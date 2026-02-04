@@ -6,6 +6,7 @@
  */
 
 import { Command } from "commander";
+import { registerStartCommand } from "./commands/start.js";
 import { registerSetupCommand } from "./commands/setup.js";
 import { registerOnboardCommand } from "./commands/onboard.js";
 import { registerConfigCommand } from "./commands/config.js";
@@ -26,6 +27,7 @@ program
   .version("0.1.0");
 
 // Register all commands
+registerStartCommand(program);
 registerSetupCommand(program);
 registerOnboardCommand(program);
 registerConfigCommand(program);

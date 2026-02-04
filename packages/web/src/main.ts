@@ -22,6 +22,33 @@ interface A2UIMessage {
   root_id: string;
 }
 
+// Simple Markdown rendering
+function renderMarkdown(text: string): string {
+  return text
+    // Code blocks
+    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="md-code-block"><code>$2</code></pre>')
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
+    // Bold
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    // Headers
+    .replace(/^### (.+)$/gm, '<h4 class="md-h4">$1</h4>')
+    .replace(/^## (.+)$/gm, '<h3 class="md-h3">$1</h3>')
+    .replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
+    // Lists
+    .replace(/^- (.+)$/gm, '<li class="md-li">$1</li>')
+    .replace(/(<li.*<\/li>\n?)+/g, '<ul class="md-ul">$&</ul>')
+    // Links
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="md-link">$1</a>')
+    // Line breaks
+    .replace(/\n\n/g, '</p><p class="md-p">')
+    .replace(/\n/g, '<br>')
+    // Wrap in paragraph
+    .replace(/^(.+)$/s, '<p class="md-p">$1</p>');
+}
+
 // Simple SVG chart rendering
 function renderLineChart(data: any[], xKey: string, yKey: string, color: string, height: number): string {
   if (!data || data.length === 0) return '';
@@ -532,6 +559,67 @@ class PHAApp extends LitElement {
       font-size: 14px;
       opacity: 0.7;
     }
+
+    /* Markdown styles */
+    .md-p {
+      margin: 0 0 8px 0;
+    }
+
+    .md-p:last-child {
+      margin-bottom: 0;
+    }
+
+    .md-h2, .md-h3, .md-h4 {
+      margin: 16px 0 8px 0;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .md-h2 { font-size: 18px; }
+    .md-h3 { font-size: 16px; }
+    .md-h4 { font-size: 14px; }
+
+    .md-code {
+      background: #334155;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 13px;
+    }
+
+    .md-code-block {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin: 8px 0;
+      overflow-x: auto;
+    }
+
+    .md-code-block code {
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #e2e8f0;
+    }
+
+    .md-ul {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+
+    .md-li {
+      margin: 4px 0;
+    }
+
+    .md-link {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    .md-link:hover {
+      text-decoration: underline;
+    }
   `;
 
   @state() private sidebarUI: A2UIMessage | null = null;
@@ -559,7 +647,9 @@ class PHAApp extends LitElement {
   }
 
   private connect() {
-    const wsUrl = `ws://${window.location.hostname}:8000/ws`;
+    // Connect to same host/port as the page
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
@@ -847,7 +937,9 @@ class PHAApp extends LitElement {
             </div>
           ` : this.chatMessages.map(msg => html`
             <div class="chat-message chat-message-${msg.role}">
-              ${msg.content}
+              ${msg.role === "assistant"
+                ? html`<div .innerHTML=${renderMarkdown(msg.content)}></div>`
+                : msg.content}
             </div>
           `)}
           ${this.isStreaming && this.streamingContent ? html`

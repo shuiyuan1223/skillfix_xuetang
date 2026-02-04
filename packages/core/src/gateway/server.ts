@@ -595,17 +595,38 @@ interface WSData {
   config: GatewayConfig;
 }
 
+// Content type helper
+function getContentType(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  const types: Record<string, string> = {
+    html: "text/html",
+    js: "application/javascript",
+    css: "text/css",
+    json: "application/json",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    svg: "image/svg+xml",
+    ico: "image/x-icon",
+    woff: "font/woff",
+    woff2: "font/woff2",
+    ttf: "font/ttf",
+  };
+  return types[ext || ""] || "application/octet-stream";
+}
+
 /**
  * Start the Gateway server with Bun
  */
-export function startGateway(config: GatewayConfig = {}): void {
+export function startGateway(config: GatewayConfig & { webDir?: string } = {}): void {
   const port = config.port || 8000;
   const app = createGatewayApp();
   const sessions = new Map<string, GatewaySession>();
+  const webDir = config.webDir;
 
   Bun.serve<WSData>({
     port,
-    fetch(req, server) {
+    async fetch(req, server) {
       const url = new URL(req.url);
 
       // Upgrade WebSocket connections
@@ -618,6 +639,34 @@ export function startGateway(config: GatewayConfig = {}): void {
           return undefined;
         }
         return new Response("WebSocket upgrade failed", { status: 400 });
+      }
+
+      // Serve static files from web directory
+      if (webDir) {
+        let filePath = url.pathname;
+        if (filePath === "/" || filePath === "") {
+          filePath = "/index.html";
+        }
+
+        const fullPath = webDir + filePath;
+        const file = Bun.file(fullPath);
+
+        if (await file.exists()) {
+          const contentType = getContentType(filePath);
+          return new Response(file, {
+            headers: { "Content-Type": contentType },
+          });
+        }
+
+        // SPA fallback - serve index.html for non-API routes
+        if (!filePath.startsWith("/api") && !filePath.startsWith("/mcp") && !filePath.startsWith("/health")) {
+          const indexFile = Bun.file(webDir + "/index.html");
+          if (await indexFile.exists()) {
+            return new Response(indexFile, {
+              headers: { "Content-Type": "text/html" },
+            });
+          }
+        }
       }
 
       // Handle HTTP requests with Hono
