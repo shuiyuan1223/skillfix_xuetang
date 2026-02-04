@@ -15,8 +15,9 @@ import type { HealthDataSource } from "../data-sources/interface.js";
 export interface GatewayConfig {
   port?: number;
   apiKey?: string;
-  provider?: "anthropic" | "openai" | "google";
+  provider?: "anthropic" | "openai" | "google" | "openrouter" | "groq" | "mistral" | "xai";
   modelId?: string;
+  baseUrl?: string;
 }
 
 // WebSocket message types
@@ -160,6 +161,7 @@ export class GatewaySession {
         apiKey: this.config.apiKey,
         provider: this.config.provider,
         modelId: this.config.modelId,
+        baseUrl: this.config.baseUrl,
       });
     }
     return this.agent;

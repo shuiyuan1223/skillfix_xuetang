@@ -6,16 +6,28 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
+export type LLMProvider =
+  | "anthropic"
+  | "openai"
+  | "google"
+  | "openrouter"
+  | "groq"
+  | "mistral"
+  | "xai";
+
+export interface LLMConfig {
+  provider: LLMProvider;
+  modelId?: string;
+  apiKey?: string;
+  baseUrl?: string;
+}
+
 export interface PHAConfig {
   gateway: {
     port: number;
     autoStart: boolean;
   };
-  llm: {
-    provider: "anthropic" | "openai" | "google";
-    modelId?: string;
-    apiKey?: string;
-  };
+  llm: LLMConfig;
   dataSources: {
     type: "mock" | "huawei" | "apple";
     huawei?: {
@@ -28,6 +40,59 @@ export interface PHAConfig {
     showToolCalls: boolean;
   };
 }
+
+// Provider configurations
+export const PROVIDER_CONFIGS: Record<LLMProvider, {
+  name: string;
+  envVar: string;
+  baseUrl?: string;
+  defaultModel: string;
+  hint?: string;
+}> = {
+  anthropic: {
+    name: "Anthropic",
+    envVar: "ANTHROPIC_API_KEY",
+    defaultModel: "claude-sonnet-4-20250514",
+    hint: "Claude models",
+  },
+  openai: {
+    name: "OpenAI",
+    envVar: "OPENAI_API_KEY",
+    defaultModel: "gpt-4o",
+    hint: "GPT models",
+  },
+  google: {
+    name: "Google",
+    envVar: "GOOGLE_API_KEY",
+    defaultModel: "gemini-2.0-flash",
+    hint: "Gemini models",
+  },
+  openrouter: {
+    name: "OpenRouter",
+    envVar: "OPENROUTER_API_KEY",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "openrouter/auto",
+    hint: "Multi-model gateway (Claude, GPT, Llama, etc.)",
+  },
+  groq: {
+    name: "Groq",
+    envVar: "GROQ_API_KEY",
+    defaultModel: "llama-3.3-70b-versatile",
+    hint: "Fast inference (Llama, Mixtral)",
+  },
+  mistral: {
+    name: "Mistral AI",
+    envVar: "MISTRAL_API_KEY",
+    defaultModel: "mistral-large-latest",
+    hint: "Mistral models",
+  },
+  xai: {
+    name: "xAI",
+    envVar: "XAI_API_KEY",
+    defaultModel: "grok-2-1212",
+    hint: "Grok models",
+  },
+};
 
 const DEFAULT_CONFIG: PHAConfig = {
   gateway: {
@@ -140,4 +205,59 @@ export function unsetConfigValue(path: string): void {
 
 export function isConfigured(): boolean {
   return fs.existsSync(getConfigPath());
+}
+
+/**
+ * Get the effective API key for the current provider
+ */
+export function getApiKey(provider?: LLMProvider): string | undefined {
+  const config = loadConfig();
+  const p = provider || config.llm.provider;
+
+  // First check config
+  if (config.llm.apiKey) {
+    return config.llm.apiKey;
+  }
+
+  // Then check environment
+  const providerConfig = PROVIDER_CONFIGS[p];
+  if (providerConfig) {
+    return process.env[providerConfig.envVar];
+  }
+
+  return undefined;
+}
+
+/**
+ * Get the base URL for the current provider
+ */
+export function getBaseUrl(provider?: LLMProvider): string | undefined {
+  const config = loadConfig();
+  const p = provider || config.llm.provider;
+
+  // First check config
+  if (config.llm.baseUrl) {
+    return config.llm.baseUrl;
+  }
+
+  // Then use provider default
+  const providerConfig = PROVIDER_CONFIGS[p];
+  return providerConfig?.baseUrl;
+}
+
+/**
+ * Get the model ID for the current provider
+ */
+export function getModelId(provider?: LLMProvider): string {
+  const config = loadConfig();
+  const p = provider || config.llm.provider;
+
+  // First check config
+  if (config.llm.modelId) {
+    return config.llm.modelId;
+  }
+
+  // Then use provider default
+  const providerConfig = PROVIDER_CONFIGS[p];
+  return providerConfig?.defaultModel || "default";
 }
