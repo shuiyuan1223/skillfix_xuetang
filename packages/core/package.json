@@ -1,0 +1,30 @@
+{
+  "name": "@pha/core",
+  "version": "0.1.0",
+  "description": "PHA Core - Agent, Gateway, Tools, Evolution",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.51.0",
+    "@mariozechner/pi-agent-core": "^0.51.0",
+    "@sinclair/typebox": "^0.34.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0",
+    "@types/bun": "latest"
+  }
+}
