@@ -1,104 +1,38 @@
 # PHA - Personal Health Agent
-# Makefile for build and installation
+# Installation Makefile
 
-.PHONY: all build install uninstall clean dev check help web gateway tui
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
 
-# Default target
+.PHONY: all install uninstall clean
+
 all: build
 
-# Build all packages
+# Install dependencies and build
 build:
-	@echo "Building PHA..."
+	@echo "Installing dependencies..."
+	@bun install
+	@echo "Building..."
 	@cd packages/core && bun run build
 	@cd packages/cli && bun run build
-	@cd packages/web && bun run build
-	@echo "✓ Build complete"
+	@echo "Build complete."
 
-# Install dependencies and build
-install:
-	@echo "Installing dependencies..."
-	@bun install --frozen-lockfile 2>/dev/null || bun install
-	@$(MAKE) build
-	@echo "✓ Installation complete"
-	@echo ""
-	@echo "Quick start:"
-	@echo "  export ANTHROPIC_API_KEY=sk-ant-xxx"
-	@echo "  bun run pha setup"
-	@echo "  bun run pha tui --local"
+# Install pha command globally
+install: build
+	@echo "Installing pha to $(BINDIR)..."
+	@mkdir -p $(BINDIR)
+	@echo '#!/bin/bash' > $(BINDIR)/pha
+	@echo 'exec bun "$(CURDIR)/packages/cli/dist/main.js" "$$@"' >> $(BINDIR)/pha
+	@chmod +x $(BINDIR)/pha
+	@echo "Done! Run 'pha --help' to get started."
 
-# Install globally to ~/.local/bin
-install-global: build
-	@mkdir -p ~/.local/bin
-	@echo '#!/bin/bash' > ~/.local/bin/pha
-	@echo 'bun "$(CURDIR)/packages/cli/dist/main.js" "$$@"' >> ~/.local/bin/pha
-	@chmod +x ~/.local/bin/pha
-	@echo "✓ Installed pha to ~/.local/bin/pha"
-	@echo ""
-	@if [[ ":$$PATH:" != *":$$HOME/.local/bin:"* ]]; then \
-		echo "Add to your shell config:"; \
-		echo '  export PATH="$$HOME/.local/bin:$$PATH"'; \
-	fi
-
-# Uninstall global command
+# Uninstall pha command
 uninstall:
-	@rm -f ~/.local/bin/pha
-	@echo "✓ Removed ~/.local/bin/pha"
+	@echo "Removing pha from $(BINDIR)..."
+	@rm -f $(BINDIR)/pha
+	@echo "Done."
 
 # Clean build artifacts
 clean:
-	@echo "Cleaning..."
 	@rm -rf packages/*/dist
-	@echo "✓ Clean complete"
-
-# Deep clean (including node_modules)
-clean-all: clean
-	@rm -rf node_modules packages/*/node_modules
-	@echo "✓ Deep clean complete"
-
-# Development mode
-dev:
-	@cd packages/cli && bun run dev
-
-# Type check
-check:
-	@echo "Running type checks..."
-	@cd packages/core && bun run check 2>/dev/null || true
-	@cd packages/cli && bun run check 2>/dev/null || true
-	@cd packages/web && bun run check 2>/dev/null || true
-
-# Run CLI
-run:
-	@bun packages/cli/dist/main.js $(ARGS)
-
-# Start gateway
-gateway:
-	@bun packages/cli/dist/main.js gateway start
-
-# Start TUI
-tui:
-	@bun packages/cli/dist/main.js tui --local
-
-# Start Web UI dev server
-web:
-	@cd packages/web && bun run dev
-
-# Show help
-help:
-	@echo "PHA Makefile targets:"
-	@echo ""
-	@echo "  make              Build all packages"
-	@echo "  make install      Install dependencies and build"
-	@echo "  make install-global  Install 'pha' command to ~/.local/bin"
-	@echo "  make uninstall    Remove global 'pha' command"
-	@echo "  make clean        Remove build artifacts"
-	@echo "  make clean-all    Remove build artifacts and node_modules"
-	@echo "  make dev          Run CLI in development mode"
-	@echo "  make check        Run type checks"
-	@echo "  make gateway      Start gateway server"
-	@echo "  make tui          Start TUI (local mode)"
-	@echo "  make web          Start Web UI dev server"
-	@echo "  make run ARGS=... Run CLI with arguments"
-	@echo ""
-	@echo "Examples:"
-	@echo "  make run ARGS='health'"
-	@echo "  make run ARGS='tools list'"
+	@echo "Cleaned."

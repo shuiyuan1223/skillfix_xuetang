@@ -94,28 +94,14 @@ PHA 内置了完整的自我进化系统，能够持续优化 Agent 的响应质
 ### 安装
 
 ```bash
-# 克隆项目
 git clone https://github.com/ibytechaos/pha.git
 cd pha
-
-# 安装依赖并构建
 make install
-
-# (可选) 安装全局命令
-make install-global
 ```
 
-**Makefile 命令:**
+安装完成后 `pha` 命令即可使用。
 
-| 命令 | 说明 |
-|------|------|
-| `make install` | 安装依赖并构建 |
-| `make install-global` | 安装 `pha` 到 ~/.local/bin |
-| `make build` | 仅构建 |
-| `make clean` | 清理构建产物 |
-| `make tui` | 启动 TUI |
-| `make gateway` | 启动 Gateway |
-| `make help` | 查看所有命令 |
+卸载：`make uninstall`
 
 ### 快速开始
 
@@ -325,19 +311,16 @@ PHA (Personal Health Agent) is an intelligent health management assistant built 
 ```bash
 git clone https://github.com/ibytechaos/pha.git
 cd pha
-make install          # Install dependencies and build
-make install-global   # Optional: install 'pha' command globally
+make install
 ```
 
 ### Quick Start
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-xxx
-pha setup
-pha tui --local
-
-# Or use make
-make tui
+export OPENROUTER_API_KEY=sk-or-xxx  # or ANTHROPIC_API_KEY
+pha onboard
+pha gateway start
+pha tui
 ```
 
 ### CLI Commands
