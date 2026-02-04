@@ -1,7 +1,7 @@
 # PHA - Personal Health Agent
 # Makefile for build and installation
 
-.PHONY: all build install uninstall clean dev check help
+.PHONY: all build install uninstall clean dev check help web gateway tui
 
 # Default target
 all: build
@@ -78,6 +78,10 @@ gateway:
 tui:
 	@bun packages/cli/dist/main.js tui --local
 
+# Start Web UI dev server
+web:
+	@cd packages/web && bun run dev
+
 # Show help
 help:
 	@echo "PHA Makefile targets:"
@@ -92,6 +96,7 @@ help:
 	@echo "  make check        Run type checks"
 	@echo "  make gateway      Start gateway server"
 	@echo "  make tui          Start TUI (local mode)"
+	@echo "  make web          Start Web UI dev server"
 	@echo "  make run ARGS=... Run CLI with arguments"
 	@echo ""
 	@echo "Examples:"
