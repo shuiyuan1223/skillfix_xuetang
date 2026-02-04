@@ -91,56 +91,35 @@ PHA 内置了完整的自我进化系统，能够持续优化 Agent 的响应质
                     └─────────────┘
 ```
 
-### 快速开始
+### 安装
 
-#### 1. 环境要求
-
-- [Bun](https://bun.sh/) >= 1.0
-- LLM API Key (任选一个):
-  - `ANTHROPIC_API_KEY`
-  - `OPENAI_API_KEY`
-  - `GOOGLE_API_KEY`
-
-#### 2. 安装
+#### 一键安装 (推荐)
 
 ```bash
-# 克隆项目
+curl -fsSL https://raw.githubusercontent.com/ibytechaos/pha/main/install.sh | bash
+```
+
+#### 手动安装
+
+```bash
 git clone https://github.com/ibytechaos/pha.git
 cd pha
-
-# 安装依赖
-bun install
-
-# 构建所有包
-cd packages/core && bun run build
-cd ../cli && bun run build
-cd ../web && bun run build
+bun install  # 自动构建
 ```
 
-#### 3. 配置
+### 快速开始
 
 ```bash
-# 设置 API Key
+# 1. 设置 API Key (任选一个)
 export ANTHROPIC_API_KEY=sk-ant-xxx
 
-# 初始化配置
+# 2. 初始化
 pha setup
 
-# 或运行交互式配置向导
-pha onboard
-```
-
-#### 4. 启动
-
-```bash
-# 方式一：启动 Gateway 服务器
-pha gateway start
-
-# 方式二：启动 Gateway (后台运行)
-pha gateway start -d
-
-# 方式三：直接使用 TUI (无需 Gateway)
-pha tui --local
+# 3. 开始使用
+pha tui --local     # 终端聊天
+pha health          # 查看健康数据
+pha gateway start   # 启动服务器
 ```
 
 ### CLI 命令参考
@@ -331,24 +310,22 @@ PHA (Personal Health Agent) is an intelligent health management assistant built 
 | **Multi-Source** | Mock, Huawei Health, Apple HealthKit support |
 | **Multi-Frontend** | Web UI, TUI, REST API |
 
+### Installation
+
+```bash
+# One-line install
+curl -fsSL https://raw.githubusercontent.com/ibytechaos/pha/main/install.sh | bash
+
+# Or manual
+git clone https://github.com/ibytechaos/pha.git && cd pha && bun install
+```
+
 ### Quick Start
 
 ```bash
-# Clone and install
-git clone https://github.com/ibytechaos/pha.git
-cd pha && bun install
-
-# Build
-cd packages/core && bun run build
-cd ../cli && bun run build
-
-# Configure
 export ANTHROPIC_API_KEY=sk-ant-xxx
 pha setup
-
-# Run
-pha gateway start
-pha tui
+pha tui --local
 ```
 
 ### CLI Commands

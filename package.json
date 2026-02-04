@@ -1,16 +1,24 @@
 {
-  "name": "pha-ts",
+  "name": "pha",
   "version": "0.1.0",
-  "description": "Personal Health Agent - AgentOS Architecture",
+  "description": "Personal Health Agent - AI-powered health management",
   "private": true,
   "type": "module",
   "workspaces": [
     "packages/*"
   ],
+  "bin": {
+    "pha": "./packages/cli/dist/main.js"
+  },
   "scripts": {
-    "build": "bun run --filter '*' build",
+    "build": "bun run build:core && bun run build:cli && bun run build:web",
+    "build:core": "cd packages/core && bun run build",
+    "build:cli": "cd packages/cli && bun run build",
+    "build:web": "cd packages/web && bun run build",
+    "postinstall": "bun run build",
     "dev": "bun run --filter @pha/cli dev",
     "start": "bun run packages/cli/dist/main.js",
+    "pha": "bun run packages/cli/dist/main.js",
     "check": "bun run --filter '*' check",
     "clean": "rm -rf packages/*/dist node_modules"
   },
@@ -18,11 +26,9 @@
     "health",
     "agent",
     "ai",
-    "pi-agent"
+    "pha",
+    "personal-health-agent"
   ],
   "author": "",
-  "license": "MIT",
-  "engines": {
-    "node": ">=20.0.0"
-  }
+  "license": "MIT"
 }
