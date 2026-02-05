@@ -35,7 +35,10 @@ export class HuaweiHealthDataSource implements HealthDataSource {
    * (steps, distance, calories, active minutes)
    */
   async getMetrics(date: string): Promise<HealthMetrics> {
-    if (!this.auth.isAuthenticated()) {
+    try {
+      // Try to ensure valid token (will refresh if expired)
+      await this.auth.ensureValidToken();
+    } catch {
       console.warn("Huawei not authenticated, using mock data");
       return this.mockFallback.getMetrics(date);
     }
@@ -77,7 +80,10 @@ export class HuaweiHealthDataSource implements HealthDataSource {
    * Get workout data from Huawei API
    */
   async getWorkouts(date: string): Promise<WorkoutData[]> {
-    if (!this.auth.isAuthenticated()) {
+    try {
+      // Try to ensure valid token (will refresh if expired)
+      await this.auth.ensureValidToken();
+    } catch {
       console.warn("Huawei not authenticated, using mock data");
       return this.mockFallback.getWorkouts(date);
     }

@@ -6,6 +6,7 @@
  */
 
 import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
+import { t } from "../locales/index.js";
 
 // Types for page data
 interface Message {
@@ -42,10 +43,10 @@ export function generateSidebar(activeView: string): A2UIMessage {
   // Main navigation
   const mainNav = ui.nav(
     [
-      { id: "chat", label: "Chat", icon: "💬" },
-      { id: "health", label: "Health", icon: "❤️" },
-      { id: "sleep", label: "Sleep", icon: "🌙" },
-      { id: "activity", label: "Activity", icon: "🏃" },
+      { id: "chat", label: t("nav.chat"), icon: "💬" },
+      { id: "health", label: t("nav.health"), icon: "❤️" },
+      { id: "sleep", label: t("nav.sleep"), icon: "🌙" },
+      { id: "activity", label: t("nav.activity"), icon: "🏃" },
     ],
     { activeId: activeView }
   );
@@ -57,9 +58,9 @@ export function generateSidebar(activeView: string): A2UIMessage {
   // Settings navigation
   const settingsNav = ui.nav(
     [
-      { id: "settings/prompts", label: "Prompts", icon: "📝" },
-      { id: "settings/skills", label: "Skills", icon: "🧩" },
-      { id: "settings/evolution", label: "Evolution", icon: "🔬" },
+      { id: "settings/prompts", label: t("nav.prompts"), icon: "📝" },
+      { id: "settings/skills", label: t("nav.skills"), icon: "🧩" },
+      { id: "settings/evolution", label: t("nav.evolution"), icon: "🔬" },
     ],
     { activeId: activeView }
   );
@@ -92,7 +93,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
     id: inputId,
     type: "chat_input",
     disabled: state.streaming,
-    placeholder: "Ask me anything about your health...",
+    placeholder: t("chat.placeholder"),
   });
 
   const root = ui.column([messagesId, inputId], { gap: 0 });
@@ -119,8 +120,8 @@ export function generateHealthPage(data: {
   const ui = new A2UIGenerator("main");
 
   // Header
-  const title = ui.text("Health Overview", "h2");
-  const subtitle = ui.text("Your vital signs and trends", "caption");
+  const title = ui.text(t("health.title"), "h2");
+  const subtitle = ui.text(t("health.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
   // Stats grid
@@ -154,7 +155,7 @@ export function generateHealthPage(data: {
   const statsGrid = ui.grid([hrCard, bpCard, spo2Card], { columns: 3, gap: 16 });
 
   // Heart rate chart
-  const chartTitle = ui.text("Heart Rate Trend", "h3");
+  const chartTitle = ui.text(t("health.heartRateTrend"), "h3");
   const chart = ui.chart({
     chartType: "line",
     data: data.heartRateChart.map((d) => ({ label: d.label, value: d.value })),
@@ -186,8 +187,8 @@ export function generateSleepPage(data: {
   const ui = new A2UIGenerator("main");
 
   // Header
-  const title = ui.text("Sleep Analysis", "h2");
-  const subtitle = ui.text("Your sleep patterns and quality", "caption");
+  const title = ui.text(t("sleep.title"), "h2");
+  const subtitle = ui.text(t("sleep.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
   // Stats grid
@@ -221,7 +222,7 @@ export function generateSleepPage(data: {
   const statsGrid = ui.grid([durationCard, qualityCard, deepCard], { columns: 3, gap: 16 });
 
   // Sleep chart
-  const chartTitle = ui.text("Sleep Duration (Past Week)", "h3");
+  const chartTitle = ui.text(t("sleep.chartTitle"), "h3");
   const chart = ui.chart({
     chartType: "bar",
     data: data.sleepChart.map((d) => ({ label: d.label, value: d.value })),
@@ -253,8 +254,8 @@ export function generateActivityPage(data: {
   const ui = new A2UIGenerator("main");
 
   // Header
-  const title = ui.text("Activity Summary", "h2");
-  const subtitle = ui.text("Your daily movement and exercise", "caption");
+  const title = ui.text(t("activity.title"), "h2");
+  const subtitle = ui.text(t("activity.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
   // Stats grid
@@ -288,7 +289,7 @@ export function generateActivityPage(data: {
   const statsGrid = ui.grid([stepsCard, caloriesCard, activeCard], { columns: 3, gap: 16 });
 
   // Steps chart
-  const chartTitle = ui.text("Steps (Past Week)", "h3");
+  const chartTitle = ui.text(t("activity.chartTitle"), "h3");
   const chart = ui.chart({
     chartType: "bar",
     data: data.stepsChart.map((d) => ({ label: d.label, value: d.value })),
@@ -336,8 +337,8 @@ export function generatePromptsPage(data: {
   const ui = new A2UIGenerator("main");
 
   // Header
-  const title = ui.text("Prompts", "h2");
-  const subtitle = ui.text("Manage agent personality and instructions", "caption");
+  const title = ui.text(t("prompts.title"), "h2");
+  const subtitle = ui.text(t("prompts.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
   // Prompts list
@@ -350,16 +351,16 @@ export function generatePromptsPage(data: {
 
   const promptsTable = ui.dataTable(
     [
-      { key: "name", label: "Name", sortable: true },
-      { key: "title", label: "Title" },
-      { key: "lines", label: "Lines" },
+      { key: "name", label: t("prompts.name"), sortable: true },
+      { key: "title", label: t("prompts.promptTitle") },
+      { key: "lines", label: t("prompts.lines") },
       { key: "actions", label: "", render: "badge" },
     ],
     promptRows,
     { onRowClick: "select_prompt" }
   );
 
-  const promptsCard = ui.card([promptsTable], { title: "Prompt Files", padding: 20 });
+  const promptsCard = ui.card([promptsTable], { title: t("prompts.cardTitle"), padding: 20 });
 
   const children: string[] = [promptsCard];
 
@@ -375,17 +376,17 @@ export function generatePromptsPage(data: {
     });
 
     const editBtn = data.editing
-      ? ui.button("Save", "save_prompt", { variant: "primary" })
-      : ui.button("Edit", "edit_prompt", { variant: "outline" });
+      ? ui.button(t("common.save"), "save_prompt", { variant: "primary" })
+      : ui.button(t("common.edit"), "edit_prompt", { variant: "outline" });
 
     const cancelBtn = data.editing
-      ? ui.button("Cancel", "cancel_edit", { variant: "ghost" })
+      ? ui.button(t("common.cancel"), "cancel_edit", { variant: "ghost" })
       : null;
 
     const revertBtn = data.editing
       ? null
       : data.commits && data.commits.length > 1
-        ? ui.button("Revert", "revert_prompt", { variant: "ghost" })
+        ? ui.button(t("common.revert"), "revert_prompt", { variant: "ghost" })
         : null;
 
     const editorBtns = [editBtn];
@@ -407,7 +408,10 @@ export function generatePromptsPage(data: {
         onSelect: "select_commit",
       });
 
-      const historyCard = ui.card([commitList], { title: "Version History", padding: 20 });
+      const historyCard = ui.card([commitList], {
+        title: t("prompts.versionHistory"),
+        padding: 20,
+      });
       children.push(historyCard);
     }
   }
@@ -440,10 +444,13 @@ export function generateSkillsPage(data: {
   const ui = new A2UIGenerator("main");
 
   // Header
-  const title = ui.text("Skills", "h2");
-  const subtitle = ui.text("Manage agent capabilities and behaviors", "caption");
+  const title = ui.text(t("skills.title"), "h2");
+  const subtitle = ui.text(t("skills.subtitle"), "caption");
 
-  const createBtn = ui.button("New Skill", "create_skill", { variant: "primary", size: "sm" });
+  const createBtn = ui.button(t("skills.newSkill"), "create_skill", {
+    variant: "primary",
+    size: "sm",
+  });
   const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), createBtn], {
     justify: "between",
     align: "start",
@@ -460,16 +467,16 @@ export function generateSkillsPage(data: {
 
   const skillsTable = ui.dataTable(
     [
-      { key: "name", label: "Skill", sortable: true },
-      { key: "description", label: "Description" },
-      { key: "status", label: "Status", render: "badge" },
-      { key: "triggers", label: "Triggers" },
+      { key: "name", label: t("skills.skill"), sortable: true },
+      { key: "description", label: t("skills.description") },
+      { key: "status", label: t("skills.status"), render: "badge" },
+      { key: "triggers", label: t("skills.triggers") },
     ],
     skillRows,
     { onRowClick: "select_skill" }
   );
 
-  const skillsCard = ui.card([skillsTable], { title: "Installed Skills", padding: 20 });
+  const skillsCard = ui.card([skillsTable], { title: t("skills.cardTitle"), padding: 20 });
 
   const children: string[] = [skillsCard];
 
@@ -487,15 +494,17 @@ export function generateSkillsPage(data: {
     });
 
     const editBtn = data.editing
-      ? ui.button("Save", "save_skill", { variant: "primary" })
-      : ui.button("Edit", "edit_skill", { variant: "outline" });
+      ? ui.button(t("common.save"), "save_skill", { variant: "primary" })
+      : ui.button(t("common.edit"), "edit_skill", { variant: "outline" });
 
-    const toggleBtn = ui.button(selectedInfo?.enabled ? "Disable" : "Enable", "toggle_skill", {
-      variant: selectedInfo?.enabled ? "ghost" : "secondary",
-    });
+    const toggleBtn = ui.button(
+      selectedInfo?.enabled ? t("common.disable") : t("common.enable"),
+      "toggle_skill",
+      { variant: selectedInfo?.enabled ? "ghost" : "secondary" }
+    );
 
     const cancelBtn = data.editing
-      ? ui.button("Cancel", "cancel_edit", { variant: "ghost" })
+      ? ui.button(t("common.cancel"), "cancel_edit", { variant: "ghost" })
       : null;
 
     const editorActions = cancelBtn ? [editBtn, cancelBtn, toggleBtn] : [editBtn, toggleBtn];
@@ -571,8 +580,8 @@ export function generateEvolutionPage(data: {
   const ui = new A2UIGenerator("main");
 
   // Header
-  const title = ui.text("Evolution", "h2");
-  const subtitle = ui.text("Self-improvement and quality monitoring", "caption");
+  const title = ui.text(t("evolution.title"), "h2");
+  const subtitle = ui.text(t("evolution.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
   // Tabs
@@ -581,22 +590,22 @@ export function generateEvolutionPage(data: {
   // Overview tab content
   if (data.activeTab === "overview" && data.stats) {
     const avgScoreGauge = ui.scoreGauge(data.stats.averageScore, {
-      label: "Avg Score",
+      label: t("evolution.avgScore"),
       max: 100,
       size: "lg",
     });
 
     const totalTraces = ui.statCard({
-      title: "Total Traces",
+      title: t("evolution.totalTraces"),
       value: data.stats.totalCount,
       icon: "📊",
       color: "#667eea",
     });
 
     const avgScore = ui.statCard({
-      title: "Average Score",
+      title: t("evolution.averageScore"),
       value: Math.round(data.stats.averageScore),
-      subtitle: "out of 100",
+      subtitle: t("evolution.outOf100"),
       icon: "⭐",
       color: "#f59e0b",
     });
@@ -617,9 +626,9 @@ export function generateEvolutionPage(data: {
     const tracesTable = ui.dataTable(
       [
         { key: "id", label: "ID" },
-        { key: "time", label: "Time", sortable: true },
-        { key: "message", label: "Message" },
-        { key: "score", label: "Score", render: "progress" },
+        { key: "time", label: t("evolution.time"), sortable: true },
+        { key: "message", label: t("evolution.message") },
+        { key: "score", label: t("evolution.score"), render: "progress" },
       ],
       traceRows,
       {
@@ -649,10 +658,10 @@ export function generateEvolutionPage(data: {
     const evalsTable = ui.dataTable(
       [
         { key: "id", label: "ID" },
-        { key: "traceId", label: "Trace" },
-        { key: "time", label: "Time", sortable: true },
-        { key: "score", label: "Score", render: "progress" },
-        { key: "feedback", label: "Feedback" },
+        { key: "traceId", label: t("evolution.trace") },
+        { key: "time", label: t("evolution.time"), sortable: true },
+        { key: "score", label: t("evolution.score"), render: "progress" },
+        { key: "feedback", label: t("evolution.feedback") },
       ],
       evalRows,
       { onRowClick: "view_evaluation" }
@@ -674,20 +683,20 @@ export function generateEvolutionPage(data: {
     const testsTable = ui.dataTable(
       [
         { key: "id", label: "ID" },
-        { key: "category", label: "Category", render: "badge" },
-        { key: "query", label: "Query" },
-        { key: "minScore", label: "Min Score" },
-        { key: "keywords", label: "Keywords" },
+        { key: "category", label: t("evolution.category"), render: "badge" },
+        { key: "query", label: t("evolution.query") },
+        { key: "minScore", label: t("evolution.minScore") },
+        { key: "keywords", label: t("evolution.keywords") },
       ],
       testRows,
       { onRowClick: "view_test_case" }
     );
 
-    const runAllBtn = ui.button("Run All Tests", "run_benchmark", {
+    const runAllBtn = ui.button(t("evolution.runAllTests"), "run_benchmark", {
       variant: "secondary",
       size: "sm",
     });
-    const addTestBtn = ui.button("Add Test Case", "create_test_case", {
+    const addTestBtn = ui.button(t("evolution.addTestCase"), "create_test_case", {
       variant: "primary",
       size: "sm",
     });
@@ -710,11 +719,11 @@ export function generateEvolutionPage(data: {
     const suggsTable = ui.dataTable(
       [
         { key: "id", label: "ID" },
-        { key: "time", label: "Time", sortable: true },
-        { key: "type", label: "Type", render: "badge" },
-        { key: "target", label: "Target" },
-        { key: "status", label: "Status", render: "badge" },
-        { key: "rationale", label: "Rationale" },
+        { key: "time", label: t("evolution.time"), sortable: true },
+        { key: "type", label: t("evolution.type"), render: "badge" },
+        { key: "target", label: t("evolution.target") },
+        { key: "status", label: t("skills.status"), render: "badge" },
+        { key: "rationale", label: t("evolution.rationale") },
       ],
       suggRows,
       { onRowClick: "view_suggestion" }
@@ -725,20 +734,18 @@ export function generateEvolutionPage(data: {
 
   const tabs = ui.tabs(
     [
-      { id: "overview", label: "Overview", icon: "📊" },
-      { id: "traces", label: "Traces", icon: "📝" },
-      { id: "evaluations", label: "Evaluations", icon: "⭐" },
-      { id: "benchmark", label: "Benchmark", icon: "🧪" },
-      { id: "suggestions", label: "Suggestions", icon: "💡" },
+      { id: "overview", label: t("evolution.overview"), icon: "📊" },
+      { id: "traces", label: t("evolution.traces"), icon: "📝" },
+      { id: "evaluations", label: t("evolution.evaluations"), icon: "⭐" },
+      { id: "benchmark", label: t("evolution.benchmark"), icon: "🧪" },
+      { id: "suggestions", label: t("evolution.suggestions"), icon: "💡" },
     ],
     data.activeTab,
     tabContentIds
   );
 
-  const tabsCard = ui.card([tabs], { padding: 20 });
-
-  // Content container
-  const content = ui.column([tabsCard], { gap: 24, padding: 24 });
+  // Content container - tabs directly without card wrapper to avoid double glass effect
+  const content = ui.column([tabs], { gap: 24, padding: 24 });
   const root = ui.column([header, content], { gap: 0 });
 
   return ui.build(root);

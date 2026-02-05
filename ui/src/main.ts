@@ -10,6 +10,30 @@ import { customElement, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 
 // ============================================================================
+// i18n - Client-side translations
+// ============================================================================
+
+const i18n = {
+  chat: {
+    title: "今天有什么可以帮您？",
+    subtitle: "询问您的健康数据、睡眠模式或运动情况",
+    sleepAnalysis: "睡眠分析",
+    activitySummary: "运动概览",
+    heartRate: "心率",
+    sleepQuestion: "昨晚睡眠怎么样？",
+    activityQuestion: "显示我的运动概况",
+    heartRateQuestion: "我的心率趋势如何？",
+  },
+  common: {
+    connected: "已连接",
+    reconnecting: "重新连接中...",
+    switchToLight: "切换到亮色模式",
+    switchToDark: "切换到暗色模式",
+    collapseSidebar: "收起侧边栏",
+  },
+};
+
+// ============================================================================
 // SVG Icons (Lucide-style)
 // ============================================================================
 
@@ -578,31 +602,31 @@ class A2UIRenderer {
       return html`
         <div class="a2ui-chat-empty">
           <div class="a2ui-chat-empty-icon">${unsafeHTML(ICONS["chat"])}</div>
-          <div class="a2ui-chat-empty-title">How can I help you today?</div>
-          <div class="a2ui-chat-empty-subtitle">
-            Ask me about your health data, sleep patterns, or activity.
-          </div>
+          <div class="a2ui-chat-empty-title">${i18n.chat.title}</div>
+          <div class="a2ui-chat-empty-subtitle">${i18n.chat.subtitle}</div>
           <div class="a2ui-chat-suggestions">
             <button
               class="a2ui-suggestion"
-              @click=${() =>
-                this.sendAction("send_message", { content: "How was my sleep last night?" })}
+              @click=${() => this.sendAction("send_message", { content: i18n.chat.sleepQuestion })}
             >
-              <span class="suggestion-icon">${unsafeHTML(ICONS["moon"])}</span> Sleep analysis
+              <span class="suggestion-icon">${unsafeHTML(ICONS["moon"])}</span>
+              ${i18n.chat.sleepAnalysis}
             </button>
             <button
               class="a2ui-suggestion"
               @click=${() =>
-                this.sendAction("send_message", { content: "Show my activity summary" })}
+                this.sendAction("send_message", { content: i18n.chat.activityQuestion })}
             >
-              <span class="suggestion-icon">${unsafeHTML(ICONS["activity"])}</span> Activity summary
+              <span class="suggestion-icon">${unsafeHTML(ICONS["activity"])}</span>
+              ${i18n.chat.activitySummary}
             </button>
             <button
               class="a2ui-suggestion"
               @click=${() =>
-                this.sendAction("send_message", { content: "What's my heart rate trend?" })}
+                this.sendAction("send_message", { content: i18n.chat.heartRateQuestion })}
             >
-              <span class="suggestion-icon">${unsafeHTML(ICONS["heart"])}</span> Heart rate
+              <span class="suggestion-icon">${unsafeHTML(ICONS["heart"])}</span>
+              ${i18n.chat.heartRate}
             </button>
           </div>
         </div>
@@ -1223,14 +1247,63 @@ ${value || ""}</textarea
 @customElement("pha-app")
 class PHAApp extends LitElement {
   static styles = css`
+    /* ========== CSS Variables (Tailwind-inspired) ========== */
     :host {
       display: flex;
       height: 100vh;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
+
+      /* Tailwind Slate palette for dark mode (default) */
+      --color-bg: #0f172a; /* slate-900 */
+      --color-bg-secondary: #1e293b; /* slate-800 */
+      --color-bg-tertiary: #334155; /* slate-700 */
+      --color-surface: rgba(30, 41, 59, 0.8); /* slate-800/80 */
+      --color-surface-hover: rgba(51, 65, 85, 0.8); /* slate-700/80 */
+      --color-surface-card: rgba(20, 20, 35, 0.5); /* card background */
+      --color-surface-elevated: rgba(20, 20, 35, 0.95); /* modal/elevated */
+      --color-surface-code: rgba(10, 10, 20, 0.8); /* code editor */
+      --color-surface-inline-code: rgba(255, 255, 255, 0.1);
+      --color-overlay: rgba(0, 0, 0, 0.8); /* modal overlay */
+      --color-gauge-track: rgba(255, 255, 255, 0.15); /* gauge ring background */
+      --color-border: rgba(100, 116, 139, 0.2); /* slate-500/20 */
+      --color-border-hover: rgba(100, 116, 139, 0.4);
+
+      --color-text: #f8fafc; /* slate-50 */
+      --color-text-secondary: #cbd5e1; /* slate-300 */
+      --color-text-muted: #64748b; /* slate-500 */
+
+      --color-primary: #667eea; /* indigo-400 */
+      --color-primary-hover: #818cf8; /* indigo-300 */
+      --color-accent: #764ba2; /* purple-600 */
+
+      /* Semantic colors */
+      --color-success: #10b981; /* emerald-500 */
+      --color-warning: #f59e0b; /* amber-500 */
+      --color-error: #ef4444; /* red-500 */
+      --color-info: #3b82f6; /* blue-500 */
     }
 
-    /* Animated background effects moved to .shell.theme-dark */
+    /* Light mode overrides */
+    .shell.theme-light {
+      --color-bg: #f8fafc; /* slate-50 */
+      --color-bg-secondary: #f1f5f9; /* slate-100 */
+      --color-bg-tertiary: #e2e8f0; /* slate-200 */
+      --color-surface: rgba(255, 255, 255, 0.9);
+      --color-surface-hover: rgba(241, 245, 249, 0.9);
+      --color-surface-card: rgba(248, 250, 252, 0.95); /* slate-50 */
+      --color-surface-elevated: rgba(255, 255, 255, 0.98);
+      --color-surface-code: rgba(241, 245, 249, 0.9); /* slate-100 */
+      --color-surface-inline-code: rgba(0, 0, 0, 0.06);
+      --color-overlay: rgba(0, 0, 0, 0.5); /* lighter overlay for light mode */
+      --color-gauge-track: rgba(0, 0, 0, 0.1); /* gauge ring background */
+      --color-border: rgba(100, 116, 139, 0.15);
+      --color-border-hover: rgba(100, 116, 139, 0.3);
+
+      --color-text: #0f172a; /* slate-900 */
+      --color-text-secondary: #475569; /* slate-600 */
+      --color-text-muted: #94a3b8; /* slate-400 */
+    }
 
     /* Page transition animation */
     .surface-main-content {
@@ -1264,23 +1337,20 @@ class PHAApp extends LitElement {
       }
     }
 
-    /* Shell Layout */
+    /* Shell Layout - uses CSS variables from :host */
     .shell {
       display: flex;
       width: 100%;
       height: 100%;
       position: relative;
+      background: var(--color-bg);
+      color: var(--color-text);
+      transition:
+        background 0.3s ease,
+        color 0.3s ease;
     }
 
-    /* Dark Theme (default) */
-    .shell.theme-dark {
-      background:
-        radial-gradient(ellipse at top left, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
-        radial-gradient(ellipse at bottom right, rgba(118, 75, 162, 0.15) 0%, transparent 50%),
-        linear-gradient(180deg, #0a0a0f 0%, #0d0d14 50%, #0a0a0f 100%);
-      color: #ffffff;
-    }
-
+    /* Dark theme decorative grid */
     .shell.theme-dark::before {
       content: "";
       position: fixed;
@@ -1292,109 +1362,6 @@ class PHAApp extends LitElement {
       pointer-events: none;
     }
 
-    /* Light Theme */
-    .shell.theme-light {
-      background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
-      color: #1e293b;
-    }
-
-    .shell.theme-light .surface-sidebar {
-      background: rgba(255, 255, 255, 0.9);
-      border-right: 1px solid rgba(102, 126, 234, 0.2);
-      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.05);
-    }
-
-    .shell.theme-light .surface-main {
-      background: transparent;
-    }
-
-    .shell.theme-light .a2ui-card {
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid rgba(102, 126, 234, 0.15);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
-    }
-
-    .shell.theme-light .a2ui-stat-card {
-      background: linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.95) 0%,
-        rgba(248, 250, 252, 0.95) 100%
-      );
-      border: 1px solid rgba(102, 126, 234, 0.15);
-    }
-
-    .shell.theme-light .a2ui-text,
-    .shell.theme-light .a2ui-stat-value,
-    .shell.theme-light .a2ui-stat-title {
-      color: #1e293b;
-    }
-
-    .shell.theme-light .a2ui-text.caption,
-    .shell.theme-light .a2ui-stat-subtitle {
-      color: #64748b;
-    }
-
-    .shell.theme-light .a2ui-nav-item {
-      color: #475569;
-    }
-
-    .shell.theme-light .a2ui-nav-item:hover {
-      background: rgba(102, 126, 234, 0.1);
-      color: #1e293b;
-    }
-
-    .shell.theme-light .a2ui-nav-item.active {
-      background: linear-gradient(
-        135deg,
-        rgba(102, 126, 234, 0.15) 0%,
-        rgba(118, 75, 162, 0.1) 100%
-      );
-      color: #667eea;
-    }
-
-    .shell.theme-light .logo-text,
-    .shell.theme-light .status-text {
-      color: #1e293b;
-    }
-
-    .shell.theme-light .chat-input-container {
-      background: rgba(255, 255, 255, 0.9);
-      border-top: 1px solid rgba(102, 126, 234, 0.15);
-    }
-
-    .shell.theme-light .chat-input {
-      background: rgba(241, 245, 249, 0.8);
-      color: #1e293b;
-      border: 1px solid rgba(102, 126, 234, 0.2);
-    }
-
-    .shell.theme-light .chat-input::placeholder {
-      color: #94a3b8;
-    }
-
-    .shell.theme-light .message-bubble.assistant {
-      background: rgba(241, 245, 249, 0.9);
-      color: #1e293b;
-    }
-
-    .shell.theme-light .message-bubble.user {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #ffffff;
-    }
-
-    .shell.theme-light .a2ui-chart-container {
-      background: rgba(255, 255, 255, 0.5);
-    }
-
-    .shell.theme-light .surface-modal {
-      background: rgba(0, 0, 0, 0.3);
-    }
-
-    .shell.theme-light .surface-modal-content {
-      background: #ffffff;
-      color: #1e293b;
-    }
-
     /* Theme toggle button */
     .theme-toggle {
       background: transparent;
@@ -1404,23 +1371,26 @@ class PHAApp extends LitElement {
       padding: 4px 8px;
       border-radius: 8px;
       transition: all 0.2s ease;
+      color: var(--color-text-secondary);
     }
 
     .theme-toggle:hover {
-      background: rgba(102, 126, 234, 0.15);
+      background: var(--color-surface-hover);
     }
 
     .surface-sidebar {
       width: 280px;
       box-sizing: border-box;
-      background: rgba(15, 15, 25, 0.8);
-      border-right: 1px solid rgba(102, 126, 234, 0.15);
+      background: var(--color-surface);
+      border-right: 1px solid var(--color-border);
       display: flex;
       flex-direction: column;
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
-      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.3);
-      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.1);
+      transition:
+        width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        background 0.3s ease;
     }
 
     .surface-sidebar.collapsed {
@@ -1490,9 +1460,9 @@ class PHAApp extends LitElement {
       height: 44px;
       margin: 0 auto;
       border-radius: 12px;
-      border: 1px solid rgba(102, 126, 234, 0.2);
-      background: rgba(102, 126, 234, 0.08);
-      color: rgba(255, 255, 255, 0.6);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      color: var(--color-text-secondary);
       cursor: pointer;
       transition: all 0.2s ease;
       font-size: 18px;
@@ -1500,9 +1470,9 @@ class PHAApp extends LitElement {
     }
 
     .collapse-toggle-collapsed:hover {
-      background: rgba(102, 126, 234, 0.15);
-      border-color: rgba(102, 126, 234, 0.4);
-      color: #ffffff;
+      background: var(--color-surface-hover);
+      border-color: var(--color-primary);
+      color: var(--color-text);
       box-shadow: 0 4px 16px rgba(102, 126, 234, 0.25);
     }
 
@@ -1513,13 +1483,13 @@ class PHAApp extends LitElement {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #10b981;
+      background: var(--color-success);
       box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
-      border: 2px solid rgba(15, 15, 25, 1);
+      border: 2px solid var(--color-bg);
     }
 
     .collapse-toggle-collapsed .status-dot-mini.disconnected {
-      background: #ef4444;
+      background: var(--color-error);
       box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
     }
 
@@ -1528,7 +1498,7 @@ class PHAApp extends LitElement {
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: rgba(10, 10, 15, 0.5);
+      background: var(--color-surface);
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
     }
@@ -1536,7 +1506,7 @@ class PHAApp extends LitElement {
     .surface-modal {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.8);
+      background: var(--color-overlay);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
       display: flex;
@@ -1546,9 +1516,9 @@ class PHAApp extends LitElement {
     }
 
     .surface-modal-content {
-      background: rgba(20, 20, 35, 0.95);
+      background: var(--color-surface-elevated);
       border-radius: 20px;
-      border: 1px solid rgba(102, 126, 234, 0.2);
+      border: 1px solid var(--color-border);
       max-width: 500px;
       width: 90%;
       max-height: 80vh;
@@ -1626,7 +1596,7 @@ class PHAApp extends LitElement {
       align-items: center;
       gap: 8px;
       font-size: 12px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       width: 100%;
     }
 
@@ -1665,9 +1635,9 @@ class PHAApp extends LitElement {
       width: 32px;
       height: 32px;
       border-radius: 8px;
-      border: 1px solid rgba(102, 126, 234, 0.2);
-      background: rgba(102, 126, 234, 0.1);
-      color: rgba(255, 255, 255, 0.6);
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      color: var(--color-text-secondary);
       cursor: pointer;
       transition: all 0.25s ease;
       font-size: 14px;
@@ -1675,9 +1645,9 @@ class PHAApp extends LitElement {
     }
 
     .collapse-toggle:hover {
-      background: rgba(102, 126, 234, 0.25);
-      border-color: rgba(102, 126, 234, 0.4);
-      color: #ffffff;
+      background: var(--color-surface-hover);
+      border-color: var(--color-primary);
+      color: var(--color-text);
       box-shadow: 0 0 16px rgba(102, 126, 234, 0.3);
       transform: scale(1.05);
     }
@@ -1718,25 +1688,23 @@ class PHAApp extends LitElement {
     }
     .a2ui-text-caption {
       font-size: 12px;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--color-text-secondary);
     }
     .a2ui-text-label {
       font-size: 12px;
       font-weight: 500;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
     }
 
     .a2ui-card {
-      background: rgba(20, 20, 35, 0.6);
-      border: 1px solid rgba(102, 126, 234, 0.15);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
       border-radius: 20px;
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
       transition: all 0.3s ease;
     }
 
@@ -1751,19 +1719,17 @@ class PHAApp extends LitElement {
       font-size: 16px;
       font-weight: 600;
       margin-bottom: 16px;
-      color: rgba(255, 255, 255, 0.9);
+      color: var(--color-text);
     }
 
     .a2ui-stat-card {
-      background: rgba(20, 20, 35, 0.6);
-      border: 1px solid rgba(102, 126, 234, 0.15);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
       border-radius: 20px;
       padding: 24px;
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      box-shadow:
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
       transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
@@ -1817,15 +1783,16 @@ class PHAApp extends LitElement {
     }
     .a2ui-stat-title {
       font-size: 14px;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--color-text-secondary);
     }
     .a2ui-stat-value {
       font-size: 36px;
       font-weight: 700;
+      color: var(--color-text);
     }
     .a2ui-stat-subtitle {
       font-size: 12px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       margin-top: 4px;
     }
     .a2ui-stat-trend {
@@ -1839,7 +1806,7 @@ class PHAApp extends LitElement {
       color: #ef4444;
     }
     .a2ui-stat-trend.stable {
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
     }
 
     .a2ui-metric {
@@ -1857,11 +1824,11 @@ class PHAApp extends LitElement {
     }
     .a2ui-metric-unit {
       font-size: 14px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
     }
     .a2ui-metric-label {
       font-size: 12px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       margin-left: 8px;
     }
 
@@ -1897,7 +1864,7 @@ class PHAApp extends LitElement {
 
     .a2ui-bar-label {
       font-size: 10px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       margin-top: 8px;
       white-space: nowrap;
     }
@@ -1961,7 +1928,7 @@ class PHAApp extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: rgba(255, 255, 255, 0.3);
+      color: var(--color-text-muted);
     }
 
     .a2ui-table {
@@ -1980,7 +1947,7 @@ class PHAApp extends LitElement {
       font-size: 12px;
       font-weight: 500;
       text-transform: uppercase;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
     }
 
     .a2ui-button {
@@ -2016,7 +1983,7 @@ class PHAApp extends LitElement {
 
     .a2ui-button-ghost {
       background: transparent;
-      color: rgba(255, 255, 255, 0.7);
+      color: var(--color-text-secondary);
     }
 
     .a2ui-button:disabled {
@@ -2047,7 +2014,7 @@ class PHAApp extends LitElement {
       transition: all 0.25s ease;
       border: 1px solid transparent;
       background: transparent;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-secondary);
       font-size: 14px;
       font-family: inherit;
       text-align: left;
@@ -2070,8 +2037,8 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-nav-item:hover {
-      color: rgba(255, 255, 255, 0.9);
-      border-color: rgba(102, 126, 234, 0.15);
+      color: var(--color-text);
+      border-color: var(--color-border-hover);
     }
 
     .a2ui-nav-item:hover::before {
@@ -2112,7 +2079,7 @@ class PHAApp extends LitElement {
         rgba(102, 126, 234, 0.2) 0%,
         rgba(118, 75, 162, 0.15) 100%
       );
-      color: #ffffff;
+      color: var(--color-text);
       border: 1px solid rgba(102, 126, 234, 0.4);
       box-shadow:
         0 4px 16px rgba(102, 126, 234, 0.2),
@@ -2198,14 +2165,14 @@ class PHAApp extends LitElement {
       padding: 12px 20px;
       background: transparent;
       border: none;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--color-text-secondary);
       cursor: pointer;
       font-size: 14px;
       position: relative;
     }
 
     .a2ui-tab.active {
-      color: white;
+      color: var(--color-text);
     }
 
     .a2ui-tab.active::after {
@@ -2224,7 +2191,7 @@ class PHAApp extends LitElement {
 
     .a2ui-progress-label {
       font-size: 12px;
-      color: rgba(255, 255, 255, 0.6);
+      color: var(--color-text-secondary);
       margin-bottom: 8px;
     }
 
@@ -2251,7 +2218,7 @@ class PHAApp extends LitElement {
 
     .a2ui-badge-default {
       background: rgba(255, 255, 255, 0.1);
-      color: rgba(255, 255, 255, 0.7);
+      color: var(--color-text-secondary);
     }
     .a2ui-badge-success {
       background: rgba(16, 185, 129, 0.2);
@@ -2353,7 +2320,7 @@ class PHAApp extends LitElement {
 
     .a2ui-chat-empty-subtitle {
       font-size: 14px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       max-width: 300px;
       margin-bottom: 32px;
     }
@@ -2367,23 +2334,23 @@ class PHAApp extends LitElement {
 
     .a2ui-suggestion {
       padding: 14px 22px;
-      background: rgba(20, 20, 35, 0.6);
-      border: 1px solid rgba(102, 126, 234, 0.2);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
       border-radius: 14px;
       cursor: pointer;
       transition: all 0.25s ease;
       font-size: 13px;
-      color: rgba(255, 255, 255, 0.8);
+      color: var(--color-text-secondary);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
     }
 
     .a2ui-suggestion:hover {
-      background: rgba(102, 126, 234, 0.15);
-      border-color: rgba(102, 126, 234, 0.4);
+      background: var(--color-surface-hover);
+      border-color: var(--color-primary);
       transform: translateY(-3px);
       box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
-      color: #ffffff;
+      color: var(--color-text);
     }
 
     .suggestion-icon {
@@ -2459,12 +2426,12 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-message-assistant .a2ui-message-content {
-      background: rgba(20, 20, 35, 0.8);
-      border: 1px solid rgba(102, 126, 234, 0.15);
+      background: var(--color-surface-card);
+      border: 1px solid var(--color-border);
       border-radius: 20px 20px 20px 4px;
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
     }
 
     .a2ui-message-user .a2ui-message-content {
@@ -2500,7 +2467,7 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-message-content .code-block {
-      background: rgba(0, 0, 0, 0.3);
+      background: var(--color-surface-code);
       border-radius: 12px;
       padding: 16px;
       margin: 12px 0;
@@ -2510,7 +2477,7 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-message-content .inline-code {
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--color-surface-inline-code);
       padding: 2px 8px;
       border-radius: 6px;
       font-family: "SF Mono", Monaco, Consolas, monospace;
@@ -2522,7 +2489,7 @@ class PHAApp extends LitElement {
       border-collapse: collapse;
       margin: 12px 0;
       font-size: 13px;
-      background: rgba(0, 0, 0, 0.2);
+      background: var(--color-surface-code);
       border-radius: 12px;
       overflow: hidden;
     }
@@ -2537,7 +2504,7 @@ class PHAApp extends LitElement {
     .a2ui-message-content .md-table th {
       background: rgba(102, 126, 234, 0.15);
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.9);
+      color: var(--color-text);
     }
 
     .a2ui-message-content .md-table tr:last-child td {
@@ -2597,20 +2564,21 @@ class PHAApp extends LitElement {
       display: flex;
       gap: 12px;
       padding: 24px;
-      border-top: 1px solid rgba(102, 126, 234, 0.1);
-      background: rgba(15, 15, 25, 0.6);
+      border-top: 1px solid var(--color-border);
+      background: var(--color-surface);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
+      transition: background 0.3s ease;
     }
 
     .a2ui-chat-input-field {
       flex: 1;
-      background: rgba(20, 20, 35, 0.8);
-      border: 1px solid rgba(102, 126, 234, 0.2);
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
       border-radius: 16px;
       padding: 16px 20px;
       font-size: 14px;
-      color: #ffffff;
+      color: var(--color-text);
       font-family: inherit;
       outline: none;
       transition: all 0.25s ease;
@@ -2619,15 +2587,15 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-chat-input-field:focus {
-      border-color: rgba(102, 126, 234, 0.5);
+      border-color: var(--color-primary);
       box-shadow:
         0 0 0 4px rgba(102, 126, 234, 0.1),
         0 0 24px rgba(102, 126, 234, 0.1);
-      background: rgba(25, 25, 40, 0.9);
+      background: var(--color-bg-tertiary);
     }
 
     .a2ui-chat-input-field::placeholder {
-      color: rgba(255, 255, 255, 0.35);
+      color: var(--color-text-muted);
     }
 
     .a2ui-chat-send {
@@ -2679,9 +2647,9 @@ class PHAApp extends LitElement {
     /* Code Editor */
     .a2ui-code-editor {
       display: flex;
-      border: 1px solid rgba(102, 126, 234, 0.2);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
-      background: rgba(10, 10, 20, 0.8);
+      background: var(--color-surface-code);
       overflow: hidden;
       font-family: "SF Mono", Monaco, Consolas, monospace;
       font-size: 13px;
@@ -2697,7 +2665,7 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-line-number {
-      color: rgba(255, 255, 255, 0.3);
+      color: var(--color-text-muted);
       line-height: 1.5;
     }
 
@@ -2735,7 +2703,7 @@ class PHAApp extends LitElement {
       gap: 4px 12px;
       padding: 12px;
       border-radius: 10px;
-      background: rgba(20, 20, 35, 0.5);
+      background: var(--color-surface-card);
       border: 1px solid transparent;
       cursor: pointer;
       transition: all 0.2s ease;
@@ -2760,7 +2728,7 @@ class PHAApp extends LitElement {
 
     .a2ui-commit-message {
       font-size: 13px;
-      color: rgba(255, 255, 255, 0.9);
+      color: var(--color-text);
       grid-row: 1;
       white-space: nowrap;
       overflow: hidden;
@@ -2769,7 +2737,7 @@ class PHAApp extends LitElement {
 
     .a2ui-commit-meta {
       font-size: 11px;
-      color: rgba(255, 255, 255, 0.4);
+      color: var(--color-text-muted);
       grid-row: 2;
       grid-column: 1 / -1;
       display: flex;
@@ -2778,17 +2746,17 @@ class PHAApp extends LitElement {
 
     /* Diff View */
     .a2ui-diff-view {
-      border: 1px solid rgba(102, 126, 234, 0.2);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
       overflow: hidden;
-      background: rgba(10, 10, 20, 0.8);
+      background: var(--color-surface-code);
     }
 
     .a2ui-diff-title {
       padding: 12px 16px;
       border-bottom: 1px solid rgba(102, 126, 234, 0.1);
       font-weight: 500;
-      color: rgba(255, 255, 255, 0.8);
+      color: var(--color-text);
     }
 
     .a2ui-diff-content {
@@ -2810,7 +2778,7 @@ class PHAApp extends LitElement {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       background: rgba(102, 126, 234, 0.05);
       border-bottom: 1px solid rgba(102, 126, 234, 0.1);
     }
@@ -2839,8 +2807,8 @@ class PHAApp extends LitElement {
       width: 40px;
       padding: 0 8px;
       text-align: right;
-      color: rgba(255, 255, 255, 0.3);
-      background: rgba(0, 0, 0, 0.2);
+      color: var(--color-text-muted);
+      background: var(--color-surface-inline-code);
       user-select: none;
       flex-shrink: 0;
     }
@@ -2852,10 +2820,10 @@ class PHAApp extends LitElement {
 
     /* Data Table */
     .a2ui-data-table-container {
-      border: 1px solid rgba(102, 126, 234, 0.15);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
       overflow: hidden;
-      background: rgba(20, 20, 35, 0.5);
+      background: var(--color-surface-card);
     }
 
     .a2ui-data-table {
@@ -2870,7 +2838,7 @@ class PHAApp extends LitElement {
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       background: rgba(102, 126, 234, 0.08);
       border-bottom: 1px solid rgba(102, 126, 234, 0.1);
     }
@@ -2881,7 +2849,7 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-data-table th.sortable:hover {
-      color: rgba(255, 255, 255, 0.8);
+      color: var(--color-text);
     }
 
     .a2ui-data-table th .sort-indicator {
@@ -2932,7 +2900,7 @@ class PHAApp extends LitElement {
 
     .a2ui-pagination-info {
       font-size: 12px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
     }
 
     .a2ui-pagination-controls {
@@ -2946,7 +2914,7 @@ class PHAApp extends LitElement {
       border-radius: 8px;
       border: 1px solid rgba(102, 126, 234, 0.2);
       background: rgba(102, 126, 234, 0.1);
-      color: rgba(255, 255, 255, 0.7);
+      color: var(--color-text-secondary);
       cursor: pointer;
       transition: all 0.2s ease;
     }
@@ -2975,7 +2943,7 @@ class PHAApp extends LitElement {
 
     .a2ui-gauge-bg {
       fill: none;
-      stroke: rgba(255, 255, 255, 0.1);
+      stroke: var(--color-gauge-track);
     }
 
     .a2ui-gauge-fill {
@@ -2999,7 +2967,7 @@ class PHAApp extends LitElement {
 
     .a2ui-gauge-label {
       font-size: 11px;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
@@ -3061,10 +3029,10 @@ class PHAApp extends LitElement {
 
     /* Collapsible */
     .a2ui-collapsible {
-      border: 1px solid rgba(102, 126, 234, 0.15);
+      border: 1px solid var(--color-border);
       border-radius: 12px;
       overflow: hidden;
-      background: rgba(20, 20, 35, 0.5);
+      background: var(--color-surface-card);
     }
 
     .a2ui-collapsible-header {
@@ -3075,7 +3043,7 @@ class PHAApp extends LitElement {
       padding: 14px 16px;
       background: rgba(102, 126, 234, 0.05);
       border: none;
-      color: rgba(255, 255, 255, 0.9);
+      color: var(--color-text);
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
@@ -3097,7 +3065,7 @@ class PHAApp extends LitElement {
 
     .a2ui-collapsible-arrow {
       font-size: 10px;
-      color: rgba(255, 255, 255, 0.4);
+      color: var(--color-text-muted);
       transition: transform 0.2s ease;
     }
 
@@ -3117,9 +3085,9 @@ class PHAApp extends LitElement {
 
     /* Modal Component */
     .a2ui-modal {
-      background: linear-gradient(145deg, rgba(30, 30, 50, 0.98), rgba(20, 20, 35, 0.98));
+      background: var(--color-surface-elevated);
       border-radius: 16px;
-      border: 1px solid rgba(102, 126, 234, 0.2);
+      border: 1px solid var(--color-border);
       box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
       overflow: hidden;
     }
@@ -3159,7 +3127,7 @@ class PHAApp extends LitElement {
     .a2ui-modal-close {
       background: transparent;
       border: none;
-      color: rgba(255, 255, 255, 0.5);
+      color: var(--color-text-muted);
       font-size: 1.5rem;
       cursor: pointer;
       padding: 4px 8px;
@@ -3194,7 +3162,7 @@ class PHAApp extends LitElement {
     .a2ui-label {
       font-size: 0.875rem;
       font-weight: 500;
-      color: rgba(255, 255, 255, 0.8);
+      color: var(--color-text);
     }
 
     .a2ui-required {
@@ -3220,7 +3188,7 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-input::placeholder {
-      color: rgba(255, 255, 255, 0.3);
+      color: var(--color-text-muted);
     }
 
     .a2ui-textarea {
@@ -3242,7 +3210,7 @@ class PHAApp extends LitElement {
       gap: 10px;
       cursor: pointer;
       font-size: 0.9375rem;
-      color: rgba(255, 255, 255, 0.8);
+      color: var(--color-text);
     }
 
     .a2ui-checkbox {
@@ -3444,19 +3412,21 @@ class PHAApp extends LitElement {
                   <div class="status-indicator">
                     <div class="status-dot ${this.connected ? "" : "disconnected"}"></div>
                     <span class="status-text"
-                      >${this.connected ? "Connected" : "Reconnecting..."}</span
+                      >${this.connected ? i18n.common.connected : i18n.common.reconnecting}</span
                     >
                     <button
                       class="theme-toggle"
                       @click=${() => this.toggleTheme()}
-                      title="${this.darkMode ? "Switch to light mode" : "Switch to dark mode"}"
+                      title="${this.darkMode
+                        ? i18n.common.switchToLight
+                        : i18n.common.switchToDark}"
                     >
                       ${this.darkMode ? "☀️" : "🌙"}
                     </button>
                     <button
                       class="collapse-toggle"
                       @click=${() => this.toggleSidebar()}
-                      title="Collapse sidebar"
+                      title="${i18n.common.collapseSidebar}"
                     >
                       «
                     </button>

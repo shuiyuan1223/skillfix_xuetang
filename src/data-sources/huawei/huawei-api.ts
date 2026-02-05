@@ -13,8 +13,13 @@ import {
 } from "./huawei-types.js";
 import { loadConfig } from "../../utils/config.js";
 
-// Huawei Health Kit API base URL
-const HEALTH_API_BASE = "https://health-api.cloud.huawei.com";
+// Huawei Health Kit API base URL (default, can be overridden in config)
+const DEFAULT_API_BASE = "https://health-api.cloud.huawei.com";
+
+function getApiBaseUrl(): string {
+  const config = loadConfig();
+  return config.dataSources.huawei?.apiBaseUrl || DEFAULT_API_BASE;
+}
 
 // Data type names for the API (continuous = 实时采集的连续数据)
 // 只保留确认可用的数据类型
@@ -121,7 +126,7 @@ export class HuaweiHealthApi {
     const startTime = new Date(`${startDate}T00:00:00Z`).getTime();
     const endTime = new Date(`${endDate}T23:59:59.999Z`).getTime();
 
-    const url = `${HEALTH_API_BASE}/healthkit/v1/activityRecords`;
+    const url = `${getApiBaseUrl()}/healthkit/v1/activityRecords`;
 
     const response = await fetch(url, {
       method: "POST",
@@ -189,7 +194,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
 
     // Correct endpoint: /healthkit/v1/sampleSet:polymerize
-    const url = `${HEALTH_API_BASE}/healthkit/v1/sampleSet:polymerize`;
+    const url = `${getApiBaseUrl()}/healthkit/v1/sampleSet:polymerize`;
 
     const response = await fetch(url, {
       method: "POST",

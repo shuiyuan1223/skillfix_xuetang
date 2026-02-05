@@ -8,9 +8,19 @@ import { loadConfig } from "../../utils/config.js";
 import { TokenStore, tokenStore as defaultTokenStore } from "./token-store.js";
 import type { HuaweiTokenResponse, TokenData } from "./huawei-types.js";
 
-// Huawei OAuth endpoints
-const HUAWEI_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authorize";
-const HUAWEI_TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
+// Huawei OAuth endpoints (defaults, can be overridden in config)
+const DEFAULT_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authorize";
+const DEFAULT_TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
+
+function getAuthUrl(): string {
+  const config = loadConfig();
+  return config.dataSources.huawei?.authUrl || DEFAULT_AUTH_URL;
+}
+
+function getTokenUrl(): string {
+  const config = loadConfig();
+  return config.dataSources.huawei?.tokenUrl || DEFAULT_TOKEN_URL;
+}
 
 // Default scopes for health data access
 const DEFAULT_SCOPES = [
@@ -40,7 +50,7 @@ export class HuaweiAuth {
       access_type: "offline", // Request refresh token
     });
 
-    return `${HUAWEI_AUTH_URL}?${params.toString()}`;
+    return `${getAuthUrl()}?${params.toString()}`;
   }
 
   /**
@@ -60,7 +70,7 @@ export class HuaweiAuth {
       redirect_uri: redirectUri,
     });
 
-    const response = await fetch(HUAWEI_TOKEN_URL, {
+    const response = await fetch(getTokenUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -97,7 +107,7 @@ export class HuaweiAuth {
       client_secret: clientSecret,
     });
 
-    const response = await fetch(HUAWEI_TOKEN_URL, {
+    const response = await fetch(getTokenUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

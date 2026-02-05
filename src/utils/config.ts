@@ -1,9 +1,10 @@
 /**
  * Config utilities
  *
- * Configuration is stored in project directory:
- * - ./pha.json - main config file
- * - ./.pha/ - state directory (tokens, logs, etc.)
+ * All configuration and state stored in .pha/ directory:
+ * - ./.pha/config.json - main config file
+ * - ./.pha/huawei-tokens.json - OAuth tokens
+ * - ./.pha/gateway.log - server logs
  *
  * Can be overridden via PHA_CONFIG_PATH environment variable.
  */
@@ -27,6 +28,19 @@ export interface LLMConfig {
   baseUrl?: string;
 }
 
+export interface HuaweiHealthKitConfig {
+  clientId?: string;
+  clientSecret?: string;
+  // API endpoints
+  authUrl?: string;
+  tokenUrl?: string;
+  apiBaseUrl?: string;
+  // OAuth callback
+  redirectUri?: string;
+  // Data fetch options
+  defaultDateRange?: number; // days to fetch by default
+}
+
 export interface PHAConfig {
   gateway: {
     port: number;
@@ -35,10 +49,7 @@ export interface PHAConfig {
   llm: LLMConfig;
   dataSources: {
     type: "mock" | "huawei" | "apple";
-    huawei?: {
-      clientId?: string;
-      clientSecret?: string;
-    };
+    huawei?: HuaweiHealthKitConfig;
   };
   tui: {
     theme: "dark" | "light";
@@ -154,14 +165,14 @@ export function getConfigDir(): string {
 
 /**
  * Get config file path
- * Located at ./pha.json in project root
+ * Located at ./.pha/config.json in project root
  */
 export function getConfigPath(): string {
   const override = process.env.PHA_CONFIG_PATH?.trim();
   if (override) {
     return path.resolve(override);
   }
-  return path.join(findProjectRoot(), "pha.json");
+  return path.join(getStateDir(), "config.json");
 }
 
 export function ensureConfigDir(): void {

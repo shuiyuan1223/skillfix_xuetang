@@ -10,6 +10,7 @@ import { cors } from "hono/cors";
 import { mcpHandler } from "./mcp.js";
 import { createPHAAgent, type PHAAgent } from "../agent/pha-agent.js";
 import { getDataSource } from "../tools/health-data.js";
+import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import {
   generateSidebar,
@@ -303,33 +304,39 @@ export class GatewaySession {
         const hrReadings = heartRate.readings;
         let hrTrend: { direction: "up" | "down" | "stable"; value: string } = {
           direction: "stable",
-          value: "Normal",
+          value: t("common.normal"),
         };
         if (hrReadings.length >= 2) {
           const recent = hrReadings.slice(-3).reduce((a, b) => a + b.value, 0) / 3;
           const earlier = hrReadings.slice(0, 3).reduce((a, b) => a + b.value, 0) / 3;
           if (recent > earlier + 5)
-            hrTrend = { direction: "up", value: `+${Math.round(recent - earlier)} bpm` };
+            hrTrend = {
+              direction: "up",
+              value: `+${Math.round(recent - earlier)} ${t("health.bpmUnit")}`,
+            };
           else if (recent < earlier - 5)
-            hrTrend = { direction: "down", value: `${Math.round(recent - earlier)} bpm` };
+            hrTrend = {
+              direction: "down",
+              value: `${Math.round(recent - earlier)} ${t("health.bpmUnit")}`,
+            };
         }
         mainPage = generateHealthPage({
           heartRate: {
-            label: "Heart Rate",
+            label: t("health.heartRate"),
             value: heartRate.restingAvg,
-            unit: "bpm resting",
+            unit: t("health.bpmResting"),
             trend: hrTrend,
           },
           bloodPressure: {
-            label: "Max HR Today",
+            label: t("health.maxHR"),
             value: heartRate.maxToday,
-            unit: "bpm max",
+            unit: t("health.bpmMax"),
             icon: "🔺",
           },
           spo2: {
-            label: "Min HR Today",
+            label: t("health.minHR"),
             value: heartRate.minToday,
-            unit: "bpm min",
+            unit: t("health.bpmMin"),
             icon: "🔻",
           },
           heartRateChart: heartRate.readings.slice(-12).map((r) => ({
@@ -347,20 +354,20 @@ export class GatewaySession {
         ]);
         mainPage = generateSleepPage({
           duration: {
-            label: "Duration",
+            label: t("sleep.duration"),
             value: sleep?.durationHours || "N/A",
-            unit: "hours",
-            trend: sleep ? { direction: "stable", value: "On track" } : undefined,
+            unit: t("sleep.hours"),
+            trend: sleep ? { direction: "stable", value: t("common.normal") } : undefined,
           },
           quality: {
-            label: "Quality",
+            label: t("sleep.quality"),
             value: sleep?.qualityScore || "N/A",
             unit: "%",
           },
           deepSleep: {
-            label: "Deep Sleep",
+            label: t("sleep.deepSleep"),
             value: sleep?.stages.deep || "N/A",
-            unit: "min",
+            unit: t("sleep.minutes"),
           },
           sleepChart: weeklySleep.map((d) => ({
             label: d.date.slice(-2),
@@ -383,27 +390,28 @@ export class GatewaySession {
         const stepsDiff = metrics.steps - avgSteps;
         const stepsPercent = avgSteps > 0 ? Math.round((stepsDiff / avgSteps) * 100) : 0;
         let stepsTrend: { direction: "up" | "down" | "stable"; value: string } | undefined;
-        if (stepsPercent > 5) stepsTrend = { direction: "up", value: `+${stepsPercent}% vs avg` };
+        if (stepsPercent > 5)
+          stepsTrend = { direction: "up", value: `+${stepsPercent}% ${t("activity.aboveAvg")}` };
         else if (stepsPercent < -5)
-          stepsTrend = { direction: "down", value: `${stepsPercent}% vs avg` };
-        else stepsTrend = { direction: "stable", value: "On track" };
+          stepsTrend = { direction: "down", value: `${stepsPercent}% ${t("activity.belowAvg")}` };
+        else stepsTrend = { direction: "stable", value: t("common.normal") };
 
         mainPage = generateActivityPage({
           steps: {
-            label: "Steps",
+            label: t("activity.steps"),
             value: metrics.steps.toLocaleString(),
-            unit: "steps today",
+            unit: t("activity.stepsToday"),
             trend: stepsTrend,
           },
           calories: {
-            label: "Calories",
+            label: t("activity.calories"),
             value: metrics.calories.toLocaleString(),
-            unit: "kcal burned",
+            unit: t("activity.kcalBurned"),
           },
           activeMinutes: {
-            label: "Active Time",
+            label: t("activity.activeTime"),
             value: metrics.activeMinutes,
-            unit: "minutes",
+            unit: t("sleep.minutes"),
           },
           stepsChart: weeklySteps.map((d) => ({
             label: d.date.slice(-2),
