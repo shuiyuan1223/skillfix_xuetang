@@ -27,3 +27,6 @@ pha.json
 
 # Logs
 *.log
+
+# Test coverage
+coverage/

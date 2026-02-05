@@ -1,0 +1,33 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "endTime": 1770335999999,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-steps-collector",
+          "samplePoints": [
+            {
+              "startTime": 1770249600000000000,
+              "endTime": 1770253200000000000,
+              "dataTypeName": "com.huawei.continuous.steps.delta",
+              "value": [{ "fieldName": "steps", "integerValue": 1500 }]
+            },
+            {
+              "startTime": 1770253200000000000,
+              "endTime": 1770256800000000000,
+              "dataTypeName": "com.huawei.continuous.steps.delta",
+              "value": [{ "fieldName": "steps", "integerValue": 2300 }]
+            },
+            {
+              "startTime": 1770256800000000000,
+              "endTime": 1770260400000000000,
+              "dataTypeName": "com.huawei.continuous.steps.delta",
+              "value": [{ "fieldName": "steps", "integerValue": 1800 }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "endTime": 1770335999999,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-collector-id",
+          "samplePoints": [
+            {
+              "startTime": 1770249600000000000,
+              "endTime": 1770249660000000000,
+              "dataTypeName": "com.huawei.instantaneous.heart_rate",
+              "value": [{ "fieldName": "bpm", "floatValue": 72 }]
+            },
+            {
+              "startTime": 1770249660000000000,
+              "endTime": 1770249720000000000,
+              "dataTypeName": "com.huawei.instantaneous.heart_rate",
+              "value": [{ "fieldName": "bpm", "floatValue": 68 }]
+            },
+            {
+              "startTime": 1770249720000000000,
+              "endTime": 1770249780000000000,
+              "dataTypeName": "com.huawei.instantaneous.heart_rate",
+              "value": [{ "fieldName": "bpm", "floatValue": 85 }]
+            },
+            {
+              "startTime": 1770249780000000000,
+              "endTime": 1770249840000000000,
+              "dataTypeName": "com.huawei.instantaneous.heart_rate",
+              "value": [{ "fieldName": "bpm", "floatValue": 75 }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

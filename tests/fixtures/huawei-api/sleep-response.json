@@ -1,0 +1,51 @@
+{
+  "group": [
+    {
+      "startTime": 1770199200000,
+      "endTime": 1770228000000,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-sleep-collector",
+          "samplePoints": [
+            {
+              "startTime": 1770199200000000000,
+              "endTime": 1770206400000000000,
+              "dataTypeName": "com.huawei.continuous.sleep.segment",
+              "value": [
+                { "fieldName": "sleep_state", "integerValue": 2 },
+                { "fieldName": "sleep_type", "integerValue": 1 }
+              ]
+            },
+            {
+              "startTime": 1770206400000000000,
+              "endTime": 1770213600000000000,
+              "dataTypeName": "com.huawei.continuous.sleep.segment",
+              "value": [
+                { "fieldName": "sleep_state", "integerValue": 3 },
+                { "fieldName": "sleep_type", "integerValue": 1 }
+              ]
+            },
+            {
+              "startTime": 1770213600000000000,
+              "endTime": 1770220800000000000,
+              "dataTypeName": "com.huawei.continuous.sleep.segment",
+              "value": [
+                { "fieldName": "sleep_state", "integerValue": 4 },
+                { "fieldName": "sleep_type", "integerValue": 1 }
+              ]
+            },
+            {
+              "startTime": 1770220800000000000,
+              "endTime": 1770228000000000000,
+              "dataTypeName": "com.huawei.continuous.sleep.segment",
+              "value": [
+                { "fieldName": "sleep_state", "integerValue": 2 },
+                { "fieldName": "sleep_type", "integerValue": 1 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

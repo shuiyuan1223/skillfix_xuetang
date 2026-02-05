@@ -89,8 +89,84 @@ bunx lint-staged  # ESLint + Prettier
 bun run check        # TypeScript 类型检查
 bun run lint         # ESLint
 bun run format:check # Prettier
+bun run test         # 运行测试
 bun run build        # 完整构建
 ```
+
+---
+
+## 测试
+
+### 测试命令
+
+```bash
+bun test              # 运行所有测试
+bun test:watch        # 监听模式
+bun test:coverage     # 覆盖率报告
+bun test:unit         # 仅单元测试
+bun test:integration  # 仅集成测试
+```
+
+### 测试结构
+
+```
+tests/
+├── setup.ts              # 全局测试配置
+├── unit/                 # 单元测试
+│   ├── huawei-types.test.ts
+│   ├── huawei-api-parsing.test.ts
+│   ├── huawei-data-source.test.ts
+│   ├── user-store.test.ts
+│   ├── api-cache.test.ts
+│   ├── config.test.ts
+│   └── pages.test.ts
+├── integration/          # 集成测试
+│   └── oauth-flow.test.ts
+└── fixtures/             # 测试数据
+    └── huawei-api/
+        ├── heart-rate-response.json
+        ├── steps-response.json
+        ├── sleep-response.json
+        └── empty-response.json
+```
+
+### 测试策略
+
+| 测试类型 | 覆盖范围 | 文件位置 |
+|---------|---------|---------|
+| 单元测试 | 纯函数、数据转换 | `tests/unit/` |
+| 集成测试 | 模块协作、Token 流程 | `tests/integration/` |
+| 契约测试 | API 响应结构 | fixtures + 解析测试 |
+
+### 添加新测试
+
+1. **单元测试**: 测试纯函数和数据转换
+   ```typescript
+   // tests/unit/xxx.test.ts
+   import { describe, test, expect } from "bun:test";
+
+   describe("functionName", () => {
+     test("describes behavior", () => {
+       expect(actual).toBe(expected);
+     });
+   });
+   ```
+
+2. **使用 fixture**: 从 `.pha/api-cache/` 提取真实响应
+   ```typescript
+   import response from "../fixtures/huawei-api/xxx.json";
+   ```
+
+3. **隔离测试**: 使用内存数据库
+   ```typescript
+   const store = new UserStore(":memory:");
+   ```
+
+### 测试覆盖优先级
+
+1. **必须测试**: 数据转换、Token 逻辑、API 解析
+2. **建议测试**: 页面生成器、配置管理
+3. **可选测试**: CLI 命令、UI 渲染
 
 ### Commit 规范
 
