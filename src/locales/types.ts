@@ -50,13 +50,29 @@ export interface LocaleMessages {
     title: string;
     subtitle: string;
     heartRate: string;
+    restingHR: string;
     maxHR: string;
     minHR: string;
     heartRateTrend: string;
     bpmResting: string;
+    bpmAvg: string;
     bpmMax: string;
     bpmMin: string;
     bpmUnit: string;
+    spo2: string;
+    oxygen: string;
+    stress: string;
+    stressLevel: string;
+    high: string;
+    low: string;
+    veryLow: string;
+    noData: string;
+    ecg: string;
+    arrhythmiaDetected: string;
+    normalRhythm: string;
+    latestEcgHr: string;
+    recordTime: string;
+    ecgResult: string;
   };
 
   // Sleep page
@@ -135,6 +151,18 @@ export interface LocaleMessages {
     type: string;
     target: string;
     rationale: string;
+  };
+
+  // OAuth / Authorization
+  auth: {
+    required: string;
+    requiredSubtitle: string;
+    connectHuawei: string;
+    success: string;
+    successMessage: string;
+    failed: string;
+    closingWindow: string;
+    closeWindow: string;
   };
 }
 

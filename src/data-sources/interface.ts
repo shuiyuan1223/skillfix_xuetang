@@ -23,6 +23,42 @@ export interface HeartRateData {
   }>;
 }
 
+export interface StressData {
+  date: string;
+  current: number; // 1-99
+  avg: number;
+  max: number;
+  min: number;
+  readings: Array<{
+    time: string;
+    value: number;
+  }>;
+}
+
+export interface SpO2Data {
+  date: string;
+  current: number; // percentage 0-100
+  avg: number;
+  max: number;
+  min: number;
+  readings: Array<{
+    time: string;
+    value: number;
+  }>;
+}
+
+export interface ECGData {
+  date: string;
+  records: Array<{
+    time: string;
+    avgHeartRate: number;
+    arrhythmiaType: number; // 1=normal, 2=sinus arrhythmia, 3=AF, etc.
+    arrhythmiaLabel: string;
+  }>;
+  latestHeartRate: number | null;
+  hasArrhythmia: boolean;
+}
+
 export interface SleepData {
   date: string;
   durationHours: number;
@@ -54,6 +90,12 @@ export interface HealthDataSource {
   getHeartRate(date: string): Promise<HeartRateData>;
   getSleep(date: string): Promise<SleepData | null>;
   getWorkouts(date: string): Promise<WorkoutData[]>;
+
+  // Extended health data (optional - may return null if not supported)
+  getStress?(date: string): Promise<StressData | null>;
+  getSpO2?(date: string): Promise<SpO2Data | null>;
+  getRestingHeartRate?(date: string): Promise<number | null>;
+  getECG?(date: string): Promise<ECGData | null>;
 
   // Weekly aggregations
   getWeeklySteps(endDate: string): Promise<Array<{ date: string; steps: number }>>;

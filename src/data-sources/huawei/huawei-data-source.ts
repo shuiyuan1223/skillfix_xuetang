@@ -2,7 +2,7 @@
  * Huawei Health Data Source
  *
  * Implements HealthDataSource interface using Huawei Health Kit API.
- * Falls back to mock data for unsupported data types (heart rate, sleep).
+ * Returns real data when available, null/empty when not (no mock fallback).
  */
 
 import type {
@@ -11,23 +11,51 @@ import type {
   HeartRateData,
   SleepData,
   WorkoutData,
+  StressData,
+  SpO2Data,
+  ECGData,
 } from "../interface.js";
-import { MockDataSource } from "../mock.js";
-import { HuaweiHealthApi, huaweiHealthApi } from "./huawei-api.js";
+import { HuaweiHealthApi, huaweiHealthApi, createHuaweiHealthApiForUser } from "./huawei-api.js";
 import { HuaweiAuth, huaweiAuth } from "./huawei-auth.js";
 import { mapActivityType } from "./huawei-types.js";
+import { getUserStore } from "./user-store.js";
 
 export class HuaweiHealthDataSource implements HealthDataSource {
   readonly name = "huawei";
 
   private api: HuaweiHealthApi;
   private auth: HuaweiAuth;
-  private mockFallback: MockDataSource;
+  private userUuid: string | null = null;
 
-  constructor(api: HuaweiHealthApi = huaweiHealthApi, auth: HuaweiAuth = huaweiAuth) {
-    this.api = api;
+  /**
+   * Create a HuaweiHealthDataSource
+   * @param userUuid - Optional user UUID for multi-user mode. If provided, uses SQLite token storage.
+   * @param api - Optional custom API instance
+   * @param auth - Optional custom auth instance
+   */
+  constructor(userUuid?: string, api?: HuaweiHealthApi, auth: HuaweiAuth = huaweiAuth) {
+    this.userUuid = userUuid || null;
     this.auth = auth;
-    this.mockFallback = new MockDataSource();
+
+    // If userUuid is provided, create a user-specific API instance
+    if (userUuid) {
+      this.api = api || createHuaweiHealthApiForUser(userUuid);
+    } else {
+      this.api = api || huaweiHealthApi;
+    }
+  }
+
+  /**
+   * Ensure valid token for this data source (handles multi-user)
+   */
+  private async ensureToken(): Promise<void> {
+    if (this.userUuid) {
+      // Multi-user mode: use SQLite token
+      await this.auth.ensureValidTokenForUser(this.userUuid, getUserStore());
+    } else {
+      // Single-user mode: use file token
+      await this.ensureToken();
+    }
   }
 
   /**
@@ -36,14 +64,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
    */
   async getMetrics(date: string): Promise<HealthMetrics> {
     try {
-      // Try to ensure valid token (will refresh if expired)
-      await this.auth.ensureValidToken();
-    } catch {
-      console.warn("Huawei not authenticated, using mock data");
-      return this.mockFallback.getMetrics(date);
-    }
-
-    try {
+      await this.ensureToken();
       const data = await this.api.getPolymerizeData(date);
       return {
         date,
@@ -53,8 +74,9 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         activeMinutes: data.activeMinutes,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei metrics, using mock:", error);
-      return this.mockFallback.getMetrics(date);
+      console.warn("Failed to fetch Huawei metrics:", error);
+      // Return zeros instead of mock data
+      return { date, steps: 0, distance: 0, calories: 0, activeMinutes: 0 };
     }
   }
 
@@ -63,20 +85,8 @@ export class HuaweiHealthDataSource implements HealthDataSource {
    */
   async getHeartRate(date: string): Promise<HeartRateData> {
     try {
-      await this.auth.ensureValidToken();
-    } catch {
-      console.warn("Huawei not authenticated, using mock heart rate data");
-      return this.mockFallback.getHeartRate(date);
-    }
-
-    try {
+      await this.ensureToken();
       const result = await this.api.getHeartRateData(date);
-
-      if (result.readings.length === 0) {
-        console.warn("No heart rate data from Huawei, using mock");
-        return this.mockFallback.getHeartRate(date);
-      }
-
       return {
         date,
         restingAvg: result.avg,
@@ -85,8 +95,8 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         readings: result.readings,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei heart rate, using mock:", error);
-      return this.mockFallback.getHeartRate(date);
+      console.warn("Failed to fetch Huawei heart rate:", error);
+      return { date, restingAvg: 0, maxToday: 0, minToday: 0, readings: [] };
     }
   }
 
@@ -95,25 +105,17 @@ export class HuaweiHealthDataSource implements HealthDataSource {
    */
   async getSleep(date: string): Promise<SleepData | null> {
     try {
-      await this.auth.ensureValidToken();
-    } catch {
-      console.warn("Huawei not authenticated, using mock sleep data");
-      return this.mockFallback.getSleep(date);
-    }
-
-    try {
+      await this.ensureToken();
       const result = await this.api.getSleepData(date);
 
       if (!result) {
-        console.warn("No sleep data from Huawei, using mock");
-        return this.mockFallback.getSleep(date);
+        return null; // No sleep data available
       }
 
       // Use API-provided stage durations if available, otherwise calculate from segments
       let stages = { deep: 0, light: 0, rem: 0, awake: 0 };
 
       if (result.deepSleepMinutes !== undefined || result.lightSleepMinutes !== undefined) {
-        // Use direct values from API
         stages = {
           deep: result.deepSleepMinutes || 0,
           light: result.lightSleepMinutes || 0,
@@ -137,14 +139,13 @@ export class HuaweiHealthDataSource implements HealthDataSource {
             case 4:
               stages.rem += duration;
               break;
-            case 5: // nap - count as light sleep
+            case 5:
               stages.light += duration;
               break;
           }
         }
       }
 
-      // Use API sleep score if available, otherwise calculate
       const qualityScore =
         result.sleepScore !== undefined
           ? result.sleepScore
@@ -164,8 +165,8 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         stages,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei sleep, using mock:", error);
-      return this.mockFallback.getSleep(date);
+      console.warn("Failed to fetch Huawei sleep:", error);
+      return null;
     }
   }
 
@@ -174,14 +175,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
    */
   async getWorkouts(date: string): Promise<WorkoutData[]> {
     try {
-      // Try to ensure valid token (will refresh if expired)
-      await this.auth.ensureValidToken();
-    } catch {
-      console.warn("Huawei not authenticated, using mock data");
-      return this.mockFallback.getWorkouts(date);
-    }
-
-    try {
+      await this.ensureToken();
       const records = await this.api.getActivityRecords(date, date);
 
       return records.map((record) => ({
@@ -194,8 +188,8 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         avgHeartRate: record.avgHeartRate,
       }));
     } catch (error) {
-      console.warn("Failed to fetch Huawei workouts, using mock:", error);
-      return this.mockFallback.getWorkouts(date);
+      console.warn("Failed to fetch Huawei workouts:", error);
+      return [];
     }
   }
 
@@ -222,18 +216,132 @@ export class HuaweiHealthDataSource implements HealthDataSource {
    */
   async getWeeklySleep(endDate: string): Promise<Array<{ date: string; hours: number }>> {
     try {
-      await this.auth.ensureValidToken();
-    } catch {
-      console.warn("Huawei not authenticated, using mock weekly sleep data");
-      return this.mockFallback.getWeeklySleep(endDate);
-    }
-
-    try {
+      await this.ensureToken();
       const data = await this.api.getWeeklySleepData(endDate);
       return data.map((d) => ({ date: d.date, hours: d.hours }));
     } catch (error) {
-      console.warn("Failed to fetch Huawei weekly sleep, using mock:", error);
-      return this.mockFallback.getWeeklySleep(endDate);
+      console.warn("Failed to fetch Huawei weekly sleep:", error);
+      // Return empty array for each day
+      const result: Array<{ date: string; hours: number }> = [];
+      const end = new Date(endDate);
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(end);
+        d.setDate(d.getDate() - i);
+        result.push({ date: d.toISOString().split("T")[0], hours: 0 });
+      }
+      return result;
+    }
+  }
+
+  /**
+   * Get stress data from Huawei API
+   */
+  async getStress(date: string): Promise<StressData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      console.warn("Huawei not authenticated, no stress data available");
+      return null;
+    }
+
+    try {
+      const result = await this.api.getStressData(date);
+      if (!result) {
+        return null;
+      }
+      return {
+        date,
+        current: result.current,
+        avg: result.avg,
+        max: result.max,
+        min: result.min,
+        readings: result.readings,
+      };
+    } catch (error) {
+      console.warn("Failed to fetch Huawei stress data:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get SpO2 (blood oxygen) data from Huawei API
+   */
+  async getSpO2(date: string): Promise<SpO2Data | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      console.warn("Huawei not authenticated, no SpO2 data available");
+      return null;
+    }
+
+    try {
+      const result = await this.api.getSpO2Data(date);
+      if (!result) {
+        return null;
+      }
+      return {
+        date,
+        current: result.current,
+        avg: result.avg,
+        max: result.max,
+        min: result.min,
+        readings: result.readings,
+      };
+    } catch (error) {
+      console.warn("Failed to fetch Huawei SpO2 data:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get resting heart rate from Huawei API
+   */
+  async getRestingHeartRate(date: string): Promise<number | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      console.warn("Huawei not authenticated, no resting heart rate available");
+      return null;
+    }
+
+    try {
+      return await this.api.getRestingHeartRateData(date);
+    } catch (error) {
+      console.warn("Failed to fetch Huawei resting heart rate:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get ECG (electrocardiogram) data from Huawei API
+   */
+  async getECG(date: string): Promise<ECGData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      console.warn("Huawei not authenticated, no ECG data available");
+      return null;
+    }
+
+    try {
+      const result = await this.api.getECGData(date);
+      if (!result) {
+        return null;
+      }
+      return {
+        date,
+        records: result.records.map((r) => ({
+          time: r.time,
+          avgHeartRate: r.avgHeartRate,
+          arrhythmiaType: r.arrhythmiaType,
+          arrhythmiaLabel: r.arrhythmiaLabel,
+        })),
+        latestHeartRate: result.latestHeartRate,
+        hasArrhythmia: result.hasArrhythmia,
+      };
+    } catch (error) {
+      console.warn("Failed to fetch Huawei ECG data:", error);
+      return null;
     }
   }
 
@@ -241,6 +349,11 @@ export class HuaweiHealthDataSource implements HealthDataSource {
    * Check if the data source is properly configured and authenticated
    */
   isReady(): boolean {
+    if (this.userUuid) {
+      // Multi-user mode: check SQLite
+      return this.auth.isUserAuthenticated(this.userUuid, getUserStore());
+    }
+    // Single-user mode: check file
     return this.auth.isAuthenticated();
   }
 }

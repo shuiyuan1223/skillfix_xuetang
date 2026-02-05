@@ -9,14 +9,15 @@ import { loadConfig } from "../utils/config.js";
 
 /**
  * Create a data source based on configuration
+ * @param userUuid - Optional user UUID for multi-user mode (web users)
  */
-export function createDataSource(): HealthDataSource {
+export function createDataSource(userUuid?: string): HealthDataSource {
   const config = loadConfig();
   const type = config.dataSources.type;
 
   switch (type) {
     case "huawei":
-      return new HuaweiHealthDataSource();
+      return new HuaweiHealthDataSource(userUuid);
     case "apple":
       // Apple Health not implemented yet, fallback to mock
       console.warn("Apple Health not implemented, using mock data");
@@ -25,6 +26,13 @@ export function createDataSource(): HealthDataSource {
     default:
       return new MockDataSource();
   }
+}
+
+/**
+ * Create a data source for a specific user (multi-user mode)
+ */
+export function createDataSourceForUser(userUuid: string): HealthDataSource {
+  return createDataSource(userUuid);
 }
 
 // Default data source based on config

@@ -13,6 +13,7 @@ import {
 } from "./huawei-types.js";
 import { loadConfig } from "../../utils/config.js";
 import { saveToFileCache, getFromMemoryCache, saveToMemoryCache } from "./api-cache.js";
+import { getUserStore } from "./user-store.js";
 
 // Huawei Health Kit API base URL (default, can be overridden in config)
 const DEFAULT_API_BASE = "https://health-api.cloud.huawei.com";
@@ -35,8 +36,12 @@ const DATA_TYPE_NAMES: Record<number, string> = {
 const HEALTH_DATA_TYPES = {
   HEART_RATE: "com.huawei.instantaneous.heart_rate",
   HEART_RATE_STATISTICS: "com.huawei.continuous.heart_rate.statistics",
+  RESTING_HEART_RATE: "com.huawei.instantaneous.resting_heart_rate",
   SLEEP: "com.huawei.continuous.sleep.segment",
   SLEEP_STATISTICS: "com.huawei.continuous.sleep.statistics",
+  STRESS: "com.huawei.instantaneous.stress",
+  SPO2: "com.huawei.instantaneous.spo2",
+  ECG: "com.huawei.continuous.ecg_record",
 };
 
 export interface PolymerizeResult {
@@ -59,9 +64,23 @@ export interface ActivityRecord {
 
 export class HuaweiHealthApi {
   private auth: HuaweiAuth;
+  private userUuid: string | null = null;
 
-  constructor(auth: HuaweiAuth = defaultAuth) {
+  constructor(auth: HuaweiAuth = defaultAuth, userUuid?: string) {
     this.auth = auth;
+    this.userUuid = userUuid || null;
+  }
+
+  /**
+   * Get access token - handles both single-user and multi-user modes
+   */
+  private async getAccessToken(): Promise<string> {
+    if (this.userUuid) {
+      // Multi-user mode: get token from SQLite
+      return this.auth.ensureValidTokenForUser(this.userUuid, getUserStore());
+    }
+    // Single-user mode: get token from file
+    return this.auth.ensureValidToken();
   }
 
   /**
@@ -75,7 +94,7 @@ export class HuaweiHealthApi {
       return cached;
     }
 
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     // Calculate start and end of day in UTC
     const startDate = new Date(`${date}T00:00:00Z`);
@@ -159,7 +178,7 @@ export class HuaweiHealthApi {
     steps: number;
     distance: number;
   }> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     const startTime = new Date(`${date}T00:00:00Z`).getTime();
     const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
@@ -203,7 +222,7 @@ export class HuaweiHealthApi {
    * Get activity records (workouts) for a date range
    */
   async getActivityRecords(startDate: string, endDate: string): Promise<ActivityRecord[]> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     const startTime = new Date(`${startDate}T00:00:00Z`).getTime();
     const endTime = new Date(`${endDate}T23:59:59.999Z`).getTime();
@@ -262,7 +281,7 @@ export class HuaweiHealthApi {
       return cached;
     }
 
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     const startTime = new Date(`${date}T00:00:00Z`).getTime();
     const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
@@ -338,6 +357,388 @@ export class HuaweiHealthApi {
   }
 
   /**
+   * Get resting heart rate data
+   */
+  async getRestingHeartRateData(date: string): Promise<number | null> {
+    const cacheKey = "restingHeartRate";
+    const cached = getFromMemoryCache<number>(cacheKey, { date });
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const accessToken = await this.getAccessToken();
+    const startTime = new Date(`${date}T00:00:00Z`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.RESTING_HEART_RATE }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`Resting heart rate failed: ${response.status}`);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    saveToFileCache(cacheKey, { date, rawResponse: json }, null);
+
+    // Extract the latest resting heart rate value
+    const groups = json.group || [];
+    let latestValue: number | null = null;
+
+    for (const group of groups) {
+      for (const sampleSet of group.sampleSet || []) {
+        for (const point of sampleSet.samplePoints || []) {
+          const fieldValue = point.value?.[0];
+          const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
+          if (value > 0) {
+            latestValue = value;
+          }
+        }
+      }
+    }
+
+    if (latestValue !== null) {
+      saveToMemoryCache(cacheKey, { date }, latestValue);
+    }
+    return latestValue;
+  }
+
+  /**
+   * Get stress data using polymerize API
+   */
+  async getStressData(date: string): Promise<{
+    readings: Array<{ time: string; value: number }>;
+    current: number;
+    avg: number;
+    max: number;
+    min: number;
+  } | null> {
+    const cacheKey = "stress";
+    const cached = getFromMemoryCache<{
+      readings: Array<{ time: string; value: number }>;
+      current: number;
+      avg: number;
+      max: number;
+      min: number;
+    }>(cacheKey, { date });
+    if (cached) {
+      return cached;
+    }
+
+    const accessToken = await this.getAccessToken();
+    const startTime = new Date(`${date}T00:00:00Z`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.STRESS }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Stress data failed: ${response.status}`, errorText);
+      saveToFileCache(cacheKey, { date }, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    const readings: Array<{ time: string; value: number }> = [];
+
+    const groups = json.group || [];
+    for (const group of groups) {
+      for (const sampleSet of group.sampleSet || []) {
+        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+          let timestamp = point.startTime;
+          if (timestamp > 1e15) {
+            timestamp = Math.floor(timestamp / 1e6);
+          }
+          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const fieldValue = point.value?.[0];
+          const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
+          if (value > 0) {
+            readings.push({ time, value });
+          }
+        }
+      }
+    }
+
+    if (readings.length === 0) {
+      saveToFileCache(cacheKey, { date, rawResponse: json }, null);
+      return null;
+    }
+
+    const values = readings.map((r) => r.value);
+    const result = {
+      readings,
+      current: values[values.length - 1],
+      avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
+      max: Math.max(...values),
+      min: Math.min(...values),
+    };
+
+    saveToMemoryCache(cacheKey, { date }, result);
+    saveToFileCache(cacheKey, { date, rawResponse: json }, result);
+    return result;
+  }
+
+  /**
+   * Get SpO2 (blood oxygen) data using polymerize API
+   */
+  async getSpO2Data(date: string): Promise<{
+    readings: Array<{ time: string; value: number }>;
+    current: number;
+    avg: number;
+    max: number;
+    min: number;
+  } | null> {
+    const cacheKey = "spo2";
+    const cached = getFromMemoryCache<{
+      readings: Array<{ time: string; value: number }>;
+      current: number;
+      avg: number;
+      max: number;
+      min: number;
+    }>(cacheKey, { date });
+    if (cached) {
+      return cached;
+    }
+
+    const accessToken = await this.getAccessToken();
+    const startTime = new Date(`${date}T00:00:00Z`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.SPO2 }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`SpO2 data failed: ${response.status}`, errorText);
+      saveToFileCache(cacheKey, { date }, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    const readings: Array<{ time: string; value: number }> = [];
+
+    const groups = json.group || [];
+    for (const group of groups) {
+      for (const sampleSet of group.sampleSet || []) {
+        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+          let timestamp = point.startTime;
+          if (timestamp > 1e15) {
+            timestamp = Math.floor(timestamp / 1e6);
+          }
+          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const fieldValue = point.value?.[0];
+          const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
+          if (value > 0) {
+            readings.push({ time, value });
+          }
+        }
+      }
+    }
+
+    if (readings.length === 0) {
+      saveToFileCache(cacheKey, { date, rawResponse: json }, null);
+      return null;
+    }
+
+    const values = readings.map((r) => r.value);
+    const result = {
+      readings,
+      current: values[values.length - 1],
+      avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
+      max: Math.max(...values),
+      min: Math.min(...values),
+    };
+
+    saveToMemoryCache(cacheKey, { date }, result);
+    saveToFileCache(cacheKey, { date, rawResponse: json }, result);
+    return result;
+  }
+
+  /**
+   * Get ECG (electrocardiogram) data using healthRecords API
+   * Returns arrhythmia detection and heart rate from ECG readings
+   * Note: Requires ecg.read permission
+   */
+  async getECGData(date: string): Promise<{
+    records: Array<{
+      time: string;
+      avgHeartRate: number;
+      arrhythmiaType: number; // 1=normal, 2=sinus arrhythmia, 3=AF, etc.
+      arrhythmiaLabel: string;
+      ecgType: number; // 1=single-lead
+    }>;
+    latestHeartRate: number | null;
+    hasArrhythmia: boolean;
+  } | null> {
+    const cacheKey = "ecg";
+    const cached = getFromMemoryCache<{
+      records: Array<{
+        time: string;
+        avgHeartRate: number;
+        arrhythmiaType: number;
+        arrhythmiaLabel: string;
+        ecgType: number;
+      }>;
+      latestHeartRate: number | null;
+      hasArrhythmia: boolean;
+    }>(cacheKey, { date });
+    if (cached) {
+      return cached;
+    }
+
+    const accessToken = await this.getAccessToken();
+
+    // Query a wider range to get recent ECG data (ECG measurements are infrequent)
+    const queryDate = new Date(date);
+    const startDate = new Date(queryDate);
+    startDate.setDate(startDate.getDate() - 30); // 30 days back for ECG
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(queryDate);
+    endDate.setHours(23, 59, 59, 999);
+
+    // Timestamps in nanoseconds
+    const startTime = startDate.getTime() * 1000000;
+    const endTime = endDate.getTime() * 1000000;
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const params = new URLSearchParams({
+      startTime: startTime.toString(),
+      endTime: endTime.toString(),
+      dataType: HEALTH_DATA_TYPES.ECG,
+    });
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`ECG healthRecords failed: ${response.status}`, errorText);
+      saveToFileCache(cacheKey, { date }, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    saveToFileCache(cacheKey, { date, rawResponse: json }, null);
+
+    const healthRecords = json.healthRecords || [];
+    if (healthRecords.length === 0) {
+      return null;
+    }
+
+    // Arrhythmia type labels
+    const arrhythmiaLabels: Record<number, string> = {
+      1: "Normal",
+      2: "Sinus Arrhythmia",
+      3: "Atrial Fibrillation",
+      4: "Premature Ventricular Contraction",
+      5: "Wide QRS Complex",
+      6: "Unknown",
+    };
+
+    const records: Array<{
+      time: string;
+      avgHeartRate: number;
+      arrhythmiaType: number;
+      arrhythmiaLabel: string;
+      ecgType: number;
+    }> = [];
+
+    for (const record of healthRecords) {
+      const getValue = (fieldName: string) => {
+        const field = record.value?.find((v: any) => v.fieldName === fieldName);
+        return field?.integerValue ?? field?.longValue ?? field?.floatValue ?? null;
+      };
+
+      let timestamp = record.startTime;
+      if (timestamp > 1e15) {
+        timestamp = Math.floor(timestamp / 1e6);
+      }
+      const time = new Date(timestamp).toISOString();
+
+      const avgHeartRate = getValue("avg_heart_rate") || 0;
+      const arrhythmiaType = getValue("ecg_arrhythmia_type") || 1;
+      const ecgType = getValue("ecg_type") || 1;
+
+      records.push({
+        time,
+        avgHeartRate: Math.round(avgHeartRate),
+        arrhythmiaType,
+        arrhythmiaLabel: arrhythmiaLabels[arrhythmiaType] || "Unknown",
+        ecgType,
+      });
+    }
+
+    // Sort by time (most recent first)
+    records.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+    const result = {
+      records,
+      latestHeartRate: records.length > 0 ? records[0].avgHeartRate : null,
+      hasArrhythmia: records.some((r) => r.arrhythmiaType > 1),
+    };
+
+    saveToMemoryCache(cacheKey, { date }, result);
+    return result;
+  }
+
+  /**
    * Get sleep data using healthRecords API
    * Note: Requires sleep.read permission
    */
@@ -356,7 +757,7 @@ export class HuaweiHealthApi {
     remMinutes?: number;
     awakeMinutes?: number;
   } | null> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     // Sleep data is for the night ending on this date
     // Query a wider range (7 days) to ensure we get recent sleep data
@@ -525,7 +926,7 @@ export class HuaweiHealthApi {
   async getWeeklySleepData(
     endDate: string
   ): Promise<Array<{ date: string; hours: number; sleepScore?: number }>> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
@@ -634,7 +1035,7 @@ export class HuaweiHealthApi {
     dataTypeName: string,
     date: string
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     const startTime = new Date(`${date}T00:00:00Z`).getTime();
     const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
@@ -677,7 +1078,7 @@ export class HuaweiHealthApi {
     dataType: number,
     date: string
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     const startTime = new Date(`${date}T00:00:00Z`).getTime();
     const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
@@ -721,7 +1122,7 @@ export class HuaweiHealthApi {
     dataTypeName: string,
     date: string
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     // For sleep, use overnight time range
     const prevDay = new Date(date);
@@ -768,7 +1169,7 @@ export class HuaweiHealthApi {
     healthRecordDataType: string,
     date: string
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
 
     // For sleep, use overnight time range
     const prevDay = new Date(date);
@@ -879,7 +1280,7 @@ export class HuaweiHealthApi {
    * Debug: Try various API endpoint paths for sleep data
    */
   private async debugTryVariousEndpoints(date: string): Promise<void> {
-    const accessToken = await this.auth.ensureValidToken();
+    const accessToken = await this.getAccessToken();
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
 
@@ -1102,5 +1503,12 @@ export class HuaweiHealthApi {
   }
 }
 
-// Default instance
+// Default instance (single-user mode)
 export const huaweiHealthApi = new HuaweiHealthApi();
+
+/**
+ * Create a HuaweiHealthApi instance for a specific user (multi-user mode)
+ */
+export function createHuaweiHealthApiForUser(userUuid: string): HuaweiHealthApi {
+  return new HuaweiHealthApi(defaultAuth, userUuid);
+}

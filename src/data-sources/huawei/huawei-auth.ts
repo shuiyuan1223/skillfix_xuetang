@@ -6,6 +6,7 @@
 
 import { loadConfig } from "../../utils/config.js";
 import { TokenStore, tokenStore as defaultTokenStore } from "./token-store.js";
+import { UserStore, getUserStore } from "./user-store.js";
 import type { HuaweiTokenResponse, TokenData } from "./huawei-types.js";
 
 // Huawei OAuth endpoints (defaults, can be overridden in config)
@@ -187,6 +188,123 @@ export class HuaweiAuth {
       tokenType: response.token_type,
       scope: response.scope,
     };
+  }
+
+  // ============================================================================
+  // Multi-user methods (for Web OAuth flow)
+  // ============================================================================
+
+  /**
+   * Exchange authorization code for tokens (for specific user)
+   * Does not store token - returns it for caller to store in UserStore
+   */
+  async exchangeCodeForUser(
+    code: string,
+    clientId: string,
+    clientSecret: string,
+    redirectUri: string
+  ): Promise<TokenData> {
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+    });
+
+    const response = await fetch(getTokenUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to exchange code: ${error}`);
+    }
+
+    const data = (await response.json()) as HuaweiTokenResponse;
+    return this.tokenResponseToData(data);
+  }
+
+  /**
+   * Refresh token for a specific user
+   * Does not store token - returns it for caller to store in UserStore
+   */
+  async refreshTokenForUser(
+    refreshToken: string,
+    clientId: string,
+    clientSecret: string
+  ): Promise<TokenData> {
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+
+    const response = await fetch(getTokenUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: body.toString(),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to refresh token: ${error}`);
+    }
+
+    const data = (await response.json()) as HuaweiTokenResponse;
+    return this.tokenResponseToData(data);
+  }
+
+  /**
+   * Ensure we have a valid access token for a specific user
+   * Will refresh if needed, using UserStore
+   */
+  async ensureValidTokenForUser(uuid: string, userStore?: UserStore): Promise<string> {
+    const store = userStore || getUserStore();
+    const token = store.getTokenData(uuid);
+
+    if (!token) {
+      throw new Error("User not authenticated. Please authorize via the web UI.");
+    }
+
+    // If token is still valid, return it
+    if (!store.needsRefresh(uuid)) {
+      return token.accessToken;
+    }
+
+    // Token needs refresh
+    const config = loadConfig();
+    const huaweiConfig = config.dataSources.huawei;
+
+    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+      throw new Error("Huawei credentials not configured. Run 'pha huawei setup' first.");
+    }
+
+    const newToken = await this.refreshTokenForUser(
+      token.refreshToken,
+      huaweiConfig.clientId,
+      huaweiConfig.clientSecret
+    );
+
+    // Store the new token
+    store.saveToken(uuid, newToken);
+
+    return newToken.accessToken;
+  }
+
+  /**
+   * Check if a specific user is authenticated (via UserStore)
+   */
+  isUserAuthenticated(uuid: string, userStore?: UserStore): boolean {
+    const store = userStore || getUserStore();
+    return store.isAuthenticated(uuid);
   }
 }
 

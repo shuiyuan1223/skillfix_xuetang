@@ -38,6 +38,16 @@ export interface HuaweiHealthKitConfig {
   apiBaseUrl?: string; // API 基础地址（后面会拼接具体接口路径）
 }
 
+export interface MCPConfig {
+  // Chrome DevTools MCP configuration
+  chromeMcp?: {
+    command?: string; // MCP server command, default: "npx"
+    args?: string[]; // Command arguments, default: ["-y", "chrome-devtools-mcp@latest", "--isolated"]
+    browserUrl?: string; // Connect to existing browser: http://127.0.0.1:9222
+    wsEndpoint?: string; // WebSocket endpoint for existing browser
+  };
+}
+
 export interface PHAConfig {
   gateway: {
     port: number;
@@ -52,6 +62,7 @@ export interface PHAConfig {
     theme: "dark" | "light";
     showToolCalls: boolean;
   };
+  mcp?: MCPConfig;
 }
 
 // Provider configurations

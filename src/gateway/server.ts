@@ -10,10 +10,19 @@ import { cors } from "hono/cors";
 import { mcpHandler } from "./mcp.js";
 import { createPHAAgent, type PHAAgent } from "../agent/pha-agent.js";
 import { getDataSource } from "../tools/health-data.js";
+import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
+import { loadConfig } from "../utils/config.js";
+import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
+import { getUserStore } from "../data-sources/huawei/user-store.js";
 import {
-  generateSidebar,
+  startOAuthSession,
+  completeOAuth,
+  getHuaweiAuthUrl,
+} from "../services/huawei-oauth-service.js";
+import { runOAuthFlowWithChrome } from "../services/chrome-mcp-client.js";
+import {
   generateChatPage,
   generateHealthPage,
   generateSleepPage,
@@ -30,7 +39,7 @@ import {
   generateCreateTestCaseModal,
   generateCreateSkillModal,
   generatePromptRevertModal,
-  type PageMessage,
+  generateAuthRequiredPage,
 } from "./pages.js";
 import {
   listPromptsTool,
@@ -188,7 +197,306 @@ export function createGatewayApp() {
     return c.json({ weeklySteps, weeklySleep });
   });
 
+  // ============================================================================
+  // OAuth Endpoints
+  // ============================================================================
+
+  /**
+   * Start OAuth flow - redirect to Huawei authorization page
+   */
+  app.get("/auth/huawei/start", (c) => {
+    const uuid = c.req.query("uuid");
+    if (!uuid) {
+      return c.json({ error: "Missing UUID" }, 400);
+    }
+
+    const config = loadConfig();
+    const huaweiConfig = config.dataSources.huawei;
+
+    if (!huaweiConfig?.clientId) {
+      return c.html(
+        generateOAuthErrorPage("Huawei client ID not configured. Run 'pha huawei setup' first.")
+      );
+    }
+
+    // Use the gateway callback URL
+    const port = config.gateway.port || 8000;
+    const redirectUri = huaweiConfig.redirectUri || `http://localhost:${port}/auth/huawei/callback`;
+
+    // Get auth URL with state parameter for CSRF protection and UUID passing
+    const authUrl = huaweiAuth.getAuthUrl(huaweiConfig.clientId, redirectUri);
+    const urlWithState = `${authUrl}&state=${encodeURIComponent(uuid)}`;
+
+    return c.redirect(urlWithState);
+  });
+
+  /**
+   * OAuth callback - exchange code for tokens and store
+   */
+  app.get("/auth/huawei/callback", async (c) => {
+    const code = c.req.query("code");
+    const state = c.req.query("state"); // UUID passed via state
+
+    if (!code) {
+      return c.html(generateOAuthErrorPage("Missing authorization code"));
+    }
+
+    if (!state) {
+      return c.html(generateOAuthErrorPage("Missing state parameter"));
+    }
+
+    const uuid = decodeURIComponent(state);
+
+    try {
+      const config = loadConfig();
+      const huaweiConfig = config.dataSources.huawei;
+
+      if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+        return c.html(generateOAuthErrorPage("Huawei credentials not configured"));
+      }
+
+      const port = config.gateway.port || 8000;
+      const redirectUri =
+        huaweiConfig.redirectUri || `http://localhost:${port}/auth/huawei/callback`;
+
+      // Exchange code for token
+      const token = await huaweiAuth.exchangeCodeForUser(
+        code,
+        huaweiConfig.clientId,
+        huaweiConfig.clientSecret,
+        redirectUri
+      );
+
+      // Store token in user store (SQLite)
+      const userStore = getUserStore();
+      userStore.saveToken(uuid, token);
+
+      return c.html(generateOAuthSuccessPage());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      return c.html(generateOAuthErrorPage(message));
+    }
+  });
+
+  /**
+   * Check OAuth status for a user
+   */
+  app.get("/auth/huawei/status", (c) => {
+    const uuid = c.req.query("uuid");
+    if (!uuid) {
+      return c.json({ authenticated: false });
+    }
+
+    const userStore = getUserStore();
+    const authenticated = userStore.isAuthenticated(uuid);
+    const token = userStore.getToken(uuid);
+
+    return c.json({
+      authenticated,
+      expiresAt: token?.expiresAt,
+      needsRefresh: authenticated ? userStore.needsRefresh(uuid) : undefined,
+    });
+  });
+
+  /**
+   * Chrome MCP OAuth flow - automates browser login using Chrome DevTools MCP
+   *
+   * This endpoint:
+   * 1. Launches Chrome via chrome-devtools-mcp
+   * 2. Opens Huawei OAuth page
+   * 3. Waits for user to complete login
+   * 4. Captures authorization code from redirect URL (hms://redirect_url?code=xxx)
+   * 5. Exchanges code for token and stores it
+   */
+  app.post("/auth/huawei/mcp-flow", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const uuid = body.uuid;
+
+    if (!uuid) {
+      return c.json({ success: false, error: "Missing UUID" }, 400);
+    }
+
+    const config = loadConfig();
+    const huaweiConfig = config.dataSources.huawei;
+
+    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+      return c.json(
+        {
+          success: false,
+          error: "Huawei credentials not configured. Run 'pha huawei setup' first.",
+        },
+        400
+      );
+    }
+
+    // Generate auth URL with state parameter
+    const authUrl = getHuaweiAuthUrl(uuid);
+    console.log(`[OAuth MCP] Starting Chrome MCP flow for user ${uuid.slice(0, 8)}...`);
+    console.log(`[OAuth MCP] Auth URL: ${authUrl.slice(0, 100)}...`);
+
+    try {
+      // Run OAuth flow with Chrome MCP
+      const result = await runOAuthFlowWithChrome(authUrl, { timeout: 180000 });
+
+      if ("error" in result) {
+        console.error(`[OAuth MCP] Flow failed:`, result.error);
+        return c.json({ success: false, error: result.error }, 400);
+      }
+
+      // Exchange code for token directly (no session needed for MCP flow)
+      const port = config.gateway.port || 8000;
+      const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
+
+      const token = await huaweiAuth.exchangeCodeForUser(
+        result.code,
+        huaweiConfig.clientId,
+        huaweiConfig.clientSecret,
+        redirectUri
+      );
+
+      // Store token in user store (SQLite)
+      const userStore = getUserStore();
+      userStore.saveToken(uuid, token);
+
+      console.log(`[OAuth MCP] Successfully authenticated user ${uuid.slice(0, 8)}`);
+      return c.json({ success: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[OAuth MCP] Error:`, message);
+      return c.json({ success: false, error: message }, 500);
+    }
+  });
+
   return app;
+}
+
+/**
+ * Generate OAuth success HTML page
+ */
+function generateOAuthSuccessPage(): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authorization Successful</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+      padding: 40px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+    }
+    .icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-weight: 600;
+    }
+    p {
+      margin: 0;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">✓</div>
+    <h1>Authorization Successful</h1>
+    <p>Closing this window...</p>
+  </div>
+  <script>
+    setTimeout(() => window.close(), 1500);
+  </script>
+</body>
+</html>`;
+}
+
+/**
+ * Generate OAuth error HTML page
+ */
+function generateOAuthErrorPage(message: string): string {
+  // Escape HTML to prevent XSS
+  const escapedMessage = message
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authorization Failed</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: white;
+    }
+    .container {
+      text-align: center;
+      padding: 40px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      max-width: 400px;
+    }
+    .icon {
+      font-size: 64px;
+      margin-bottom: 20px;
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-weight: 600;
+    }
+    p {
+      margin: 0 0 20px 0;
+      opacity: 0.9;
+    }
+    button {
+      background: white;
+      color: #ef4444;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover {
+      background: #f3f4f6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">✕</div>
+    <h1>Authorization Failed</h1>
+    <p>${escapedMessage}</p>
+    <button onclick="window.close()">Close</button>
+  </div>
+</body>
+</html>`;
 }
 
 /**
@@ -200,6 +508,9 @@ export class GatewaySession {
   private config: GatewayConfig;
   private sessionId: string;
   private dataSource: HealthDataSource;
+
+  // User identification (from cookie)
+  public userUuid: string | null = null;
 
   // Chat state
   private chatMessages: Array<{ role: "user" | "assistant" | "tool"; content: string }> = [];
@@ -217,10 +528,27 @@ export class GatewaySession {
     "overview";
   private tracesPage = 0;
 
-  constructor(config: GatewayConfig = {}) {
+  constructor(config: GatewayConfig = {}, userUuid?: string) {
     this.config = config;
     this.sessionId = crypto.randomUUID();
-    this.dataSource = getDataSource();
+    this.userUuid = userUuid || null;
+
+    // Use user-specific data source if userUuid is provided
+    if (userUuid) {
+      this.dataSource = createDataSourceForUser(userUuid);
+    } else {
+      this.dataSource = getDataSource();
+    }
+  }
+
+  /**
+   * Check if the current user is authenticated with Huawei
+   */
+  isUserAuthenticated(): boolean {
+    if (!this.userUuid) return false;
+    const config = loadConfig();
+    if (config.dataSources.type !== "huawei") return true; // Mock data doesn't need auth
+    return huaweiAuth.isUserAuthenticated(this.userUuid);
   }
 
   private getAgent(): PHAAgent {
@@ -296,10 +624,22 @@ export class GatewaySession {
         break;
 
       case "health": {
-        const [metrics, heartRate] = await Promise.all([
-          this.dataSource.getMetrics(today),
+        // Check if user needs to authenticate (only for Huawei data source)
+        const config = loadConfig();
+        if (config.dataSources.type === "huawei" && !this.isUserAuthenticated()) {
+          mainPage = generateAuthRequiredPage();
+          break;
+        }
+
+        // Fetch all health data in parallel
+        const [heartRate, stress, spo2, restingHR, ecg] = await Promise.all([
           this.dataSource.getHeartRate(today),
+          this.dataSource.getStress?.(today) ?? Promise.resolve(null),
+          this.dataSource.getSpO2?.(today) ?? Promise.resolve(null),
+          this.dataSource.getRestingHeartRate?.(today) ?? Promise.resolve(null),
+          this.dataSource.getECG?.(today) ?? Promise.resolve(null),
         ]);
+
         // Calculate heart rate trend
         const hrReadings = heartRate.readings;
         let hrTrend: { direction: "up" | "down" | "stable"; value: string } = {
@@ -320,29 +660,70 @@ export class GatewaySession {
               value: `${Math.round(recent - earlier)} ${t("health.bpmUnit")}`,
             };
         }
+
+        // Stress trend based on value
+        let stressTrend: { direction: "up" | "down" | "stable"; value: string } | undefined;
+        if (stress) {
+          if (stress.current > 60) {
+            stressTrend = { direction: "up", value: t("health.high") };
+          } else if (stress.current < 30) {
+            stressTrend = { direction: "down", value: t("health.low") };
+          } else {
+            stressTrend = { direction: "stable", value: t("common.normal") };
+          }
+        }
+
+        // SpO2 trend
+        let spo2Trend: { direction: "up" | "down" | "stable"; value: string } | undefined;
+        if (spo2) {
+          if (spo2.current >= 95) {
+            spo2Trend = { direction: "stable", value: t("common.normal") };
+          } else if (spo2.current >= 90) {
+            spo2Trend = { direction: "down", value: t("health.low") };
+          } else {
+            spo2Trend = { direction: "down", value: t("health.veryLow") };
+          }
+        }
+
         mainPage = generateHealthPage({
           heartRate: {
             label: t("health.heartRate"),
-            value: heartRate.restingAvg,
-            unit: t("health.bpmResting"),
+            value: heartRate.restingAvg || "--",
+            unit: t("health.bpmAvg"),
             trend: hrTrend,
           },
-          bloodPressure: {
-            label: t("health.maxHR"),
-            value: heartRate.maxToday,
-            unit: t("health.bpmMax"),
-            icon: "🔺",
+          restingHeartRate: {
+            label: t("health.restingHR"),
+            value: restingHR || heartRate.minToday || "--",
+            unit: t("health.bpmResting"),
           },
           spo2: {
-            label: t("health.minHR"),
-            value: heartRate.minToday,
-            unit: t("health.bpmMin"),
-            icon: "🔻",
+            label: t("health.spo2"),
+            value: spo2 ? `${spo2.current}%` : "--",
+            unit: spo2 ? t("health.oxygen") : t("health.noData"),
+            trend: spo2Trend,
+          },
+          stress: {
+            label: t("health.stress"),
+            value: stress ? stress.current : "--",
+            unit: stress ? t("health.stressLevel") : t("health.noData"),
+            trend: stressTrend,
           },
           heartRateChart: heartRate.readings.slice(-12).map((r) => ({
             label: r.time,
             value: r.value,
           })),
+          ecg: ecg
+            ? {
+                hasArrhythmia: ecg.hasArrhythmia,
+                latestHeartRate: ecg.latestHeartRate,
+                records: ecg.records.map((r) => ({
+                  time: r.time,
+                  avgHeartRate: r.avgHeartRate,
+                  arrhythmiaLabel: r.arrhythmiaLabel,
+                })),
+              }
+            : undefined,
         });
         break;
       }
@@ -621,6 +1002,33 @@ export class GatewaySession {
     } else if (action.startsWith("navigate:")) {
       const view = action.replace("navigate:", "");
       await this.handleNavigate(view, send);
+    }
+    // OAuth actions
+    else if (action === "start_huawei_auth") {
+      // The frontend handles opening the OAuth popup
+      // We just need to send back confirmation and the user UUID
+      send({
+        type: "auth_start",
+        provider: "huawei",
+        userUuid: this.userUuid,
+      });
+    } else if (action === "set_user_uuid" && payload?.uuid) {
+      // Update the session's user UUID (sent from frontend after generating/loading from cookie)
+      this.userUuid = payload.uuid as string;
+      send({ type: "user_uuid_set", uuid: this.userUuid });
+    } else if (action === "auth_complete") {
+      // User completed OAuth, refresh the current view
+      await this.handleNavigate(this.currentView, send);
+    } else if (action === "show_toast" && payload?.message) {
+      // Show a toast notification
+      const variant = (payload.variant as "info" | "success" | "error") || "info";
+      const toast = generateToast(payload.message as string, variant);
+      send({
+        type: "a2ui",
+        surface_id: "toast",
+        components: toast.components,
+        root_id: toast.root_id,
+      });
     }
     // Prompts actions
     else if (action === "select_prompt" && payload?.row) {
@@ -1025,6 +1433,7 @@ export class GatewaySession {
 interface WSData {
   sessionId: string;
   config: GatewayConfig;
+  userUuid?: string;
 }
 
 // Content type helper
@@ -1064,8 +1473,14 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
       // Upgrade WebSocket connections
       if (url.pathname === "/ws") {
         const sessionId = crypto.randomUUID();
+
+        // Extract user UUID from cookie
+        const cookieHeader = req.headers.get("cookie") || "";
+        const userUuidMatch = cookieHeader.match(/pha_user_id=([^;]+)/);
+        const userUuid = userUuidMatch ? userUuidMatch[1] : undefined;
+
         const success = server.upgrade(req, {
-          data: { sessionId, config },
+          data: { sessionId, config, userUuid },
         });
         if (success) {
           return undefined;
@@ -1094,7 +1509,8 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
         if (
           !filePath.startsWith("/api") &&
           !filePath.startsWith("/mcp") &&
-          !filePath.startsWith("/health")
+          !filePath.startsWith("/health") &&
+          !filePath.startsWith("/auth")
         ) {
           const indexFile = Bun.file(webDir + "/index.html");
           if (await indexFile.exists()) {
@@ -1110,10 +1526,12 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
     },
     websocket: {
       open(ws) {
-        const { sessionId, config: wsConfig } = ws.data;
-        const session = new GatewaySession(wsConfig);
+        const { sessionId, config: wsConfig, userUuid } = ws.data;
+        const session = new GatewaySession(wsConfig, userUuid);
         sessions.set(sessionId, session);
-        console.log(`WebSocket connected: ${sessionId}`);
+        console.log(
+          `WebSocket connected: ${sessionId}${userUuid ? ` (user: ${userUuid.slice(0, 8)}...)` : ""}`
+        );
       },
       async message(ws, message) {
         const { sessionId } = ws.data;

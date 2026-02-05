@@ -108,14 +108,72 @@ export function generateChatPage(state: ChatState): A2UIMessage {
 }
 
 // ============================================================================
+// Authorization Required Page Generator
+// ============================================================================
+
+export function generateAuthRequiredPage(): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+
+  // Header
+  const title = ui.text(t("auth.required"), "h2");
+  const subtitle = ui.text(t("auth.requiredSubtitle"), "caption");
+  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+
+  // Auth card with connect button
+  const iconId = `auth_icon_${Date.now()}`;
+  ui.addComponent(iconId, {
+    id: iconId,
+    type: "text",
+    text: "🔐",
+    variant: "h1",
+  });
+
+  const connectBtn = ui.button(t("auth.connectHuawei"), "start_huawei_auth", {
+    variant: "primary",
+    size: "lg",
+  });
+
+  const authContent = ui.column([iconId, connectBtn], {
+    gap: 24,
+    align: "center",
+    padding: 48,
+  });
+
+  const authCard = ui.card([authContent], { padding: 24 });
+
+  // Center the card
+  const centeredContent = ui.column([authCard], {
+    gap: 24,
+    padding: 24,
+    align: "center",
+  });
+
+  const root = ui.column([header, centeredContent], { gap: 0 });
+
+  return ui.build(root);
+}
+
+// ============================================================================
 // Health Page Generator
 // ============================================================================
 
+interface ECGRecord {
+  time: string;
+  avgHeartRate: number;
+  arrhythmiaLabel: string;
+}
+
 export function generateHealthPage(data: {
   heartRate: HealthMetric;
-  bloodPressure: HealthMetric;
+  restingHeartRate: HealthMetric;
   spo2: HealthMetric;
+  stress: HealthMetric;
   heartRateChart: ChartData[];
+  ecg?: {
+    hasArrhythmia: boolean;
+    latestHeartRate: number | null;
+    records: ECGRecord[];
+  };
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
 
@@ -124,7 +182,7 @@ export function generateHealthPage(data: {
   const subtitle = ui.text(t("health.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
-  // Stats grid
+  // Stats grid - 4 cards
   const hrCard = ui.statCard({
     title: data.heartRate.label,
     value: `${data.heartRate.value}`,
@@ -134,13 +192,13 @@ export function generateHealthPage(data: {
     color: "#ef4444",
   });
 
-  const bpCard = ui.statCard({
-    title: data.bloodPressure.label,
-    value: `${data.bloodPressure.value}`,
-    subtitle: data.bloodPressure.unit,
-    icon: data.bloodPressure.icon || "🩺",
-    trend: data.bloodPressure.trend,
-    color: "#3b82f6",
+  const restingHrCard = ui.statCard({
+    title: data.restingHeartRate.label,
+    value: `${data.restingHeartRate.value}`,
+    subtitle: data.restingHeartRate.unit,
+    icon: data.restingHeartRate.icon || "💓",
+    trend: data.restingHeartRate.trend,
+    color: "#f97316",
   });
 
   const spo2Card = ui.statCard({
@@ -152,7 +210,16 @@ export function generateHealthPage(data: {
     color: "#10b981",
   });
 
-  const statsGrid = ui.grid([hrCard, bpCard, spo2Card], { columns: 3, gap: 16 });
+  const stressCard = ui.statCard({
+    title: data.stress.label,
+    value: `${data.stress.value}`,
+    subtitle: data.stress.unit,
+    icon: data.stress.icon || "🧠",
+    trend: data.stress.trend,
+    color: "#8b5cf6",
+  });
+
+  const statsGrid = ui.grid([hrCard, restingHrCard, spo2Card, stressCard], { columns: 4, gap: 16 });
 
   // Heart rate chart
   const chartTitle = ui.text(t("health.heartRateTrend"), "h3");
@@ -166,8 +233,50 @@ export function generateHealthPage(data: {
   });
   const chartCard = ui.card([chartTitle, chart], { padding: 20 });
 
+  const contentChildren = [statsGrid, chartCard];
+
+  // ECG section (if available)
+  if (data.ecg && data.ecg.records.length > 0) {
+    const ecgTitle = ui.text(t("health.ecg"), "h3");
+
+    // ECG status badge
+    const ecgStatusBadge = ui.badge(
+      data.ecg.hasArrhythmia ? t("health.arrhythmiaDetected") : t("health.normalRhythm"),
+      { variant: data.ecg.hasArrhythmia ? "warning" : "success" }
+    );
+
+    // Latest HR from ECG
+    const latestHrText = ui.text(
+      data.ecg.latestHeartRate
+        ? `${t("health.latestEcgHr")}: ${data.ecg.latestHeartRate} ${t("health.bpmUnit")}`
+        : "",
+      "caption"
+    );
+
+    const ecgHeader = ui.row([ecgTitle, ecgStatusBadge], { gap: 12, align: "center" });
+
+    // ECG records table
+    const ecgRows = data.ecg.records.slice(0, 5).map((r) => ({
+      time: new Date(r.time).toLocaleString(),
+      heartRate: `${r.avgHeartRate} ${t("health.bpmUnit")}`,
+      result: r.arrhythmiaLabel,
+    }));
+
+    const ecgTable = ui.table(
+      [
+        { key: "time", label: t("health.recordTime") },
+        { key: "heartRate", label: t("health.heartRate") },
+        { key: "result", label: t("health.ecgResult") },
+      ],
+      ecgRows
+    );
+
+    const ecgCard = ui.card([ecgHeader, latestHrText, ecgTable], { padding: 20 });
+    contentChildren.push(ecgCard);
+  }
+
   // Content container
-  const content = ui.column([statsGrid, chartCard], { gap: 24, padding: 24 });
+  const content = ui.column(contentChildren, { gap: 24, padding: 24 });
 
   const root = ui.column([header, content], { gap: 0 });
 
