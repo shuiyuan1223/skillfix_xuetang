@@ -2,7 +2,7 @@
  * Token Store
  *
  * Persists OAuth tokens for Huawei Health Kit.
- * Stores tokens in ~/.pha/huawei-tokens.json
+ * Stores tokens in .pha/huawei-tokens.json (project directory)
  */
 
 import * as fs from "fs";

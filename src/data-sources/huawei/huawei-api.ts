@@ -1273,7 +1273,7 @@ export class HuaweiHealthApi {
     console.log("\n--- Trying various API paths ---\n");
     await this.debugTryVariousEndpoints(date);
 
-    console.log("\nResults saved to ~/.pha/api-cache/");
+    console.log("\nResults saved to .pha/api-cache/");
   }
 
   /**

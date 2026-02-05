@@ -369,7 +369,7 @@ async function debugApi(options: {
     } else {
       printSection("Cached Responses", "📁");
       files.forEach((f) => console.log(`  ${c.dim(f)}`));
-      console.log(`\n  ${c.dim("Location:")} ~/.pha/api-cache/`);
+      console.log(`\n  ${c.dim("Location:")} .pha/api-cache/`);
     }
     console.log("");
     return;
@@ -406,7 +406,7 @@ async function debugApi(options: {
       await huaweiHealthApi.debugExploreDataTypes(options.date);
     }
 
-    console.log(`\n  ${c.dim("Results saved to:")} ~/.pha/api-cache/`);
+    console.log(`\n  ${c.dim("Results saved to:")} .pha/api-cache/`);
   } catch (error) {
     spinner.stop("error");
     console.log(`\n  ${c.red("Error:")} ${error instanceof Error ? error.message : String(error)}`);
