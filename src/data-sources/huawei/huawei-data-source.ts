@@ -59,12 +59,35 @@ export class HuaweiHealthDataSource implements HealthDataSource {
   }
 
   /**
-   * Get heart rate data (Mock fallback - requires Health Kit advanced permission)
+   * Get heart rate data from Huawei API
    */
   async getHeartRate(date: string): Promise<HeartRateData> {
-    // Heart rate requires Health Kit advanced permission
-    // Fall back to mock data
-    return this.mockFallback.getHeartRate(date);
+    try {
+      await this.auth.ensureValidToken();
+    } catch {
+      console.warn("Huawei not authenticated, using mock heart rate data");
+      return this.mockFallback.getHeartRate(date);
+    }
+
+    try {
+      const result = await this.api.getHeartRateData(date);
+
+      if (result.readings.length === 0) {
+        console.warn("No heart rate data from Huawei, using mock");
+        return this.mockFallback.getHeartRate(date);
+      }
+
+      return {
+        date,
+        restingAvg: result.avg,
+        maxToday: result.max,
+        minToday: result.min,
+        readings: result.readings,
+      };
+    } catch (error) {
+      console.warn("Failed to fetch Huawei heart rate, using mock:", error);
+      return this.mockFallback.getHeartRate(date);
+    }
   }
 
   /**

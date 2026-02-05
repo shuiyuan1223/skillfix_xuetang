@@ -21,14 +21,21 @@ function getApiBaseUrl(): string {
   return config.dataSources.huawei?.apiBaseUrl || DEFAULT_API_BASE;
 }
 
-// Data type names for the API (continuous = 实时采集的连续数据)
-// 只保留确认可用的数据类型
+// Data type names for the API
+// See: https://pub.dev/documentation/huawei_health/latest/huawei_health/DataType-class.html
 const DATA_TYPE_NAMES: Record<number, string> = {
   [HuaweiDataType.STEPS]: "com.huawei.continuous.steps.delta",
   [HuaweiDataType.DISTANCE]: "com.huawei.continuous.distance.delta",
-  // 卡路里和活动时长暂不支持，API 返回 Invalid dataTypeName
-  // [HuaweiDataType.CALORIES]: "com.huawei.continuous.calories.delta",
-  // [HuaweiDataType.ACTIVE_MINUTES]: "com.huawei.continuous.activity.duration",
+  [HuaweiDataType.CALORIES]: "com.huawei.continuous.calories.burnt",
+  // Note: activity_minutes not supported via REST API
+};
+
+// Additional data type names for other health metrics
+const HEALTH_DATA_TYPES = {
+  HEART_RATE: "com.huawei.instantaneous.heart_rate",
+  HEART_RATE_STATISTICS: "com.huawei.continuous.heart_rate.statistics",
+  SLEEP: "com.huawei.continuous.sleep.segment",
+  SLEEP_STATISTICS: "com.huawei.continuous.sleep.statistics",
 };
 
 export interface PolymerizeResult {
@@ -220,6 +227,84 @@ export class HuaweiHealthApi {
       calories: record.calories,
       avgHeartRate: record.avgHeartRate,
     }));
+  }
+
+  /**
+   * Get heart rate data using polymerize API
+   */
+  async getHeartRateData(date: string): Promise<{
+    readings: Array<{ time: string; value: number }>;
+    avg: number;
+    max: number;
+    min: number;
+  }> {
+    const accessToken = await this.auth.ensureValidToken();
+
+    const startTime = new Date(`${date}T00:00:00Z`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.HEART_RATE }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Heart rate polymerize failed: ${response.status}`, errorText);
+      return { readings: [], avg: 0, max: 0, min: 0 };
+    }
+
+    const json = (await response.json()) as any;
+
+    // Parse response - extract heart rate readings
+    const readings: Array<{ time: string; value: number }> = [];
+
+    // Try different response formats
+    const groups = json.group || [];
+    for (const group of groups) {
+      const sampleSets = group.sampleSet || [];
+      for (const sampleSet of sampleSets) {
+        const points = sampleSet.samplePoints || sampleSet.samplePoint || [];
+        for (const point of points) {
+          // Timestamps can be in nanoseconds (19 digits) or milliseconds (13 digits)
+          let timestamp = point.startTime;
+          if (timestamp > 1e15) {
+            timestamp = Math.floor(timestamp / 1e6); // Convert nanoseconds to milliseconds
+          }
+          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+
+          // Value can be in value[0].floatValue or value[0].integerValue
+          const fieldValue = point.value?.[0];
+          const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
+          if (value > 0) {
+            readings.push({ time, value });
+          }
+        }
+      }
+    }
+
+    // Calculate statistics
+    const values = readings.map((r) => r.value);
+    const avg =
+      values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
+    const max = values.length > 0 ? Math.max(...values) : 0;
+    const min = values.length > 0 ? Math.min(...values) : 0;
+
+    return { readings, avg, max, min };
   }
 
   /**
