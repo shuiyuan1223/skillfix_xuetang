@@ -719,18 +719,20 @@ export class HuaweiHealthApi {
       { path: "/healthkit/v2/dataCollectors", method: "GET" },
     ];
 
-    // Also try POST requests to healthRecords with different dataTypeNames
-    const sleepDataTypes = [
-      "com.huawei.continuous.sleep.segment",
-      "com.huawei.continuous.sleep.statistics",
-      "com.huawei.continuous.sleep.detail",
-      "com.huawei.sleep",
-      "com.huawei.health.sleep",
+    // Try polymerize with derived dataCollectorId for sleep
+    console.log("--- Trying polymerize with dataCollectorId ---\n");
+
+    // Construct derived dataCollectorId patterns for sleep
+    // Format: derived:<type>:com.huawei.hwid:<hash> but we can try without the hash
+    const sleepCollectorPatterns = [
+      "derived:sleep:com.huawei.hwid",
+      "derived:sleep_segment:com.huawei.hwid",
+      "derived:sleep:com.huawei.health",
+      "raw:sleep:com.huawei.health",
     ];
 
-    console.log("--- Trying POST healthRecords ---\n");
-    for (const dataTypeName of sleepDataTypes) {
-      const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords`;
+    for (const collectorId of sleepCollectorPatterns) {
+      const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
       try {
         const response = await fetch(url, {
           method: "POST",
@@ -739,7 +741,16 @@ export class HuaweiHealthApi {
             "Content-Type": "application/json",
             "x-client-id": clientId,
           },
-          body: JSON.stringify({ dataTypeName, startTime, endTime }),
+          body: JSON.stringify({
+            polymerizeWith: [
+              {
+                dataTypeName: "com.huawei.continuous.sleep.statistics",
+                dataCollectorId: Buffer.from(collectorId).toString("base64"),
+              },
+            ],
+            startTime,
+            endTime,
+          }),
         });
 
         const text = await response.text();
@@ -754,12 +765,12 @@ export class HuaweiHealthApi {
         const info = response.ok
           ? JSON.stringify(data).slice(0, 80)
           : `${response.status}: ${text.slice(0, 50)}`;
-        console.log(`${status} POST healthRecords (${dataTypeName})`);
+        console.log(`${status} polymerize with collector (${collectorId})`);
         console.log(`  ${info}\n`);
 
-        saveToFileCache(`healthRecords-POST/${dataTypeName}`, { dataTypeName }, data);
+        saveToFileCache(`polymerize-collector/${collectorId}`, { collectorId }, data);
       } catch (err) {
-        console.log(`✗ POST healthRecords (${dataTypeName})`);
+        console.log(`✗ polymerize with collector (${collectorId})`);
         console.log(`  Error: ${err}\n`);
       }
     }
