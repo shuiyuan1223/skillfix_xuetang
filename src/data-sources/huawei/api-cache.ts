@@ -29,7 +29,8 @@ function ensureCacheDir(): void {
  */
 function getCacheKey(endpoint: string, params: Record<string, unknown>): string {
   const paramStr = JSON.stringify(params, Object.keys(params).sort());
-  return `${endpoint}-${Buffer.from(paramStr).toString("base64").slice(0, 20)}`;
+  // Use full base64 encoding to ensure unique keys for different params
+  return `${endpoint}-${Buffer.from(paramStr).toString("base64")}`;
 }
 
 /**
