@@ -299,6 +299,67 @@ export function createGatewayApp() {
   });
 
   /**
+   * Get OAuth URL for browser extension flow
+   * Returns the Huawei OAuth URL that the extension should open
+   */
+  app.get("/auth/huawei/get-auth-url", (c) => {
+    const uuid = c.req.query("uuid");
+    if (!uuid) {
+      return c.json({ error: "Missing UUID" }, 400);
+    }
+
+    const config = loadConfig();
+    const huaweiConfig = config.dataSources.huawei;
+
+    if (!huaweiConfig?.clientId) {
+      return c.json({ error: "Huawei client ID not configured" }, 400);
+    }
+
+    const authUrl = getHuaweiAuthUrl(uuid);
+    return c.json({ authUrl });
+  });
+
+  /**
+   * Exchange authorization code for token (used by browser extension)
+   */
+  app.post("/auth/huawei/exchange", async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const { code, uuid } = body;
+
+    if (!code || !uuid) {
+      return c.json({ success: false, error: "Missing code or uuid" }, 400);
+    }
+
+    const config = loadConfig();
+    const huaweiConfig = config.dataSources.huawei;
+
+    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+      return c.json({ success: false, error: "Huawei credentials not configured" }, 400);
+    }
+
+    try {
+      const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
+
+      const token = await huaweiAuth.exchangeCodeForUser(
+        code,
+        huaweiConfig.clientId,
+        huaweiConfig.clientSecret,
+        redirectUri
+      );
+
+      const userStore = getUserStore();
+      userStore.saveToken(uuid, token);
+
+      console.log(`[OAuth Extension] Successfully authenticated user ${uuid.slice(0, 8)}`);
+      return c.json({ success: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[OAuth Extension] Error:`, message);
+      return c.json({ success: false, error: message }, 500);
+    }
+  });
+
+  /**
    * Chrome MCP OAuth flow - automates browser login using Chrome DevTools MCP
    *
    * This endpoint:

@@ -54,7 +54,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       await this.auth.ensureValidTokenForUser(this.userUuid, getUserStore());
     } else {
       // Single-user mode: use file token
-      await this.ensureToken();
+      await this.auth.ensureValidToken();
     }
   }
 

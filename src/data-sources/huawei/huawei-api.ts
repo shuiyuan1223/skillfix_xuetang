@@ -87,9 +87,10 @@ export class HuaweiHealthApi {
    * Get polymerized (aggregated) health data for a specific date
    */
   async getPolymerizeData(date: string): Promise<PolymerizeResult> {
-    // Check memory cache first
+    // Check memory cache first (include userUuid to isolate per-user cache)
     const cacheKey = "polymerize";
-    const cached = getFromMemoryCache<PolymerizeResult>(cacheKey, { date });
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<PolymerizeResult>(cacheKey, cacheParams);
     if (cached) {
       return cached;
     }
@@ -163,8 +164,8 @@ export class HuaweiHealthApi {
     }
 
     // Save to cache
-    saveToMemoryCache(cacheKey, { date }, aggregated);
-    saveToFileCache(cacheKey, { date }, aggregated);
+    saveToMemoryCache(cacheKey, cacheParams, aggregated);
+    saveToFileCache(cacheKey, cacheParams, aggregated);
 
     return aggregated;
   }
@@ -269,14 +270,15 @@ export class HuaweiHealthApi {
     max: number;
     min: number;
   }> {
-    // Check memory cache first
+    // Check memory cache first (include userUuid to isolate per-user cache)
     const cacheKey = "heartRate";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; value: number }>;
       avg: number;
       max: number;
       min: number;
-    }>(cacheKey, { date });
+    }>(cacheKey, cacheParams);
     if (cached) {
       return cached;
     }
@@ -350,8 +352,8 @@ export class HuaweiHealthApi {
     const result = { readings, avg, max, min };
 
     // Save to cache
-    saveToMemoryCache(cacheKey, { date }, result);
-    saveToFileCache(cacheKey, { date, rawResponse: json }, result);
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
 
     return result;
   }
@@ -361,7 +363,8 @@ export class HuaweiHealthApi {
    */
   async getRestingHeartRateData(date: string): Promise<number | null> {
     const cacheKey = "restingHeartRate";
-    const cached = getFromMemoryCache<number>(cacheKey, { date });
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<number>(cacheKey, cacheParams);
     if (cached !== undefined) {
       return cached;
     }
@@ -394,7 +397,7 @@ export class HuaweiHealthApi {
     }
 
     const json = (await response.json()) as any;
-    saveToFileCache(cacheKey, { date, rawResponse: json }, null);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
 
     // Extract the latest resting heart rate value
     const groups = json.group || [];
@@ -413,7 +416,7 @@ export class HuaweiHealthApi {
     }
 
     if (latestValue !== null) {
-      saveToMemoryCache(cacheKey, { date }, latestValue);
+      saveToMemoryCache(cacheKey, cacheParams, latestValue);
     }
     return latestValue;
   }
@@ -429,13 +432,14 @@ export class HuaweiHealthApi {
     min: number;
   } | null> {
     const cacheKey = "stress";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; value: number }>;
       current: number;
       avg: number;
       max: number;
       min: number;
-    }>(cacheKey, { date });
+    }>(cacheKey, cacheParams);
     if (cached) {
       return cached;
     }
@@ -465,7 +469,7 @@ export class HuaweiHealthApi {
     if (!response.ok) {
       const errorText = await response.text();
       console.warn(`Stress data failed: ${response.status}`, errorText);
-      saveToFileCache(cacheKey, { date }, null, errorText);
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
     }
 
@@ -491,7 +495,7 @@ export class HuaweiHealthApi {
     }
 
     if (readings.length === 0) {
-      saveToFileCache(cacheKey, { date, rawResponse: json }, null);
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
 
@@ -504,8 +508,8 @@ export class HuaweiHealthApi {
       min: Math.min(...values),
     };
 
-    saveToMemoryCache(cacheKey, { date }, result);
-    saveToFileCache(cacheKey, { date, rawResponse: json }, result);
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
     return result;
   }
 
@@ -520,13 +524,14 @@ export class HuaweiHealthApi {
     min: number;
   } | null> {
     const cacheKey = "spo2";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; value: number }>;
       current: number;
       avg: number;
       max: number;
       min: number;
-    }>(cacheKey, { date });
+    }>(cacheKey, cacheParams);
     if (cached) {
       return cached;
     }
@@ -556,7 +561,7 @@ export class HuaweiHealthApi {
     if (!response.ok) {
       const errorText = await response.text();
       console.warn(`SpO2 data failed: ${response.status}`, errorText);
-      saveToFileCache(cacheKey, { date }, null, errorText);
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
     }
 
@@ -582,7 +587,7 @@ export class HuaweiHealthApi {
     }
 
     if (readings.length === 0) {
-      saveToFileCache(cacheKey, { date, rawResponse: json }, null);
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
 
@@ -595,8 +600,8 @@ export class HuaweiHealthApi {
       min: Math.min(...values),
     };
 
-    saveToMemoryCache(cacheKey, { date }, result);
-    saveToFileCache(cacheKey, { date, rawResponse: json }, result);
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
     return result;
   }
 
@@ -617,6 +622,7 @@ export class HuaweiHealthApi {
     hasArrhythmia: boolean;
   } | null> {
     const cacheKey = "ecg";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
     const cached = getFromMemoryCache<{
       records: Array<{
         time: string;
@@ -627,7 +633,7 @@ export class HuaweiHealthApi {
       }>;
       latestHeartRate: number | null;
       hasArrhythmia: boolean;
-    }>(cacheKey, { date });
+    }>(cacheKey, cacheParams);
     if (cached) {
       return cached;
     }
@@ -670,12 +676,12 @@ export class HuaweiHealthApi {
     if (!response.ok) {
       const errorText = await response.text();
       console.warn(`ECG healthRecords failed: ${response.status}`, errorText);
-      saveToFileCache(cacheKey, { date }, null, errorText);
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
     }
 
     const json = (await response.json()) as any;
-    saveToFileCache(cacheKey, { date, rawResponse: json }, null);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
 
     const healthRecords = json.healthRecords || [];
     if (healthRecords.length === 0) {
@@ -734,7 +740,7 @@ export class HuaweiHealthApi {
       hasArrhythmia: records.some((r) => r.arrhythmiaType > 1),
     };
 
-    saveToMemoryCache(cacheKey, { date }, result);
+    saveToMemoryCache(cacheKey, cacheParams, result);
     return result;
   }
 

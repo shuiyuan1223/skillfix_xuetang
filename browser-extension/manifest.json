@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "PHA OAuth Helper",
+  "version": "1.0.0",
+  "description": "Helps PHA complete Huawei Health OAuth authorization",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "webNavigation",
+    "webRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:*/*", "http://127.0.0.1:*/*", "https://*/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

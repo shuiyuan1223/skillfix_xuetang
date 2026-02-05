@@ -103,9 +103,27 @@ export function registerStartCommand(program: Command): void {
           info(`PHA is already running ${c.dim(`(PID: ${existingPid})`)}`);
           console.log(`\n  ${c.cyan(`http://localhost:${port}`)}\n`);
           if (options.open !== false) {
-            openBrowser(`http://localhost:${port}`);
+            // Open browser using spawn to avoid blocking exit
+            const { spawn } = await import("child_process");
+            const platform = process.platform;
+            if (platform === "darwin") {
+              spawn("open", [`http://localhost:${port}`], {
+                detached: true,
+                stdio: "ignore",
+              }).unref();
+            } else if (platform === "win32") {
+              spawn("cmd", ["/c", "start", "", `http://localhost:${port}`], {
+                detached: true,
+                stdio: "ignore",
+              }).unref();
+            } else {
+              spawn("xdg-open", [`http://localhost:${port}`], {
+                detached: true,
+                stdio: "ignore",
+              }).unref();
+            }
           }
-          return;
+          process.exit(0);
         }
       }
 
@@ -191,8 +209,27 @@ export function registerStartCommand(program: Command): void {
           console.log("");
 
           if (options.open !== false) {
-            setTimeout(() => openBrowser(`http://localhost:${port}`), 300);
+            // Open browser using spawn to avoid blocking
+            const { spawn: spawnBrowser } = await import("child_process");
+            const platform = process.platform;
+            if (platform === "darwin") {
+              spawnBrowser("open", [`http://localhost:${port}`], {
+                detached: true,
+                stdio: "ignore",
+              }).unref();
+            } else if (platform === "win32") {
+              spawnBrowser("cmd", ["/c", "start", "", `http://localhost:${port}`], {
+                detached: true,
+                stdio: "ignore",
+              }).unref();
+            } else {
+              spawnBrowser("xdg-open", [`http://localhost:${port}`], {
+                detached: true,
+                stdio: "ignore",
+              }).unref();
+            }
           }
+          process.exit(0);
         } else {
           spinner.stop("error");
           fatal("Failed to start PHA", `Check logs: ${getLogFile()}`);
@@ -285,13 +322,12 @@ export function registerStartCommand(program: Command): void {
         }
       }
 
-      // Now start
-      const { exec } = await import("child_process");
-      exec(`${process.argv[0]} ${process.argv[1]} start`, (err) => {
-        if (err) {
-          fatal("Failed to start PHA", err.message);
-        }
+      // Now start (with --no-open since browser is already open)
+      const { spawnSync } = await import("child_process");
+      spawnSync(process.argv[0], [process.argv[1], "start", "--no-open"], {
+        stdio: "inherit",
       });
+      process.exit(0);
     });
 }
 

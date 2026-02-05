@@ -10,6 +10,45 @@ import { customElement, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 
 // ============================================================================
+// UUID Generation - with fallback for non-secure contexts
+// ============================================================================
+
+/**
+ * Generate a UUID v4.
+ * Uses crypto.randomUUID() if available (secure context),
+ * otherwise falls back to crypto.getRandomValues().
+ */
+function generateUUID(): string {
+  // Try native randomUUID first (requires secure context)
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  // Fallback using crypto.getRandomValues()
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+
+    // Set version (4) and variant (RFC 4122)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // Version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // Variant RFC 4122
+
+    // Convert to hex string with dashes
+    const hex = Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  // Last resort: Math.random() based UUID (not cryptographically secure, but works)
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// ============================================================================
 // i18n - Client-side translations
 // ============================================================================
 
@@ -3440,26 +3479,180 @@ class PHAApp extends LitElement {
     }
 
     // Generate new UUID and save to cookie
-    const uuid = crypto.randomUUID();
+    const uuid = generateUUID();
     const expires = new Date();
     expires.setFullYear(expires.getFullYear() + 1); // 1 year expiry
     document.cookie = `pha_user_id=${uuid}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
     return uuid;
   }
 
+  /** Whether PHA browser extension is detected */
+  private extensionDetected = false;
+
   /**
-   * Start Huawei OAuth flow using Chrome MCP automation
+   * Check if PHA browser extension is installed
+   */
+  private checkExtension(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve(false);
+      }, 500);
+
+      const handler = (event: MessageEvent) => {
+        if (
+          event.data?.type === "PHA_EXTENSION_READY" ||
+          event.data?.type === "PHA_EXTENSION_STATUS"
+        ) {
+          clearTimeout(timeout);
+          window.removeEventListener("message", handler);
+          this.extensionDetected = true;
+          console.log("[OAuth] Extension detected, version:", event.data.version);
+          resolve(true);
+        }
+      };
+
+      window.addEventListener("message", handler);
+      window.postMessage({ type: "PHA_CHECK_EXTENSION" }, "*");
+    });
+  }
+
+  /**
+   * Start Huawei OAuth flow
    *
-   * This launches a browser via chrome-devtools-mcp server,
-   * user completes login, and the code is automatically captured.
+   * Tries browser extension first (for remote server deployment),
+   * falls back to Chrome MCP flow (for local development).
    */
   private async startHuaweiAuth() {
     // Ensure we have a user UUID
     this.userUuid = this.getUserUuid();
 
-    console.log("[OAuth] Starting Chrome MCP flow...");
+    console.log("[OAuth] Starting authentication...");
 
-    // Show loading indicator via toast (send to server to generate)
+    // Check if extension is available
+    const hasExtension = await this.checkExtension();
+
+    if (hasExtension) {
+      await this.startOAuthWithExtension();
+    } else {
+      // Try MCP flow (works for local development)
+      await this.startOAuthWithMCP();
+    }
+  }
+
+  /**
+   * OAuth flow using browser extension
+   */
+  private async startOAuthWithExtension() {
+    console.log("[OAuth] Using browser extension flow...");
+
+    // Show loading indicator
+    this.ws?.send(
+      JSON.stringify({
+        type: "action",
+        action: "show_toast",
+        payload: { message: "Opening authorization page...", variant: "info" },
+      })
+    );
+
+    try {
+      // Get auth URL from server
+      const urlResponse = await fetch(
+        `/auth/huawei/get-auth-url?uuid=${encodeURIComponent(this.userUuid)}`
+      );
+
+      if (!urlResponse.ok) {
+        const text = await urlResponse.text();
+        console.error("[OAuth] get-auth-url failed:", urlResponse.status, text.slice(0, 200));
+        throw new Error(`Server error: ${urlResponse.status}`);
+      }
+
+      const urlData = await urlResponse.json();
+
+      if (urlData.error) {
+        throw new Error(urlData.error);
+      }
+
+      if (!urlData.authUrl) {
+        throw new Error("No auth URL returned");
+      }
+
+      console.log("[OAuth] Got auth URL, requesting extension...");
+
+      // Request extension to handle OAuth
+      const result = await this.requestExtensionOAuth(urlData.authUrl);
+
+      console.log("[OAuth] Extension result:", result);
+
+      if (result.success && result.code) {
+        // Exchange code for token
+        const exchangeResponse = await fetch("/auth/huawei/exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: result.code, uuid: this.userUuid }),
+        });
+
+        if (!exchangeResponse.ok) {
+          const text = await exchangeResponse.text();
+          console.error("[OAuth] exchange failed:", exchangeResponse.status, text.slice(0, 200));
+          throw new Error(`Exchange failed: ${exchangeResponse.status}`);
+        }
+
+        const exchangeResult = await exchangeResponse.json();
+
+        if (exchangeResult.success) {
+          console.log("[OAuth] Authentication successful!");
+          this.sendAction("auth_complete");
+        } else {
+          throw new Error(exchangeResult.error || "Failed to exchange code");
+        }
+      } else {
+        throw new Error(result.error || "Extension OAuth failed");
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("[OAuth] Extension flow failed:", message);
+      this.ws?.send(
+        JSON.stringify({
+          type: "action",
+          action: "show_toast",
+          payload: { message: `Authentication failed: ${message}`, variant: "error" },
+        })
+      );
+    }
+  }
+
+  /**
+   * Send OAuth request to extension and wait for response
+   */
+  private requestExtensionOAuth(
+    authUrl: string
+  ): Promise<{ success: boolean; code?: string; error?: string }> {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        window.removeEventListener("message", handler);
+        resolve({ success: false, error: "OAuth timeout" });
+      }, 180000); // 3 minute timeout
+
+      const handler = (event: MessageEvent) => {
+        if (event.data?.type === "PHA_OAUTH_RESULT") {
+          clearTimeout(timeout);
+          window.removeEventListener("message", handler);
+          resolve(event.data);
+        }
+      };
+
+      window.addEventListener("message", handler);
+      window.postMessage({ type: "PHA_OAUTH_START", authUrl }, "*");
+    });
+  }
+
+  /**
+   * OAuth flow using Chrome MCP (local development fallback)
+   */
+  private async startOAuthWithMCP() {
+    console.log("[OAuth] Using Chrome MCP flow...");
+
+    // Show loading indicator
     this.ws?.send(
       JSON.stringify({
         type: "action",
@@ -3476,22 +3669,46 @@ class PHAApp extends LitElement {
         body: JSON.stringify({ uuid: this.userUuid }),
       });
 
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("[OAuth] MCP flow request failed:", response.status, text.slice(0, 200));
+        throw new Error(`Server error: ${response.status}`);
+      }
+
       const result = await response.json();
 
       if (result.success) {
         console.log("[OAuth] Authentication successful!");
-        // Notify server that auth completed, refresh the view
         this.sendAction("auth_complete");
       } else {
-        console.error("[OAuth] Authentication failed:", result.error);
-        // Show error toast
-        this.ws?.send(
-          JSON.stringify({
-            type: "action",
-            action: "show_toast",
-            payload: { message: `Authentication failed: ${result.error}`, variant: "error" },
-          })
-        );
+        // MCP flow failed, suggest installing extension
+        console.error("[OAuth] MCP flow failed:", result.error);
+
+        // Check if this looks like a server deployment (MCP not available)
+        if (
+          result.error?.includes("MCP") ||
+          result.error?.includes("chrome") ||
+          result.error?.includes("spawn")
+        ) {
+          this.ws?.send(
+            JSON.stringify({
+              type: "action",
+              action: "show_toast",
+              payload: {
+                message: "Please install PHA browser extension for authentication",
+                variant: "warning",
+              },
+            })
+          );
+        } else {
+          this.ws?.send(
+            JSON.stringify({
+              type: "action",
+              action: "show_toast",
+              payload: { message: `Authentication failed: ${result.error}`, variant: "error" },
+            })
+          );
+        }
       }
     } catch (e) {
       console.error("[OAuth] Request failed:", e);
@@ -3499,7 +3716,10 @@ class PHAApp extends LitElement {
         JSON.stringify({
           type: "action",
           action: "show_toast",
-          payload: { message: "Failed to start authentication", variant: "error" },
+          payload: {
+            message: "Failed to start authentication. Please install PHA extension.",
+            variant: "error",
+          },
         })
       );
     }

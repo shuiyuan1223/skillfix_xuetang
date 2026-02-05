@@ -92,7 +92,22 @@ export class PHAAgent {
 
     let model: Model<any>;
 
-    if (BUILTIN_PROVIDERS.includes(provider)) {
+    if (config.baseUrl) {
+      // Custom OpenAI-compatible API with baseUrl
+      // modelId is used directly without provider prefix
+      model = {
+        id: modelId,
+        name: modelId,
+        api: "openai-completions" as const,
+        provider: provider,
+        baseUrl: config.baseUrl,
+        reasoning: false,
+        input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 128000,
+        maxTokens: 16384,
+      };
+    } else if (BUILTIN_PROVIDERS.includes(provider)) {
       // Use built-in pi-ai provider
       try {
         // @ts-expect-error - dynamic model selection
@@ -101,15 +116,14 @@ export class PHAAgent {
         throw new Error(`Model not found: ${provider}/${modelId}. Error: ${e}`);
       }
     } else {
-      // For non-built-in providers, we'd need to use OpenAI-compatible API
-      // For now, throw an error - these need custom implementation
+      // For non-built-in providers without baseUrl
       throw new Error(
-        `Provider ${provider} is not yet supported. Use one of: ${BUILTIN_PROVIDERS.join(", ")}`
+        `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(", ")}`
       );
     }
 
     if (!model) {
-      throw new Error(`Model not found: ${provider}/${modelId}`);
+      throw new Error(`Model not found: ${modelId}`);
     }
 
     this.agent = new Agent({
