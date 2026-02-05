@@ -31,14 +31,11 @@ export interface LLMConfig {
 export interface HuaweiHealthKitConfig {
   clientId?: string;
   clientSecret?: string;
-  // API endpoints
-  authUrl?: string;
-  tokenUrl?: string;
-  apiBaseUrl?: string;
-  // OAuth callback
   redirectUri?: string;
-  // Data fetch options
-  defaultDateRange?: number; // days to fetch by default
+  // 3 个核心 URL，都配置完整路径
+  authUrl?: string; // 授权页面完整 URL
+  tokenUrl?: string; // Token 接口完整 URL
+  apiBaseUrl?: string; // API 基础地址（后面会拼接具体接口路径）
 }
 
 export interface PHAConfig {
