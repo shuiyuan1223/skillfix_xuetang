@@ -308,6 +308,105 @@ export class HuaweiHealthApi {
   }
 
   /**
+   * Get sleep data using polymerize API
+   * Note: Requires sleep.read permission
+   */
+  async getSleepData(date: string): Promise<{
+    segments: Array<{
+      startTime: number;
+      endTime: number;
+      sleepType: number; // 1=awake, 2=light, 3=deep, 4=REM
+    }>;
+    totalMinutes: number;
+    bedTime: string;
+    wakeTime: string;
+  } | null> {
+    const accessToken = await this.auth.ensureValidToken();
+
+    // Sleep data is for the night ending on this date
+    // Query from previous day 18:00 to current day 12:00
+    const queryDate = new Date(date);
+    const prevDay = new Date(queryDate);
+    prevDay.setDate(prevDay.getDate() - 1);
+
+    const startTime = new Date(`${prevDay.toISOString().split("T")[0]}T18:00:00Z`).getTime();
+    const endTime = new Date(`${date}T12:00:00Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.SLEEP }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Sleep polymerize failed: ${response.status}`, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+
+    // Parse sleep segments
+    const segments: Array<{ startTime: number; endTime: number; sleepType: number }> = [];
+
+    const groups = json.group || [];
+    for (const group of groups) {
+      const sampleSets = group.sampleSet || [];
+      for (const sampleSet of sampleSets) {
+        const points = sampleSet.samplePoints || sampleSet.samplePoint || [];
+        for (const point of points) {
+          let start = point.startTime;
+          let end = point.endTime;
+
+          // Convert nanoseconds to milliseconds if needed
+          if (start > 1e15) start = Math.floor(start / 1e6);
+          if (end > 1e15) end = Math.floor(end / 1e6);
+
+          // Sleep type is in value[0].integerValue
+          const sleepType = point.value?.[0]?.integerValue || 0;
+
+          if (start && end && sleepType) {
+            segments.push({ startTime: start, endTime: end, sleepType });
+          }
+        }
+      }
+    }
+
+    if (segments.length === 0) {
+      return null;
+    }
+
+    // Sort by start time
+    segments.sort((a, b) => a.startTime - b.startTime);
+
+    // Calculate total duration and bed/wake times
+    const firstSegment = segments[0];
+    const lastSegment = segments[segments.length - 1];
+
+    const bedTime = new Date(firstSegment.startTime).toTimeString().slice(0, 5);
+    const wakeTime = new Date(lastSegment.endTime).toTimeString().slice(0, 5);
+
+    const totalMinutes = segments.reduce((sum, seg) => {
+      return sum + Math.round((seg.endTime - seg.startTime) / (60 * 1000));
+    }, 0);
+
+    return { segments, totalMinutes, bedTime, wakeTime };
+  }
+
+  /**
    * Test API connection by fetching today's step count
    */
   async testConnection(): Promise<{ success: boolean; steps?: number; error?: string }> {

@@ -91,12 +91,61 @@ export class HuaweiHealthDataSource implements HealthDataSource {
   }
 
   /**
-   * Get sleep data (Mock fallback - requires Health Kit advanced permission)
+   * Get sleep data from Huawei API
    */
   async getSleep(date: string): Promise<SleepData | null> {
-    // Sleep data requires Health Kit advanced permission
-    // Fall back to mock data
-    return this.mockFallback.getSleep(date);
+    try {
+      await this.auth.ensureValidToken();
+    } catch {
+      console.warn("Huawei not authenticated, using mock sleep data");
+      return this.mockFallback.getSleep(date);
+    }
+
+    try {
+      const result = await this.api.getSleepData(date);
+
+      if (!result || result.segments.length === 0) {
+        console.warn("No sleep data from Huawei, using mock");
+        return this.mockFallback.getSleep(date);
+      }
+
+      // Calculate sleep stages (Huawei: 1=awake, 2=light, 3=deep, 4=REM)
+      const stages = { deep: 0, light: 0, rem: 0, awake: 0 };
+      for (const seg of result.segments) {
+        const duration = Math.round((seg.endTime - seg.startTime) / (60 * 1000));
+        switch (seg.sleepType) {
+          case 1:
+            stages.awake += duration;
+            break;
+          case 2:
+            stages.light += duration;
+            break;
+          case 3:
+            stages.deep += duration;
+            break;
+          case 4:
+            stages.rem += duration;
+            break;
+        }
+      }
+
+      // Calculate quality score (deep + REM as percentage of total sleep time)
+      const sleepMinutes = stages.deep + stages.light + stages.rem;
+      const qualityScore =
+        sleepMinutes > 0 ? Math.round(((stages.deep + stages.rem) / sleepMinutes) * 100) : 0;
+
+      return {
+        date,
+        durationHours: Math.round((result.totalMinutes / 60) * 10) / 10,
+        qualityScore,
+        bedTime: result.bedTime,
+        wakeTime: result.wakeTime,
+        stages,
+      };
+    } catch (error) {
+      console.warn("Failed to fetch Huawei sleep, using mock:", error);
+      return this.mockFallback.getSleep(date);
+    }
   }
 
   /**
