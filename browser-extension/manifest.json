@@ -17,13 +17,7 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "http://localhost:*/*",
-        "http://127.0.0.1:*/*",
-        "http://10.*:*/*",
-        "http://192.168.*:*/*",
-        "https://*/*"
-      ],
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["content-script.js"],
       "run_at": "document_start"
     }
