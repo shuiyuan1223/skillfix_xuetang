@@ -51,12 +51,13 @@ bun run build
 ### 首次配置
 
 ```bash
-# 交互式配置向导
+# 方式一：交互式配置向导（推荐）
 pha onboard
 
-# 或手动配置
-cp .env.example .env
-# 编辑 .env 填入 API Key
+# 方式二：手动配置
+mkdir -p .pha
+cp config.json.example .pha/config.json
+# 编辑 .pha/config.json 填入 API Key
 ```
 
 ## 快速开始
