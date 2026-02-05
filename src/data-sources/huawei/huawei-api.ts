@@ -338,102 +338,184 @@ export class HuaweiHealthApi {
   }
 
   /**
-   * Get sleep data using polymerize API
+   * Get sleep data using healthRecords API
    * Note: Requires sleep.read permission
    */
   async getSleepData(date: string): Promise<{
     segments: Array<{
       startTime: number;
       endTime: number;
-      sleepType: number; // 1=awake, 2=light, 3=deep, 4=REM
+      sleepType: number; // 1=awake, 2=light, 3=deep, 4=REM, 5=nap
     }>;
     totalMinutes: number;
     bedTime: string;
     wakeTime: string;
+    sleepScore?: number;
+    deepSleepMinutes?: number;
+    lightSleepMinutes?: number;
+    remMinutes?: number;
+    awakeMinutes?: number;
   } | null> {
     const accessToken = await this.auth.ensureValidToken();
 
     // Sleep data is for the night ending on this date
-    // Query from previous day 18:00 to current day 12:00
+    // Query a wider range (7 days) to ensure we get recent sleep data
     const queryDate = new Date(date);
-    const prevDay = new Date(queryDate);
-    prevDay.setDate(prevDay.getDate() - 1);
 
-    const startTime = new Date(`${prevDay.toISOString().split("T")[0]}T18:00:00Z`).getTime();
-    const endTime = new Date(`${date}T12:00:00Z`).getTime();
+    const startDate = new Date(queryDate);
+    startDate.setDate(startDate.getDate() - 7);
+    startDate.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(queryDate);
+    endDate.setHours(23, 59, 59, 999);
+
+    // Timestamps in nanoseconds (19 digits)
+    const startTime = startDate.getTime() * 1000000;
+    const endTime = endDate.getTime() * 1000000;
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
 
-    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+    // Use healthRecords endpoint with GET request
+    const params = new URLSearchParams({
+      startTime: startTime.toString(),
+      endTime: endTime.toString(),
+      dataType: "com.huawei.health.record.sleep",
+      subDataType: "com.huawei.continuous.sleep.fragment",
+    });
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
     const response = await fetch(url, {
-      method: "POST",
+      method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
         "x-client-id": clientId,
       },
-      body: JSON.stringify({
-        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.SLEEP }],
-        startTime,
-        endTime,
-      }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Sleep polymerize failed: ${response.status}`, errorText);
+      console.warn(`Sleep healthRecords failed: ${response.status}`, errorText);
+      saveToFileCache("sleep-error", { date, startTime, endTime }, null, errorText);
       return null;
     }
 
     const json = (await response.json()) as any;
+    saveToFileCache("sleep-success", { date }, json);
 
-    // Parse sleep segments
-    const segments: Array<{ startTime: number; endTime: number; sleepType: number }> = [];
-
-    const groups = json.group || [];
-    for (const group of groups) {
-      const sampleSets = group.sampleSet || [];
-      for (const sampleSet of sampleSets) {
-        const points = sampleSet.samplePoints || sampleSet.samplePoint || [];
-        for (const point of points) {
-          let start = point.startTime;
-          let end = point.endTime;
-
-          // Convert nanoseconds to milliseconds if needed
-          if (start > 1e15) start = Math.floor(start / 1e6);
-          if (end > 1e15) end = Math.floor(end / 1e6);
-
-          // Sleep type is in value[0].integerValue
-          const sleepType = point.value?.[0]?.integerValue || 0;
-
-          if (start && end && sleepType) {
-            segments.push({ startTime: start, endTime: end, sleepType });
-          }
-        }
-      }
+    const healthRecords = json.healthRecords || [];
+    if (healthRecords.length === 0) {
+      return null;
     }
 
-    if (segments.length === 0) {
+    // Find sleep record for the requested date
+    // Look for the record where wakeup_time is on the requested date
+    const targetDate = new Date(date);
+    const targetDayStart = new Date(targetDate);
+    targetDayStart.setHours(0, 0, 0, 0);
+    const targetDayEnd = new Date(targetDate);
+    targetDayEnd.setHours(23, 59, 59, 999);
+
+    // Filter out naps (sleep_type = 3) and sort by wakeup time (most recent first)
+    const normalSleepRecords = healthRecords
+      .filter((r: any) => {
+        const sleepType = r.value?.find((v: any) => v.fieldName === "sleep_type")?.integerValue;
+        return sleepType !== 3; // Exclude naps
+      })
+      .sort((a: any, b: any) => {
+        const timeA = a.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue || 0;
+        const timeB = b.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue || 0;
+        return timeB - timeA; // Most recent first
+      });
+
+    if (normalSleepRecords.length === 0) {
       return null;
+    }
+
+    // Find the record for the target date, or use the most recent one
+    let mainRecord = normalSleepRecords.find((r: any) => {
+      const wakeupTime = r.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue;
+      if (wakeupTime) {
+        const wakeupDate = new Date(wakeupTime);
+        return wakeupDate >= targetDayStart && wakeupDate <= targetDayEnd;
+      }
+      return false;
+    });
+
+    // If no exact match for target date, use the most recent sleep
+    if (!mainRecord) {
+      mainRecord = normalSleepRecords[0];
+      console.log(
+        `No sleep data for ${date}, using most recent sleep from ${new Date(mainRecord.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue).toISOString().split("T")[0]}`
+      );
+    }
+
+    // Extract sleep record values
+    const getValue = (fieldName: string) => {
+      const field = mainRecord.value?.find((v: any) => v.fieldName === fieldName);
+      return field?.integerValue ?? field?.longValue ?? null;
+    };
+
+    const fallAsleepTime = getValue("fall_asleep_time");
+    const wakeupTime = getValue("wakeup_time");
+    const allSleepTime = getValue("all_sleep_time"); // minutes
+    const sleepScore = getValue("sleep_score");
+    const deepSleepTime = getValue("deep_sleep_time"); // minutes
+    const lightSleepTime = getValue("light_sleep_time"); // minutes
+    const dreamTime = getValue("dream_time"); // REM minutes
+    const awakeTime = getValue("awake_time"); // minutes
+
+    // Parse sleep fragments from subData
+    const segments: Array<{ startTime: number; endTime: number; sleepType: number }> = [];
+    const fragmentData = mainRecord.subData?.["com.huawei.continuous.sleep.fragment"];
+
+    if (fragmentData?.samplePoints) {
+      for (const point of fragmentData.samplePoints) {
+        let start = point.startTime;
+        let end = point.endTime;
+
+        // Convert nanoseconds to milliseconds
+        if (start > 1e15) start = Math.floor(start / 1e6);
+        if (end > 1e15) end = Math.floor(end / 1e6);
+
+        const sleepState =
+          point.value?.find((v: any) => v.fieldName === "sleep_state")?.integerValue || 0;
+
+        if (start && end && sleepState) {
+          segments.push({ startTime: start, endTime: end, sleepType: sleepState });
+        }
+      }
     }
 
     // Sort by start time
     segments.sort((a, b) => a.startTime - b.startTime);
 
-    // Calculate total duration and bed/wake times
-    const firstSegment = segments[0];
-    const lastSegment = segments[segments.length - 1];
+    // Calculate bed/wake times
+    const bedTime = fallAsleepTime
+      ? new Date(fallAsleepTime).toTimeString().slice(0, 5)
+      : segments.length > 0
+        ? new Date(segments[0].startTime).toTimeString().slice(0, 5)
+        : "00:00";
 
-    const bedTime = new Date(firstSegment.startTime).toTimeString().slice(0, 5);
-    const wakeTime = new Date(lastSegment.endTime).toTimeString().slice(0, 5);
+    const wakeTime = wakeupTime
+      ? new Date(wakeupTime).toTimeString().slice(0, 5)
+      : segments.length > 0
+        ? new Date(segments[segments.length - 1].endTime).toTimeString().slice(0, 5)
+        : "00:00";
 
-    const totalMinutes = segments.reduce((sum, seg) => {
-      return sum + Math.round((seg.endTime - seg.startTime) / (60 * 1000));
-    }, 0);
-
-    return { segments, totalMinutes, bedTime, wakeTime };
+    return {
+      segments,
+      totalMinutes: allSleepTime || 0,
+      bedTime,
+      wakeTime,
+      sleepScore: sleepScore || undefined,
+      deepSleepMinutes: deepSleepTime || undefined,
+      lightSleepMinutes: lightSleepTime || undefined,
+      remMinutes: dreamTime || undefined,
+      awakeMinutes: awakeTime || undefined,
+    };
   }
 
   /**

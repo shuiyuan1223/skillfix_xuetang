@@ -104,35 +104,56 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     try {
       const result = await this.api.getSleepData(date);
 
-      if (!result || result.segments.length === 0) {
+      if (!result) {
         console.warn("No sleep data from Huawei, using mock");
         return this.mockFallback.getSleep(date);
       }
 
-      // Calculate sleep stages (Huawei: 1=awake, 2=light, 3=deep, 4=REM)
-      const stages = { deep: 0, light: 0, rem: 0, awake: 0 };
-      for (const seg of result.segments) {
-        const duration = Math.round((seg.endTime - seg.startTime) / (60 * 1000));
-        switch (seg.sleepType) {
-          case 1:
-            stages.awake += duration;
-            break;
-          case 2:
-            stages.light += duration;
-            break;
-          case 3:
-            stages.deep += duration;
-            break;
-          case 4:
-            stages.rem += duration;
-            break;
+      // Use API-provided stage durations if available, otherwise calculate from segments
+      let stages = { deep: 0, light: 0, rem: 0, awake: 0 };
+
+      if (result.deepSleepMinutes !== undefined || result.lightSleepMinutes !== undefined) {
+        // Use direct values from API
+        stages = {
+          deep: result.deepSleepMinutes || 0,
+          light: result.lightSleepMinutes || 0,
+          rem: result.remMinutes || 0,
+          awake: result.awakeMinutes || 0,
+        };
+      } else if (result.segments.length > 0) {
+        // Calculate from segments (Huawei sleep_state: 1=awake, 2=light, 3=deep, 4=REM, 5=nap)
+        for (const seg of result.segments) {
+          const duration = Math.round((seg.endTime - seg.startTime) / (60 * 1000));
+          switch (seg.sleepType) {
+            case 1:
+              stages.awake += duration;
+              break;
+            case 2:
+              stages.light += duration;
+              break;
+            case 3:
+              stages.deep += duration;
+              break;
+            case 4:
+              stages.rem += duration;
+              break;
+            case 5: // nap - count as light sleep
+              stages.light += duration;
+              break;
+          }
         }
       }
 
-      // Calculate quality score (deep + REM as percentage of total sleep time)
-      const sleepMinutes = stages.deep + stages.light + stages.rem;
+      // Use API sleep score if available, otherwise calculate
       const qualityScore =
-        sleepMinutes > 0 ? Math.round(((stages.deep + stages.rem) / sleepMinutes) * 100) : 0;
+        result.sleepScore !== undefined
+          ? result.sleepScore
+          : (() => {
+              const sleepMinutes = stages.deep + stages.light + stages.rem;
+              return sleepMinutes > 0
+                ? Math.round(((stages.deep + stages.rem) / sleepMinutes) * 100)
+                : 0;
+            })();
 
       return {
         date,
