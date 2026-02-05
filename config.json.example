@@ -1,0 +1,25 @@
+{
+  "gateway": {
+    "port": 8000,
+    "autoStart": false
+  },
+  "llm": {
+    "provider": "anthropic",
+    "apiKey": "sk-ant-xxx-your-api-key",
+    "modelId": "claude-sonnet-4-20250514"
+  },
+  "dataSources": {
+    "type": "huawei",
+    "huawei": {
+      "clientId": "your-huawei-client-id",
+      "clientSecret": "your-huawei-client-secret",
+      "authUrl": "https://oauth-login.cloud.huawei.com/oauth2/v3/authorize",
+      "tokenUrl": "https://oauth-login.cloud.huawei.com/oauth2/v3/token",
+      "apiBaseUrl": "https://health-api.cloud.huawei.com"
+    }
+  },
+  "tui": {
+    "theme": "dark",
+    "showToolCalls": true
+  }
+}
