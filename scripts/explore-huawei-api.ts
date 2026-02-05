@@ -15,88 +15,120 @@ import { loadConfig } from "../src/utils/config.js";
 
 // All known Huawei Health Kit data types based on documentation
 // Reference: https://developer.huawei.com/consumer/cn/doc/hmscore-guides/scene-example-0000001050819089
+// Reference: https://pub.dev/packages/huawei_health (Flutter SDK)
 const POLYMERIZE_DATA_TYPES = [
-  // Steps & Activity
+  // ========== Steps & Activity ==========
   "com.huawei.continuous.steps.delta",
   "com.huawei.continuous.steps.total",
   "com.huawei.instantaneous.steps",
   "com.huawei.continuous.steps.rate",
+  "com.huawei.continuous.steps.rate.statistics",
 
-  // Distance
+  // ========== Distance ==========
   "com.huawei.continuous.distance.delta",
   "com.huawei.continuous.distance.total",
 
-  // Calories
+  // ========== Calories ==========
   "com.huawei.continuous.calories.burnt",
+  "com.huawei.continuous.calories.burnt.total",
   "com.huawei.continuous.calories.delta",
   "com.huawei.continuous.calories.total",
   "com.huawei.continuous.calories.bmr",
+  "com.huawei.continuous.calories.consumed",
+  "com.huawei.instantaneous.calories.bmr",
 
-  // Heart Rate
+  // ========== Heart Rate ==========
   "com.huawei.instantaneous.heart_rate",
   "com.huawei.continuous.heart_rate.statistics",
   "com.huawei.instantaneous.heart_rate.resting",
   "com.huawei.instantaneous.heart_rate.max",
+  "com.huawei.continuous.exercise.heart_rate",
 
-  // Blood Pressure
+  // ========== Blood Pressure ==========
   "com.huawei.instantaneous.blood_pressure",
 
-  // Blood Glucose
+  // ========== Blood Glucose ==========
   "com.huawei.instantaneous.blood_glucose",
 
-  // Blood Oxygen (SpO2)
+  // ========== Blood Oxygen (SpO2) ==========
   "com.huawei.instantaneous.oxygen_saturation",
   "com.huawei.instantaneous.spo2",
 
-  // Body Temperature
+  // ========== Body Temperature ==========
   "com.huawei.instantaneous.body_temperature",
+  "com.huawei.instantaneous.skin_temperature",
 
-  // Weight & Body
+  // ========== Weight & Body Composition ==========
   "com.huawei.instantaneous.body.weight",
   "com.huawei.instantaneous.body.height",
   "com.huawei.instantaneous.body.fat.rate",
   "com.huawei.instantaneous.body.bmi",
   "com.huawei.instantaneous.height",
   "com.huawei.instantaneous.weight",
+  "com.huawei.continuous.body.fat.rate.statistics",
+  "com.huawei.continuous.body.weight.statistics",
+  "com.huawei.continuous.height.statistics",
 
-  // Sleep
+  // ========== Sleep ==========
+  "com.huawei.continuous.sleep",
   "com.huawei.continuous.sleep.segment",
   "com.huawei.continuous.sleep.statistics",
   "com.huawei.continuous.sleep.fragment",
   "com.huawei.instantaneous.sleep",
+  "com.huawei.statistics.sleep",
 
-  // Stress
+  // ========== Stress ==========
   "com.huawei.instantaneous.stress",
   "com.huawei.continuous.stress.statistics",
+  "com.huawei.instantaneous.stress.statistics",
 
-  // Activity
+  // ========== Activity ==========
   "com.huawei.continuous.activity.segment",
   "com.huawei.continuous.activity.duration",
+  "com.huawei.continuous.activity.statistics",
   "com.huawei.instantaneous.activity",
+  "com.huawei.instantaneous.activity.sample",
 
-  // Exercise
+  // ========== Exercise ==========
   "com.huawei.continuous.exercise.heart_rate",
   "com.huawei.continuous.exercise.speed",
   "com.huawei.continuous.exercise.pace",
+  "com.huawei.continuous.exercise.intensity",
+  "com.huawei.continuous.exercise.intensity.statistics",
+  "com.huawei.continuous.workout.duration",
 
-  // Location
+  // ========== Speed & Power ==========
+  "com.huawei.instantaneous.speed",
+  "com.huawei.continuous.speed.statistics",
+  "com.huawei.instantaneous.power.sample",
+  "com.huawei.continuous.power.statistics",
+
+  // ========== Location ==========
   "com.huawei.continuous.location.sample",
+  "com.huawei.instantaneous.location.sample",
+  "com.huawei.instantaneous.location.trace",
+  "com.huawei.continuous.location.boundary.range",
 
-  // Hydration
+  // ========== Cycling ==========
+  "com.huawei.continuous.biking.wheel.rotation.total",
+  "com.huawei.instantaneous.biking.wheel.rotation",
+  "com.huawei.continuous.biking.pedaling.total",
+  "com.huawei.instantaneous.biking.pedaling.rate",
+
+  // ========== Hydration ==========
   "com.huawei.instantaneous.hydration",
+  "com.huawei.instantaneous.hydrate",
 
-  // Nutrition
+  // ========== Nutrition ==========
   "com.huawei.instantaneous.nutrition",
   "com.huawei.instantaneous.nutrition.facts",
+  "com.huawei.continuous.nutrition.facts.statistics",
 
-  // Menstruation
+  // ========== Menstruation ==========
   "com.huawei.instantaneous.menstrual_cycle",
   "com.huawei.instantaneous.menstruation",
 
-  // Skin Temperature
-  "com.huawei.instantaneous.skin_temperature",
-
-  // VO2 Max
+  // ========== VO2 Max & Fitness ==========
   "com.huawei.instantaneous.vo2max",
 ];
 

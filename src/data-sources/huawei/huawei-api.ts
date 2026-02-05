@@ -519,6 +519,98 @@ export class HuaweiHealthApi {
   }
 
   /**
+   * Get weekly sleep data using healthRecords API
+   * Returns sleep duration for each day in the past 7 days
+   */
+  async getWeeklySleepData(
+    endDate: string
+  ): Promise<Array<{ date: string; hours: number; sleepScore?: number }>> {
+    const accessToken = await this.auth.ensureValidToken();
+
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+
+    const start = new Date(end);
+    start.setDate(start.getDate() - 7);
+    start.setHours(0, 0, 0, 0);
+
+    // Timestamps in nanoseconds
+    const startTime = start.getTime() * 1000000;
+    const endTime = end.getTime() * 1000000;
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const params = new URLSearchParams({
+      startTime: startTime.toString(),
+      endTime: endTime.toString(),
+      dataType: "com.huawei.health.record.sleep",
+    });
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`Weekly sleep healthRecords failed: ${response.status}`);
+      return [];
+    }
+
+    const json = (await response.json()) as any;
+    const healthRecords = json.healthRecords || [];
+
+    // Create a map of date -> sleep data
+    const sleepByDate = new Map<string, { hours: number; sleepScore?: number }>();
+
+    for (const record of healthRecords) {
+      // Skip naps (sleep_type = 3)
+      const sleepType = record.value?.find((v: any) => v.fieldName === "sleep_type")?.integerValue;
+      if (sleepType === 3) continue;
+
+      const wakeupTime = record.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue;
+      const allSleepTime = record.value?.find(
+        (v: any) => v.fieldName === "all_sleep_time"
+      )?.integerValue;
+      const sleepScore = record.value?.find(
+        (v: any) => v.fieldName === "sleep_score"
+      )?.integerValue;
+
+      if (wakeupTime && allSleepTime) {
+        const wakeupDate = new Date(wakeupTime).toISOString().split("T")[0];
+        const hours = Math.round((allSleepTime / 60) * 10) / 10;
+
+        // Use the most recent sleep record for each date
+        if (!sleepByDate.has(wakeupDate) || sleepByDate.get(wakeupDate)!.hours < hours) {
+          sleepByDate.set(wakeupDate, { hours, sleepScore });
+        }
+      }
+    }
+
+    // Build result array for the past 7 days
+    const result: Array<{ date: string; hours: number; sleepScore?: number }> = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(end);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const data = sleepByDate.get(dateStr);
+      result.push({
+        date: dateStr,
+        hours: data?.hours || 0,
+        sleepScore: data?.sleepScore,
+      });
+    }
+
+    return result;
+  }
+
+  /**
    * Test API connection by fetching today's step count
    */
   async testConnection(): Promise<{ success: boolean; steps?: number; error?: string }> {

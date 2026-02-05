@@ -218,11 +218,23 @@ export class HuaweiHealthDataSource implements HealthDataSource {
   }
 
   /**
-   * Get weekly sleep data (Mock fallback)
+   * Get weekly sleep data from Huawei API
    */
   async getWeeklySleep(endDate: string): Promise<Array<{ date: string; hours: number }>> {
-    // Sleep requires advanced permission, use mock
-    return this.mockFallback.getWeeklySleep(endDate);
+    try {
+      await this.auth.ensureValidToken();
+    } catch {
+      console.warn("Huawei not authenticated, using mock weekly sleep data");
+      return this.mockFallback.getWeeklySleep(endDate);
+    }
+
+    try {
+      const data = await this.api.getWeeklySleepData(endDate);
+      return data.map((d) => ({ date: d.date, hours: d.hours }));
+    } catch (error) {
+      console.warn("Failed to fetch Huawei weekly sleep, using mock:", error);
+      return this.mockFallback.getWeeklySleep(endDate);
+    }
   }
 
   /**
