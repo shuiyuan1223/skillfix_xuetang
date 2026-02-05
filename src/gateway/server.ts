@@ -299,22 +299,38 @@ export class GatewaySession {
           this.dataSource.getMetrics(today),
           this.dataSource.getHeartRate(today),
         ]);
+        // Calculate heart rate trend
+        const hrReadings = heartRate.readings;
+        let hrTrend: { direction: "up" | "down" | "stable"; value: string } = {
+          direction: "stable",
+          value: "Normal",
+        };
+        if (hrReadings.length >= 2) {
+          const recent = hrReadings.slice(-3).reduce((a, b) => a + b.value, 0) / 3;
+          const earlier = hrReadings.slice(0, 3).reduce((a, b) => a + b.value, 0) / 3;
+          if (recent > earlier + 5)
+            hrTrend = { direction: "up", value: `+${Math.round(recent - earlier)} bpm` };
+          else if (recent < earlier - 5)
+            hrTrend = { direction: "down", value: `${Math.round(recent - earlier)} bpm` };
+        }
         mainPage = generateHealthPage({
           heartRate: {
             label: "Heart Rate",
             value: heartRate.restingAvg,
             unit: "bpm resting",
-            trend: { direction: "stable", value: "Normal" },
+            trend: hrTrend,
           },
           bloodPressure: {
-            label: "Blood Pressure",
-            value: "120/80",
-            unit: "mmHg",
+            label: "Max HR Today",
+            value: heartRate.maxToday,
+            unit: "bpm max",
+            icon: "🔺",
           },
           spo2: {
-            label: "SpO2",
-            value: "98%",
-            unit: "oxygen",
+            label: "Min HR Today",
+            value: heartRate.minToday,
+            unit: "bpm min",
+            icon: "🔻",
           },
           heartRateChart: heartRate.readings.slice(-12).map((r) => ({
             label: r.time,
@@ -359,12 +375,25 @@ export class GatewaySession {
           this.dataSource.getMetrics(today),
           this.dataSource.getWeeklySteps(today),
         ]);
+        // Calculate steps trend vs weekly average
+        const avgSteps =
+          weeklySteps.length > 0
+            ? weeklySteps.reduce((a, b) => a + b.steps, 0) / weeklySteps.length
+            : metrics.steps;
+        const stepsDiff = metrics.steps - avgSteps;
+        const stepsPercent = avgSteps > 0 ? Math.round((stepsDiff / avgSteps) * 100) : 0;
+        let stepsTrend: { direction: "up" | "down" | "stable"; value: string } | undefined;
+        if (stepsPercent > 5) stepsTrend = { direction: "up", value: `+${stepsPercent}% vs avg` };
+        else if (stepsPercent < -5)
+          stepsTrend = { direction: "down", value: `${stepsPercent}% vs avg` };
+        else stepsTrend = { direction: "stable", value: "On track" };
+
         mainPage = generateActivityPage({
           steps: {
             label: "Steps",
             value: metrics.steps.toLocaleString(),
             unit: "steps today",
-            trend: { direction: "up", value: "+12% vs avg" },
+            trend: stepsTrend,
           },
           calories: {
             label: "Calories",

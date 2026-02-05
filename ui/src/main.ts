@@ -1227,48 +1227,10 @@ class PHAApp extends LitElement {
       display: flex;
       height: 100vh;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background:
-        radial-gradient(ellipse at top left, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
-        radial-gradient(ellipse at bottom right, rgba(118, 75, 162, 0.15) 0%, transparent 50%),
-        linear-gradient(180deg, #0a0a0f 0%, #0d0d14 50%, #0a0a0f 100%);
-      color: #ffffff;
       overflow: hidden;
     }
 
-    /* Animated background grid */
-    :host::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(102, 126, 234, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(102, 126, 234, 0.03) 1px, transparent 1px);
-      background-size: 50px 50px;
-      pointer-events: none;
-    }
-
-    /* Flowing gradient background */
-    :host::after {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background:
-        radial-gradient(ellipse 80% 50% at 20% 40%, rgba(102, 126, 234, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse 60% 40% at 80% 60%, rgba(118, 75, 162, 0.08) 0%, transparent 50%);
-      background-size: 200% 200%;
-      animation: gradientFlow 20s ease-in-out infinite;
-      pointer-events: none;
-    }
-
-    @keyframes gradientFlow {
-      0%,
-      100% {
-        background-position: 0% 50%;
-      }
-      50% {
-        background-position: 100% 50%;
-      }
-    }
+    /* Animated background effects moved to .shell.theme-dark */
 
     /* Page transition animation */
     .surface-main-content {
@@ -1308,6 +1270,144 @@ class PHAApp extends LitElement {
       width: 100%;
       height: 100%;
       position: relative;
+    }
+
+    /* Dark Theme (default) */
+    .shell.theme-dark {
+      background:
+        radial-gradient(ellipse at top left, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at bottom right, rgba(118, 75, 162, 0.15) 0%, transparent 50%),
+        linear-gradient(180deg, #0a0a0f 0%, #0d0d14 50%, #0a0a0f 100%);
+      color: #ffffff;
+    }
+
+    .shell.theme-dark::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(102, 126, 234, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(102, 126, 234, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none;
+    }
+
+    /* Light Theme */
+    .shell.theme-light {
+      background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
+      color: #1e293b;
+    }
+
+    .shell.theme-light .surface-sidebar {
+      background: rgba(255, 255, 255, 0.9);
+      border-right: 1px solid rgba(102, 126, 234, 0.2);
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.05);
+    }
+
+    .shell.theme-light .surface-main {
+      background: transparent;
+    }
+
+    .shell.theme-light .a2ui-card {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(102, 126, 234, 0.15);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+    }
+
+    .shell.theme-light .a2ui-stat-card {
+      background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.95) 0%,
+        rgba(248, 250, 252, 0.95) 100%
+      );
+      border: 1px solid rgba(102, 126, 234, 0.15);
+    }
+
+    .shell.theme-light .a2ui-text,
+    .shell.theme-light .a2ui-stat-value,
+    .shell.theme-light .a2ui-stat-title {
+      color: #1e293b;
+    }
+
+    .shell.theme-light .a2ui-text.caption,
+    .shell.theme-light .a2ui-stat-subtitle {
+      color: #64748b;
+    }
+
+    .shell.theme-light .a2ui-nav-item {
+      color: #475569;
+    }
+
+    .shell.theme-light .a2ui-nav-item:hover {
+      background: rgba(102, 126, 234, 0.1);
+      color: #1e293b;
+    }
+
+    .shell.theme-light .a2ui-nav-item.active {
+      background: linear-gradient(
+        135deg,
+        rgba(102, 126, 234, 0.15) 0%,
+        rgba(118, 75, 162, 0.1) 100%
+      );
+      color: #667eea;
+    }
+
+    .shell.theme-light .logo-text,
+    .shell.theme-light .status-text {
+      color: #1e293b;
+    }
+
+    .shell.theme-light .chat-input-container {
+      background: rgba(255, 255, 255, 0.9);
+      border-top: 1px solid rgba(102, 126, 234, 0.15);
+    }
+
+    .shell.theme-light .chat-input {
+      background: rgba(241, 245, 249, 0.8);
+      color: #1e293b;
+      border: 1px solid rgba(102, 126, 234, 0.2);
+    }
+
+    .shell.theme-light .chat-input::placeholder {
+      color: #94a3b8;
+    }
+
+    .shell.theme-light .message-bubble.assistant {
+      background: rgba(241, 245, 249, 0.9);
+      color: #1e293b;
+    }
+
+    .shell.theme-light .message-bubble.user {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+    }
+
+    .shell.theme-light .a2ui-chart-container {
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    .shell.theme-light .surface-modal {
+      background: rgba(0, 0, 0, 0.3);
+    }
+
+    .shell.theme-light .surface-modal-content {
+      background: #ffffff;
+      color: #1e293b;
+    }
+
+    /* Theme toggle button */
+    .theme-toggle {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .theme-toggle:hover {
+      background: rgba(102, 126, 234, 0.15);
     }
 
     .surface-sidebar {
@@ -3168,6 +3268,7 @@ class PHAApp extends LitElement {
   @state() private toastData: A2UISurfaceData | null = null;
   @state() private sidebarCollapsed = false;
   @state() private pageKey = 0; // For page transition animations
+  @state() private darkMode = true; // Theme state
 
   private ws: WebSocket | null = null;
   private renderer: A2UIRenderer;
@@ -3290,6 +3391,11 @@ class PHAApp extends LitElement {
     localStorage.setItem("pha-sidebar-collapsed", String(this.sidebarCollapsed));
   }
 
+  private toggleTheme() {
+    this.darkMode = !this.darkMode;
+    localStorage.setItem("pha-dark-mode", String(this.darkMode));
+  }
+
   connectedCallback() {
     super.connectedCallback();
     // Restore sidebar state from localStorage
@@ -3297,12 +3403,20 @@ class PHAApp extends LitElement {
     if (saved === "true") {
       this.sidebarCollapsed = true;
     }
+    // Restore theme state (default to dark, or check system preference)
+    const savedTheme = localStorage.getItem("pha-dark-mode");
+    if (savedTheme !== null) {
+      this.darkMode = savedTheme === "true";
+    } else {
+      // Check system preference
+      this.darkMode = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
     this.connect();
   }
 
   render() {
     return html`
-      <div class="shell">
+      <div class="shell ${this.darkMode ? "theme-dark" : "theme-light"}">
         <!-- Sidebar Surface -->
         <aside class="surface-sidebar ${this.sidebarCollapsed ? "collapsed" : ""}">
           <div class="shell-header">
@@ -3332,6 +3446,13 @@ class PHAApp extends LitElement {
                     <span class="status-text"
                       >${this.connected ? "Connected" : "Reconnecting..."}</span
                     >
+                    <button
+                      class="theme-toggle"
+                      @click=${() => this.toggleTheme()}
+                      title="${this.darkMode ? "Switch to light mode" : "Switch to dark mode"}"
+                    >
+                      ${this.darkMode ? "☀️" : "🌙"}
+                    </button>
                     <button
                       class="collapse-toggle"
                       @click=${() => this.toggleSidebar()}
