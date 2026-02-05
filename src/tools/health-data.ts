@@ -35,9 +35,7 @@ export const getHealthDataTool = {
     required: ["date"],
   },
   execute: async (args: { date: string }) => {
-    const date = args.date === "today"
-      ? new Date().toISOString().split("T")[0]
-      : args.date;
+    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
 
     const metrics = await dataSource.getMetrics(date);
     return {
@@ -62,9 +60,7 @@ export const getHeartRateTool = {
     required: ["date"],
   },
   execute: async (args: { date: string }) => {
-    const date = args.date === "today"
-      ? new Date().toISOString().split("T")[0]
-      : args.date;
+    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
 
     const heartRate = await dataSource.getHeartRate(date);
     return {
@@ -89,9 +85,7 @@ export const getSleepTool = {
     required: ["date"],
   },
   execute: async (args: { date: string }) => {
-    const date = args.date === "today"
-      ? new Date().toISOString().split("T")[0]
-      : args.date;
+    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
 
     const sleep = await dataSource.getSleep(date);
     if (!sleep) {
@@ -122,9 +116,7 @@ export const getWorkoutsTool = {
     required: ["date"],
   },
   execute: async (args: { date: string }) => {
-    const date = args.date === "today"
-      ? new Date().toISOString().split("T")[0]
-      : args.date;
+    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
 
     const workouts = await dataSource.getWorkouts(date);
     return {
@@ -155,9 +147,8 @@ export const getWeeklySummaryTool = {
 
     const sleepDays = weeklySleep.filter((d) => d.hours > 0);
     const totalSleep = sleepDays.reduce((sum, d) => sum + d.hours, 0);
-    const avgSleep = sleepDays.length > 0
-      ? Math.round((totalSleep / sleepDays.length) * 10) / 10
-      : 0;
+    const avgSleep =
+      sleepDays.length > 0 ? Math.round((totalSleep / sleepDays.length) * 10) / 10 : 0;
 
     return {
       success: true,

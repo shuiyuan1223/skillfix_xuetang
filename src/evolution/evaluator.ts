@@ -95,15 +95,12 @@ export class Evaluator {
       return rowToEvaluation(existing);
     }
 
-    const prompt = EVALUATION_PROMPT
-      .replace("{query}", trace.userMessage)
+    const prompt = EVALUATION_PROMPT.replace("{query}", trace.userMessage)
       .replace("{context}", JSON.stringify(trace.context || {}, null, 2))
       .replace("{response}", trace.agentResponse)
       .replace(
         "{toolCalls}",
-        trace.toolCalls?.length
-          ? JSON.stringify(trace.toolCalls, null, 2)
-          : "None"
+        trace.toolCalls?.length ? JSON.stringify(trace.toolCalls, null, 2) : "None"
       );
 
     const response = await this.llmCall(prompt);
@@ -229,7 +226,10 @@ export class Evaluator {
    */
   async runTestCase(
     testCase: TestCase,
-    agentCall: (query: string, context?: unknown) => Promise<{
+    agentCall: (
+      query: string,
+      context?: unknown
+    ) => Promise<{
       response: string;
       toolCalls?: Array<{ tool: string; arguments: unknown; result: unknown }>;
     }>
@@ -239,10 +239,7 @@ export class Evaluator {
     passed: boolean;
   }> {
     // Call the agent
-    const { response, toolCalls } = await agentCall(
-      testCase.query,
-      testCase.context
-    );
+    const { response, toolCalls } = await agentCall(testCase.query, testCase.context);
 
     // Create a trace
     const trace: Trace = {
@@ -263,10 +260,7 @@ export class Evaluator {
     let passed = true;
 
     // Check minimum score
-    if (
-      testCase.expected.minScore &&
-      evaluation.overallScore < testCase.expected.minScore
-    ) {
+    if (testCase.expected.minScore && evaluation.overallScore < testCase.expected.minScore) {
       passed = false;
     }
 

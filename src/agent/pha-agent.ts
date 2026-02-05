@@ -4,7 +4,12 @@
  * Main agent class that wraps pi-agent with health-specific configuration.
  */
 
-import { Agent, type AgentOptions, type AgentEvent, type AgentMessage } from "@mariozechner/pi-agent-core";
+import {
+  Agent,
+  type AgentOptions,
+  type AgentEvent,
+  type AgentMessage,
+} from "@mariozechner/pi-agent-core";
 import { getModel, type Model, type KnownProvider } from "@mariozechner/pi-ai";
 import { healthAgentTools } from "./tools.js";
 import { getSystemPrompt } from "./system-prompt.js";
@@ -39,7 +44,7 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
   google: "gemini-2.0-flash",
   openrouter: "openrouter/auto",
   moonshot: "moonshot-v1-128k", // Not built-in, needs custom handling
-  deepseek: "deepseek-chat",    // Not built-in, needs custom handling
+  deepseek: "deepseek-chat", // Not built-in, needs custom handling
   groq: "llama-3.3-70b-versatile",
   mistral: "mistral-large-latest",
   xai: "grok-2-1212",
@@ -80,7 +85,9 @@ export class PHAAgent {
     const apiKey = config.apiKey || this.getEnvApiKey(provider);
 
     if (!apiKey) {
-      throw new Error(`API key required for provider: ${provider}. Set ${ENV_KEYS[provider]} or provide apiKey in config.`);
+      throw new Error(
+        `API key required for provider: ${provider}. Set ${ENV_KEYS[provider]} or provide apiKey in config.`
+      );
     }
 
     let model: Model<any>;
@@ -96,7 +103,9 @@ export class PHAAgent {
     } else {
       // For non-built-in providers, we'd need to use OpenAI-compatible API
       // For now, throw an error - these need custom implementation
-      throw new Error(`Provider ${provider} is not yet supported. Use one of: ${BUILTIN_PROVIDERS.join(", ")}`);
+      throw new Error(
+        `Provider ${provider} is not yet supported. Use one of: ${BUILTIN_PROVIDERS.join(", ")}`
+      );
     }
 
     if (!model) {

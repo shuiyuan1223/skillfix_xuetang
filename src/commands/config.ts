@@ -13,25 +13,22 @@ import {
 } from "../utils/config.js";
 
 export function registerConfigCommand(program: Command): void {
-  const configCmd = program
-    .command("config")
-    .description("Manage PHA configuration");
+  const configCmd = program.command("config").description("Manage PHA configuration");
 
   // config (no subcommand) - show all config
-  configCmd
-    .action(() => {
-      if (!isConfigured()) {
-        console.log("\nNo configuration found. Run 'pha setup' first.\n");
-        return;
-      }
+  configCmd.action(() => {
+    if (!isConfigured()) {
+      console.log("\nNo configuration found. Run 'pha setup' first.\n");
+      return;
+    }
 
-      const config = loadConfig();
-      console.log("\nPHA Configuration\n");
-      console.log("Path:", getConfigPath());
-      console.log("");
-      console.log(JSON.stringify(config, null, 2));
-      console.log("");
-    });
+    const config = loadConfig();
+    console.log("\nPHA Configuration\n");
+    console.log("Path:", getConfigPath());
+    console.log("");
+    console.log(JSON.stringify(config, null, 2));
+    console.log("");
+  });
 
   // config get <path>
   configCmd

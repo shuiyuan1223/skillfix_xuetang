@@ -3,7 +3,13 @@
  */
 
 import type { Command } from "commander";
-import { loadConfig, isConfigured, getConfigPath, PROVIDER_CONFIGS, type LLMProvider } from "../utils/config.js";
+import {
+  loadConfig,
+  isConfigured,
+  getConfigPath,
+  PROVIDER_CONFIGS,
+  type LLMProvider,
+} from "../utils/config.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -173,7 +179,9 @@ export function registerStatusCommand(program: Command): void {
           hasOpenAI && "OpenAI",
           hasGoogle && "Google",
           hasOpenRouter && "OpenRouter",
-        ].filter(Boolean).join(", ");
+        ]
+          .filter(Boolean)
+          .join(", ");
         printKV("API Keys", `${c.green(String(keyCount))} ${c.dim("found:")} ${keyList}`);
       }
 

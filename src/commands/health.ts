@@ -28,9 +28,7 @@ export function registerHealthCommand(program: Command): void {
     .action(async (options) => {
       const dataSource = getDataSource();
 
-      const date = options.date === "today"
-        ? new Date().toISOString().split("T")[0]
-        : options.date;
+      const date = options.date === "today" ? new Date().toISOString().split("T")[0] : options.date;
 
       if (options.weekly) {
         await showWeeklySummary(dataSource, date, options.json);
@@ -61,13 +59,15 @@ async function showDailySummary(dataSource: any, date: string, json: boolean): P
       min: heartRate.minToday,
       max: heartRate.maxToday,
     },
-    sleep: sleep ? {
-      duration: sleep.durationHours,
-      quality: sleep.qualityScore,
-      bedTime: sleep.bedTime,
-      wakeTime: sleep.wakeTime,
-      stages: sleep.stages,
-    } : null,
+    sleep: sleep
+      ? {
+          duration: sleep.durationHours,
+          quality: sleep.qualityScore,
+          bedTime: sleep.bedTime,
+          wakeTime: sleep.wakeTime,
+          stages: sleep.stages,
+        }
+      : null,
     workouts: workouts.map((w: any) => ({
       type: w.type,
       duration: w.durationMinutes,
@@ -87,38 +87,58 @@ async function showDailySummary(dataSource: any, date: string, json: boolean): P
   printSection("Activity", icons.activity);
   const stepsGoal = 10000;
   const stepsPercent = Math.min(100, Math.round((metrics.steps / stepsGoal) * 100));
-  printKV("Steps", `${c.bold(formatNumber(metrics.steps))} ${c.dim("/ " + formatNumber(stepsGoal))} ${progressBar(metrics.steps, stepsGoal, 15)}`);
+  printKV(
+    "Steps",
+    `${c.bold(formatNumber(metrics.steps))} ${c.dim("/ " + formatNumber(stepsGoal))} ${progressBar(metrics.steps, stepsGoal, 15)}`
+  );
   printKV("Calories", `${c.bold(formatNumber(metrics.calories))} ${c.dim("kcal")}`);
   printKV("Active Time", `${c.bold(String(metrics.activeMinutes))} ${c.dim("min")}`);
   printKV("Distance", `${c.bold((metrics.distance / 1000).toFixed(2))} ${c.dim("km")}`);
 
   // Heart Rate Section
   printSection("Heart Rate", icons.heart);
-  const hrData = heartRate.hourly || Array(24).fill(0).map((_, i) => 60 + Math.sin(i) * 10);
+  const hrData =
+    heartRate.hourly ||
+    Array(24)
+      .fill(0)
+      .map((_, i) => 60 + Math.sin(i) * 10);
   printKV("Resting", `${c.bold(String(heartRate.restingAvg))} ${c.dim("bpm")}`);
-  printKV("Range", `${c.cyan(String(heartRate.minToday))} ${c.dim("-")} ${c.red(String(heartRate.maxToday))} ${c.dim("bpm")}`);
+  printKV(
+    "Range",
+    `${c.cyan(String(heartRate.minToday))} ${c.dim("-")} ${c.red(String(heartRate.maxToday))} ${c.dim("bpm")}`
+  );
   printKV("Today", c.cyan(miniChart(hrData)));
 
   // Sleep Section
   printSection("Sleep", icons.sleep);
   if (sleep) {
     const sleepGoal = 8;
-    printKV("Duration", `${c.bold(String(sleep.durationHours))} ${c.dim("hours")} ${progressBar(sleep.durationHours, sleepGoal, 10)}`);
-    printKV("Quality", `${c.bold(String(sleep.qualityScore))}${c.dim("%")} ${getQualityLabel(sleep.qualityScore)}`);
+    printKV(
+      "Duration",
+      `${c.bold(String(sleep.durationHours))} ${c.dim("hours")} ${progressBar(sleep.durationHours, sleepGoal, 10)}`
+    );
+    printKV(
+      "Quality",
+      `${c.bold(String(sleep.qualityScore))}${c.dim("%")} ${getQualityLabel(sleep.qualityScore)}`
+    );
     printKV("Time", `${c.dim(sleep.bedTime + " → ")}${sleep.wakeTime}`);
 
     // Sleep stages breakdown
-    const total = sleep.stages.deep + sleep.stages.light + sleep.stages.rem + (sleep.stages.awake || 0);
+    const total =
+      sleep.stages.deep + sleep.stages.light + sleep.stages.rem + (sleep.stages.awake || 0);
     const stageBar = (val: number, color: (s: string) => string) => {
       const width = Math.round((val / total) * 20);
       return color("█".repeat(width));
     };
     console.log("");
-    printKV("Stages", [
-      stageBar(sleep.stages.deep, c.blue) + c.dim(` Deep ${sleep.stages.deep}m`),
-      stageBar(sleep.stages.light, c.cyan) + c.dim(` Light ${sleep.stages.light}m`),
-      stageBar(sleep.stages.rem, c.magenta) + c.dim(` REM ${sleep.stages.rem}m`),
-    ].join("  "));
+    printKV(
+      "Stages",
+      [
+        stageBar(sleep.stages.deep, c.blue) + c.dim(` Deep ${sleep.stages.deep}m`),
+        stageBar(sleep.stages.light, c.cyan) + c.dim(` Light ${sleep.stages.light}m`),
+        stageBar(sleep.stages.rem, c.magenta) + c.dim(` REM ${sleep.stages.rem}m`),
+      ].join("  ")
+    );
   } else {
     console.log(`  ${c.dim("No sleep data recorded")}`);
   }
@@ -128,11 +148,7 @@ async function showDailySummary(dataSource: any, date: string, json: boolean): P
   if (workouts.length > 0) {
     printTable(
       ["Type", "Duration", "Calories"],
-      workouts.map((w: any) => [
-        w.type,
-        `${w.durationMinutes} min`,
-        `${w.caloriesBurned} kcal`,
-      ])
+      workouts.map((w: any) => [w.type, `${w.durationMinutes} min`, `${w.caloriesBurned} kcal`])
     );
   } else {
     console.log(`  ${c.dim("No workouts recorded today")}`);
@@ -164,7 +180,8 @@ async function showWeeklySummary(dataSource: any, endDate: string, json: boolean
 
   const totalSteps = weeklySteps.reduce((sum: number, d: any) => sum + d.steps, 0);
   const avgSteps = Math.round(totalSteps / weeklySteps.length);
-  const avgSleep = weeklySleep.reduce((sum: number, d: any) => sum + d.hours, 0) / weeklySleep.length;
+  const avgSleep =
+    weeklySleep.reduce((sum: number, d: any) => sum + d.hours, 0) / weeklySleep.length;
 
   const data = {
     period: {
@@ -225,6 +242,8 @@ async function showWeeklySummary(dataSource: any, endDate: string, json: boolean
 
   console.log("");
   printDivider();
-  console.log(`  ${c.dim("Legend:")} ${c.green("✓")} ${c.dim("Goal met")}  ${c.yellow("!")} ${c.dim("Below target")}`);
+  console.log(
+    `  ${c.dim("Legend:")} ${c.green("✓")} ${c.dim("Goal met")}  ${c.yellow("!")} ${c.dim("Below target")}`
+  );
   console.log("");
 }

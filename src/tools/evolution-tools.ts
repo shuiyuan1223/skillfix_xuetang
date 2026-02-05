@@ -65,12 +65,13 @@ export const listTracesTool = {
 
     return {
       success: true,
-      traces: rows.map(r => ({
+      traces: rows.map((r) => ({
         id: r.id,
         sessionId: r.session_id,
         timestamp: r.timestamp,
         userMessage: r.user_message.slice(0, 100) + (r.user_message.length > 100 ? "..." : ""),
-        responsePreview: r.agent_response.slice(0, 100) + (r.agent_response.length > 100 ? "..." : ""),
+        responsePreview:
+          r.agent_response.slice(0, 100) + (r.agent_response.length > 100 ? "..." : ""),
         durationMs: r.duration_ms,
         hasToolCalls: !!r.tool_calls,
       })),
@@ -120,12 +121,14 @@ export const getTraceTool = {
         durationMs: row.duration_ms,
         tokenUsage: row.token_usage ? JSON.parse(row.token_usage) : null,
       },
-      evaluation: evalRow ? {
-        overallScore: evalRow.overall_score,
-        scores: JSON.parse(evalRow.scores),
-        feedback: evalRow.feedback,
-        issues: evalRow.issues ? JSON.parse(evalRow.issues) : [],
-      } : null,
+      evaluation: evalRow
+        ? {
+            overallScore: evalRow.overall_score,
+            scores: JSON.parse(evalRow.scores),
+            feedback: evalRow.feedback,
+            issues: evalRow.issues ? JSON.parse(evalRow.issues) : [],
+          }
+        : null,
     };
   },
 };
@@ -185,7 +188,7 @@ export const listEvaluationsTool = {
 
     return {
       success: true,
-      evaluations: rows.map(r => ({
+      evaluations: rows.map((r) => ({
         id: r.id,
         traceId: r.trace_id,
         timestamp: r.timestamp,
@@ -228,7 +231,7 @@ export const listTestCasesTool = {
 
     return {
       success: true,
-      testCases: rows.map(r => ({
+      testCases: rows.map((r) => ({
         id: r.id,
         category: r.category,
         query: r.query.slice(0, 100) + (r.query.length > 100 ? "..." : ""),
@@ -408,7 +411,7 @@ export const listSuggestionsTool = {
 
     return {
       success: true,
-      suggestions: rows.map(r => ({
+      suggestions: rows.map((r) => ({
         id: r.id,
         timestamp: r.timestamp,
         type: r.type,

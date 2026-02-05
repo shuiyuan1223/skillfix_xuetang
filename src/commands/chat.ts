@@ -20,7 +20,8 @@ export function registerChatCommand(program: Command): void {
     .action(async (options) => {
       const config = loadConfig();
       const provider = options.provider || config.llm.provider;
-      const apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GOOGLE_API_KEY;
+      const apiKey =
+        process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GOOGLE_API_KEY;
 
       if (!apiKey) {
         fatal("No API key found", "Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY");
@@ -73,7 +74,9 @@ export function registerChatCommand(program: Command): void {
               currentToolSpinner = new Spinner(`Calling ${event.toolName}...`);
               currentToolSpinner.start();
             } else if (!options.json && options.stream !== false) {
-              process.stdout.write(`\r\x1b[K${c.yellow(icons.running)} ${c.dim(`Using ${event.toolName}...`)}`);
+              process.stdout.write(
+                `\r\x1b[K${c.yellow(icons.running)} ${c.dim(`Using ${event.toolName}...`)}`
+              );
             }
           } else if (event.type === "tool_execution_end") {
             const lastTool = toolCalls[toolCalls.length - 1];
@@ -92,15 +95,23 @@ export function registerChatCommand(program: Command): void {
           await agent.getAgent().waitForIdle();
 
           if (options.json) {
-            console.log(JSON.stringify({
-              message: options.message,
-              response,
-              toolCalls,
-            }, null, 2));
+            console.log(
+              JSON.stringify(
+                {
+                  message: options.message,
+                  response,
+                  toolCalls,
+                },
+                null,
+                2
+              )
+            );
           } else {
             // Show tool summary if any
             if (toolCalls.length > 0 && !options.showTools) {
-              console.log(`\n${c.dim(`Used ${toolCalls.length} tool(s): ${toolCalls.map(t => t.tool).join(", ")}`)}`);
+              console.log(
+                `\n${c.dim(`Used ${toolCalls.length} tool(s): ${toolCalls.map((t) => t.tool).join(", ")}`)}`
+              );
             }
             console.log("");
           }

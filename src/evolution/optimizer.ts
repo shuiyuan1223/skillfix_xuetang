@@ -65,9 +65,10 @@ export class Optimizer {
       return [];
     }
 
-    const prompt = OPTIMIZATION_PROMPT
-      .replace("{analysis}", JSON.stringify(analysis, null, 2))
-      .replace("{currentPrompt}", this.currentSystemPrompt);
+    const prompt = OPTIMIZATION_PROMPT.replace(
+      "{analysis}",
+      JSON.stringify(analysis, null, 2)
+    ).replace("{currentPrompt}", this.currentSystemPrompt);
 
     const response = await this.llmCall(prompt);
 
@@ -149,10 +150,7 @@ export class Optimizer {
 
     if (suggestion.currentValue) {
       // Replace existing text
-      newPrompt = newPrompt.replace(
-        suggestion.currentValue,
-        suggestion.suggestedValue
-      );
+      newPrompt = newPrompt.replace(suggestion.currentValue, suggestion.suggestedValue);
     } else {
       // Append new text
       newPrompt += "\n\n" + suggestion.suggestedValue;

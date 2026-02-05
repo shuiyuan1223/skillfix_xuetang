@@ -212,7 +212,8 @@ export class GatewaySession {
   private editingPrompt = false;
   private editingSkill = false;
   private editBuffer: string | null = null;
-  private evolutionTab: "overview" | "traces" | "evaluations" | "benchmark" | "suggestions" = "overview";
+  private evolutionTab: "overview" | "traces" | "evaluations" | "benchmark" | "suggestions" =
+    "overview";
   private tracesPage = 0;
 
   constructor(config: GatewayConfig = {}) {
@@ -386,7 +387,15 @@ export class GatewaySession {
       case "settings/prompts": {
         const promptsResult = await listPromptsTool.execute({});
         let content: string | undefined;
-        let commits: Array<{ hash: string; shortHash: string; message: string; date: string; author: string }> | undefined;
+        let commits:
+          | Array<{
+              hash: string;
+              shortHash: string;
+              message: string;
+              date: string;
+              author: string;
+            }>
+          | undefined;
 
         if (this.selectedPrompt) {
           const promptResult = await getPromptTool.execute({ name: this.selectedPrompt });
@@ -394,7 +403,10 @@ export class GatewaySession {
             content = this.editBuffer ?? promptResult.content;
           }
 
-          const historyResult = await getPromptHistoryTool.execute({ name: this.selectedPrompt, limit: 10 });
+          const historyResult = await getPromptHistoryTool.execute({
+            name: this.selectedPrompt,
+            limit: 10,
+          });
           if (historyResult.success && historyResult.commits) {
             commits = historyResult.commits;
           }
@@ -443,7 +455,7 @@ export class GatewaySession {
         } else if (this.evolutionTab === "traces") {
           const traceRows = listTraces({ limit: 20, offset: this.tracesPage * 20 });
           tracesTotal = countTraces();
-          traces = traceRows.map(t => {
+          traces = traceRows.map((t) => {
             const evalResult = getEvaluationByTraceId(t.id);
             return {
               id: t.id,
@@ -454,7 +466,7 @@ export class GatewaySession {
           });
         } else if (this.evolutionTab === "evaluations") {
           const evalRows = listEvaluations({ limit: 50 });
-          evaluations = evalRows.map(e => ({
+          evaluations = evalRows.map((e) => ({
             id: e.id,
             traceId: e.trace_id,
             timestamp: e.timestamp,
@@ -463,7 +475,7 @@ export class GatewaySession {
           }));
         } else if (this.evolutionTab === "benchmark") {
           const testRows = listTestCases({ limit: 50 });
-          testCases = testRows.map(tc => ({
+          testCases = testRows.map((tc) => ({
             id: tc.id,
             category: tc.category,
             query: tc.query,
@@ -471,7 +483,7 @@ export class GatewaySession {
           }));
         } else if (this.evolutionTab === "suggestions") {
           const suggRows = listSuggestions({ limit: 50 });
-          suggestions = suggRows.map(s => ({
+          suggestions = suggRows.map((s) => ({
             id: s.id,
             timestamp: s.timestamp,
             type: s.type,
@@ -627,7 +639,9 @@ export class GatewaySession {
       await this.handleNavigate("settings/skills", send);
     } else if (action === "toggle_skill" && this.selectedSkill) {
       const skillsResult = await listSkillsTool.execute({});
-      const skill = skillsResult.skills?.find((s: { name: string }) => s.name === this.selectedSkill);
+      const skill = skillsResult.skills?.find(
+        (s: { name: string }) => s.name === this.selectedSkill
+      );
       if (skill) {
         await toggleSkillTool.execute({
           name: this.selectedSkill,
@@ -638,14 +652,24 @@ export class GatewaySession {
     } else if (action === "create_skill") {
       // Show create skill modal
       const modal = generateCreateSkillModal();
-      send({ type: "a2ui", surface_id: "modal", components: modal.components, root_id: modal.root_id });
+      send({
+        type: "a2ui",
+        surface_id: "modal",
+        components: modal.components,
+        root_id: modal.root_id,
+      });
     } else if (action === "submit_create_skill" && payload) {
       const name = payload.name as string;
       const description = payload.description as string;
       const emoji = payload.emoji as string | undefined;
       const triggersStr = payload.triggers as string | undefined;
       const content = payload.content as string | undefined;
-      const triggers = triggersStr ? triggersStr.split(",").map(t => t.trim()).filter(Boolean) : undefined;
+      const triggers = triggersStr
+        ? triggersStr
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : undefined;
 
       await createSkillTool.execute({ name, description, emoji, triggers, content });
       send({ type: "clear_surface", surface_id: "modal" });
@@ -674,7 +698,12 @@ export class GatewaySession {
             toolCalls: trace.tool_calls ? JSON.parse(trace.tool_calls) : undefined,
             durationMs: trace.duration_ms || undefined,
           });
-          send({ type: "a2ui", surface_id: "modal", components: modal.components, root_id: modal.root_id });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
         }
       }
     } else if (action === "view_evaluation" && payload?.row) {
@@ -692,7 +721,12 @@ export class GatewaySession {
             feedback: evaluation.feedback || undefined,
             issues: evaluation.issues ? JSON.parse(evaluation.issues) : undefined,
           });
-          send({ type: "a2ui", surface_id: "modal", components: modal.components, root_id: modal.root_id });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
         }
       }
     } else if (action === "view_test_case" && payload?.row) {
@@ -708,7 +742,12 @@ export class GatewaySession {
             context: testCase.context ? JSON.parse(testCase.context) : undefined,
             expected: JSON.parse(testCase.expected),
           });
-          send({ type: "a2ui", surface_id: "modal", components: modal.components, root_id: modal.root_id });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
         }
       }
     } else if (action === "view_suggestion" && payload?.row) {
@@ -726,14 +765,26 @@ export class GatewaySession {
             suggestedValue: suggestion.suggested_value,
             rationale: suggestion.rationale || undefined,
             status: suggestion.status,
-            validationResults: suggestion.validation_results ? JSON.parse(suggestion.validation_results) : undefined,
+            validationResults: suggestion.validation_results
+              ? JSON.parse(suggestion.validation_results)
+              : undefined,
           });
-          send({ type: "a2ui", surface_id: "modal", components: modal.components, root_id: modal.root_id });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
         }
       }
     } else if (action === "create_test_case") {
       const modal = generateCreateTestCaseModal();
-      send({ type: "a2ui", surface_id: "modal", components: modal.components, root_id: modal.root_id });
+      send({
+        type: "a2ui",
+        surface_id: "modal",
+        components: modal.components,
+        root_id: modal.root_id,
+      });
     } else if (action === "submit_create_test_case" && payload) {
       const category = payload.category as string;
       const query = payload.query as string;
@@ -748,8 +799,18 @@ export class GatewaySession {
         query,
         expected: {
           minScore,
-          shouldMention: shouldMentionStr ? shouldMentionStr.split(",").map(s => s.trim()).filter(Boolean) : undefined,
-          shouldNotMention: shouldNotMentionStr ? shouldNotMentionStr.split(",").map(s => s.trim()).filter(Boolean) : undefined,
+          shouldMention: shouldMentionStr
+            ? shouldMentionStr
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : undefined,
+          shouldNotMention: shouldNotMentionStr
+            ? shouldNotMentionStr
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : undefined,
         },
       });
 
@@ -775,10 +836,18 @@ export class GatewaySession {
       send({ type: "clear_surface", surface_id: "modal" });
     } else if (action === "revert_prompt" && this.selectedPrompt) {
       // Show revert modal with commit history
-      const historyResult = await getPromptHistoryTool.execute({ name: this.selectedPrompt, limit: 20 });
+      const historyResult = await getPromptHistoryTool.execute({
+        name: this.selectedPrompt,
+        limit: 20,
+      });
       if (historyResult.success && historyResult.commits) {
         const modal = generatePromptRevertModal(this.selectedPrompt, historyResult.commits);
-        send({ type: "a2ui", surface_id: "modal", components: modal.components, root_id: modal.root_id });
+        send({
+          type: "a2ui",
+          surface_id: "modal",
+          components: modal.components,
+          root_id: modal.root_id,
+        });
       }
     } else if (action === "select_revert_commit" && payload?.commit && this.selectedPrompt) {
       const commit = payload.commit as { hash: string };
@@ -788,7 +857,12 @@ export class GatewaySession {
     } else if (action === "run_benchmark") {
       // Show toast that benchmark is starting
       const toast = generateToast("Running benchmark tests... This may take a while.", "info");
-      send({ type: "a2ui", surface_id: "toast", components: toast.components, root_id: toast.root_id });
+      send({
+        type: "a2ui",
+        surface_id: "toast",
+        components: toast.components,
+        root_id: toast.root_id,
+      });
 
       // Run benchmarks in background (simplified - in production would use actual evaluator)
       const tests = listTestCases({ limit: 100 });
@@ -801,11 +875,21 @@ export class GatewaySession {
       // Show completion toast
       setTimeout(() => {
         const doneToast = generateToast(`Completed ${tests.length} benchmark tests`, "success");
-        send({ type: "a2ui", surface_id: "toast", components: doneToast.components, root_id: doneToast.root_id });
+        send({
+          type: "a2ui",
+          surface_id: "toast",
+          components: doneToast.components,
+          root_id: doneToast.root_id,
+        });
       }, 1000);
     } else if (action === "run_test_case" && payload?.id) {
       const toast = generateToast("Running test case...", "info");
-      send({ type: "a2ui", surface_id: "toast", components: toast.components, root_id: toast.root_id });
+      send({
+        type: "a2ui",
+        surface_id: "toast",
+        components: toast.components,
+        root_id: toast.root_id,
+      });
       send({ type: "clear_surface", surface_id: "modal" });
       console.log(`Running test case: ${payload.id}`);
     }
@@ -819,25 +903,25 @@ export class GatewaySession {
   // Helper methods to find full IDs from truncated IDs
   private findFullTraceId(shortId: string): string | null {
     const traces = listTraces({ limit: 100 });
-    const found = traces.find(t => t.id.startsWith(shortId));
+    const found = traces.find((t) => t.id.startsWith(shortId));
     return found?.id || null;
   }
 
   private findFullEvaluationId(shortId: string): string | null {
     const evals = listEvaluations({ limit: 100 });
-    const found = evals.find(e => e.id.startsWith(shortId));
+    const found = evals.find((e) => e.id.startsWith(shortId));
     return found?.id || null;
   }
 
   private findFullTestCaseId(shortId: string): string | null {
     const tests = listTestCases({ limit: 100 });
-    const found = tests.find(t => t.id.startsWith(shortId));
+    const found = tests.find((t) => t.id.startsWith(shortId));
     return found?.id || null;
   }
 
   private findFullSuggestionId(shortId: string): string | null {
     const suggs = listSuggestions({ limit: 100 });
-    const found = suggs.find(s => s.id.startsWith(shortId));
+    const found = suggs.find((s) => s.id.startsWith(shortId));
     return found?.id || null;
   }
 
@@ -898,7 +982,6 @@ export class GatewaySession {
         break;
     }
   }
-
 }
 
 // WebSocket data type
@@ -971,7 +1054,11 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
         }
 
         // SPA fallback - serve index.html for non-API routes
-        if (!filePath.startsWith("/api") && !filePath.startsWith("/mcp") && !filePath.startsWith("/health")) {
+        if (
+          !filePath.startsWith("/api") &&
+          !filePath.startsWith("/mcp") &&
+          !filePath.startsWith("/health")
+        ) {
           const indexFile = Bun.file(webDir + "/index.html");
           if (await indexFile.exists()) {
             return new Response(indexFile, {
@@ -1003,11 +1090,13 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
           });
         } catch (error) {
           console.error("WebSocket message error:", error);
-          ws.send(JSON.stringify({
-            type: "error",
-            code: "parse_error",
-            message: "Failed to parse message",
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "error",
+              code: "parse_error",
+              message: "Failed to parse message",
+            })
+          );
         }
       },
       close(ws) {

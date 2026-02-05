@@ -18,9 +18,7 @@ import {
 } from "../utils/cli-ui.js";
 
 export function registerToolsCommand(program: Command): void {
-  const toolsCmd = program
-    .command("tools")
-    .description("Manage MCP tools");
+  const toolsCmd = program.command("tools").description("Manage MCP tools");
 
   // tools list (default)
   toolsCmd
@@ -65,7 +63,7 @@ export function registerToolsCommand(program: Command): void {
         // Compact table view
         printTable(
           ["Tool", "Description", "Params"],
-          tools.map(tool => {
+          tools.map((tool) => {
             const paramCount = Object.keys(tool.inputSchema.properties || {}).length;
             return [
               c.cyan(tool.name),
@@ -76,8 +74,12 @@ export function registerToolsCommand(program: Command): void {
         );
 
         console.log("");
-        console.log(`  ${c.dim("Use")} ${c.cyan("pha tools list -v")} ${c.dim("for detailed view")}`);
-        console.log(`  ${c.dim("Use")} ${c.cyan("pha tools info <name>")} ${c.dim("for specific tool")}`);
+        console.log(
+          `  ${c.dim("Use")} ${c.cyan("pha tools list -v")} ${c.dim("for detailed view")}`
+        );
+        console.log(
+          `  ${c.dim("Use")} ${c.cyan("pha tools info <name>")} ${c.dim("for specific tool")}`
+        );
       }
 
       console.log("");
@@ -91,10 +93,10 @@ export function registerToolsCommand(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (name, options) => {
       const tools = mcpHandler.listTools();
-      const tool = tools.find(t => t.name === name);
+      const tool = tools.find((t) => t.name === name);
 
       if (!tool) {
-        fatal(`Tool not found: ${name}`, `Available: ${tools.map(t => t.name).join(", ")}`);
+        fatal(`Tool not found: ${name}`, `Available: ${tools.map((t) => t.name).join(", ")}`);
       }
 
       const args: Record<string, unknown> = {};
@@ -156,10 +158,10 @@ export function registerToolsCommand(program: Command): void {
     .description("Show detailed info about a tool")
     .action((name) => {
       const tools = mcpHandler.listTools();
-      const tool = tools.find(t => t.name === name);
+      const tool = tools.find((t) => t.name === name);
 
       if (!tool) {
-        fatal(`Tool not found: ${name}`, `Available: ${tools.map(t => t.name).join(", ")}`);
+        fatal(`Tool not found: ${name}`, `Available: ${tools.map((t) => t.name).join(", ")}`);
       }
 
       console.log("");
@@ -197,7 +199,7 @@ export function registerToolsCommand(program: Command): void {
         .filter(([name]) => required.includes(name))
         .map(([name, schema]) => {
           const type = (schema as any).type;
-          let example = type === "string" ? "value" : type === "number" ? "123" : "true";
+          const example = type === "string" ? "value" : type === "number" ? "123" : "true";
           return `-a ${name}=${example}`;
         })
         .join(" ");

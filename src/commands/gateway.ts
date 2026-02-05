@@ -50,9 +50,7 @@ function getApiKey(config: ReturnType<typeof loadConfig>): string | undefined {
 }
 
 export function registerGatewayCommand(program: Command): void {
-  const gatewayCmd = program
-    .command("gateway")
-    .description("Manage the PHA gateway server");
+  const gatewayCmd = program.command("gateway").description("Manage the PHA gateway server");
 
   // gateway start
   gatewayCmd
@@ -83,7 +81,7 @@ export function registerGatewayCommand(program: Command): void {
         const providerConfig = PROVIDER_CONFIGS[provider as LLMProvider];
         console.error(`\x1b[31mError: No API key found\x1b[0m`);
         console.error(`\nSet the API key via:`);
-        console.error(`  1. Environment: export ${providerConfig?.envVar || 'API_KEY'}=...`);
+        console.error(`  1. Environment: export ${providerConfig?.envVar || "API_KEY"}=...`);
         console.error(`  2. Config: pha onboard --reset`);
         return;
       }
@@ -93,9 +91,12 @@ export function registerGatewayCommand(program: Command): void {
         const { spawn } = await import("child_process");
         const args = [
           process.argv[1],
-          "gateway", "run",
-          "-p", String(port),
-          "--provider", provider,
+          "gateway",
+          "run",
+          "-p",
+          String(port),
+          "--provider",
+          provider,
         ];
         if (modelId) args.push("--model", modelId);
         if (baseUrl) args.push("--base-url", baseUrl);
@@ -206,7 +207,7 @@ export function registerGatewayCommand(program: Command): void {
         fs.unlinkSync(PID_FILE);
         console.log(`Stopped gateway (PID: ${pid})`);
         // Wait a bit for port to be released
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 500));
       }
 
       // Re-run start command
@@ -240,7 +241,9 @@ export function registerGatewayCommand(program: Command): void {
         console.log(JSON.stringify(status, null, 2));
       } else {
         console.log("\nGateway Status\n");
-        console.log(`  Status: ${running ? "\x1b[32m✓ Running\x1b[0m" : "\x1b[31m✗ Stopped\x1b[0m"}`);
+        console.log(
+          `  Status: ${running ? "\x1b[32m✓ Running\x1b[0m" : "\x1b[31m✗ Stopped\x1b[0m"}`
+        );
         if (running) {
           console.log(`  PID: ${pid}`);
           console.log(`  URL: http://localhost:${config.gateway.port}`);

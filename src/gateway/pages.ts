@@ -341,7 +341,7 @@ export function generatePromptsPage(data: {
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
   // Prompts list
-  const promptRows = data.prompts.map(p => ({
+  const promptRows = data.prompts.map((p) => ({
     name: p.name,
     title: p.title,
     lines: p.lines,
@@ -384,7 +384,7 @@ export function generatePromptsPage(data: {
 
     const revertBtn = data.editing
       ? null
-      : (data.commits && data.commits.length > 1)
+      : data.commits && data.commits.length > 1
         ? ui.button("Revert", "revert_prompt", { variant: "ghost" })
         : null;
 
@@ -394,10 +394,10 @@ export function generatePromptsPage(data: {
 
     const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
 
-    const editorCard = ui.card(
-      [editorHeader, editor],
-      { title: `${data.selectedPrompt}.md`, padding: 20 }
-    );
+    const editorCard = ui.card([editorHeader, editor], {
+      title: `${data.selectedPrompt}.md`,
+      padding: 20,
+    });
 
     children.push(editorCard);
 
@@ -451,7 +451,7 @@ export function generateSkillsPage(data: {
   const header = ui.column([headerRow], { padding: 24 });
 
   // Skills list
-  const skillRows = data.skills.map(s => ({
+  const skillRows = data.skills.map((s) => ({
     name: `${s.emoji || "🧩"} ${s.name}`,
     description: s.description || "-",
     status: s.enabled ? "enabled" : "disabled",
@@ -475,7 +475,7 @@ export function generateSkillsPage(data: {
 
   // If a skill is selected, show editor
   if (data.selectedSkill && data.content !== undefined) {
-    const selectedInfo = data.skills.find(s => s.name === data.selectedSkill);
+    const selectedInfo = data.skills.find((s) => s.name === data.selectedSkill);
 
     // Editor
     const editor = ui.codeEditor(data.content, {
@@ -490,26 +490,22 @@ export function generateSkillsPage(data: {
       ? ui.button("Save", "save_skill", { variant: "primary" })
       : ui.button("Edit", "edit_skill", { variant: "outline" });
 
-    const toggleBtn = ui.button(
-      selectedInfo?.enabled ? "Disable" : "Enable",
-      "toggle_skill",
-      { variant: selectedInfo?.enabled ? "ghost" : "secondary" }
-    );
+    const toggleBtn = ui.button(selectedInfo?.enabled ? "Disable" : "Enable", "toggle_skill", {
+      variant: selectedInfo?.enabled ? "ghost" : "secondary",
+    });
 
     const cancelBtn = data.editing
       ? ui.button("Cancel", "cancel_edit", { variant: "ghost" })
       : null;
 
-    const editorActions = cancelBtn
-      ? [editBtn, cancelBtn, toggleBtn]
-      : [editBtn, toggleBtn];
+    const editorActions = cancelBtn ? [editBtn, cancelBtn, toggleBtn] : [editBtn, toggleBtn];
 
     const editorHeader = ui.row(editorActions, { gap: 8, justify: "end" });
 
-    const editorCard = ui.card(
-      [editorHeader, editor],
-      { title: `${data.selectedSkill}/SKILL.md`, padding: 20 }
-    );
+    const editorCard = ui.card([editorHeader, editor], {
+      title: `${data.selectedSkill}/SKILL.md`,
+      padding: 20,
+    });
 
     children.push(editorCard);
   }
@@ -611,7 +607,7 @@ export function generateEvolutionPage(data: {
 
   // Traces tab content
   if (data.activeTab === "traces" && data.traces) {
-    const traceRows = data.traces.map(t => ({
+    const traceRows = data.traces.map((t) => ({
       id: t.id.slice(0, 8),
       time: new Date(t.timestamp).toLocaleString(),
       message: t.userMessage.slice(0, 50) + (t.userMessage.length > 50 ? "..." : ""),
@@ -642,7 +638,7 @@ export function generateEvolutionPage(data: {
 
   // Evaluations tab content
   if (data.activeTab === "evaluations" && data.evaluations) {
-    const evalRows = data.evaluations.map(e => ({
+    const evalRows = data.evaluations.map((e) => ({
       id: e.id.slice(0, 8),
       traceId: e.traceId.slice(0, 8),
       time: new Date(e.timestamp).toLocaleString(),
@@ -667,7 +663,7 @@ export function generateEvolutionPage(data: {
 
   // Benchmark tab content
   if (data.activeTab === "benchmark" && data.testCases) {
-    const testRows = data.testCases.map(tc => ({
+    const testRows = data.testCases.map((tc) => ({
       id: tc.id.slice(0, 8),
       category: tc.category,
       query: tc.query.slice(0, 50) + (tc.query.length > 50 ? "..." : ""),
@@ -687,8 +683,14 @@ export function generateEvolutionPage(data: {
       { onRowClick: "view_test_case" }
     );
 
-    const runAllBtn = ui.button("Run All Tests", "run_benchmark", { variant: "secondary", size: "sm" });
-    const addTestBtn = ui.button("Add Test Case", "create_test_case", { variant: "primary", size: "sm" });
+    const runAllBtn = ui.button("Run All Tests", "run_benchmark", {
+      variant: "secondary",
+      size: "sm",
+    });
+    const addTestBtn = ui.button("Add Test Case", "create_test_case", {
+      variant: "primary",
+      size: "sm",
+    });
     const btnRow = ui.row([runAllBtn, addTestBtn], { gap: 8, justify: "end", padding: 8 });
 
     tabContentIds["benchmark"] = ui.column([btnRow, testsTable], { padding: 16 });
@@ -696,7 +698,7 @@ export function generateEvolutionPage(data: {
 
   // Suggestions tab content
   if (data.activeTab === "suggestions" && data.suggestions) {
-    const suggRows = data.suggestions.map(s => ({
+    const suggRows = data.suggestions.map((s) => ({
       id: s.id.slice(0, 8),
       time: new Date(s.timestamp).toLocaleString(),
       type: s.type,
@@ -779,10 +781,7 @@ export interface PageMessage {
   };
 }
 
-export function generatePage(
-  view: string,
-  mainContent: A2UIMessage
-): PageMessage {
+export function generatePage(view: string, mainContent: A2UIMessage): PageMessage {
   const sidebar = generateSidebar(view);
 
   return {
@@ -817,11 +816,14 @@ interface TraceDetail {
 export function generateTraceDetailModal(trace: TraceDetail): A2UIMessage {
   const ui = new A2UIGenerator("modal");
 
-  const infoRow = ui.row([
-    ui.text(`Session: ${trace.sessionId.slice(0, 8)}`, "caption"),
-    ui.text(`Duration: ${trace.durationMs || 0}ms`, "caption"),
-    ui.text(new Date(trace.timestamp).toLocaleString(), "caption"),
-  ], { gap: 16 });
+  const infoRow = ui.row(
+    [
+      ui.text(`Session: ${trace.sessionId.slice(0, 8)}`, "caption"),
+      ui.text(`Duration: ${trace.durationMs || 0}ms`, "caption"),
+      ui.text(new Date(trace.timestamp).toLocaleString(), "caption"),
+    ],
+    { gap: 16 }
+  );
 
   const userLabel = ui.text("User Message", "label");
   const userMsg = ui.card([ui.text(trace.userMessage, "body")], { padding: 12 });
@@ -855,7 +857,13 @@ interface EvaluationDetail {
   id: string;
   traceId: string;
   timestamp: number;
-  scores: { accuracy: number; relevance: number; helpfulness: number; safety: number; completeness: number };
+  scores: {
+    accuracy: number;
+    relevance: number;
+    helpfulness: number;
+    safety: number;
+    completeness: number;
+  };
   overallScore: number;
   feedback?: string;
   issues?: { type: string; description: string; severity: string }[];
@@ -891,7 +899,7 @@ export function generateEvaluationDetailModal(evaluation: EvaluationDetail): A2U
 
   if (evaluation.issues && evaluation.issues.length > 0) {
     const issuesLabel = ui.text("Issues", "label");
-    const issueRows = evaluation.issues.map(issue => ({
+    const issueRows = evaluation.issues.map((issue) => ({
       type: issue.type,
       description: issue.description,
       severity: issue.severity,
@@ -956,14 +964,18 @@ export function generateTestCaseDetailModal(testCase: TestCaseDetail): A2UIMessa
 
   if (testCase.expected.shouldMention && testCase.expected.shouldMention.length > 0) {
     const mentionLabel = ui.text("Should Mention", "label");
-    const mentionBadges = testCase.expected.shouldMention.map(k => ui.badge(k, { variant: "success" }));
+    const mentionBadges = testCase.expected.shouldMention.map((k) =>
+      ui.badge(k, { variant: "success" })
+    );
     const mentionRow = ui.row(mentionBadges, { gap: 8, wrap: true });
     children.push(mentionLabel, mentionRow);
   }
 
   if (testCase.expected.shouldNotMention && testCase.expected.shouldNotMention.length > 0) {
     const notMentionLabel = ui.text("Should NOT Mention", "label");
-    const notMentionBadges = testCase.expected.shouldNotMention.map(k => ui.badge(k, { variant: "error" }));
+    const notMentionBadges = testCase.expected.shouldNotMention.map((k) =>
+      ui.badge(k, { variant: "error" })
+    );
     const notMentionRow = ui.row(notMentionBadges, { gap: 8, wrap: true });
     children.push(notMentionLabel, notMentionRow);
   }
@@ -979,8 +991,14 @@ export function generateTestCaseDetailModal(testCase: TestCaseDetail): A2UIMessa
   }
 
   // Action buttons
-  const runBtn = ui.button("Run Test", "run_test_case", { variant: "primary", payload: { id: testCase.id } });
-  const deleteBtn = ui.button("Delete", "delete_test_case", { variant: "danger", payload: { id: testCase.id } });
+  const runBtn = ui.button("Run Test", "run_test_case", {
+    variant: "primary",
+    payload: { id: testCase.id },
+  });
+  const deleteBtn = ui.button("Delete", "delete_test_case", {
+    variant: "danger",
+    payload: { id: testCase.id },
+  });
   const actionsRow = ui.row([runBtn, deleteBtn], { gap: 8, justify: "end" });
   children.push(actionsRow);
 
@@ -1007,9 +1025,14 @@ export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2U
 
   const typeBadge = ui.badge(suggestion.type, { variant: "info" });
   const statusBadge = ui.badge(suggestion.status, {
-    variant: suggestion.status === "applied" ? "success" :
-             suggestion.status === "rejected" ? "error" :
-             suggestion.status === "validated" ? "success" : "default"
+    variant:
+      suggestion.status === "applied"
+        ? "success"
+        : suggestion.status === "rejected"
+          ? "error"
+          : suggestion.status === "validated"
+            ? "success"
+            : "default",
   });
   const headerRow = ui.row([typeBadge, statusBadge], { gap: 8 });
 
@@ -1043,13 +1066,21 @@ export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2U
 
   if (suggestion.validationResults) {
     const validLabel = ui.text("Validation Results", "label");
-    const beforeCard = ui.statCard({ title: "Before", value: suggestion.validationResults.before, icon: "📉" });
-    const afterCard = ui.statCard({ title: "After", value: suggestion.validationResults.after, icon: "📈" });
+    const beforeCard = ui.statCard({
+      title: "Before",
+      value: suggestion.validationResults.before,
+      icon: "📉",
+    });
+    const afterCard = ui.statCard({
+      title: "After",
+      value: suggestion.validationResults.after,
+      icon: "📈",
+    });
     const improvementCard = ui.statCard({
       title: "Improvement",
       value: `+${suggestion.validationResults.improvement}%`,
       icon: "✨",
-      color: "#10b981"
+      color: "#10b981",
     });
     const validGrid = ui.grid([beforeCard, afterCard, improvementCard], { columns: 3, gap: 12 });
     children.push(validLabel, validGrid);
@@ -1057,9 +1088,18 @@ export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2U
 
   // Action buttons (only for pending/validated suggestions)
   if (suggestion.status === "pending" || suggestion.status === "validated") {
-    const applyBtn = ui.button("Apply", "apply_suggestion", { variant: "primary", payload: { id: suggestion.id } });
-    const rejectBtn = ui.button("Reject", "reject_suggestion", { variant: "danger", payload: { id: suggestion.id } });
-    const testBtn = ui.button("Test", "test_suggestion", { variant: "outline", payload: { id: suggestion.id } });
+    const applyBtn = ui.button("Apply", "apply_suggestion", {
+      variant: "primary",
+      payload: { id: suggestion.id },
+    });
+    const rejectBtn = ui.button("Reject", "reject_suggestion", {
+      variant: "danger",
+      payload: { id: suggestion.id },
+    });
+    const testBtn = ui.button("Test", "test_suggestion", {
+      variant: "outline",
+      payload: { id: suggestion.id },
+    });
     const actionsRow = ui.row([testBtn, rejectBtn, applyBtn], { gap: 8, justify: "end" });
     children.push(actionsRow);
   }
@@ -1162,11 +1202,17 @@ export function generateCreateSkillModal(): A2UIMessage {
   return ui.build(root);
 }
 
-export function generatePromptRevertModal(promptName: string, commits: { hash: string; shortHash: string; message: string; date: string }[]): A2UIMessage {
+export function generatePromptRevertModal(
+  promptName: string,
+  commits: { hash: string; shortHash: string; message: string; date: string }[]
+): A2UIMessage {
   const ui = new A2UIGenerator("modal");
 
   const info = ui.text("Select a commit to revert to:", "body");
-  const commitList = ui.commitList(commits.map(c => ({ ...c, author: "" })), { onSelect: "select_revert_commit" });
+  const commitList = ui.commitList(
+    commits.map((c) => ({ ...c, author: "" })),
+    { onSelect: "select_revert_commit" }
+  );
 
   const content = ui.column([info, commitList], { gap: 12 });
   const root = ui.modal(`Revert ${promptName}`, [content], { size: "md" });

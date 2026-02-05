@@ -104,7 +104,10 @@ export function registerStartCommand(program: Command): void {
       }
 
       if (!apiKey) {
-        fatal("No API key found", `Run ${c.cyan("pha onboard")} or set ${c.cyan(providerCfg?.envVar || "API_KEY")}`);
+        fatal(
+          "No API key found",
+          `Run ${c.cyan("pha onboard")} or set ${c.cyan(providerCfg?.envVar || "API_KEY")}`
+        );
       }
 
       if (!webDir) {
@@ -146,13 +149,7 @@ export function registerStartCommand(program: Command): void {
         spinner.start();
 
         const { spawn } = await import("child_process");
-        const args = [
-          process.argv[1],
-          "start",
-          "-f",
-          "-p", String(port),
-          "--no-open",
-        ];
+        const args = [process.argv[1], "start", "-f", "-p", String(port), "--no-open"];
 
         fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
 
@@ -169,7 +166,7 @@ export function registerStartCommand(program: Command): void {
         child.unref();
 
         // Wait a moment to verify it started
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         if (isRunning(child.pid!)) {
           spinner.stop("success");

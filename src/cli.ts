@@ -23,7 +23,8 @@ const program = new Command();
 
 program
   .name("pha")
-  .description(`
+  .description(
+    `
   🏥 Personal Health Agent - AI-powered health management
 
   PHA is an intelligent health assistant that analyzes your health data
@@ -34,9 +35,12 @@ program
     $ pha start         # Start gateway and open browser
     $ pha health        # View health summary
     $ pha tui --local   # Chat in terminal
-`.trim())
+`.trim()
+  )
   .version("0.1.0")
-  .addHelpText("after", `
+  .addHelpText(
+    "after",
+    `
 Examples:
   $ pha start                    Start gateway server
   $ pha health -w                Weekly health summary
@@ -46,11 +50,12 @@ Examples:
 
 Documentation:
   https://github.com/anthropics/pha
-`);
+`
+  );
 
 // Register all commands
 // Server commands
-registerStartCommand(program);  // start, stop, restart
+registerStartCommand(program); // start, stop, restart
 registerGatewayCommand(program); // gateway start/stop (legacy)
 
 // Setup commands
@@ -70,7 +75,7 @@ registerToolsCommand(program);
 registerEvalCommand(program);
 
 // Diagnostics
-registerStatusCommand(program);  // status, logs
+registerStatusCommand(program); // status, logs
 registerDoctorCommand(program);
 
 program.parse();

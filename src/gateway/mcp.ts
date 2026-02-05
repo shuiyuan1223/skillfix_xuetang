@@ -33,7 +33,7 @@ export interface MCPToolResult {
  * MCP Handler - Handles MCP protocol requests
  */
 export class MCPHandler {
-  private tools: Map<string, typeof healthTools[number]> = new Map();
+  private tools: Map<string, (typeof healthTools)[number]> = new Map();
 
   constructor() {
     // Register all health tools
@@ -76,7 +76,12 @@ export class MCPHandler {
       };
     } catch (error) {
       return {
-        content: [{ type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        content: [
+          {
+            type: "text",
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
         isError: true,
       };
     }

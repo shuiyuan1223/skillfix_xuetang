@@ -42,13 +42,16 @@ export interface PHAConfig {
 }
 
 // Provider configurations
-export const PROVIDER_CONFIGS: Record<LLMProvider, {
-  name: string;
-  envVar: string;
-  baseUrl?: string;
-  defaultModel: string;
-  hint?: string;
-}> = {
+export const PROVIDER_CONFIGS: Record<
+  LLMProvider,
+  {
+    name: string;
+    envVar: string;
+    baseUrl?: string;
+    defaultModel: string;
+    hint?: string;
+  }
+> = {
   anthropic: {
     name: "Anthropic",
     envVar: "ANTHROPIC_API_KEY",

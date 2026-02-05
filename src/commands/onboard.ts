@@ -34,7 +34,10 @@ import {
  */
 function createPrompt(): {
   question: (query: string) => Promise<string>;
-  select: <T extends string>(message: string, options: { value: T; label: string; hint?: string }[]) => Promise<T>;
+  select: <T extends string>(
+    message: string,
+    options: { value: T; label: string; hint?: string }[]
+  ) => Promise<T>;
   password: (query: string) => Promise<string>;
   confirm: (query: string, defaultValue?: boolean) => Promise<boolean>;
   close: () => void;
@@ -75,7 +78,9 @@ function createPrompt(): {
         }
 
         // Also accept value directly
-        const found = options.find((o) => o.value === answer || o.label.toLowerCase() === answer.toLowerCase());
+        const found = options.find(
+          (o) => o.value === answer || o.label.toLowerCase() === answer.toLowerCase()
+        );
         if (found) {
           console.log(`  ${c.green(icons.success)} ${found.label}\n`);
           return found.value;
@@ -148,7 +153,9 @@ function formatApiKeyPreview(key: string): string {
 
 function printStepHeader(step: number, total: number, title: string): void {
   console.log("");
-  console.log(`  ${c.cyan(box.rtl + box.h.repeat(3))} ${c.bold(`Step ${step}/${total}:`)} ${title} ${c.cyan(box.h.repeat(30 - title.length) + box.rtr)}`);
+  console.log(
+    `  ${c.cyan(box.rtl + box.h.repeat(3))} ${c.bold(`Step ${step}/${total}:`)} ${title} ${c.cyan(box.h.repeat(30 - title.length) + box.rtr)}`
+  );
   console.log("");
 }
 
@@ -242,7 +249,9 @@ async function handleSpecificChange(
         console.log(`  ${c.cyan(icons.link)} ${c.cyan(keyUrls[config.llm.provider])}`);
       }
       console.log("");
-      const apiKey = await prompt.password(`Enter ${providerCfg?.name || config.llm.provider} API key: `);
+      const apiKey = await prompt.password(
+        `Enter ${providerCfg?.name || config.llm.provider} API key: `
+      );
       if (apiKey.trim()) {
         config.llm.apiKey = apiKey.trim();
         console.log(`  ${c.green(icons.success)} API key updated`);
@@ -306,13 +315,26 @@ export function registerOnboardCommand(program: Command): void {
             showCurrentConfig(config);
 
             const editOptions = [
-              { value: "provider" as const, label: "LLM Provider", hint: PROVIDER_CONFIGS[config.llm.provider as LLMProvider]?.name || config.llm.provider },
+              {
+                value: "provider" as const,
+                label: "LLM Provider",
+                hint:
+                  PROVIDER_CONFIGS[config.llm.provider as LLMProvider]?.name || config.llm.provider,
+              },
               { value: "model" as const, label: "Model", hint: config.llm.modelId || "default" },
-              { value: "apikey" as const, label: "API Key", hint: config.llm.apiKey ? "configured" : "from env" },
+              {
+                value: "apikey" as const,
+                label: "API Key",
+                hint: config.llm.apiKey ? "configured" : "from env",
+              },
               { value: "port" as const, label: "Gateway Port", hint: String(config.gateway.port) },
               { value: "datasource" as const, label: "Data Source", hint: config.dataSources.type },
               { value: "reset" as const, label: "Full Reset", hint: "Start over" },
-              { value: "done" as const, label: "Save & Exit", hint: hasChanges ? "Save changes" : "No changes" },
+              {
+                value: "done" as const,
+                label: "Save & Exit",
+                hint: hasChanges ? "Save changes" : "No changes",
+              },
             ];
 
             const choice = await prompt.select("Select to edit:", editOptions);
@@ -328,7 +350,10 @@ export function registerOnboardCommand(program: Command): void {
             }
 
             if (choice === "reset") {
-              const confirmReset = await prompt.confirm(`${c.yellow("Reset all settings?")}`, false);
+              const confirmReset = await prompt.confirm(
+                `${c.yellow("Reset all settings?")}`,
+                false
+              );
               if (confirmReset) {
                 prompt.close();
                 options.reset = true;
@@ -448,9 +473,7 @@ export function registerOnboardCommand(program: Command): void {
         // Model selection
         const defaultModel = providerCfg.defaultModel;
         console.log(`  ${c.dim("Default model:")} ${defaultModel}`);
-        const customModel = await prompt.question(
-          `  Model ID ${c.dim(`[${defaultModel}]:`)} `
-        );
+        const customModel = await prompt.question(`  Model ID ${c.dim(`[${defaultModel}]:`)} `);
         config.llm.modelId = customModel.trim() || defaultModel;
         console.log(`  ${c.green(icons.success)} ${config.llm.modelId}\n`);
 
@@ -477,7 +500,10 @@ export function registerOnboardCommand(program: Command): void {
           { value: "apple" as const, label: "Apple HealthKit", hint: "iOS/macOS" },
         ];
 
-        config.dataSources.type = await prompt.select("Select health data source:", dataSourceOptions);
+        config.dataSources.type = await prompt.select(
+          "Select health data source:",
+          dataSourceOptions
+        );
 
         // Save configuration
         saveConfig(config);

@@ -195,7 +195,7 @@ export interface CodeEditorComponent extends A2UIComponent {
   readonly?: boolean;
   lineNumbers?: boolean;
   height?: number | string;
-  onChange?: string;  // Action name to send on change
+  onChange?: string; // Action name to send on change
 }
 
 // Commit List Component (Git history)
@@ -209,7 +209,7 @@ export interface CommitListComponent extends A2UIComponent {
     author: string;
   }[];
   selectedHash?: string;
-  onSelect?: string;  // Action name
+  onSelect?: string; // Action name
 }
 
 // Diff View Component
@@ -240,8 +240,8 @@ export interface DataTableComponent extends A2UIComponent {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   filterable?: boolean;
-  onRowClick?: string;  // Action name
-  onSort?: string;      // Action name
+  onRowClick?: string; // Action name
+  onSort?: string; // Action name
   onPageChange?: string; // Action name
 }
 
@@ -262,7 +262,7 @@ export interface StatusBadgeComponent extends A2UIComponent {
   type: "status_badge";
   status: "pending" | "running" | "success" | "failed" | "warning";
   label?: string;
-  pulse?: boolean;  // Animated pulse for running state
+  pulse?: boolean; // Animated pulse for running state
 }
 
 // Collapsible Panel Component
@@ -280,7 +280,7 @@ export interface ModalComponent extends A2UIComponent {
   title: string;
   size?: "sm" | "md" | "lg" | "xl";
   closable?: boolean;
-  onClose?: string;  // Action name
+  onClose?: string; // Action name
 }
 
 // Form Input Component
@@ -291,18 +291,18 @@ export interface FormInputComponent extends A2UIComponent {
   label?: string;
   placeholder?: string;
   value?: string | number | boolean;
-  options?: { value: string; label: string }[];  // For select
+  options?: { value: string; label: string }[]; // For select
   required?: boolean;
-  onChange?: string;  // Action name
+  onChange?: string; // Action name
 }
 
 // Form Component
 export interface FormComponent extends A2UIComponent {
   type: "form";
-  onSubmit: string;  // Action name
+  onSubmit: string; // Action name
   submitLabel?: string;
   cancelLabel?: string;
-  onCancel?: string;  // Action name
+  onCancel?: string; // Action name
 }
 
 // A2UI Message format
@@ -437,7 +437,10 @@ export class A2UIGenerator {
     return id;
   }
 
-  commitList(commits: CommitListComponent["commits"], opts: Partial<CommitListComponent> = {}): string {
+  commitList(
+    commits: CommitListComponent["commits"],
+    opts: Partial<CommitListComponent> = {}
+  ): string {
     const id = this.nextId("commits");
     this.components.set(id, { id, type: "commit_list", commits, ...opts });
     return id;
@@ -465,7 +468,10 @@ export class A2UIGenerator {
     return id;
   }
 
-  statusBadge(status: StatusBadgeComponent["status"], opts: Partial<StatusBadgeComponent> = {}): string {
+  statusBadge(
+    status: StatusBadgeComponent["status"],
+    opts: Partial<StatusBadgeComponent> = {}
+  ): string {
     const id = this.nextId("status");
     this.components.set(id, { id, type: "status_badge", status, ...opts });
     return id;
@@ -489,7 +495,11 @@ export class A2UIGenerator {
     return id;
   }
 
-  formInput(name: string, inputType: FormInputComponent["inputType"], opts: Partial<FormInputComponent> = {}): string {
+  formInput(
+    name: string,
+    inputType: FormInputComponent["inputType"],
+    opts: Partial<FormInputComponent> = {}
+  ): string {
     const id = this.nextId("input");
     this.components.set(id, { id, type: "form_input", name, inputType, ...opts });
     return id;

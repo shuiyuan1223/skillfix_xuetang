@@ -3,7 +3,16 @@
  */
 
 import type { Command } from "commander";
-import { isConfigured, loadConfig, getConfigPath, ensureConfigDir, saveConfig, getConfigDir, PROVIDER_CONFIGS, type LLMProvider } from "../utils/config.js";
+import {
+  isConfigured,
+  loadConfig,
+  getConfigPath,
+  ensureConfigDir,
+  saveConfig,
+  getConfigDir,
+  PROVIDER_CONFIGS,
+  type LLMProvider,
+} from "../utils/config.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -47,15 +56,17 @@ export function registerDoctorCommand(program: Command): void {
         status: configExists ? "pass" : "warn",
         message: configExists ? "Configuration file exists" : "No configuration file found",
         detail: configExists ? getConfigPath() : undefined,
-        fix: configExists ? undefined : () => {
-          ensureConfigDir();
-          saveConfig({
-            gateway: { port: 8000, autoStart: false },
-            llm: { provider: "anthropic" },
-            dataSources: { type: "mock" },
-            tui: { theme: "dark", showToolCalls: true },
-          });
-        },
+        fix: configExists
+          ? undefined
+          : () => {
+              ensureConfigDir();
+              saveConfig({
+                gateway: { port: 8000, autoStart: false },
+                llm: { provider: "anthropic" },
+                dataSources: { type: "mock" },
+                tui: { theme: "dark", showToolCalls: true },
+              });
+            },
         fixHint: "pha setup",
       });
 
@@ -107,9 +118,7 @@ export function registerDoctorCommand(program: Command): void {
           : hasAnyKey
             ? `Found keys: ${foundProviders.join(", ")}`
             : "No API key found in environment",
-        detail: config?.llm.provider
-          ? `Provider: ${config.llm.provider}`
-          : undefined,
+        detail: config?.llm.provider ? `Provider: ${config.llm.provider}` : undefined,
         fixHint: config?.llm.provider
           ? `export ${PROVIDER_CONFIGS[config.llm.provider as LLMProvider]?.envVar}=...`
           : "export ANTHROPIC_API_KEY=sk-ant-...",
@@ -208,7 +217,7 @@ export function registerDoctorCommand(program: Command): void {
       const dbExists = fs.existsSync(dbPath);
       checks.push({
         name: "Database",
-        status: dbExists ? "pass" : "pass",  // Not existing is fine
+        status: dbExists ? "pass" : "pass", // Not existing is fine
         message: dbExists ? "Database exists" : "Database will be created on first use",
         detail: dbExists ? dbPath : undefined,
       });
@@ -227,7 +236,8 @@ export function registerDoctorCommand(program: Command): void {
       printSection("System Checks");
 
       for (const check of checks) {
-        const statusType = check.status === "pass" ? "success" : check.status === "warn" ? "warning" : "error";
+        const statusType =
+          check.status === "pass" ? "success" : check.status === "warn" ? "warning" : "error";
         printStatus(statusType, check.name, check.detail);
         if (check.message && check.status !== "pass") {
           console.log(`    ${c.dim(check.message)}`);
@@ -246,9 +256,9 @@ export function registerDoctorCommand(program: Command): void {
       }
 
       // Summary
-      const passCount = checks.filter(c => c.status === "pass").length;
-      const warnCount = checks.filter(c => c.status === "warn").length;
-      const failCount = checks.filter(c => c.status === "fail").length;
+      const passCount = checks.filter((c) => c.status === "pass").length;
+      const warnCount = checks.filter((c) => c.status === "warn").length;
+      const failCount = checks.filter((c) => c.status === "fail").length;
 
       console.log("");
       printDivider();
@@ -260,7 +270,9 @@ export function registerDoctorCommand(program: Command): void {
       const failBar = c.red("█".repeat(Math.round((failCount / total) * 20)));
 
       console.log(`  ${passBar}${warnBar}${failBar}`);
-      console.log(`  ${c.green(`${passCount} passed`)}  ${c.yellow(`${warnCount} warnings`)}  ${c.red(`${failCount} failed`)}`);
+      console.log(
+        `  ${c.green(`${passCount} passed`)}  ${c.yellow(`${warnCount} warnings`)}  ${c.red(`${failCount} failed`)}`
+      );
 
       if (failCount > 0) {
         console.log(`\n  ${c.bold("Recommended actions:")}`);
@@ -273,9 +285,11 @@ export function registerDoctorCommand(program: Command): void {
           console.log(`     ${c.dim("pha onboard")}`);
         }
 
-        const fixableCount = checks.filter(c => c.fix && c.status !== "pass").length;
+        const fixableCount = checks.filter((c) => c.fix && c.status !== "pass").length;
         if (fixableCount > 0 && !options.fix) {
-          console.log(`\n  ${c.dim("Run")} ${c.cyan("pha doctor --fix")} ${c.dim(`to auto-fix ${fixableCount} issue(s)`)}`);
+          console.log(
+            `\n  ${c.dim("Run")} ${c.cyan("pha doctor --fix")} ${c.dim(`to auto-fix ${fixableCount} issue(s)`)}`
+          );
         }
       } else if (warnCount === 0) {
         console.log(`\n  ${c.green("✓")} ${c.bold("All checks passed!")} You're good to go.`);

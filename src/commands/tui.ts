@@ -14,8 +14,6 @@ import {
   Container,
   Spacer,
   CombinedAutocompleteProvider,
-  matchesKey,
-  Key,
   type EditorTheme,
   type MarkdownTheme,
   type SelectListTheme,
@@ -74,7 +72,6 @@ interface ChatMessage {
   content: string;
 }
 
-
 export function registerTuiCommand(program: Command): void {
   program
     .command("tui")
@@ -103,7 +100,9 @@ async function runTUI(options: any, config: any): Promise<void> {
     const { execSync } = await import("child_process");
     try {
       execSync("pha start --no-open", { stdio: "ignore", timeout: 10000 });
-    } catch {}
+    } catch {
+      // Ignore - gateway startup is async
+    }
 
     let ready = false;
     for (let i = 0; i < 50; i++) {
@@ -112,8 +111,13 @@ async function runTUI(options: any, config: any): Promise<void> {
         const check = await fetch(`http://localhost:${port}/health`, {
           signal: AbortSignal.timeout(500),
         });
-        if (check.ok) { ready = true; break; }
-      } catch {}
+        if (check.ok) {
+          ready = true;
+          break;
+        }
+      } catch {
+        // Retry
+      }
     }
     if (!ready) {
       console.error("Failed to start gateway");
@@ -140,9 +144,10 @@ async function runTUI(options: any, config: any): Promise<void> {
   // Header
   const header = new Text(
     `${colors.bold(colors.cyan("PHA Chat"))} ${colors.dim("- Personal Health Agent")}\n` +
-    `${colors.dim(`Provider: ${providerCfg?.name || provider}`)}\n` +
-    `${colors.dim("Type /help for commands, /quit to exit")}`,
-    1, 0
+      `${colors.dim(`Provider: ${providerCfg?.name || provider}`)}\n` +
+      `${colors.dim("Type /help for commands, /quit to exit")}`,
+    1,
+    0
   );
   chatContainer.addChild(header);
   chatContainer.addChild(new Spacer(1));
@@ -186,12 +191,15 @@ async function runTUI(options: any, config: any): Promise<void> {
     }
 
     if (cmd === "/help") {
-      addMessage("assistant", `**Commands:**
+      addMessage(
+        "assistant",
+        `**Commands:**
 - \`/quit\` - Exit
 - \`/clear\` - Clear chat
 - \`/help\` - Show help
 
-**Tips:** Press Enter to send, Alt+Enter for new line`);
+**Tips:** Press Enter to send, Alt+Enter for new line`
+      );
       editor.setText("");
       tui.requestRender();
       return;
@@ -230,14 +238,18 @@ async function runTUI(options: any, config: any): Promise<void> {
     messagesContainer.clear();
     for (const msg of messages) {
       if (msg.role === "user") {
-        messagesContainer.addChild(new Text(`${colors.green("You")} ${colors.dim("›")} ${msg.content}`, 1, 0));
+        messagesContainer.addChild(
+          new Text(`${colors.green("You")} ${colors.dim("›")} ${msg.content}`, 1, 0)
+        );
         messagesContainer.addChild(new Spacer(1));
       } else if (msg.role === "assistant") {
         messagesContainer.addChild(new Text(colors.cyan("Assistant"), 1, 0));
         messagesContainer.addChild(new Markdown(msg.content, 1, 0, markdownTheme));
         messagesContainer.addChild(new Spacer(1));
       } else if (msg.role === "tool") {
-        messagesContainer.addChild(new Text(`${colors.yellow("Tool")} ${colors.dim("›")} ${msg.content}`, 1, 0));
+        messagesContainer.addChild(
+          new Text(`${colors.yellow("Tool")} ${colors.dim("›")} ${msg.content}`, 1, 0)
+        );
       }
     }
   }
@@ -276,7 +288,10 @@ async function runTUI(options: any, config: any): Promise<void> {
   ws.onopen = () => {
     connected = true;
     ws!.send(JSON.stringify({ type: "init" }));
-    addMessage("assistant", `Welcome to **PHA Chat**!\n\nAsk me about your health data, sleep, or activity.`);
+    addMessage(
+      "assistant",
+      `Welcome to **PHA Chat**!\n\nAsk me about your health data, sleep, or activity.`
+    );
     tui.requestRender();
   };
 
@@ -290,7 +305,8 @@ async function runTUI(options: any, config: any): Promise<void> {
           } else {
             currentAssistantMessage = msg.content;
             if (loader) {
-              const preview = msg.content.length > 60 ? msg.content.substring(0, 60) + "..." : msg.content;
+              const preview =
+                msg.content.length > 60 ? msg.content.substring(0, 60) + "..." : msg.content;
               loader.setMessage(preview);
             }
           }
@@ -303,10 +319,12 @@ async function runTUI(options: any, config: any): Promise<void> {
           addMessage("assistant", `**Error:** ${msg.message}`);
           break;
       }
-    } catch {}
+    } catch {
+      // Ignore parse errors
+    }
   };
 
-  ws.onerror = (err) => {
+  ws.onerror = () => {
     if (!connected) {
       console.error("WebSocket connection failed");
       process.exit(1);
@@ -322,7 +340,7 @@ async function runTUI(options: any, config: any): Promise<void> {
   // Wait for connection with timeout
   const connectionTimeout = 5000;
   const startTime = Date.now();
-  await new Promise<void>((resolve, reject) => {
+  await new Promise<void>((resolve) => {
     const check = setInterval(() => {
       if (connected) {
         clearInterval(check);
@@ -337,7 +355,7 @@ async function runTUI(options: any, config: any): Promise<void> {
 
   // Handle Ctrl+C at raw input level (before pi-tui processes it)
   const originalStdinOn = process.stdin.on.bind(process.stdin);
-  process.stdin.on = function(event: string, listener: (...args: any[]) => void) {
+  process.stdin.on = function (event: string, listener: (...args: any[]) => void) {
     if (event === "data") {
       const wrappedListener = (data: Buffer | string) => {
         const str = data.toString();

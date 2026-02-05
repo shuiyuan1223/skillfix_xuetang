@@ -107,7 +107,7 @@ function serializeFrontmatter(frontmatter: Record<string, unknown>): string {
     if (typeof value === "string") {
       if (value.includes("\n")) {
         lines.push(`${key}: |`);
-        value.split("\n").forEach(l => lines.push(`  ${l}`));
+        value.split("\n").forEach((l) => lines.push(`  ${l}`));
       } else if (value.includes('"') || value.includes(":")) {
         lines.push(`${key}: "${value.replace(/"/g, '\\"')}"`);
       } else {
@@ -218,7 +218,7 @@ export const listSkillsTool = {
       success: true,
       skills,
       count: skills.length,
-      enabledCount: skills.filter(s => s.enabled).length,
+      enabledCount: skills.filter((s) => s.enabled).length,
     };
   },
 };
@@ -407,7 +407,10 @@ export const createSkillTool = {
     const skillContent = [
       serializeFrontmatter(frontmatter),
       "",
-      `# ${args.name.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")} Skill`,
+      `# ${args.name
+        .split("-")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ")} Skill`,
       "",
       args.content || "<!-- Add skill instructions here -->",
       "",

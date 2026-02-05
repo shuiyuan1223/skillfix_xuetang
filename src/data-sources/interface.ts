@@ -30,7 +30,7 @@ export interface SleepData {
   bedTime: string;
   wakeTime: string;
   stages: {
-    deep: number;    // minutes
+    deep: number; // minutes
     light: number;
     rem: number;
     awake: number;

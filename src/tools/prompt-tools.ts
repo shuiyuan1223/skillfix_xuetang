@@ -52,12 +52,12 @@ export const listPromptsTool = {
     }
 
     const files = readdirSync(dir)
-      .filter(f => f.endsWith(".md"))
-      .map(f => {
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => {
         const filePath = join(dir, f);
         const content = readFileSync(filePath, "utf-8");
         const lines = content.split("\n");
-        const title = lines.find(l => l.startsWith("# "))?.slice(2) || f;
+        const title = lines.find((l) => l.startsWith("# "))?.slice(2) || f;
 
         return {
           name: f.replace(".md", ""),
@@ -222,9 +222,7 @@ export const getPromptHistoryTool = {
 
     try {
       // Get git log for this file
-      const logOutput = git(
-        `log --pretty=format:"%H|%h|%s|%ai|%an" -n ${limit} -- "${filePath}"`
-      );
+      const logOutput = git(`log --pretty=format:"%H|%h|%s|%ai|%an" -n ${limit} -- "${filePath}"`);
 
       if (!logOutput) {
         return {
@@ -234,7 +232,7 @@ export const getPromptHistoryTool = {
         };
       }
 
-      const commits = logOutput.split("\n").map(line => {
+      const commits = logOutput.split("\n").map((line) => {
         const [hash, shortHash, message, date, author] = line.split("|");
         return {
           hash,

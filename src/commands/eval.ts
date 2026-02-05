@@ -28,9 +28,7 @@ import {
 } from "../utils/cli-ui.js";
 
 export function registerEvalCommand(program: Command): void {
-  const evalCmd = program
-    .command("eval")
-    .description("Self-evolution evaluation system");
+  const evalCmd = program.command("eval").description("Self-evolution evaluation system");
 
   // eval traces
   evalCmd
@@ -53,13 +51,15 @@ export function registerEvalCommand(program: Command): void {
 
       if (recent.length === 0) {
         console.log(`\n  ${c.dim("No traces recorded yet.")}`);
-        console.log(`  ${c.dim("Use")} ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")} ${c.dim("to generate traces.")}\n`);
+        console.log(
+          `  ${c.dim("Use")} ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")} ${c.dim("to generate traces.")}\n`
+        );
         return;
       }
 
       printTable(
         ["ID", "Time", "User Message", "Tools", "Duration"],
-        recent.map(trace => [
+        recent.map((trace) => [
           c.dim(trace.id.substring(0, 8)),
           formatRelativeTime(new Date(trace.timestamp)),
           truncate(trace.userMessage, 25),
@@ -70,7 +70,9 @@ export function registerEvalCommand(program: Command): void {
 
       console.log("");
       printDivider();
-      console.log(`\n  ${c.dim("Showing")} ${recent.length} ${c.dim("of")} ${traces.length} ${c.dim("traces")}`);
+      console.log(
+        `\n  ${c.dim("Showing")} ${recent.length} ${c.dim("of")} ${traces.length} ${c.dim("traces")}`
+      );
       console.log(`  ${c.dim("Use")} ${c.cyan("pha eval run")} ${c.dim("to evaluate traces")}`);
       console.log("");
     });
@@ -84,7 +86,8 @@ export function registerEvalCommand(program: Command): void {
     .option("--json", "Output as JSON")
     .action(async (options) => {
       const config = loadConfig();
-      const apiKey = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GOOGLE_API_KEY;
+      const apiKey =
+        process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GOOGLE_API_KEY;
 
       if (!apiKey) {
         fatal("No API key found for evaluation", "Set ANTHROPIC_API_KEY or another provider key");
@@ -93,7 +96,9 @@ export function registerEvalCommand(program: Command): void {
       const traces = traceCollector.getAllTraces();
       if (traces.length === 0) {
         info("No traces to evaluate");
-        console.log(`  ${c.dim("Generate some first with")} ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")}\n`);
+        console.log(
+          `  ${c.dim("Generate some first with")} ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")}\n`
+        );
         return;
       }
 
@@ -128,8 +133,9 @@ export function registerEvalCommand(program: Command): void {
 
       printTable(
         ["Trace", "Score", "Accuracy", "Relevance", "Helpful", "Safety", "Issues"],
-        results.map(result => {
-          const scoreColor = result.overallScore >= 80 ? c.green : result.overallScore >= 60 ? c.yellow : c.red;
+        results.map((result) => {
+          const scoreColor =
+            result.overallScore >= 80 ? c.green : result.overallScore >= 60 ? c.yellow : c.red;
           return [
             c.dim(result.traceId.substring(0, 8)),
             scoreColor(`${result.overallScore}/100`),
@@ -150,13 +156,21 @@ export function registerEvalCommand(program: Command): void {
 
       const avgScore = analysis.metrics.averageScore;
       const scoreBar = progressBar(avgScore, 100, 20);
-      const scoreLabel = avgScore >= 80 ? c.green("Excellent") : avgScore >= 60 ? c.yellow("Good") : c.red("Needs Improvement");
+      const scoreLabel =
+        avgScore >= 80
+          ? c.green("Excellent")
+          : avgScore >= 60
+            ? c.yellow("Good")
+            : c.red("Needs Improvement");
 
       printKV("Average Score", `${c.bold(String(avgScore))} ${scoreBar} ${scoreLabel}`);
 
-      const trendIcon = analysis.metrics.improvementTrend > 0 ? c.green("↑ Improving") :
-                        analysis.metrics.improvementTrend < 0 ? c.red("↓ Declining") :
-                        c.dim("→ Stable");
+      const trendIcon =
+        analysis.metrics.improvementTrend > 0
+          ? c.green("↑ Improving")
+          : analysis.metrics.improvementTrend < 0
+            ? c.red("↓ Declining")
+            : c.dim("→ Stable");
       printKV("Trend", trendIcon);
 
       // Weaknesses
@@ -164,8 +178,11 @@ export function registerEvalCommand(program: Command): void {
         console.log("");
         console.log(`  ${c.yellow(icons.warning)} ${c.bold("Weaknesses:")}`);
         for (const weakness of analysis.weaknesses) {
-          const impactColor = weakness.impact === "high" ? c.red : weakness.impact === "medium" ? c.yellow : c.gray;
-          console.log(`    ${impactColor("●")} ${weakness.category}: ${c.dim(weakness.description)}`);
+          const impactColor =
+            weakness.impact === "high" ? c.red : weakness.impact === "medium" ? c.yellow : c.gray;
+          console.log(
+            `    ${impactColor("●")} ${weakness.category}: ${c.dim(weakness.description)}`
+          );
         }
       }
 
@@ -181,7 +198,9 @@ export function registerEvalCommand(program: Command): void {
 
       console.log("");
       printDivider();
-      console.log(`\n  ${c.dim("Run")} ${c.cyan("pha eval optimize")} ${c.dim("to generate improvement suggestions")}\n`);
+      console.log(
+        `\n  ${c.dim("Run")} ${c.cyan("pha eval optimize")} ${c.dim("to generate improvement suggestions")}\n`
+      );
     });
 
   // eval optimize
@@ -309,14 +328,14 @@ export function registerEvalCommand(program: Command): void {
       printKV("Total Traces", c.bold(String(traces.length)));
 
       // Time stats
-      const timestamps = traces.map(t => new Date(t.timestamp).getTime());
+      const timestamps = traces.map((t) => new Date(t.timestamp).getTime());
       const oldest = new Date(Math.min(...timestamps));
       const newest = new Date(Math.max(...timestamps));
       printKV("First Trace", formatRelativeTime(oldest));
       printKV("Last Trace", formatRelativeTime(newest));
 
       // Duration stats
-      const durations = traces.map(t => t.duration);
+      const durations = traces.map((t) => t.duration);
       const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
       const maxDuration = Math.max(...durations);
       printKV("Avg Duration", formatDuration(avgDuration));
@@ -335,7 +354,9 @@ export function registerEvalCommand(program: Command): void {
         const sorted = Object.entries(toolCounts).sort((a, b) => b[1] - a[1]);
         for (const [tool, count] of sorted.slice(0, 5)) {
           const pct = Math.round((count / traces.length) * 100);
-          console.log(`  ${c.cyan(tool.padEnd(25))} ${progressBar(count, sorted[0][1], 15)} ${count} ${c.dim(`(${pct}%)`)}`);
+          console.log(
+            `  ${c.cyan(tool.padEnd(25))} ${progressBar(count, sorted[0][1], 15)} ${count} ${c.dim(`(${pct}%)`)}`
+          );
         }
       }
 

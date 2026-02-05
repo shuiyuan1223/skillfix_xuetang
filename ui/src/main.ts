@@ -15,36 +15,36 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 
 const ICONS: Record<string, string> = {
   // Navigation
-  "chat": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>`,
-  "heart": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`,
-  "moon": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`,
-  "activity": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+  chat: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>`,
+  heart: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`,
+  moon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`,
+  activity: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
   "file-text": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>`,
-  "puzzle": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/></svg>`,
-  "flask": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/></svg>`,
+  puzzle: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z"/></svg>`,
+  flask: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/></svg>`,
   // Status
-  "user": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`,
-  "bot": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`,
-  "send": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>`,
+  user: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>`,
+  bot: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`,
+  send: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>`,
   "chevron-left": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>`,
   "chevron-right": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`,
   // Health
   "heart-pulse": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg>`,
-  "stethoscope": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>`,
-  "wind": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>`,
-  "flame": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`,
-  "timer": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>`,
-  "footprints": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg>`,
-  "bed": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>`,
-  "star": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
-  "zap": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+  stethoscope: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>`,
+  wind: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>`,
+  flame: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`,
+  timer: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>`,
+  footprints: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg>`,
+  bed: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4v16"/><path d="M2 8h18a2 2 0 0 1 2 2v10"/><path d="M2 17h20"/><path d="M6 8v9"/></svg>`,
+  star: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+  zap: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
   // Logo
-  "hospital": `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v4"/><path d="M14 14h-4"/><path d="M14 18h-4"/><path d="M14 8h-4"/><path d="M18 12h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h2"/><path d="M18 22V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v18"/></svg>`,
+  hospital: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v4"/><path d="M14 14h-4"/><path d="M14 18h-4"/><path d="M14 8h-4"/><path d="M18 12h2a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h2"/><path d="M18 22V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v18"/></svg>`,
   // Misc
-  "settings": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
-  "loader": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="6"/><line x1="12" x2="12" y1="18" y2="22"/><line x1="4.93" x2="7.76" y1="4.93" y2="7.76"/><line x1="16.24" x2="19.07" y1="16.24" y2="19.07"/><line x1="2" x2="6" y1="12" y2="12"/><line x1="18" x2="22" y1="12" y2="12"/><line x1="4.93" x2="7.76" y1="19.07" y2="16.24"/><line x1="16.24" x2="19.07" y1="7.76" y2="4.93"/></svg>`,
-  "check": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
-  "x": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
+  settings: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  loader: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="6"/><line x1="12" x2="12" y1="18" y2="22"/><line x1="4.93" x2="7.76" y1="4.93" y2="7.76"/><line x1="16.24" x2="19.07" y1="16.24" y2="19.07"/><line x1="2" x2="6" y1="12" y2="12"/><line x1="18" x2="22" y1="12" y2="12"/><line x1="4.93" x2="7.76" y1="19.07" y2="16.24"/><line x1="16.24" x2="19.07" y1="7.76" y2="4.93"/></svg>`,
+  check: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+  x: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
   "alert-triangle": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`,
 };
 
@@ -130,7 +130,13 @@ interface ErrorMessage {
   message: string;
 }
 
-type WSMessage = PageMessage | A2UIMessage | ClearSurfaceMessage | AgentTextMessage | ToolCallMessage | ErrorMessage;
+type WSMessage =
+  | PageMessage
+  | A2UIMessage
+  | ClearSurfaceMessage
+  | AgentTextMessage
+  | ToolCallMessage
+  | ErrorMessage;
 
 // ============================================================================
 // Markdown Renderer
@@ -139,16 +145,25 @@ type WSMessage = PageMessage | A2UIMessage | ClearSurfaceMessage | AgentTextMess
 function renderMarkdown(text: string): string {
   // Parse tables first (before other transformations)
   const tableRegex = /(?:^|\n)(\|.+\|)\n(\|[-:\s|]+\|)\n((?:\|.+\|\n?)+)/g;
-  let result = text.replace(tableRegex, (_, headerRow, separatorRow, bodyRows) => {
-    const headers = headerRow.split('|').filter((c: string) => c.trim()).map((c: string) => c.trim());
-    const rows = bodyRows.trim().split('\n').map((row: string) =>
-      row.split('|').filter((c: string) => c.trim()).map((c: string) => c.trim())
-    );
+  const result = text.replace(tableRegex, (_, headerRow, separatorRow, bodyRows) => {
+    const headers = headerRow
+      .split("|")
+      .filter((c: string) => c.trim())
+      .map((c: string) => c.trim());
+    const rows = bodyRows
+      .trim()
+      .split("\n")
+      .map((row: string) =>
+        row
+          .split("|")
+          .filter((c: string) => c.trim())
+          .map((c: string) => c.trim())
+      );
 
-    const headerHtml = headers.map((h: string) => `<th>${h}</th>`).join('');
-    const bodyHtml = rows.map((row: string[]) =>
-      `<tr>${row.map((cell: string) => `<td>${cell}</td>`).join('')}</tr>`
-    ).join('');
+    const headerHtml = headers.map((h: string) => `<th>${h}</th>`).join("");
+    const bodyHtml = rows
+      .map((row: string[]) => `<tr>${row.map((cell: string) => `<td>${cell}</td>`).join("")}</tr>`)
+      .join("");
 
     return `<table class="md-table"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
   });
@@ -156,17 +171,17 @@ function renderMarkdown(text: string): string {
   return result
     .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
     .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/^### (.+)$/gm, '<h4>$1</h4>')
-    .replace(/^## (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/^### (.+)$/gm, "<h4>$1</h4>")
+    .replace(/^## (.+)$/gm, "<h3>$1</h3>")
+    .replace(/^# (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^- (.+)$/gm, "<li>$1</li>")
+    .replace(/(<li>.*<\/li>\n?)+/g, "<ul>$&</ul>")
+    .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-    .replace(/\n\n/g, '<br><br>')
-    .replace(/\n/g, '<br>');
+    .replace(/\n\n/g, "<br><br>")
+    .replace(/\n/g, "<br>");
 }
 
 // ============================================================================
@@ -265,7 +280,7 @@ class A2UIRenderer {
 
   private renderChildren(ids?: string[]): TemplateResult[] {
     if (!ids) return [];
-    return ids.map(id => this.renderComponent(id));
+    return ids.map((id) => this.renderComponent(id));
   }
 
   // Layout Components
@@ -285,7 +300,10 @@ class A2UIRenderer {
     const justify = (c.justify as string) || "start";
     const align = (c.align as string) || "center";
     return html`
-      <div class="a2ui-row" style="gap: ${gap}px; justify-content: ${justify}; align-items: ${align}">
+      <div
+        class="a2ui-row"
+        style="gap: ${gap}px; justify-content: ${justify}; align-items: ${align}"
+      >
         ${this.renderChildren(c.children)}
       </div>
     `;
@@ -343,12 +361,14 @@ class A2UIRenderer {
         </div>
         <div class="a2ui-stat-value" style="color: ${color}">${value}</div>
         ${subtitle ? html`<div class="a2ui-stat-subtitle">${subtitle}</div>` : nothing}
-        ${trend ? html`
-          <div class="a2ui-stat-trend ${trend.direction}">
-            ${trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"}
-            ${trend.value}
-          </div>
-        ` : nothing}
+        ${trend
+          ? html`
+              <div class="a2ui-stat-trend ${trend.direction}">
+                ${trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"}
+                ${trend.value}
+              </div>
+            `
+          : nothing}
       </div>
     `;
   }
@@ -381,7 +401,7 @@ class A2UIRenderer {
       return html`<div class="a2ui-chart-empty" style="height: ${height}px">No data</div>`;
     }
 
-    const values = data.map(d => Number(d[yKey]) || 0);
+    const values = data.map((d) => Number(d[yKey]) || 0);
     const maxVal = Math.max(...values, 1);
 
     if (chartType === "bar") {
@@ -402,16 +422,18 @@ class A2UIRenderer {
 
     // Line chart (simple SVG)
     const width = 100;
-    const points = data.map((d, i) => {
-      const x = (i / (data.length - 1)) * width;
-      const y = height - (values[i] / maxVal) * (height - 20);
-      return `${x},${y}`;
-    }).join(" ");
+    const points = data
+      .map((d, i) => {
+        const x = (i / (data.length - 1)) * width;
+        const y = height - (values[i] / maxVal) * (height - 20);
+        return `${x},${y}`;
+      })
+      .join(" ");
 
     return html`
       <div class="a2ui-chart a2ui-chart-line" style="height: ${height}px">
         <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-          <polyline fill="none" stroke="${color}" stroke-width="2" points="${points}"/>
+          <polyline fill="none" stroke="${color}" stroke-width="2" points="${points}" />
         </svg>
       </div>
     `;
@@ -423,12 +445,18 @@ class A2UIRenderer {
     return html`
       <table class="a2ui-table">
         <thead>
-          <tr>${columns.map(col => html`<th>${col.label}</th>`)}</tr>
+          <tr>
+            ${columns.map((col) => html`<th>${col.label}</th>`)}
+          </tr>
         </thead>
         <tbody>
-          ${rows.map(row => html`
-            <tr>${columns.map(col => html`<td>${row[col.key]}</td>`)}</tr>
-          `)}
+          ${rows.map(
+            (row) => html`
+              <tr>
+                ${columns.map((col) => html`<td>${row[col.key]}</td>`)}
+              </tr>
+            `
+          )}
         </tbody>
       </table>
     `;
@@ -460,15 +488,19 @@ class A2UIRenderer {
 
     return html`
       <nav class="a2ui-nav a2ui-nav-${orientation}">
-        ${items.map(item => html`
-          <button
-            class="a2ui-nav-item ${item.id === activeId ? 'active' : ''}"
-            @click=${() => this.sendNavigate(item.id)}
-          >
-            ${item.icon ? html`<span class="a2ui-nav-icon">${unsafeHTML(getIcon(item.icon))}</span>` : nothing}
-            <span class="a2ui-nav-label">${item.label}</span>
-          </button>
-        `)}
+        ${items.map(
+          (item) => html`
+            <button
+              class="a2ui-nav-item ${item.id === activeId ? "active" : ""}"
+              @click=${() => this.sendNavigate(item.id)}
+            >
+              ${item.icon
+                ? html`<span class="a2ui-nav-icon">${unsafeHTML(getIcon(item.icon))}</span>`
+                : nothing}
+              <span class="a2ui-nav-label">${item.label}</span>
+            </button>
+          `
+        )}
       </nav>
     `;
   }
@@ -481,14 +513,16 @@ class A2UIRenderer {
     return html`
       <div class="a2ui-tabs">
         <div class="a2ui-tabs-header">
-          ${tabs.map(tab => html`
-            <button
-              class="a2ui-tab ${tab.id === activeTab ? 'active' : ''}"
-              @click=${() => this.sendAction("tab_change", { tab: tab.id })}
-            >
-              ${tab.label}
-            </button>
-          `)}
+          ${tabs.map(
+            (tab) => html`
+              <button
+                class="a2ui-tab ${tab.id === activeTab ? "active" : ""}"
+                @click=${() => this.sendAction("tab_change", { tab: tab.id })}
+              >
+                ${tab.label}
+              </button>
+            `
+          )}
         </div>
         <div class="a2ui-tabs-content">
           ${contentIds[activeTab] ? this.renderComponent(contentIds[activeTab]) : nothing}
@@ -527,14 +561,16 @@ class A2UIRenderer {
     return html`
       <div
         class="a2ui-skeleton a2ui-skeleton-${variant}"
-        style="width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height}"
+        style="width: ${typeof width === "number"
+          ? width + "px"
+          : width}; height: ${typeof height === "number" ? height + "px" : height}"
       ></div>
     `;
   }
 
   // Chat Components
   private renderChatMessages(c: A2UIComponent): TemplateResult {
-    const messages = c.messages as { role: string; content: string }[] || [];
+    const messages = (c.messages as { role: string; content: string }[]) || [];
     const streaming = c.streaming as boolean;
     const streamingContent = c.streamingContent as string;
 
@@ -543,15 +579,29 @@ class A2UIRenderer {
         <div class="a2ui-chat-empty">
           <div class="a2ui-chat-empty-icon">${unsafeHTML(ICONS["chat"])}</div>
           <div class="a2ui-chat-empty-title">How can I help you today?</div>
-          <div class="a2ui-chat-empty-subtitle">Ask me about your health data, sleep patterns, or activity.</div>
+          <div class="a2ui-chat-empty-subtitle">
+            Ask me about your health data, sleep patterns, or activity.
+          </div>
           <div class="a2ui-chat-suggestions">
-            <button class="a2ui-suggestion" @click=${() => this.sendAction("send_message", { content: "How was my sleep last night?" })}>
+            <button
+              class="a2ui-suggestion"
+              @click=${() =>
+                this.sendAction("send_message", { content: "How was my sleep last night?" })}
+            >
               <span class="suggestion-icon">${unsafeHTML(ICONS["moon"])}</span> Sleep analysis
             </button>
-            <button class="a2ui-suggestion" @click=${() => this.sendAction("send_message", { content: "Show my activity summary" })}>
+            <button
+              class="a2ui-suggestion"
+              @click=${() =>
+                this.sendAction("send_message", { content: "Show my activity summary" })}
+            >
               <span class="suggestion-icon">${unsafeHTML(ICONS["activity"])}</span> Activity summary
             </button>
-            <button class="a2ui-suggestion" @click=${() => this.sendAction("send_message", { content: "What's my heart rate trend?" })}>
+            <button
+              class="a2ui-suggestion"
+              @click=${() =>
+                this.sendAction("send_message", { content: "What's my heart rate trend?" })}
+            >
               <span class="suggestion-icon">${unsafeHTML(ICONS["heart"])}</span> Heart rate
             </button>
           </div>
@@ -561,32 +611,42 @@ class A2UIRenderer {
 
     return html`
       <div class="a2ui-chat-messages">
-        ${messages.map(msg => html`
-          <div class="a2ui-message a2ui-message-${msg.role}">
-            ${msg.role !== "tool" ? html`
-              <div class="a2ui-avatar a2ui-avatar-${msg.role}">
-                ${unsafeHTML(ICONS[msg.role === "assistant" ? "bot" : "user"])}
+        ${messages.map(
+          (msg) => html`
+            <div class="a2ui-message a2ui-message-${msg.role}">
+              ${msg.role !== "tool"
+                ? html`
+                    <div class="a2ui-avatar a2ui-avatar-${msg.role}">
+                      ${unsafeHTML(ICONS[msg.role === "assistant" ? "bot" : "user"])}
+                    </div>
+                  `
+                : nothing}
+              <div class="a2ui-message-content">
+                ${msg.role === "assistant" ? unsafeHTML(renderMarkdown(msg.content)) : msg.content}
               </div>
-            ` : nothing}
-            <div class="a2ui-message-content">
-              ${msg.role === "assistant" ? unsafeHTML(renderMarkdown(msg.content)) : msg.content}
             </div>
-          </div>
-        `)}
-        ${streaming ? html`
-          <div class="a2ui-message a2ui-message-assistant">
-            <div class="a2ui-avatar a2ui-avatar-assistant">${unsafeHTML(ICONS["bot"])}</div>
-            ${streamingContent ? html`
-              <div class="a2ui-message-content">${unsafeHTML(renderMarkdown(streamingContent))}</div>
-            ` : html`
-              <div class="a2ui-typing">
-                <div class="a2ui-typing-dot"></div>
-                <div class="a2ui-typing-dot"></div>
-                <div class="a2ui-typing-dot"></div>
+          `
+        )}
+        ${streaming
+          ? html`
+              <div class="a2ui-message a2ui-message-assistant">
+                <div class="a2ui-avatar a2ui-avatar-assistant">${unsafeHTML(ICONS["bot"])}</div>
+                ${streamingContent
+                  ? html`
+                      <div class="a2ui-message-content">
+                        ${unsafeHTML(renderMarkdown(streamingContent))}
+                      </div>
+                    `
+                  : html`
+                      <div class="a2ui-typing">
+                        <div class="a2ui-typing-dot"></div>
+                        <div class="a2ui-typing-dot"></div>
+                        <div class="a2ui-typing-dot"></div>
+                      </div>
+                    `}
               </div>
-            `}
-          </div>
-        ` : nothing}
+            `
+          : nothing}
       </div>
     `;
   }
@@ -623,7 +683,9 @@ class A2UIRenderer {
               input.value = "";
             }
           }}
-        >${unsafeHTML(ICONS["send"])}</button>
+        >
+          ${unsafeHTML(ICONS["send"])}
+        </button>
       </div>
     `;
   }
@@ -642,12 +704,17 @@ class A2UIRenderer {
     const lines = value.split("\n");
 
     return html`
-      <div class="a2ui-code-editor" style="height: ${typeof height === 'number' ? height + 'px' : height}">
-        ${lineNumbers ? html`
-          <div class="a2ui-code-line-numbers">
-            ${lines.map((_, i) => html`<div class="a2ui-line-number">${i + 1}</div>`)}
-          </div>
-        ` : nothing}
+      <div
+        class="a2ui-code-editor"
+        style="height: ${typeof height === "number" ? height + "px" : height}"
+      >
+        ${lineNumbers
+          ? html`
+              <div class="a2ui-code-line-numbers">
+                ${lines.map((_, i) => html`<div class="a2ui-line-number">${i + 1}</div>`)}
+              </div>
+            `
+          : nothing}
         <textarea
           class="a2ui-code-textarea"
           spellcheck="false"
@@ -665,28 +732,36 @@ class A2UIRenderer {
   }
 
   private renderCommitList(c: A2UIComponent): TemplateResult {
-    const commits = c.commits as { hash: string; shortHash: string; message: string; date: string; author: string }[];
+    const commits = c.commits as {
+      hash: string;
+      shortHash: string;
+      message: string;
+      date: string;
+      author: string;
+    }[];
     const selectedHash = c.selectedHash as string;
 
     return html`
       <div class="a2ui-commit-list">
-        ${commits.map(commit => html`
-          <div
-            class="a2ui-commit-item ${commit.hash === selectedHash ? 'selected' : ''}"
-            @click=${() => {
-              if (c.onSelect) {
-                this.sendAction(c.onSelect as string, { hash: commit.hash });
-              }
-            }}
-          >
-            <div class="a2ui-commit-hash">${commit.shortHash}</div>
-            <div class="a2ui-commit-message">${commit.message}</div>
-            <div class="a2ui-commit-meta">
-              <span class="a2ui-commit-date">${commit.date}</span>
-              <span class="a2ui-commit-author">${commit.author}</span>
+        ${commits.map(
+          (commit) => html`
+            <div
+              class="a2ui-commit-item ${commit.hash === selectedHash ? "selected" : ""}"
+              @click=${() => {
+                if (c.onSelect) {
+                  this.sendAction(c.onSelect as string, { hash: commit.hash });
+                }
+              }}
+            >
+              <div class="a2ui-commit-hash">${commit.shortHash}</div>
+              <div class="a2ui-commit-message">${commit.message}</div>
+              <div class="a2ui-commit-meta">
+                <span class="a2ui-commit-date">${commit.date}</span>
+                <span class="a2ui-commit-author">${commit.author}</span>
+              </div>
             </div>
-          </div>
-        `)}
+          `
+        )}
       </div>
     `;
   }
@@ -707,23 +782,27 @@ class A2UIRenderer {
           <div class="a2ui-diff-panel">
             <div class="a2ui-diff-header">Before</div>
             <div class="a2ui-diff-lines">
-              ${beforeLines.map((line, i) => html`
-                <div class="a2ui-diff-line ${afterLines[i] !== line ? 'removed' : ''}">
-                  <span class="a2ui-diff-line-num">${i + 1}</span>
-                  <span class="a2ui-diff-line-text">${line || ' '}</span>
-                </div>
-              `)}
+              ${beforeLines.map(
+                (line, i) => html`
+                  <div class="a2ui-diff-line ${afterLines[i] !== line ? "removed" : ""}">
+                    <span class="a2ui-diff-line-num">${i + 1}</span>
+                    <span class="a2ui-diff-line-text">${line || " "}</span>
+                  </div>
+                `
+              )}
             </div>
           </div>
           <div class="a2ui-diff-panel">
             <div class="a2ui-diff-header">After</div>
             <div class="a2ui-diff-lines">
-              ${afterLines.map((line, i) => html`
-                <div class="a2ui-diff-line ${beforeLines[i] !== line ? 'added' : ''}">
-                  <span class="a2ui-diff-line-num">${i + 1}</span>
-                  <span class="a2ui-diff-line-text">${line || ' '}</span>
-                </div>
-              `)}
+              ${afterLines.map(
+                (line, i) => html`
+                  <div class="a2ui-diff-line ${beforeLines[i] !== line ? "added" : ""}">
+                    <span class="a2ui-diff-line-num">${i + 1}</span>
+                    <span class="a2ui-diff-line-text">${line || " "}</span>
+                  </div>
+                `
+              )}
             </div>
           </div>
         </div>
@@ -732,20 +811,39 @@ class A2UIRenderer {
   }
 
   private renderDataTable(c: A2UIComponent): TemplateResult {
-    const columns = c.columns as { key: string; label: string; width?: string; sortable?: boolean; render?: string }[];
+    const columns = c.columns as {
+      key: string;
+      label: string;
+      width?: string;
+      sortable?: boolean;
+      render?: string;
+    }[];
     const rows = c.rows as Record<string, unknown>[];
-    const pagination = c.pagination as { page: number; pageSize: number; total: number } | undefined;
+    const pagination = c.pagination as
+      | { page: number; pageSize: number; total: number }
+      | undefined;
     const sortBy = c.sortBy as string;
     const sortOrder = (c.sortOrder as string) || "asc";
 
     const renderCellContent = (value: unknown, render?: string) => {
       if (render === "badge") {
         const status = String(value).toLowerCase();
-        return html`<span class="a2ui-badge a2ui-badge-${status === 'success' ? 'success' : status === 'failed' ? 'error' : status === 'pending' ? 'warning' : 'default'}">${value}</span>`;
+        return html`<span
+          class="a2ui-badge a2ui-badge-${status === "success"
+            ? "success"
+            : status === "failed"
+              ? "error"
+              : status === "pending"
+                ? "warning"
+                : "default"}"
+          >${value}</span
+        >`;
       }
       if (render === "progress") {
         const num = Number(value) || 0;
-        return html`<div class="a2ui-mini-progress"><div class="a2ui-mini-progress-fill" style="width: ${num}%"></div></div>`;
+        return html`<div class="a2ui-mini-progress">
+          <div class="a2ui-mini-progress-fill" style="width: ${num}%"></div>
+        </div>`;
       }
       if (render === "date") {
         return new Date(Number(value)).toLocaleString();
@@ -758,65 +856,81 @@ class A2UIRenderer {
         <table class="a2ui-data-table">
           <thead>
             <tr>
-              ${columns.map(col => html`
-                <th
-                  style="${col.width ? `width: ${col.width}` : ''}"
-                  class="${col.sortable ? 'sortable' : ''} ${sortBy === col.key ? 'sorted' : ''}"
-                  @click=${() => {
-                    if (col.sortable && c.onSort) {
-                      this.sendAction(c.onSort as string, {
-                        sortBy: col.key,
-                        sortOrder: sortBy === col.key && sortOrder === "asc" ? "desc" : "asc"
-                      });
-                    }
-                  }}
-                >
-                  ${col.label}
-                  ${col.sortable && sortBy === col.key ? html`<span class="sort-indicator">${sortOrder === "asc" ? "↑" : "↓"}</span>` : nothing}
-                </th>
-              `)}
+              ${columns.map(
+                (col) => html`
+                  <th
+                    style="${col.width ? `width: ${col.width}` : ""}"
+                    class="${col.sortable ? "sortable" : ""} ${sortBy === col.key ? "sorted" : ""}"
+                    @click=${() => {
+                      if (col.sortable && c.onSort) {
+                        this.sendAction(c.onSort as string, {
+                          sortBy: col.key,
+                          sortOrder: sortBy === col.key && sortOrder === "asc" ? "desc" : "asc",
+                        });
+                      }
+                    }}
+                  >
+                    ${col.label}
+                    ${col.sortable && sortBy === col.key
+                      ? html`<span class="sort-indicator">${sortOrder === "asc" ? "↑" : "↓"}</span>`
+                      : nothing}
+                  </th>
+                `
+              )}
             </tr>
           </thead>
           <tbody>
-            ${rows.map(row => html`
-              <tr @click=${() => {
-                if (c.onRowClick) {
-                  this.sendAction(c.onRowClick as string, { row });
-                }
-              }}>
-                ${columns.map(col => html`<td>${renderCellContent(row[col.key], col.render)}</td>`)}
-              </tr>
-            `)}
+            ${rows.map(
+              (row) => html`
+                <tr
+                  @click=${() => {
+                    if (c.onRowClick) {
+                      this.sendAction(c.onRowClick as string, { row });
+                    }
+                  }}
+                >
+                  ${columns.map(
+                    (col) => html`<td>${renderCellContent(row[col.key], col.render)}</td>`
+                  )}
+                </tr>
+              `
+            )}
           </tbody>
         </table>
-        ${pagination ? html`
-          <div class="a2ui-data-table-pagination">
-            <span class="a2ui-pagination-info">
-              Page ${pagination.page + 1} of ${Math.ceil(pagination.total / pagination.pageSize)}
-              (${pagination.total} items)
-            </span>
-            <div class="a2ui-pagination-controls">
-              <button
-                class="a2ui-pagination-btn"
-                ?disabled=${pagination.page === 0}
-                @click=${() => {
-                  if (c.onPageChange) {
-                    this.sendAction(c.onPageChange as string, { page: pagination.page - 1 });
-                  }
-                }}
-              >←</button>
-              <button
-                class="a2ui-pagination-btn"
-                ?disabled=${(pagination.page + 1) * pagination.pageSize >= pagination.total}
-                @click=${() => {
-                  if (c.onPageChange) {
-                    this.sendAction(c.onPageChange as string, { page: pagination.page + 1 });
-                  }
-                }}
-              >→</button>
-            </div>
-          </div>
-        ` : nothing}
+        ${pagination
+          ? html`
+              <div class="a2ui-data-table-pagination">
+                <span class="a2ui-pagination-info">
+                  Page ${pagination.page + 1} of
+                  ${Math.ceil(pagination.total / pagination.pageSize)} (${pagination.total} items)
+                </span>
+                <div class="a2ui-pagination-controls">
+                  <button
+                    class="a2ui-pagination-btn"
+                    ?disabled=${pagination.page === 0}
+                    @click=${() => {
+                      if (c.onPageChange) {
+                        this.sendAction(c.onPageChange as string, { page: pagination.page - 1 });
+                      }
+                    }}
+                  >
+                    ←
+                  </button>
+                  <button
+                    class="a2ui-pagination-btn"
+                    ?disabled=${(pagination.page + 1) * pagination.pageSize >= pagination.total}
+                    @click=${() => {
+                      if (c.onPageChange) {
+                        this.sendAction(c.onPageChange as string, { page: pagination.page + 1 });
+                      }
+                    }}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
+            `
+          : nothing}
       </div>
     `;
   }
@@ -827,10 +941,10 @@ class A2UIRenderer {
     const label = c.label as string;
     const showValue = c.showValue !== false;
     const size = (c.size as string) || "md";
-    const thresholds = c.thresholds as { value: number; color: string }[] || [
+    const thresholds = (c.thresholds as { value: number; color: string }[]) || [
       { value: 30, color: "#ef4444" },
       { value: 60, color: "#f59e0b" },
-      { value: 100, color: "#10b981" }
+      { value: 100, color: "#10b981" },
     ];
 
     const pct = Math.min(100, (value / max) * 100);
@@ -872,7 +986,9 @@ class A2UIRenderer {
           />
         </svg>
         <div class="a2ui-gauge-center">
-          ${showValue ? html`<div class="a2ui-gauge-value" style="color: ${color}">${Math.round(value)}</div>` : nothing}
+          ${showValue
+            ? html`<div class="a2ui-gauge-value" style="color: ${color}">${Math.round(value)}</div>`
+            : nothing}
           ${label ? html`<div class="a2ui-gauge-label">${label}</div>` : nothing}
         </div>
       </div>
@@ -889,11 +1005,11 @@ class A2UIRenderer {
       running: "loader",
       success: "check",
       failed: "x",
-      warning: "alert-triangle"
+      warning: "alert-triangle",
     };
 
     return html`
-      <span class="a2ui-status-badge a2ui-status-${status} ${pulse ? 'pulse' : ''}">
+      <span class="a2ui-status-badge a2ui-status-${status} ${pulse ? "pulse" : ""}">
         <span class="a2ui-status-icon">${unsafeHTML(ICONS[statusIcons[status]] || "•")}</span>
         <span class="a2ui-status-label">${label}</span>
       </span>
@@ -907,7 +1023,7 @@ class A2UIRenderer {
     const id = c.id;
 
     return html`
-      <div class="a2ui-collapsible ${expanded ? 'expanded' : ''}">
+      <div class="a2ui-collapsible ${expanded ? "expanded" : ""}">
         <button
           class="a2ui-collapsible-header"
           @click=${(e: Event) => {
@@ -919,9 +1035,7 @@ class A2UIRenderer {
           <span class="a2ui-collapsible-title">${title}</span>
           <span class="a2ui-collapsible-arrow">▶</span>
         </button>
-        <div class="a2ui-collapsible-content">
-          ${this.renderChildren(c.children)}
-        </div>
+        <div class="a2ui-collapsible-content">${this.renderChildren(c.children)}</div>
       </div>
     `;
   }
@@ -936,16 +1050,21 @@ class A2UIRenderer {
       <div class="a2ui-modal a2ui-modal-${size}">
         <div class="a2ui-modal-header">
           <h3 class="a2ui-modal-title">${title}</h3>
-          ${closable ? html`
-            <button class="a2ui-modal-close" @click=${() => {
-              if (onClose) this.sendAction(onClose);
-              else this.sendAction("close_modal");
-            }}>×</button>
-          ` : nothing}
+          ${closable
+            ? html`
+                <button
+                  class="a2ui-modal-close"
+                  @click=${() => {
+                    if (onClose) this.sendAction(onClose);
+                    else this.sendAction("close_modal");
+                  }}
+                >
+                  ×
+                </button>
+              `
+            : nothing}
         </div>
-        <div class="a2ui-modal-body">
-          ${this.renderChildren(c.children)}
-        </div>
+        <div class="a2ui-modal-body">${this.renderChildren(c.children)}</div>
       </div>
     `;
   }
@@ -957,21 +1076,32 @@ class A2UIRenderer {
     const onCancel = c.onCancel as string | undefined;
 
     return html`
-      <form class="a2ui-form" @submit=${(e: Event) => {
-        e.preventDefault();
-        const form = e.target as HTMLFormElement;
-        const formData = new FormData(form);
-        const data: Record<string, unknown> = {};
-        formData.forEach((value, key) => { data[key] = value; });
-        this.sendAction(onSubmit, data);
-      }}>
+      <form
+        class="a2ui-form"
+        @submit=${(e: Event) => {
+          e.preventDefault();
+          const form = e.target as HTMLFormElement;
+          const formData = new FormData(form);
+          const data: Record<string, unknown> = {};
+          formData.forEach((value, key) => {
+            data[key] = value;
+          });
+          this.sendAction(onSubmit, data);
+        }}
+      >
         ${this.renderChildren(c.children)}
         <div class="a2ui-form-actions">
-          ${cancelLabel && onCancel ? html`
-            <button type="button" class="a2ui-btn a2ui-btn-ghost" @click=${() => this.sendAction(onCancel)}>
-              ${cancelLabel}
-            </button>
-          ` : nothing}
+          ${cancelLabel && onCancel
+            ? html`
+                <button
+                  type="button"
+                  class="a2ui-btn a2ui-btn-ghost"
+                  @click=${() => this.sendAction(onCancel)}
+                >
+                  ${cancelLabel}
+                </button>
+              `
+            : nothing}
           <button type="submit" class="a2ui-btn a2ui-btn-primary">${submitLabel}</button>
         </div>
       </form>
@@ -1006,7 +1136,9 @@ class A2UIRenderer {
             placeholder=${placeholder}
             ?required=${required}
             @change=${handleChange}
-          >${value || ""}</textarea>
+          >
+${value || ""}</textarea
+          >
         `;
         break;
 
@@ -1019,9 +1151,11 @@ class A2UIRenderer {
             @change=${handleChange}
           >
             <option value="">${placeholder || "Select..."}</option>
-            ${options?.map(opt => html`
-              <option value=${opt.value} ?selected=${value === opt.value}>${opt.label}</option>
-            `)}
+            ${options?.map(
+              (opt) => html`
+                <option value=${opt.value} ?selected=${value === opt.value}>${opt.label}</option>
+              `
+            )}
           </select>
         `;
         break;
@@ -1071,7 +1205,11 @@ class A2UIRenderer {
 
     return html`
       <div class="a2ui-form-field">
-        ${label && inputType !== "checkbox" ? html`<label class="a2ui-label">${label}${required ? html`<span class="a2ui-required">*</span>` : nothing}</label>` : nothing}
+        ${label && inputType !== "checkbox"
+          ? html`<label class="a2ui-label"
+              >${label}${required ? html`<span class="a2ui-required">*</span>` : nothing}</label
+            >`
+          : nothing}
         ${input}
       </div>
     `;
@@ -1088,17 +1226,18 @@ class PHAApp extends LitElement {
     :host {
       display: flex;
       height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: radial-gradient(ellipse at top left, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
-                  radial-gradient(ellipse at bottom right, rgba(118, 75, 162, 0.15) 0%, transparent 50%),
-                  linear-gradient(180deg, #0a0a0f 0%, #0d0d14 50%, #0a0a0f 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(ellipse at top left, rgba(102, 126, 234, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at bottom right, rgba(118, 75, 162, 0.15) 0%, transparent 50%),
+        linear-gradient(180deg, #0a0a0f 0%, #0d0d14 50%, #0a0a0f 100%);
       color: #ffffff;
       overflow: hidden;
     }
 
     /* Animated background grid */
     :host::before {
-      content: '';
+      content: "";
       position: fixed;
       inset: 0;
       background-image:
@@ -1110,7 +1249,7 @@ class PHAApp extends LitElement {
 
     /* Flowing gradient background */
     :host::after {
-      content: '';
+      content: "";
       position: fixed;
       inset: 0;
       background:
@@ -1122,8 +1261,13 @@ class PHAApp extends LitElement {
     }
 
     @keyframes gradientFlow {
-      0%, 100% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
+      0%,
+      100% {
+        background-position: 0% 50%;
+      }
+      50% {
+        background-position: 100% 50%;
+      }
     }
 
     /* Page transition animation */
@@ -1190,7 +1334,9 @@ class PHAApp extends LitElement {
       width: 0;
       overflow: hidden;
       white-space: nowrap;
-      transition: opacity 0.15s ease, width 0.15s ease;
+      transition:
+        opacity 0.15s ease,
+        width 0.15s ease;
     }
 
     .surface-sidebar:not(.collapsed) .logo-text,
@@ -1309,7 +1455,9 @@ class PHAApp extends LitElement {
       overflow: auto;
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
-      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      box-shadow:
+        0 24px 48px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     }
 
     .surface-toast {
@@ -1340,7 +1488,9 @@ class PHAApp extends LitElement {
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+      box-shadow:
+        0 4px 16px rgba(102, 126, 234, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.1) inset;
       color: white;
     }
     .logo-icon svg {
@@ -1385,13 +1535,20 @@ class PHAApp extends LitElement {
       height: 8px;
       border-radius: 50%;
       background: #10b981;
-      box-shadow: 0 0 12px rgba(16, 185, 129, 0.6), 0 0 4px rgba(16, 185, 129, 0.8);
+      box-shadow:
+        0 0 12px rgba(16, 185, 129, 0.6),
+        0 0 4px rgba(16, 185, 129, 0.8);
       animation: pulse 2s ease-in-out infinite;
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.6;
+      }
     }
 
     .status-dot.disconnected {
@@ -1444,12 +1601,32 @@ class PHAApp extends LitElement {
       display: grid;
     }
 
-    .a2ui-text-h1 { font-size: 32px; font-weight: 700; }
-    .a2ui-text-h2 { font-size: 24px; font-weight: 600; }
-    .a2ui-text-h3 { font-size: 18px; font-weight: 600; }
-    .a2ui-text-body { font-size: 14px; }
-    .a2ui-text-caption { font-size: 12px; color: rgba(255,255,255,0.6); }
-    .a2ui-text-label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.5); }
+    .a2ui-text-h1 {
+      font-size: 32px;
+      font-weight: 700;
+    }
+    .a2ui-text-h2 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .a2ui-text-h3 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .a2ui-text-body {
+      font-size: 14px;
+    }
+    .a2ui-text-caption {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    .a2ui-text-label {
+      font-size: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.5);
+    }
 
     .a2ui-card {
       background: rgba(20, 20, 35, 0.6);
@@ -1457,13 +1634,17 @@ class PHAApp extends LitElement {
       border-radius: 20px;
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.03) inset;
       transition: all 0.3s ease;
     }
 
     .a2ui-card:hover {
       border-color: rgba(102, 126, 234, 0.25);
-      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(102, 126, 234, 0.1) inset;
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(102, 126, 234, 0.1) inset;
     }
 
     .a2ui-card-title {
@@ -1480,14 +1661,16 @@ class PHAApp extends LitElement {
       padding: 24px;
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.03) inset;
       transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
     }
 
     .a2ui-stat-card::before {
-      content: '';
+      content: "";
       position: absolute;
       top: 0;
       left: 0;
@@ -1499,7 +1682,9 @@ class PHAApp extends LitElement {
     .a2ui-stat-card:hover {
       transform: translateY(-4px);
       border-color: rgba(102, 126, 234, 0.3);
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 0 24px rgba(102, 126, 234, 0.15);
+      box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.4),
+        0 0 24px rgba(102, 126, 234, 0.15);
     }
 
     /* Card entrance animation - staggered */
@@ -1507,10 +1692,18 @@ class PHAApp extends LitElement {
     .a2ui-grid > div {
       animation: cardEntrance 0.5s ease-out backwards;
     }
-    .a2ui-grid > :nth-child(1) { animation-delay: 0ms; }
-    .a2ui-grid > :nth-child(2) { animation-delay: 100ms; }
-    .a2ui-grid > :nth-child(3) { animation-delay: 200ms; }
-    .a2ui-grid > :nth-child(4) { animation-delay: 300ms; }
+    .a2ui-grid > :nth-child(1) {
+      animation-delay: 0ms;
+    }
+    .a2ui-grid > :nth-child(2) {
+      animation-delay: 100ms;
+    }
+    .a2ui-grid > :nth-child(3) {
+      animation-delay: 200ms;
+    }
+    .a2ui-grid > :nth-child(4) {
+      animation-delay: 300ms;
+    }
 
     .a2ui-stat-header {
       display: flex;
@@ -1519,14 +1712,35 @@ class PHAApp extends LitElement {
       margin-bottom: 12px;
     }
 
-    .a2ui-stat-icon { font-size: 20px; }
-    .a2ui-stat-title { font-size: 14px; color: rgba(255,255,255,0.6); }
-    .a2ui-stat-value { font-size: 36px; font-weight: 700; }
-    .a2ui-stat-subtitle { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 4px; }
-    .a2ui-stat-trend { font-size: 12px; margin-top: 8px; }
-    .a2ui-stat-trend.up { color: #10b981; }
-    .a2ui-stat-trend.down { color: #ef4444; }
-    .a2ui-stat-trend.stable { color: rgba(255,255,255,0.5); }
+    .a2ui-stat-icon {
+      font-size: 20px;
+    }
+    .a2ui-stat-title {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.6);
+    }
+    .a2ui-stat-value {
+      font-size: 36px;
+      font-weight: 700;
+    }
+    .a2ui-stat-subtitle {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-top: 4px;
+    }
+    .a2ui-stat-trend {
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .a2ui-stat-trend.up {
+      color: #10b981;
+    }
+    .a2ui-stat-trend.down {
+      color: #ef4444;
+    }
+    .a2ui-stat-trend.stable {
+      color: rgba(255, 255, 255, 0.5);
+    }
 
     .a2ui-metric {
       display: flex;
@@ -1534,10 +1748,22 @@ class PHAApp extends LitElement {
       gap: 4px;
     }
 
-    .a2ui-metric-icon { font-size: 16px; }
-    .a2ui-metric-value { font-size: 24px; font-weight: 600; }
-    .a2ui-metric-unit { font-size: 14px; color: rgba(255,255,255,0.5); }
-    .a2ui-metric-label { font-size: 12px; color: rgba(255,255,255,0.5); margin-left: 8px; }
+    .a2ui-metric-icon {
+      font-size: 16px;
+    }
+    .a2ui-metric-value {
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .a2ui-metric-unit {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .a2ui-metric-label {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-left: 8px;
+    }
 
     .a2ui-chart {
       width: 100%;
@@ -1571,7 +1797,7 @@ class PHAApp extends LitElement {
 
     .a2ui-bar-label {
       font-size: 10px;
-      color: rgba(255,255,255,0.5);
+      color: rgba(255, 255, 255, 0.5);
       margin-top: 8px;
       white-space: nowrap;
     }
@@ -1589,7 +1815,9 @@ class PHAApp extends LitElement {
     }
 
     @keyframes drawLine {
-      to { stroke-dashoffset: 0; }
+      to {
+        stroke-dashoffset: 0;
+      }
     }
 
     /* Bar chart growth animation */
@@ -1599,23 +1827,41 @@ class PHAApp extends LitElement {
     }
 
     @keyframes barGrow {
-      from { transform: scaleY(0); }
-      to { transform: scaleY(1); }
+      from {
+        transform: scaleY(0);
+      }
+      to {
+        transform: scaleY(1);
+      }
     }
 
-    .a2ui-bar-item:nth-child(1) .a2ui-bar { animation-delay: 0ms; }
-    .a2ui-bar-item:nth-child(2) .a2ui-bar { animation-delay: 50ms; }
-    .a2ui-bar-item:nth-child(3) .a2ui-bar { animation-delay: 100ms; }
-    .a2ui-bar-item:nth-child(4) .a2ui-bar { animation-delay: 150ms; }
-    .a2ui-bar-item:nth-child(5) .a2ui-bar { animation-delay: 200ms; }
-    .a2ui-bar-item:nth-child(6) .a2ui-bar { animation-delay: 250ms; }
-    .a2ui-bar-item:nth-child(7) .a2ui-bar { animation-delay: 300ms; }
+    .a2ui-bar-item:nth-child(1) .a2ui-bar {
+      animation-delay: 0ms;
+    }
+    .a2ui-bar-item:nth-child(2) .a2ui-bar {
+      animation-delay: 50ms;
+    }
+    .a2ui-bar-item:nth-child(3) .a2ui-bar {
+      animation-delay: 100ms;
+    }
+    .a2ui-bar-item:nth-child(4) .a2ui-bar {
+      animation-delay: 150ms;
+    }
+    .a2ui-bar-item:nth-child(5) .a2ui-bar {
+      animation-delay: 200ms;
+    }
+    .a2ui-bar-item:nth-child(6) .a2ui-bar {
+      animation-delay: 250ms;
+    }
+    .a2ui-bar-item:nth-child(7) .a2ui-bar {
+      animation-delay: 300ms;
+    }
 
     .a2ui-chart-empty {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: rgba(255,255,255,0.3);
+      color: rgba(255, 255, 255, 0.3);
     }
 
     .a2ui-table {
@@ -1623,17 +1869,18 @@ class PHAApp extends LitElement {
       border-collapse: collapse;
     }
 
-    .a2ui-table th, .a2ui-table td {
+    .a2ui-table th,
+    .a2ui-table td {
       padding: 12px;
       text-align: left;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     }
 
     .a2ui-table th {
       font-size: 12px;
       font-weight: 500;
       text-transform: uppercase;
-      color: rgba(255,255,255,0.5);
+      color: rgba(255, 255, 255, 0.5);
     }
 
     .a2ui-button {
@@ -1651,22 +1898,25 @@ class PHAApp extends LitElement {
       color: white;
     }
 
-    .a2ui-button-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102,126,234,0.4); }
+    .a2ui-button-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
 
     .a2ui-button-secondary {
-      background: rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.1);
       color: white;
     }
 
     .a2ui-button-outline {
       background: transparent;
-      border: 1px solid rgba(255,255,255,0.2);
+      border: 1px solid rgba(255, 255, 255, 0.2);
       color: white;
     }
 
     .a2ui-button-ghost {
       background: transparent;
-      color: rgba(255,255,255,0.7);
+      color: rgba(255, 255, 255, 0.7);
     }
 
     .a2ui-button:disabled {
@@ -1707,10 +1957,14 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-nav-item::before {
-      content: '';
+      content: "";
       position: absolute;
       inset: 0;
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.05) 100%);
+      background: linear-gradient(
+        135deg,
+        rgba(102, 126, 234, 0.1) 0%,
+        rgba(118, 75, 162, 0.05) 100%
+      );
       opacity: 0;
       transition: opacity 0.25s ease;
     }
@@ -1731,7 +1985,7 @@ class PHAApp extends LitElement {
 
     /* Left glow bar on hover */
     .a2ui-nav-item::after {
-      content: '';
+      content: "";
       position: absolute;
       left: 0;
       top: 50%;
@@ -1753,10 +2007,16 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-nav-item.active {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.15) 100%);
+      background: linear-gradient(
+        135deg,
+        rgba(102, 126, 234, 0.2) 0%,
+        rgba(118, 75, 162, 0.15) 100%
+      );
       color: #ffffff;
       border: 1px solid rgba(102, 126, 234, 0.4);
-      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      box-shadow:
+        0 4px 16px rgba(102, 126, 234, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     }
 
     .a2ui-nav-item.active::before {
@@ -1765,7 +2025,9 @@ class PHAApp extends LitElement {
 
     .a2ui-nav-icon {
       font-size: 18px;
-      transition: transform 0.25s ease, filter 0.25s ease;
+      transition:
+        transform 0.25s ease,
+        filter 0.25s ease;
     }
     .a2ui-nav-label {
       flex: 1;
@@ -1809,9 +2071,15 @@ class PHAApp extends LitElement {
     }
 
     .surface-sidebar.collapsed .a2ui-nav-item.active {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.2) 100%);
+      background: linear-gradient(
+        135deg,
+        rgba(102, 126, 234, 0.25) 0%,
+        rgba(118, 75, 162, 0.2) 100%
+      );
       border-color: rgba(102, 126, 234, 0.5);
-      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      box-shadow:
+        0 4px 16px rgba(102, 126, 234, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     }
 
     .surface-sidebar.collapsed .a2ui-nav-item.active .a2ui-nav-icon {
@@ -1822,7 +2090,7 @@ class PHAApp extends LitElement {
     .a2ui-tabs-header {
       display: flex;
       gap: 4px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       margin-bottom: 16px;
     }
 
@@ -1830,7 +2098,7 @@ class PHAApp extends LitElement {
       padding: 12px 20px;
       background: transparent;
       border: none;
-      color: rgba(255,255,255,0.6);
+      color: rgba(255, 255, 255, 0.6);
       cursor: pointer;
       font-size: 14px;
       position: relative;
@@ -1841,7 +2109,7 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-tab.active::after {
-      content: '';
+      content: "";
       position: absolute;
       bottom: -1px;
       left: 0;
@@ -1856,13 +2124,13 @@ class PHAApp extends LitElement {
 
     .a2ui-progress-label {
       font-size: 12px;
-      color: rgba(255,255,255,0.6);
+      color: rgba(255, 255, 255, 0.6);
       margin-bottom: 8px;
     }
 
     .a2ui-progress-bar {
       height: 8px;
-      background: rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.1);
       border-radius: 4px;
       overflow: hidden;
     }
@@ -1881,32 +2149,62 @@ class PHAApp extends LitElement {
       font-weight: 600;
     }
 
-    .a2ui-badge-default { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); }
-    .a2ui-badge-success { background: rgba(16,185,129,0.2); color: #10b981; }
-    .a2ui-badge-warning { background: rgba(245,158,11,0.2); color: #f59e0b; }
-    .a2ui-badge-error { background: rgba(239,68,68,0.2); color: #ef4444; }
-    .a2ui-badge-info { background: rgba(59,130,246,0.2); color: #3b82f6; }
+    .a2ui-badge-default {
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .a2ui-badge-success {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+    .a2ui-badge-warning {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+    }
+    .a2ui-badge-error {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+    .a2ui-badge-info {
+      background: rgba(59, 130, 246, 0.2);
+      color: #3b82f6;
+    }
 
     .a2ui-skeleton {
-      background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(102,126,234,0.12) 50%, rgba(255,255,255,0.04) 75%);
+      background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.04) 25%,
+        rgba(102, 126, 234, 0.12) 50%,
+        rgba(255, 255, 255, 0.04) 75%
+      );
       background-size: 200% 100%;
       animation: skeleton-loading 1s infinite;
       border-radius: 8px;
       box-shadow: 0 0 20px rgba(102, 126, 234, 0.05) inset;
     }
 
-    .a2ui-skeleton-circular { border-radius: 50%; }
-    .a2ui-skeleton-text { height: 1em; }
-    .a2ui-skeleton-card { border-radius: 16px; }
+    .a2ui-skeleton-circular {
+      border-radius: 50%;
+    }
+    .a2ui-skeleton-text {
+      height: 1em;
+    }
+    .a2ui-skeleton-card {
+      border-radius: 16px;
+    }
 
     @keyframes skeleton-loading {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
+      0% {
+        background-position: 200% 0;
+      }
+      100% {
+        background-position: -200% 0;
+      }
     }
 
     .a2ui-divider {
       height: 1px;
-      background: rgba(255,255,255,0.06);
+      background: rgba(255, 255, 255, 0.06);
       margin: 16px 0;
     }
 
@@ -1924,14 +2222,20 @@ class PHAApp extends LitElement {
     .a2ui-chat-empty-icon {
       width: 88px;
       height: 88px;
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.2) 100%);
+      background: linear-gradient(
+        135deg,
+        rgba(102, 126, 234, 0.25) 0%,
+        rgba(118, 75, 162, 0.2) 100%
+      );
       border-radius: 28px;
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 24px;
       border: 1px solid rgba(102, 126, 234, 0.3);
-      box-shadow: 0 8px 32px rgba(102, 126, 234, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      box-shadow:
+        0 8px 32px rgba(102, 126, 234, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       color: white;
@@ -2009,8 +2313,14 @@ class PHAApp extends LitElement {
     }
 
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     .a2ui-message-user {
@@ -2058,20 +2368,36 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-message-user .a2ui-message-content {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
+      background: linear-gradient(
+        135deg,
+        rgba(102, 126, 234, 0.9) 0%,
+        rgba(118, 75, 162, 0.9) 100%
+      );
       border-radius: 20px 20px 4px 20px;
       box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
     }
 
-    .a2ui-message-content h2, .a2ui-message-content h3, .a2ui-message-content h4 {
+    .a2ui-message-content h2,
+    .a2ui-message-content h3,
+    .a2ui-message-content h4 {
       margin: 16px 0 8px 0;
       font-weight: 600;
     }
 
-    .a2ui-message-content ul { margin: 8px 0; padding-left: 20px; }
-    .a2ui-message-content li { margin: 4px 0; }
-    .a2ui-message-content a { color: #93c5fd; text-decoration: none; }
-    .a2ui-message-content a:hover { text-decoration: underline; }
+    .a2ui-message-content ul {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+    .a2ui-message-content li {
+      margin: 4px 0;
+    }
+    .a2ui-message-content a {
+      color: #93c5fd;
+      text-decoration: none;
+    }
+    .a2ui-message-content a:hover {
+      text-decoration: underline;
+    }
 
     .a2ui-message-content .code-block {
       background: rgba(0, 0, 0, 0.3);
@@ -2079,7 +2405,7 @@ class PHAApp extends LitElement {
       padding: 16px;
       margin: 12px 0;
       overflow-x: auto;
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
       font-size: 13px;
     }
 
@@ -2087,7 +2413,7 @@ class PHAApp extends LitElement {
       background: rgba(255, 255, 255, 0.1);
       padding: 2px 8px;
       border-radius: 6px;
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
       font-size: 13px;
     }
 
@@ -2149,12 +2475,22 @@ class PHAApp extends LitElement {
       animation: bounce 1.4s infinite;
     }
 
-    .a2ui-typing-dot:nth-child(2) { animation-delay: 0.2s; }
-    .a2ui-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    .a2ui-typing-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    .a2ui-typing-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
 
     @keyframes bounce {
-      0%, 60%, 100% { transform: translateY(0); }
-      30% { transform: translateY(-8px); }
+      0%,
+      60%,
+      100% {
+        transform: translateY(0);
+      }
+      30% {
+        transform: translateY(-8px);
+      }
     }
 
     .a2ui-chat-input {
@@ -2184,7 +2520,9 @@ class PHAApp extends LitElement {
 
     .a2ui-chat-input-field:focus {
       border-color: rgba(102, 126, 234, 0.5);
-      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1), 0 0 24px rgba(102, 126, 234, 0.1);
+      box-shadow:
+        0 0 0 4px rgba(102, 126, 234, 0.1),
+        0 0 24px rgba(102, 126, 234, 0.1);
       background: rgba(25, 25, 40, 0.9);
     }
 
@@ -2245,7 +2583,7 @@ class PHAApp extends LitElement {
       border-radius: 12px;
       background: rgba(10, 10, 20, 0.8);
       overflow: hidden;
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
       font-size: 13px;
     }
 
@@ -2314,7 +2652,7 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-commit-hash {
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
       font-size: 12px;
       color: #667eea;
       grid-row: 1;
@@ -2378,7 +2716,7 @@ class PHAApp extends LitElement {
     }
 
     .a2ui-diff-lines {
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
       font-size: 12px;
       overflow-x: auto;
     }
@@ -2594,8 +2932,13 @@ class PHAApp extends LitElement {
     }
 
     @keyframes statusPulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+      0%,
+      100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
     }
 
     .a2ui-status-success {
@@ -2681,10 +3024,22 @@ class PHAApp extends LitElement {
       overflow: hidden;
     }
 
-    .a2ui-modal-sm { max-width: 400px; width: 90%; }
-    .a2ui-modal-md { max-width: 600px; width: 90%; }
-    .a2ui-modal-lg { max-width: 800px; width: 90%; }
-    .a2ui-modal-xl { max-width: 1000px; width: 95%; }
+    .a2ui-modal-sm {
+      max-width: 400px;
+      width: 90%;
+    }
+    .a2ui-modal-md {
+      max-width: 600px;
+      width: 90%;
+    }
+    .a2ui-modal-lg {
+      max-width: 800px;
+      width: 90%;
+    }
+    .a2ui-modal-xl {
+      max-width: 1000px;
+      width: 95%;
+    }
 
     .a2ui-modal-header {
       display: flex;
@@ -2880,15 +3235,21 @@ class PHAApp extends LitElement {
           case "toast":
             this.toastData = { components: msg.components, root_id: msg.root_id };
             // Auto-dismiss toast after 5 seconds
-            setTimeout(() => { this.toastData = null; }, 5000);
+            setTimeout(() => {
+              this.toastData = null;
+            }, 5000);
             break;
         }
         break;
 
       case "clear_surface":
         switch (msg.surface_id) {
-          case "modal": this.modalData = null; break;
-          case "toast": this.toastData = null; break;
+          case "modal":
+            this.modalData = null;
+            break;
+          case "toast":
+            this.toastData = null;
+            break;
         }
         break;
     }
@@ -2926,14 +3287,14 @@ class PHAApp extends LitElement {
 
   private toggleSidebar() {
     this.sidebarCollapsed = !this.sidebarCollapsed;
-    localStorage.setItem('pha-sidebar-collapsed', String(this.sidebarCollapsed));
+    localStorage.setItem("pha-sidebar-collapsed", String(this.sidebarCollapsed));
   }
 
   connectedCallback() {
     super.connectedCallback();
     // Restore sidebar state from localStorage
-    const saved = localStorage.getItem('pha-sidebar-collapsed');
-    if (saved === 'true') {
+    const saved = localStorage.getItem("pha-sidebar-collapsed");
+    if (saved === "true") {
       this.sidebarCollapsed = true;
     }
     this.connect();
@@ -2943,7 +3304,7 @@ class PHAApp extends LitElement {
     return html`
       <div class="shell">
         <!-- Sidebar Surface -->
-        <aside class="surface-sidebar ${this.sidebarCollapsed ? 'collapsed' : ''}">
+        <aside class="surface-sidebar ${this.sidebarCollapsed ? "collapsed" : ""}">
           <div class="shell-header">
             <div class="logo">
               <div class="logo-icon">${unsafeHTML(ICONS["hospital"])}</div>
@@ -2951,52 +3312,63 @@ class PHAApp extends LitElement {
             </div>
           </div>
           <div class="sidebar-content">
-            ${this.sidebarData
-              ? this.renderer.render(this.sidebarData)
-              : this.renderSkeleton()}
+            ${this.sidebarData ? this.renderer.render(this.sidebarData) : this.renderSkeleton()}
           </div>
           <div class="sidebar-footer">
-            ${this.sidebarCollapsed ? html`
-              <button class="collapse-toggle-collapsed" @click=${() => this.toggleSidebar()} title="Expand sidebar">
-                <span class="status-dot-mini ${this.connected ? '' : 'disconnected'}"></span>
-                »
-              </button>
-            ` : html`
-              <div class="status-indicator">
-                <div class="status-dot ${this.connected ? '' : 'disconnected'}"></div>
-                <span class="status-text">${this.connected ? 'Connected' : 'Reconnecting...'}</span>
-                <button class="collapse-toggle" @click=${() => this.toggleSidebar()} title="Collapse sidebar">«</button>
-              </div>
-            `}
+            ${this.sidebarCollapsed
+              ? html`
+                  <button
+                    class="collapse-toggle-collapsed"
+                    @click=${() => this.toggleSidebar()}
+                    title="Expand sidebar"
+                  >
+                    <span class="status-dot-mini ${this.connected ? "" : "disconnected"}"></span>
+                    »
+                  </button>
+                `
+              : html`
+                  <div class="status-indicator">
+                    <div class="status-dot ${this.connected ? "" : "disconnected"}"></div>
+                    <span class="status-text"
+                      >${this.connected ? "Connected" : "Reconnecting..."}</span
+                    >
+                    <button
+                      class="collapse-toggle"
+                      @click=${() => this.toggleSidebar()}
+                      title="Collapse sidebar"
+                    >
+                      «
+                    </button>
+                  </div>
+                `}
           </div>
         </aside>
 
         <!-- Main Surface -->
         <main class="surface-main">
           <div class="surface-main-content" key=${this.pageKey}>
-            ${this.mainData
-              ? this.renderer.render(this.mainData)
-              : this.renderMainSkeleton()}
+            ${this.mainData ? this.renderer.render(this.mainData) : this.renderMainSkeleton()}
           </div>
         </main>
 
         <!-- Modal Surface (overlay) -->
-        ${this.modalData ? html`
-          <div class="surface-modal" @click=${(e: Event) => {
-            if (e.target === e.currentTarget) this.modalData = null;
-          }}>
-            <div class="surface-modal-content">
-              ${this.renderer.render(this.modalData)}
-            </div>
-          </div>
-        ` : nothing}
+        ${this.modalData
+          ? html`
+              <div
+                class="surface-modal"
+                @click=${(e: Event) => {
+                  if (e.target === e.currentTarget) this.modalData = null;
+                }}
+              >
+                <div class="surface-modal-content">${this.renderer.render(this.modalData)}</div>
+              </div>
+            `
+          : nothing}
 
         <!-- Toast Surface (fixed position) -->
-        ${this.toastData ? html`
-          <div class="surface-toast">
-            ${this.renderer.render(this.toastData)}
-          </div>
-        ` : nothing}
+        ${this.toastData
+          ? html` <div class="surface-toast">${this.renderer.render(this.toastData)}</div> `
+          : nothing}
       </div>
     `;
   }

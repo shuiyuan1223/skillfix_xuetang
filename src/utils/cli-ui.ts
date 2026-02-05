@@ -141,11 +141,15 @@ export function printHeader(title: string, subtitle?: string): void {
   const paddingRight = width - title.length - 2 - padding;
 
   console.log(`${c.cyan(box.ttl + box.hh.repeat(width) + box.ttr)}`);
-  console.log(`${c.cyan(box.vv)}${" ".repeat(padding)} ${c.bold(title)} ${" ".repeat(paddingRight)}${c.cyan(box.vv)}`);
+  console.log(
+    `${c.cyan(box.vv)}${" ".repeat(padding)} ${c.bold(title)} ${" ".repeat(paddingRight)}${c.cyan(box.vv)}`
+  );
   if (subtitle) {
     const sp = Math.max(0, Math.floor((width - subtitle.length) / 2));
     const spr = width - subtitle.length - sp;
-    console.log(`${c.cyan(box.vv)}${" ".repeat(sp)}${c.dim(subtitle)}${" ".repeat(spr)}${c.cyan(box.vv)}`);
+    console.log(
+      `${c.cyan(box.vv)}${" ".repeat(sp)}${c.dim(subtitle)}${" ".repeat(spr)}${c.cyan(box.vv)}`
+    );
   }
   console.log(`${c.cyan(box.bbl + box.hh.repeat(width) + box.bbr)}`);
 }
@@ -208,16 +212,18 @@ export function printTable(
 
   // Calculate column widths
   const widths = headers.map((h, i) => {
-    const maxRowWidth = Math.max(0, ...rows.map(r => (r[i] || "").length));
+    const maxRowWidth = Math.max(0, ...rows.map((r) => (r[i] || "").length));
     return Math.max(h.length, maxRowWidth);
   });
 
   // Print header
-  const headerRow = headers.map((h, i) => headerColor(h.padEnd(widths[i]))).join(" ".repeat(padding));
+  const headerRow = headers
+    .map((h, i) => headerColor(h.padEnd(widths[i])))
+    .join(" ".repeat(padding));
   console.log(`  ${headerRow}`);
 
   // Print separator
-  const separator = widths.map(w => box.h.repeat(w)).join(" ".repeat(padding));
+  const separator = widths.map((w) => box.h.repeat(w)).join(" ".repeat(padding));
   console.log(`  ${c.dim(separator)}`);
 
   // Print rows
@@ -254,7 +260,12 @@ export class Spinner {
       this.interval = null;
     }
 
-    const icon = status === "success" ? c.green(icons.success) : status === "error" ? c.red(icons.error) : c.yellow(icons.warning);
+    const icon =
+      status === "success"
+        ? c.green(icons.success)
+        : status === "error"
+          ? c.red(icons.error)
+          : c.yellow(icons.warning);
     process.stdout.write(`\r  ${icon} ${this.message}\n`);
   }
 
@@ -345,7 +356,7 @@ export function miniChart(values: number[], width = 20): string {
   if (max === 0) return "▁".repeat(width);
 
   const bars = "▁▂▃▄▅▆▇█";
-  const normalized = values.map(v => Math.round((v / max) * 7));
+  const normalized = values.map((v) => Math.round((v / max) * 7));
 
   // Sample if too many values
   const step = Math.ceil(values.length / width);
@@ -354,7 +365,7 @@ export function miniChart(values: number[], width = 20): string {
     sampled.push(normalized[i]);
   }
 
-  return sampled.map(v => bars[v]).join("");
+  return sampled.map((v) => bars[v]).join("");
 }
 
 /**

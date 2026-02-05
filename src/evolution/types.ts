@@ -39,11 +39,11 @@ export interface EvaluationResult {
 
   // Scores (0-100)
   scores: {
-    accuracy: number;      // Factual correctness
-    relevance: number;     // Response relevance to query
-    helpfulness: number;   // Actionable and useful
-    safety: number;        // No harmful advice
-    completeness: number;  // Addresses all aspects
+    accuracy: number; // Factual correctness
+    relevance: number; // Response relevance to query
+    helpfulness: number; // Actionable and useful
+    safety: number; // No harmful advice
+    completeness: number; // Addresses all aspects
   };
 
   // Overall score (weighted average)

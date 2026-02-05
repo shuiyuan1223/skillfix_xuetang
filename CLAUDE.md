@@ -1,266 +1,151 @@
-# PHA-TS Development Guide
+# PHA Development Guide
 
-PHA (Personal Health Agent) TypeScript 重写版本，基于 AgentOS 架构，使用 Bun 运行时。
+PHA (Personal Health Agent) - AI 驱动的健康管理助手，基于 AgentOS 架构。
 
 ## 快速开始
 
 ```bash
-# 安装依赖
+# 1. 克隆并安装
+git clone https://github.com/ibytechaos/pha.git
+cd pha
 bun install
 
-# 构建所有包
-cd packages/core && bun run build
-cd packages/cli && bun run build
-cd packages/web && bun run build
+# 2. 配置环境
+cp .env.example .env
+# 编辑 .env 填入 API Key
 
-# 运行 CLI
-bun packages/cli/dist/main.js --help
+# 3. 构建运行
+bun run build
+pha start         # 启动服务 http://localhost:8000
+pha tui           # 终端聊天界面
+```
 
-# 启动 Gateway 服务器
-bun packages/cli/dist/main.js start
+## 开发模式
 
-# 查看健康摘要 (使用 Mock 数据)
-bun packages/cli/dist/main.js health
+```bash
+# 终端 1: 启动 Gateway
+pha start
 
-# 列出 MCP 工具
-bun packages/cli/dist/main.js tools
-
-# 启动 Web UI 开发服务器
-cd packages/web && bun run dev
+# 终端 2: UI 热更新 (可选)
+cd ui && bun run dev   # http://localhost:5173
 ```
 
 ## 项目结构
 
 ```
-pha-ts/
-├── packages/
-│   ├── core/                    # 核心库
-│   │   └── src/
-│   │       ├── agent/           # Agent 封装
-│   │       │   ├── pha-agent.ts # PHA Agent 主类
-│   │       │   ├── tools.ts     # pi-agent 工具适配器
-│   │       │   └── system-prompt.ts
-│   │       ├── data-sources/    # 数据源接口
-│   │       │   ├── interface.ts # 健康数据源接口
-│   │       │   └── mock.ts      # Mock 数据实现
-│   │       ├── gateway/         # Gateway 服务
-│   │       │   ├── server.ts    # Bun HTTP/WebSocket 服务器
-│   │       │   ├── a2ui.ts      # A2UI 协议和组件
-│   │       │   └── mcp.ts       # MCP 协议处理
-│   │       ├── tools/           # 健康数据工具
-│   │       │   └── health-data.ts
-│   │       └── evolution/       # 自我进化系统
-│   │           ├── trace-collector.ts
-│   │           ├── evaluator.ts
-│   │           ├── analyzer.ts
-│   │           └── optimizer.ts
-│   ├── cli/                     # CLI 工具
-│   │   └── src/
-│   │       └── main.ts          # CLI 入口
-│   └── web/                     # Web UI
-│       └── src/
-│           └── main.ts          # Lit Element A2UI 渲染器
-└── package.json                 # Monorepo 配置
+pha/
+├── src/
+│   ├── cli.ts                 # CLI 入口
+│   ├── commands/              # CLI 命令
+│   │   ├── start.ts           # pha start
+│   │   ├── tui.ts             # pha tui (pi-tui)
+│   │   └── ...
+│   ├── gateway/               # Gateway 服务
+│   │   ├── server.ts          # Bun HTTP/WebSocket
+│   │   ├── pages.ts           # A2UI 页面生成器
+│   │   └── a2ui.ts            # A2UI 组件定义
+│   ├── agent/                 # Agent 核心
+│   │   └── pha-agent.ts
+│   ├── tools/                 # MCP 工具
+│   │   └── health-data.ts
+│   └── data-sources/          # 数据源
+│       ├── interface.ts
+│       └── mock.ts
+├── ui/                        # Web UI (Lit Element)
+│   └── src/main.ts            # A2UI 渲染器
+├── dist/                      # 构建输出
+└── package.json
 ```
 
-## 架构
+## 常用开发任务
 
-### AgentOS 架构
+| 任务 | 文件 |
+|------|------|
+| 添加新页面 | `src/gateway/pages.ts` → `src/gateway/server.ts` |
+| 添加 MCP 工具 | `src/tools/` |
+| 修改 TUI | `src/commands/tui.ts` |
+| 修改 Web UI 组件 | `ui/src/main.ts` |
+| 修改 Agent 提示词 | `src/prompts/SOUL.md` |
+
+## 多人协作 (Trunk Based)
+
+### 工作流程
+
+```
+main ←── 直接推送小改动
+     ←── PR (大功能/破坏性变更)
+```
+
+### 提交前检查 (自动)
+
+```bash
+# Husky 会在 commit 前自动运行:
+bunx lint-staged  # ESLint + Prettier
+```
+
+### 手动检查
+
+```bash
+bun run check        # TypeScript 类型检查
+bun run lint         # ESLint
+bun run format:check # Prettier
+bun run build        # 完整构建
+```
+
+### Commit 规范
+
+```
+feat: 新功能
+fix: 修复
+refactor: 重构
+docs: 文档
+chore: 杂项
+```
+
+### CI/CD
+
+- 每次 push 到 main 自动运行: 类型检查 → Lint → 格式检查 → 构建
+- PR 必须 CI 通过才能合并
+
+---
+
+## 架构原则
+
+### AgentOS 核心理念
+
+**前端是纯渲染器，所有 UI 由 Agent 通过 A2UI 协议生成。**
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                  Frontend (Web / TUI)                    │
 │  - 纯渲染器，无业务逻辑                                   │
-│  - 通过 WebSocket 接收 A2UI 组件                          │
 └────────────────────────┬────────────────────────────────┘
-                         │ WebSocket (A2UI Protocol)
+                         │ WebSocket (A2UI)
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    Gateway Server                        │
-│  - Bun HTTP/WebSocket 服务                               │
-│  - A2UI: 生成式 UI 渲染                                  │
-│  - MCP: 模型上下文协议                                   │
-│  - REST: 传统 API                                        │
+│  - A2UI 页面生成                                         │
+│  - WebSocket 会话管理                                    │
+│  - MCP 工具调用                                          │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    PHA Agent                             │
-│  - 基于 pi-agent-core                                    │
-│  - 健康数据工具集成                                       │
-│  - 系统提示词配置                                         │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                  Data Sources                            │
-│  - Mock (开发测试)                                       │
-│  - Huawei Health (TODO)                                  │
-│  - Apple HealthKit (TODO)                                │
+│  - pi-agent-core                                         │
+│  - 健康数据工具                                           │
 └─────────────────────────────────────────────────────────┘
-```
-
-### 自我进化系统
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Trace     │────▶│  Evaluator  │────▶│  Analyzer   │
-│  Collector  │     │ (LLM Judge) │     │             │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-                                               ▼
-                    ┌─────────────┐     ┌─────────────┐
-                    │   Applier   │◀────│  Optimizer  │
-                    │             │     │             │
-                    └─────────────┘     └─────────────┘
 ```
 
 ### A2UI 协议
 
-A2UI (Agent-to-UI) 是一个基于 JSONL 的生成式 UI 协议：
-
 ```typescript
-interface A2UIMessage {
-  type: "a2ui";
-  surface_id: string;  // "main" | "sidebar" | "modal" | "toast"
-  components: A2UIComponent[];
-  root_id: string;
-}
-```
+// 服务端生成
+const page = generateChatPage({ messages });
+send({ type: "page", surfaces: { sidebar, main: page } });
 
-支持的组件：
-- 布局: `column`, `row`, `grid`
-- 内容: `text`, `card`, `chart`, `metric`, `stat_card`, `table`
-- 交互: `button`, `nav`, `tabs`, `progress`, `badge`
-- 加载: `skeleton`
-
-## CLI 命令
-
-```bash
-# 服务器
-bun packages/cli/dist/main.js start [--port 8000] [--provider anthropic]
-
-# 健康数据
-bun packages/cli/dist/main.js health [--date 2024-01-01]
-
-# MCP 工具
-bun packages/cli/dist/main.js tools
-
-# 交互式聊天
-bun packages/cli/dist/main.js chat [--provider anthropic]
-
-# 自我进化
-bun packages/cli/dist/main.js eval traces        # 查看记录的交互
-bun packages/cli/dist/main.js eval run           # 运行评估
-bun packages/cli/dist/main.js eval optimize      # 生成优化建议
-```
-
-## API 端点
-
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/health` | GET | 健康检查 |
-| `/api/health/summary` | GET | 每日健康摘要 |
-| `/api/health/metrics` | GET | 健康指标 |
-| `/api/health/heart-rate` | GET | 心率数据 |
-| `/api/health/sleep` | GET | 睡眠数据 |
-| `/api/health/workouts` | GET | 运动数据 |
-| `/api/health/weekly` | GET | 周数据 |
-| `/mcp/tools/list` | POST | MCP 工具列表 |
-| `/mcp/tools/call` | POST | MCP 工具调用 |
-| `/ws` | WS | A2UI WebSocket |
-
-## 环境变量
-
-```bash
-# LLM API Key (选一个)
-ANTHROPIC_API_KEY=sk-ant-xxx
-OPENAI_API_KEY=sk-xxx
-GOOGLE_API_KEY=xxx
-```
-
-## 开发状态
-
-### Phase 1: 基础设施 ✅
-- [x] 项目结构和 monorepo 配置
-- [x] 健康数据源接口和 Mock 实现
-- [x] 健康数据工具
-- [x] pi-agent 集成
-- [x] Gateway 服务器 (Bun)
-- [x] A2UI 协议和组件
-- [x] MCP 端点
-- [x] CLI 工具 (start, health, tools)
-
-### Phase 2: WebSocket 和 Web UI ✅
-- [x] Bun 原生 WebSocket 支持
-- [x] A2UI WebSocket 推送
-- [x] Web UI (Lit Element)
-- [x] A2UI 组件渲染器
-
-### Phase 3: 自我进化系统 ✅
-- [x] Trace Collector
-- [x] Evaluator (LLM-as-Judge)
-- [x] Analyzer
-- [x] Optimizer
-- [x] CLI eval 命令
-
-### Phase 4: AgentOS 生成式 UI ✅
-- [x] 4 Surface Shell（sidebar, main, modal, toast）
-- [x] A2UI 组件渲染器（完整实现）
-- [x] 页面生成器（Chat, Health, Sleep, Activity）
-- [x] 图表渲染（折线图、柱状图）
-- [x] 聊天界面（流式响应、Markdown 表格）
-- [x] 毛玻璃科技风格 UI
-
-### Phase 5: 待完成
-- [ ] TUI 集成 (pi-tui)
-- [ ] 华为 Health Kit 集成
-- [ ] Apple HealthKit 集成
-
-## 代码规范
-
-- 使用严格 TypeScript
-- 避免 `any` 类型
-- 使用 Conventional Commits
-- 保持代码简洁
-- 使用 Bun 而非 Node.js
-
----
-
-## 军规 (Iron Rules)
-
-### 1. AgentOS 架构原则
-
-**前端是纯渲染器，无业务逻辑。所有 UI 必须由 Agent 通过 A2UI 协议生成。**
-
-```
-❌ 错误：前端直接调用 API 获取数据并渲染
-❌ 错误：前端包含业务逻辑或状态管理
-❌ 错误：前端硬编码 UI 组件
-
-✅ 正确：前端只接收 A2UI 消息并渲染
-✅ 正确：所有数据获取和处理在 Agent/Gateway 完成
-✅ 正确：UI 结构由服务端 Page Generator 生成
-```
-
-### 2. 生成式 UI (A2UI) 原则
-
-**UI 是 Agent 的输出，不是前端的产物。**
-
-- **Surface 分离**: sidebar, main, modal, toast 四个独立渲染区域
-- **组件树**: 服务端生成完整的组件树（components + root_id）
-- **消息类型**:
-  - `page`: 初始化/导航时一次性推送 sidebar + main
-  - `a2ui`: 增量更新单个 surface
-  - `clear_surface`: 清除 modal/toast
-
-```typescript
-// 服务端生成 UI
-const chatPage = generateChatPage({ messages, streaming });
-send(generatePage("chat", chatPage));
-
-// 前端只负责渲染
-private handleMessage(msg: WSMessage) {
+// 前端只渲染
+handleMessage(msg) {
   if (msg.type === "page") {
     this.sidebarData = msg.surfaces.sidebar;
     this.mainData = msg.surfaces.main;
@@ -268,18 +153,35 @@ private handleMessage(msg: WSMessage) {
 }
 ```
 
-### 3. 文件职责
+### 新增页面流程
 
-| 文件 | 职责 | 禁止 |
-|------|------|------|
-| `web/src/main.ts` | A2UI 渲染器 | 业务逻辑、API 调用 |
-| `gateway/pages.ts` | 页面生成器 | 直接操作 DOM |
-| `gateway/server.ts` | WebSocket 会话管理 | 前端代码 |
-| `gateway/a2ui.ts` | A2UI 组件构建器 | 渲染逻辑 |
+1. `src/gateway/pages.ts` - 添加 `generateXxxPage()`
+2. `src/gateway/server.ts` - 在 `handleNavigate()` 添加 case
+3. `src/gateway/pages.ts` - 在 `generateSidebar()` 添加导航项
+4. **无需修改前端** (如果组件已支持)
 
-### 4. 新增页面流程
+---
 
-1. 在 `pages.ts` 添加 `generateXxxPage()` 函数
-2. 在 `server.ts` 的 `handleNavigate()` 添加 case
-3. 在 `generateSidebar()` 添加导航项
-4. **无需修改前端代码**（如果组件已支持）
+## 军规 (Iron Rules)
+
+1. **前端无业务逻辑** - 只接收 A2UI 消息并渲染
+2. **UI 是 Agent 输出** - 不是前端产物
+3. **MCP 是唯一 API** - 工具通过 MCP 暴露
+4. **保持简单** - 避免过度设计
+
+## API 端点
+
+| 端点 | 说明 |
+|------|------|
+| `GET /health` | 健康检查 |
+| `WS /ws` | A2UI WebSocket |
+| `POST /mcp/tools/list` | 列出 MCP 工具 |
+| `POST /mcp/tools/call` | 调用 MCP 工具 |
+| `GET /api/health/*` | REST API (兼容) |
+
+## 环境变量
+
+```bash
+# .env
+ANTHROPIC_API_KEY=sk-ant-xxx  # 或其他 Provider
+```
