@@ -45,8 +45,9 @@ check-deps:
 # Install dependencies and build
 build: check-deps
 	@echo ""
-	@echo "Installing npm dependencies..."
+	@echo "Installing dependencies..."
 	@bun install
+	@cd ui && bun install
 	@echo ""
 	@echo "Building project..."
 	@bun run build

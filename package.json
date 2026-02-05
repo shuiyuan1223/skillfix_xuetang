@@ -16,9 +16,9 @@
   },
   "scripts": {
     "build": "tsc --outDir dist && bun run build:ui",
-    "build:ui": "cd ui && bun run build",
+    "build:ui": "cd ui && bun install && bun run build",
     "dev": "tsc --outDir dist --watch",
-    "dev:ui": "cd ui && bun run dev",
+    "dev:ui": "cd ui && bun install && bun run dev",
     "start": "bun ./dist/cli.js start",
     "pha": "bun ./dist/cli.js",
     "check": "tsc --noEmit",
