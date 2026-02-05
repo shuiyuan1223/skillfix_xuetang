@@ -7,9 +7,9 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
+import { getStateDir } from "../../utils/config.js";
 
-const CACHE_DIR = path.join(os.homedir(), ".pha", "api-cache");
+const CACHE_DIR = path.join(getStateDir(), "api-cache");
 
 // In-memory cache with TTL (5 minutes default)
 const memoryCache = new Map<string, { data: unknown; timestamp: number }>();
