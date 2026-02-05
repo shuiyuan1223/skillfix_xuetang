@@ -12,6 +12,7 @@ import {
   type HuaweiApiError,
 } from "./huawei-types.js";
 import { loadConfig } from "../../utils/config.js";
+import { saveToFileCache, getFromMemoryCache, saveToMemoryCache } from "./api-cache.js";
 
 // Huawei Health Kit API base URL (default, can be overridden in config)
 const DEFAULT_API_BASE = "https://health-api.cloud.huawei.com";
@@ -67,6 +68,13 @@ export class HuaweiHealthApi {
    * Get polymerized (aggregated) health data for a specific date
    */
   async getPolymerizeData(date: string): Promise<PolymerizeResult> {
+    // Check memory cache first
+    const cacheKey = "polymerize";
+    const cached = getFromMemoryCache<PolymerizeResult>(cacheKey, { date });
+    if (cached) {
+      return cached;
+    }
+
     const accessToken = await this.auth.ensureValidToken();
 
     // Calculate start and end of day in UTC
@@ -134,6 +142,10 @@ export class HuaweiHealthApi {
         console.warn("Failed to get dailyActivitySummary:", e);
       }
     }
+
+    // Save to cache
+    saveToMemoryCache(cacheKey, { date }, aggregated);
+    saveToFileCache(cacheKey, { date }, aggregated);
 
     return aggregated;
   }
@@ -238,6 +250,18 @@ export class HuaweiHealthApi {
     max: number;
     min: number;
   }> {
+    // Check memory cache first
+    const cacheKey = "heartRate";
+    const cached = getFromMemoryCache<{
+      readings: Array<{ time: string; value: number }>;
+      avg: number;
+      max: number;
+      min: number;
+    }>(cacheKey, { date });
+    if (cached) {
+      return cached;
+    }
+
     const accessToken = await this.auth.ensureValidToken();
 
     const startTime = new Date(`${date}T00:00:00Z`).getTime();
@@ -304,7 +328,13 @@ export class HuaweiHealthApi {
     const max = values.length > 0 ? Math.max(...values) : 0;
     const min = values.length > 0 ? Math.min(...values) : 0;
 
-    return { readings, avg, max, min };
+    const result = { readings, avg, max, min };
+
+    // Save to cache
+    saveToMemoryCache(cacheKey, { date }, result);
+    saveToFileCache(cacheKey, { date, rawResponse: json }, result);
+
+    return result;
   }
 
   /**
@@ -419,6 +449,363 @@ export class HuaweiHealthApi {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       };
+    }
+  }
+
+  /**
+   * Debug method: Try a specific dataTypeName and cache the response
+   * Useful for exploring what data types are available
+   */
+  async debugPolymerize(
+    dataTypeName: string,
+    date: string
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const accessToken = await this.auth.ensureValidToken();
+
+    const startTime = new Date(`${date}T00:00:00Z`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+    const params = { dataTypeName, startTime, endTime };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      saveToFileCache(`polymerize/${dataTypeName}`, params, null, errorText);
+      return { success: false, error: `${response.status}: ${errorText}` };
+    }
+
+    const json = await response.json();
+    saveToFileCache(`polymerize/${dataTypeName}`, params, json);
+    return { success: true, data: json };
+  }
+
+  /**
+   * Debug method: Try healthRecords endpoint with a specific dataType
+   */
+  async debugHealthRecords(
+    dataType: number,
+    date: string
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const accessToken = await this.auth.ensureValidToken();
+
+    const startTime = new Date(`${date}T00:00:00Z`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    // Try healthRecords endpoint
+    const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords`;
+    const params = { dataType, startTime, endTime };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        dataType,
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      saveToFileCache(`healthRecords/${dataType}`, params, null, errorText);
+      return { success: false, error: `${response.status}: ${errorText}` };
+    }
+
+    const json = await response.json();
+    saveToFileCache(`healthRecords/${dataType}`, params, json);
+    return { success: true, data: json };
+  }
+
+  /**
+   * Debug method: Try sampleSet:read endpoint (different from polymerize)
+   */
+  async debugSampleSetRead(
+    dataTypeName: string,
+    date: string
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const accessToken = await this.auth.ensureValidToken();
+
+    // For sleep, use overnight time range
+    const prevDay = new Date(date);
+    prevDay.setDate(prevDay.getDate() - 1);
+    const startTime = new Date(`${prevDay.toISOString().split("T")[0]}T18:00:00Z`).getTime();
+    const endTime = new Date(`${date}T12:00:00Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:read`;
+    const params = { dataTypeName, startTime, endTime };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        dataTypeName,
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      saveToFileCache(`sampleSet-read/${dataTypeName}`, params, null, errorText);
+      return { success: false, error: `${response.status}: ${errorText}` };
+    }
+
+    const json = await response.json();
+    saveToFileCache(`sampleSet-read/${dataTypeName}`, params, json);
+    return { success: true, data: json };
+  }
+
+  /**
+   * Debug method: Try healthRecordController endpoint for sleep
+   * According to Huawei docs, sleep data is accessed via healthRecordController
+   */
+  async debugHealthRecordController(
+    healthRecordDataType: string,
+    date: string
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const accessToken = await this.auth.ensureValidToken();
+
+    // For sleep, use overnight time range
+    const prevDay = new Date(date);
+    prevDay.setDate(prevDay.getDate() - 1);
+    const startTime = new Date(`${prevDay.toISOString().split("T")[0]}T18:00:00Z`).getTime();
+    const endTime = new Date(`${date}T12:00:00Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    // Try healthRecordController endpoint
+    const url = `${getApiBaseUrl()}/healthkit/v2/healthRecordController:getHealthRecord`;
+    const params = { healthRecordDataType, startTime, endTime };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        healthRecordDataType,
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      saveToFileCache(`healthRecord/${healthRecordDataType}`, params, null, errorText);
+      return { success: false, error: `${response.status}: ${errorText}` };
+    }
+
+    const json = await response.json();
+    saveToFileCache(`healthRecord/${healthRecordDataType}`, params, json);
+    return { success: true, data: json };
+  }
+
+  /**
+   * Debug method: List all available data types by trying common ones
+   */
+  async debugExploreDataTypes(date: string): Promise<void> {
+    console.log("Exploring available data types...\n");
+
+    // Common dataTypeName patterns to try
+    const dataTypeNames = [
+      // Steps/Activity
+      "com.huawei.continuous.steps.delta",
+      "com.huawei.continuous.steps.total",
+      "com.huawei.instantaneous.steps",
+      // Heart rate
+      "com.huawei.instantaneous.heart_rate",
+      "com.huawei.continuous.heart_rate.statistics",
+      // Sleep - try various patterns
+      "com.huawei.continuous.sleep.segment",
+      "com.huawei.continuous.sleep.statistics",
+      "com.huawei.sleep",
+      "com.huawei.instantaneous.sleep",
+      "com.huawei.health.sleep",
+      "com.huawei.continuous.sleep",
+      // Calories
+      "com.huawei.continuous.calories.burnt",
+      "com.huawei.continuous.calories.delta",
+      // Distance
+      "com.huawei.continuous.distance.delta",
+      "com.huawei.continuous.distance.total",
+      // Other
+      "com.huawei.continuous.activity.duration",
+      "com.huawei.instantaneous.stress",
+      "com.huawei.instantaneous.blood_glucose",
+      "com.huawei.instantaneous.blood_pressure",
+      "com.huawei.instantaneous.body_temperature",
+      "com.huawei.instantaneous.oxygen_saturation",
+    ];
+
+    for (const name of dataTypeNames) {
+      const result = await this.debugPolymerize(name, date);
+      const status = result.success ? "✓" : "✗";
+      const info = result.success
+        ? JSON.stringify(result.data).slice(0, 100)
+        : result.error?.slice(0, 60);
+      console.log(`${status} ${name}`);
+      console.log(`  ${info}\n`);
+    }
+
+    // Try healthRecordController for sleep
+    console.log("\n--- Trying healthRecordController for sleep ---\n");
+    const sleepTypes = ["com.huawei.health.record.sleep", "com.huawei.sleep.record", "sleep"];
+    for (const type of sleepTypes) {
+      const result = await this.debugHealthRecordController(type, date);
+      const status = result.success ? "✓" : "✗";
+      const info = result.success
+        ? JSON.stringify(result.data).slice(0, 100)
+        : result.error?.slice(0, 60);
+      console.log(`${status} ${type} (healthRecordController)`);
+      console.log(`  ${info}\n`);
+    }
+
+    // Try various API paths for sleep
+    console.log("\n--- Trying various API paths ---\n");
+    await this.debugTryVariousEndpoints(date);
+
+    console.log("\nResults saved to ~/.pha/api-cache/");
+  }
+
+  /**
+   * Debug: Try various API endpoint paths for sleep data
+   */
+  private async debugTryVariousEndpoints(date: string): Promise<void> {
+    const accessToken = await this.auth.ensureValidToken();
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const prevDay = new Date(date);
+    prevDay.setDate(prevDay.getDate() - 1);
+    const startTime = new Date(`${prevDay.toISOString().split("T")[0]}T18:00:00Z`).getTime();
+    const endTime = new Date(`${date}T12:00:00Z`).getTime();
+
+    const endpoints = [
+      // Try dataCollector endpoints
+      { path: "/healthkit/v2/dataCollectors", method: "GET" },
+    ];
+
+    // Also try POST requests to healthRecords with different dataTypeNames
+    const sleepDataTypes = [
+      "com.huawei.continuous.sleep.segment",
+      "com.huawei.continuous.sleep.statistics",
+      "com.huawei.continuous.sleep.detail",
+      "com.huawei.sleep",
+      "com.huawei.health.sleep",
+    ];
+
+    console.log("--- Trying POST healthRecords ---\n");
+    for (const dataTypeName of sleepDataTypes) {
+      const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords`;
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "x-client-id": clientId,
+          },
+          body: JSON.stringify({ dataTypeName, startTime, endTime }),
+        });
+
+        const text = await response.text();
+        let data: unknown;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+
+        const status = response.ok ? "✓" : "✗";
+        const info = response.ok
+          ? JSON.stringify(data).slice(0, 80)
+          : `${response.status}: ${text.slice(0, 50)}`;
+        console.log(`${status} POST healthRecords (${dataTypeName})`);
+        console.log(`  ${info}\n`);
+
+        saveToFileCache(`healthRecords-POST/${dataTypeName}`, { dataTypeName }, data);
+      } catch (err) {
+        console.log(`✗ POST healthRecords (${dataTypeName})`);
+        console.log(`  Error: ${err}\n`);
+      }
+    }
+
+    console.log("--- Trying other endpoints ---\n");
+
+    for (const ep of endpoints) {
+      const separator = ep.path.includes("?") ? "&" : "?";
+      const url =
+        ep.method === "GET"
+          ? `${getApiBaseUrl()}${ep.path}${separator}startTime=${startTime}&endTime=${endTime}`
+          : `${getApiBaseUrl()}${ep.path}`;
+
+      try {
+        const response = await fetch(url, {
+          method: ep.method,
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "x-client-id": clientId,
+          },
+          ...(ep.method === "POST" && {
+            body: JSON.stringify({ startTime, endTime }),
+          }),
+        });
+
+        const text = await response.text();
+        let data: unknown;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = text;
+        }
+
+        const status = response.ok ? "✓" : "✗";
+        const info = response.ok
+          ? JSON.stringify(data).slice(0, 80)
+          : `${response.status}: ${text.slice(0, 50)}`;
+        console.log(`${status} ${ep.method} ${ep.path}`);
+        console.log(`  ${info}\n`);
+
+        saveToFileCache(`endpoint${ep.path.replace(/\//g, "_")}`, { method: ep.method }, data);
+      } catch (err) {
+        console.log(`✗ ${ep.method} ${ep.path}`);
+        console.log(`  Error: ${err}\n`);
+      }
     }
   }
 

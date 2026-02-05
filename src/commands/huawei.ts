@@ -11,6 +11,7 @@ import {
   huaweiAuth,
   tokenStore,
   huaweiHealthApi,
+  listCacheFiles,
 } from "../data-sources/huawei/index.js";
 
 // Default redirect URI for Huawei OAuth (HMS scheme)
@@ -68,6 +69,22 @@ export function registerHuaweiCommand(program: Command): void {
     .description("Clear Huawei authorization")
     .action(async () => {
       await logout();
+    });
+
+  // Debug subcommand - explore available data types
+  huawei
+    .command("debug")
+    .description("Debug: Explore available API data types")
+    .option(
+      "-d, --date <date>",
+      "Date to query (YYYY-MM-DD)",
+      new Date().toISOString().split("T")[0]
+    )
+    .option("-t, --type <name>", "Specific dataTypeName to test")
+    .option("-r, --read", "Use sampleSet:read instead of polymerize")
+    .option("-l, --list", "List cached API responses")
+    .action(async (options) => {
+      await debugApi(options);
     });
 }
 
@@ -330,4 +347,70 @@ async function logout(): Promise<void> {
 function maskString(str: string): string {
   if (str.length <= 8) return "****";
   return `${str.slice(0, 4)}****${str.slice(-4)}`;
+}
+
+/**
+ * Debug API - explore data types
+ */
+async function debugApi(options: {
+  date: string;
+  type?: string;
+  read?: boolean;
+  list?: boolean;
+}): Promise<void> {
+  console.log("");
+  printHeader("Huawei API Debug", "Explore data types");
+
+  if (options.list) {
+    // List cached files
+    const files = listCacheFiles();
+    if (files.length === 0) {
+      console.log(`  ${c.dim("No cached responses yet")}`);
+    } else {
+      printSection("Cached Responses", "📁");
+      files.forEach((f) => console.log(`  ${c.dim(f)}`));
+      console.log(`\n  ${c.dim("Location:")} ~/.pha/api-cache/`);
+    }
+    console.log("");
+    return;
+  }
+
+  const spinner = new Spinner("Querying API...");
+  spinner.start();
+
+  try {
+    if (options.type) {
+      // Test specific dataTypeName
+      const result = options.read
+        ? await huaweiHealthApi.debugSampleSetRead(options.type, options.date)
+        : await huaweiHealthApi.debugPolymerize(options.type, options.date);
+      spinner.stop(result.success ? "success" : "error");
+
+      const endpoint = options.read ? "sampleSet:read" : "polymerize";
+      if (result.success) {
+        console.log(`\n  ${c.green("✓")} ${options.type} (${endpoint})`);
+        console.log(`\n  ${c.dim("Response:")}`);
+        console.log(
+          JSON.stringify(result.data, null, 2)
+            .split("\n")
+            .map((l) => `  ${l}`)
+            .join("\n")
+        );
+      } else {
+        console.log(`\n  ${c.red("✗")} ${options.type} (${endpoint})`);
+        console.log(`  ${c.dim("Error:")} ${result.error}`);
+      }
+    } else {
+      // Explore all common data types
+      spinner.stop("success");
+      await huaweiHealthApi.debugExploreDataTypes(options.date);
+    }
+
+    console.log(`\n  ${c.dim("Results saved to:")} ~/.pha/api-cache/`);
+  } catch (error) {
+    spinner.stop("error");
+    console.log(`\n  ${c.red("Error:")} ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  console.log("");
 }
