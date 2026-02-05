@@ -5,10 +5,10 @@ node_modules/
 dist/
 ui/dist/
 
-# Runtime data (memory system)
-memory/
-sessions/
-data/*.db
+# Runtime data
+/memory/
+/sessions/
+data/
 
 # Environment
 .env
