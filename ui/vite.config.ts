@@ -1,0 +1,31 @@
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  server: {
+    port: 5173,
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+      "/mcp": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    target: "es2022",
+    outDir: "dist",
+  },
+  esbuild: {
+    target: "es2022",
+    // Support legacy decorators (experimentalDecorators)
+    tsconfigRaw: {
+      compilerOptions: {
+        experimentalDecorators: true,
+        useDefineForClassFields: false,
+      },
+    },
+  },
+});

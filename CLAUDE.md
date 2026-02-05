@@ -204,12 +204,18 @@ GOOGLE_API_KEY=xxx
 - [x] Optimizer
 - [x] CLI eval 命令
 
-### Phase 4: 待完成
+### Phase 4: AgentOS 生成式 UI ✅
+- [x] 4 Surface Shell（sidebar, main, modal, toast）
+- [x] A2UI 组件渲染器（完整实现）
+- [x] 页面生成器（Chat, Health, Sleep, Activity）
+- [x] 图表渲染（折线图、柱状图）
+- [x] 聊天界面（流式响应、Markdown 表格）
+- [x] 毛玻璃科技风格 UI
+
+### Phase 5: 待完成
 - [ ] TUI 集成 (pi-tui)
 - [ ] 华为 Health Kit 集成
 - [ ] Apple HealthKit 集成
-- [ ] 图表渲染 (目前是占位符)
-- [ ] 聊天界面完善
 
 ## 代码规范
 
@@ -218,3 +224,62 @@ GOOGLE_API_KEY=xxx
 - 使用 Conventional Commits
 - 保持代码简洁
 - 使用 Bun 而非 Node.js
+
+---
+
+## 军规 (Iron Rules)
+
+### 1. AgentOS 架构原则
+
+**前端是纯渲染器，无业务逻辑。所有 UI 必须由 Agent 通过 A2UI 协议生成。**
+
+```
+❌ 错误：前端直接调用 API 获取数据并渲染
+❌ 错误：前端包含业务逻辑或状态管理
+❌ 错误：前端硬编码 UI 组件
+
+✅ 正确：前端只接收 A2UI 消息并渲染
+✅ 正确：所有数据获取和处理在 Agent/Gateway 完成
+✅ 正确：UI 结构由服务端 Page Generator 生成
+```
+
+### 2. 生成式 UI (A2UI) 原则
+
+**UI 是 Agent 的输出，不是前端的产物。**
+
+- **Surface 分离**: sidebar, main, modal, toast 四个独立渲染区域
+- **组件树**: 服务端生成完整的组件树（components + root_id）
+- **消息类型**:
+  - `page`: 初始化/导航时一次性推送 sidebar + main
+  - `a2ui`: 增量更新单个 surface
+  - `clear_surface`: 清除 modal/toast
+
+```typescript
+// 服务端生成 UI
+const chatPage = generateChatPage({ messages, streaming });
+send(generatePage("chat", chatPage));
+
+// 前端只负责渲染
+private handleMessage(msg: WSMessage) {
+  if (msg.type === "page") {
+    this.sidebarData = msg.surfaces.sidebar;
+    this.mainData = msg.surfaces.main;
+  }
+}
+```
+
+### 3. 文件职责
+
+| 文件 | 职责 | 禁止 |
+|------|------|------|
+| `web/src/main.ts` | A2UI 渲染器 | 业务逻辑、API 调用 |
+| `gateway/pages.ts` | 页面生成器 | 直接操作 DOM |
+| `gateway/server.ts` | WebSocket 会话管理 | 前端代码 |
+| `gateway/a2ui.ts` | A2UI 组件构建器 | 渲染逻辑 |
+
+### 4. 新增页面流程
+
+1. 在 `pages.ts` 添加 `generateXxxPage()` 函数
+2. 在 `server.ts` 的 `handleNavigate()` 添加 case
+3. 在 `generateSidebar()` 添加导航项
+4. **无需修改前端代码**（如果组件已支持）

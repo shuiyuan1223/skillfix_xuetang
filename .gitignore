@@ -1,6 +1,25 @@
+# Dependencies
 node_modules/
+
+# Build outputs
 dist/
-*.log
-.DS_Store
+ui/dist/
+
+# Runtime data (memory system)
+memory/
+sessions/
+data/*.db
+
+# Environment
 .env
 .env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log

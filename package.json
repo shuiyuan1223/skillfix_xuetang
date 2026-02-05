@@ -2,25 +2,40 @@
   "name": "pha",
   "version": "0.1.0",
   "description": "Personal Health Agent - AI-powered health management",
-  "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/*"
-  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
-    "pha": "./packages/cli/dist/main.js"
+    "pha": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
-    "build": "bun run build:core && bun run build:cli && bun run build:web",
-    "build:core": "cd packages/core && bun run build",
-    "build:cli": "cd packages/cli && bun run build",
-    "build:web": "cd packages/web && bun run build",
-    "postinstall": "bun run build",
-    "dev": "bun run --filter @pha/cli dev",
-    "start": "bun run packages/cli/dist/main.js",
-    "pha": "bun run packages/cli/dist/main.js",
-    "check": "bun run --filter '*' check",
-    "clean": "rm -rf packages/*/dist node_modules"
+    "build": "tsc --outDir dist && bun run build:ui",
+    "build:ui": "cd ui && bun run build",
+    "dev": "tsc --outDir dist --watch",
+    "dev:ui": "cd ui && bun run dev",
+    "start": "bun ./dist/cli.js start",
+    "pha": "bun ./dist/cli.js",
+    "check": "tsc --noEmit",
+    "clean": "rm -rf dist ui/dist node_modules"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.51.0",
+    "@mariozechner/pi-agent-core": "^0.51.0",
+    "@mariozechner/pi-tui": "^0.51.0",
+    "@sinclair/typebox": "^0.34.0",
+    "commander": "^14.0.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
   },
   "keywords": [
     "health",
