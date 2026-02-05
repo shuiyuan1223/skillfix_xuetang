@@ -4,9 +4,10 @@
     "autoStart": false
   },
   "llm": {
-    "provider": "anthropic",
-    "apiKey": "sk-ant-xxx-your-api-key",
-    "modelId": "claude-sonnet-4-20250514"
+    "provider": "openrouter",
+    "apiKey": "sk-or-xxx-your-api-key",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "modelId": "anthropic/claude-sonnet-4"
   },
   "dataSources": {
     "type": "huawei",
