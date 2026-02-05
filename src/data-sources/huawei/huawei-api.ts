@@ -85,7 +85,7 @@ export class HuaweiHealthApi {
       )
     );
 
-    // Aggregate results
+    // Aggregate results from polymerize
     const aggregated: PolymerizeResult = {
       steps: 0,
       distance: 0,
@@ -114,7 +114,70 @@ export class HuaweiHealthApi {
       }
     });
 
+    // Try to get more data from dailyActivitySummary if polymerize returned zeros
+    if (aggregated.calories === 0 || aggregated.activeMinutes === 0) {
+      try {
+        const summary = await this.getDailyActivitySummary(date);
+        if (summary.calories > 0) aggregated.calories = summary.calories;
+        if (summary.activeMinutes > 0) aggregated.activeMinutes = summary.activeMinutes;
+        if (summary.steps > 0 && aggregated.steps === 0) aggregated.steps = summary.steps;
+        if (summary.distance > 0 && aggregated.distance === 0)
+          aggregated.distance = summary.distance;
+      } catch (e) {
+        console.warn("Failed to get dailyActivitySummary:", e);
+      }
+    }
+
     return aggregated;
+  }
+
+  /**
+   * Get daily activity summary (calories, active minutes, etc.)
+   */
+  async getDailyActivitySummary(date: string): Promise<{
+    calories: number;
+    activeMinutes: number;
+    steps: number;
+    distance: number;
+  }> {
+    const accessToken = await this.auth.ensureValidToken();
+
+    const startTime = new Date(`${date}T00:00:00Z`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:dailyActivitySummary`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`dailyActivitySummary failed: ${response.status}`);
+      return { calories: 0, activeMinutes: 0, steps: 0, distance: 0 };
+    }
+
+    const json = (await response.json()) as any;
+
+    // Parse response - structure may vary
+    const summary = json.dailyActivitySummary?.[0] || json.data?.[0] || json;
+    return {
+      calories: summary.calories || summary.totalCalories || 0,
+      activeMinutes: summary.activeMinutes || summary.totalActiveMinutes || 0,
+      steps: summary.steps || summary.totalSteps || 0,
+      distance: summary.distance || summary.totalDistance || 0,
+    };
   }
 
   /**
@@ -126,27 +189,28 @@ export class HuaweiHealthApi {
     const startTime = new Date(`${startDate}T00:00:00Z`).getTime();
     const endTime = new Date(`${endDate}T23:59:59.999Z`).getTime();
 
-    const url = `${getApiBaseUrl()}/healthkit/v1/activityRecords`;
+    const params = new URLSearchParams({
+      startTime: startTime.toString(),
+      endTime: endTime.toString(),
+    });
+    const url = `${getApiBaseUrl()}/healthkit/v2/activityRecords?${params}`;
 
     const response = await fetch(url, {
-      method: "POST",
+      method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        startTime,
-        endTime,
-      }),
     });
 
     if (!response.ok) {
       await this.handleError(response);
     }
 
-    const data = (await response.json()) as HuaweiActivityResponse;
+    const json = (await response.json()) as any;
+    const records = json.data || json.activityRecord || json.activityRecords || [];
 
-    return data.data.map((record) => ({
+    return records.map((record: any) => ({
       id: record.activityId || `activity-${record.startTime}`,
       activityType: record.activityType,
       startTime: new Date(record.startTime),
@@ -193,8 +257,8 @@ export class HuaweiHealthApi {
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
 
-    // Correct endpoint: /healthkit/v1/sampleSet:polymerize
-    const url = `${getApiBaseUrl()}/healthkit/v1/sampleSet:polymerize`;
+    // v2 endpoint
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await fetch(url, {
       method: "POST",
