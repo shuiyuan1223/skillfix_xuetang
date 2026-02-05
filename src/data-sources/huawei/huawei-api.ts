@@ -92,14 +92,8 @@ export class HuaweiHealthApi {
     const cacheParams = { date, userUuid: this.userUuid || "default" };
     const cached = getFromMemoryCache<PolymerizeResult>(cacheKey, cacheParams);
     if (cached) {
-      console.log(
-        `[Polymerize] Cache HIT for date=${date}, userUuid=${this.userUuid?.slice(0, 8)}, steps=${cached.steps}`
-      );
       return cached;
     }
-    console.log(
-      `[Polymerize] Cache MISS for date=${date}, userUuid=${this.userUuid?.slice(0, 8)}, fetching from API...`
-    );
 
     const accessToken = await this.getAccessToken();
 
@@ -170,7 +164,6 @@ export class HuaweiHealthApi {
     }
 
     // Save to cache
-    console.log(`[Polymerize] Saving to cache: date=${date}, steps=${aggregated.steps}`);
     saveToMemoryCache(cacheKey, cacheParams, aggregated);
     saveToFileCache(cacheKey, cacheParams, aggregated);
 
