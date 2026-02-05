@@ -16,6 +16,14 @@ import {
 // Default redirect URI for Huawei OAuth (HMS scheme)
 const DEFAULT_REDIRECT_URI = "hms://redirect_url";
 
+/**
+ * Get redirect URI from config or use default
+ */
+function getRedirectUri(): string {
+  const config = loadConfig();
+  return config.dataSources.huawei?.redirectUri || DEFAULT_REDIRECT_URI;
+}
+
 export function registerHuaweiCommand(program: Command): void {
   const huawei = program.command("huawei").description("Manage Huawei Health Kit integration");
 
@@ -31,9 +39,11 @@ export function registerHuaweiCommand(program: Command): void {
   huawei
     .command("auth")
     .description("Authorize access to Huawei Health data")
-    .option("-r, --redirect-uri <uri>", "OAuth redirect URI", DEFAULT_REDIRECT_URI)
+    .option("-r, --redirect-uri <uri>", "Override redirect URI from config")
     .action(async (options) => {
-      await authorizeAccess(options.redirectUri);
+      // Use command line option if provided, otherwise read from config
+      const redirectUri = options.redirectUri || getRedirectUri();
+      await authorizeAccess(redirectUri);
     });
 
   // Status subcommand
@@ -93,9 +103,18 @@ async function setupCredentials(): Promise<void> {
       return;
     }
 
+    // Optional: redirect URI
+    console.log(
+      `\n  ${c.dim("Redirect URI (press Enter for default: " + DEFAULT_REDIRECT_URI + ")")}`
+    );
+    const redirectUri = await question(`  ${c.cyan("Redirect URI")}: `);
+
     // Save to config
     setConfigValue("dataSources.huawei.clientId", clientId.trim());
     setConfigValue("dataSources.huawei.clientSecret", clientSecret.trim());
+    if (redirectUri.trim()) {
+      setConfigValue("dataSources.huawei.redirectUri", redirectUri.trim());
+    }
 
     console.log(`\n  ${c.green("✓")} Credentials saved`);
     console.log(`\n  ${c.dim("Next: Run")} ${c.cyan("pha huawei auth")} ${c.dim("to authorize")}`);
@@ -237,6 +256,7 @@ async function showStatus(): Promise<void> {
       ? `${c.green("✓")} Huawei (active)`
       : `${c.dim(config.dataSources.type)} ${c.yellow("(not active)")}`
   );
+  printKV("Redirect URI", huaweiConfig?.redirectUri || `${c.dim(DEFAULT_REDIRECT_URI)} (default)`);
 
   console.log("");
   printDivider();
