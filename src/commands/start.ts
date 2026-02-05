@@ -7,7 +7,6 @@ import { startGateway } from "../gateway/index.js";
 import { loadConfig, PROVIDER_CONFIGS, type LLMProvider } from "../utils/config.js";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import {
   printHeader,
   printKV,
@@ -20,14 +19,21 @@ import {
   info,
   warn,
 } from "../utils/cli-ui.js";
+import { getStateDir, ensureConfigDir } from "../utils/config.js";
 
-const PID_FILE = path.join(os.homedir(), ".pha", "gateway.pid");
-const LOG_FILE = path.join(os.homedir(), ".pha", "gateway.log");
+// PID and log files in project .pha/ directory
+function getPidFile(): string {
+  return path.join(getStateDir(), "gateway.pid");
+}
+
+function getLogFile(): string {
+  return path.join(getStateDir(), "gateway.log");
+}
 
 function getPid(): number | null {
-  if (!fs.existsSync(PID_FILE)) return null;
+  if (!fs.existsSync(getPidFile())) return null;
   try {
-    return parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
+    return parseInt(fs.readFileSync(getPidFile(), "utf-8").trim(), 10);
   } catch {
     return null;
   }
@@ -151,18 +157,18 @@ export function registerStartCommand(program: Command): void {
         const { spawn } = await import("child_process");
         const args = [process.argv[1], "start", "-f", "-p", String(port), "--no-open"];
 
-        fs.mkdirSync(path.dirname(LOG_FILE), { recursive: true });
+        ensureConfigDir();
 
         const child = spawn(process.argv[0], args, {
           detached: true,
-          stdio: ["ignore", fs.openSync(LOG_FILE, "a"), fs.openSync(LOG_FILE, "a")],
+          stdio: ["ignore", fs.openSync(getLogFile(), "a"), fs.openSync(getLogFile(), "a")],
           env: {
             ...process.env,
             PHA_API_KEY: apiKey,
           },
         });
 
-        fs.writeFileSync(PID_FILE, String(child.pid));
+        fs.writeFileSync(getPidFile(), String(child.pid));
         child.unref();
 
         // Wait a moment to verify it started
@@ -176,7 +182,7 @@ export function registerStartCommand(program: Command): void {
           console.log("");
           printKV("URL", c.cyan(`http://localhost:${port}`));
           printKV("PID", String(child.pid));
-          printKV("Logs", c.dim(LOG_FILE));
+          printKV("Logs", c.dim(getLogFile()));
           console.log("");
           printDivider();
           console.log(`\n  ${c.cyan("pha stop")}    ${c.dim("Stop the server")}`);
@@ -189,7 +195,7 @@ export function registerStartCommand(program: Command): void {
           }
         } else {
           spinner.stop("error");
-          fatal("Failed to start PHA", `Check logs: ${LOG_FILE}`);
+          fatal("Failed to start PHA", `Check logs: ${getLogFile()}`);
         }
       }
     });
@@ -207,7 +213,7 @@ export function registerStartCommand(program: Command): void {
 
       if (!isRunning(pid)) {
         info("PHA process not found, cleaning up stale PID file...");
-        fs.unlinkSync(PID_FILE);
+        fs.unlinkSync(getPidFile());
         return;
       }
 
@@ -225,8 +231,8 @@ export function registerStartCommand(program: Command): void {
           if (!isRunning(pid) || attempts >= maxAttempts) {
             clearInterval(checkInterval);
 
-            if (fs.existsSync(PID_FILE)) {
-              fs.unlinkSync(PID_FILE);
+            if (fs.existsSync(getPidFile())) {
+              fs.unlinkSync(getPidFile());
             }
 
             if (attempts >= maxAttempts && isRunning(pid)) {
@@ -264,8 +270,8 @@ export function registerStartCommand(program: Command): void {
               attempts++;
               if (!isRunning(pid) || attempts >= 20) {
                 clearInterval(check);
-                if (fs.existsSync(PID_FILE)) {
-                  fs.unlinkSync(PID_FILE);
+                if (fs.existsSync(getPidFile())) {
+                  fs.unlinkSync(getPidFile());
                 }
                 resolve();
               }

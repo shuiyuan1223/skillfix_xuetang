@@ -1,21 +1,30 @@
 /**
  * Gateway command - Manage the gateway server
+ *
+ * Most commands are aliases for `pha start/stop/restart`.
+ * Provides additional utility commands like logs, status, health.
  */
 
 import type { Command } from "commander";
-import { startGateway } from "../gateway/index.js";
-import { loadConfig, PROVIDER_CONFIGS, type LLMProvider } from "../utils/config.js";
+import { loadConfig } from "../utils/config.js";
+import { getStateDir } from "../utils/config.js";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
+import { c, info, printKV } from "../utils/cli-ui.js";
 
-const PID_FILE = path.join(os.homedir(), ".pha", "gateway.pid");
-const LOG_FILE = path.join(os.homedir(), ".pha", "gateway.log");
+function getPidFile(): string {
+  return path.join(getStateDir(), "gateway.pid");
+}
+
+function getLogFile(): string {
+  return path.join(getStateDir(), "gateway.log");
+}
 
 function getPid(): number | null {
-  if (!fs.existsSync(PID_FILE)) return null;
+  const pidFile = getPidFile();
+  if (!fs.existsSync(pidFile)) return null;
   try {
-    return parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
+    return parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
   } catch {
     return null;
   }
@@ -30,192 +39,60 @@ function isRunning(pid: number): boolean {
   }
 }
 
-/**
- * Get the API key from config or environment
- */
-function getApiKey(config: ReturnType<typeof loadConfig>): string | undefined {
-  // First check config
-  if (config.llm.apiKey) {
-    return config.llm.apiKey;
-  }
-
-  // Then check environment based on provider
-  const provider = config.llm.provider as LLMProvider;
-  const providerConfig = PROVIDER_CONFIGS[provider];
-  if (providerConfig) {
-    return process.env[providerConfig.envVar];
-  }
-
-  return undefined;
-}
-
 export function registerGatewayCommand(program: Command): void {
-  const gatewayCmd = program.command("gateway").description("Manage the PHA gateway server");
+  const gatewayCmd = program
+    .command("gateway")
+    .description("Manage the PHA gateway server (alias for start/stop)");
 
-  // gateway start
+  // gateway start - alias for `pha start`
   gatewayCmd
     .command("start")
-    .description("Start the gateway server")
+    .description("Start the gateway server (alias for: pha start)")
     .option("-p, --port <number>", "Port to listen on")
-    .option("--provider <string>", "LLM provider")
-    .option("--model <string>", "Model ID")
-    .option("--base-url <string>", "Base URL for API")
-    .option("-d, --daemon", "Run as background daemon")
+    .option("-f, --foreground", "Run in foreground")
+    .option("-d, --daemon", "Run as daemon (default)")
     .action(async (options) => {
-      const config = loadConfig();
-      const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
-      const provider = options.provider || config.llm.provider;
-      const modelId = options.model || config.llm.modelId;
-      const baseUrl = options.baseUrl || config.llm.baseUrl;
-      const apiKey = getApiKey(config);
+      info("Tip: You can use `pha start` directly");
+      console.log("");
 
-      // Check if already running
-      const existingPid = getPid();
-      if (existingPid && isRunning(existingPid)) {
-        console.log(`Gateway already running (PID: ${existingPid})`);
-        console.log(`Stop it first with: pha gateway stop`);
-        return;
-      }
-
-      if (!apiKey) {
-        const providerConfig = PROVIDER_CONFIGS[provider as LLMProvider];
-        console.error(`\x1b[31mError: No API key found\x1b[0m`);
-        console.error(`\nSet the API key via:`);
-        console.error(`  1. Environment: export ${providerConfig?.envVar || "API_KEY"}=...`);
-        console.error(`  2. Config: pha onboard --reset`);
-        return;
-      }
-
-      if (options.daemon) {
-        // Spawn as background process
-        const { spawn } = await import("child_process");
-        const args = [
-          process.argv[1],
-          "gateway",
-          "run",
-          "-p",
-          String(port),
-          "--provider",
-          provider,
-        ];
-        if (modelId) args.push("--model", modelId);
-        if (baseUrl) args.push("--base-url", baseUrl);
-
-        const child = spawn(process.argv[0], args, {
-          detached: true,
-          stdio: ["ignore", fs.openSync(LOG_FILE, "a"), fs.openSync(LOG_FILE, "a")],
-          env: {
-            ...process.env,
-            PHA_API_KEY: apiKey, // Pass API key via env for security
-          },
-        });
-
-        fs.writeFileSync(PID_FILE, String(child.pid));
-        child.unref();
-
-        console.log(`Gateway started in background (PID: ${child.pid})`);
-        console.log(`Provider: ${provider}`);
-        if (modelId) console.log(`Model: ${modelId}`);
-        console.log(`Logs: ${LOG_FILE}`);
-        console.log(`\nEndpoints:`);
-        console.log(`  http://localhost:${port}/health`);
-        console.log(`  ws://localhost:${port}/ws`);
-      } else {
-        // Run in foreground
-        console.log(`Starting PHA Gateway on port ${port}...`);
-        console.log(`Provider: ${provider}`);
-        if (modelId) console.log(`Model: ${modelId}`);
-        if (baseUrl) console.log(`Base URL: ${baseUrl}`);
-
-        startGateway({
-          port,
-          provider: provider as any,
-          modelId,
-          baseUrl,
-          apiKey,
-        });
-
-        console.log("\nEndpoints:");
-        console.log("  GET  /health          - Health check");
-        console.log("  POST /mcp/tools/list  - List MCP tools");
-        console.log("  POST /mcp/tools/call  - Call MCP tool");
-        console.log("  GET  /api/health/*    - Health data REST API");
-        console.log("  WS   /ws              - WebSocket (A2UI)");
-        console.log("\nPress Ctrl+C to stop.");
-      }
-    });
-
-  // gateway run (internal, used for daemon mode)
-  gatewayCmd
-    .command("run")
-    .description("Run the gateway (used internally)")
-    .option("-p, --port <number>", "Port")
-    .option("--provider <string>", "Provider")
-    .option("--model <string>", "Model")
-    .option("--base-url <string>", "Base URL")
-    .action(async (options) => {
-      const config = loadConfig();
-      const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
-      const apiKey = process.env.PHA_API_KEY || getApiKey(config);
-
-      fs.writeFileSync(PID_FILE, String(process.pid));
-
-      startGateway({
-        port,
-        provider: (options.provider || config.llm.provider) as any,
-        modelId: options.model || config.llm.modelId,
-        baseUrl: options.baseUrl || config.llm.baseUrl,
-        apiKey,
-      });
-    });
-
-  // gateway stop
-  gatewayCmd
-    .command("stop")
-    .description("Stop the gateway server")
-    .action(() => {
-      const pid = getPid();
-      if (!pid) {
-        console.log("Gateway is not running (no PID file)");
-        return;
-      }
-
-      if (!isRunning(pid)) {
-        console.log(`Gateway process ${pid} is not running`);
-        fs.unlinkSync(PID_FILE);
-        return;
-      }
+      const { execSync } = await import("child_process");
+      const args: string[] = [];
+      if (options.port) args.push("-p", options.port);
+      if (options.foreground) args.push("-f");
 
       try {
-        process.kill(pid, "SIGTERM");
-        console.log(`Stopped gateway (PID: ${pid})`);
-        fs.unlinkSync(PID_FILE);
-      } catch (e) {
-        console.error("Failed to stop gateway:", e);
+        execSync(`${process.argv[0]} ${process.argv[1]} start ${args.join(" ")}`, {
+          stdio: "inherit",
+        });
+      } catch {
+        // execSync throws on non-zero exit, ignore
       }
     });
 
-  // gateway restart
+  // gateway stop - alias for `pha stop`
+  gatewayCmd
+    .command("stop")
+    .description("Stop the gateway server (alias for: pha stop)")
+    .action(async () => {
+      const { execSync } = await import("child_process");
+      try {
+        execSync(`${process.argv[0]} ${process.argv[1]} stop`, { stdio: "inherit" });
+      } catch {
+        // ignore
+      }
+    });
+
+  // gateway restart - alias for `pha restart`
   gatewayCmd
     .command("restart")
-    .description("Restart the gateway server")
-    .option("-d, --daemon", "Run as background daemon")
-    .action(async (options) => {
-      const pid = getPid();
-      if (pid && isRunning(pid)) {
-        process.kill(pid, "SIGTERM");
-        fs.unlinkSync(PID_FILE);
-        console.log(`Stopped gateway (PID: ${pid})`);
-        // Wait a bit for port to be released
-        await new Promise((r) => setTimeout(r, 500));
-      }
-
-      // Re-run start command
+    .description("Restart the gateway server (alias for: pha restart)")
+    .action(async () => {
       const { execSync } = await import("child_process");
-      const args = options.daemon ? "-d" : "";
-      execSync(`${process.argv[0]} ${process.argv[1]} gateway start ${args}`, {
-        stdio: "inherit",
-      });
+      try {
+        execSync(`${process.argv[0]} ${process.argv[1]} restart`, { stdio: "inherit" });
+      } catch {
+        // ignore
+      }
     });
 
   // gateway status
@@ -226,7 +103,7 @@ export function registerGatewayCommand(program: Command): void {
     .action(async (options) => {
       const config = loadConfig();
       const pid = getPid();
-      const running = pid && isRunning(pid);
+      const running = pid ? isRunning(pid) : false;
 
       const status = {
         running,
@@ -240,18 +117,15 @@ export function registerGatewayCommand(program: Command): void {
       if (options.json) {
         console.log(JSON.stringify(status, null, 2));
       } else {
-        console.log("\nGateway Status\n");
-        console.log(
-          `  Status: ${running ? "\x1b[32m✓ Running\x1b[0m" : "\x1b[31m✗ Stopped\x1b[0m"}`
-        );
+        console.log("");
+        console.log(`  Status: ${running ? c.green("Running") : c.red("Stopped")}`);
         if (running) {
-          console.log(`  PID: ${pid}`);
-          console.log(`  URL: http://localhost:${config.gateway.port}`);
-          console.log(`  WebSocket: ws://localhost:${config.gateway.port}/ws`);
+          printKV("PID", String(pid));
+          printKV("URL", c.cyan(`http://localhost:${config.gateway.port}`));
         }
-        console.log(`  Provider: ${config.llm.provider}`);
+        printKV("Provider", config.llm.provider);
         if (config.llm.modelId) {
-          console.log(`  Model: ${config.llm.modelId}`);
+          printKV("Model", config.llm.modelId);
         }
         console.log("");
       }
@@ -264,18 +138,25 @@ export function registerGatewayCommand(program: Command): void {
     .option("-f, --follow", "Follow log output")
     .option("-n, --lines <number>", "Number of lines to show", "50")
     .action(async (options) => {
-      if (!fs.existsSync(LOG_FILE)) {
-        console.log("No log file found.");
+      const logFile = getLogFile();
+      if (!fs.existsSync(logFile)) {
+        console.log("No log file found at:", logFile);
         return;
       }
 
       if (options.follow) {
         const { spawn } = await import("child_process");
-        spawn("tail", ["-f", LOG_FILE], { stdio: "inherit" });
+        spawn("tail", ["-f", logFile], { stdio: "inherit" });
       } else {
         const { execSync } = await import("child_process");
-        const output = execSync(`tail -n ${options.lines} "${LOG_FILE}"`, { encoding: "utf-8" });
-        console.log(output);
+        try {
+          const output = execSync(`tail -n ${options.lines} "${logFile}"`, {
+            encoding: "utf-8",
+          });
+          console.log(output);
+        } catch {
+          console.log("Failed to read log file");
+        }
       }
     });
 
@@ -291,7 +172,7 @@ export function registerGatewayCommand(program: Command): void {
         const response = await fetch(url);
         const data = await response.json();
         console.log("Gateway Health:", JSON.stringify(data, null, 2));
-      } catch (e) {
+      } catch {
         console.log("Gateway is not reachable at", url);
       }
     });
