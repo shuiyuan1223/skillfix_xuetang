@@ -18,6 +18,7 @@ import { registerChatCommand } from "./commands/chat.js";
 import { registerEvalCommand } from "./commands/eval.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
+import { registerHuaweiCommand } from "./commands/huawei.js";
 
 const program = new Command();
 
@@ -77,5 +78,8 @@ registerEvalCommand(program);
 // Diagnostics
 registerStatusCommand(program); // status, logs
 registerDoctorCommand(program);
+
+// Data source integrations
+registerHuaweiCommand(program);
 
 program.parse();

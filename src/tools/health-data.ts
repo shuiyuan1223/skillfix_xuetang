@@ -5,17 +5,25 @@
  */
 
 import type { HealthDataSource } from "../data-sources/interface.js";
-import { mockDataSource } from "../data-sources/mock.js";
+import { getConfiguredDataSource, resetCachedDataSource } from "../data-sources/index.js";
 
-// Current data source (can be swapped at runtime)
-let dataSource: HealthDataSource = mockDataSource;
+// Current data source (uses configuration-based source by default)
+let dataSource: HealthDataSource | null = null;
 
 export function setDataSource(source: HealthDataSource): void {
   dataSource = source;
 }
 
 export function getDataSource(): HealthDataSource {
+  if (!dataSource) {
+    dataSource = getConfiguredDataSource();
+  }
   return dataSource;
+}
+
+export function resetDataSource(): void {
+  dataSource = null;
+  resetCachedDataSource();
 }
 
 // Tool definitions for pi-agent
@@ -36,8 +44,8 @@ export const getHealthDataTool = {
   },
   execute: async (args: { date: string }) => {
     const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-
-    const metrics = await dataSource.getMetrics(date);
+    const source = getDataSource();
+    const metrics = await source.getMetrics(date);
     return {
       success: true,
       data: metrics,
@@ -61,8 +69,8 @@ export const getHeartRateTool = {
   },
   execute: async (args: { date: string }) => {
     const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-
-    const heartRate = await dataSource.getHeartRate(date);
+    const source = getDataSource();
+    const heartRate = await source.getHeartRate(date);
     return {
       success: true,
       data: heartRate,
@@ -86,8 +94,8 @@ export const getSleepTool = {
   },
   execute: async (args: { date: string }) => {
     const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-
-    const sleep = await dataSource.getSleep(date);
+    const source = getDataSource();
+    const sleep = await source.getSleep(date);
     if (!sleep) {
       return {
         success: true,
@@ -117,8 +125,8 @@ export const getWorkoutsTool = {
   },
   execute: async (args: { date: string }) => {
     const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-
-    const workouts = await dataSource.getWorkouts(date);
+    const source = getDataSource();
+    const workouts = await source.getWorkouts(date);
     return {
       success: true,
       data: workouts,
@@ -136,10 +144,10 @@ export const getWeeklySummaryTool = {
   },
   execute: async () => {
     const today = new Date().toISOString().split("T")[0];
-
+    const source = getDataSource();
     const [weeklySteps, weeklySleep] = await Promise.all([
-      dataSource.getWeeklySteps(today),
-      dataSource.getWeeklySleep(today),
+      source.getWeeklySteps(today),
+      source.getWeeklySleep(today),
     ]);
 
     const totalSteps = weeklySteps.reduce((sum, d) => sum + d.steps, 0);

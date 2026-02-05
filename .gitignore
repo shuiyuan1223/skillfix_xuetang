@@ -14,6 +14,10 @@ data/
 .env
 .env.local
 
+# PHA config (contains API keys)
+pha.json
+.pha/
+
 # IDE
 .idea/
 .vscode/

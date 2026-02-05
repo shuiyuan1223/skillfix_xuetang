@@ -1,10 +1,15 @@
 /**
  * Config utilities
+ *
+ * Configuration is stored in project directory:
+ * - ./pha.json - main config file
+ * - ./.pha/ - state directory (tokens, logs, etc.)
+ *
+ * Can be overridden via PHA_CONFIG_PATH environment variable.
  */
 
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 
 export type LLMProvider =
   | "anthropic"
@@ -114,12 +119,49 @@ const DEFAULT_CONFIG: PHAConfig = {
   },
 };
 
-export function getConfigDir(): string {
-  return path.join(os.homedir(), ".pha");
+/**
+ * Find project root by looking for package.json
+ */
+function findProjectRoot(): string {
+  let dir = process.cwd();
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, "package.json"))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+  return process.cwd();
 }
 
+/**
+ * Get state directory for tokens, logs, etc.
+ * Located at ./.pha/ in project root
+ */
+export function getStateDir(): string {
+  const override = process.env.PHA_STATE_DIR?.trim();
+  if (override) {
+    return path.resolve(override);
+  }
+  return path.join(findProjectRoot(), ".pha");
+}
+
+/**
+ * Get config directory (same as state dir for compatibility)
+ */
+export function getConfigDir(): string {
+  return getStateDir();
+}
+
+/**
+ * Get config file path
+ * Located at ./pha.json in project root
+ */
 export function getConfigPath(): string {
-  return path.join(getConfigDir(), "config.json");
+  const override = process.env.PHA_CONFIG_PATH?.trim();
+  if (override) {
+    return path.resolve(override);
+  }
+  return path.join(findProjectRoot(), "pha.json");
 }
 
 export function ensureConfigDir(): void {
