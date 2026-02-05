@@ -3494,11 +3494,20 @@ class PHAApp extends LitElement {
    */
   private checkExtension(): Promise<boolean> {
     return new Promise((resolve) => {
+      console.log("[OAuth] Checking for extension...");
+
       const timeout = setTimeout(() => {
+        console.log("[OAuth] Extension check timed out");
+        window.removeEventListener("message", handler);
         resolve(false);
-      }, 500);
+      }, 2000);
 
       const handler = (event: MessageEvent) => {
+        // Log all messages for debugging
+        if (event.data?.type?.startsWith("PHA_")) {
+          console.log("[OAuth] Received message:", event.data.type, event.data);
+        }
+
         if (
           event.data?.type === "PHA_EXTENSION_READY" ||
           event.data?.type === "PHA_EXTENSION_STATUS"
