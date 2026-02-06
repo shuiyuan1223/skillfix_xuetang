@@ -83,6 +83,23 @@ export function logAssistantMessage(
 }
 
 /**
+ * Log raw message event for debugging
+ */
+export function logRawMessageEvent(
+  sessionId: string,
+  eventType: string,
+  message: unknown,
+  model?: string
+): void {
+  logLLM({
+    sessionId,
+    type: "request",
+    model,
+    data: { eventType, rawMessage: message },
+  });
+}
+
+/**
  * Log a tool call
  */
 export function logToolCall(

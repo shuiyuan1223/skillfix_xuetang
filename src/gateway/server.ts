@@ -20,6 +20,7 @@ import {
   logToolCall,
   logToolResult,
   logError,
+  logRawMessageEvent,
 } from "../utils/llm-logger.js";
 import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
 import { getUserStore } from "../data-sources/huawei/user-store.js";
@@ -1465,6 +1466,9 @@ export class GatewaySession {
         break;
 
       case "message_end":
+        // Log raw message for debugging
+        logRawMessageEvent(this.sessionId, "message_end", event.message, this.config.modelId);
+
         if (event.message.role === "assistant") {
           const content = event.message.content;
           let text = "";
