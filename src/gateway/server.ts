@@ -14,15 +14,7 @@ import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { loadConfig } from "../utils/config.js";
-import {
-  logUserMessage,
-  logAssistantMessage,
-  logToolCall,
-  logToolResult,
-  logError,
-  logRawMessageEvent,
-  logApiRequest,
-} from "../utils/llm-logger.js";
+import { logRequest, logResponse } from "../utils/llm-logger.js";
 import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
 import { getUserStore } from "../data-sources/huawei/user-store.js";
 import {
@@ -1011,9 +1003,6 @@ export class GatewaySession {
     this.isStreaming = true;
     this.streamingContent = "";
 
-    // Log user message
-    logUserMessage(this.sessionId, content, this.config.modelId, this.config.provider);
-
     // Send updated chat UI immediately
     this.sendChatUpdate(send);
 
@@ -1039,8 +1028,7 @@ export class GatewaySession {
       });
       this.sendChatUpdate(send);
 
-      // Log error
-      logError(this.sessionId, error);
+      console.error(`[Agent Error] Session ${this.sessionId}:`, error);
 
       send({
         type: "error",
@@ -1449,10 +1437,10 @@ export class GatewaySession {
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
     switch (event.type) {
       case "turn_start":
-        // Log full API request context before each LLM call
+        // Log full API request before each LLM call
         if (this.agent) {
           const agentState = this.agent.getAgent().state;
-          logApiRequest(
+          logRequest(
             this.sessionId,
             {
               systemPrompt: agentState.systemPrompt,
@@ -1478,7 +1466,6 @@ export class GatewaySession {
           }
           this.streamingContent = text;
           this.sendChatUpdate(send);
-          // Also send simple text format for TUI clients
           send({ type: "agent_text", content: text, is_final: false });
         }
         break;
@@ -1487,50 +1474,44 @@ export class GatewaySession {
         if (event.message.role === "assistant") {
           const content = event.message.content;
           let text = "";
-          let hasToolCall = false;
+          const toolCalls: Array<{ name: string; arguments: unknown }> = [];
+
           for (const block of content) {
             if (block.type === "text") {
               text += block.text;
             } else if (block.type === "toolCall") {
-              hasToolCall = true;
+              toolCalls.push({ name: block.name, arguments: block.arguments });
             }
           }
 
-          // Only add to history and log if there's actual text content
-          // Empty responses with stopReason "toolUse" are expected and skipped
+          // Log the full response
+          logResponse(
+            this.sessionId,
+            {
+              content: text,
+              toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+              stopReason: event.message.stopReason,
+              usage: event.message.usage,
+            },
+            this.config.modelId,
+            this.config.provider
+          );
+
+          // Update UI if there's text content
           if (text.trim()) {
             this.chatMessages.push({ role: "assistant", content: text });
             this.isStreaming = false;
             this.streamingContent = "";
             this.sendChatUpdate(send);
             send({ type: "agent_text", content: text, is_final: true });
-            logAssistantMessage(this.sessionId, text, this.config.modelId, this.config.provider);
-          } else if (!hasToolCall) {
-            // Log unexpected empty response (no tool call, but also no text)
-            logRawMessageEvent(
-              this.sessionId,
-              "empty_response",
-              event.message,
-              this.config.modelId
-            );
           }
-          // If hasToolCall and no text, this is expected - model is calling tools
         }
         break;
 
       case "tool_execution_start":
-        // Add tool call indicator to chat
         this.chatMessages.push({ role: "tool", content: `Using ${event.toolName}...` });
         this.sendChatUpdate(send);
-        // Also send tool_call for TUI clients
         send({ type: "tool_call", tool: event.toolName });
-        // Log tool call
-        logToolCall(this.sessionId, event.toolName, event.args, this.config.modelId);
-        break;
-
-      case "tool_execution_end":
-        // Log tool result
-        logToolResult(this.sessionId, event.toolName, event.result, event.isError);
         break;
 
       case "agent_end":

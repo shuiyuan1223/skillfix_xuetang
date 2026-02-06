@@ -1,7 +1,7 @@
 /**
  * LLM Request/Response Logger
  *
- * Logs LLM interactions for debugging and comparison across environments.
+ * Logs raw LLM API requests and responses for debugging.
  */
 
 import { existsSync, mkdirSync, appendFileSync } from "fs";
@@ -23,8 +23,8 @@ function getLogFile(): string {
 
 export interface LLMLogEntry {
   timestamp: string;
-  sessionId?: string;
-  type: "request" | "response" | "tool_call" | "tool_result" | "error" | "api_request";
+  sessionId: string;
+  type: "request" | "response";
   model?: string;
   provider?: string;
   data: unknown;
@@ -47,109 +47,11 @@ export function logLLM(entry: Omit<LLMLogEntry, "timestamp">): void {
 }
 
 /**
- * Log a user message being sent to the agent
+ * Log the full API request (what's sent to the LLM)
  */
-export function logUserMessage(
+export function logRequest(
   sessionId: string,
-  message: string,
-  model?: string,
-  provider?: string
-): void {
-  logLLM({
-    sessionId,
-    type: "request",
-    model,
-    provider,
-    data: { role: "user", content: message },
-  });
-}
-
-/**
- * Log an assistant response
- */
-export function logAssistantMessage(
-  sessionId: string,
-  message: string,
-  model?: string,
-  provider?: string
-): void {
-  logLLM({
-    sessionId,
-    type: "response",
-    model,
-    provider,
-    data: { role: "assistant", content: message },
-  });
-}
-
-/**
- * Log raw message event for debugging
- */
-export function logRawMessageEvent(
-  sessionId: string,
-  eventType: string,
-  message: unknown,
-  model?: string
-): void {
-  logLLM({
-    sessionId,
-    type: "request",
-    model,
-    data: { eventType, rawMessage: message },
-  });
-}
-
-/**
- * Log a tool call
- */
-export function logToolCall(
-  sessionId: string,
-  toolName: string,
-  args: unknown,
-  model?: string
-): void {
-  logLLM({
-    sessionId,
-    type: "tool_call",
-    model,
-    data: { tool: toolName, arguments: args },
-  });
-}
-
-/**
- * Log a tool result
- */
-export function logToolResult(
-  sessionId: string,
-  toolName: string,
-  result: unknown,
-  isError: boolean
-): void {
-  logLLM({
-    sessionId,
-    type: "tool_result",
-    data: { tool: toolName, result, isError },
-  });
-}
-
-/**
- * Log an error
- */
-export function logError(sessionId: string, error: unknown): void {
-  logLLM({
-    sessionId,
-    type: "error",
-    data: { error: error instanceof Error ? error.message : String(error) },
-  });
-}
-
-/**
- * Log the full API request context (system prompt, tools, messages)
- * Called at the start of each turn to capture what's being sent to the LLM
- */
-export function logApiRequest(
-  sessionId: string,
-  context: {
+  request: {
     systemPrompt: string;
     tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
     messages: unknown[];
@@ -159,17 +61,32 @@ export function logApiRequest(
 ): void {
   logLLM({
     sessionId,
-    type: "api_request",
+    type: "request",
     model,
     provider,
-    data: {
-      systemPrompt: context.systemPrompt,
-      tools: context.tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-      })),
-      messages: context.messages,
-    },
+    data: request,
+  });
+}
+
+/**
+ * Log the API response (what comes back from the LLM)
+ */
+export function logResponse(
+  sessionId: string,
+  response: {
+    content: unknown;
+    toolCalls?: Array<{ name: string; arguments: unknown }>;
+    stopReason?: string;
+    usage?: { input: number; output: number };
+  },
+  model?: string,
+  provider?: string
+): void {
+  logLLM({
+    sessionId,
+    type: "response",
+    model,
+    provider,
+    data: response,
   });
 }
