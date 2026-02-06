@@ -14,6 +14,13 @@ import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { loadConfig } from "../utils/config.js";
+import {
+  logUserMessage,
+  logAssistantMessage,
+  logToolCall,
+  logToolResult,
+  logError,
+} from "../utils/llm-logger.js";
 import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
 import { getUserStore } from "../data-sources/huawei/user-store.js";
 import {
@@ -1002,6 +1009,9 @@ export class GatewaySession {
     this.isStreaming = true;
     this.streamingContent = "";
 
+    // Log user message
+    logUserMessage(this.sessionId, content, this.config.modelId, this.config.provider);
+
     // Send updated chat UI immediately
     this.sendChatUpdate(send);
 
@@ -1026,6 +1036,9 @@ export class GatewaySession {
         content: `Error: ${error instanceof Error ? error.message : String(error)}`,
       });
       this.sendChatUpdate(send);
+
+      // Log error
+      logError(this.sessionId, error);
 
       send({
         type: "error",
@@ -1467,6 +1480,8 @@ export class GatewaySession {
           this.sendChatUpdate(send);
           // Also send simple text format for TUI clients
           send({ type: "agent_text", content: text, is_final: true });
+          // Log assistant response
+          logAssistantMessage(this.sessionId, text, this.config.modelId, this.config.provider);
         }
         break;
 
@@ -1476,10 +1491,13 @@ export class GatewaySession {
         this.sendChatUpdate(send);
         // Also send tool_call for TUI clients
         send({ type: "tool_call", tool: event.toolName });
+        // Log tool call
+        logToolCall(this.sessionId, event.toolName, event.args, this.config.modelId);
         break;
 
       case "tool_execution_end":
-        // Tool completed - no need to add to chat, agent will respond
+        // Log tool result
+        logToolResult(this.sessionId, event.toolName, event.result, event.isError);
         break;
 
       case "agent_end":
