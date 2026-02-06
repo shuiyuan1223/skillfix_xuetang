@@ -90,23 +90,39 @@ export function installFetchInterceptor(): void {
     // Clone response to read body without consuming it
     const clonedResponse = response.clone();
 
-    // Log response asynchronously
-    clonedResponse.text().then((text) => {
-      let responseBody: unknown;
-      try {
-        responseBody = JSON.parse(text);
-      } catch {
-        responseBody = text;
-      }
+    // Log response and fix malformed tool calls
+    const responseText = await clonedResponse.text();
+    let responseBody: unknown;
+    try {
+      responseBody = JSON.parse(responseText);
 
-      logEntry({
-        type: "response",
-        url,
-        data: responseBody,
-      });
+      // Fix: If content contains <tool_call> tags but tool_calls exists,
+      // clean up the malformed content (some models output both formats)
+      const choices = (responseBody as any)?.choices;
+      if (choices?.[0]?.message) {
+        const msg = choices[0].message;
+        if (msg.tool_calls?.length > 0 && typeof msg.content === "string") {
+          // Remove <tool_call>...</tool_call> tags from content
+          const cleaned = msg.content.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "").trim();
+          msg.content = cleaned || null;
+        }
+      }
+    } catch {
+      responseBody = responseText;
+    }
+
+    logEntry({
+      type: "response",
+      url,
+      data: responseBody,
     });
 
-    return response;
+    // Return modified response with fixed body
+    return new Response(JSON.stringify(responseBody), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
   };
 
   // @ts-expect-error - Bun's fetch type is slightly different
