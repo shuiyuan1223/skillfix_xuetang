@@ -1466,26 +1466,37 @@ export class GatewaySession {
         break;
 
       case "message_end":
-        // Log raw message for debugging
-        logRawMessageEvent(this.sessionId, "message_end", event.message, this.config.modelId);
-
         if (event.message.role === "assistant") {
           const content = event.message.content;
           let text = "";
+          let hasToolCall = false;
           for (const block of content) {
             if (block.type === "text") {
               text += block.text;
+            } else if (block.type === "toolCall") {
+              hasToolCall = true;
             }
           }
-          // Add final message to chat history
-          this.chatMessages.push({ role: "assistant", content: text });
-          this.isStreaming = false;
-          this.streamingContent = "";
-          this.sendChatUpdate(send);
-          // Also send simple text format for TUI clients
-          send({ type: "agent_text", content: text, is_final: true });
-          // Log assistant response
-          logAssistantMessage(this.sessionId, text, this.config.modelId, this.config.provider);
+
+          // Only add to history and log if there's actual text content
+          // Empty responses with stopReason "toolUse" are expected and skipped
+          if (text.trim()) {
+            this.chatMessages.push({ role: "assistant", content: text });
+            this.isStreaming = false;
+            this.streamingContent = "";
+            this.sendChatUpdate(send);
+            send({ type: "agent_text", content: text, is_final: true });
+            logAssistantMessage(this.sessionId, text, this.config.modelId, this.config.provider);
+          } else if (!hasToolCall) {
+            // Log unexpected empty response (no tool call, but also no text)
+            logRawMessageEvent(
+              this.sessionId,
+              "empty_response",
+              event.message,
+              this.config.modelId
+            );
+          }
+          // If hasToolCall and no text, this is expected - model is calling tools
         }
         break;
 
