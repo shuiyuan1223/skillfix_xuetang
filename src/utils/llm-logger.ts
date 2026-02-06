@@ -54,7 +54,7 @@ export function logRequest(
   sessionId: string,
   request: {
     systemPrompt: string;
-    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+    tools: Array<{ name: string; description?: string; parameters?: unknown }>;
     messages: unknown[];
   },
   model?: string,
@@ -95,12 +95,12 @@ export function logRequest(
   ];
 
   // Convert tools to OpenAI format
-  const apiTools = request.tools.map((t) => ({
+  const apiTools = request.tools.map((t: any) => ({
     type: "function",
     function: {
       name: t.name,
       description: t.description,
-      parameters: t.inputSchema,
+      parameters: t.parameters || t.inputSchema,
     },
   }));
 
