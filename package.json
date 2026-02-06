@@ -48,7 +48,8 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@sinclair/typebox": "^0.34.0",
     "commander": "^14.0.0",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "sqlite-vec": "^0.1.7-alpha.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",

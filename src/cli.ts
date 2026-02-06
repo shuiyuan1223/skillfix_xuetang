@@ -19,6 +19,7 @@ import { registerEvalCommand } from "./commands/eval.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerDoctorCommand } from "./commands/doctor.js";
 import { registerHuaweiCommand } from "./commands/huawei.js";
+import { registerAuthCommand } from "./commands/auth.js";
 import { registerWebCommand } from "./commands/web.js";
 
 const program = new Command();
@@ -82,6 +83,7 @@ registerDoctorCommand(program);
 
 // Data source integrations
 registerHuaweiCommand(program);
+registerAuthCommand(program);
 
 // Quick actions
 registerWebCommand(program);

@@ -4,7 +4,6 @@
 
 import type { Command } from "commander";
 import { traceCollector, Evaluator, analyzer, Optimizer } from "../evolution/index.js";
-import { getSystemPrompt } from "../agent/system-prompt.js";
 import { createPHAAgent } from "../agent/index.js";
 import { loadConfig } from "../utils/config.js";
 import {
@@ -108,7 +107,7 @@ export function registerEvalCommand(program: Command): void {
       const spinner = new Spinner(`Evaluating traces...`);
       spinner.start();
 
-      const agent = createPHAAgent({
+      const agent = await createPHAAgent({
         apiKey,
         provider: (options.provider || config.llm.provider) as "anthropic" | "openai" | "google",
         modelId: options.model || config.llm.modelId,

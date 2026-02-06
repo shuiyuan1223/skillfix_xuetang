@@ -13,8 +13,9 @@ import { getDataSource } from "../tools/health-data.js";
 import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
-import { loadConfig } from "../utils/config.js";
+import { loadConfig, getUserUuid } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
+import { getMemoryManager } from "../memory/index.js";
 
 // Install fetch interceptor to log raw LLM API requests/responses
 installFetchInterceptor();
@@ -31,6 +32,7 @@ import {
   generateHealthPage,
   generateSleepPage,
   generateActivityPage,
+  generateMemoryPage,
   generatePromptsPage,
   generateSkillsPage,
   generateEvolutionPage,
@@ -45,6 +47,7 @@ import {
   generatePromptRevertModal,
   generateAuthRequiredPage,
 } from "./pages.js";
+import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
 import {
   listPromptsTool,
   getPromptTool,
@@ -593,10 +596,15 @@ export class GatewaySession {
     "overview";
   private tracesPage = 0;
 
+  // Memory page state
+  private memoryTab: "profile" | "summary" | "logs" | "search" = "profile";
+  private memorySearchQuery: string | undefined;
+  private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
+
   constructor(config: GatewayConfig = {}, userUuid?: string) {
     this.config = config;
     this.sessionId = crypto.randomUUID();
-    this.userUuid = userUuid || null;
+    this.userUuid = userUuid || getUserUuid();
 
     // Use user-specific data source if userUuid is provided
     if (userUuid) {
@@ -616,13 +624,15 @@ export class GatewaySession {
     return huaweiAuth.isUserAuthenticated(this.userUuid);
   }
 
-  private getAgent(): PHAAgent {
+  private async getAgent(): Promise<PHAAgent> {
     if (!this.agent) {
-      this.agent = createPHAAgent({
+      this.agent = await createPHAAgent({
         apiKey: this.config.apiKey,
         provider: this.config.provider,
         modelId: this.config.modelId,
         baseUrl: this.config.baseUrl,
+        userUuid: this.userUuid || undefined,
+        sessionId: this.sessionId,
       });
     }
     return this.agent;
@@ -867,6 +877,23 @@ export class GatewaySession {
         break;
       }
 
+      case "memory": {
+        const mm = getMemoryManager();
+        const uuid = this.userUuid || getUserUuid();
+        mainPage = generateMemoryPage({
+          activeTab: this.memoryTab,
+          profileCompleteness: mm.getProfileCompleteness(uuid),
+          profile: mm.getProfile(uuid),
+          missingFields: mm.getAllMissingFields(uuid).map((f) => f.key),
+          memoryStats: mm.getMemoryStats(uuid),
+          memorySummary: loadMemorySummary(uuid) || "",
+          dailyLogs: getRecentDailyLogs(uuid, 7),
+          searchQuery: this.memorySearchQuery,
+          searchResults: this.memorySearchResults,
+        });
+        break;
+      }
+
       case "settings/prompts": {
         const promptsResult = await listPromptsTool.execute({});
         let content: string | undefined;
@@ -1006,11 +1033,26 @@ export class GatewaySession {
     this.isStreaming = true;
     this.streamingContent = "";
 
+    // Extract profile info from user message (non-blocking)
+    if (this.userUuid) {
+      try {
+        const mm = getMemoryManager();
+        const extracted = mm.extractAndUpdateProfile(this.userUuid, content);
+        if (Object.keys(extracted).length > 0) {
+          const fields = Object.keys(extracted).join(", ");
+          this.chatMessages.push({ role: "tool", content: `💾 已提取档案: ${fields}` });
+          this.sendChatUpdate(send);
+        }
+      } catch {
+        // Profile extraction is best-effort
+      }
+    }
+
     // Send updated chat UI immediately
     this.sendChatUpdate(send);
 
     try {
-      const agent = this.getAgent();
+      const agent = await this.getAgent();
 
       // Subscribe to agent events
       const unsubscribe = agent.subscribe((event) => {
@@ -1082,10 +1124,20 @@ export class GatewaySession {
     } else if (action === "set_user_uuid" && payload?.uuid) {
       // Update the session's user UUID (sent from frontend after generating/loading from cookie)
       this.userUuid = payload.uuid as string;
+      // Reset agent so it gets recreated with memory context on next message
+      this.agent = null;
       send({ type: "user_uuid_set", uuid: this.userUuid });
     } else if (action === "auth_complete") {
       // User completed OAuth, refresh the current view
       await this.handleNavigate(this.currentView, send);
+    }
+    // Memory search action
+    else if (action === "memory_search_submit" && payload?.query) {
+      const mm = getMemoryManager();
+      const uuid = this.userUuid || getUserUuid();
+      this.memorySearchQuery = payload.query as string;
+      this.memorySearchResults = await mm.searchAsync(uuid, this.memorySearchQuery);
+      await this.handleNavigate("memory", send);
     } else if (action === "show_toast" && payload?.message) {
       // Show a toast notification
       const variant = (payload.variant as "info" | "success" | "error") || "info";
@@ -1189,9 +1241,14 @@ export class GatewaySession {
     }
     // Evolution actions
     else if (action === "tab_change" && payload?.tab) {
-      type EvolutionTab = "overview" | "traces" | "evaluations" | "benchmark" | "suggestions";
-      this.evolutionTab = payload.tab as EvolutionTab;
-      await this.handleNavigate("settings/evolution", send);
+      if (this.currentView === "memory") {
+        this.memoryTab = payload.tab as "profile" | "summary" | "logs" | "search";
+        await this.handleNavigate("memory", send);
+      } else {
+        type EvolutionTab = "overview" | "traces" | "evaluations" | "benchmark" | "suggestions";
+        this.evolutionTab = payload.tab as EvolutionTab;
+        await this.handleNavigate("settings/evolution", send);
+      }
     } else if (action === "traces_page_change" && payload?.page !== undefined) {
       this.tracesPage = payload.page as number;
       await this.handleNavigate("settings/evolution", send);
@@ -1478,11 +1535,18 @@ export class GatewaySession {
         }
         break;
 
-      case "tool_execution_start":
-        this.chatMessages.push({ role: "tool", content: `Using ${event.toolName}...` });
+      case "tool_execution_start": {
+        const memoryToolLabels: Record<string, string> = {
+          memory_search: "🔍 搜索记忆...",
+          memory_save: "📝 保存到记忆...",
+          daily_log: "📝 记录到今日日志...",
+        };
+        const toolMsg = memoryToolLabels[event.toolName] || `Using ${event.toolName}...`;
+        this.chatMessages.push({ role: "tool", content: toolMsg });
         this.sendChatUpdate(send);
         send({ type: "tool_call", tool: event.toolName });
         break;
+      }
 
       case "agent_end":
         this.isStreaming = false;
@@ -1495,6 +1559,7 @@ export class GatewaySession {
 // WebSocket data type
 interface WSData {
   sessionId: string;
+  sessionKey: string;
   config: GatewayConfig;
   userUuid?: string;
 }
@@ -1543,7 +1608,7 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
         const userUuid = userUuidMatch ? userUuidMatch[1] : undefined;
 
         const success = server.upgrade(req, {
-          data: { sessionId, config, userUuid },
+          data: { sessionId, sessionKey: userUuid || sessionId, config, userUuid },
         });
         if (success) {
           return undefined;
@@ -1590,15 +1655,24 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
     websocket: {
       open(ws) {
         const { sessionId, config: wsConfig, userUuid } = ws.data;
-        const session = new GatewaySession(wsConfig, userUuid);
-        sessions.set(sessionId, session);
-        console.log(
-          `WebSocket connected: ${sessionId}${userUuid ? ` (user: ${userUuid.slice(0, 8)}...)` : ""}`
-        );
+        const key = userUuid || sessionId;
+        ws.data.sessionKey = key;
+
+        let session = sessions.get(key);
+        if (session) {
+          console.log(
+            `WebSocket reconnected: ${sessionId} → reusing session for ${key.slice(0, 8)}...`
+          );
+        } else {
+          session = new GatewaySession(wsConfig, userUuid);
+          sessions.set(key, session);
+          console.log(
+            `WebSocket connected: ${sessionId}${userUuid ? ` (user: ${userUuid.slice(0, 8)}...)` : ""}`
+          );
+        }
       },
       async message(ws, message) {
-        const { sessionId } = ws.data;
-        const session = sessions.get(sessionId);
+        const session = sessions.get(ws.data.sessionKey);
         if (!session) return;
 
         try {
@@ -1618,9 +1692,8 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
         }
       },
       close(ws) {
-        const { sessionId } = ws.data;
-        sessions.delete(sessionId);
-        console.log(`WebSocket disconnected: ${sessionId}`);
+        // Don't delete session — keep it alive for reconnection (page refresh)
+        console.log(`WebSocket disconnected: ${ws.data.sessionId}`);
       },
     },
   });

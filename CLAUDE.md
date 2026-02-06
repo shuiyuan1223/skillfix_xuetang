@@ -244,6 +244,19 @@ handleMessage(msg) {
 2. **UI 是 Agent 输出** - 不是前端产物
 3. **MCP 是唯一 API** - 工具通过 MCP 暴露
 4. **保持简单** - 避免过度设计
+5. **禁止 Emoji 做图标** - A2UI 组件的 `icon` 属性必须使用 icon name（如 `"heart"`, `"brain"`），**禁止使用 emoji**（如 ~~`"❤️"`~~, ~~`"🧠"`~~）。前端 `ui/src/main.ts` 的 `ICONS` 对象定义了所有可用图标。如需新图标，在 `ICONS` 中添加 Lucide 风格 SVG，并在 `EMOJI_TO_ICON` 中添加映射。
+6. **i18n 必须同步** - 新增界面文案必须同时更新 `src/locales/types.ts`、`zh-CN.ts`、`en.ts` 三个文件
+
+### 可用 Icon 名称
+
+```
+chat, heart, moon, activity, brain, file-text, puzzle, flask,
+user, bot, send, heart-pulse, stethoscope, wind, flame, timer,
+footprints, bed, star, zap, bar-chart, calendar, search, save,
+test-tube, lightbulb, target, link, shield, trending-up,
+trending-down, sparkles, info, settings, hospital, loader,
+check, x, alert-triangle, chevron-left, chevron-right
+```
 
 ## API 端点
 

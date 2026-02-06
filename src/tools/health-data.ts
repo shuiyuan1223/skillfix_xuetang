@@ -31,13 +31,13 @@ export function resetDataSource(): void {
 export const getHealthDataTool = {
   name: "get_health_data",
   description:
-    "获取指定日期的健康数据。返回步数(steps)、卡路里(calories)、活动时间(activeMinutes)、距离(distance)。当用户询问步数、运动量、活动情况时调用此工具。",
+    "Retrieve health metrics for a given date. Returns steps, calories, activeMinutes, distance. Call this when the user asks about steps, activity, or exercise.",
   parameters: {
     type: "object" as const,
     properties: {
       date: {
         type: "string",
-        description: "日期，格式为 YYYY-MM-DD。使用 'today' 表示今天。",
+        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
       },
     },
     required: ["date"],
@@ -56,13 +56,13 @@ export const getHealthDataTool = {
 export const getHeartRateTool = {
   name: "get_heart_rate",
   description:
-    "获取指定日期的心率数据。返回静息心率(restingAvg)、最高心率(maxToday)、最低心率(minToday)、每小时读数(readings)。当用户询问心率、心跳时调用此工具。",
+    "Retrieve heart rate data for a given date. Returns restingAvg, maxToday, minToday, and hourly readings. Call this when the user asks about heart rate.",
   parameters: {
     type: "object" as const,
     properties: {
       date: {
         type: "string",
-        description: "日期，格式为 YYYY-MM-DD。使用 'today' 表示今天。",
+        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
       },
     },
     required: ["date"],
@@ -81,13 +81,13 @@ export const getHeartRateTool = {
 export const getSleepTool = {
   name: "get_sleep",
   description:
-    "获取指定日期的睡眠数据。返回睡眠时长(durationHours)、质量评分(qualityScore)、入睡时间(bedTime)、起床时间(wakeTime)、睡眠阶段(stages: deep/light/rem/awake)。当用户询问睡眠、睡觉、休息情况时调用此工具。",
+    "Retrieve sleep data for a given date. Returns durationHours, qualityScore, bedTime, wakeTime, and stages (deep/light/rem/awake). Call this when the user asks about sleep or rest.",
   parameters: {
     type: "object" as const,
     properties: {
       date: {
         type: "string",
-        description: "日期，格式为 YYYY-MM-DD。使用 'today' 表示昨晚的睡眠。",
+        description: "Date in YYYY-MM-DD format. Use 'today' for last night's sleep.",
       },
     },
     required: ["date"],
@@ -113,13 +113,13 @@ export const getSleepTool = {
 export const getWorkoutsTool = {
   name: "get_workouts",
   description:
-    "获取指定日期的运动记录。返回运动类型(type)、时长(durationMinutes)、消耗卡路里(caloriesBurned)、距离(distanceKm)、平均心率(avgHeartRate)。当用户询问运动、锻炼、健身记录时调用此工具。",
+    "Retrieve workout records for a given date. Returns type, durationMinutes, caloriesBurned, distanceKm, avgHeartRate. Call this when the user asks about workouts or exercise.",
   parameters: {
     type: "object" as const,
     properties: {
       date: {
         type: "string",
-        description: "日期，格式为 YYYY-MM-DD。使用 'today' 表示今天。",
+        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
       },
     },
     required: ["date"],
@@ -139,7 +139,7 @@ export const getWorkoutsTool = {
 export const getWeeklySummaryTool = {
   name: "get_weekly_summary",
   description:
-    "获取过去7天的健康数据汇总。返回每日步数、总步数、平均步数、每日睡眠时长、平均睡眠时长。当用户询问本周、这周、最近几天的健康情况时调用此工具。",
+    "Retrieve a 7-day health summary. Returns daily steps, total/average steps, daily sleep hours, and average sleep. Call this when the user asks about their week or recent days.",
   parameters: {
     type: "object" as const,
     properties: {},

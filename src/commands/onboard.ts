@@ -15,6 +15,7 @@ import {
   PROVIDER_CONFIGS,
   type LLMProvider,
   type PHAConfig,
+  type EmbeddingConfig,
 } from "../utils/config.js";
 import { c, icons } from "../utils/cli-ui.js";
 import { HuaweiAuth, tokenStore } from "../data-sources/huawei/index.js";
@@ -173,6 +174,72 @@ async function authorizeHuawei(config: PHAConfig): Promise<boolean> {
   }
 }
 
+/**
+ * Setup embedding/vector search configuration
+ */
+async function setupEmbedding(config: PHAConfig): Promise<void> {
+  const currentEnabled = config.embedding?.enabled !== false;
+
+  const enabled = await p.confirm({
+    message: "Enable vector search for memory?",
+    initialValue: currentEnabled,
+  });
+  handleCancel(enabled);
+
+  if (!enabled) {
+    config.embedding = { enabled: false };
+    p.log.success("Vector search disabled");
+    return;
+  }
+
+  // Use LLM's OpenRouter API key if available
+  const hasApiKey = config.llm.provider === "openrouter" && config.llm.apiKey;
+
+  if (!hasApiKey) {
+    p.note(
+      [
+        "Vector search requires OpenRouter API key.",
+        "You can use your existing OpenRouter LLM key.",
+        "",
+        "Get a key from: https://openrouter.ai/keys",
+      ].join("\n"),
+      "Embedding API"
+    );
+  }
+
+  // Model selection
+  const model = await p.select({
+    message: "Embedding model",
+    options: [
+      {
+        value: "openai/text-embedding-3-small",
+        label: "text-embedding-3-small (Recommended)",
+        hint: "Fast, 1536 dims, $0.02/1M tokens",
+      },
+      {
+        value: "openai/text-embedding-3-large",
+        label: "text-embedding-3-large",
+        hint: "Higher quality, 3072 dims, $0.13/1M tokens",
+      },
+      {
+        value: "openai/text-embedding-ada-002",
+        label: "text-embedding-ada-002",
+        hint: "Legacy, 1536 dims",
+      },
+    ],
+    initialValue: config.embedding?.model || "openai/text-embedding-3-small",
+  });
+  handleCancel(model);
+
+  const modelStr = model as string;
+  config.embedding = {
+    enabled: true,
+    model: modelStr,
+  };
+
+  p.log.success(`Embedding: ${modelStr}`);
+}
+
 export function registerOnboardCommand(program: Command): void {
   program
     .command("onboard")
@@ -238,6 +305,11 @@ async function editConfig(config: PHAConfig): Promise<void> {
         },
         { value: "port", label: "Gateway Port", hint: String(config.gateway.port) },
         { value: "datasource", label: "Data Source", hint: config.dataSources.type },
+        {
+          value: "embedding",
+          label: "Embedding/Vector Search",
+          hint: config.embedding?.enabled !== false ? "enabled" : "disabled",
+        },
         { value: "done", label: "Save & Exit", hint: hasChanges ? "Save changes" : "No changes" },
       ],
     });
@@ -384,6 +456,11 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
       p.log.success(`Data source: ${config.dataSources.type}`);
       break;
     }
+
+    case "embedding": {
+      await setupEmbedding(config);
+      break;
+    }
   }
 }
 
@@ -393,15 +470,22 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
 async function runFullWizard(): Promise<void> {
   ensureConfigDir();
 
+  // Preserve existing userUuid or generate a new one
+  const existingConfig = isConfigured() ? loadConfig() : null;
+  const userUuid = existingConfig?.userUuid || crypto.randomUUID();
+
   const config: PHAConfig = {
+    userUuid,
     gateway: { port: 8000, autoStart: false },
     llm: { provider: "anthropic" },
     dataSources: { type: "mock" },
     tui: { theme: "dark", showToolCalls: true },
   };
 
+  p.log.info(`User ID: ${userUuid.slice(0, 8)}...`);
+
   // Step 1: LLM Provider
-  p.log.step("Step 1/3: LLM Provider");
+  p.log.step("Step 1/4: LLM Provider");
 
   // Check for existing API keys in environment
   const detectedProviders: string[] = [];
@@ -479,7 +563,7 @@ async function runFullWizard(): Promise<void> {
   config.llm.modelId = (model as string) || providerCfg.defaultModel;
 
   // Step 2: Gateway
-  p.log.step("Step 2/3: Gateway");
+  p.log.step("Step 2/4: Gateway");
 
   const port = await p.text({
     message: "Gateway port",
@@ -503,7 +587,7 @@ async function runFullWizard(): Promise<void> {
   config.gateway.autoStart = autoStart as boolean;
 
   // Step 3: Health Data
-  p.log.step("Step 3/3: Health Data");
+  p.log.step("Step 3/4: Health Data");
 
   const dataSource = await p.select({
     message: "Select health data source",
@@ -524,20 +608,54 @@ async function runFullWizard(): Promise<void> {
     config.dataSources.type = dataSource as "mock" | "huawei" | "apple";
   }
 
+  // Step 4: Embedding/Vector Search
+  p.log.step("Step 4/4: Memory & Vector Search");
+
+  // Auto-enable if using OpenRouter (can use same API key)
+  if (config.llm.provider === "openrouter") {
+    const enableEmbedding = await p.confirm({
+      message: "Enable vector search for memory? (uses OpenRouter embeddings)",
+      initialValue: true,
+    });
+    handleCancel(enableEmbedding);
+
+    if (enableEmbedding) {
+      config.embedding = {
+        enabled: true,
+        model: "openai/text-embedding-3-small",
+      };
+      p.log.success("Vector search enabled (text-embedding-3-small)");
+    } else {
+      config.embedding = { enabled: false };
+    }
+  } else {
+    p.note(
+      [
+        "Vector search requires OpenRouter API for embeddings.",
+        "You can enable it later via 'pha onboard'.",
+      ].join("\n"),
+      "Vector Search"
+    );
+    config.embedding = { enabled: false };
+  }
+
   // Save
   saveConfig(config);
 
   // Summary
   p.note(
     [
+      `User ID: ${config.userUuid?.slice(0, 8)}...`,
       `Provider: ${providerCfg.name}`,
       `Model: ${config.llm.modelId}`,
       `Gateway: http://localhost:${config.gateway.port}`,
       `Data Source: ${config.dataSources.type}`,
+      `Vector Search: ${config.embedding?.enabled ? config.embedding.model : "disabled"}`,
       `Config: ${getConfigPath()}`,
     ].join("\n"),
     "Configuration saved"
   );
 
-  p.outro(`Next: Run ${c.cyan("pha start")} or ${c.cyan("pha health")}`);
+  const nextCmd = config.dataSources.type === "huawei" ? `${c.cyan("pha auth")} then ` : "";
+  p.outro(`Next: Run ${nextCmd}${c.cyan("pha start")} or ${c.cyan("pha health")}`);
 }

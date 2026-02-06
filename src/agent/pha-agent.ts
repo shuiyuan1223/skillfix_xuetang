@@ -12,7 +12,11 @@ import {
 } from "@mariozechner/pi-agent-core";
 import { getModel, type Model, type KnownProvider } from "@mariozechner/pi-ai";
 import { healthAgentTools } from "./tools.js";
-import { getSystemPrompt } from "./system-prompt.js";
+import { getMemoryManager } from "../memory/index.js";
+import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/compaction.js";
+import { getUserUuid } from "../utils/config.js";
+import { preComputeHealthContext } from "./health-context.js";
+import { enrichWithSkills } from "./skill-trigger.js";
 
 export type LLMProvider =
   | "anthropic"
@@ -34,6 +38,10 @@ export interface PHAAgentConfig {
   apiKey?: string;
   /** Base URL for OpenAI-compatible APIs (not used for built-in providers) */
   baseUrl?: string;
+  /** User UUID for personalized memory (optional) */
+  userUuid?: string;
+  /** Session ID for transcript storage */
+  sessionId?: string;
   /** Additional agent options */
   agentOptions?: Partial<AgentOptions>;
 }
@@ -76,9 +84,11 @@ const BUILTIN_PROVIDERS: LLMProvider[] = [
 export class PHAAgent {
   private agent: Agent;
   private config: PHAAgentConfig;
+  private userUuid?: string;
 
-  constructor(config: PHAAgentConfig = {}) {
+  constructor(config: PHAAgentConfig = {}, healthContext?: string) {
     this.config = config;
+    this.userUuid = config.userUuid || getUserUuid();
 
     const provider = config.provider || "anthropic";
     const modelId = config.modelId || DEFAULT_MODELS[provider];
@@ -126,15 +136,50 @@ export class PHAAgent {
       throw new Error(`Model not found: ${modelId}`);
     }
 
+    // Build system prompt with memory and pre-computed health context
+    const memoryManager = getMemoryManager();
+    memoryManager.ensureUser(this.userUuid);
+    const systemPrompt = memoryManager.buildSystemPrompt(this.userUuid, healthContext);
+
+    // Build LLM config for compaction summarization
+    const llmConfig: LLMSummarizationConfig = {
+      provider: provider,
+      modelId: modelId,
+      apiKey: apiKey,
+      baseUrl: config.baseUrl,
+      api: model.api,
+    };
+
+    // Compaction flush: save context to memory before truncation
+    const compactionFlush = createCompactionFlush(
+      {
+        contextWindow: model.contextWindow || 128000,
+        reserveTokens: 20000,
+        flushThreshold: 4000,
+      },
+      memoryManager,
+      this.userUuid,
+      llmConfig,
+      config.sessionId
+    );
+
     this.agent = new Agent({
       initialState: {
-        systemPrompt: getSystemPrompt(),
+        systemPrompt,
         model,
         tools: healthAgentTools,
       },
       getApiKey: () => apiKey,
+      transformContext: compactionFlush,
       ...config.agentOptions,
     });
+  }
+
+  /**
+   * Get the user UUID associated with this agent
+   */
+  getUserUuid(): string | undefined {
+    return this.userUuid;
   }
 
   private getEnvApiKey(provider: LLMProvider): string | undefined {
@@ -154,9 +199,11 @@ export class PHAAgent {
 
   /**
    * Send a message to the agent.
+   * Automatically injects relevant skill guides based on message content.
    */
   async chat(message: string): Promise<void> {
-    await this.agent.prompt(message);
+    const enriched = enrichWithSkills(message);
+    await this.agent.prompt(enriched);
   }
 
   /**
@@ -178,7 +225,8 @@ export class PHAAgent {
     });
 
     try {
-      await this.agent.prompt(message);
+      const enriched = enrichWithSkills(message);
+      await this.agent.prompt(enriched);
       await this.agent.waitForIdle();
     } finally {
       unsubscribe();
@@ -225,8 +273,9 @@ export class PHAAgent {
 
 /**
  * Create a PHA Agent instance with environment-based configuration.
+ * Pre-computes health context for immediate availability in first turn.
  */
-export function createPHAAgent(config: PHAAgentConfig = {}): PHAAgent {
+export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAgent> {
   // Try to get API key from environment if not provided
   if (!config.apiKey) {
     const provider = config.provider || "anthropic";
@@ -236,5 +285,8 @@ export function createPHAAgent(config: PHAAgentConfig = {}): PHAAgent {
     }
   }
 
-  return new PHAAgent(config);
+  // Pre-compute recent health data context (best-effort)
+  const healthContext = await preComputeHealthContext();
+
+  return new PHAAgent(config, healthContext);
 }

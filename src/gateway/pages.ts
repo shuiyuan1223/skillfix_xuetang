@@ -7,6 +7,7 @@
 
 import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
 import { t } from "../locales/index.js";
+import type { UserProfile, MemorySearchResult } from "../memory/types.js";
 
 // Types for page data
 interface Message {
@@ -43,10 +44,11 @@ export function generateSidebar(activeView: string): A2UIMessage {
   // Main navigation
   const mainNav = ui.nav(
     [
-      { id: "chat", label: t("nav.chat"), icon: "💬" },
-      { id: "health", label: t("nav.health"), icon: "❤️" },
-      { id: "sleep", label: t("nav.sleep"), icon: "🌙" },
-      { id: "activity", label: t("nav.activity"), icon: "🏃" },
+      { id: "chat", label: t("nav.chat"), icon: "chat" },
+      { id: "health", label: t("nav.health"), icon: "heart" },
+      { id: "sleep", label: t("nav.sleep"), icon: "moon" },
+      { id: "activity", label: t("nav.activity"), icon: "activity" },
+      { id: "memory", label: t("nav.memory"), icon: "brain" },
     ],
     { activeId: activeView }
   );
@@ -58,9 +60,9 @@ export function generateSidebar(activeView: string): A2UIMessage {
   // Settings navigation
   const settingsNav = ui.nav(
     [
-      { id: "settings/prompts", label: t("nav.prompts"), icon: "📝" },
-      { id: "settings/skills", label: t("nav.skills"), icon: "🧩" },
-      { id: "settings/evolution", label: t("nav.evolution"), icon: "🔬" },
+      { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
+      { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
+      { id: "settings/evolution", label: t("nav.evolution"), icon: "flask" },
     ],
     { activeId: activeView }
   );
@@ -187,7 +189,7 @@ export function generateHealthPage(data: {
     title: data.heartRate.label,
     value: `${data.heartRate.value}`,
     subtitle: data.heartRate.unit,
-    icon: data.heartRate.icon || "❤️",
+    icon: data.heartRate.icon || "heart",
     trend: data.heartRate.trend,
     color: "#ef4444",
   });
@@ -196,7 +198,7 @@ export function generateHealthPage(data: {
     title: data.restingHeartRate.label,
     value: `${data.restingHeartRate.value}`,
     subtitle: data.restingHeartRate.unit,
-    icon: data.restingHeartRate.icon || "💓",
+    icon: data.restingHeartRate.icon || "heart-pulse",
     trend: data.restingHeartRate.trend,
     color: "#f97316",
   });
@@ -205,7 +207,7 @@ export function generateHealthPage(data: {
     title: data.spo2.label,
     value: `${data.spo2.value}`,
     subtitle: data.spo2.unit,
-    icon: data.spo2.icon || "🫁",
+    icon: data.spo2.icon || "wind",
     trend: data.spo2.trend,
     color: "#10b981",
   });
@@ -214,7 +216,7 @@ export function generateHealthPage(data: {
     title: data.stress.label,
     value: `${data.stress.value}`,
     subtitle: data.stress.unit,
-    icon: data.stress.icon || "🧠",
+    icon: data.stress.icon || "brain",
     trend: data.stress.trend,
     color: "#8b5cf6",
   });
@@ -305,7 +307,7 @@ export function generateSleepPage(data: {
     title: data.duration.label,
     value: `${data.duration.value}`,
     subtitle: data.duration.unit,
-    icon: "🌙",
+    icon: "moon",
     trend: data.duration.trend,
     color: "#8b5cf6",
   });
@@ -314,7 +316,7 @@ export function generateSleepPage(data: {
     title: data.quality.label,
     value: `${data.quality.value}`,
     subtitle: data.quality.unit,
-    icon: "⭐",
+    icon: "star",
     trend: data.quality.trend,
     color: "#f59e0b",
   });
@@ -323,7 +325,7 @@ export function generateSleepPage(data: {
     title: data.deepSleep.label,
     value: `${data.deepSleep.value}`,
     subtitle: data.deepSleep.unit,
-    icon: "😴",
+    icon: "bed",
     trend: data.deepSleep.trend,
     color: "#6366f1",
   });
@@ -372,7 +374,7 @@ export function generateActivityPage(data: {
     title: data.steps.label,
     value: `${data.steps.value}`,
     subtitle: data.steps.unit,
-    icon: "👟",
+    icon: "footprints",
     trend: data.steps.trend,
     color: "#10b981",
   });
@@ -381,7 +383,7 @@ export function generateActivityPage(data: {
     title: data.calories.label,
     value: `${data.calories.value}`,
     subtitle: data.calories.unit,
-    icon: "🔥",
+    icon: "flame",
     trend: data.calories.trend,
     color: "#f97316",
   });
@@ -390,7 +392,7 @@ export function generateActivityPage(data: {
     title: data.activeMinutes.label,
     value: `${data.activeMinutes.value}`,
     subtitle: data.activeMinutes.unit,
-    icon: "⏱️",
+    icon: "timer",
     trend: data.activeMinutes.trend,
     color: "#3b82f6",
   });
@@ -412,6 +414,225 @@ export function generateActivityPage(data: {
   // Content container
   const content = ui.column([statsGrid, chartCard], { gap: 24, padding: 24 });
 
+  const root = ui.column([header, content], { gap: 0 });
+
+  return ui.build(root);
+}
+
+// ============================================================================
+// Memory Page Generator
+// ============================================================================
+
+const PROFILE_FIELD_LABELS: Record<string, { zh: string; en: string }> = {
+  nickname: { zh: "昵称", en: "Nickname" },
+  gender: { zh: "性别", en: "Gender" },
+  birthYear: { zh: "出生年份", en: "Birth Year" },
+  height: { zh: "身高", en: "Height" },
+  weight: { zh: "体重", en: "Weight" },
+  conditions: { zh: "慢性病", en: "Conditions" },
+  allergies: { zh: "过敏史", en: "Allergies" },
+  medications: { zh: "用药", en: "Medications" },
+  "goals.primary": { zh: "主要目标", en: "Primary Goal" },
+  "goals.dailySteps": { zh: "每日步数目标", en: "Steps Goal" },
+  "goals.sleepHours": { zh: "睡眠目标", en: "Sleep Goal" },
+  "lifestyle.sleepSchedule": { zh: "作息", en: "Sleep Schedule" },
+  "lifestyle.exercisePreference": { zh: "运动偏好", en: "Exercise" },
+  "lifestyle.dietPreference": { zh: "饮食偏好", en: "Diet" },
+};
+
+function formatProfileValue(key: string, value: unknown): string {
+  if (value === undefined || value === null) return "-";
+  if (key === "gender") return value === "male" ? "男 / Male" : "女 / Female";
+  if (key === "height") return `${value}cm`;
+  if (key === "weight") return `${value}kg`;
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "-";
+  return String(value);
+}
+
+function getProfileRows(profile: UserProfile): Array<{ field: string; value: string }> {
+  const rows: Array<{ field: string; value: string }> = [];
+
+  const fieldMap: Array<{ key: string; getter: () => unknown }> = [
+    { key: "nickname", getter: () => profile.nickname },
+    { key: "gender", getter: () => profile.gender },
+    { key: "birthYear", getter: () => profile.birthYear },
+    { key: "height", getter: () => profile.height },
+    { key: "weight", getter: () => profile.weight },
+    { key: "conditions", getter: () => profile.conditions },
+    { key: "allergies", getter: () => profile.allergies },
+    { key: "medications", getter: () => profile.medications },
+    { key: "goals.primary", getter: () => profile.goals?.primary },
+    { key: "goals.dailySteps", getter: () => profile.goals?.dailySteps },
+    { key: "goals.sleepHours", getter: () => profile.goals?.sleepHours },
+    { key: "lifestyle.sleepSchedule", getter: () => profile.lifestyle?.sleepSchedule },
+    { key: "lifestyle.exercisePreference", getter: () => profile.lifestyle?.exercisePreference },
+    { key: "lifestyle.dietPreference", getter: () => profile.lifestyle?.dietPreference },
+  ];
+
+  for (const { key, getter } of fieldMap) {
+    const label = PROFILE_FIELD_LABELS[key];
+    rows.push({
+      field: label ? `${label.zh} (${label.en})` : key,
+      value: formatProfileValue(key, getter()),
+    });
+  }
+
+  return rows;
+}
+
+export function generateMemoryPage(data: {
+  activeTab: "profile" | "summary" | "logs" | "search";
+  profileCompleteness: number;
+  profile: UserProfile;
+  missingFields: string[];
+  memoryStats: { totalChunks: number; lastUpdated: number };
+  memorySummary: string;
+  dailyLogs: Array<{ date: string; preview: string }>;
+  searchQuery?: string;
+  searchResults?: MemorySearchResult[];
+}): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+
+  // Header
+  const title = ui.text(t("memory.title"), "h2");
+  const subtitle = ui.text(t("memory.subtitle"), "caption");
+  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+
+  // Tab contents
+  const tabContentIds: Record<string, string> = {};
+
+  // Tab 1: Profile — stats + profile table
+  if (data.activeTab === "profile") {
+    const completenessCard = ui.statCard({
+      title: t("memory.completeness"),
+      value: `${data.profileCompleteness}%`,
+      icon: "bar-chart",
+      color:
+        data.profileCompleteness >= 80
+          ? "#10b981"
+          : data.profileCompleteness >= 50
+            ? "#f59e0b"
+            : "#ef4444",
+    });
+
+    const chunksCard = ui.statCard({
+      title: t("memory.totalChunks"),
+      value: data.memoryStats.totalChunks,
+      icon: "brain",
+      color: "#8b5cf6",
+    });
+
+    const missingCard = ui.statCard({
+      title: t("memory.missingFields"),
+      value: data.missingFields.length,
+      subtitle:
+        data.missingFields.length > 0
+          ? data.missingFields.map((f) => PROFILE_FIELD_LABELS[f]?.zh || f).join(", ")
+          : undefined,
+      icon: "file-text",
+      color: data.missingFields.length === 0 ? "#10b981" : "#f97316",
+    });
+
+    const statsGrid = ui.grid([completenessCard, chunksCard, missingCard], { columns: 3, gap: 16 });
+
+    const profileRows = getProfileRows(data.profile);
+    const profileTable = ui.dataTable(
+      [
+        { key: "field", label: t("memory.field") },
+        { key: "value", label: t("memory.value") },
+      ],
+      profileRows
+    );
+    const profileCard = ui.card([profileTable], { title: t("memory.profile"), padding: 20 });
+
+    tabContentIds["profile"] = ui.column([statsGrid, profileCard], { padding: 16, gap: 16 });
+  }
+
+  // Tab 2: Summary — MEMORY.md viewer
+  if (data.activeTab === "summary") {
+    if (data.memorySummary) {
+      const editor = ui.codeEditor(data.memorySummary, {
+        language: "markdown",
+        readonly: true,
+        height: 400,
+      });
+      tabContentIds["summary"] = ui.column([editor], { padding: 16 });
+    } else {
+      tabContentIds["summary"] = ui.column([ui.text(t("memory.noResults"), "caption")], {
+        padding: 16,
+      });
+    }
+  }
+
+  // Tab 3: Logs — daily logs table
+  if (data.activeTab === "logs") {
+    if (data.dailyLogs.length > 0) {
+      const logRows = data.dailyLogs.map((log) => ({
+        date: log.date,
+        preview: log.preview,
+      }));
+      const logsTable = ui.table(
+        [
+          { key: "date", label: t("evolution.time") },
+          { key: "preview", label: t("memory.value") },
+        ],
+        logRows
+      );
+      tabContentIds["logs"] = ui.column([logsTable], { padding: 16 });
+    } else {
+      tabContentIds["logs"] = ui.column([ui.text(t("memory.noResults"), "caption")], {
+        padding: 16,
+      });
+    }
+  }
+
+  // Tab 4: Search — input + results
+  if (data.activeTab === "search") {
+    const searchInput = ui.formInput("query", "text", {
+      placeholder: t("memory.searchPlaceholder"),
+      value: data.searchQuery || "",
+    });
+    const searchBtn = ui.button(t("memory.search"), "memory_search_submit", {
+      variant: "primary",
+      size: "sm",
+    });
+    const searchRow = ui.row([searchInput, searchBtn], { gap: 8, align: "end" });
+    const searchChildren: string[] = [searchRow];
+
+    if (data.searchQuery && data.searchResults) {
+      if (data.searchResults.length === 0) {
+        searchChildren.push(ui.text(t("memory.noResults"), "caption"));
+      } else {
+        for (const result of data.searchResults) {
+          const scoreBadge = ui.badge(`${t("memory.score")}: ${Math.round(result.score * 100)}%`, {
+            variant: result.score >= 0.7 ? "success" : result.score >= 0.4 ? "warning" : "default",
+          });
+          const pathText = ui.text(result.path, "caption");
+          const snippetText = ui.text(result.snippet, "body");
+          const resultHeader = ui.row([pathText, scoreBadge], { gap: 8, align: "center" });
+          const resultCard = ui.card([resultHeader, snippetText], { padding: 12 });
+          searchChildren.push(resultCard);
+        }
+      }
+    }
+
+    tabContentIds["search"] = ui.column(searchChildren, { padding: 16, gap: 12 });
+  }
+
+  // Assemble tabs
+  const tabs = ui.tabs(
+    [
+      { id: "profile", label: t("memory.tabProfile"), icon: "user" },
+      { id: "summary", label: t("memory.tabSummary"), icon: "brain" },
+      { id: "logs", label: t("memory.tabLogs"), icon: "calendar" },
+      { id: "search", label: t("memory.tabSearch"), icon: "search" },
+    ],
+    data.activeTab,
+    tabContentIds
+  );
+
+  // Content container — tabs directly without card wrapper to avoid double glass effect
+  const content = ui.column([tabs], { gap: 24, padding: 24 });
   const root = ui.column([header, content], { gap: 0 });
 
   return ui.build(root);
@@ -707,7 +928,7 @@ export function generateEvolutionPage(data: {
     const totalTraces = ui.statCard({
       title: t("evolution.totalTraces"),
       value: data.stats.totalCount,
-      icon: "📊",
+      icon: "bar-chart",
       color: "#667eea",
     });
 
@@ -715,7 +936,7 @@ export function generateEvolutionPage(data: {
       title: t("evolution.averageScore"),
       value: Math.round(data.stats.averageScore),
       subtitle: t("evolution.outOf100"),
-      icon: "⭐",
+      icon: "star",
       color: "#f59e0b",
     });
 
@@ -843,11 +1064,11 @@ export function generateEvolutionPage(data: {
 
   const tabs = ui.tabs(
     [
-      { id: "overview", label: t("evolution.overview"), icon: "📊" },
-      { id: "traces", label: t("evolution.traces"), icon: "📝" },
-      { id: "evaluations", label: t("evolution.evaluations"), icon: "⭐" },
-      { id: "benchmark", label: t("evolution.benchmark"), icon: "🧪" },
-      { id: "suggestions", label: t("evolution.suggestions"), icon: "💡" },
+      { id: "overview", label: t("evolution.overview"), icon: "bar-chart" },
+      { id: "traces", label: t("evolution.traces"), icon: "file-text" },
+      { id: "evaluations", label: t("evolution.evaluations"), icon: "star" },
+      { id: "benchmark", label: t("evolution.benchmark"), icon: "test-tube" },
+      { id: "suggestions", label: t("evolution.suggestions"), icon: "lightbulb" },
     ],
     data.activeTab,
     tabContentIds
@@ -871,10 +1092,10 @@ export function generateToast(
   const ui = new A2UIGenerator("toast");
 
   const icons: Record<string, string> = {
-    success: "✓",
-    error: "✕",
-    info: "ℹ",
-    warning: "⚠",
+    success: "check",
+    error: "x",
+    info: "info",
+    warning: "alert-triangle",
   };
 
   const icon = ui.text(icons[variant], "body");
@@ -1039,13 +1260,13 @@ export function generateEvaluationDetailModal(evaluation: EvaluationDetail): A2U
 
 function getScoreIcon(key: string): string {
   const icons: Record<string, string> = {
-    accuracy: "🎯",
-    relevance: "🔗",
-    helpfulness: "💡",
-    safety: "🛡️",
-    completeness: "✓",
+    accuracy: "target",
+    relevance: "link",
+    helpfulness: "lightbulb",
+    safety: "shield",
+    completeness: "check",
   };
-  return icons[key] || "📊";
+  return icons[key] || "bar-chart";
 }
 
 function getScoreColor(score: number): string {
@@ -1185,17 +1406,17 @@ export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2U
     const beforeCard = ui.statCard({
       title: "Before",
       value: suggestion.validationResults.before,
-      icon: "📉",
+      icon: "trending-down",
     });
     const afterCard = ui.statCard({
       title: "After",
       value: suggestion.validationResults.after,
-      icon: "📈",
+      icon: "trending-up",
     });
     const improvementCard = ui.statCard({
       title: "Improvement",
       value: `+${suggestion.validationResults.improvement}%`,
-      icon: "✨",
+      icon: "sparkles",
       color: "#10b981",
     });
     const validGrid = ui.grid([beforeCard, afterCard, improvementCard], { columns: 3, gap: 12 });

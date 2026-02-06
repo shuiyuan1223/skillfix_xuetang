@@ -12,6 +12,9 @@
 import * as fs from "fs";
 import * as path from "path";
 
+/** Fallback user UUID (used only if config has no userUuid) */
+const FALLBACK_USER_UUID = "a755451c-938e-4cea-b7a6-b66b205949cf";
+
 export type LLMProvider =
   | "anthropic"
   | "openai"
@@ -48,7 +51,16 @@ export interface MCPConfig {
   };
 }
 
+export interface EmbeddingConfig {
+  /** Embedding model (default: openai/text-embedding-3-small) */
+  model?: string;
+  /** Whether embedding/vector search is enabled */
+  enabled?: boolean;
+}
+
 export interface PHAConfig {
+  /** User UUID for memory/profile isolation */
+  userUuid?: string;
   gateway: {
     port: number;
     autoStart: boolean;
@@ -63,6 +75,7 @@ export interface PHAConfig {
     showToolCalls: boolean;
   };
   mcp?: MCPConfig;
+  embedding?: EmbeddingConfig;
 }
 
 // Provider configurations
@@ -324,4 +337,12 @@ export function getModelId(provider?: LLMProvider): string {
   // Then use provider default
   const providerConfig = PROVIDER_CONFIGS[p];
   return providerConfig?.defaultModel || "default";
+}
+
+/**
+ * Get the user UUID from config, falling back to the built-in default
+ */
+export function getUserUuid(): string {
+  const config = loadConfig();
+  return config.userUuid || FALLBACK_USER_UUID;
 }

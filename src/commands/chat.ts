@@ -28,7 +28,7 @@ export function registerChatCommand(program: Command): void {
       }
 
       const providerCfg = PROVIDER_CONFIGS[provider as LLMProvider];
-      const agent = createPHAAgent({
+      const agent = await createPHAAgent({
         apiKey,
         provider: provider as "anthropic" | "openai" | "google",
         modelId: options.model || config.llm.modelId,

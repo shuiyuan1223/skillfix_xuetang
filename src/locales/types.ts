@@ -9,6 +9,7 @@ export interface LocaleMessages {
     health: string;
     sleep: string;
     activity: string;
+    memory: string;
     prompts: string;
     skills: string;
     evolution: string;
@@ -151,6 +152,28 @@ export interface LocaleMessages {
     type: string;
     target: string;
     rationale: string;
+  };
+
+  // Memory page
+  memory: {
+    title: string;
+    subtitle: string;
+    completeness: string;
+    totalChunks: string;
+    missingFields: string;
+    profile: string;
+    field: string;
+    value: string;
+    memorySummary: string;
+    recentLogs: string;
+    searchPlaceholder: string;
+    search: string;
+    noResults: string;
+    score: string;
+    tabProfile: string;
+    tabSummary: string;
+    tabLogs: string;
+    tabSearch: string;
   };
 
   // OAuth / Authorization

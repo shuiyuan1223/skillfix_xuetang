@@ -13,6 +13,8 @@ import {
   getWorkoutsTool,
   getWeeklySummaryTool,
 } from "../tools/health-data.js";
+import { memorySearchTool, memorySaveTool, dailyLogTool } from "../tools/memory-tools.js";
+import { getSkillTool } from "../tools/skill-tools.js";
 
 // Define TypeBox schemas for each tool
 const DateSchema = Type.Object({
@@ -107,6 +109,100 @@ export const weeklySummaryAgentTool: AgentTool<typeof EmptySchema> = {
   },
 };
 
+// ========================================================================
+// Memory Tools as AgentTools
+// ========================================================================
+
+const MemorySearchSchema = Type.Object({
+  query: Type.String({ description: "Search query for user memories" }),
+  maxResults: Type.Optional(Type.Number({ description: "Max results to return, default 5" })),
+});
+
+const MemorySaveSchema = Type.Object({
+  content: Type.String({ description: "Content to save to long-term memory" }),
+});
+
+const DailyLogSchema = Type.Object({
+  content: Type.String({ description: "Daily conversation summary to log" }),
+});
+
+export const memorySearchAgentTool: AgentTool<typeof MemorySearchSchema> = {
+  name: memorySearchTool.name,
+  description: memorySearchTool.description,
+  label: "Search Memory",
+  parameters: MemorySearchSchema,
+  execute: async (
+    _toolCallId: string,
+    params: { query: string; maxResults?: number }
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await memorySearchTool.execute(params);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
+export const memorySaveAgentTool: AgentTool<typeof MemorySaveSchema> = {
+  name: memorySaveTool.name,
+  description: memorySaveTool.description,
+  label: "Save Memory",
+  parameters: MemorySaveSchema,
+  execute: async (
+    _toolCallId: string,
+    params: { content: string }
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await memorySaveTool.execute(params);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
+export const dailyLogAgentTool: AgentTool<typeof DailyLogSchema> = {
+  name: dailyLogTool.name,
+  description: dailyLogTool.description,
+  label: "Write Daily Log",
+  parameters: DailyLogSchema,
+  execute: async (
+    _toolCallId: string,
+    params: { content: string }
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await dailyLogTool.execute(params);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
+// ========================================================================
+// Skill Tools as AgentTools
+// ========================================================================
+
+const GetSkillSchema = Type.Object({
+  name: Type.String({ description: "Skill name (e.g. 'sleep-coach', 'heart-monitor')" }),
+});
+
+export const getSkillAgentTool: AgentTool<typeof GetSkillSchema> = {
+  name: getSkillTool.name,
+  description:
+    "Load a professional skill guide by name. Use this when the conversation topic matches an available skill to get detailed expert guidance before responding.",
+  label: "Load Skill Guide",
+  parameters: GetSkillSchema,
+  execute: async (
+    _toolCallId: string,
+    params: { name: string }
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await getSkillTool.execute(params);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
 // All health tools as AgentTools - use 'any' to avoid variance issues
 export const healthAgentTools: AgentTool<any>[] = [
   healthDataAgentTool,
@@ -114,4 +210,8 @@ export const healthAgentTools: AgentTool<any>[] = [
   sleepAgentTool,
   workoutsAgentTool,
   weeklySummaryAgentTool,
+  memorySearchAgentTool,
+  memorySaveAgentTool,
+  dailyLogAgentTool,
+  getSkillAgentTool,
 ];
