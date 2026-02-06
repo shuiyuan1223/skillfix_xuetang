@@ -4,7 +4,7 @@
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 
-.PHONY: all install uninstall clean check-deps help sync sync-dist sync-win
+.PHONY: all install uninstall clean check-deps help sync sync-dist
 
 # Default target
 all: help
@@ -24,7 +24,6 @@ help:
 	@echo "  make test       - Run tests"
 	@echo "  make sync REMOTE=user@host:path       - Sync, build, install and restart on remote"
 	@echo "  make sync-dist REMOTE=user@host:path  - Sync pre-built dist and restart on remote"
-	@echo "  make sync-win REMOTE=user@host:path   - Windows version (uses tar+scp)"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - Bun (https://bun.sh)"
@@ -166,48 +165,5 @@ endif
 	@ssh $(REMOTE_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(REMOTE_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
 	@sleep 2
 	@ssh $(REMOTE_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
-	@echo ""
-	@echo "==> Sync complete!"
-
-# Windows-compatible sync (uses tar + scp instead of rsync)
-# Usage: make sync-win REMOTE=user@host:/path/to/pha
-sync-win:
-ifndef REMOTE
-	@echo "Error: REMOTE not specified"
-	@echo "Usage: make sync-win REMOTE=user@host:/path/to/pha"
-	@exit 1
-endif
-	@echo "==> Git pull..."
-	@git pull
-	@echo ""
-	@echo "==> Building locally..."
-	@bun run build
-	@echo ""
-	@echo "==> Creating archive..."
-	@tar -czf pha-sync.tar.gz \
-		--exclude='node_modules' \
-		--exclude='.git' \
-		--exclude='ui/node_modules' \
-		--exclude='.pha' \
-		--exclude='.env' \
-		--exclude='*.log' \
-		.
-	@echo ""
-	@echo "==> Uploading to remote..."
-	$(eval REMOTE_HOST := $(firstword $(subst :, ,$(REMOTE))))
-	$(eval REMOTE_PATH := $(lastword $(subst :, ,$(REMOTE))))
-	@scp pha-sync.tar.gz $(REMOTE_HOST):/tmp/
-	@echo ""
-	@echo "==> Extracting on remote..."
-	@ssh $(REMOTE_HOST) "mkdir -p $(REMOTE_PATH) && cd $(REMOTE_PATH) && tar -xzf /tmp/pha-sync.tar.gz && rm /tmp/pha-sync.tar.gz"
-	@echo ""
-	@echo "==> Installing dependencies on remote..."
-	@ssh $(REMOTE_HOST) "cd $(REMOTE_PATH) && bun install"
-	@echo ""
-	@echo "==> Restarting service on remote..."
-	@ssh $(REMOTE_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(REMOTE_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
-	@sleep 2
-	@ssh $(REMOTE_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
-	@rm -f pha-sync.tar.gz
 	@echo ""
 	@echo "==> Sync complete!"
