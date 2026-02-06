@@ -4,10 +4,13 @@
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 
-.PHONY: all install uninstall clean check-deps help
+.PHONY: all install uninstall clean check-deps help sync sync-dist
 
 # Default target
 all: help
+
+# Remote sync target (user@host:path)
+REMOTE ?=
 
 # Help message
 help:
@@ -19,6 +22,8 @@ help:
 	@echo "  make build      - Build without installing"
 	@echo "  make clean      - Clean build artifacts"
 	@echo "  make test       - Run tests"
+	@echo "  make sync REMOTE=user@host:path       - Git pull and rsync source to remote"
+	@echo "  make sync-dist REMOTE=user@host:path  - Sync with pre-built dist"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - Bun (https://bun.sh)"
@@ -92,3 +97,55 @@ uninstall:
 clean:
 	@rm -rf dist ui/dist node_modules
 	@echo "Cleaned."
+
+# Sync to remote server (incremental)
+# Usage: make sync REMOTE=user@host:/path/to/pha
+sync:
+ifndef REMOTE
+	@echo "Error: REMOTE not specified"
+	@echo "Usage: make sync REMOTE=user@host:/path/to/pha"
+	@exit 1
+endif
+	@echo "==> Git pull..."
+	@git pull
+	@echo ""
+	@echo "==> Syncing to $(REMOTE)..."
+	@rsync -avz --progress --delete \
+		--exclude 'node_modules' \
+		--exclude '.git' \
+		--exclude 'dist' \
+		--exclude 'ui/dist' \
+		--exclude 'ui/node_modules' \
+		--exclude '.pha' \
+		--exclude '.env' \
+		--exclude '*.log' \
+		./ $(REMOTE)/
+	@echo ""
+	@echo "==> Sync complete!"
+	@echo "Run on remote: cd <path> && bun install && bun run build"
+
+# Sync with dist (pre-built version)
+sync-dist:
+ifndef REMOTE
+	@echo "Error: REMOTE not specified"
+	@echo "Usage: make sync-dist REMOTE=user@host:/path/to/pha"
+	@exit 1
+endif
+	@echo "==> Git pull..."
+	@git pull
+	@echo ""
+	@echo "==> Building locally..."
+	@bun run build
+	@echo ""
+	@echo "==> Syncing to $(REMOTE) (with dist)..."
+	@rsync -avz --progress --delete \
+		--exclude 'node_modules' \
+		--exclude '.git' \
+		--exclude 'ui/node_modules' \
+		--exclude '.pha' \
+		--exclude '.env' \
+		--exclude '*.log' \
+		./ $(REMOTE)/
+	@echo ""
+	@echo "==> Sync complete! (with pre-built dist)"
+	@echo "Run on remote: cd <path> && bun install && pha start"
