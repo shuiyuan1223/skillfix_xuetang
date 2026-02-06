@@ -24,7 +24,7 @@ function getLogFile(): string {
 export interface LLMLogEntry {
   timestamp: string;
   sessionId?: string;
-  type: "request" | "response" | "tool_call" | "tool_result" | "error";
+  type: "request" | "response" | "tool_call" | "tool_result" | "error" | "api_request";
   model?: string;
   provider?: string;
   data: unknown;
@@ -140,5 +140,36 @@ export function logError(sessionId: string, error: unknown): void {
     sessionId,
     type: "error",
     data: { error: error instanceof Error ? error.message : String(error) },
+  });
+}
+
+/**
+ * Log the full API request context (system prompt, tools, messages)
+ * Called at the start of each turn to capture what's being sent to the LLM
+ */
+export function logApiRequest(
+  sessionId: string,
+  context: {
+    systemPrompt: string;
+    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+    messages: unknown[];
+  },
+  model?: string,
+  provider?: string
+): void {
+  logLLM({
+    sessionId,
+    type: "api_request",
+    model,
+    provider,
+    data: {
+      systemPrompt: context.systemPrompt,
+      tools: context.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.inputSchema,
+      })),
+      messages: context.messages,
+    },
   });
 }

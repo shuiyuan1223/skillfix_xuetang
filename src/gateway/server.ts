@@ -21,6 +21,7 @@ import {
   logToolResult,
   logError,
   logRawMessageEvent,
+  logApiRequest,
 } from "../utils/llm-logger.js";
 import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
 import { getUserStore } from "../data-sources/huawei/user-store.js";
@@ -1447,6 +1448,23 @@ export class GatewaySession {
 
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
     switch (event.type) {
+      case "turn_start":
+        // Log full API request context before each LLM call
+        if (this.agent) {
+          const agentState = this.agent.getAgent().state;
+          logApiRequest(
+            this.sessionId,
+            {
+              systemPrompt: agentState.systemPrompt,
+              tools: agentState.tools || [],
+              messages: agentState.messages,
+            },
+            this.config.modelId,
+            this.config.provider
+          );
+        }
+        break;
+
       case "message_start":
       case "message_update":
         // Stream partial content
