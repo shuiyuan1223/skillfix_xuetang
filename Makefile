@@ -22,8 +22,8 @@ help:
 	@echo "  make build      - Build without installing"
 	@echo "  make clean      - Clean build artifacts"
 	@echo "  make test       - Run tests"
-	@echo "  make sync REMOTE=user@host:path       - Git pull and rsync source to remote"
-	@echo "  make sync-dist REMOTE=user@host:path  - Sync with pre-built dist"
+	@echo "  make sync REMOTE=user@host:path       - Sync, build, install and restart on remote"
+	@echo "  make sync-dist REMOTE=user@host:path  - Sync pre-built dist and restart on remote"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - Bun (https://bun.sh)"
@@ -98,7 +98,7 @@ clean:
 	@rm -rf dist ui/dist node_modules
 	@echo "Cleaned."
 
-# Sync to remote server (incremental)
+# Sync to remote server (incremental) + install + restart
 # Usage: make sync REMOTE=user@host:/path/to/pha
 sync:
 ifndef REMOTE
@@ -121,10 +121,19 @@ endif
 		--exclude '*.log' \
 		./ $(REMOTE)/
 	@echo ""
+	@echo "==> Installing on remote..."
+	$(eval REMOTE_HOST := $(shell echo $(REMOTE) | cut -d: -f1))
+	$(eval REMOTE_PATH := $(shell echo $(REMOTE) | cut -d: -f2))
+	@ssh $(REMOTE_HOST) "cd $(REMOTE_PATH) && make install"
+	@echo ""
+	@echo "==> Restarting service on remote..."
+	@ssh $(REMOTE_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(REMOTE_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
+	@sleep 2
+	@ssh $(REMOTE_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
+	@echo ""
 	@echo "==> Sync complete!"
-	@echo "Run on remote: cd <path> && bun install && bun run build"
 
-# Sync with dist (pre-built version)
+# Sync with dist (pre-built version) + install + restart
 sync-dist:
 ifndef REMOTE
 	@echo "Error: REMOTE not specified"
@@ -147,5 +156,14 @@ endif
 		--exclude '*.log' \
 		./ $(REMOTE)/
 	@echo ""
-	@echo "==> Sync complete! (with pre-built dist)"
-	@echo "Run on remote: cd <path> && bun install && pha start"
+	@echo "==> Installing dependencies on remote..."
+	$(eval REMOTE_HOST := $(shell echo $(REMOTE) | cut -d: -f1))
+	$(eval REMOTE_PATH := $(shell echo $(REMOTE) | cut -d: -f2))
+	@ssh $(REMOTE_HOST) "cd $(REMOTE_PATH) && bun install"
+	@echo ""
+	@echo "==> Restarting service on remote..."
+	@ssh $(REMOTE_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(REMOTE_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
+	@sleep 2
+	@ssh $(REMOTE_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
+	@echo ""
+	@echo "==> Sync complete!"
