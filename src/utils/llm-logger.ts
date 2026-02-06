@@ -1,7 +1,7 @@
 /**
  * LLM Request/Response Logger
  *
- * Logs raw LLM API requests and responses for debugging.
+ * Intercepts actual HTTP requests to LLM APIs and logs raw request/response bodies.
  */
 
 import { existsSync, mkdirSync, appendFileSync } from "fs";
@@ -9,6 +9,19 @@ import { join } from "path";
 import { getStateDir } from "./config.js";
 
 const LOG_DIR = join(getStateDir(), "llm-logs");
+
+// LLM API endpoints to intercept
+const LLM_API_PATTERNS = [
+  "api.openai.com",
+  "api.anthropic.com",
+  "openrouter.ai",
+  "api.groq.com",
+  "api.mistral.ai",
+  "generativelanguage.googleapis.com",
+  "api.x.ai",
+  "api.deepseek.com",
+  "api.moonshot.cn",
+];
 
 function ensureLogDir(): void {
   if (!existsSync(LOG_DIR)) {
@@ -21,22 +34,14 @@ function getLogFile(): string {
   return join(LOG_DIR, `llm-${date}.jsonl`);
 }
 
-export interface LLMLogEntry {
-  timestamp: string;
-  sessionId: string;
-  type: "request" | "response";
-  model?: string;
-  provider?: string;
-  data: unknown;
+function isLLMEndpoint(url: string): boolean {
+  return LLM_API_PATTERNS.some((pattern) => url.includes(pattern));
 }
 
-/**
- * Log an LLM interaction
- */
-export function logLLM(entry: Omit<LLMLogEntry, "timestamp">): void {
+function logEntry(entry: { type: "request" | "response"; url: string; data: unknown }): void {
   try {
     ensureLogDir();
-    const fullEntry: LLMLogEntry = {
+    const fullEntry = {
       timestamp: new Date().toISOString(),
       ...entry,
     };
@@ -47,122 +52,65 @@ export function logLLM(entry: Omit<LLMLogEntry, "timestamp">): void {
 }
 
 /**
- * Log the full API request (what's sent to the LLM)
- * Format matches OpenAI/Anthropic API request structure
+ * Install fetch interceptor to log all LLM API requests/responses
  */
-export function logRequest(
-  sessionId: string,
-  request: {
-    systemPrompt: string;
-    tools: Array<{ name: string; description?: string; parameters?: unknown }>;
-    messages: unknown[];
-  },
-  model?: string,
-  provider?: string
-): void {
-  // Convert to standard API request format
-  const apiMessages = [
-    { role: "system", content: request.systemPrompt },
-    ...((request.messages as any[]) || []).map((msg) => {
-      if (msg.role === "user") {
-        const textContent = msg.content?.find?.((c: any) => c.type === "text");
-        return { role: "user", content: textContent?.text || msg.content };
-      } else if (msg.role === "assistant") {
-        const textBlocks = msg.content?.filter?.((c: any) => c.type === "text") || [];
-        const toolCalls = msg.content?.filter?.((c: any) => c.type === "toolCall") || [];
-        return {
-          role: "assistant",
-          content: textBlocks.map((t: any) => t.text).join("") || null,
-          tool_calls:
-            toolCalls.length > 0
-              ? toolCalls.map((tc: any) => ({
-                  id: tc.id,
-                  type: "function",
-                  function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-                }))
-              : undefined,
-        };
-      } else if (msg.role === "toolResult") {
-        const textContent = msg.content?.find?.((c: any) => c.type === "text");
-        return {
-          role: "tool",
-          tool_call_id: msg.toolCallId,
-          content: textContent?.text || JSON.stringify(msg.content),
-        };
+export function installFetchInterceptor(): void {
+  const originalFetch = globalThis.fetch.bind(globalThis);
+
+  const interceptedFetch = async (
+    input: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+
+    // Only intercept LLM API calls
+    if (!isLLMEndpoint(url)) {
+      return originalFetch(input, init);
+    }
+
+    // Log request
+    let requestBody: unknown;
+    try {
+      if (init?.body) {
+        requestBody = JSON.parse(init.body as string);
       }
-      return msg;
-    }),
-  ];
+    } catch {
+      requestBody = init?.body;
+    }
 
-  // Convert tools to OpenAI format
-  const apiTools = request.tools.map((t: any) => ({
-    type: "function",
-    function: {
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters || t.inputSchema,
-    },
-  }));
+    logEntry({
+      type: "request",
+      url,
+      data: requestBody,
+    });
 
-  logLLM({
-    sessionId,
-    type: "request",
-    model,
-    provider,
-    data: {
-      model,
-      messages: apiMessages,
-      tools: apiTools,
-    },
-  });
-}
+    // Make actual request
+    const response = await originalFetch(input, init);
 
-/**
- * Log the API response (what comes back from the LLM)
- * Format matches OpenAI API response structure
- */
-export function logResponse(
-  sessionId: string,
-  response: {
-    content: unknown;
-    toolCalls?: Array<{ name: string; arguments: unknown }>;
-    stopReason?: string;
-    usage?: { input: number; output: number };
-  },
-  model?: string,
-  provider?: string
-): void {
-  // Convert to standard API response format
-  const apiResponse = {
-    model,
-    choices: [
-      {
-        message: {
-          role: "assistant",
-          content: response.content || null,
-          tool_calls: response.toolCalls?.map((tc, i) => ({
-            id: `call_${i}`,
-            type: "function",
-            function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-          })),
-        },
-        finish_reason: response.stopReason === "toolUse" ? "tool_calls" : "stop",
-      },
-    ],
-    usage: response.usage
-      ? {
-          prompt_tokens: response.usage.input,
-          completion_tokens: response.usage.output,
-          total_tokens: response.usage.input + response.usage.output,
-        }
-      : undefined,
+    // Clone response to read body without consuming it
+    const clonedResponse = response.clone();
+
+    // Log response asynchronously
+    clonedResponse.text().then((text) => {
+      let responseBody: unknown;
+      try {
+        responseBody = JSON.parse(text);
+      } catch {
+        responseBody = text;
+      }
+
+      logEntry({
+        type: "response",
+        url,
+        data: responseBody,
+      });
+    });
+
+    return response;
   };
 
-  logLLM({
-    sessionId,
-    type: "response",
-    model,
-    provider,
-    data: apiResponse,
-  });
+  // @ts-expect-error - Bun's fetch type is slightly different
+  globalThis.fetch = interceptedFetch;
+
+  console.log("[LLM Logger] Fetch interceptor installed");
 }

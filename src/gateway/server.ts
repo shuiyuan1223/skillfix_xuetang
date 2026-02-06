@@ -14,7 +14,10 @@ import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { loadConfig } from "../utils/config.js";
-import { logRequest, logResponse } from "../utils/llm-logger.js";
+import { installFetchInterceptor } from "../utils/llm-logger.js";
+
+// Install fetch interceptor to log raw LLM API requests/responses
+installFetchInterceptor();
 import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
 import { getUserStore } from "../data-sources/huawei/user-store.js";
 import {
@@ -1436,23 +1439,6 @@ export class GatewaySession {
 
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
     switch (event.type) {
-      case "turn_start":
-        // Log full API request before each LLM call
-        if (this.agent) {
-          const agentState = this.agent.getAgent().state;
-          logRequest(
-            this.sessionId,
-            {
-              systemPrompt: agentState.systemPrompt,
-              tools: agentState.tools || [],
-              messages: agentState.messages,
-            },
-            this.config.modelId,
-            this.config.provider
-          );
-        }
-        break;
-
       case "message_start":
       case "message_update":
         // Stream partial content
@@ -1474,28 +1460,12 @@ export class GatewaySession {
         if (event.message.role === "assistant") {
           const content = event.message.content;
           let text = "";
-          const toolCalls: Array<{ name: string; arguments: unknown }> = [];
 
           for (const block of content) {
             if (block.type === "text") {
               text += block.text;
-            } else if (block.type === "toolCall") {
-              toolCalls.push({ name: block.name, arguments: block.arguments });
             }
           }
-
-          // Log the full response
-          logResponse(
-            this.sessionId,
-            {
-              content: text,
-              toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-              stopReason: event.message.stopReason,
-              usage: event.message.usage,
-            },
-            this.config.modelId,
-            this.config.provider
-          );
 
           // Update UI if there's text content
           if (text.trim()) {
