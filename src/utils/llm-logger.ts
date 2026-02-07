@@ -382,8 +382,8 @@ export function installFetchInterceptor(): void {
         if (result) {
           responseData = result.rebuilt;
         } else {
-          // Fallback: couldn't parse SSE events
-          responseData = { _raw_sse: true, _length: text.length };
+          // Fallback: couldn't parse SSE events — include raw text for debugging
+          responseData = { _raw_sse: true, _length: text.length, _preview: text.slice(0, 500) };
         }
       } else {
         // Non-streaming: parse JSON directly
@@ -398,6 +398,7 @@ export function installFetchInterceptor(): void {
         type: "response",
         url,
         ...meta,
+        status: response.status,
         ...(isSSE ? { stream: true } : {}),
         data: responseData,
       });

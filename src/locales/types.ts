@@ -6,6 +6,7 @@ export interface LocaleMessages {
   // Navigation
   nav: {
     chat: string;
+    dashboard: string;
     health: string;
     sleep: string;
     activity: string;
@@ -13,6 +14,7 @@ export interface LocaleMessages {
     prompts: string;
     skills: string;
     evolution: string;
+    integrations: string;
   };
 
   // Common
@@ -68,6 +70,16 @@ export interface LocaleMessages {
     low: string;
     veryLow: string;
     noData: string;
+    bloodPressure: string;
+    systolic: string;
+    diastolic: string;
+    bloodGlucose: string;
+    bodyWeight: string;
+    bodyTemperature: string;
+    bmi: string;
+    bodyFat: string;
+    nutrition: string;
+    menstrualCycle: string;
     ecg: string;
     arrhythmiaDetected: string;
     normalRhythm: string;
@@ -100,6 +112,78 @@ export interface LocaleMessages {
     kcalBurned: string;
     aboveAvg: string;
     belowAvg: string;
+  };
+
+  // Dashboard page (unified health dashboard)
+  dashboard: {
+    title: string;
+    subtitle: string;
+    // Tab names
+    tabOverview: string;
+    tabVitals: string;
+    tabActivity: string;
+    tabSleep: string;
+    tabBody: string;
+    tabHeart: string;
+    tabTrends: string;
+    // Health score
+    healthScore: string;
+    healthScoreLabel: string;
+    // New data type labels
+    vo2max: string;
+    emotion: string;
+    hrv: string;
+    hrvLabel: string;
+    pulse: string;
+    activeHours: string;
+    distance: string;
+    // Loading states
+    loadingData: string;
+    loadingProgress: string;
+    loadingComplete: string;
+    // Anomaly / alerts
+    anomalyAlert: string;
+    noAnomalies: string;
+    // Time range selectors (Trends tab)
+    timeRange: string;
+    oneWeek: string;
+    oneMonth: string;
+    threeMonths: string;
+    sixMonths: string;
+    oneYear: string;
+    twoYears: string;
+    // Metric selector (Trends tab)
+    selectMetric: string;
+    monthlySummary: string;
+    weeklyAverage: string;
+    days: string;
+    noTrendsData: string;
+    // Body tab
+    height: string;
+    protein: string;
+    fat: string;
+    carbs: string;
+    water: string;
+    nutritionSummary: string;
+    // Heart tab
+    ecgRecords: string;
+    tachycardia: string;
+    bradycardia: string;
+    heartEvents: string;
+    // Sleep tab extras
+    sleepStages: string;
+    sleepTrend: string;
+    sleepBreathing: string;
+    // Activity tab extras
+    workouts: string;
+    recentWorkouts: string;
+    // Activity rings
+    activityRings: string;
+    yesterdayData: string;
+    // Re-auth
+    scopeErrorTitle: string;
+    scopeErrorHint: string;
+    reAuth: string;
   };
 
   // Prompts page
@@ -152,6 +236,53 @@ export interface LocaleMessages {
     type: string;
     target: string;
     rationale: string;
+    // Benchmark additions
+    radarChart: string;
+    benchmarkRuns: string;
+    comparison: string;
+    passed: string;
+    failed: string;
+    overall: string;
+    profile: string;
+    quickProfile: string;
+    fullProfile: string;
+    versionTag: string;
+    runBenchmark: string;
+    healthDataAnalysis: string;
+    healthCoaching: string;
+    safetyBoundaries: string;
+    personalization: string;
+    communicationQuality: string;
+    autoLoop: string;
+    autoLoopHint: string;
+    regression: string;
+    improvement: string;
+    runs: string;
+    runQuickBenchmark: string;
+    runFullBenchmark: string;
+    benchmarkRunning: string;
+    noBenchmarkRuns: string;
+    recentRuns: string;
+    viewDetails: string;
+    duration: string;
+    totalScore: string;
+    categoryScores: string;
+    benchmarkProgress: string;
+    benchmarkComplete: string;
+    noEvaluationsHint: string;
+    noTracesHint: string;
+    noSuggestionsHint: string;
+    noEvaluationsYet: string;
+    model: string;
+    latestChange: string;
+    config: string;
+    configDesc: string;
+    passingScore: string;
+    weakThreshold: string;
+    weight: string;
+    dimension: string;
+    editConfigHint: string;
+    noConfigFile: string;
   };
 
   // Memory page
@@ -174,6 +305,41 @@ export interface LocaleMessages {
     tabSummary: string;
     tabLogs: string;
     tabSearch: string;
+  };
+
+  // Integrations page
+  integrations: {
+    title: string;
+    subtitle: string;
+    tabOverview: string;
+    tabIssues: string;
+    tabPRs: string;
+    tabBranches: string;
+    repo: string;
+    openIssues: string;
+    openPRs: string;
+    currentBranch: string;
+    issueNumber: string;
+    issueTitle: string;
+    state: string;
+    labels: string;
+    author: string;
+    created: string;
+    prTitle: string;
+    branch: string;
+    baseBranch: string;
+    draft: string;
+    recentCommits: string;
+    hash: string;
+    message: string;
+    date: string;
+    refreshData: string;
+    noGitHub: string;
+    noGitHubHint: string;
+    open: string;
+    closed: string;
+    merged: string;
+    feedbackIssues: string;
   };
 
   // OAuth / Authorization

@@ -35,8 +35,9 @@ export interface HuaweiHealthKitConfig {
   clientId?: string;
   clientSecret?: string;
   redirectUri?: string;
+  scopes?: string[];
   // 3 个核心 URL，都配置完整路径
-  authUrl?: string; // 授权页面完整 URL
+  authUrl?: string; // 授权页面基础 URL（不含 query params）
   tokenUrl?: string; // Token 接口完整 URL
   apiBaseUrl?: string; // API 基础地址（后面会拼接具体接口路径）
 }

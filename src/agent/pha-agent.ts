@@ -11,7 +11,7 @@ import {
   type AgentMessage,
 } from "@mariozechner/pi-agent-core";
 import { getModel, type Model, type KnownProvider } from "@mariozechner/pi-ai";
-import { healthAgentTools } from "./tools.js";
+import { healthAgentTools, createHealthAgentTools } from "./tools.js";
 import { getMemoryManager } from "../memory/index.js";
 import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/compaction.js";
 import { getUserUuid } from "../utils/config.js";
@@ -42,6 +42,8 @@ export interface PHAAgentConfig {
   userUuid?: string;
   /** Session ID for transcript storage */
   sessionId?: string;
+  /** User-specific health data source (for per-session isolation) */
+  dataSource?: import("../data-sources/interface.js").HealthDataSource;
   /** Additional agent options */
   agentOptions?: Partial<AgentOptions>;
 }
@@ -102,9 +104,28 @@ export class PHAAgent {
 
     let model: Model<any>;
 
-    if (config.baseUrl) {
-      // Custom OpenAI-compatible API with baseUrl
-      // modelId is used directly without provider prefix
+    if (BUILTIN_PROVIDERS.includes(provider)) {
+      // Try built-in pi-ai provider first (has proper compat settings)
+      // @ts-expect-error - dynamic model selection
+      model = getModel(provider, modelId);
+
+      if (!model && config.baseUrl) {
+        // Model not in registry but provider is known — use custom baseUrl as fallback
+        model = {
+          id: modelId,
+          name: modelId,
+          api: "openai-completions" as const,
+          provider: provider,
+          baseUrl: config.baseUrl,
+          reasoning: false,
+          input: ["text", "image"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 128000,
+          maxTokens: 16384,
+        };
+      }
+    } else if (config.baseUrl) {
+      // Non-built-in provider with custom baseUrl
       model = {
         id: modelId,
         name: modelId,
@@ -117,14 +138,6 @@ export class PHAAgent {
         contextWindow: 128000,
         maxTokens: 16384,
       };
-    } else if (BUILTIN_PROVIDERS.includes(provider)) {
-      // Use built-in pi-ai provider
-      try {
-        // @ts-expect-error - dynamic model selection
-        model = getModel(provider, modelId);
-      } catch (e) {
-        throw new Error(`Model not found: ${provider}/${modelId}. Error: ${e}`);
-      }
     } else {
       // For non-built-in providers without baseUrl
       throw new Error(
@@ -133,7 +146,9 @@ export class PHAAgent {
     }
 
     if (!model) {
-      throw new Error(`Model not found: ${modelId}`);
+      throw new Error(
+        `Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`
+      );
     }
 
     // Build system prompt with memory and pre-computed health context
@@ -163,11 +178,14 @@ export class PHAAgent {
       config.sessionId
     );
 
+    // Use per-session tools when a user-specific data source is provided
+    const tools = config.dataSource ? createHealthAgentTools(config.dataSource) : healthAgentTools;
+
     this.agent = new Agent({
       initialState: {
         systemPrompt,
         model,
-        tools: healthAgentTools,
+        tools,
       },
       getApiKey: () => apiKey,
       transformContext: compactionFlush,
@@ -212,6 +230,7 @@ export class PHAAgent {
    */
   async chatAndWait(message: string): Promise<string> {
     let finalContent = "";
+    let hasError = false;
 
     const unsubscribe = this.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
@@ -221,6 +240,63 @@ export class PHAAgent {
             finalContent += block.text;
           }
         }
+      }
+      // Capture errors for diagnostics
+      if ((event as any).type === "error" || (event as any).error) {
+        hasError = true;
+        console.warn("[PHAAgent] chatAndWait error event:", (event as any).error || event);
+      }
+    });
+
+    try {
+      const enriched = enrichWithSkills(message);
+      await this.agent.prompt(enriched);
+      await this.agent.waitForIdle();
+    } catch (err) {
+      console.warn("[PHAAgent] chatAndWait prompt/idle error:", err);
+      throw err;
+    } finally {
+      unsubscribe();
+    }
+
+    if (!finalContent && hasError) {
+      console.warn("[PHAAgent] chatAndWait completed with empty response and errors");
+    }
+
+    return finalContent;
+  }
+
+  /**
+   * Send a message and wait for the complete response + tool calls.
+   * Returns both the final text and any tool call details.
+   */
+  async chatAndWaitWithTools(message: string): Promise<{
+    response: string;
+    toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+  }> {
+    let finalContent = "";
+    const toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }> = [];
+    let pendingToolName = "";
+    let pendingToolArgs: unknown = undefined;
+
+    const unsubscribe = this.subscribe((event) => {
+      if (event.type === "message_end" && event.message.role === "assistant") {
+        for (const block of event.message.content) {
+          if (block.type === "text") {
+            finalContent += block.text;
+          }
+        }
+      }
+      if (event.type === "tool_execution_start") {
+        pendingToolName = (event as any).toolName || "";
+        pendingToolArgs = (event as any).arguments;
+      }
+      if (event.type === "tool_execution_end") {
+        toolCalls.push({
+          tool: pendingToolName || (event as any).toolName || "unknown",
+          arguments: pendingToolArgs,
+          result: (event as any).result,
+        });
       }
     });
 
@@ -232,7 +308,7 @@ export class PHAAgent {
       unsubscribe();
     }
 
-    return finalContent;
+    return { response: finalContent, toolCalls };
   }
 
   /**
@@ -285,8 +361,8 @@ export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAg
     }
   }
 
-  // Pre-compute recent health data context (best-effort)
-  const healthContext = await preComputeHealthContext();
+  // Pre-compute recent health data context (best-effort, use user-specific source if available)
+  const healthContext = await preComputeHealthContext(config.dataSource);
 
   return new PHAAgent(config, healthContext);
 }

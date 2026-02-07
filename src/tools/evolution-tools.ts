@@ -569,6 +569,96 @@ export const updateSuggestionStatusTool = {
   },
 };
 
+// ============================================================================
+// Benchmark Tools
+// ============================================================================
+
+export const listBenchmarkRunsTool = {
+  name: "list_benchmark_runs",
+  description: "List benchmark run history with scores and pass/fail counts",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      limit: {
+        type: "number",
+        description: "Maximum number of runs to return (default: 10)",
+      },
+    },
+  },
+  execute: async (args?: { limit?: number }) => {
+    const { listBenchmarkRuns } = await import("../memory/db.js");
+    const rows = listBenchmarkRuns({ limit: args?.limit || 10 });
+
+    return {
+      success: true,
+      runs: rows.map((r) => ({
+        id: r.id,
+        timestamp: r.timestamp,
+        versionTag: r.version_tag,
+        totalTestCases: r.total_test_cases,
+        passedCount: r.passed_count,
+        failedCount: r.failed_count,
+        overallScore: r.overall_score,
+        profile: r.profile,
+        durationMs: r.duration_ms,
+      })),
+      count: rows.length,
+    };
+  },
+};
+
+export const getBenchmarkRunDetailsTool = {
+  name: "get_benchmark_run_details",
+  description: "Get detailed results for a benchmark run including category scores",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      runId: {
+        type: "string",
+        description: "Benchmark run ID",
+      },
+    },
+    required: ["runId"],
+  },
+  execute: async (args: { runId: string }) => {
+    const { getBenchmarkRun, listCategoryScores, listBenchmarkResults } =
+      await import("../memory/db.js");
+
+    const run = getBenchmarkRun(args.runId);
+    if (!run) {
+      return { success: false, error: `Run not found: ${args.runId}` };
+    }
+
+    const categoryScores = listCategoryScores(args.runId);
+    const results = listBenchmarkResults({ runId: args.runId });
+
+    return {
+      success: true,
+      run: {
+        id: run.id,
+        timestamp: run.timestamp,
+        versionTag: run.version_tag,
+        overallScore: run.overall_score,
+        profile: run.profile,
+        passedCount: run.passed_count,
+        failedCount: run.failed_count,
+      },
+      categoryScores: categoryScores.map((s) => ({
+        category: s.category,
+        score: s.score,
+        testCount: s.test_count,
+        passedCount: s.passed_count,
+      })),
+      results: results.map((r) => ({
+        testCaseId: r.test_case_id,
+        overallScore: r.overall_score,
+        passed: r.passed === 1,
+        feedback: r.feedback?.substring(0, 100),
+      })),
+    };
+  },
+};
+
 // Export all tools as array
 export const evolutionTools = [
   // Traces
@@ -587,4 +677,7 @@ export const evolutionTools = [
   getSuggestionTool,
   createSuggestionTool,
   updateSuggestionStatusTool,
+  // Benchmarks
+  listBenchmarkRunsTool,
+  getBenchmarkRunDetailsTool,
 ];

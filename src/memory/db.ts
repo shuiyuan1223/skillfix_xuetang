@@ -89,6 +89,50 @@ function initializeSchema(db: Database): void {
       validation_results TEXT     -- JSON: {before, after, improvement}
     );
 
+    -- Benchmark Runs: Each execution of the benchmark suite
+    CREATE TABLE IF NOT EXISTS benchmark_runs (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      version_tag TEXT,
+      prompt_versions TEXT,    -- JSON: {filename: gitHash}
+      skill_versions TEXT,     -- JSON: {filename: gitHash}
+      total_test_cases INTEGER NOT NULL,
+      passed_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      overall_score REAL NOT NULL DEFAULT 0,
+      duration_ms INTEGER,
+      profile TEXT DEFAULT 'quick',
+      metadata TEXT             -- JSON
+    );
+
+    -- Category Scores: Per-category scores within a benchmark run
+    CREATE TABLE IF NOT EXISTS category_scores (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES benchmark_runs(id),
+      category TEXT NOT NULL,
+      subcategory TEXT,
+      score REAL NOT NULL DEFAULT 0,
+      test_count INTEGER NOT NULL DEFAULT 0,
+      passed_count INTEGER NOT NULL DEFAULT 0,
+      details TEXT               -- JSON
+    );
+
+    -- Benchmark Results: Per-test-case results within a benchmark run
+    CREATE TABLE IF NOT EXISTS benchmark_results (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL REFERENCES benchmark_runs(id),
+      test_case_id TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      agent_response TEXT,
+      tool_calls TEXT,           -- JSON
+      scores TEXT,               -- JSON: {accuracy, relevance, helpfulness, safety, completeness}
+      overall_score REAL NOT NULL DEFAULT 0,
+      passed INTEGER NOT NULL DEFAULT 0,
+      feedback TEXT,
+      issues TEXT,               -- JSON
+      duration_ms INTEGER
+    );
+
     -- Indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(timestamp);
     CREATE INDEX IF NOT EXISTS idx_traces_session ON traces(session_id);
@@ -97,7 +141,40 @@ function initializeSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_test_cases_category ON test_cases(category);
     CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
     CREATE INDEX IF NOT EXISTS idx_suggestions_type ON suggestions(type);
+    CREATE INDEX IF NOT EXISTS idx_benchmark_runs_timestamp ON benchmark_runs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_category_scores_run ON category_scores(run_id);
+    CREATE INDEX IF NOT EXISTS idx_category_scores_category ON category_scores(category);
+    CREATE INDEX IF NOT EXISTS idx_benchmark_results_run ON benchmark_results(run_id);
+    CREATE INDEX IF NOT EXISTS idx_benchmark_results_test_case ON benchmark_results(test_case_id);
   `);
+
+  // Add columns to test_cases if they don't exist (safe migration)
+  migrateTestCasesTable(db);
+}
+
+/**
+ * Migrate test_cases table to add new columns
+ */
+function migrateTestCasesTable(db: Database): void {
+  try {
+    // Check if subcategory column exists
+    const tableInfo = db.prepare("PRAGMA table_info(test_cases)").all() as Array<{
+      name: string;
+    }>;
+    const columnNames = tableInfo.map((c) => c.name);
+
+    if (!columnNames.includes("subcategory")) {
+      db.exec("ALTER TABLE test_cases ADD COLUMN subcategory TEXT");
+    }
+    if (!columnNames.includes("difficulty")) {
+      db.exec("ALTER TABLE test_cases ADD COLUMN difficulty TEXT DEFAULT 'medium'");
+    }
+    if (!columnNames.includes("mock_context")) {
+      db.exec("ALTER TABLE test_cases ADD COLUMN mock_context TEXT");
+    }
+  } catch {
+    // Table might not exist yet on first run, which is fine
+  }
 }
 
 /**
@@ -370,6 +447,7 @@ export interface TestCaseRow {
 export function insertTestCase(testCase: {
   id: string;
   category: string;
+  subcategory?: string;
   query: string;
   context?: unknown;
   expected: {
@@ -378,21 +456,26 @@ export function insertTestCase(testCase: {
     minScore?: number;
     safetyConcerns?: string[];
   };
+  difficulty?: string;
+  mock_context?: unknown;
 }): void {
   const database = getDatabase();
   const now = Date.now();
   const stmt = database.prepare(`
-    INSERT OR REPLACE INTO test_cases (id, category, query, context, expected, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO test_cases (id, category, subcategory, query, context, expected, created_at, updated_at, difficulty, mock_context)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   stmt.run(
     testCase.id,
     testCase.category,
+    testCase.subcategory ?? null,
     testCase.query,
     testCase.context ? JSON.stringify(testCase.context) : null,
     JSON.stringify(testCase.expected),
     now,
-    now
+    now,
+    testCase.difficulty ?? "medium",
+    testCase.mock_context ? JSON.stringify(testCase.mock_context) : null
   );
 }
 
@@ -532,4 +615,273 @@ export function updateSuggestionStatus(
     UPDATE suggestions SET status = ?, validation_results = ? WHERE id = ?
   `);
   stmt.run(status, validationResults ? JSON.stringify(validationResults) : null, id);
+}
+
+// ============================================================================
+// Benchmark Run Operations
+// ============================================================================
+
+export interface BenchmarkRunRow {
+  id: string;
+  timestamp: number;
+  version_tag: string | null;
+  prompt_versions: string | null;
+  skill_versions: string | null;
+  total_test_cases: number;
+  passed_count: number;
+  failed_count: number;
+  overall_score: number;
+  duration_ms: number | null;
+  profile: string;
+  metadata: string | null;
+}
+
+export function insertBenchmarkRun(run: {
+  id: string;
+  timestamp: number;
+  versionTag?: string;
+  promptVersions?: Record<string, string>;
+  skillVersions?: Record<string, string>;
+  totalTestCases: number;
+  passedCount: number;
+  failedCount: number;
+  overallScore: number;
+  durationMs?: number;
+  profile?: string;
+  metadata?: Record<string, unknown>;
+}): void {
+  const database = getDatabase();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO benchmark_runs (id, timestamp, version_tag, prompt_versions, skill_versions,
+      total_test_cases, passed_count, failed_count, overall_score, duration_ms, profile, metadata)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    run.id,
+    run.timestamp,
+    run.versionTag ?? null,
+    run.promptVersions ? JSON.stringify(run.promptVersions) : null,
+    run.skillVersions ? JSON.stringify(run.skillVersions) : null,
+    run.totalTestCases,
+    run.passedCount,
+    run.failedCount,
+    run.overallScore,
+    run.durationMs ?? null,
+    run.profile ?? "quick",
+    run.metadata ? JSON.stringify(run.metadata) : null
+  );
+}
+
+export function getBenchmarkRun(id: string): BenchmarkRunRow | null {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM benchmark_runs WHERE id = ?");
+  return stmt.get(id) as BenchmarkRunRow | null;
+}
+
+export function listBenchmarkRuns(
+  options: { limit?: number; offset?: number } = {}
+): BenchmarkRunRow[] {
+  const database = getDatabase();
+  let sql = "SELECT * FROM benchmark_runs ORDER BY timestamp DESC";
+  const params: SQLParam[] = [];
+
+  if (options.limit) {
+    sql += " LIMIT ?";
+    params.push(options.limit);
+  }
+  if (options.offset) {
+    sql += " OFFSET ?";
+    params.push(options.offset);
+  }
+
+  const stmt = database.prepare(sql);
+  return stmt.all(...params) as BenchmarkRunRow[];
+}
+
+export function updateBenchmarkRun(
+  id: string,
+  updates: {
+    passedCount?: number;
+    failedCount?: number;
+    overallScore?: number;
+    durationMs?: number;
+  }
+): void {
+  const database = getDatabase();
+  const setClauses: string[] = [];
+  const params: SQLParam[] = [];
+
+  if (updates.passedCount !== undefined) {
+    setClauses.push("passed_count = ?");
+    params.push(updates.passedCount);
+  }
+  if (updates.failedCount !== undefined) {
+    setClauses.push("failed_count = ?");
+    params.push(updates.failedCount);
+  }
+  if (updates.overallScore !== undefined) {
+    setClauses.push("overall_score = ?");
+    params.push(updates.overallScore);
+  }
+  if (updates.durationMs !== undefined) {
+    setClauses.push("duration_ms = ?");
+    params.push(updates.durationMs);
+  }
+
+  if (setClauses.length === 0) return;
+
+  params.push(id);
+  const stmt = database.prepare(`UPDATE benchmark_runs SET ${setClauses.join(", ")} WHERE id = ?`);
+  stmt.run(...params);
+}
+
+// ============================================================================
+// Category Score Operations
+// ============================================================================
+
+export interface CategoryScoreRow {
+  id: string;
+  run_id: string;
+  category: string;
+  subcategory: string | null;
+  score: number;
+  test_count: number;
+  passed_count: number;
+  details: string | null;
+}
+
+export function insertCategoryScore(score: {
+  id: string;
+  runId: string;
+  category: string;
+  subcategory?: string;
+  score: number;
+  testCount: number;
+  passedCount: number;
+  details?: Record<string, unknown>;
+}): void {
+  const database = getDatabase();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO category_scores (id, run_id, category, subcategory, score, test_count, passed_count, details)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    score.id,
+    score.runId,
+    score.category,
+    score.subcategory ?? null,
+    score.score,
+    score.testCount,
+    score.passedCount,
+    score.details ? JSON.stringify(score.details) : null
+  );
+}
+
+export function listCategoryScores(runId: string): CategoryScoreRow[] {
+  const database = getDatabase();
+  const stmt = database.prepare(
+    "SELECT * FROM category_scores WHERE run_id = ? ORDER BY category, subcategory"
+  );
+  return stmt.all(runId) as CategoryScoreRow[];
+}
+
+// ============================================================================
+// Benchmark Result Operations
+// ============================================================================
+
+export interface BenchmarkResultRow {
+  id: string;
+  run_id: string;
+  test_case_id: string;
+  timestamp: number;
+  agent_response: string | null;
+  tool_calls: string | null;
+  scores: string | null;
+  overall_score: number;
+  passed: number;
+  feedback: string | null;
+  issues: string | null;
+  duration_ms: number | null;
+}
+
+export function insertBenchmarkResult(result: {
+  id: string;
+  runId: string;
+  testCaseId: string;
+  timestamp: number;
+  agentResponse?: string;
+  toolCalls?: unknown[];
+  scores?: Record<string, number>;
+  overallScore: number;
+  passed: boolean;
+  feedback?: string;
+  issues?: Array<{ type: string; description: string; severity: string }>;
+  durationMs?: number;
+}): void {
+  const database = getDatabase();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO benchmark_results (id, run_id, test_case_id, timestamp, agent_response,
+      tool_calls, scores, overall_score, passed, feedback, issues, duration_ms)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    result.id,
+    result.runId,
+    result.testCaseId,
+    result.timestamp,
+    result.agentResponse ?? null,
+    result.toolCalls ? JSON.stringify(result.toolCalls) : null,
+    result.scores ? JSON.stringify(result.scores) : null,
+    result.overallScore,
+    result.passed ? 1 : 0,
+    result.feedback ?? null,
+    result.issues ? JSON.stringify(result.issues) : null,
+    result.durationMs ?? null
+  );
+}
+
+export function listBenchmarkResults(
+  options: { runId?: string; testCaseId?: string; limit?: number } = {}
+): BenchmarkResultRow[] {
+  const database = getDatabase();
+  let sql = "SELECT * FROM benchmark_results WHERE 1=1";
+  const params: SQLParam[] = [];
+
+  if (options.runId) {
+    sql += " AND run_id = ?";
+    params.push(options.runId);
+  }
+  if (options.testCaseId) {
+    sql += " AND test_case_id = ?";
+    params.push(options.testCaseId);
+  }
+
+  sql += " ORDER BY timestamp DESC";
+
+  if (options.limit) {
+    sql += " LIMIT ?";
+    params.push(options.limit);
+  }
+
+  const stmt = database.prepare(sql);
+  return stmt.all(...params) as BenchmarkResultRow[];
+}
+
+export function countTestCases(options: { category?: string; difficulty?: string } = {}): number {
+  const database = getDatabase();
+  let sql = "SELECT COUNT(*) as count FROM test_cases WHERE 1=1";
+  const params: SQLParam[] = [];
+
+  if (options.category) {
+    sql += " AND category = ?";
+    params.push(options.category);
+  }
+  if (options.difficulty) {
+    sql += " AND difficulty = ?";
+    params.push(options.difficulty);
+  }
+
+  const stmt = database.prepare(sql);
+  const result = stmt.get(...params) as { count: number };
+  return result.count;
 }

@@ -12,24 +12,50 @@ import type { HuaweiTokenResponse, TokenData } from "./huawei-types.js";
 // Huawei OAuth endpoints (defaults, can be overridden in config)
 const DEFAULT_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authorize";
 const DEFAULT_TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
+const DEFAULT_REDIRECT_URI = "hms://redirect_url";
 
-function getAuthUrl(): string {
+// Default scopes — used only when config.scopes is not set
+const DEFAULT_SCOPES = [
+  "openid",
+  "https://www.huawei.com/healthkit/step.read",
+  "https://www.huawei.com/healthkit/calories.read",
+  "https://www.huawei.com/healthkit/distance.read",
+  "https://www.huawei.com/healthkit/heartrate.read",
+  "https://www.huawei.com/healthkit/sleep.read",
+  "https://www.huawei.com/healthkit/activity.read",
+  "https://www.huawei.com/healthkit/activityrecord.read",
+  "https://www.huawei.com/healthkit/stress.read",
+  "https://www.huawei.com/healthkit/oxygensaturation.read",
+  "https://www.huawei.com/healthkit/hearthealth.read",
+  "https://www.huawei.com/healthkit/bloodpressure.read",
+  "https://www.huawei.com/healthkit/bloodglucose.read",
+  "https://www.huawei.com/healthkit/heightweight.read",
+  "https://www.huawei.com/healthkit/bodytemperature.read",
+  "https://www.huawei.com/healthkit/nutrition.read",
+  "https://www.huawei.com/healthkit/reproductive.read",
+  "https://www.huawei.com/healthkit/pulmonary.read",
+  "https://www.huawei.com/healthkit/emotion.read",
+];
+
+function getConfigAuthBaseUrl(): string {
   const config = loadConfig();
   return config.dataSources.huawei?.authUrl || DEFAULT_AUTH_URL;
 }
 
-function getTokenUrl(): string {
+function getConfigTokenUrl(): string {
   const config = loadConfig();
   return config.dataSources.huawei?.tokenUrl || DEFAULT_TOKEN_URL;
 }
 
-// Default scopes for health data access
-const DEFAULT_SCOPES = [
-  "https://www.huawei.com/healthkit/step.read",
-  "https://www.huawei.com/healthkit/distance.read",
-  "https://www.huawei.com/healthkit/calories.read",
-  "https://www.huawei.com/healthkit/activity.read",
-];
+function getConfigScopes(): string[] {
+  const config = loadConfig();
+  return config.dataSources.huawei?.scopes || DEFAULT_SCOPES;
+}
+
+function getConfigRedirectUri(): string {
+  const config = loadConfig();
+  return config.dataSources.huawei?.redirectUri || DEFAULT_REDIRECT_URI;
+}
 
 export class HuaweiAuth {
   private tokenStore: TokenStore;
@@ -40,18 +66,18 @@ export class HuaweiAuth {
 
   /**
    * Generate OAuth authorization URL
-   * User should open this in a browser to authorize
+   * All params read from config; explicit args can override.
    */
-  getAuthUrl(clientId: string, redirectUri: string, scopes: string[] = DEFAULT_SCOPES): string {
+  getAuthUrl(clientId: string, redirectUri?: string, scopes?: string[]): string {
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
-      redirect_uri: redirectUri,
-      scope: scopes.join(" "),
+      redirect_uri: redirectUri || getConfigRedirectUri(),
+      scope: (scopes || getConfigScopes()).join(" "),
       access_type: "offline", // Request refresh token
     });
 
-    return `${getAuthUrl()}?${params.toString()}`;
+    return `${getConfigAuthBaseUrl()}?${params.toString()}`;
   }
 
   /**
@@ -71,7 +97,7 @@ export class HuaweiAuth {
       redirect_uri: redirectUri,
     });
 
-    const response = await fetch(getTokenUrl(), {
+    const response = await fetch(getConfigTokenUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -108,7 +134,7 @@ export class HuaweiAuth {
       client_secret: clientSecret,
     });
 
-    const response = await fetch(getTokenUrl(), {
+    const response = await fetch(getConfigTokenUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -212,7 +238,7 @@ export class HuaweiAuth {
       redirect_uri: redirectUri,
     });
 
-    const response = await fetch(getTokenUrl(), {
+    const response = await fetch(getConfigTokenUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -245,7 +271,7 @@ export class HuaweiAuth {
       client_secret: clientSecret,
     });
 
-    const response = await fetch(getTokenUrl(), {
+    const response = await fetch(getConfigTokenUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",

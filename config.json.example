@@ -14,13 +14,43 @@
     "huawei": {
       "clientId": "your-huawei-client-id",
       "clientSecret": "your-huawei-client-secret",
-      "authUrl": "https://oauth-login.cloud.huawei.com/oauth2/v3/authorize",
-      "tokenUrl": "https://oauth-login.cloud.huawei.com/oauth2/v3/token",
-      "apiBaseUrl": "https://health-api.cloud.huawei.com"
+      "redirectUri": "hms://redirect_url",
+      "authUrl": "https://oauth-login1.cloud.huawei.com/oauth2/v3/authorize",
+      "tokenUrl": "https://oauth-login.cloud.huawei.com/oauth2/v2/token",
+      "apiBaseUrl": "https://hihealthbase-drcn.things.dbankcloud.cn:443",
+      "scopes": [
+        "openid",
+        "profile",
+        "email",
+        "https://www.huawei.com/healthkit/step.read",
+        "https://www.huawei.com/healthkit/calories.read",
+        "https://www.huawei.com/healthkit/distance.read",
+        "https://www.huawei.com/healthkit/strength.read",
+        "https://www.huawei.com/healthkit/activity.read",
+        "https://www.huawei.com/healthkit/activityrecord.read",
+        "https://www.huawei.com/healthkit/heartrate.read",
+        "https://www.huawei.com/healthkit/sleep.read",
+        "https://www.huawei.com/healthkit/stress.read",
+        "https://www.huawei.com/healthkit/oxygensaturation.read",
+        "https://www.huawei.com/healthkit/hearthealth.read",
+        "https://www.huawei.com/healthkit/heightweight.read",
+        "https://www.huawei.com/healthkit/bloodpressure.read",
+        "https://www.huawei.com/healthkit/bloodglucose.read",
+        "https://www.huawei.com/healthkit/pulmonary.read",
+        "https://www.huawei.com/healthkit/nutrition.read",
+        "https://www.huawei.com/healthkit/reproductive.read",
+        "https://www.huawei.com/healthkit/emotion.read",
+        "https://www.huawei.com/healthkit/activehours.read",
+        "https://www.huawei.com/healthkit/dailyactivitysummary.read"
+      ]
     }
   },
   "tui": {
     "theme": "dark",
     "showToolCalls": true
+  },
+  "embedding": {
+    "enabled": true,
+    "model": "openai/text-embedding-3-small"
   }
 }

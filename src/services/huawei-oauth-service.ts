@@ -24,22 +24,9 @@ interface OAuthSession {
 
 const oauthSessions = new Map<string, OAuthSession>();
 
-// Default redirect URI
-const REDIRECT_URI = "hms://redirect_url";
-
-// Health Kit scopes
-const SCOPES = [
-  "openid",
-  "https://www.huawei.com/healthkit/heartrate.read",
-  "https://www.huawei.com/healthkit/sleep.read",
-  "https://www.huawei.com/healthkit/activity.read",
-  "https://www.huawei.com/healthkit/step.read",
-  "https://www.huawei.com/healthkit/stress.read",
-  "https://www.huawei.com/healthkit/hearthealth.read",
-];
-
 /**
  * Generate Huawei OAuth URL
+ * All scopes / redirectUri / authUrl come from config via HuaweiAuth.
  */
 export function getHuaweiAuthUrl(state: string): string {
   const config = loadConfig();
@@ -49,16 +36,9 @@ export function getHuaweiAuthUrl(state: string): string {
     throw new Error("Huawei client ID not configured");
   }
 
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: clientId,
-    redirect_uri: REDIRECT_URI,
-    scope: SCOPES.join(" "),
-    access_type: "offline",
-    state,
-  });
-
-  return `https://oauth-login.cloud.huawei.com/oauth2/v3/authorize?${params.toString()}`;
+  // HuaweiAuth.getAuthUrl reads scopes/redirectUri/baseUrl from config
+  const base = huaweiAuth.getAuthUrl(clientId);
+  return `${base}&state=${encodeURIComponent(state)}`;
 }
 
 /**
@@ -103,12 +83,14 @@ export async function completeOAuth(
   }
 
   try {
+    const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
+
     // Exchange code for token
     const token = await huaweiAuth.exchangeCodeForUser(
       code,
       huaweiConfig.clientId,
       huaweiConfig.clientSecret,
-      REDIRECT_URI
+      redirectUri
     );
 
     // Store token

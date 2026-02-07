@@ -18,6 +18,24 @@ import { getUserStore } from "./user-store.js";
 // Huawei Health Kit API base URL (default, can be overridden in config)
 const DEFAULT_API_BASE = "https://health-api.cloud.huawei.com";
 
+// Track scope errors for re-auth detection
+const missingScopeErrors = new Set<string>();
+
+/**
+ * Get the set of data types that failed due to missing OAuth scopes (403).
+ * Used by the dashboard to show a re-auth prompt.
+ */
+export function getMissingScopeErrors(): string[] {
+  return Array.from(missingScopeErrors);
+}
+
+/**
+ * Clear the missing scope errors (e.g., after re-auth).
+ */
+export function clearMissingScopeErrors(): void {
+  missingScopeErrors.clear();
+}
+
 function getApiBaseUrl(): string {
   const config = loadConfig();
   return config.dataSources.huawei?.apiBaseUrl || DEFAULT_API_BASE;
@@ -42,6 +60,18 @@ const HEALTH_DATA_TYPES = {
   STRESS: "com.huawei.instantaneous.stress",
   SPO2: "com.huawei.instantaneous.spo2",
   ECG: "com.huawei.continuous.ecg_record",
+  BLOOD_PRESSURE: "com.huawei.instantaneous.blood_pressure",
+  BLOOD_GLUCOSE: "com.huawei.instantaneous.blood_glucose",
+  BODY_WEIGHT: "com.huawei.instantaneous.body_weight",
+  BODY_HEIGHT: "com.huawei.instantaneous.height",
+  BODY_TEMPERATURE: "com.huawei.instantaneous.body.temperature",
+  NUTRITION_RECORD: "com.huawei.health.record.nutrition_record",
+  MENSTRUAL_FLOW: "com.huawei.continuous.menstrual_flow",
+  DYSMENORRHOEA: "com.huawei.dysmenorrhoea",
+  PHYSICAL_SYMPTOMS: "com.huawei.physical_symptoms",
+  VO2MAX: "com.huawei.vo2max",
+  HRV: "com.huawei.instantaneous.heart_rate_variability",
+  EMOTION: "com.huawei.emotion",
 };
 
 export interface PolymerizeResult {
@@ -97,9 +127,9 @@ export class HuaweiHealthApi {
 
     const accessToken = await this.getAccessToken();
 
-    // Calculate start and end of day in UTC
-    const startDate = new Date(`${date}T00:00:00Z`);
-    const endDate = new Date(`${date}T23:59:59.999Z`);
+    // Calculate start and end of day in local timezone
+    const startDate = new Date(`${date}T00:00:00`);
+    const endDate = new Date(`${date}T23:59:59.999`);
     const startTime = startDate.getTime();
     const endTime = endDate.getTime();
 
@@ -181,8 +211,8 @@ export class HuaweiHealthApi {
   }> {
     const accessToken = await this.getAccessToken();
 
-    const startTime = new Date(`${date}T00:00:00Z`).getTime();
-    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
@@ -225,8 +255,8 @@ export class HuaweiHealthApi {
   async getActivityRecords(startDate: string, endDate: string): Promise<ActivityRecord[]> {
     const accessToken = await this.getAccessToken();
 
-    const startTime = new Date(`${startDate}T00:00:00Z`).getTime();
-    const endTime = new Date(`${endDate}T23:59:59.999Z`).getTime();
+    const startTime = new Date(`${startDate}T00:00:00`).getTime();
+    const endTime = new Date(`${endDate}T23:59:59.999`).getTime();
 
     const params = new URLSearchParams({
       startTime: startTime.toString(),
@@ -285,8 +315,8 @@ export class HuaweiHealthApi {
 
     const accessToken = await this.getAccessToken();
 
-    const startTime = new Date(`${date}T00:00:00Z`).getTime();
-    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
@@ -370,8 +400,8 @@ export class HuaweiHealthApi {
     }
 
     const accessToken = await this.getAccessToken();
-    const startTime = new Date(`${date}T00:00:00Z`).getTime();
-    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
@@ -445,8 +475,8 @@ export class HuaweiHealthApi {
     }
 
     const accessToken = await this.getAccessToken();
-    const startTime = new Date(`${date}T00:00:00Z`).getTime();
-    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
@@ -469,6 +499,7 @@ export class HuaweiHealthApi {
     if (!response.ok) {
       const errorText = await response.text();
       console.warn(`Stress data failed: ${response.status}`, errorText);
+      // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
     }
@@ -537,8 +568,8 @@ export class HuaweiHealthApi {
     }
 
     const accessToken = await this.getAccessToken();
-    const startTime = new Date(`${date}T00:00:00Z`).getTime();
-    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
@@ -561,6 +592,7 @@ export class HuaweiHealthApi {
     if (!response.ok) {
       const errorText = await response.text();
       console.warn(`SpO2 data failed: ${response.status}`, errorText);
+      // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
     }
@@ -676,6 +708,7 @@ export class HuaweiHealthApi {
     if (!response.ok) {
       const errorText = await response.text();
       console.warn(`ECG healthRecords failed: ${response.status}`, errorText);
+      // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
     }
@@ -1018,11 +1051,1088 @@ export class HuaweiHealthApi {
   }
 
   /**
+   * Get blood pressure data using polymerize API
+   */
+  async getBloodPressureData(
+    date: string,
+    lookbackDays = 0
+  ): Promise<{
+    readings: Array<{ time: string; systolic: number; diastolic: number; pulse?: number }>;
+    latestSystolic: number;
+    latestDiastolic: number;
+    avgSystolic: number;
+    avgDiastolic: number;
+  } | null> {
+    const cacheKey = "bloodPressure";
+    const cacheParams = { date, lookbackDays, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      readings: Array<{ time: string; systolic: number; diastolic: number; pulse?: number }>;
+      latestSystolic: number;
+      latestDiastolic: number;
+      avgSystolic: number;
+      avgDiastolic: number;
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
+    const startDate = new Date(`${date}T00:00:00`);
+    if (lookbackDays > 0) startDate.setDate(startDate.getDate() - lookbackDays);
+    const startTime = startDate.getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.BLOOD_PRESSURE }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Blood pressure data failed: ${response.status}`, errorText);
+      // 403 = Huawei API limitation, re-auth won't fix
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    const readings: Array<{ time: string; systolic: number; diastolic: number; pulse?: number }> =
+      [];
+
+    const groups = json.group || [];
+    for (const group of groups) {
+      for (const sampleSet of group.sampleSet || []) {
+        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+          let timestamp = point.startTime;
+          if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+
+          // Extract by fieldName per Huawei docs: systolic_pressure, diastolic_pressure, sphygmus
+          let systolic = 0;
+          let diastolic = 0;
+          let pulse = 0;
+          const values = point.value || [];
+          for (const v of values) {
+            const val = Math.round(v.floatValue ?? v.integerValue ?? 0);
+            if (v.fieldName === "systolic_pressure") {
+              systolic = val;
+            } else if (v.fieldName === "diastolic_pressure") {
+              diastolic = val;
+            } else if (v.fieldName === "sphygmus") {
+              pulse = val;
+            }
+          }
+          // Fallback: positional (value[0] = systolic, value[1] = diastolic)
+          if (systolic === 0 && diastolic === 0 && values.length >= 2) {
+            systolic = Math.round(values[0].floatValue ?? values[0].integerValue ?? 0);
+            diastolic = Math.round(values[1].floatValue ?? values[1].integerValue ?? 0);
+          }
+          if (systolic > 0 || diastolic > 0) {
+            readings.push({ time, systolic, diastolic, pulse: pulse > 0 ? pulse : undefined });
+          }
+        }
+      }
+    }
+
+    if (readings.length === 0) {
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
+      return null;
+    }
+
+    const systolicValues = readings.map((r) => r.systolic);
+    const diastolicValues = readings.map((r) => r.diastolic);
+    const result = {
+      readings,
+      latestSystolic: systolicValues[systolicValues.length - 1],
+      latestDiastolic: diastolicValues[diastolicValues.length - 1],
+      avgSystolic: Math.round(systolicValues.reduce((a, b) => a + b, 0) / systolicValues.length),
+      avgDiastolic: Math.round(diastolicValues.reduce((a, b) => a + b, 0) / diastolicValues.length),
+    };
+
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
+    return result;
+  }
+
+  /**
+   * Get blood glucose data using polymerize API
+   */
+  async getBloodGlucoseData(date: string): Promise<{
+    readings: Array<{ time: string; value: number }>;
+    latest: number;
+    avg: number;
+    max: number;
+    min: number;
+  } | null> {
+    const cacheKey = "bloodGlucose";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      readings: Array<{ time: string; value: number }>;
+      latest: number;
+      avg: number;
+      max: number;
+      min: number;
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.BLOOD_GLUCOSE }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Blood glucose data failed: ${response.status}`, errorText);
+      // 403 = Huawei API limitation, re-auth won't fix
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    const readings: Array<{ time: string; value: number }> = [];
+
+    const groups = json.group || [];
+    for (const group of groups) {
+      for (const sampleSet of group.sampleSet || []) {
+        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+          let timestamp = point.startTime;
+          if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const fieldValue = point.value?.[0];
+          const value = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
+          if (value > 0) {
+            readings.push({ time, value: Math.round(value * 10) / 10 });
+          }
+        }
+      }
+    }
+
+    if (readings.length === 0) {
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
+      return null;
+    }
+
+    const values = readings.map((r) => r.value);
+    const result = {
+      readings,
+      latest: values[values.length - 1],
+      avg: Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10,
+      max: Math.max(...values),
+      min: Math.min(...values),
+    };
+
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
+    return result;
+  }
+
+  /**
+   * Get body composition data (weight, height, BMI, body fat rate)
+   * Uses 30-day lookback to find latest measurements.
+   * Per Huawei docs: body_weight contains fields: body_weight, bmi, body_fat_rate, etc.
+   * Height is a separate dataType (com.huawei.instantaneous.height) returning meters.
+   */
+  async getBodyCompositionData(date: string): Promise<{
+    weight?: number;
+    height?: number;
+    bmi?: number;
+    bodyFatRate?: number;
+    latestWeightDate?: string;
+  } | null> {
+    const cacheKey = "bodyComposition";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      weight?: number;
+      height?: number;
+      bmi?: number;
+      bodyFatRate?: number;
+      latestWeightDate?: string;
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+
+    // 30-day lookback for body measurements
+    const endDate = new Date(`${date}T23:59:59.999`);
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 30);
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    // Fetch weight (includes bmi + body_fat_rate fields) and height in parallel
+    const [weightRes, heightRes] = await Promise.all(
+      [HEALTH_DATA_TYPES.BODY_WEIGHT, HEALTH_DATA_TYPES.BODY_HEIGHT].map((dataTypeName) =>
+        fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "x-client-id": clientId,
+          },
+          body: JSON.stringify({
+            polymerizeWith: [{ dataTypeName }],
+            startTime,
+            endTime,
+          }),
+        }).catch(() => null)
+      )
+    );
+
+    // Extract body_weight response — multiple fields per point: body_weight, bmi, body_fat_rate
+    const extractWeightData = async (
+      res: Response | null
+    ): Promise<{ weight?: number; bmi?: number; bodyFatRate?: number; date?: string } | null> => {
+      if (!res || !res.ok) return null;
+      const json = (await res.json()) as any;
+      let latest: { weight?: number; bmi?: number; bodyFatRate?: number; date?: string } | null =
+        null;
+      const groups = json.group || [];
+      for (const group of groups) {
+        for (const sampleSet of group.sampleSet || []) {
+          for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+            let timestamp = point.startTime;
+            if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+            const pointDate = timestamp
+              ? new Date(timestamp).toISOString().split("T")[0]
+              : undefined;
+
+            const entry: { weight?: number; bmi?: number; bodyFatRate?: number; date?: string } = {
+              date: pointDate,
+            };
+            for (const v of point.value || []) {
+              const val = v.floatValue ?? v.integerValue ?? 0;
+              if (v.fieldName === "body_weight" && val > 0)
+                entry.weight = Math.round(val * 10) / 10;
+              else if (v.fieldName === "bmi" && val > 0) entry.bmi = Math.round(val * 10) / 10;
+              else if (v.fieldName === "body_fat_rate" && val > 0)
+                entry.bodyFatRate = Math.round(val * 10) / 10;
+            }
+            // Fallback: if no fieldName matched, use positional value[0] as weight
+            if (!entry.weight && point.value?.[0]) {
+              const val = point.value[0].floatValue ?? point.value[0].integerValue ?? 0;
+              if (val > 0) entry.weight = Math.round(val * 10) / 10;
+            }
+            if (entry.weight) latest = entry;
+          }
+        }
+      }
+      return latest;
+    };
+
+    // Extract height — API returns in meters (range 0.4-2.6), convert to cm
+    const extractHeight = async (res: Response | null): Promise<number | null> => {
+      if (!res || !res.ok) return null;
+      const json = (await res.json()) as any;
+      let latestHeight: number | null = null;
+      const groups = json.group || [];
+      for (const group of groups) {
+        for (const sampleSet of group.sampleSet || []) {
+          for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+            // Try fieldName "height" first, then positional
+            let heightVal = 0;
+            for (const v of point.value || []) {
+              if (v.fieldName === "height") {
+                heightVal = v.floatValue ?? v.integerValue ?? 0;
+              }
+            }
+            if (heightVal === 0 && point.value?.[0]) {
+              heightVal = point.value[0].floatValue ?? point.value[0].integerValue ?? 0;
+            }
+            if (heightVal > 0) {
+              // Huawei API returns height in meters; convert to cm
+              latestHeight =
+                heightVal <= 3
+                  ? Math.round(heightVal * 100 * 10) / 10
+                  : Math.round(heightVal * 10) / 10;
+            }
+          }
+        }
+      }
+      return latestHeight;
+    };
+
+    const [weightData, heightCm] = await Promise.all([
+      extractWeightData(weightRes),
+      extractHeight(heightRes),
+    ]);
+
+    if (!weightData && !heightCm) {
+      return null;
+    }
+
+    const result: {
+      weight?: number;
+      height?: number;
+      bmi?: number;
+      bodyFatRate?: number;
+      latestWeightDate?: string;
+    } = {};
+
+    if (weightData) {
+      result.weight = weightData.weight;
+      result.bmi = weightData.bmi;
+      result.bodyFatRate = weightData.bodyFatRate;
+      result.latestWeightDate = weightData.date;
+    }
+    if (heightCm) {
+      result.height = heightCm;
+    }
+    // Compute BMI if not already present from API
+    if (!result.bmi && result.weight && result.height && result.height > 0) {
+      const heightM = result.height / 100;
+      result.bmi = Math.round((result.weight / (heightM * heightM)) * 10) / 10;
+    }
+
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, cacheParams, result);
+    return result;
+  }
+
+  /**
+   * Get body temperature data using polymerize API
+   */
+  async getBodyTemperatureData(date: string): Promise<{
+    readings: Array<{ time: string; value: number }>;
+    latest: number;
+    avg: number;
+    max: number;
+    min: number;
+  } | null> {
+    const cacheKey = "bodyTemperature";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      readings: Array<{ time: string; value: number }>;
+      latest: number;
+      avg: number;
+      max: number;
+      min: number;
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.BODY_TEMPERATURE }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Body temperature data failed: ${response.status}`, errorText);
+      // 403 = Huawei API limitation, re-auth won't fix
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    const readings: Array<{ time: string; value: number }> = [];
+
+    const groups = json.group || [];
+    for (const group of groups) {
+      for (const sampleSet of group.sampleSet || []) {
+        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+          let timestamp = point.startTime;
+          if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const fieldValue = point.value?.[0];
+          const value = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
+          if (value > 0) {
+            readings.push({ time, value: Math.round(value * 10) / 10 });
+          }
+        }
+      }
+    }
+
+    if (readings.length === 0) {
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
+      return null;
+    }
+
+    const values = readings.map((r) => r.value);
+    const result = {
+      readings,
+      latest: values[values.length - 1],
+      avg: Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10,
+      max: Math.max(...values),
+      min: Math.min(...values),
+    };
+
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
+    return result;
+  }
+
+  /**
+   * Get nutrition data using healthRecords API
+   * Per Huawei docs: nutrition uses healthRecords endpoint with
+   * dataType = "com.huawei.health.record.nutrition_record"
+   * Fields: dietaryEnergy, meal, foodName, fat, protein, carbohydrates, mealRecordTime
+   */
+  async getNutritionData(date: string): Promise<{
+    totalCalories: number;
+    protein?: number;
+    fat?: number;
+    carbs?: number;
+    water?: number;
+    meals: Array<{ time: string; calories: number }>;
+  } | null> {
+    const cacheKey = "nutrition";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      totalCalories: number;
+      protein?: number;
+      fat?: number;
+      carbs?: number;
+      water?: number;
+      meals: Array<{ time: string; calories: number }>;
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+
+    // Timestamps in nanoseconds for healthRecords endpoint
+    const startTime = new Date(`${date}T00:00:00`).getTime() * 1000000;
+    const endTime = new Date(`${date}T23:59:59.999`).getTime() * 1000000;
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+
+    const params = new URLSearchParams({
+      startTime: startTime.toString(),
+      endTime: endTime.toString(),
+      dataType: HEALTH_DATA_TYPES.NUTRITION_RECORD,
+    });
+
+    const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Nutrition data failed: ${response.status}`, errorText);
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    const healthRecords = json.healthRecords || [];
+
+    if (healthRecords.length === 0) {
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
+      return null;
+    }
+
+    const meals: Array<{ time: string; calories: number }> = [];
+    let totalCalories = 0;
+    let protein: number | undefined;
+    let fat: number | undefined;
+    let carbs: number | undefined;
+    let water: number | undefined;
+
+    for (const record of healthRecords) {
+      const getValue = (fieldName: string) => {
+        const field = record.value?.find((v: any) => v.fieldName === fieldName);
+        return field?.floatValue ?? field?.integerValue ?? field?.longValue ?? null;
+      };
+
+      let timestamp = record.startTime;
+      if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+      const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+
+      const energy = getValue("dietaryEnergy") || 0;
+      const mealProtein = getValue("protein");
+      const mealFat = getValue("fat");
+      const mealCarbs = getValue("carbohydrates");
+
+      if (energy > 0) {
+        totalCalories += Math.round(energy);
+        meals.push({ time, calories: Math.round(energy) });
+      }
+      if (mealProtein !== null) protein = (protein || 0) + Math.round(mealProtein * 10) / 10;
+      if (mealFat !== null) fat = (fat || 0) + Math.round(mealFat * 10) / 10;
+      if (mealCarbs !== null) carbs = (carbs || 0) + Math.round(mealCarbs * 10) / 10;
+    }
+
+    if (totalCalories === 0 && meals.length === 0) {
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
+      return null;
+    }
+
+    const result = { totalCalories, protein, fat, carbs, water, meals };
+
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
+    return result;
+  }
+
+  /**
+   * Get menstrual cycle data using polymerize API
+   * Per Huawei docs, reproductive data spans multiple dataTypes:
+   * - com.huawei.continuous.menstrual_flow (volume: 1-4)
+   * - com.huawei.dysmenorrhoea (level: 1-3)
+   * - com.huawei.physical_symptoms (physicalSymptoms)
+   */
+  async getMenstrualCycleData(date: string): Promise<{
+    cycleDay?: number;
+    phase?: "menstrual" | "follicular" | "ovulatory" | "luteal";
+    periodStartDate?: string;
+    cycleLength?: number;
+    records: Array<{ date: string; status: string }>;
+  } | null> {
+    const cacheKey = "menstrualCycle";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      cycleDay?: number;
+      phase?: "menstrual" | "follicular" | "ovulatory" | "luteal";
+      periodStartDate?: string;
+      cycleLength?: number;
+      records: Array<{ date: string; status: string }>;
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+
+    // Look back 45 days to capture full cycle
+    const endDate = new Date(`${date}T23:59:59.999`);
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 45);
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    // Query menstrual_flow (primary indicator of period days)
+    // Also try dysmenorrhoea and physical_symptoms for richer data
+    const menstrualTypes = [
+      HEALTH_DATA_TYPES.MENSTRUAL_FLOW,
+      HEALTH_DATA_TYPES.DYSMENORRHOEA,
+      HEALTH_DATA_TYPES.PHYSICAL_SYMPTOMS,
+    ];
+
+    const responses = await Promise.all(
+      menstrualTypes.map((dataTypeName) =>
+        fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "x-client-id": clientId,
+          },
+          body: JSON.stringify({
+            polymerizeWith: [{ dataTypeName }],
+            startTime,
+            endTime,
+          }),
+        }).catch(() => null)
+      )
+    );
+
+    const records: Array<{ date: string; status: string }> = [];
+
+    // Parse menstrual_flow response — records with flow volume indicate period days
+    const flowRes = responses[0];
+    if (flowRes && flowRes.ok) {
+      const json = (await flowRes.json()) as any;
+      const groups = json.group || [];
+      for (const group of groups) {
+        for (const sampleSet of group.sampleSet || []) {
+          for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+            let timestamp = point.startTime;
+            if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+            const pointDate = timestamp ? new Date(timestamp).toISOString().split("T")[0] : date;
+
+            // volume field: 1=spotting, 2=light, 3=moderate, 4=heavy
+            let volume = 0;
+            for (const v of point.value || []) {
+              if (v.fieldName === "volume") {
+                volume = v.integerValue ?? v.floatValue ?? 0;
+              }
+            }
+            if (volume > 0) {
+              records.push({ date: pointDate, status: "menstrual" });
+            }
+          }
+        }
+      }
+    }
+
+    if (records.length === 0) {
+      saveToFileCache(cacheKey, cacheParams, null);
+      return null;
+    }
+
+    // Sort by date
+    records.sort((a, b) => a.date.localeCompare(b.date));
+
+    // Derive cycle info from flow records
+    const periodStartDate = records.length > 0 ? records[0].date : undefined;
+
+    // Estimate phase based on cycle day
+    let cycleDay: number | undefined;
+    let phase: "menstrual" | "follicular" | "ovulatory" | "luteal" | undefined;
+    if (periodStartDate) {
+      const daysDiff = Math.floor(
+        (new Date(date).getTime() - new Date(periodStartDate).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      cycleDay = daysDiff + 1;
+      // Estimate phase from cycle day (typical 28-day cycle)
+      if (cycleDay <= 5) phase = "menstrual";
+      else if (cycleDay <= 13) phase = "follicular";
+      else if (cycleDay <= 16) phase = "ovulatory";
+      else phase = "luteal";
+    }
+
+    const result = { cycleDay, phase, periodStartDate, cycleLength: undefined, records };
+
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, cacheParams, result);
+    return result;
+  }
+
+  /**
+   * Get VO2Max data using polymerize API
+   */
+  async getVO2MaxData(date: string): Promise<{
+    value: number;
+    level: "low" | "fair" | "good" | "excellent" | "superior";
+  } | null> {
+    const cacheKey = "vo2max";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      value: number;
+      level: "low" | "fair" | "good" | "excellent" | "superior";
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+
+    // Use 30-day lookback since VO2Max is not measured daily
+    const endDate = new Date(`${date}T23:59:59.999`);
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - 30);
+    const startTime = startDate.getTime();
+    const endTime = endDate.getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.VO2MAX }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`VO2Max data failed: ${response.status}`, errorText);
+      // 403 = Huawei API limitation, re-auth won't fix
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    let latestValue = 0;
+
+    const groups = json.group || [];
+    for (const group of groups) {
+      for (const sampleSet of group.sampleSet || []) {
+        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+          const fieldValue = point.value?.[0];
+          const value = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
+          if (value > 0) latestValue = value;
+        }
+      }
+    }
+
+    if (latestValue === 0) {
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
+      return null;
+    }
+
+    // Classify VO2Max level
+    let level: "low" | "fair" | "good" | "excellent" | "superior";
+    if (latestValue < 30) level = "low";
+    else if (latestValue < 37) level = "fair";
+    else if (latestValue < 48) level = "good";
+    else if (latestValue < 55) level = "excellent";
+    else level = "superior";
+
+    const result = { value: Math.round(latestValue * 10) / 10, level };
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
+    return result;
+  }
+
+  /**
+   * Get HRV (heart rate variability) data
+   * Uses heart_rate_variability or falls back to heart_rate.statistics
+   */
+  async getHRVData(date: string): Promise<{
+    rmssd: number;
+    avg: number;
+    max: number;
+    min: number;
+    readings: Array<{ time: string; value: number }>;
+  } | null> {
+    const cacheKey = "hrv";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      rmssd: number;
+      avg: number;
+      max: number;
+      min: number;
+      readings: Array<{ time: string; value: number }>;
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    // Try dedicated HRV data type first, then fall back to heart_rate.statistics
+    const dataTypeNames = [HEALTH_DATA_TYPES.HRV, HEALTH_DATA_TYPES.HEART_RATE_STATISTICS];
+
+    for (const dataTypeName of dataTypeNames) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "x-client-id": clientId,
+        },
+        body: JSON.stringify({
+          polymerizeWith: [{ dataTypeName }],
+          startTime,
+          endTime,
+        }),
+      });
+
+      if (!response.ok) continue;
+
+      const json = (await response.json()) as any;
+      const readings: Array<{ time: string; value: number }> = [];
+
+      const groups = json.group || [];
+      for (const group of groups) {
+        for (const sampleSet of group.sampleSet || []) {
+          for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+            let timestamp = point.startTime;
+            if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+            const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+
+            // Try to extract HRV specific fields
+            let hrvValue = 0;
+            for (const v of point.value || []) {
+              const val = v.floatValue ?? v.integerValue ?? 0;
+              if (
+                v.fieldName === "rmssd" ||
+                v.fieldName === "hrv" ||
+                v.fieldName === "heart_rate_variability"
+              ) {
+                hrvValue = val;
+                break;
+              }
+            }
+            // Fallback: first value
+            if (hrvValue === 0 && point.value?.[0]) {
+              hrvValue = point.value[0].floatValue ?? point.value[0].integerValue ?? 0;
+            }
+            if (hrvValue > 0) {
+              readings.push({ time, value: Math.round(hrvValue) });
+            }
+          }
+        }
+      }
+
+      if (readings.length === 0) continue;
+
+      const values = readings.map((r) => r.value);
+      const result = {
+        rmssd: values[values.length - 1], // Latest reading as RMSSD
+        avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
+        max: Math.max(...values),
+        min: Math.min(...values),
+        readings,
+      };
+
+      saveToMemoryCache(cacheKey, cacheParams, result);
+      saveToFileCache(cacheKey, { ...cacheParams, dataTypeName, rawResponse: json }, result);
+      return result;
+    }
+
+    saveToFileCache(cacheKey, cacheParams, null);
+    return null;
+  }
+
+  /**
+   * Get emotion data using polymerize API
+   * Note: May not be available on all devices/regions
+   */
+  async getEmotionData(date: string): Promise<{
+    current: string;
+    score: number;
+    readings: Array<{ time: string; emotion: string; score: number }>;
+  } | null> {
+    const cacheKey = "emotion";
+    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cached = getFromMemoryCache<{
+      current: string;
+      score: number;
+      readings: Array<{ time: string; emotion: string; score: number }>;
+    }>(cacheKey, cacheParams);
+    if (cached) return cached;
+
+    const accessToken = await this.getAccessToken();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
+
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-client-id": clientId,
+      },
+      body: JSON.stringify({
+        polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.EMOTION }],
+        startTime,
+        endTime,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Emotion data failed: ${response.status}`, errorText);
+      // 403 = Huawei API limitation, re-auth won't fix
+      saveToFileCache(cacheKey, cacheParams, null, errorText);
+      return null;
+    }
+
+    const json = (await response.json()) as any;
+    const readings: Array<{ time: string; emotion: string; score: number }> = [];
+
+    // Emotion score mapping: higher = more positive
+    const emotionFromScore = (score: number): string => {
+      if (score >= 80) return "happy";
+      if (score >= 60) return "calm";
+      if (score >= 40) return "neutral";
+      if (score >= 20) return "stressed";
+      return "anxious";
+    };
+
+    const groups = json.group || [];
+    for (const group of groups) {
+      for (const sampleSet of group.sampleSet || []) {
+        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+          let timestamp = point.startTime;
+          if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+
+          const fieldValue = point.value?.[0];
+          const score = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
+          if (score > 0) {
+            readings.push({ time, emotion: emotionFromScore(score), score });
+          }
+        }
+      }
+    }
+
+    if (readings.length === 0) {
+      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
+      return null;
+    }
+
+    const latestReading = readings[readings.length - 1];
+    const result = {
+      current: latestReading.emotion,
+      score: latestReading.score,
+      readings,
+    };
+
+    saveToMemoryCache(cacheKey, cacheParams, result);
+    saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
+    return result;
+  }
+
+  /**
+   * Get polymerized data for a date range using groupByTime for daily aggregation.
+   * This is the key optimization for 2-year data — instead of 730 individual API calls,
+   * we batch into ~90-day chunks with groupByTime=86400000ms (1 day), resulting in ~9 calls.
+   *
+   * Returns raw grouped data per day with field values.
+   */
+  async getPolymerizeDataRange(
+    dataTypeName: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; values: Record<string, number> }>> {
+    const accessToken = await this.getAccessToken();
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
+    const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
+
+    const result: Array<{ date: string; values: Record<string, number> }> = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const CHUNK_DAYS = 90;
+
+    const chunkStart = new Date(start);
+    while (chunkStart <= end) {
+      const chunkEnd = new Date(chunkStart);
+      chunkEnd.setDate(chunkEnd.getDate() + CHUNK_DAYS - 1);
+      if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+
+      const chunkStartDate = `${chunkStart.getFullYear()}-${String(chunkStart.getMonth() + 1).padStart(2, "0")}-${String(chunkStart.getDate()).padStart(2, "0")}`;
+      const chunkEndDate = `${chunkEnd.getFullYear()}-${String(chunkEnd.getMonth() + 1).padStart(2, "0")}-${String(chunkEnd.getDate()).padStart(2, "0")}`;
+      const startTime = new Date(`${chunkStartDate}T00:00:00`).getTime();
+      const endTime = new Date(`${chunkEndDate}T23:59:59.999`).getTime();
+
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "x-client-id": clientId,
+          },
+          body: JSON.stringify({
+            polymerizeWith: [{ dataTypeName }],
+            startTime,
+            endTime,
+            groupByTime: {
+              duration: 86400000, // 1 day in milliseconds
+              timeZoneId,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          console.warn(`Range polymerize failed for ${dataTypeName}: ${response.status}`);
+          chunkStart.setDate(chunkStart.getDate() + CHUNK_DAYS);
+          continue;
+        }
+
+        const json = (await response.json()) as any;
+        const groups = json.group || [];
+
+        for (const group of groups) {
+          // With groupByTime, each group represents one day
+          let groupStart = group.startTime;
+          if (groupStart > 1e15) groupStart = Math.floor(groupStart / 1e6);
+          const groupDate = groupStart
+            ? new Date(groupStart).toISOString().split("T")[0]
+            : undefined;
+          if (!groupDate) continue;
+
+          const dayValues: Record<string, number> = {};
+          for (const sampleSet of group.sampleSet || []) {
+            for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
+              for (const v of point.value || []) {
+                const val = v.floatValue ?? v.integerValue ?? 0;
+                if (v.fieldName) {
+                  dayValues[v.fieldName] = (dayValues[v.fieldName] || 0) + val;
+                } else {
+                  dayValues["value"] = (dayValues["value"] || 0) + val;
+                }
+              }
+            }
+          }
+
+          if (Object.keys(dayValues).length > 0) {
+            result.push({ date: groupDate, values: dayValues });
+          }
+        }
+      } catch (error) {
+        console.warn(`Range polymerize error for ${dataTypeName}:`, error);
+      }
+
+      chunkStart.setDate(chunkStart.getDate() + CHUNK_DAYS);
+    }
+
+    return result;
+  }
+
+  /**
    * Test API connection by fetching today's step count
    */
   async testConnection(): Promise<{ success: boolean; steps?: number; error?: string }> {
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       const data = await this.getPolymerizeData(today);
       return { success: true, steps: data.steps };
     } catch (error) {
@@ -1043,8 +2153,8 @@ export class HuaweiHealthApi {
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
     const accessToken = await this.getAccessToken();
 
-    const startTime = new Date(`${date}T00:00:00Z`).getTime();
-    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
@@ -1086,8 +2196,8 @@ export class HuaweiHealthApi {
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
     const accessToken = await this.getAccessToken();
 
-    const startTime = new Date(`${date}T00:00:00Z`).getTime();
-    const endTime = new Date(`${date}T23:59:59.999Z`).getTime();
+    const startTime = new Date(`${date}T00:00:00`).getTime();
+    const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
@@ -1248,7 +2358,7 @@ export class HuaweiHealthApi {
       "com.huawei.instantaneous.stress",
       "com.huawei.instantaneous.blood_glucose",
       "com.huawei.instantaneous.blood_pressure",
-      "com.huawei.instantaneous.body_temperature",
+      "com.huawei.instantaneous.body.temperature",
       "com.huawei.instantaneous.oxygen_saturation",
     ];
 

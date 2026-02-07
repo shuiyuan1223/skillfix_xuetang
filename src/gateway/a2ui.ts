@@ -39,7 +39,9 @@ export type A2UIComponentType =
   | "data_table"
   | "score_gauge"
   | "status_badge"
-  | "collapsible";
+  | "collapsible"
+  | "radar_chart"
+  | "activity_rings";
 
 // Base component interface
 export interface A2UIComponent {
@@ -257,6 +259,18 @@ export interface ScoreGaugeComponent extends A2UIComponent {
   thresholds?: { value: number; color: string }[];
 }
 
+// Activity Rings Component (Apple Watch-style concentric rings)
+export interface ActivityRingsComponent extends A2UIComponent {
+  type: "activity_rings";
+  rings: Array<{
+    value: number;
+    max: number;
+    label: string;
+    color: string;
+  }>;
+  size?: number; // diameter in px, default 200
+}
+
 // Status Badge Component
 export interface StatusBadgeComponent extends A2UIComponent {
   type: "status_badge";
@@ -272,6 +286,26 @@ export interface CollapsibleComponent extends A2UIComponent {
   expanded?: boolean;
   icon?: string;
   children: string[];
+}
+
+// Radar Chart Component
+export interface RadarChartComponent extends A2UIComponent {
+  type: "radar_chart";
+  data: Array<{
+    label: string;
+    value: number;
+    maxValue: number;
+  }>;
+  size?: number;
+  showLabels?: boolean;
+  showValues?: boolean;
+  color?: string;
+  compareData?: Array<{
+    label: string;
+    value: number;
+    maxValue: number;
+  }>;
+  compareColor?: string;
 }
 
 // Modal Component
@@ -332,7 +366,7 @@ export class A2UIGenerator {
   }
 
   private nextId(prefix: string = "c"): string {
-    return `${prefix}_${++this.idCounter}`;
+    return `${this.surfaceId}_${prefix}_${++this.idCounter}`;
   }
 
   // Layout components
@@ -468,12 +502,27 @@ export class A2UIGenerator {
     return id;
   }
 
+  activityRings(
+    rings: ActivityRingsComponent["rings"],
+    opts: Partial<ActivityRingsComponent> = {}
+  ): string {
+    const id = this.nextId("rings");
+    this.components.set(id, { id, type: "activity_rings", rings, ...opts });
+    return id;
+  }
+
   statusBadge(
     status: StatusBadgeComponent["status"],
     opts: Partial<StatusBadgeComponent> = {}
   ): string {
     const id = this.nextId("status");
     this.components.set(id, { id, type: "status_badge", status, ...opts });
+    return id;
+  }
+
+  radarChart(data: RadarChartComponent["data"], opts: Partial<RadarChartComponent> = {}): string {
+    const id = this.nextId("radar");
+    this.components.set(id, { id, type: "radar_chart", data, ...opts });
     return id;
   }
 

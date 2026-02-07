@@ -36,6 +36,7 @@ import {
   generatePromptsPage,
   generateSkillsPage,
   generateEvolutionPage,
+  generateBenchmarkRunDetailModal,
   generatePage,
   generateToast,
   generateTraceDetailModal,
@@ -46,7 +47,13 @@ import {
   generateCreateSkillModal,
   generatePromptRevertModal,
   generateAuthRequiredPage,
+  generateBenchmarkProgress,
+  generateBenchmarkProgressComplete,
+  generateToolCards,
+  mergePendingCards,
+  generateIntegrationsPage,
 } from "./pages.js";
+import { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
 import {
   listPromptsTool,
@@ -77,7 +84,11 @@ import {
   insertTestCase,
   deleteTestCase,
   updateSuggestionStatus,
+  listBenchmarkRuns,
+  listCategoryScores,
+  getBenchmarkRun,
 } from "../memory/db.js";
+import { BenchmarkRunner } from "../evolution/benchmark-runner.js";
 
 export interface GatewayConfig {
   port?: number;
@@ -138,6 +149,29 @@ export function createGatewayApp() {
       arguments: body.arguments || {},
     });
     return c.json(result);
+  });
+
+  // Slack webhook endpoint
+  app.post("/api/integrations/slack/webhook", async (c) => {
+    try {
+      const body = await c.req.json();
+      const { handleSlackWebhook } = await import("../integrations/slack-webhook.js");
+      const result = await handleSlackWebhook(body);
+      return c.json({
+        response_type: "in_channel",
+        text: result.issueUrl
+          ? `Feedback received! Issue created: ${result.issueUrl}`
+          : `Feedback received and classified as: ${result.classification.category} (${result.classification.severity})${result.error ? ` [Note: ${result.error}]` : ""}`,
+      });
+    } catch (error) {
+      return c.json(
+        {
+          response_type: "ephemeral",
+          text: `Error processing feedback: ${error instanceof Error ? error.message : String(error)}`,
+        },
+        500
+      );
+    }
   });
 
   // REST API endpoints for health data
@@ -581,7 +615,12 @@ export class GatewaySession {
   public userUuid: string | null = null;
 
   // Chat state
-  private chatMessages: Array<{ role: "user" | "assistant" | "tool"; content: string }> = [];
+  private chatMessages: Array<{
+    role: "user" | "assistant" | "tool";
+    content: string;
+    cards?: { components: unknown[]; root_id: string };
+  }> = [];
+  private pendingCards: Array<{ components: unknown[]; root_id: string }> = [];
   private isStreaming = false;
   private streamingContent = "";
   private currentView = "chat";
@@ -592,9 +631,34 @@ export class GatewaySession {
   private editingPrompt = false;
   private editingSkill = false;
   private editBuffer: string | null = null;
-  private evolutionTab: "overview" | "traces" | "evaluations" | "benchmark" | "suggestions" =
-    "overview";
+  private evolutionTab:
+    | "overview"
+    | "traces"
+    | "evaluations"
+    | "benchmark"
+    | "runs"
+    | "suggestions"
+    | "config" = "overview";
   private tracesPage = 0;
+  private benchmarkRunning = false;
+
+  // Dashboard state
+  private dashboardTab: "overview" | "vitals" | "activity" | "sleep" | "body" | "heart" | "trends" =
+    "overview";
+  private dashboardLoader: ProgressiveDashboardLoader | null = null;
+  private trendsMetric: string = "steps";
+  private trendsRange: string = "1m";
+
+  // Integrations page state
+  private integrationsTab: "overview" | "issues" | "prs" | "branches" = "overview";
+  private integrationsCache: {
+    repo?: unknown;
+    issues?: unknown[];
+    prs?: unknown[];
+    branchInfo?: unknown;
+    ghAvailable: boolean;
+    timestamp: number;
+  } | null = null;
 
   // Memory page state
   private memoryTab: "profile" | "summary" | "logs" | "search" = "profile";
@@ -633,6 +697,7 @@ export class GatewaySession {
         baseUrl: this.config.baseUrl,
         userUuid: this.userUuid || undefined,
         sessionId: this.sessionId,
+        dataSource: this.dataSource,
       });
     }
     return this.agent;
@@ -698,7 +763,10 @@ export class GatewaySession {
         });
         break;
 
-      case "health": {
+      case "dashboard":
+      case "health":
+      case "sleep":
+      case "activity": {
         // Check if user needs to authenticate (only for Huawei data source)
         const config = loadConfig();
         if (config.dataSources.type === "huawei" && !this.isUserAuthenticated()) {
@@ -706,314 +774,208 @@ export class GatewaySession {
           break;
         }
 
-        // Fetch all health data in parallel
-        const [heartRate, stress, spo2, restingHR, ecg] = await Promise.all([
-          this.dataSource.getHeartRate(today),
-          this.dataSource.getStress?.(today) ?? Promise.resolve(null),
-          this.dataSource.getSpO2?.(today) ?? Promise.resolve(null),
-          this.dataSource.getRestingHeartRate?.(today) ?? Promise.resolve(null),
-          this.dataSource.getECG?.(today) ?? Promise.resolve(null),
-        ]);
+        // Map legacy views to dashboard tabs
+        if (view === "health") this.dashboardTab = "vitals";
+        else if (view === "sleep") this.dashboardTab = "sleep";
+        else if (view === "activity") this.dashboardTab = "activity";
 
-        // Calculate heart rate trend
-        const hrReadings = heartRate.readings;
-        let hrTrend: { direction: "up" | "down" | "stable"; value: string } = {
-          direction: "stable",
-          value: t("common.normal"),
-        };
-        if (hrReadings.length >= 2) {
-          const recent = hrReadings.slice(-3).reduce((a, b) => a + b.value, 0) / 3;
-          const earlier = hrReadings.slice(0, 3).reduce((a, b) => a + b.value, 0) / 3;
-          if (recent > earlier + 5)
-            hrTrend = {
-              direction: "up",
-              value: `+${Math.round(recent - earlier)} ${t("health.bpmUnit")}`,
-            };
-          else if (recent < earlier - 5)
-            hrTrend = {
-              direction: "down",
-              value: `${Math.round(recent - earlier)} ${t("health.bpmUnit")}`,
-            };
+        // Use progressive loader for dashboard
+        if (!this.dashboardLoader) {
+          this.dashboardLoader = new ProgressiveDashboardLoader(this.dataSource, send);
+        } else {
+          // Update send function in case WebSocket reconnected
+          this.dashboardLoader.updateSend(send);
         }
 
-        // Stress trend based on value
-        let stressTrend: { direction: "up" | "down" | "stable"; value: string } | undefined;
-        if (stress) {
-          if (stress.current > 60) {
-            stressTrend = { direction: "up", value: t("health.high") };
-          } else if (stress.current < 30) {
-            stressTrend = { direction: "down", value: t("health.low") };
-          } else {
-            stressTrend = { direction: "stable", value: t("common.normal") };
-          }
-        }
+        // Load data progressively — this sends updates directly via send()
+        await this.dashboardLoader.load(this.dashboardTab);
 
-        // SpO2 trend
-        let spo2Trend: { direction: "up" | "down" | "stable"; value: string } | undefined;
-        if (spo2) {
-          if (spo2.current >= 95) {
-            spo2Trend = { direction: "stable", value: t("common.normal") };
-          } else if (spo2.current >= 90) {
-            spo2Trend = { direction: "down", value: t("health.low") };
-          } else {
-            spo2Trend = { direction: "down", value: t("health.veryLow") };
-          }
-        }
-
-        mainPage = generateHealthPage({
-          heartRate: {
-            label: t("health.heartRate"),
-            value: heartRate.restingAvg || "--",
-            unit: t("health.bpmAvg"),
-            trend: hrTrend,
-          },
-          restingHeartRate: {
-            label: t("health.restingHR"),
-            value: restingHR || heartRate.minToday || "--",
-            unit: t("health.bpmResting"),
-          },
-          spo2: {
-            label: t("health.spo2"),
-            value: spo2 ? `${spo2.current}%` : "--",
-            unit: spo2 ? t("health.oxygen") : t("health.noData"),
-            trend: spo2Trend,
-          },
-          stress: {
-            label: t("health.stress"),
-            value: stress ? stress.current : "--",
-            unit: stress ? t("health.stressLevel") : t("health.noData"),
-            trend: stressTrend,
-          },
-          heartRateChart: heartRate.readings.slice(-12).map((r) => ({
-            label: r.time,
-            value: r.value,
-          })),
-          ecg: ecg
-            ? {
-                hasArrhythmia: ecg.hasArrhythmia,
-                latestHeartRate: ecg.latestHeartRate,
-                records: ecg.records.map((r) => ({
-                  time: r.time,
-                  avgHeartRate: r.avgHeartRate,
-                  arrhythmiaLabel: r.arrhythmiaLabel,
-                })),
-              }
-            : undefined,
-        });
-        break;
-      }
-
-      case "sleep": {
-        const [sleep, weeklySleep] = await Promise.all([
-          this.dataSource.getSleep(today),
-          this.dataSource.getWeeklySleep(today),
-        ]);
-        mainPage = generateSleepPage({
-          duration: {
-            label: t("sleep.duration"),
-            value: sleep?.durationHours || "N/A",
-            unit: t("sleep.hours"),
-            trend: sleep ? { direction: "stable", value: t("common.normal") } : undefined,
-          },
-          quality: {
-            label: t("sleep.quality"),
-            value: sleep?.qualityScore || "N/A",
-            unit: "%",
-          },
-          deepSleep: {
-            label: t("sleep.deepSleep"),
-            value: sleep?.stages.deep || "N/A",
-            unit: t("sleep.minutes"),
-          },
-          sleepChart: weeklySleep.map((d) => ({
-            label: d.date.slice(-2),
-            value: d.hours,
-          })),
-        });
-        break;
-      }
-
-      case "activity": {
-        const [metrics, weeklySteps] = await Promise.all([
-          this.dataSource.getMetrics(today),
-          this.dataSource.getWeeklySteps(today),
-        ]);
-        // Calculate steps trend vs weekly average
-        const avgSteps =
-          weeklySteps.length > 0
-            ? weeklySteps.reduce((a, b) => a + b.steps, 0) / weeklySteps.length
-            : metrics.steps;
-        const stepsDiff = metrics.steps - avgSteps;
-        const stepsPercent = avgSteps > 0 ? Math.round((stepsDiff / avgSteps) * 100) : 0;
-        let stepsTrend: { direction: "up" | "down" | "stable"; value: string } | undefined;
-        if (stepsPercent > 5)
-          stepsTrend = { direction: "up", value: `+${stepsPercent}% ${t("activity.aboveAvg")}` };
-        else if (stepsPercent < -5)
-          stepsTrend = { direction: "down", value: `${stepsPercent}% ${t("activity.belowAvg")}` };
-        else stepsTrend = { direction: "stable", value: t("common.normal") };
-
-        mainPage = generateActivityPage({
-          steps: {
-            label: t("activity.steps"),
-            value: metrics.steps.toLocaleString(),
-            unit: t("activity.stepsToday"),
-            trend: stepsTrend,
-          },
-          calories: {
-            label: t("activity.calories"),
-            value: metrics.calories.toLocaleString(),
-            unit: t("activity.kcalBurned"),
-          },
-          activeMinutes: {
-            label: t("activity.activeTime"),
-            value: metrics.activeMinutes,
-            unit: t("sleep.minutes"),
-          },
-          stepsChart: weeklySteps.map((d) => ({
-            label: d.date.slice(-2),
-            value: d.steps,
-          })),
-        });
-        break;
+        // Return early — progressive loader already sent the page
+        return;
       }
 
       case "memory": {
+        // Send loading page immediately
+        send(
+          generatePage(
+            view,
+            generateMemoryPage({
+              activeTab: this.memoryTab,
+              profileCompleteness: 0,
+              profile: {} as never,
+              missingFields: [],
+              memoryStats: { totalChunks: 0, lastUpdated: 0 },
+              memorySummary: "",
+              dailyLogs: [],
+              loading: true,
+            })
+          )
+        );
+
+        // Load data async and re-send
         const mm = getMemoryManager();
         const uuid = this.userUuid || getUserUuid();
-        mainPage = generateMemoryPage({
-          activeTab: this.memoryTab,
-          profileCompleteness: mm.getProfileCompleteness(uuid),
-          profile: mm.getProfile(uuid),
-          missingFields: mm.getAllMissingFields(uuid).map((f) => f.key),
-          memoryStats: mm.getMemoryStats(uuid),
-          memorySummary: loadMemorySummary(uuid) || "",
-          dailyLogs: getRecentDailyLogs(uuid, 7),
-          searchQuery: this.memorySearchQuery,
-          searchResults: this.memorySearchResults,
-        });
-        break;
+        try {
+          const memoryPage = generateMemoryPage({
+            activeTab: this.memoryTab,
+            profileCompleteness: mm.getProfileCompleteness(uuid),
+            profile: mm.getProfile(uuid),
+            missingFields: mm.getAllMissingFields(uuid).map((f) => f.key),
+            memoryStats: mm.getMemoryStats(uuid),
+            memorySummary: loadMemorySummary(uuid) || "",
+            dailyLogs: getRecentDailyLogs(uuid, 7),
+            searchQuery: this.memorySearchQuery,
+            searchResults: this.memorySearchResults,
+          });
+          send(generatePage(view, memoryPage));
+        } catch (e) {
+          console.error("[Memory] Load error:", e);
+        }
+        return;
       }
 
       case "settings/prompts": {
-        const promptsResult = await listPromptsTool.execute({});
-        let content: string | undefined;
-        let commits:
-          | Array<{
-              hash: string;
-              shortHash: string;
-              message: string;
-              date: string;
-              author: string;
-            }>
-          | undefined;
+        // Send loading page immediately
+        send(
+          generatePage(
+            view,
+            generatePromptsPage({
+              prompts: [],
+              editing: false,
+              loading: true,
+            })
+          )
+        );
 
-        if (this.selectedPrompt) {
-          const promptResult = await getPromptTool.execute({ name: this.selectedPrompt });
-          if (promptResult.success) {
-            content = this.editBuffer ?? promptResult.content;
+        // Fetch data async
+        try {
+          const promptsResult = await listPromptsTool.execute({});
+          let content: string | undefined;
+          let commits:
+            | Array<{
+                hash: string;
+                shortHash: string;
+                message: string;
+                date: string;
+                author: string;
+              }>
+            | undefined;
+
+          if (this.selectedPrompt) {
+            const promptResult = await getPromptTool.execute({ name: this.selectedPrompt });
+            if (promptResult.success) {
+              content = this.editBuffer ?? promptResult.content;
+            }
+
+            const historyResult = await getPromptHistoryTool.execute({
+              name: this.selectedPrompt,
+              limit: 10,
+            });
+            if (historyResult.success && historyResult.commits) {
+              commits = historyResult.commits;
+            }
           }
 
-          const historyResult = await getPromptHistoryTool.execute({
-            name: this.selectedPrompt,
-            limit: 10,
-          });
-          if (historyResult.success && historyResult.commits) {
-            commits = historyResult.commits;
-          }
+          send(
+            generatePage(
+              view,
+              generatePromptsPage({
+                prompts: promptsResult.prompts || [],
+                selectedPrompt: this.selectedPrompt || undefined,
+                content,
+                commits,
+                editing: this.editingPrompt,
+              })
+            )
+          );
+        } catch (e) {
+          console.error("[Prompts] Load error:", e);
         }
-
-        mainPage = generatePromptsPage({
-          prompts: promptsResult.prompts || [],
-          selectedPrompt: this.selectedPrompt || undefined,
-          content,
-          commits,
-          editing: this.editingPrompt,
-        });
-        break;
+        return;
       }
 
       case "settings/skills": {
-        const skillsResult = await listSkillsTool.execute({});
-        let content: string | undefined;
+        // Send loading page immediately
+        send(
+          generatePage(
+            view,
+            generateSkillsPage({
+              skills: [],
+              editing: false,
+              loading: true,
+            })
+          )
+        );
 
-        if (this.selectedSkill) {
-          const skillResult = await getSkillTool.execute({ name: this.selectedSkill });
-          if (skillResult.success && "content" in skillResult) {
-            content = this.editBuffer ?? skillResult.content;
+        // Fetch data async
+        try {
+          const skillsResult = await listSkillsTool.execute({});
+          let content: string | undefined;
+
+          if (this.selectedSkill) {
+            const skillResult = await getSkillTool.execute({ name: this.selectedSkill });
+            if (skillResult.success && "content" in skillResult) {
+              content = this.editBuffer ?? skillResult.content;
+            }
           }
-        }
 
-        mainPage = generateSkillsPage({
-          skills: skillsResult.skills || [],
-          selectedSkill: this.selectedSkill || undefined,
-          content,
-          editing: this.editingSkill,
-        });
-        break;
+          send(
+            generatePage(
+              view,
+              generateSkillsPage({
+                skills: skillsResult.skills || [],
+                selectedSkill: this.selectedSkill || undefined,
+                content,
+                editing: this.editingSkill,
+              })
+            )
+          );
+        } catch (e) {
+          console.error("[Skills] Load error:", e);
+        }
+        return;
       }
 
       case "settings/evolution": {
-        let stats;
-        let traces;
-        let tracesTotal = 0;
-        let evaluations;
-        let testCases;
-        let suggestions;
+        // Send loading page immediately
+        send(
+          generatePage(
+            view,
+            generateEvolutionPage({
+              activeTab: this.evolutionTab,
+              loading: true,
+            })
+          )
+        );
 
-        if (this.evolutionTab === "overview") {
-          stats = getEvaluationStats();
-        } else if (this.evolutionTab === "traces") {
-          const traceRows = listTraces({ limit: 20, offset: this.tracesPage * 20 });
-          tracesTotal = countTraces();
-          traces = traceRows.map((t) => {
-            const evalResult = getEvaluationByTraceId(t.id);
-            return {
-              id: t.id,
-              timestamp: t.timestamp,
-              userMessage: t.user_message,
-              score: evalResult?.overall_score,
-            };
-          });
-        } else if (this.evolutionTab === "evaluations") {
-          const evalRows = listEvaluations({ limit: 50 });
-          evaluations = evalRows.map((e) => ({
-            id: e.id,
-            traceId: e.trace_id,
-            timestamp: e.timestamp,
-            score: e.overall_score,
-            feedback: e.feedback,
-          }));
-        } else if (this.evolutionTab === "benchmark") {
-          const testRows = listTestCases({ limit: 50 });
-          testCases = testRows.map((tc) => ({
-            id: tc.id,
-            category: tc.category,
-            query: tc.query,
-            expected: JSON.parse(tc.expected),
-          }));
-        } else if (this.evolutionTab === "suggestions") {
-          const suggRows = listSuggestions({ limit: 50 });
-          suggestions = suggRows.map((s) => ({
-            id: s.id,
-            timestamp: s.timestamp,
-            type: s.type,
-            target: s.target,
-            status: s.status,
-            rationale: s.rationale,
-          }));
+        // Fetch data and re-send
+        try {
+          const evoData = this.loadEvolutionData();
+          send(generatePage(view, generateEvolutionPage(evoData)));
+        } catch (e) {
+          console.error("[Evolution] Load error:", e);
         }
+        return;
+      }
 
-        mainPage = generateEvolutionPage({
-          activeTab: this.evolutionTab,
-          stats,
-          traces,
-          tracesPage: this.tracesPage,
-          tracesTotal,
-          evaluations,
-          testCases,
-          suggestions,
+      case "settings/integrations": {
+        // Send loading page immediately (no data yet)
+        send(
+          generatePage(
+            view,
+            generateIntegrationsPage({
+              activeTab: this.integrationsTab,
+              ghAvailable: true,
+              loading: true,
+            })
+          )
+        );
+
+        // Fetch GitHub data async and re-send
+        this.loadIntegrationsAsync(send).catch((e) => {
+          console.error("[Integrations] Load error:", e);
         });
-        break;
+        return;
       }
 
       default:
@@ -1113,7 +1075,11 @@ export class GatewaySession {
       await this.handleNavigate(view, send);
     }
     // OAuth actions
-    else if (action === "start_huawei_auth") {
+    else if (action === "start_huawei_auth" || action === "start_reauth") {
+      // Clear scope error cache so re-auth can fix them
+      import("../data-sources/huawei/huawei-api.js").then(({ clearMissingScopeErrors }) =>
+        clearMissingScopeErrors()
+      );
       // The frontend handles opening the OAuth popup
       // We just need to send back confirmation and the user UUID
       send({
@@ -1128,7 +1094,13 @@ export class GatewaySession {
       this.agent = null;
       send({ type: "user_uuid_set", uuid: this.userUuid });
     } else if (action === "auth_complete") {
-      // User completed OAuth, refresh the current view
+      // User completed OAuth — full reset: clear all caches and re-fetch from scratch
+      const { clearMemoryCache } = await import("../data-sources/huawei/api-cache.js");
+      const { clearMissingScopeErrors } = await import("../data-sources/huawei/huawei-api.js");
+      clearMemoryCache();
+      clearMissingScopeErrors();
+      // Force dashboard loader to start fresh (discard stale null data)
+      this.dashboardLoader = null;
       await this.handleNavigate(this.currentView, send);
     }
     // Memory search action
@@ -1241,13 +1213,103 @@ export class GatewaySession {
     }
     // Evolution actions
     else if (action === "tab_change" && payload?.tab) {
-      if (this.currentView === "memory") {
+      if (
+        this.currentView === "dashboard" ||
+        this.currentView === "health" ||
+        this.currentView === "sleep" ||
+        this.currentView === "activity"
+      ) {
+        type DashboardTab =
+          | "overview"
+          | "vitals"
+          | "activity"
+          | "sleep"
+          | "body"
+          | "heart"
+          | "trends";
+        this.dashboardTab = payload.tab as DashboardTab;
+        if (this.dashboardLoader) {
+          this.dashboardLoader.updateSend(send);
+          // Pre-set trends state so selectors show current values
+          if (this.dashboardTab === "trends") {
+            this.dashboardLoader.getData().trendsMetric = this.trendsMetric;
+            this.dashboardLoader.getData().trendsRange = this.trendsRange;
+          }
+          await this.dashboardLoader.load(this.dashboardTab);
+          // After loading Trends tab skeleton, load actual trend data
+          if (this.dashboardTab === "trends") {
+            await this.dashboardLoader.loadTrends(this.trendsMetric, this.trendsRange);
+          }
+        } else {
+          await this.handleNavigate("dashboard", send);
+        }
+      } else if (this.currentView === "memory") {
         this.memoryTab = payload.tab as "profile" | "summary" | "logs" | "search";
         await this.handleNavigate("memory", send);
+      } else if (this.currentView === "settings/integrations") {
+        this.integrationsTab = payload.tab as "overview" | "issues" | "prs" | "branches";
+        if (this.integrationsCache) {
+          // Cache available — instant tab switch
+          send(
+            generatePage(
+              "settings/integrations",
+              generateIntegrationsPage({
+                activeTab: this.integrationsTab,
+                repo: this.integrationsCache.repo as any,
+                issues: this.integrationsCache.issues as any,
+                prs: this.integrationsCache.prs as any,
+                branchInfo: this.integrationsCache.branchInfo as any,
+                ghAvailable: this.integrationsCache.ghAvailable,
+              })
+            )
+          );
+          this.loadIntegrationsTabData(send).catch(() => {});
+        } else {
+          // Still loading — just show skeleton for the new tab (don't re-trigger full load)
+          send(
+            generatePage(
+              "settings/integrations",
+              generateIntegrationsPage({
+                activeTab: this.integrationsTab,
+                ghAvailable: true,
+                loading: true,
+              })
+            )
+          );
+        }
       } else {
-        type EvolutionTab = "overview" | "traces" | "evaluations" | "benchmark" | "suggestions";
+        type EvolutionTab =
+          | "overview"
+          | "traces"
+          | "evaluations"
+          | "benchmark"
+          | "runs"
+          | "suggestions"
+          | "config";
         this.evolutionTab = payload.tab as EvolutionTab;
         await this.handleNavigate("settings/evolution", send);
+      }
+    } else if (action === "change_trends_range" && payload) {
+      // User changed time range selector
+      this.trendsRange = (payload.value as string) || "1m";
+      if (this.dashboardLoader) {
+        this.dashboardLoader.updateSend(send);
+        await this.dashboardLoader.loadTrends(this.trendsMetric, this.trendsRange);
+      }
+    } else if (action === "change_trends_metric" && payload) {
+      // User changed metric selector
+      this.trendsMetric = (payload.value as string) || "steps";
+      if (this.dashboardLoader) {
+        this.dashboardLoader.updateSend(send);
+        await this.dashboardLoader.loadTrends(this.trendsMetric, this.trendsRange);
+      }
+    } else if (action === "trends_config_change" && payload) {
+      // Legacy combined handler
+      this.trendsMetric = (payload.metric as string) || "steps";
+      this.trendsRange = (payload.range as string) || "1m";
+      if (this.dashboardLoader) {
+        this.dashboardLoader.updateSend(send);
+        await this.dashboardLoader.loadTrends(this.trendsMetric, this.trendsRange);
       }
     } else if (action === "traces_page_change" && payload?.page !== undefined) {
       this.tracesPage = payload.page as number;
@@ -1424,33 +1486,63 @@ export class GatewaySession {
       send({ type: "clear_surface", surface_id: "modal" });
       await this.handleNavigate("settings/prompts", send);
     } else if (action === "run_benchmark") {
-      // Show toast that benchmark is starting
-      const toast = generateToast("Running benchmark tests... This may take a while.", "info");
+      if (this.benchmarkRunning) {
+        const toast = generateToast(t("evolution.benchmarkRunning"), "warning");
+        send({
+          type: "a2ui",
+          surface_id: "toast",
+          components: toast.components,
+          root_id: toast.root_id,
+        });
+        return;
+      }
+
+      const profile = (payload?.profile as "quick" | "full") || "quick";
+
+      // Run benchmark asynchronously (progress shown via progress surface)
+      this.runBenchmarkAsync(profile, send).catch(console.error);
+    } else if (action === "run_auto_loop") {
+      const toast = generateToast(t("evolution.autoLoopHint"), "warning");
       send({
         type: "a2ui",
         surface_id: "toast",
         components: toast.components,
         root_id: toast.root_id,
       });
-
-      // Run benchmarks in background (simplified - in production would use actual evaluator)
-      const tests = listTestCases({ limit: 100 });
-      for (const test of tests) {
-        // For each test, we would normally call the agent and evaluate
-        // For now, just simulate by sending progress toast
-        console.log(`Running test: ${test.id} - ${test.query.slice(0, 50)}`);
+    } else if (action === "view_benchmark_run" && payload?.row) {
+      const row = payload.row as { id: string };
+      const runId = this.findFullBenchmarkRunId(row.id);
+      if (runId) {
+        const run = getBenchmarkRun(runId);
+        if (run) {
+          const scores = listCategoryScores(runId);
+          const modal = generateBenchmarkRunDetailModal(
+            {
+              id: run.id,
+              timestamp: run.timestamp,
+              versionTag: run.version_tag,
+              profile: run.profile,
+              overallScore: run.overall_score,
+              passedCount: run.passed_count,
+              failedCount: run.failed_count,
+              totalTestCases: run.total_test_cases,
+              durationMs: run.duration_ms,
+            },
+            scores.map((s) => ({
+              category: s.category,
+              score: s.score,
+              testCount: s.test_count,
+              passedCount: s.passed_count,
+            }))
+          );
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
+        }
       }
-
-      // Show completion toast
-      setTimeout(() => {
-        const doneToast = generateToast(`Completed ${tests.length} benchmark tests`, "success");
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: doneToast.components,
-          root_id: doneToast.root_id,
-        });
-      }, 1000);
     } else if (action === "run_test_case" && payload?.id) {
       const toast = generateToast("Running test case...", "info");
       send({
@@ -1461,6 +1553,11 @@ export class GatewaySession {
       });
       send({ type: "clear_surface", surface_id: "modal" });
       console.log(`Running test case: ${payload.id}`);
+    }
+    // Integrations actions
+    else if (action === "refresh_integrations") {
+      this.integrationsCache = null; // Invalidate cache to force refetch
+      await this.handleNavigate("settings/integrations", send);
     }
     // Default - pass to agent
     else {
@@ -1494,6 +1591,305 @@ export class GatewaySession {
     return found?.id || null;
   }
 
+  /**
+   * Load integrations data asynchronously and re-send the page.
+   * Caches results so tab switches are instant.
+   */
+  private async loadIntegrationsAsync(send: (msg: unknown) => void): Promise<void> {
+    let ghAvailable = true;
+
+    try {
+      const { getRepoInfo, listIssues, listPRs, getBranchInfo } =
+        await import("../integrations/github.js");
+
+      // Load all data in parallel for caching
+      const [repo, issues, prs, branchInfo] = await Promise.all([
+        getRepoInfo().catch(() => null),
+        listIssues(20).catch(() => []),
+        listPRs(20).catch(() => []),
+        getBranchInfo().catch(() => undefined),
+      ]);
+
+      if (!repo) ghAvailable = false;
+
+      // Cache everything
+      this.integrationsCache = {
+        repo,
+        issues,
+        prs,
+        branchInfo,
+        ghAvailable,
+        timestamp: Date.now(),
+      };
+    } catch {
+      ghAvailable = false;
+      this.integrationsCache = { ghAvailable: false, timestamp: Date.now() };
+    }
+
+    send(
+      generatePage(
+        "settings/integrations",
+        generateIntegrationsPage({
+          activeTab: this.integrationsTab,
+          repo: this.integrationsCache?.repo as any,
+          issues: this.integrationsCache?.issues as any,
+          prs: this.integrationsCache?.prs as any,
+          branchInfo: this.integrationsCache?.branchInfo as any,
+          ghAvailable,
+        })
+      )
+    );
+  }
+
+  /**
+   * Load tab-specific integrations data that wasn't in the initial cache
+   */
+  private async loadIntegrationsTabData(send: (msg: unknown) => void): Promise<void> {
+    if (!this.integrationsCache) return;
+
+    const { listIssues, listPRs, getBranchInfo } = await import("../integrations/github.js");
+
+    let updated = false;
+
+    if (this.integrationsTab === "issues" && !this.integrationsCache.issues?.length) {
+      this.integrationsCache.issues = await listIssues(30).catch(() => []);
+      updated = true;
+    } else if (this.integrationsTab === "prs" && !this.integrationsCache.prs?.length) {
+      this.integrationsCache.prs = await listPRs(20).catch(() => []);
+      updated = true;
+    } else if (this.integrationsTab === "branches" && !this.integrationsCache.branchInfo) {
+      this.integrationsCache.branchInfo = await getBranchInfo().catch(() => undefined);
+      updated = true;
+    }
+
+    if (updated) {
+      send(
+        generatePage(
+          "settings/integrations",
+          generateIntegrationsPage({
+            activeTab: this.integrationsTab,
+            repo: this.integrationsCache.repo as any,
+            issues: this.integrationsCache.issues as any,
+            prs: this.integrationsCache.prs as any,
+            branchInfo: this.integrationsCache.branchInfo as any,
+            ghAvailable: this.integrationsCache.ghAvailable,
+          })
+        )
+      );
+    }
+  }
+
+  /**
+   * Load evolution data synchronously (DB queries are fast)
+   */
+  private loadEvolutionData() {
+    let stats;
+    let traces;
+    let tracesTotal = 0;
+    let evaluations;
+    let testCases;
+    let suggestions;
+    let benchmarkRuns;
+    let latestCategoryScores;
+    let categoriesConfig;
+
+    if (this.evolutionTab === "overview") {
+      stats = getEvaluationStats();
+      const runs = listBenchmarkRuns({ limit: 5 });
+      benchmarkRuns = runs.map((r) => ({
+        id: r.id,
+        timestamp: r.timestamp,
+        versionTag: r.version_tag,
+        profile: r.profile,
+        overallScore: r.overall_score,
+        passedCount: r.passed_count,
+        failedCount: r.failed_count,
+        totalTestCases: r.total_test_cases,
+        durationMs: r.duration_ms,
+        metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+      }));
+      if (runs.length > 0) {
+        const scores = listCategoryScores(runs[0].id);
+        latestCategoryScores = scores.map((s) => ({
+          category: s.category,
+          score: s.score,
+          testCount: s.test_count,
+          passedCount: s.passed_count,
+        }));
+      }
+    } else if (this.evolutionTab === "traces") {
+      const traceRows = listTraces({ limit: 20, offset: this.tracesPage * 20 });
+      tracesTotal = countTraces();
+      traces = traceRows.map((t) => {
+        const evalResult = getEvaluationByTraceId(t.id);
+        return {
+          id: t.id,
+          timestamp: t.timestamp,
+          userMessage: t.user_message,
+          score: evalResult?.overall_score,
+        };
+      });
+    } else if (this.evolutionTab === "evaluations") {
+      const evalRows = listEvaluations({ limit: 50 });
+      evaluations = evalRows.map((e) => ({
+        id: e.id,
+        traceId: e.trace_id,
+        timestamp: e.timestamp,
+        score: e.overall_score,
+        feedback: e.feedback,
+      }));
+    } else if (this.evolutionTab === "benchmark") {
+      const testRows = listTestCases({ limit: 50 });
+      testCases = testRows.map((tc) => ({
+        id: tc.id,
+        category: tc.category,
+        query: tc.query,
+        expected: JSON.parse(tc.expected),
+      }));
+    } else if (this.evolutionTab === "runs") {
+      const runs = listBenchmarkRuns({ limit: 20 });
+      benchmarkRuns = runs.map((r) => ({
+        id: r.id,
+        timestamp: r.timestamp,
+        versionTag: r.version_tag,
+        profile: r.profile,
+        overallScore: r.overall_score,
+        passedCount: r.passed_count,
+        failedCount: r.failed_count,
+        totalTestCases: r.total_test_cases,
+        durationMs: r.duration_ms,
+        metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+      }));
+    } else if (this.evolutionTab === "suggestions") {
+      const suggRows = listSuggestions({ limit: 50 });
+      suggestions = suggRows.map((s) => ({
+        id: s.id,
+        timestamp: s.timestamp,
+        type: s.type,
+        target: s.target,
+        status: s.status,
+        rationale: s.rationale,
+      }));
+    } else if (this.evolutionTab === "config") {
+      const { loadCategoriesConfig } = require("../evolution/benchmark-seed.js");
+      categoriesConfig = loadCategoriesConfig();
+    }
+
+    return {
+      activeTab: this.evolutionTab,
+      stats,
+      traces,
+      tracesPage: this.tracesPage,
+      tracesTotal,
+      evaluations,
+      testCases,
+      suggestions,
+      benchmarkRuns,
+      latestCategoryScores,
+      categoriesConfig,
+    };
+  }
+
+  private findFullBenchmarkRunId(shortId: string): string | null {
+    const runs = listBenchmarkRuns({ limit: 100 });
+    const found = runs.find((r) => r.id.startsWith(shortId));
+    return found?.id || null;
+  }
+
+  private async runBenchmarkAsync(
+    profile: "quick" | "full",
+    send: (msg: unknown) => void
+  ): Promise<void> {
+    this.benchmarkRunning = true;
+
+    // Show initial progress (current=0)
+    const initProgress = generateBenchmarkProgress({
+      current: 0,
+      total: 0,
+      category: "",
+      profile,
+    });
+    send({
+      type: "a2ui",
+      surface_id: "progress",
+      components: initProgress.components,
+      root_id: initProgress.root_id,
+    });
+
+    try {
+      const agent = await this.getAgent();
+
+      const runner = new BenchmarkRunner({
+        agentCall: async (query: string) => {
+          const response = await agent.chatAndWait(query);
+          return { response };
+        },
+        llmCall: async (prompt: string) => {
+          const response = await agent.chatAndWait(prompt);
+          return response;
+        },
+        onProgress: (current, total, testCase) => {
+          const progress = generateBenchmarkProgress({
+            current,
+            total,
+            category: testCase.category,
+            profile,
+          });
+          send({
+            type: "a2ui",
+            surface_id: "progress",
+            components: progress.components,
+            root_id: progress.root_id,
+          });
+        },
+      });
+
+      // Seed test cases if needed
+      await runner.seedTestCases();
+
+      // Run benchmark
+      const result = await runner.run({ profile });
+
+      // Show completion progress
+      const complete = generateBenchmarkProgressComplete({
+        score: result.run.overallScore,
+        passed: result.run.passedCount,
+        failed: result.run.failedCount,
+        total: result.run.totalTestCases,
+      });
+      send({
+        type: "a2ui",
+        surface_id: "progress",
+        components: complete.components,
+        root_id: complete.root_id,
+      });
+
+      // Clear progress after 2 seconds
+      setTimeout(() => {
+        send({ type: "clear_surface", surface_id: "progress" });
+      }, 2000);
+
+      // Refresh evolution page
+      await this.handleNavigate("settings/evolution", send);
+    } catch (error) {
+      // Clear progress surface
+      send({ type: "clear_surface", surface_id: "progress" });
+
+      const errorToast = generateToast(
+        `Benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
+      send({
+        type: "a2ui",
+        surface_id: "toast",
+        components: errorToast.components,
+        root_id: errorToast.root_id,
+      });
+    } finally {
+      this.benchmarkRunning = false;
+    }
+  }
+
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
     switch (event.type) {
       case "message_start":
@@ -1524,9 +1920,32 @@ export class GatewaySession {
             }
           }
 
+          // Check for error responses (API errors, region blocks, etc.)
+          if (!text.trim() && event.message.stopReason === "error") {
+            const errorMsg = event.message.errorMessage || "Unknown error occurred";
+            this.chatMessages.push({
+              role: "assistant",
+              content: `⚠️ ${errorMsg}`,
+            });
+            this.isStreaming = false;
+            this.streamingContent = "";
+            this.pendingCards = [];
+            this.sendChatUpdate(send);
+            send({ type: "agent_text", content: errorMsg, is_final: true });
+            break;
+          }
+
           // Update UI if there's text content
           if (text.trim()) {
-            this.chatMessages.push({ role: "assistant", content: text });
+            // Attach any pending tool cards to this assistant message
+            const cards = mergePendingCards(this.pendingCards);
+            this.pendingCards = [];
+
+            this.chatMessages.push({
+              role: "assistant",
+              content: text,
+              ...(cards ? { cards } : {}),
+            });
             this.isStreaming = false;
             this.streamingContent = "";
             this.sendChatUpdate(send);
@@ -1545,6 +1964,20 @@ export class GatewaySession {
         this.chatMessages.push({ role: "tool", content: toolMsg });
         this.sendChatUpdate(send);
         send({ type: "tool_call", tool: event.toolName });
+        break;
+      }
+
+      case "tool_execution_end": {
+        if (!event.isError) {
+          try {
+            const cards = generateToolCards(event.toolName, event.result);
+            if (cards) {
+              this.pendingCards.push(cards);
+            }
+          } catch (err) {
+            console.error(`[ToolCards] Failed to generate cards for ${event.toolName}:`, err);
+          }
+        }
         break;
       }
 
@@ -1602,10 +2035,11 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
       if (url.pathname === "/ws") {
         const sessionId = crypto.randomUUID();
 
-        // Extract user UUID from cookie
+        // Extract user UUID from URL query param (priority) or cookie
+        const urlUuid = url.searchParams.get("uuid") || undefined;
         const cookieHeader = req.headers.get("cookie") || "";
         const userUuidMatch = cookieHeader.match(/pha_user_id=([^;]+)/);
-        const userUuid = userUuidMatch ? userUuidMatch[1] : undefined;
+        const userUuid = urlUuid || (userUuidMatch ? userUuidMatch[1] : undefined);
 
         const success = server.upgrade(req, {
           data: { sessionId, sessionKey: userUuid || sessionId, config, userUuid },

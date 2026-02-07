@@ -6,23 +6,40 @@
  * without needing tool calls in the first turn.
  */
 
+import type { HealthDataSource } from "../data-sources/interface.js";
 import { getDataSource } from "../tools/health-data.js";
 
 /**
  * Pre-compute a 7-day health context summary for the system prompt.
  * Best-effort: returns empty string if data fetching fails.
+ * @param dataSource - Optional user-specific data source; falls back to global.
  */
-export async function preComputeHealthContext(): Promise<string> {
+export async function preComputeHealthContext(dataSource?: HealthDataSource): Promise<string> {
   try {
-    const source = getDataSource();
+    const source = dataSource || getDataSource();
     const today = new Date().toISOString().split("T")[0];
 
-    // Fetch data in parallel
-    const [weeklySteps, weeklySleep, todayHR, todayWorkouts] = await Promise.all([
+    // Fetch data in parallel (including stress, SpO2, and new health types if available)
+    const [
+      weeklySteps,
+      weeklySleep,
+      todayHR,
+      todayWorkouts,
+      todayStress,
+      todaySpO2,
+      todayBP,
+      todayGlucose,
+      todayTemp,
+    ] = await Promise.all([
       source.getWeeklySteps(today).catch(() => []),
       source.getWeeklySleep(today).catch(() => []),
       source.getHeartRate(today).catch(() => null),
       source.getWorkouts(today).catch(() => []),
+      source.getStress?.(today).catch(() => null) ?? Promise.resolve(null),
+      source.getSpO2?.(today).catch(() => null) ?? Promise.resolve(null),
+      source.getBloodPressure?.(today).catch(() => null) ?? Promise.resolve(null),
+      source.getBloodGlucose?.(today).catch(() => null) ?? Promise.resolve(null),
+      source.getBodyTemperature?.(today).catch(() => null) ?? Promise.resolve(null),
     ]);
 
     const sections: string[] = [];
@@ -82,6 +99,37 @@ export async function preComputeHealthContext(): Promise<string> {
       );
     }
 
+    // --- Stress ---
+    if (todayStress) {
+      sections.push(
+        `**Stress (today)**: Current ${todayStress.current}, avg ${todayStress.avg}, range ${todayStress.min}-${todayStress.max}`
+      );
+    }
+
+    // --- SpO2 ---
+    if (todaySpO2) {
+      sections.push(
+        `**SpO2 (today)**: Current ${todaySpO2.current}%, avg ${todaySpO2.avg}%, range ${todaySpO2.min}-${todaySpO2.max}%`
+      );
+    }
+
+    // --- Blood Pressure ---
+    if (todayBP) {
+      sections.push(
+        `**Blood Pressure (today)**: ${todayBP.latestSystolic}/${todayBP.latestDiastolic} mmHg`
+      );
+    }
+
+    // --- Blood Glucose ---
+    if (todayGlucose) {
+      sections.push(`**Blood Glucose (today)**: ${todayGlucose.latest} mmol/L`);
+    }
+
+    // --- Body Temperature ---
+    if (todayTemp) {
+      sections.push(`**Body Temperature (today)**: ${todayTemp.latest}\u00B0C`);
+    }
+
     // --- Today's Workouts ---
     if (todayWorkouts.length > 0) {
       const workoutDescs = todayWorkouts.map((w) => {
@@ -121,6 +169,31 @@ export async function preComputeHealthContext(): Promise<string> {
     // Insight: elevated HR
     if (todayHR && todayHR.restingAvg > 90) {
       insights.push("Today's resting heart rate is elevated (>90 bpm).");
+    }
+
+    // Insight: high stress
+    if (todayStress && todayStress.avg > 60) {
+      insights.push("Today's average stress level is high (>60).");
+    }
+
+    // Insight: low SpO2
+    if (todaySpO2 && todaySpO2.avg < 95) {
+      insights.push("Today's blood oxygen is below normal (<95%).");
+    }
+
+    // Insight: elevated blood pressure
+    if (todayBP && (todayBP.latestSystolic > 140 || todayBP.latestDiastolic > 90)) {
+      insights.push("Blood pressure is elevated (>140/90 mmHg).");
+    }
+
+    // Insight: elevated blood glucose
+    if (todayGlucose && todayGlucose.latest > 7.0) {
+      insights.push("Blood glucose is elevated (>7.0 mmol/L fasting).");
+    }
+
+    // Insight: elevated body temperature
+    if (todayTemp && todayTemp.latest > 37.5) {
+      insights.push("Body temperature is elevated (>37.5\u00B0C).");
     }
 
     const dateRange =

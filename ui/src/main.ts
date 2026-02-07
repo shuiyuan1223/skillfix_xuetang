@@ -305,6 +305,20 @@ class A2UIRenderer {
     return this.renderComponent(data.root_id);
   }
 
+  /**
+   * Render inline card components within a chat message.
+   * Temporarily merges the card's components into the renderer's map.
+   */
+  renderInline(data: { components: A2UIComponent[]; root_id: string }): TemplateResult {
+    const saved = new Map(this.components);
+    for (const c of data.components) {
+      this.components.set(c.id, c);
+    }
+    const result = this.renderComponent(data.root_id);
+    this.components = saved;
+    return result;
+  }
+
   private renderComponent(id: string): TemplateResult {
     const c = this.components.get(id);
     if (!c) return html``;
@@ -359,6 +373,10 @@ class A2UIRenderer {
         return this.renderDataTable(c);
       case "score_gauge":
         return this.renderScoreGauge(c);
+      case "activity_rings":
+        return this.renderActivityRings(c);
+      case "radar_chart":
+        return this.renderRadarChart(c);
       case "status_badge":
         return this.renderStatusBadge(c);
       case "collapsible":
@@ -384,8 +402,12 @@ class A2UIRenderer {
     const gap = (c.gap as number) || 0;
     const padding = (c.padding as number) || 0;
     const align = (c.align as string) || "stretch";
+    const extraStyle = (c.style as string) || "";
     return html`
-      <div class="a2ui-column" style="gap: ${gap}px; padding: ${padding}px; align-items: ${align}">
+      <div
+        class="a2ui-column"
+        style="gap: ${gap}px; padding: ${padding}px; align-items: ${align}; ${extraStyle}"
+      >
         ${this.renderChildren(c.children)}
       </div>
     `;
@@ -517,44 +539,96 @@ class A2UIRenderer {
       `;
     }
 
-    // Line chart (simple SVG with interactive points)
-    const width = 100;
+    // Line chart with y-axis labels, grid lines, auto-scaled range
+    const chartW = 960;
+    const mL = 52; // left margin for y-axis labels
+    const mR = 12;
+    const mT = 12;
+    const mB = 22; // bottom margin for x-axis labels
+    const plotW = chartW - mL - mR;
+    const plotH = height - mT - mB;
+
+    // Auto-scale y range based on data (zoom into actual data range)
+    const minVal = Math.min(...values);
+    const dataRange = maxVal - minVal;
+    const yPad = dataRange > 0 ? dataRange * 0.15 : maxVal * 0.1 || 1;
+    const yMin = Math.max(0, Math.floor(minVal - yPad));
+    const yMax = Math.ceil(maxVal + yPad);
+    const yRange = yMax - yMin || 1;
+
     const pointCoords = data.map((d, i) => ({
-      x: data.length > 1 ? (i / (data.length - 1)) * width : width / 2,
-      y: height - (values[i] / maxVal) * (height - 20),
+      x: mL + (data.length > 1 ? (i / (data.length - 1)) * plotW : plotW / 2),
+      y: mT + plotH - ((values[i] - yMin) / yRange) * plotH,
       label: String(d[xKey]),
       value: values[i],
     }));
     const points = pointCoords.map((p) => `${p.x},${p.y}`).join(" ");
 
+    // Area fill under the line
+    const areaPoints = `${pointCoords[0].x},${mT + plotH} ${points} ${pointCoords[pointCoords.length - 1].x},${mT + plotH}`;
+
+    // Horizontal grid lines (5 levels)
+    const gridCount = 4;
+    const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
+      const pct = i / gridCount;
+      const val = yMin + pct * yRange;
+      return {
+        y: mT + plotH - pct * plotH,
+        label:
+          val >= 10000
+            ? `${(val / 1000).toFixed(0)}k`
+            : val >= 1000
+              ? `${(val / 1000).toFixed(1)}k`
+              : String(Math.round(val)),
+      };
+    });
+
+    // X-axis labels (evenly spaced, max 7)
+    const maxXLabels = Math.min(data.length, 7);
+    const xLabelIdxs =
+      data.length <= maxXLabels
+        ? data.map((_, i) => i)
+        : Array.from({ length: maxXLabels }, (_, i) =>
+            Math.round((i * (data.length - 1)) / (maxXLabels - 1))
+          );
+
     return html`
       <div class="a2ui-chart a2ui-chart-line" style="height: ${height}px">
-        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-          <polyline fill="none" stroke="${color}" stroke-width="2" points="${points}" />
+        <svg viewBox="0 0 ${chartW} ${height}">
+          ${gridLines.map(
+            (g) => svg`
+            <line x1="${mL}" y1="${g.y}" x2="${chartW - mR}" y2="${g.y}"
+                  stroke="currentColor" stroke-opacity="0.08" stroke-width="1" />
+            <text x="${mL - 8}" y="${g.y + 4}" text-anchor="end"
+                  fill="currentColor" fill-opacity="0.45" font-size="11" font-family="system-ui">${g.label}</text>
+          `
+          )}
+          <polygon points="${areaPoints}" fill="${color}" fill-opacity="0.06" />
+          <polyline
+            fill="none"
+            stroke="${color}"
+            stroke-width="2.5"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+            points="${points}"
+          />
           ${pointCoords.map(
             (p) => svg`
             <g class="a2ui-chart-point-group">
-              <circle
-                cx="${p.x}"
-                cy="${p.y}"
-                r="4"
-                fill="${color}"
-                class="a2ui-chart-point"
-              >
+              <circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}" class="a2ui-chart-point">
                 <title>${p.label}: ${p.value}</title>
               </circle>
-              <circle
-                cx="${p.x}"
-                cy="${p.y}"
-                r="12"
-                fill="transparent"
-                class="a2ui-chart-point-hitarea"
-              />
+              <circle cx="${p.x}" cy="${p.y}" r="14" fill="transparent" class="a2ui-chart-point-hitarea" />
             </g>
           `
           )}
+          ${xLabelIdxs.map(
+            (i) => svg`
+            <text x="${pointCoords[i].x}" y="${height - 4}" text-anchor="middle"
+                  fill="currentColor" fill-opacity="0.4" font-size="11" font-family="system-ui">${pointCoords[i].label}</text>
+          `
+          )}
         </svg>
-        <div class="a2ui-chart-tooltip"></div>
       </div>
     `;
   }
@@ -690,7 +764,12 @@ class A2UIRenderer {
 
   // Chat Components
   private renderChatMessages(c: A2UIComponent): TemplateResult {
-    const messages = (c.messages as { role: string; content: string }[]) || [];
+    const messages =
+      (c.messages as {
+        role: string;
+        content: string;
+        cards?: { components: A2UIComponent[]; root_id: string };
+      }[]) || [];
     const streaming = c.streaming as boolean;
     const streamingContent = c.streamingContent as string;
 
@@ -741,9 +820,22 @@ class A2UIRenderer {
                     </div>
                   `
                 : nothing}
-              <div class="a2ui-message-content">
-                ${msg.role === "assistant" ? unsafeHTML(renderMarkdown(msg.content)) : msg.content}
-              </div>
+              ${msg.role === "assistant" && msg.cards
+                ? html`
+                    <div class="a2ui-message-wrapper">
+                      <div class="a2ui-message-content">
+                        ${unsafeHTML(renderMarkdown(msg.content))}
+                      </div>
+                      <div class="a2ui-message-cards">${this.renderInline(msg.cards)}</div>
+                    </div>
+                  `
+                : html`
+                    <div class="a2ui-message-content">
+                      ${msg.role === "assistant"
+                        ? unsafeHTML(renderMarkdown(msg.content))
+                        : msg.content}
+                    </div>
+                  `}
             </div>
           `
         )}
@@ -1115,6 +1207,192 @@ class A2UIRenderer {
     `;
   }
 
+  private renderActivityRings(c: A2UIComponent): TemplateResult {
+    const rings =
+      (c.rings as Array<{ value: number; max: number; label: string; color: string }>) || [];
+    const size = (c.size as number) || 200;
+    const center = size / 2;
+    const strokeWidth = size / 11;
+    const gap = strokeWidth * 0.35;
+
+    // Build rings from outermost to innermost
+    const ringElements = rings.map((ring, i) => {
+      const radius = center - strokeWidth / 2 - i * (strokeWidth + gap);
+      if (radius <= 0) return svg``;
+      const circumference = 2 * Math.PI * radius;
+      const pct = Math.min(ring.value / ring.max, 1);
+      const dashOffset = circumference - pct * circumference;
+      // Track color: dimmed version of the ring color
+      const trackColor = ring.color + "30";
+
+      return svg`
+        <circle
+          cx="${center}" cy="${center}" r="${radius}"
+          fill="none"
+          stroke="${trackColor}"
+          stroke-width="${strokeWidth}"
+        />
+        <circle
+          cx="${center}" cy="${center}" r="${radius}"
+          fill="none"
+          stroke="${ring.color}"
+          stroke-width="${strokeWidth}"
+          stroke-linecap="round"
+          stroke-dasharray="${circumference}"
+          stroke-dashoffset="${dashOffset}"
+          transform="rotate(-90 ${center} ${center})"
+          class="a2ui-ring-fill"
+        />
+      `;
+    });
+
+    // Legend items
+    const legendItems = rings.map((ring) => {
+      const pct = Math.min(100, Math.round((ring.value / ring.max) * 100));
+      return html`
+        <div class="a2ui-ring-legend-item">
+          <span class="a2ui-ring-legend-dot" style="background: ${ring.color}"></span>
+          <span class="a2ui-ring-legend-label">${ring.label}</span>
+          <span class="a2ui-ring-legend-value" style="color: ${ring.color}">${pct}%</span>
+        </div>
+      `;
+    });
+
+    return html`
+      <div class="a2ui-activity-rings">
+        <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" class="a2ui-rings-svg">
+          ${ringElements}
+        </svg>
+        <div class="a2ui-ring-legend">${legendItems}</div>
+      </div>
+    `;
+  }
+
+  private renderRadarChart(c: A2UIComponent): TemplateResult {
+    const data = (c.data as Array<{ label: string; value: number; maxValue: number }>) || [];
+    const compareData = c.compareData as
+      | Array<{ label: string; value: number; maxValue: number }>
+      | undefined;
+    const size = (c.size as number) || 280;
+    const color = (c.color as string) || "#667eea";
+    const compareColor = (c.compareColor as string) || "#f59e0b";
+    const n = data.length;
+    if (n < 3) return html`<div class="a2ui-radar-chart">Need at least 3 data points</div>`;
+
+    const cx = size / 2;
+    const cy = size / 2;
+    const radius = size / 2 - 40; // Leave space for labels
+    const angleStep = (2 * Math.PI) / n;
+    const startAngle = -Math.PI / 2; // Start from top
+
+    // Helper: get polygon point
+    const getPoint = (i: number, pct: number) => {
+      const angle = startAngle + i * angleStep;
+      return {
+        x: cx + radius * pct * Math.cos(angle),
+        y: cy + radius * pct * Math.sin(angle),
+      };
+    };
+
+    // Build concentric grid polygons (20%, 40%, 60%, 80%, 100%)
+    const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
+    const gridPolygons = gridLevels.map((level) => {
+      const points = Array.from({ length: n }, (_, i) => {
+        const p = getPoint(i, level);
+        return `${p.x},${p.y}`;
+      }).join(" ");
+      return points;
+    });
+
+    // Axis lines from center to each vertex
+    const axisLines = Array.from({ length: n }, (_, i) => {
+      const p = getPoint(i, 1);
+      return { x2: p.x, y2: p.y };
+    });
+
+    // Data polygon
+    const dataPoints = data
+      .map((d, i) => {
+        const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0;
+        const p = getPoint(i, pct);
+        return `${p.x},${p.y}`;
+      })
+      .join(" ");
+
+    // Compare polygon (if provided)
+    let comparePoints = "";
+    if (compareData && compareData.length === n) {
+      comparePoints = compareData
+        .map((d, i) => {
+          const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0;
+          const p = getPoint(i, pct);
+          return `${p.x},${p.y}`;
+        })
+        .join(" ");
+    }
+
+    // Label positions (slightly beyond outer polygon)
+    const labels = data.map((d, i) => {
+      const angle = startAngle + i * angleStep;
+      const labelRadius = radius + 24;
+      const x = cx + labelRadius * Math.cos(angle);
+      const y = cy + labelRadius * Math.sin(angle);
+      // Text anchor based on position
+      let anchor = "middle";
+      if (Math.cos(angle) < -0.1) anchor = "end";
+      else if (Math.cos(angle) > 0.1) anchor = "start";
+      return { x, y, label: d.label, value: Math.round(d.value), anchor };
+    });
+
+    return html`
+      <div class="a2ui-radar-chart" style="width: ${size}px; height: ${size}px">
+        <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+          <!-- Grid polygons -->
+          ${gridPolygons.map(
+            (points) => svg`
+              <polygon points="${points}" class="a2ui-radar-grid" />
+            `
+          )}
+          <!-- Axis lines -->
+          ${axisLines.map(
+            (line) => svg`
+              <line x1="${cx}" y1="${cy}" x2="${line.x2}" y2="${line.y2}" class="a2ui-radar-axis" />
+            `
+          )}
+          <!-- Compare data polygon -->
+          ${comparePoints
+            ? svg`<polygon points="${comparePoints}" fill="${compareColor}" fill-opacity="0.15" stroke="${compareColor}" stroke-width="1.5" stroke-opacity="0.6" />`
+            : nothing}
+          <!-- Data polygon -->
+          <polygon
+            points="${dataPoints}"
+            fill="${color}"
+            fill-opacity="0.25"
+            stroke="${color}"
+            stroke-width="2"
+          />
+          <!-- Data points -->
+          ${data.map((d, i) => {
+            const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0;
+            const p = getPoint(i, pct);
+            return svg`<circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}" />`;
+          })}
+          <!-- Labels -->
+          ${labels.map(
+            (l) => svg`
+              <text x="${l.x}" y="${l.y}" text-anchor="${l.anchor}" class="a2ui-radar-label" dominant-baseline="central">
+                ${l.label}
+              </text>
+              <text x="${l.x}" y="${l.y + 14}" text-anchor="${l.anchor}" class="a2ui-radar-value" dominant-baseline="central">
+                ${l.value}
+              </text>
+            `
+          )}
+        </svg>
+      </div>
+    `;
+  }
+
   private renderStatusBadge(c: A2UIComponent): TemplateResult {
     const status = c.status as string;
     const label = (c.label as string) || status;
@@ -1270,7 +1548,7 @@ ${value || ""}</textarea
             ?required=${required}
             @change=${handleChange}
           >
-            <option value="">${placeholder || "Select..."}</option>
+            ${!value ? html`<option value="">${placeholder || "Select..."}</option>` : nothing}
             ${options?.map(
               (opt) => html`
                 <option value=${opt.value} ?selected=${value === opt.value}>${opt.label}</option>
@@ -1380,30 +1658,255 @@ class PHAApp extends LitElement {
       --color-info: #3b82f6; /* blue-500 */
     }
 
-    /* Light mode overrides */
+    /* ========== Light Mode — 小清新 Fresh & Clean ========== */
     .shell.theme-light {
-      --color-bg: #f8fafc; /* slate-50 */
-      --color-bg-secondary: #f1f5f9; /* slate-100 */
-      --color-bg-tertiary: #e2e8f0; /* slate-200 */
-      --color-surface: rgba(255, 255, 255, 0.9);
-      --color-surface-hover: rgba(241, 245, 249, 0.9);
-      --color-surface-card: rgba(248, 250, 252, 0.95); /* slate-50 */
-      --color-surface-elevated: rgba(255, 255, 255, 0.98);
-      --color-surface-code: rgba(241, 245, 249, 0.9); /* slate-100 */
-      --color-surface-inline-code: rgba(0, 0, 0, 0.06);
-      --color-overlay: rgba(0, 0, 0, 0.5); /* lighter overlay for light mode */
-      --color-gauge-track: rgba(0, 0, 0, 0.1); /* gauge ring background */
-      --color-border: rgba(100, 116, 139, 0.15);
-      --color-border-hover: rgba(100, 116, 139, 0.3);
+      --color-bg: #f5f7fa;
+      --color-bg-secondary: #eef1f5;
+      --color-bg-tertiary: #e3e8ef;
+      --color-surface: rgba(255, 255, 255, 0.95);
+      --color-surface-hover: rgba(248, 250, 252, 0.95);
+      --color-surface-card: rgba(255, 255, 255, 0.98);
+      --color-surface-elevated: rgba(255, 255, 255, 1);
+      --color-surface-code: #f0f4f8;
+      --color-surface-inline-code: rgba(16, 185, 129, 0.08);
+      --color-overlay: rgba(15, 23, 42, 0.35);
+      --color-gauge-track: rgba(100, 116, 139, 0.1);
+      --color-border: rgba(0, 0, 0, 0.06);
+      --color-border-hover: rgba(16, 185, 129, 0.25);
 
-      --color-text: #0f172a; /* slate-900 */
-      --color-text-secondary: #475569; /* slate-600 */
-      --color-text-muted: #94a3b8; /* slate-400 */
+      --color-text: #1e293b;
+      --color-text-secondary: #475569;
+      --color-text-muted: #94a3b8;
+
+      --color-primary: #10b981;
+      --color-primary-hover: #059669;
+    }
+
+    /* Light: buttons — soft filled style, no jarring colored text */
+    .shell.theme-light .a2ui-button-primary {
+      background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+    }
+    .shell.theme-light .a2ui-button-primary:hover {
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    }
+    .shell.theme-light .a2ui-button-secondary {
+      background: #f0fdf4;
+      color: #1e293b;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .shell.theme-light .a2ui-button-secondary:hover {
+      background: #dcfce7;
+      border-color: rgba(16, 185, 129, 0.35);
+    }
+    .shell.theme-light .a2ui-button-outline {
+      background: transparent;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      color: #334155;
+    }
+    .shell.theme-light .a2ui-button-outline:hover {
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.04);
+      color: #1e293b;
+    }
+    .shell.theme-light .a2ui-button-ghost {
+      color: #475569;
+    }
+    .shell.theme-light .a2ui-button-ghost:hover {
+      background: rgba(0, 0, 0, 0.04);
+      color: #1e293b;
+    }
+
+    /* Light: tables */
+    .shell.theme-light .a2ui-table th {
+      background: #f8fafb;
+      color: #475569;
+      font-weight: 600;
+    }
+    .shell.theme-light .a2ui-table th,
+    .shell.theme-light .a2ui-table td {
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    .shell.theme-light .a2ui-data-table td {
+      border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    }
+    .shell.theme-light .a2ui-data-table tbody tr:hover {
+      background: rgba(16, 185, 129, 0.03);
+    }
+
+    /* Light: tabs */
+    .shell.theme-light .a2ui-tabs-header {
+      border-bottom: 2px solid rgba(0, 0, 0, 0.05);
+    }
+    .shell.theme-light .a2ui-tab {
+      color: #64748b;
+    }
+    .shell.theme-light .a2ui-tab:hover {
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.04);
+    }
+    .shell.theme-light .a2ui-tab.active {
+      color: #10b981;
+      border-bottom-color: #10b981;
+    }
+
+    /* Light: progress bar */
+    .shell.theme-light .a2ui-progress-bar {
+      background: rgba(0, 0, 0, 0.06);
+    }
+    .shell.theme-light .a2ui-mini-progress {
+      background: rgba(0, 0, 0, 0.06);
+    }
+
+    /* Light: badge */
+    .shell.theme-light .a2ui-badge-default {
+      background: #f0f4f8;
+      color: #475569;
+    }
+
+    /* Light: cards — clean white with soft shadow */
+    .shell.theme-light .a2ui-card {
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.04),
+        0 1px 2px rgba(0, 0, 0, 0.02);
+    }
+    .shell.theme-light .a2ui-card:hover {
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+      border-color: rgba(0, 0, 0, 0.08);
+    }
+    .shell.theme-light .a2ui-stat-card {
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    .shell.theme-light .a2ui-stat-card::before {
+      background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.2), transparent);
+    }
+    .shell.theme-light .a2ui-stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+      border-color: rgba(16, 185, 129, 0.15);
+    }
+
+    /* Light: modal */
+    .shell.theme-light .a2ui-modal-title {
+      color: #1e293b;
+    }
+    .shell.theme-light .a2ui-modal-close:hover {
+      background: rgba(0, 0, 0, 0.06);
+      color: #1e293b;
+    }
+    .shell.theme-light .surface-modal-content {
+      box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.1),
+        0 8px 20px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Light: form inputs */
+    .shell.theme-light .a2ui-input {
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      color: #1e293b;
+    }
+    .shell.theme-light .a2ui-input:focus {
+      background: #ffffff;
+      border-color: #10b981;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    }
+    .shell.theme-light .a2ui-select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(71,85,105,0.6)' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+    }
+
+    /* Light: sidebar */
+    .shell.theme-light .surface-sidebar {
+      background: #ffffff;
+      box-shadow: 1px 0 12px rgba(0, 0, 0, 0.03);
+      border-right: 1px solid rgba(0, 0, 0, 0.04);
+    }
+    .shell.theme-light .shell-header {
+      background: transparent;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
+    .shell.theme-light .sidebar-footer {
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
+      background: transparent;
+    }
+    .shell.theme-light .a2ui-nav-item {
+      color: #475569;
+    }
+    .shell.theme-light .a2ui-nav-item:hover {
+      background: rgba(16, 185, 129, 0.05);
+      color: #1e293b;
+    }
+    .shell.theme-light .a2ui-nav-item.active {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.15);
+      color: #10b981;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+    }
+    .shell.theme-light.collapsed .a2ui-nav-item {
+      background: rgba(0, 0, 0, 0.02);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    /* Light: skeleton */
+    .shell.theme-light .a2ui-skeleton {
+      background: linear-gradient(
+        90deg,
+        rgba(0, 0, 0, 0.04) 25%,
+        rgba(16, 185, 129, 0.06) 50%,
+        rgba(0, 0, 0, 0.04) 75%
+      );
+      background-size: 200% 100%;
+    }
+
+    /* Light: code blocks */
+    .shell.theme-light .code-block {
+      background: #f0f4f8;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      color: #1e293b;
+    }
+    .shell.theme-light .inline-code {
+      background: rgba(16, 185, 129, 0.06);
+      color: #059669;
+    }
+
+    /* Light: collapsible */
+    .shell.theme-light .a2ui-collapsible-header:hover {
+      background: rgba(0, 0, 0, 0.03);
+    }
+
+    /* Light: progress surface */
+    .shell.theme-light .surface-progress {
+      background: rgba(16, 185, 129, 0.05);
+      border-bottom: 1px solid rgba(16, 185, 129, 0.1);
+    }
+
+    /* Light: chart backgrounds */
+    .shell.theme-light .a2ui-chart-empty {
+      background: #fafbfc;
+      color: #94a3b8;
+    }
+
+    /* Light: bar chart tooltip — dark bg for contrast */
+    .shell.theme-light .a2ui-bar-tooltip {
+      background: rgba(15, 23, 42, 0.9);
+      color: #f8fafc;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Light: score gauge text */
+    .shell.theme-light .a2ui-gauge-label {
+      color: #64748b;
     }
 
     /* Page transition animation */
     .surface-main-content {
       flex: 1;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: auto;
@@ -1633,6 +2136,17 @@ class PHAApp extends LitElement {
       z-index: 200;
     }
 
+    .surface-progress {
+      flex-shrink: 0;
+      background: linear-gradient(
+        135deg,
+        rgba(102, 126, 234, 0.15) 0%,
+        rgba(118, 75, 162, 0.15) 100%
+      );
+      border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+      z-index: 10;
+    }
+
     /* Logo Header */
     .shell-header {
       padding: 24px;
@@ -1761,6 +2275,22 @@ class PHAApp extends LitElement {
     .a2ui-row {
       display: flex;
       flex-direction: row;
+    }
+
+    /* Compact form fields when inside a row (filter bar style) */
+    .a2ui-row > .a2ui-form-field {
+      flex: 1;
+      min-width: 0;
+    }
+    .a2ui-row > .a2ui-form-field .a2ui-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.6;
+    }
+    .a2ui-row > .a2ui-form-field .a2ui-select {
+      padding: 8px 32px 8px 12px;
+      font-size: 0.875rem;
     }
 
     .a2ui-grid {
@@ -1967,7 +2497,7 @@ class PHAApp extends LitElement {
 
     .a2ui-chart-line svg {
       width: 100%;
-      height: 100%;
+      height: auto;
     }
 
     /* Line chart drawing animation */
@@ -2520,6 +3050,7 @@ class PHAApp extends LitElement {
 
     .a2ui-chat-messages {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 24px;
       display: flex;
@@ -2569,6 +3100,47 @@ class PHAApp extends LitElement {
 
     .a2ui-avatar-user {
       background: rgba(255, 255, 255, 0.1);
+    }
+
+    .a2ui-message-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-width: 85%;
+    }
+
+    .a2ui-message-wrapper .a2ui-message-content {
+      max-width: 100%;
+    }
+
+    .a2ui-message-cards {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: 16px;
+      padding: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Compact stat cards inside chat messages */
+    .a2ui-message-cards .a2ui-stat-card {
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: none;
+    }
+    .a2ui-message-cards .a2ui-stat-card:hover {
+      transform: none;
+      box-shadow: none;
+    }
+    .a2ui-message-cards .a2ui-stat-value {
+      font-size: 24px;
+    }
+    .a2ui-message-cards .a2ui-grid {
+      gap: 8px;
+    }
+    /* Compact charts inside chat */
+    .a2ui-message-cards .a2ui-chart {
+      margin-top: 8px;
     }
 
     .a2ui-message-content {
@@ -2716,6 +3288,7 @@ class PHAApp extends LitElement {
 
     .a2ui-chat-input {
       display: flex;
+      flex-shrink: 0;
       gap: 12px;
       padding: 24px;
       border-top: 1px solid var(--color-border);
@@ -3126,6 +3699,84 @@ class PHAApp extends LitElement {
       letter-spacing: 0.5px;
     }
 
+    /* Activity Rings (Apple Watch-style) */
+    .a2ui-activity-rings {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+    }
+
+    .a2ui-rings-svg {
+      flex-shrink: 0;
+    }
+
+    .a2ui-ring-fill {
+      transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .a2ui-ring-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .a2ui-ring-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+    }
+
+    .a2ui-ring-legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .a2ui-ring-legend-label {
+      color: var(--color-text-secondary);
+      min-width: 60px;
+    }
+
+    .a2ui-ring-legend-value {
+      font-weight: 700;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Radar Chart */
+    .a2ui-radar-chart {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .a2ui-radar-grid {
+      fill: none;
+      stroke: var(--color-border);
+      stroke-width: 0.5;
+      opacity: 0.5;
+    }
+
+    .a2ui-radar-axis {
+      stroke: var(--color-border);
+      stroke-width: 0.5;
+      opacity: 0.4;
+    }
+
+    .a2ui-radar-label {
+      font-size: 11px;
+      fill: var(--color-text-secondary);
+      font-weight: 500;
+    }
+
+    .a2ui-radar-value {
+      font-size: 10px;
+      fill: var(--color-text-muted);
+    }
+
     /* Status Badge */
     .a2ui-status-badge {
       display: inline-flex;
@@ -3275,7 +3926,7 @@ class PHAApp extends LitElement {
       margin: 0;
       font-size: 1.25rem;
       font-weight: 600;
-      color: #ffffff;
+      color: var(--color-text);
     }
 
     .a2ui-modal-close {
@@ -3291,7 +3942,7 @@ class PHAApp extends LitElement {
 
     .a2ui-modal-close:hover {
       background: rgba(255, 255, 255, 0.1);
-      color: #ffffff;
+      color: var(--color-text);
     }
 
     .a2ui-modal-body {
@@ -3329,7 +3980,7 @@ class PHAApp extends LitElement {
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid rgba(102, 126, 234, 0.2);
       border-radius: 10px;
-      color: #ffffff;
+      color: var(--color-text);
       font-size: 0.9375rem;
       transition: all 0.2s ease;
     }
@@ -3388,6 +4039,7 @@ class PHAApp extends LitElement {
   @state() private mainData: A2UISurfaceData | null = null;
   @state() private modalData: A2UISurfaceData | null = null;
   @state() private toastData: A2UISurfaceData | null = null;
+  @state() private progressData: A2UISurfaceData | null = null;
   @state() private sidebarCollapsed = false;
   @state() private pageKey = 0; // For page transition animations
   @state() private darkMode = true; // Theme state
@@ -3411,7 +4063,9 @@ class PHAApp extends LitElement {
 
   private connect() {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+    // Pass UUID in WebSocket URL so server can identify user even without cookies
+    const uuidParam = this.userUuid ? `?uuid=${this.userUuid}` : "";
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws${uuidParam}`;
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
@@ -3463,6 +4117,9 @@ class PHAApp extends LitElement {
               this.toastData = null;
             }, 5000);
             break;
+          case "progress":
+            this.progressData = { components: msg.components, root_id: msg.root_id };
+            break;
         }
         break;
 
@@ -3474,6 +4131,9 @@ class PHAApp extends LitElement {
           case "toast":
             this.toastData = null;
             break;
+          case "progress":
+            this.progressData = null;
+            break;
         }
         break;
     }
@@ -3482,6 +4142,8 @@ class PHAApp extends LitElement {
   private sendAction(action: string, payload?: Record<string, unknown>) {
     // Handle OAuth actions locally
     if (action === "start_huawei_auth") {
+      // Also notify server so it can clear scope error cache
+      this.ws?.send(JSON.stringify({ type: "action", action, payload }));
       this.startHuaweiAuth();
       return;
     }
@@ -3502,7 +4164,18 @@ class PHAApp extends LitElement {
    * Get or create user UUID from cookie
    */
   private getUserUuid(): string {
-    // Check cookie first
+    // Check URL query param first (for debugging: ?uuid=xxx)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlUuid = urlParams.get("uuid");
+    if (urlUuid) {
+      // Also save to cookie so WebSocket reconnects use the same UUID
+      const expires = new Date();
+      expires.setFullYear(expires.getFullYear() + 1);
+      document.cookie = `pha_user_id=${urlUuid}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
+      return urlUuid;
+    }
+
+    // Check cookie
     const cookies = document.cookie.split(";");
     for (const cookie of cookies) {
       const [name, value] = cookie.trim().split("=");
@@ -3873,6 +4546,9 @@ class PHAApp extends LitElement {
 
         <!-- Main Surface -->
         <main class="surface-main">
+          ${this.progressData
+            ? html`<div class="surface-progress">${this.renderer.render(this.progressData)}</div>`
+            : nothing}
           <div class="surface-main-content" key=${this.pageKey}>
             ${this.mainData ? this.renderer.render(this.mainData) : this.renderMainSkeleton()}
           </div>

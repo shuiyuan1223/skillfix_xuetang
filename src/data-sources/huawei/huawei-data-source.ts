@@ -14,11 +14,25 @@ import type {
   StressData,
   SpO2Data,
   ECGData,
+  BloodPressureData,
+  BloodGlucoseData,
+  BodyCompositionData,
+  BodyTemperatureData,
+  NutritionData,
+  MenstrualCycleData,
+  VO2MaxData,
+  EmotionData,
+  HRVData,
 } from "../interface.js";
 import { HuaweiHealthApi, huaweiHealthApi, createHuaweiHealthApiForUser } from "./huawei-api.js";
 import { HuaweiAuth, huaweiAuth } from "./huawei-auth.js";
 import { mapActivityType } from "./huawei-types.js";
 import { getUserStore } from "./user-store.js";
+
+/** Get date string in local timezone (YYYY-MM-DD) */
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export class HuaweiHealthDataSource implements HealthDataSource {
   readonly name = "huawei";
@@ -203,7 +217,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = toLocalDateStr(d);
       const metrics = await this.getMetrics(dateStr);
       result.push({ date: dateStr, steps: metrics.steps });
     }
@@ -227,7 +241,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       for (let i = 6; i >= 0; i--) {
         const d = new Date(end);
         d.setDate(d.getDate() - i);
-        result.push({ date: d.toISOString().split("T")[0], hours: 0 });
+        result.push({ date: toLocalDateStr(d), hours: 0 });
       }
       return result;
     }
@@ -342,6 +356,482 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     } catch (error) {
       console.warn("Failed to fetch Huawei ECG data:", error);
       return null;
+    }
+  }
+
+  /**
+   * Get blood pressure data from Huawei API.
+   * Uses 7-day lookback since BP isn't measured daily.
+   */
+  async getBloodPressure(date: string): Promise<BloodPressureData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      // Query 7-day range in a single API call (BP is intermittent)
+      const result = await this.api.getBloodPressureData(date, 7);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch blood pressure:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get blood glucose data from Huawei API
+   */
+  async getBloodGlucose(date: string): Promise<BloodGlucoseData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      const result = await this.api.getBloodGlucoseData(date);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch blood glucose:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get body composition data from Huawei API
+   */
+  async getBodyComposition(date: string): Promise<BodyCompositionData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      const result = await this.api.getBodyCompositionData(date);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch body composition:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get body temperature data from Huawei API
+   */
+  async getBodyTemperature(date: string): Promise<BodyTemperatureData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      const result = await this.api.getBodyTemperatureData(date);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch body temperature:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get nutrition data from Huawei API
+   */
+  async getNutrition(date: string): Promise<NutritionData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      const result = await this.api.getNutritionData(date);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch nutrition:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get menstrual cycle data from Huawei API
+   */
+  async getMenstrualCycle(date: string): Promise<MenstrualCycleData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      const result = await this.api.getMenstrualCycleData(date);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch menstrual cycle:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get VO2Max data from Huawei API
+   */
+  async getVO2Max(date: string): Promise<VO2MaxData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      const result = await this.api.getVO2MaxData(date);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch VO2Max:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get emotion data from Huawei API
+   */
+  async getEmotion(date: string): Promise<EmotionData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      const result = await this.api.getEmotionData(date);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch emotion:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get HRV (heart rate variability) data from Huawei API
+   */
+  async getHRV(date: string): Promise<HRVData | null> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return null;
+    }
+    try {
+      const result = await this.api.getHRVData(date);
+      if (!result) return null;
+      return { date, ...result };
+    } catch (error) {
+      console.warn("Failed to fetch HRV:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Get metrics for a date range using groupByTime optimization.
+   * Uses polymerize with groupByTime=1day for efficient 2-year data fetching.
+   * 730 days → ~9 API calls (in 90-day chunks) instead of 730 individual calls.
+   */
+  async getMetricsRange(
+    startDate: string,
+    endDate: string
+  ): Promise<
+    Array<{
+      date: string;
+      steps: number;
+      calories: number;
+      distance: number;
+      activeMinutes: number;
+    }>
+  > {
+    try {
+      await this.ensureToken();
+    } catch {
+      return [];
+    }
+
+    try {
+      // Fetch steps, calories, distance in parallel using groupByTime
+      const [stepsData, caloriesData, distanceData] = await Promise.all([
+        this.api.getPolymerizeDataRange("com.huawei.continuous.steps.delta", startDate, endDate),
+        this.api.getPolymerizeDataRange("com.huawei.continuous.calories.burnt", startDate, endDate),
+        this.api.getPolymerizeDataRange("com.huawei.continuous.distance.delta", startDate, endDate),
+      ]);
+
+      // Build lookup maps
+      const stepsMap = new Map(stepsData.map((d) => [d.date, d.values["value"] || 0]));
+      const caloriesMap = new Map(caloriesData.map((d) => [d.date, d.values["value"] || 0]));
+      const distanceMap = new Map(distanceData.map((d) => [d.date, d.values["value"] || 0]));
+
+      // Build result for all dates in range
+      const result: Array<{
+        date: string;
+        steps: number;
+        calories: number;
+        distance: number;
+        activeMinutes: number;
+      }> = [];
+      const current = new Date(startDate);
+      const end = new Date(endDate);
+      while (current <= end) {
+        const dateStr = toLocalDateStr(current);
+        result.push({
+          date: dateStr,
+          steps: Math.round(stepsMap.get(dateStr) || 0),
+          calories: Math.round(caloriesMap.get(dateStr) || 0),
+          distance: Math.round(distanceMap.get(dateStr) || 0),
+          activeMinutes: 0, // Not available via groupByTime; use dailyActivitySummary for single-day
+        });
+        current.setDate(current.getDate() + 1);
+      }
+
+      return result;
+    } catch (error) {
+      console.warn("Failed to fetch metrics range with groupByTime:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get sleep data for a date range
+   */
+  async getSleepRange(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; hours: number; qualityScore?: number }>> {
+    try {
+      await this.ensureToken();
+      // Use the weekly API with extended range
+      const data = await this.api.getWeeklySleepData(endDate);
+
+      // If range is within 7 days, return directly
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const dayDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (dayDiff <= 7) {
+        return data.map((d) => ({ date: d.date, hours: d.hours, qualityScore: d.sleepScore }));
+      }
+
+      // For longer ranges, fetch in 7-day chunks
+      const result: Array<{ date: string; hours: number; qualityScore?: number }> = [];
+      const current = new Date(end);
+
+      while (current >= start) {
+        const chunkEnd = toLocalDateStr(current);
+        const chunkData = await this.api.getWeeklySleepData(chunkEnd);
+        for (const d of chunkData) {
+          if (new Date(d.date) >= start && new Date(d.date) <= end) {
+            // Avoid duplicates
+            if (!result.some((r) => r.date === d.date)) {
+              result.push({ date: d.date, hours: d.hours, qualityScore: d.sleepScore });
+            }
+          }
+        }
+        current.setDate(current.getDate() - 7);
+      }
+
+      return result.sort((a, b) => a.date.localeCompare(b.date));
+    } catch (error) {
+      console.warn("Failed to fetch sleep range:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get heart rate data for a date range using groupByTime optimization
+   */
+  async getHeartRateRange(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; avg: number; max: number; min: number }>> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return [];
+    }
+
+    try {
+      const data = await this.api.getPolymerizeDataRange(
+        "com.huawei.instantaneous.heart_rate",
+        startDate,
+        endDate
+      );
+
+      // With groupByTime, each entry has daily aggregated HR values
+      return data.map((d) => ({
+        date: d.date,
+        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
+        max: Math.round(d.values["max"] || d.values["value"] || 0),
+        min: Math.round(d.values["min"] || d.values["value"] || 0),
+      }));
+    } catch (error) {
+      console.warn("Failed to fetch heart rate range with groupByTime:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get stress data for a date range using groupByTime
+   */
+  async getStressRange(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; avg: number; max: number; min: number }>> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return [];
+    }
+
+    try {
+      const data = await this.api.getPolymerizeDataRange(
+        "com.huawei.instantaneous.stress",
+        startDate,
+        endDate
+      );
+
+      return data.map((d) => ({
+        date: d.date,
+        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
+        max: Math.round(d.values["max"] || d.values["value"] || 0),
+        min: Math.round(d.values["min"] || d.values["value"] || 0),
+      }));
+    } catch (error) {
+      console.warn("Failed to fetch stress range:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get SpO2 data for a date range using groupByTime
+   */
+  async getSpO2Range(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; avg: number; max: number; min: number }>> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return [];
+    }
+
+    try {
+      const data = await this.api.getPolymerizeDataRange(
+        "com.huawei.instantaneous.spo2",
+        startDate,
+        endDate
+      );
+
+      return data.map((d) => ({
+        date: d.date,
+        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
+        max: Math.round(d.values["max"] || Math.min(100, (d.values["value"] || 0) + 1)),
+        min: Math.round(d.values["min"] || Math.max(0, (d.values["value"] || 0) - 2)),
+      }));
+    } catch (error) {
+      console.warn("Failed to fetch SpO2 range:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get blood pressure data for a date range using groupByTime
+   */
+  async getBloodPressureRange(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; avgSystolic: number; avgDiastolic: number }>> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return [];
+    }
+
+    try {
+      const data = await this.api.getPolymerizeDataRange(
+        "com.huawei.instantaneous.blood_pressure",
+        startDate,
+        endDate
+      );
+
+      return data
+        .map((d) => ({
+          date: d.date,
+          avgSystolic: Math.round(d.values["systolic_pressure"] || d.values["value"] || 0),
+          avgDiastolic: Math.round(d.values["diastolic_pressure"] || 0),
+        }))
+        .filter((d) => d.avgSystolic > 0);
+    } catch (error) {
+      console.warn("Failed to fetch blood pressure range:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get body composition data for a date range using groupByTime
+   */
+  async getBodyCompositionRange(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; weight?: number; bmi?: number; bodyFatRate?: number }>> {
+    try {
+      await this.ensureToken();
+    } catch {
+      return [];
+    }
+
+    try {
+      const data = await this.api.getPolymerizeDataRange(
+        "com.huawei.instantaneous.body_weight",
+        startDate,
+        endDate
+      );
+
+      return data
+        .map((d) => ({
+          date: d.date,
+          weight: d.values["body_weight"]
+            ? Math.round(d.values["body_weight"] * 10) / 10
+            : d.values["value"]
+              ? Math.round(d.values["value"] * 10) / 10
+              : undefined,
+          bmi: d.values["bmi"] ? Math.round(d.values["bmi"] * 10) / 10 : undefined,
+          bodyFatRate: d.values["body_fat_rate"]
+            ? Math.round(d.values["body_fat_rate"] * 10) / 10
+            : undefined,
+        }))
+        .filter((d) => d.weight != null);
+    } catch (error) {
+      console.warn("Failed to fetch body composition range:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get workouts for a date range
+   */
+  async getWorkoutsRange(startDate: string, endDate: string): Promise<WorkoutData[]> {
+    try {
+      await this.ensureToken();
+      const records = await this.api.getActivityRecords(startDate, endDate);
+      return records.map((record) => ({
+        id: record.id,
+        date: toLocalDateStr(record.startTime),
+        type: mapActivityType(record.activityType),
+        durationMinutes: record.duration,
+        caloriesBurned: record.calories || 0,
+        distanceKm: record.distance ? record.distance / 1000 : undefined,
+        avgHeartRate: record.avgHeartRate,
+      }));
+    } catch (error) {
+      console.warn("Failed to fetch workouts range:", error);
+      return [];
     }
   }
 

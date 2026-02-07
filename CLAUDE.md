@@ -191,6 +191,25 @@ chore: 杂项
 
 **前端是纯渲染器，所有 UI 由 Agent 通过 A2UI 协议生成。**
 
+**一切工具 MCP 化，一切能力 Skills 化。**
+
+#### MCP 与 Skills 的关系
+
+| | MCP Tools | Skills |
+|---|-----------|--------|
+| **定位** | 服务端工具 | 客户端能力接入 |
+| **作用** | 数据获取、操作执行 | 专家知识、评估框架、行为指导 |
+| **存储** | `src/tools/` (代码) | `src/skills/*/SKILL.md` (文件系统) |
+| **管理** | 代码级别修改 | UI 可视化编辑 (Settings > Skills) |
+| **协议** | JSON-RPC (MCP 标准) | YAML frontmatter + Markdown |
+| **示例** | `get_heart_rate`, `get_sleep` | `sleep-coach`, `benchmark-evaluator` |
+
+**设计原则**: MCP 是底层原子能力（获取数据、执行操作），Skills 是上层组合能力（如何解读数据、如何评估质量）。任何接入 PHA 系统的新能力，都应该先确认是 MCP Tool 还是 Skill：
+
+- **需要调用 API / 读写数据？** → MCP Tool (`src/tools/`)
+- **需要专家判断 / 评分框架 / 行为指导？** → Skill (`src/skills/`)
+- **两者都需要？** → MCP Tool 提供数据，Skill 提供解读框架
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                  Frontend (Web / TUI)                    │
@@ -209,9 +228,36 @@ chore: 杂项
 ┌─────────────────────────────────────────────────────────┐
 │                    PHA Agent                             │
 │  - pi-agent-core                                         │
-│  - 健康数据工具                                           │
+│  - MCP Tools (数据获取、操作执行)                          │
+│  - Skills (专家指导、评估框架、行为模式)                     │
+│                                                          │
+│  Tools = 手 (做事)    Skills = 脑 (判断)                  │
 └─────────────────────────────────────────────────────────┘
 ```
+
+#### Skills 系统
+
+Skills 存放在 `src/skills/<name>/SKILL.md`，遵循 OpenClaw 格式：
+
+```yaml
+---
+name: skill-name
+description: "..."
+metadata:
+  { "pha": { "emoji": "...", "triggers": [...], "config": {...} } }
+---
+# Skill Body (Markdown)
+```
+
+- **自动触发**: 用户消息匹配 triggers 后自动注入 skill guide
+- **手动加载**: Agent 通过 `get_skill` 工具按需获取
+- **UI 管理**: Settings > Skills 页面可编辑、启用/禁用
+- **Git 追踪**: 每次修改自动 git commit
+
+**重要**: 新增系统能力时，优先考虑 Skills 化。例如：
+- 评测框架 → `benchmark-evaluator` Skill（非 JSON 配置文件）
+- 健康解读 → `sleep-coach`, `heart-monitor` 等 Skills
+- 未来: 通知策略、数据异常检测规则等都应该是 Skills
 
 ### A2UI 协议
 
@@ -243,9 +289,10 @@ handleMessage(msg) {
 1. **前端无业务逻辑** - 只接收 A2UI 消息并渲染
 2. **UI 是 Agent 输出** - 不是前端产物
 3. **MCP 是唯一 API** - 工具通过 MCP 暴露
-4. **保持简单** - 避免过度设计
-5. **禁止 Emoji 做图标** - A2UI 组件的 `icon` 属性必须使用 icon name（如 `"heart"`, `"brain"`），**禁止使用 emoji**（如 ~~`"❤️"`~~, ~~`"🧠"`~~）。前端 `ui/src/main.ts` 的 `ICONS` 对象定义了所有可用图标。如需新图标，在 `ICONS` 中添加 Lucide 风格 SVG，并在 `EMOJI_TO_ICON` 中添加映射。
-6. **i18n 必须同步** - 新增界面文案必须同时更新 `src/locales/types.ts`、`zh-CN.ts`、`en.ts` 三个文件
+4. **一切工具 MCP 化，一切能力 Skills 化** - 数据操作 → MCP Tool；专家知识/评估框架/行为指导 → Skill。**禁止使用裸 JSON 配置文件替代 Skill**（如评测标准、通知规则等应该是 `src/skills/` 下的 SKILL.md，而非 `.pha/` 下的 JSON）
+5. **保持简单** - 避免过度设计
+6. **禁止 Emoji 做图标** - A2UI 组件的 `icon` 属性必须使用 icon name（如 `"heart"`, `"brain"`），**禁止使用 emoji**（如 ~~`"❤️"`~~, ~~`"🧠"`~~）。前端 `ui/src/main.ts` 的 `ICONS` 对象定义了所有可用图标。如需新图标，在 `ICONS` 中添加 Lucide 风格 SVG，并在 `EMOJI_TO_ICON` 中添加映射。
+7. **i18n 必须同步** - 新增界面文案必须同时更新 `src/locales/types.ts`、`zh-CN.ts`、`en.ts` 三个文件
 
 ### 可用 Icon 名称
 
