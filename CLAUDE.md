@@ -43,7 +43,8 @@ pha/
 │   ├── gateway/               # Gateway 服务
 │   │   ├── server.ts          # Bun HTTP/WebSocket
 │   │   ├── pages.ts           # A2UI 页面生成器
-│   │   ├── evolution-lab.ts   # Evolution Lab 双面板页面
+│   │   ├── evolution-lab.ts   # Evolution Lab 5-Tab Dashboard
+│   │   ├── tui-renderer.ts    # A2UI → TUI 文本渲染引擎
 │   │   └── a2ui.ts            # A2UI 组件定义
 │   ├── agent/                 # Agent 核心
 │   │   ├── pha-agent.ts
@@ -81,7 +82,7 @@ pha/
 | 添加 MCP 工具 | `src/tools/` → `src/agent/tools.ts` → `src/gateway/mcp.ts` |
 | 添加 Git 工具 | `src/tools/git-tools.ts` → `src/agent/git-agent-tools.ts` |
 | 修改进化实验室 | `src/gateway/evolution-lab.ts` → `src/gateway/server.ts` |
-| 修改 TUI | `src/commands/tui.ts` |
+| 修改 TUI | `src/commands/tui.ts` + `src/gateway/tui-renderer.ts` |
 | 修改 Web UI 组件 | `ui/src/main.ts` |
 | 修改 Agent 提示词 | `src/prompts/SOUL.md` |
 | 修改进化方法论 | `src/skills/evolution-driver/SKILL.md` |
@@ -294,6 +295,25 @@ handleMessage(msg) {
 }
 ```
 
+### 双形态架构 (Web + TUI)
+
+PHA 支持两种前端形态，共享同一个 Gateway 和 A2UI 协议：
+
+| | Web UI | TUI |
+|---|--------|-----|
+| 框架 | Lit Element | pi-tui |
+| 入口 | `ui/src/main.ts` | `src/commands/tui.ts` |
+| 渲染器 | A2UI → HTML Components | A2UI → Terminal Widgets |
+| 连接 | WebSocket `/ws` | WebSocket `/ws` |
+| 导航 | 侧边栏点击 | 斜杠命令 (`/dashboard`, `/health` 等) |
+| 交互 | 按钮点击 → action 消息 | 编号选择 → action 消息 |
+
+核心文件：
+- `src/commands/tui.ts` — TUI 入口和主循环
+- `src/gateway/tui-renderer.ts` — A2UI → pi-tui 组件转换层
+
+新增页面时 **无需额外 TUI 代码** — 只要 A2UI 组件已有 TUI 映射，TUI 自动获得新页面。
+
 ### 新增页面流程
 
 1. `src/gateway/pages.ts` - 添加 `generateXxxPage()`
@@ -312,6 +332,11 @@ handleMessage(msg) {
 5. **保持简单** - 避免过度设计
 6. **禁止 Emoji 做图标** - A2UI 组件的 `icon` 属性必须使用 icon name（如 `"heart"`, `"brain"`），**禁止使用 emoji**（如 ~~`"❤️"`~~, ~~`"🧠"`~~）。前端 `ui/src/main.ts` 的 `ICONS` 对象定义了所有可用图标。如需新图标，在 `ICONS` 中添加 Lucide 风格 SVG，并在 `EMOJI_TO_ICON` 中添加映射。
 7. **i18n 必须同步** - 新增界面文案必须同时更新 `src/locales/types.ts`、`zh-CN.ts`、`en.ts` 三个文件
+8. **开发完成后重启服务** - 完成 `bun run build` + `bun test` 后，执行 `pha restart` 重启 Gateway 服务以验证改动
+9. **自动提交并推送** - 功能开发完成、测试通过后，自动 commit 并 push 代码到远程仓库
+10. **遵循 AgentOS 设计** - 系统设计必须遵循 AgentOS 哲学：前端纯渲染、Agent 驱动 UI、MCP 工具化、Skills 能力化。整体架构要支持 Agentic 自主驱动
+11. **双形态同步 (Web + TUI)** - PHA 有两种前端形态：Web UI (Lit Element) 和 TUI (基于 pi-tui 框架)。所有页面和功能改动必须同步到 TUI。TUI 通过 A2UI-to-TUI 渲染层消费同一套 A2UI 数据，不重复实现业务逻辑
+12. **参考 OpenClaw 架构** - 架构设计应参考学习 OpenClaw 项目 (`../openclaw`)，特别是 Skills 系统、文件系统 Git-backed 状态管理、Agent 自我进化模式等
 
 ### 可用 Icon 名称
 
@@ -327,29 +352,33 @@ git-branch, git-merge, git-commit
 
 ### Evolution Lab 架构
 
-Evolution Lab 是顶级导航页面，采用双面板布局：
+Evolution Lab 是顶级导航页面，采用 5-Tab Dashboard 布局：
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                   Evolution Lab                          │
-│  ┌──────────────────┐  ┌─────────────────────────────┐  │
-│  │  Agent Chat      │  │  Context Panel              │  │
-│  │  (左侧 60%)      │  │  [Timeline│Benchmarks│Insp] │  │
-│  │                  │  │  (右侧 40%)                 │  │
-│  │  Step Indicator  │  │  git_timeline / radar_chart  │  │
-│  │  Chat Messages   │  │  file_tree / diff_view      │  │
-│  │  Chat Input      │  │                             │  │
-│  └──────────────────┘  └─────────────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │  [Overview] [Benchmark] [Versions] [Data] [Agent]   ││
+│  ├─────────────────────────────────────────────────────┤│
+│  │                                                     ││
+│  │  Tab Content Area                                   ││
+│  │  - Overview: score_gauge + radar_chart + timeline   ││
+│  │  - Benchmark: data_table + run controls             ││
+│  │  - Versions: git_timeline + file_tree + diff_view   ││
+│  │  - Data: traces / test cases / suggestions          ││
+│  │  - Agent: step_indicator + chat + chat_input        ││
+│  │                                                     ││
+│  └─────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **Agent 驱动**: 用户在左侧对话，Agent 通过 `evolution-driver` Skill 理解进化方法论
+- **Dashboard 驱动**: 5 个 Tab 各司其职，Overview 展示全局，Agent Tab 提供对话式进化
 - **Git 操作 MCP 化**: 12 个 git 工具（`git_status`, `git_log`, `git_diff` 等）Agent 可直接调用
-- **实时面板更新**: Agent 调用工具时右侧面板自动切换（benchmark→基准测试 tab，git_*→时间线）
 - **流水线步骤追踪**: 6 步进化流程（Benchmark → Diagnose → Propose → Approve → Apply → Validate）
+- **Agent 模式**: Agent Tab 中用户对话驱动，Agent 通过 `evolution-driver` Skill 理解进化方法论
 
 关键文件：
-- `src/gateway/evolution-lab.ts` — 页面生成器
+- `src/gateway/evolution-lab.ts` — 5-Tab Dashboard 页面生成器
 - `src/tools/git-tools.ts` — 12 个 Git MCP 工具
 - `src/agent/git-agent-tools.ts` — Git AgentTool 适配器
 - `src/skills/evolution-driver/SKILL.md` — 进化方法论 Skill
