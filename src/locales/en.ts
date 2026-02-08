@@ -348,6 +348,10 @@ export const en: LocaleMessages = {
     startEvolution: "Start Evolution",
     // Version detail
     versionDetail: "Version Detail",
+    // Data labels
+    latestRun: "Latest Run",
+    bestScoresAllTime: "Best Scores (All-Time)",
+    bestPerVersion: "Best per Version",
   },
 
   memory: {

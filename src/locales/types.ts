@@ -366,6 +366,10 @@ export interface LocaleMessages {
     startEvolution: string;
     // Version detail
     versionDetail: string;
+    // Data labels
+    latestRun: string;
+    bestScoresAllTime: string;
+    bestPerVersion: string;
   };
 
   // Memory page

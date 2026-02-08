@@ -54,6 +54,8 @@ interface BenchmarkRunInfo {
   total_test_cases: number;
   profile: string;
   duration_ms: number;
+  modelId?: string;
+  presetName?: string;
 }
 
 interface ChangedFile {
@@ -124,6 +126,7 @@ export interface EvolutionLabData {
   // Overview
   stats?: EvaluationStats;
   latestCategoryScores?: CategoryScoreInfo[];
+  latestRunCategoryScores?: CategoryScoreInfo[];
   benchmarkRuns?: BenchmarkRunInfo[];
   activeVersionBranch?: string | null;
   scoreTrend?: Array<{ version: string; score: number }>;
@@ -258,7 +261,7 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
   );
 
   const content = ui.column([tabs], { gap: 0, padding: 24 });
-  const root = ui.column([header, content], { gap: 12, padding: 16 });
+  const root = ui.column([header, content], { gap: 12, padding: 16, className: "evo-lab" } as any);
 
   return ui.build(root);
 }
@@ -270,16 +273,26 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
 function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
 
+  // External progress at top of overview (if benchmark running)
+  if (data.externalProgress) {
+    const ep = data.externalProgress;
+    const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
+    const progressLabel = ui.text(
+      `${t("evolution.externalBenchmarkRunning")}${ep.modelId ? ` (${ep.modelId})` : ""} — ${ep.current}/${ep.total} (${pct}%)`,
+      "caption"
+    );
+    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#00e5ff" });
+    children.push(ui.card([progressLabel, progressBar], { padding: 12 }));
+  }
+
   // Row 1: Stat Cards
   const statCards: string[] = [];
 
-  // Overall score gauge
-  if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
-    const avgScore =
-      data.latestCategoryScores.reduce((sum, cs) => sum + cs.score, 0) /
-      data.latestCategoryScores.length;
-    const gauge = ui.scoreGauge(avgScore, {
-      label: t("evolution.score"),
+  // Overall score gauge — use latest run score for consistency
+  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+    const latestScore = data.benchmarkRuns[0].overall_score;
+    const gauge = ui.scoreGauge(latestScore, {
+      label: t("evolution.latestRun"),
       max: 100,
       size: "lg",
     });
@@ -352,6 +365,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   const row2Items: string[] = [];
 
   if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
+    const radarTitle = ui.text(t("evolution.bestScoresAllTime"), "label");
     const radarData = data.latestCategoryScores.map((cs) => ({
       label: getCategoryLabel(cs.category),
       value: cs.score,
@@ -363,7 +377,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       showValues: true,
       color: "#667eea",
     });
-    row2Items.push(ui.card([radar], { padding: 16 }));
+    row2Items.push(ui.card([radarTitle, radar], { padding: 16 }));
   }
 
   if (data.scoreTrend && data.scoreTrend.length > 0) {
@@ -394,6 +408,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       version_tag: r.version_tag || "-",
       overall_score: Math.round(r.overall_score),
       passed: `${r.passed_count}/${r.total_test_cases}`,
+      model: r.presetName || r.modelId || "-",
       profile: r.profile,
       duration: r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
     }));
@@ -402,6 +417,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         { key: "version_tag", label: t("evolution.versionTag") },
         { key: "overall_score", label: t("evolution.score"), render: "progress" },
         { key: "passed", label: t("evolution.passed") },
+        { key: "model", label: t("evolution.model") },
         { key: "profile", label: t("evolution.profile"), render: "badge" },
         { key: "duration", label: t("evolution.duration") },
       ],
@@ -419,7 +435,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       size: "sm",
       payload: { profile: "full" },
     });
-    const btnRow = ui.row([quickBtn, fullBtn], { gap: 8, justify: "end" });
+    const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "end" });
 
     children.push(ui.card([runsLabel, runsTable, btnRow], { padding: 16 }));
   } else {
@@ -447,7 +463,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       payload: { branch: data.activeVersionBranch },
     });
     const branchRow = ui.row([branchLabel, branchBadge, switchBtn, mergeBtn], {
-      gap: 8,
+      gap: 12,
       align: "center",
     });
     children.push(ui.card([branchRow], { padding: 12 }));
@@ -481,16 +497,36 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
   });
   children.push(ui.row([quickBtn, fullBtn, diagnoseBtn], { gap: 8 }));
 
-  // External benchmark progress
+  // External benchmark progress — enhanced display
   if (data.externalProgress) {
     const ep = data.externalProgress;
     const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
-    const progressLabel = ui.text(
-      `${t("evolution.externalBenchmarkRunning")}${ep.modelId ? ` (${ep.modelId})` : ""} — ${ep.current}/${ep.total} (${pct}%)`,
-      "caption"
-    );
-    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#f59e0b" });
-    children.push(ui.card([progressLabel, progressBar], { padding: 12 }));
+    const progressChildren: string[] = [];
+
+    // Status + model badges
+    const statusBadge = ui.badge("running", { variant: "warning" });
+    const modelBadge = ep.modelId ? ui.badge(ep.modelId, { variant: "info" }) : null;
+    const badgeRow = modelBadge
+      ? ui.row([statusBadge, modelBadge], { gap: 8, align: "center" })
+      : statusBadge;
+    progressChildren.push(badgeRow);
+
+    // Large percentage text
+    const pctText = ui.text(`${pct}%`, "h2");
+    progressChildren.push(pctText);
+
+    // Progress bar with cyan color
+    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#00e5ff" });
+    progressChildren.push(progressBar);
+
+    // Current category badge
+    if (ep.category) {
+      const catBadge = ui.badge(getCategoryLabel(ep.category), { variant: "default" });
+      const detailText = ui.text(`${ep.current}/${ep.total}`, "caption");
+      progressChildren.push(ui.row([catBadge, detailText], { gap: 8, align: "center" }));
+    }
+
+    children.push(ui.card(progressChildren, { padding: 16 }));
   }
 
   // Test Cases table
@@ -529,6 +565,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
       version_tag: r.version_tag || "-",
       overall_score: Math.round(r.overall_score),
       passed: `${r.passed_count}/${r.total_test_cases}`,
+      model: r.presetName || r.modelId || "-",
       profile: r.profile,
       duration: r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
     }));
@@ -538,6 +575,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
         { key: "version_tag", label: t("evolution.versionTag") },
         { key: "overall_score", label: t("evolution.score"), render: "progress" },
         { key: "passed", label: t("evolution.passed") },
+        { key: "model", label: t("evolution.model") },
         { key: "profile", label: t("evolution.profile"), render: "badge" },
         { key: "duration", label: t("evolution.duration") },
       ],
@@ -565,13 +603,35 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   const leftChildren: string[] = [];
   const rightChildren: string[] = [];
 
-  // Git Timeline
+  // Git Timeline — grouped by branch with collapsible sections
   if (data.timelineEvents && data.timelineEvents.length > 0) {
-    const timelineId = ui.gitTimeline(data.timelineEvents, {
-      activeBranch: data.activeVersionBranch || undefined,
-      onEventClick: "evo_timeline_click",
-    });
-    leftChildren.push(timelineId);
+    // Group events by branch
+    const branchGroups = new Map<string, typeof data.timelineEvents>();
+    for (const ev of data.timelineEvents) {
+      const branch = ev.branch || "main";
+      if (!branchGroups.has(branch)) {
+        branchGroups.set(branch, []);
+      }
+      branchGroups.get(branch)!.push(ev);
+    }
+
+    // Render each branch as a collapsible section
+    for (const [branch, events] of branchGroups) {
+      const isActive = branch === (data.activeVersionBranch || "main");
+      const statusBadge = ui.badge(isActive ? "active" : `${events.length}`, {
+        variant: isActive ? "success" : "default",
+      });
+      const branchTimeline = ui.gitTimeline(events, {
+        activeBranch: data.activeVersionBranch || undefined,
+        onEventClick: "evo_timeline_click",
+      });
+      const section = ui.collapsible(
+        `${branch} (${events.length})`,
+        [statusBadge, branchTimeline],
+        { expanded: isActive, icon: "git-branch" }
+      );
+      leftChildren.push(section);
+    }
   } else {
     leftChildren.push(ui.text(t("evolution.noVersions"), "caption"));
   }
@@ -649,7 +709,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         size: "sm",
         payload: { branch: selectedInfo.branchName },
       });
-      rightChildren.push(ui.row([switchBtn, mergeBtn, abandonBtn], { gap: 8 }));
+      rightChildren.push(ui.row([switchBtn, mergeBtn, abandonBtn], { gap: 12 }));
     }
   } else {
     rightChildren.push(ui.text(t("evolution.selectFileToView"), "caption"));
@@ -700,7 +760,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       size: "sm",
       payload: { branch: null },
     });
-    children.unshift(ui.row([activeLabel, activeBadge, resetBtn], { gap: 8, align: "center" }));
+    children.unshift(ui.row([activeLabel, activeBadge, resetBtn], { gap: 12, align: "center" }));
   }
 
   children.push(twoCol);

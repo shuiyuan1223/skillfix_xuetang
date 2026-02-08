@@ -415,9 +415,10 @@ class A2UIRenderer {
     const padding = (c.padding as number) || 0;
     const align = (c.align as string) || "stretch";
     const extraStyle = (c.style as string) || "";
+    const className = (c.className as string) || "";
     return html`
       <div
-        class="a2ui-column"
+        class="a2ui-column ${className}"
         style="gap: ${gap}px; padding: ${padding}px; align-items: ${align}; ${extraStyle}"
       >
         ${this.renderChildren(c.children)}
@@ -429,9 +430,10 @@ class A2UIRenderer {
     const gap = (c.gap as number) || 0;
     const justify = (c.justify as string) || "start";
     const align = (c.align as string) || "center";
+    const className = (c.className as string) || "";
     return html`
       <div
-        class="a2ui-row"
+        class="a2ui-row ${className}"
         style="gap: ${gap}px; justify-content: ${justify}; align-items: ${align}"
       >
         ${this.renderChildren(c.children)}
@@ -467,8 +469,9 @@ class A2UIRenderer {
   private renderCard(c: A2UIComponent): TemplateResult {
     const title = c.title as string;
     const padding = (c.padding as number) || 20;
+    const className = (c.className as string) || "";
     return html`
-      <div class="a2ui-card" style="padding: ${padding}px">
+      <div class="a2ui-card ${className}" style="padding: ${padding}px">
         ${title ? html`<div class="a2ui-card-title">${title}</div>` : nothing}
         ${this.renderChildren(c.children)}
       </div>
@@ -4469,6 +4472,302 @@ class PHAApp extends LitElement {
     }
     .file-changes .deletions {
       color: var(--color-error, #ef4444);
+    }
+
+    /* ========== Evolution Lab Sci-Fi Theme ========== */
+
+    /* Keyframes */
+    @keyframes evoGradientShift {
+      0% {
+        background-position: 0% 50%;
+      }
+      50% {
+        background-position: 100% 50%;
+      }
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    @keyframes evoGridPulse {
+      0%,
+      100% {
+        opacity: 0.3;
+      }
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    @keyframes evoParticleTravel {
+      0% {
+        top: 0;
+        opacity: 0;
+      }
+      20% {
+        opacity: 1;
+      }
+      80% {
+        opacity: 1;
+      }
+      100% {
+        top: 100%;
+        opacity: 0;
+      }
+    }
+
+    @keyframes evoPulseNode {
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4);
+      }
+      50% {
+        box-shadow: 0 0 0 8px rgba(0, 229, 255, 0);
+      }
+    }
+
+    /* Grid background + breathing glow */
+    .evo-lab {
+      position: relative;
+      background-image:
+        linear-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 229, 255, 0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: evoGridPulse 8s ease-in-out infinite;
+    }
+
+    .evo-lab::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 120px;
+      background: radial-gradient(ellipse at center, rgba(0, 229, 255, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .evo-lab > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Title gradient text */
+    .evo-lab .a2ui-text-h1 {
+      background: linear-gradient(90deg, #00e5ff, #7c4dff, #00e5ff);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: evoGradientShift 4s ease infinite;
+    }
+
+    /* Card neon border */
+    .evo-lab .a2ui-card {
+      border-color: rgba(0, 229, 255, 0.15);
+      box-shadow:
+        0 0 15px rgba(0, 229, 255, 0.05),
+        0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+
+    .evo-lab .a2ui-card:hover {
+      border-color: rgba(0, 229, 255, 0.3);
+      box-shadow:
+        0 0 20px rgba(0, 229, 255, 0.1),
+        0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Stat card cyan top line */
+    .evo-lab .a2ui-stat-card::before {
+      background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.4), transparent);
+    }
+
+    .evo-lab .a2ui-stat-card:hover {
+      border-color: rgba(0, 229, 255, 0.3);
+      box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.4),
+        0 0 24px rgba(0, 229, 255, 0.15);
+    }
+
+    /* Active tab underline glow */
+    .evo-lab .a2ui-tab.active::after {
+      background: linear-gradient(90deg, #00e5ff, #7c4dff);
+      box-shadow: 0 2px 8px rgba(0, 229, 255, 0.3);
+    }
+
+    /* Primary button cyan→purple gradient */
+    .evo-lab .a2ui-button-primary {
+      background: linear-gradient(135deg, #00e5ff 0%, #7c4dff 100%);
+    }
+
+    .evo-lab .a2ui-button-primary:hover {
+      box-shadow: 0 4px 16px rgba(0, 229, 255, 0.4);
+    }
+
+    /* Secondary button cyan border */
+    .evo-lab .a2ui-button-secondary {
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      background: rgba(0, 229, 255, 0.05);
+    }
+
+    .evo-lab .a2ui-button-secondary:hover {
+      background: rgba(0, 229, 255, 0.1);
+      border-color: rgba(0, 229, 255, 0.5);
+    }
+
+    /* Progress bar glow */
+    .evo-lab .a2ui-progress-fill {
+      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+    }
+
+    /* Gauge fill glow */
+    .evo-lab .a2ui-gauge-fill {
+      filter: drop-shadow(0 0 4px rgba(0, 229, 255, 0.4));
+    }
+
+    /* Table header cyan accent */
+    .evo-lab .a2ui-data-table th {
+      border-bottom: 1px solid rgba(0, 229, 255, 0.15);
+    }
+
+    /* Step connector gradient + glow */
+    .evo-lab .step-connector.filled {
+      background: linear-gradient(90deg, #00e5ff, #7c4dff);
+      box-shadow: 0 0 6px rgba(0, 229, 255, 0.3);
+    }
+
+    /* Git timeline connector gradient + particle */
+    .evo-lab .timeline-connector {
+      background: linear-gradient(180deg, rgba(0, 229, 255, 0.3), rgba(124, 77, 255, 0.3));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .evo-lab .timeline-connector::after {
+      content: "";
+      position: absolute;
+      left: -1px;
+      width: 4px;
+      height: 8px;
+      border-radius: 2px;
+      background: #00e5ff;
+      box-shadow: 0 0 6px #00e5ff;
+      animation: evoParticleTravel 2s linear infinite;
+    }
+
+    /* Active timeline node pulse */
+    .evo-lab .timeline-event.active-branch .timeline-dot {
+      animation: evoPulseNode 2s ease-in-out infinite;
+    }
+
+    /* Success/failed node glow */
+    .evo-lab .timeline-dot {
+      transition: box-shadow 0.3s ease;
+    }
+
+    /* Timeline score badge cyan */
+    .evo-lab .timeline-score {
+      background: rgba(0, 229, 255, 0.15);
+      color: #00e5ff;
+      box-shadow: 0 0 6px rgba(0, 229, 255, 0.1);
+    }
+
+    /* Collapsible sections in evo lab */
+    .evo-lab .a2ui-collapsible {
+      border-color: rgba(0, 229, 255, 0.15);
+    }
+
+    .evo-lab .a2ui-collapsible-header {
+      background: rgba(0, 229, 255, 0.03);
+    }
+
+    .evo-lab .a2ui-collapsible-header:hover {
+      background: rgba(0, 229, 255, 0.08);
+    }
+
+    /* Light mode adjustments — reduce glow intensity */
+    .shell.theme-light .evo-lab {
+      background-image:
+        linear-gradient(rgba(0, 180, 200, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 180, 200, 0.06) 1px, transparent 1px);
+    }
+
+    .shell.theme-light .evo-lab::before {
+      background: radial-gradient(ellipse at center, rgba(0, 180, 200, 0.06) 0%, transparent 70%);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-text-h1 {
+      background: linear-gradient(90deg, #0097a7, #5e35b1, #0097a7);
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: evoGradientShift 4s ease infinite;
+    }
+
+    .shell.theme-light .evo-lab .a2ui-card {
+      border-color: rgba(0, 151, 167, 0.15);
+      box-shadow:
+        0 0 10px rgba(0, 151, 167, 0.03),
+        0 8px 32px rgba(0, 0, 0, 0.05);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-card:hover {
+      border-color: rgba(0, 151, 167, 0.25);
+      box-shadow:
+        0 0 12px rgba(0, 151, 167, 0.06),
+        0 12px 40px rgba(0, 0, 0, 0.08);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-stat-card::before {
+      background: linear-gradient(90deg, transparent, rgba(0, 151, 167, 0.3), transparent);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-tab.active::after {
+      background: linear-gradient(90deg, #0097a7, #5e35b1);
+      box-shadow: 0 2px 6px rgba(0, 151, 167, 0.2);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-button-primary {
+      background: linear-gradient(135deg, #0097a7 0%, #5e35b1 100%);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-button-secondary {
+      border-color: rgba(0, 151, 167, 0.3);
+      background: rgba(0, 151, 167, 0.05);
+    }
+
+    .shell.theme-light .evo-lab .timeline-connector {
+      background: linear-gradient(180deg, rgba(0, 151, 167, 0.3), rgba(94, 53, 177, 0.3));
+    }
+
+    .shell.theme-light .evo-lab .timeline-connector::after {
+      background: #0097a7;
+      box-shadow: 0 0 4px #0097a7;
+    }
+
+    .shell.theme-light .evo-lab .timeline-score {
+      background: rgba(0, 151, 167, 0.1);
+      color: #0097a7;
+    }
+
+    .shell.theme-light .evo-lab .step-connector.filled {
+      background: linear-gradient(90deg, #0097a7, #5e35b1);
+      box-shadow: 0 0 4px rgba(0, 151, 167, 0.2);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-collapsible {
+      border-color: rgba(0, 151, 167, 0.15);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-collapsible-header {
+      background: rgba(0, 151, 167, 0.03);
+    }
+
+    .shell.theme-light .evo-lab .a2ui-collapsible-header:hover {
+      background: rgba(0, 151, 167, 0.06);
     }
 
     /* ========== Mobile Menu Button (hidden on desktop) ========== */

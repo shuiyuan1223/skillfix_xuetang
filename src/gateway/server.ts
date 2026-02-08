@@ -2188,6 +2188,7 @@ export class GatewaySession {
 
     // Common data loaded for multiple tabs
     let latestCategoryScores: EvolutionLabData["latestCategoryScores"];
+    let latestRunCategoryScores: EvolutionLabData["latestRunCategoryScores"];
     let benchmarkRunsList: EvolutionLabData["benchmarkRuns"];
     let stats: EvolutionLabData["stats"];
     let scoreTrend: EvolutionLabData["scoreTrend"];
@@ -2203,17 +2204,32 @@ export class GatewaySession {
     // Always load benchmark runs (used by overview + benchmark tabs)
     try {
       const runs = listBenchmarkRuns({ limit: 20 });
-      benchmarkRunsList = runs.map((r) => ({
-        id: r.id,
-        timestamp: r.timestamp,
-        version_tag: r.version_tag || "",
-        overall_score: r.overall_score,
-        passed_count: r.passed_count,
-        failed_count: r.failed_count,
-        total_test_cases: r.total_test_cases,
-        profile: r.profile,
-        duration_ms: r.duration_ms || 0,
-      }));
+      benchmarkRunsList = runs.map((r) => {
+        let modelId: string | undefined;
+        let presetName: string | undefined;
+        if (r.metadata) {
+          try {
+            const meta = JSON.parse(r.metadata);
+            modelId = meta.modelId;
+            presetName = meta.presetName;
+          } catch {
+            // ok
+          }
+        }
+        return {
+          id: r.id,
+          timestamp: r.timestamp,
+          version_tag: r.version_tag || "",
+          overall_score: r.overall_score,
+          passed_count: r.passed_count,
+          failed_count: r.failed_count,
+          total_test_cases: r.total_test_cases,
+          profile: r.profile,
+          duration_ms: r.duration_ms || 0,
+          modelId,
+          presetName,
+        };
+      });
 
       const bestScores = getBestCategoryScores();
       if (bestScores.length > 0) {
@@ -2223,6 +2239,23 @@ export class GatewaySession {
           test_count: s.test_count,
           passed_count: s.passed_count,
         }));
+      }
+
+      // Latest run category scores (for overview consistency)
+      if (runs.length > 0) {
+        try {
+          const latestScores = listCategoryScores(runs[0].id);
+          if (latestScores.length > 0) {
+            latestRunCategoryScores = latestScores.map((s) => ({
+              category: s.category,
+              score: s.score,
+              test_count: s.test_count,
+              passed_count: s.passed_count,
+            }));
+          }
+        } catch {
+          // ok
+        }
       }
     } catch {
       // benchmark tables may not exist yet
@@ -2261,6 +2294,21 @@ export class GatewaySession {
     // Benchmark: test cases + external progress
     let testCases: EvolutionLabData["testCases"];
     let externalProgress: EvolutionLabData["externalProgress"];
+
+    // External progress shared between overview + benchmark tabs
+    if (activeTab === "overview" || activeTab === "benchmark") {
+      const extProg = readBenchmarkProgress();
+      if (extProg && extProg.source === "cli") {
+        externalProgress = {
+          current: extProg.current,
+          total: extProg.total,
+          category: extProg.category,
+          profile: extProg.profile,
+          modelId: extProg.modelId,
+        };
+      }
+    }
+
     if (activeTab === "benchmark") {
       try {
         const tcRows = listTestCases({ limit: 50 });
@@ -2272,16 +2320,6 @@ export class GatewaySession {
         }));
       } catch {
         // ok
-      }
-      const extProg = readBenchmarkProgress();
-      if (extProg && extProg.source === "cli") {
-        externalProgress = {
-          current: extProg.current,
-          total: extProg.total,
-          category: extProg.category,
-          profile: extProg.profile,
-          modelId: extProg.modelId,
-        };
       }
     }
 
@@ -2436,6 +2474,7 @@ export class GatewaySession {
       // Overview
       stats,
       latestCategoryScores,
+      latestRunCategoryScores,
       benchmarkRuns: benchmarkRunsList,
       activeVersionBranch: this.activeVersionBranch,
       scoreTrend,

@@ -343,6 +343,10 @@ export const zhCN: LocaleMessages = {
     startEvolution: "开始进化",
     // Version detail
     versionDetail: "版本详情",
+    // Data labels
+    latestRun: "最新运行",
+    bestScoresAllTime: "历史最佳",
+    bestPerVersion: "各版本最佳",
   },
 
   memory: {
