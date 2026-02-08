@@ -128,6 +128,7 @@ const ICONS: Record<string, string> = {
   "git-branch": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>`,
   "git-merge": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>`,
   "git-commit": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>`,
+  menu: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>`,
 };
 
 // Emoji to icon mapping (backward compat - prefer icon names in new code)
@@ -648,22 +649,24 @@ class A2UIRenderer {
     const columns = c.columns as { key: string; label: string }[];
     const rows = c.rows as Record<string, unknown>[];
     return html`
-      <table class="a2ui-table">
-        <thead>
-          <tr>
-            ${columns.map((col) => html`<th>${col.label}</th>`)}
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map(
-            (row) => html`
-              <tr>
-                ${columns.map((col) => html`<td>${row[col.key]}</td>`)}
-              </tr>
-            `
-          )}
-        </tbody>
-      </table>
+      <div class="a2ui-table-container">
+        <table class="a2ui-table">
+          <thead>
+            <tr>
+              ${columns.map((col) => html`<th>${col.label}</th>`)}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(
+              (row) => html`
+                <tr>
+                  ${columns.map((col) => html`<td>${row[col.key]}</td>`)}
+                </tr>
+              `
+            )}
+          </tbody>
+        </table>
+      </div>
     `;
   }
 
@@ -1843,6 +1846,7 @@ class PHAApp extends LitElement {
     :host {
       display: flex;
       height: 100vh;
+      height: 100dvh;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
 
@@ -4466,6 +4470,177 @@ class PHAApp extends LitElement {
     .file-changes .deletions {
       color: var(--color-error, #ef4444);
     }
+
+    /* ========== Mobile Menu Button (hidden on desktop) ========== */
+    .mobile-menu-btn {
+      display: none;
+    }
+
+    /* ========== Sidebar Overlay (hidden on desktop) ========== */
+    .sidebar-overlay {
+      display: none;
+    }
+
+    /* ========== Mobile Responsive ========== */
+    @media (max-width: 768px) {
+      /* Sidebar: hidden by default, overlay when open */
+      .surface-sidebar {
+        display: none;
+      }
+
+      .surface-sidebar.mobile-open {
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 280px;
+        z-index: 50;
+        box-shadow: 4px 0 32px rgba(0, 0, 0, 0.4);
+      }
+
+      /* Sidebar overlay */
+      .sidebar-overlay {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 40;
+      }
+
+      /* Mobile hamburger button */
+      .mobile-menu-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 30;
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
+        color: var(--color-text);
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      }
+
+      .mobile-menu-btn:active {
+        transform: scale(0.95);
+      }
+
+      .mobile-menu-btn svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      /* Typography: reduce sizes */
+      .a2ui-text-h1 {
+        font-size: 24px;
+      }
+
+      .a2ui-text-h2 {
+        font-size: 20px;
+      }
+
+      .a2ui-text-h3 {
+        font-size: 16px;
+      }
+
+      /* Grid: single column on mobile */
+      .a2ui-grid {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* Cards: compact */
+      .a2ui-card {
+        border-radius: 12px;
+      }
+
+      .a2ui-stat-card {
+        padding: 16px;
+        border-radius: 12px;
+      }
+
+      /* Tables: horizontal scroll */
+      .a2ui-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .a2ui-data-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      /* Chat empty state */
+      .a2ui-chat-empty {
+        padding: 24px;
+      }
+
+      .a2ui-chat-empty-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 18px;
+        margin-bottom: 16px;
+      }
+
+      .a2ui-chat-empty-icon svg {
+        width: 28px;
+        height: 28px;
+      }
+
+      /* Chat input: compact */
+      .a2ui-chat-input {
+        padding: 12px;
+      }
+
+      .a2ui-chat-input-field {
+        padding: 12px 16px;
+      }
+
+      .a2ui-chat-send {
+        width: 46px;
+        height: 46px;
+        border-radius: 12px;
+      }
+
+      /* Tabs: horizontal scroll instead of wrap */
+      .a2ui-tabs-header {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+
+      .a2ui-tabs-header::-webkit-scrollbar {
+        display: none;
+      }
+
+      .a2ui-tab {
+        white-space: nowrap;
+        flex-shrink: 0;
+        padding: 10px 16px;
+        font-size: 13px;
+      }
+
+      /* Main content needs top padding for hamburger button */
+      .surface-main-content {
+        padding-top: 56px;
+      }
+
+      /* Stat card hover: disable lift on mobile (no hover) */
+      .a2ui-stat-card:hover {
+        transform: none;
+      }
+    }
   `;
 
   @state() private connected = false;
@@ -4475,6 +4650,7 @@ class PHAApp extends LitElement {
   @state() private toastData: A2UISurfaceData | null = null;
   @state() private progressData: A2UISurfaceData | null = null;
   @state() private sidebarCollapsed = false;
+  @state() private mobileSidebarOpen = false;
   @state() private pageKey = 0; // For page transition animations
   @state() private darkMode = true; // Theme state
 
@@ -4587,6 +4763,7 @@ class PHAApp extends LitElement {
 
   private sendNavigate(view: string) {
     this.pageKey++; // Trigger page transition animation
+    this.mobileSidebarOpen = false; // Close mobile sidebar on navigation
     this.ws?.send(JSON.stringify({ type: "navigate", view }));
   }
 
@@ -4900,6 +5077,10 @@ class PHAApp extends LitElement {
     localStorage.setItem("pha-sidebar-collapsed", String(this.sidebarCollapsed));
   }
 
+  private toggleMobileSidebar() {
+    this.mobileSidebarOpen = !this.mobileSidebarOpen;
+  }
+
   private toggleTheme() {
     this.darkMode = !this.darkMode;
     localStorage.setItem("pha-dark-mode", String(this.darkMode));
@@ -4928,8 +5109,17 @@ class PHAApp extends LitElement {
   render() {
     return html`
       <div class="shell ${this.darkMode ? "theme-dark" : "theme-light"}">
+        <!-- Mobile sidebar overlay -->
+        ${this.mobileSidebarOpen
+          ? html`<div class="sidebar-overlay" @click=${() => this.toggleMobileSidebar()}></div>`
+          : nothing}
         <!-- Sidebar Surface -->
-        <aside class="surface-sidebar ${this.sidebarCollapsed ? "collapsed" : ""}">
+        <aside
+          class="surface-sidebar ${this.sidebarCollapsed ? "collapsed" : ""} ${this
+            .mobileSidebarOpen
+            ? "mobile-open"
+            : ""}"
+        >
           <div class="shell-header">
             <div class="logo">
               <div class="logo-icon">${unsafeHTML(ICONS["hospital"])}</div>
@@ -4980,6 +5170,9 @@ class PHAApp extends LitElement {
 
         <!-- Main Surface -->
         <main class="surface-main">
+          <button class="mobile-menu-btn" @click=${() => this.toggleMobileSidebar()}>
+            ${unsafeHTML(ICONS["menu"])}
+          </button>
           ${this.progressData
             ? html`<div class="surface-progress">${this.renderer.render(this.progressData)}</div>`
             : nothing}
