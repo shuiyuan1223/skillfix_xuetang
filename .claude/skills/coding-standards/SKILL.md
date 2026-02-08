@@ -30,10 +30,13 @@ description: Use when writing or reviewing code for the PHA project. Covers codi
 |------|-------|
 | CLI commands | `src/commands/xxx.ts` |
 | MCP tool definitions | `src/tools/xxx-tools.ts` |
-| AgentTool adapters | `src/agent/tools.ts` |
-| A2UI page generators | `src/gateway/pages.ts` |
+| Git MCP tools | `src/tools/git-tools.ts` |
+| AgentTool adapters | `src/agent/tools.ts`, `src/agent/git-agent-tools.ts` |
+| A2UI page generators | `src/gateway/pages.ts`, `src/gateway/evolution-lab.ts` |
 | Route/action handlers | `src/gateway/server.ts` |
 | A2UI component types | `src/gateway/a2ui.ts` |
+| Evolution system | `src/evolution/*.ts` |
+| Agent Skills | `src/skills/*/SKILL.md` |
 | Memory system | `src/memory/*.ts` |
 | Translations | `src/locales/{types,zh-CN,en}.ts` |
 | Frontend renderer | `ui/src/main.ts` |
@@ -49,6 +52,12 @@ import { getMemoryManager } from "../memory/index.js";
 import { getDataSource } from "../tools/health-data.js";
 import { getUserUuid } from "../utils/config.js";
 ```
+
+### Git Operations
+
+- **All git operations** should go through `src/evolution/version-manager.ts` or `src/tools/git-tools.ts`
+- Use `gitCommitFiles(files, message)` for commits, not raw `execSync("git add && git commit")`
+- Import from `"../evolution/version-manager.js"` for `gitCommitFiles`, `getProjectRoot`, etc.
 
 ### Error Handling
 

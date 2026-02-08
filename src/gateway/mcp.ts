@@ -5,6 +5,7 @@
  */
 
 import { healthTools } from "../tools/health-data.js";
+import { gitTools } from "../tools/git-tools.js";
 
 // MCP Tool Definition
 export interface MCPTool {
@@ -33,26 +34,37 @@ export interface MCPToolResult {
  * MCP Handler - Handles MCP protocol requests
  */
 export class MCPHandler {
-  private tools: Map<string, (typeof healthTools)[number]> = new Map();
+  private tools: Map<
+    string,
+    { name: string; description: string; parameters: any; execute: (args: any) => Promise<any> }
+  > = new Map();
 
   constructor() {
     // Register all health tools
     for (const tool of healthTools) {
       this.tools.set(tool.name, tool);
     }
+    // Register git tools
+    for (const tool of gitTools) {
+      this.tools.set(tool.name, tool);
+    }
+  }
+
+  private get allTools() {
+    return [...healthTools, ...gitTools];
   }
 
   /**
    * List all available tools
    */
   listTools(): MCPTool[] {
-    return healthTools.map((tool) => ({
+    return this.allTools.map((tool) => ({
       name: tool.name,
       description: tool.description,
       inputSchema: {
         type: "object" as const,
         properties: tool.parameters.properties,
-        required: "required" in tool.parameters ? tool.parameters.required : undefined,
+        required: "required" in tool.parameters ? (tool.parameters as any).required : undefined,
       },
     }));
   }

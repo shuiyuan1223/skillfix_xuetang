@@ -29,6 +29,7 @@ import {
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { memorySearchTool, memorySaveTool, dailyLogTool } from "../tools/memory-tools.js";
 import { getSkillTool } from "../tools/skill-tools.js";
+import { gitAgentTools } from "./git-agent-tools.js";
 
 // Define TypeBox schemas for each tool
 const DateSchema = Type.Object({
@@ -467,6 +468,7 @@ export const healthAgentTools: AgentTool<any>[] = [
   memorySaveAgentTool,
   dailyLogAgentTool,
   getSkillAgentTool,
+  ...gitAgentTools,
 ];
 
 /**
@@ -554,5 +556,7 @@ export function createHealthAgentTools(dataSource: HealthDataSource): AgentTool<
     memorySaveAgentTool,
     dailyLogAgentTool,
     getSkillAgentTool,
+    // Git tools are not data-source dependent
+    ...gitAgentTools,
   ];
 }

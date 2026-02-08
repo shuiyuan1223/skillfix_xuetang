@@ -28,6 +28,12 @@ import {
   readSkillFiles,
   type OptimizationContext,
 } from "./claude-code-optimizer.js";
+import { createNextVersion, removeWorktree, type VersionInfo } from "./version-manager.js";
+import {
+  insertEvolutionVersion,
+  updateEvolutionVersion,
+  getEvolutionVersionByBranch,
+} from "../memory/db.js";
 
 export interface AutoLoopCallbacks {
   onIterationStart?: (iteration: number, maxIterations: number) => void;
@@ -71,6 +77,7 @@ export class AutoLoop {
   private runnerConfig: BenchmarkRunnerConfig;
   private callbacks: AutoLoopCallbacks;
   private projectRoot: string;
+  private versionInfo: VersionInfo | null = null;
 
   constructor(
     config: AutoLoopConfig,
@@ -162,9 +169,10 @@ export class AutoLoop {
           continue;
         }
 
-        // Build optimization context
-        const promptContent = await readPromptFiles(this.projectRoot);
-        const skillContent = await readSkillFiles(this.projectRoot, weak.category);
+        // Build optimization context — use worktree if available
+        const optCwd = this.versionInfo?.worktreePath || this.projectRoot;
+        const promptContent = await readPromptFiles(optCwd);
+        const skillContent = await readSkillFiles(optCwd, weak.category);
 
         const context: OptimizationContext = {
           category: weak.category,
@@ -173,8 +181,8 @@ export class AutoLoop {
           currentSkillContent: skillContent,
         };
 
-        // Spawn Claude Code
-        const optResult = await optimizeWithClaudeCode(context, this.projectRoot);
+        // Spawn Claude Code in worktree directory
+        const optResult = await optimizeWithClaudeCode(context, optCwd);
         this.callbacks.onOptimizationComplete?.(
           weak.category,
           optResult.success,
@@ -265,6 +273,21 @@ export class AutoLoop {
     result.finalScore = currentScore;
     result.improved = currentScore > result.initialScore;
 
+    // Update version record with final results
+    if (this.versionInfo) {
+      const version = getEvolutionVersionByBranch(this.versionInfo.branchName);
+      if (version) {
+        const allFilesChanged = result.changes
+          .filter((ch) => ch.kept)
+          .flatMap((ch) => ch.filesChanged);
+        updateEvolutionVersion(version.id, {
+          status: result.improved ? "active" : "abandoned",
+          scoreDelta: result.finalScore - result.initialScore,
+          filesChanged: allFilesChanged,
+        });
+      }
+    }
+
     this.callbacks.onComplete?.(result.iterations, result.finalScore, result.improved);
 
     return result;
@@ -288,64 +311,74 @@ export class AutoLoop {
   }
 
   /**
-   * Ensure we're on the optimization branch
+   * Create a worktree for the optimization branch.
+   * Uses git worktree to avoid modifying the main branch.
    */
   private async ensureBranch(): Promise<void> {
-    const { execSync } = await import("child_process");
-
     try {
-      const currentBranch = execSync("git branch --show-current", {
-        cwd: this.projectRoot,
-        encoding: "utf-8",
-        timeout: 5000,
-      }).trim();
-
-      if (currentBranch !== this.config.branch) {
-        // Create and checkout optimization branch
-        try {
-          execSync(`git checkout -b ${this.config.branch}`, {
-            cwd: this.projectRoot,
-            encoding: "utf-8",
-            timeout: 5000,
-          });
-        } catch {
-          // Branch might already exist
-          execSync(`git checkout ${this.config.branch}`, {
-            cwd: this.projectRoot,
-            encoding: "utf-8",
-            timeout: 5000,
-          });
-        }
-        this.log(`Switched to branch: ${this.config.branch}`);
-      }
+      this.versionInfo = createNextVersion({
+        triggerMode: "auto-evolve",
+        triggerRef: `target=${this.config.targetScore}`,
+      });
+      this.log(
+        `Created worktree: ${this.versionInfo.branchName} at ${this.versionInfo.worktreePath}`
+      );
     } catch (error) {
-      this.log(`Warning: Could not manage git branch: ${error}`);
+      this.log(`Warning: Could not create worktree, falling back to direct branch: ${error}`);
+      // Fallback to old behavior
+      const { execSync } = await import("child_process");
+      try {
+        const currentBranch = execSync("git branch --show-current", {
+          cwd: this.projectRoot,
+          encoding: "utf-8",
+          timeout: 5000,
+        }).trim();
+
+        if (currentBranch !== this.config.branch) {
+          try {
+            execSync(`git checkout -b ${this.config.branch}`, {
+              cwd: this.projectRoot,
+              encoding: "utf-8",
+              timeout: 5000,
+            });
+          } catch {
+            execSync(`git checkout ${this.config.branch}`, {
+              cwd: this.projectRoot,
+              encoding: "utf-8",
+              timeout: 5000,
+            });
+          }
+          this.log(`Switched to branch: ${this.config.branch}`);
+        }
+      } catch (innerError) {
+        this.log(`Warning: Could not manage git branch: ${innerError}`);
+      }
     }
   }
 
   /**
-   * Revert the last git commit
+   * Revert the last git commit (in worktree or project root)
    */
   private async revertLastCommit(): Promise<void> {
     const { execSync } = await import("child_process");
+    const cwd = this.versionInfo?.worktreePath || this.projectRoot;
 
     try {
       execSync("git revert --no-edit HEAD", {
-        cwd: this.projectRoot,
+        cwd,
         encoding: "utf-8",
         timeout: 10000,
       });
     } catch (error) {
       this.log(`Warning: Failed to revert: ${error}`);
-      // Try harder - reset soft
       try {
         execSync("git reset --soft HEAD~1", {
-          cwd: this.projectRoot,
+          cwd,
           encoding: "utf-8",
           timeout: 5000,
         });
         execSync("git checkout -- .", {
-          cwd: this.projectRoot,
+          cwd,
           encoding: "utf-8",
           timeout: 5000,
         });

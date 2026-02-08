@@ -52,5 +52,11 @@
   "embedding": {
     "enabled": true,
     "model": "openai/text-embedding-3-small"
+  },
+  "benchmarkModels": {
+    "claude-sonnet": { "provider": "openrouter", "modelId": "anthropic/claude-sonnet-4", "label": "Claude Sonnet 4" },
+    "deepseek-v3": { "provider": "openrouter", "modelId": "deepseek/deepseek-chat", "label": "DeepSeek V3" },
+    "qwen-72b": { "provider": "openrouter", "modelId": "qwen/qwen-2.5-72b-instruct", "label": "Qwen 2.5 72B" },
+    "gpt-4o": { "provider": "openrouter", "modelId": "openai/gpt-4o", "label": "GPT-4o" }
   }
 }

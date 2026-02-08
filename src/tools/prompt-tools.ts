@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
 import { join, basename } from "path";
 import { execSync } from "child_process";
+import { gitCommitFiles } from "../evolution/version-manager.js";
 
 // Default prompts directory (relative to project root)
 let promptsDir = "src/prompts";
@@ -162,16 +163,13 @@ export const updatePromptTool = {
     // Git commit
     const message = args.commitMessage || `Update ${filename}`;
     try {
-      git(`add "${filePath}"`);
-      git(`commit -m "${message.replace(/"/g, '\\"')}"`);
-
-      const commitHash = git("rev-parse --short HEAD");
+      const result = gitCommitFiles(filePath, message);
 
       return {
         success: true,
         message: `Updated ${filename}`,
         changed: true,
-        commitHash,
+        commitHash: result.commitHash || "",
         commitMessage: message,
         oldLines: oldContent.split("\n").length,
         newLines: args.content.split("\n").length,
@@ -310,17 +308,14 @@ export const revertPromptTool = {
       // Commit the revert
       const shortHash = args.commitHash.slice(0, 7);
       const message = `Revert ${filename} to ${shortHash}`;
-      git(`add "${filePath}"`);
-      git(`commit -m "${message}"`);
-
-      const newCommitHash = git("rev-parse --short HEAD");
+      const result = gitCommitFiles(filePath, message);
 
       return {
         success: true,
         message: `Reverted ${filename} to ${shortHash}`,
         changed: true,
         revertedTo: args.commitHash,
-        newCommitHash,
+        newCommitHash: result.commitHash || "",
       };
     } catch (error) {
       return {

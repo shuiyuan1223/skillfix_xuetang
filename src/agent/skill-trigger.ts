@@ -8,6 +8,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import { getSkillsDir } from "../tools/skill-tools.js";
 
 interface SkillEntry {
   name: string;
@@ -23,7 +24,7 @@ let skillCache: SkillEntry[] | null = null;
 function getSkillEntries(): SkillEntry[] {
   if (skillCache) return skillCache;
 
-  const skillsDir = "src/skills";
+  const skillsDir = getSkillsDir();
   skillCache = [];
 
   if (!existsSync(skillsDir)) return skillCache;

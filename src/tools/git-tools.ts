@@ -1,0 +1,394 @@
+/**
+ * Git MCP Tools
+ *
+ * Exposes git operations as MCP tools so the Agent can manage
+ * evolution branches, commits, diffs, and merges.
+ */
+
+import {
+  getProjectRoot,
+  getGitStatusPorcelain,
+  getGitLog,
+  getGitDiffContent,
+  gitCommitFiles,
+  revertLastCommit,
+  readFileFromBranch,
+  listEvolutionBranches,
+  listWorktrees,
+  getChangedFilesOnBranch,
+  createNextVersion,
+  mergeVersion,
+  abandonVersion,
+  removeWorktree,
+} from "../evolution/version-manager.js";
+
+// ============================================================================
+// git_status
+// ============================================================================
+
+export const gitStatusTool = {
+  name: "git_status",
+  description: "Show git working tree status (porcelain format)",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      path: {
+        type: "string",
+        description: "Working directory path (defaults to project root)",
+      },
+    },
+  },
+  execute: async (args?: { path?: string }) => {
+    const output = getGitStatusPorcelain(args?.path);
+    return {
+      success: true,
+      status: output || "(clean)",
+      clean: !output,
+    };
+  },
+};
+
+// ============================================================================
+// git_log
+// ============================================================================
+
+export const gitLogTool = {
+  name: "git_log",
+  description: "Show commit history with optional branch filtering",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      limit: {
+        type: "number",
+        description: "Max commits to return (default: 20)",
+      },
+      branch: {
+        type: "string",
+        description: "Branch name to show log for",
+      },
+      all: {
+        type: "boolean",
+        description: "Show commits from all branches",
+      },
+    },
+  },
+  execute: async (args?: { limit?: number; branch?: string; all?: boolean }) => {
+    const commits = getGitLog(args);
+    return {
+      success: true,
+      commits,
+      count: commits.length,
+    };
+  },
+};
+
+// ============================================================================
+// git_show_file
+// ============================================================================
+
+export const gitShowFileTool = {
+  name: "git_show_file",
+  description: "Read a file from a specific branch without checkout",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      branch: {
+        type: "string",
+        description: "Branch name (e.g., 'evo/v3', 'main')",
+      },
+      path: {
+        type: "string",
+        description: "File path relative to repo root",
+      },
+    },
+    required: ["branch", "path"],
+  },
+  execute: async (args: { branch: string; path: string }) => {
+    const content = readFileFromBranch(args.branch, args.path);
+    if (content === null) {
+      return {
+        success: false,
+        error: `File not found: ${args.path} on branch ${args.branch}`,
+      };
+    }
+    return {
+      success: true,
+      branch: args.branch,
+      path: args.path,
+      content,
+      lines: content.split("\n").length,
+    };
+  },
+};
+
+// ============================================================================
+// git_diff
+// ============================================================================
+
+export const gitDiffTool = {
+  name: "git_diff",
+  description: "Get diff between two branches (actual diff content)",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      branch: {
+        type: "string",
+        description: "Branch to diff (e.g., 'evo/v3')",
+      },
+      baseBranch: {
+        type: "string",
+        description: "Base branch to diff against (default: 'main')",
+      },
+    },
+    required: ["branch"],
+  },
+  execute: async (args: { branch: string; baseBranch?: string }) => {
+    const diff = getGitDiffContent(args.branch, args.baseBranch);
+    return {
+      success: true,
+      branch: args.branch,
+      baseBranch: args.baseBranch || "main",
+      diff: diff || "(no differences)",
+      hasDiff: !!diff,
+    };
+  },
+};
+
+// ============================================================================
+// git_branch_list
+// ============================================================================
+
+export const gitBranchListTool = {
+  name: "git_branch_list",
+  description: "List all evolution (evo/*) branches",
+  parameters: {
+    type: "object" as const,
+    properties: {},
+  },
+  execute: async () => {
+    const branches = listEvolutionBranches();
+    return {
+      success: true,
+      branches,
+      count: branches.length,
+    };
+  },
+};
+
+// ============================================================================
+// git_branch_create
+// ============================================================================
+
+export const gitBranchCreateTool = {
+  name: "git_branch_create",
+  description:
+    "Create a new evolution branch (evo/vN) with a git worktree for isolated modifications",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      triggerMode: {
+        type: "string",
+        description: "What triggered this version (e.g., 'manual', 'auto-loop', 'agent')",
+      },
+      triggerRef: {
+        type: "string",
+        description: "Reference ID (e.g., benchmark run ID)",
+      },
+    },
+  },
+  execute: async (args?: { triggerMode?: string; triggerRef?: string }) => {
+    try {
+      const version = createNextVersion(args);
+      return {
+        success: true,
+        branch: version.branchName,
+        worktreePath: version.worktreePath,
+        parentBranch: version.parentBranch,
+        id: version.id,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+};
+
+// ============================================================================
+// git_branch_delete
+// ============================================================================
+
+export const gitBranchDeleteTool = {
+  name: "git_branch_delete",
+  description: "Delete an evolution branch and its worktree, marking it as abandoned",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      branch: {
+        type: "string",
+        description: "Branch name to delete (e.g., 'evo/v3')",
+      },
+    },
+    required: ["branch"],
+  },
+  execute: async (args: { branch: string }) => {
+    try {
+      abandonVersion(args.branch);
+      return {
+        success: true,
+        message: `Abandoned and removed branch: ${args.branch}`,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  },
+};
+
+// ============================================================================
+// git_worktree_list
+// ============================================================================
+
+export const gitWorktreeListTool = {
+  name: "git_worktree_list",
+  description: "List active git worktrees (evolution branches with working directories)",
+  parameters: {
+    type: "object" as const,
+    properties: {},
+  },
+  execute: async () => {
+    const worktrees = listWorktrees();
+    return {
+      success: true,
+      worktrees,
+      count: worktrees.length,
+    };
+  },
+};
+
+// ============================================================================
+// git_commit
+// ============================================================================
+
+export const gitCommitTool = {
+  name: "git_commit",
+  description: "Stage specified files and create a git commit",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      files: {
+        type: "array",
+        items: { type: "string" },
+        description: "File paths to stage and commit",
+      },
+      message: {
+        type: "string",
+        description: "Commit message",
+      },
+      cwd: {
+        type: "string",
+        description: "Working directory (defaults to project root)",
+      },
+    },
+    required: ["files", "message"],
+  },
+  execute: async (args: { files: string[]; message: string; cwd?: string }) => {
+    const result = gitCommitFiles(args.files, args.message, args.cwd);
+    return result;
+  },
+};
+
+// ============================================================================
+// git_merge
+// ============================================================================
+
+export const gitMergeTool = {
+  name: "git_merge",
+  description: "Merge an evolution branch into its parent (typically main)",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      branch: {
+        type: "string",
+        description: "Branch to merge (e.g., 'evo/v3')",
+      },
+    },
+    required: ["branch"],
+  },
+  execute: async (args: { branch: string }) => {
+    const result = mergeVersion(args.branch);
+    return result;
+  },
+};
+
+// ============================================================================
+// git_revert
+// ============================================================================
+
+export const gitRevertTool = {
+  name: "git_revert",
+  description: "Revert the last commit on the current branch",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      cwd: {
+        type: "string",
+        description: "Working directory (defaults to project root)",
+      },
+    },
+  },
+  execute: async (args?: { cwd?: string }) => {
+    const result = revertLastCommit(args?.cwd);
+    return result;
+  },
+};
+
+// ============================================================================
+// git_changed_files
+// ============================================================================
+
+export const gitChangedFilesTool = {
+  name: "git_changed_files",
+  description: "List files changed on a branch compared to its parent",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      branch: {
+        type: "string",
+        description: "Branch name (e.g., 'evo/v3')",
+      },
+    },
+    required: ["branch"],
+  },
+  execute: async (args: { branch: string }) => {
+    const files = getChangedFilesOnBranch(args.branch);
+    return {
+      success: true,
+      branch: args.branch,
+      files,
+      count: files.length,
+    };
+  },
+};
+
+// ============================================================================
+// Export all tools
+// ============================================================================
+
+export const gitTools = [
+  gitStatusTool,
+  gitLogTool,
+  gitShowFileTool,
+  gitDiffTool,
+  gitBranchListTool,
+  gitBranchCreateTool,
+  gitBranchDeleteTool,
+  gitWorktreeListTool,
+  gitCommitTool,
+  gitMergeTool,
+  gitRevertTool,
+  gitChangedFilesTool,
+];

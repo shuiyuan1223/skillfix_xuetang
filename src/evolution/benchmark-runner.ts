@@ -170,6 +170,7 @@ export class BenchmarkRunner {
       profile?: BenchmarkProfile;
       category?: BenchmarkCategory;
       versionTag?: string;
+      modelOverride?: { provider: string; modelId: string; presetName?: string };
     } = {}
   ): Promise<{
     run: BenchmarkRun;
@@ -188,8 +189,8 @@ export class BenchmarkRunner {
 
     // Capture model and version info
     const config = loadConfig();
-    const modelId = config.llm?.modelId || "unknown";
-    const provider = config.llm?.provider || "unknown";
+    const modelId = options.modelOverride?.modelId || config.llm?.modelId || "unknown";
+    const provider = options.modelOverride?.provider || config.llm?.provider || "unknown";
     let gitVersion = "unknown";
     try {
       const proc = Bun.spawnSync(["git", "describe", "--always", "--dirty"]);
@@ -215,6 +216,9 @@ export class BenchmarkRunner {
         modelId,
         provider,
         gitVersion,
+        ...(options.modelOverride?.presetName
+          ? { presetName: options.modelOverride.presetName }
+          : {}),
       },
     };
 

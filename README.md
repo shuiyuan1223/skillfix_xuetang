@@ -82,7 +82,7 @@ pha health
 | **华为健康集成** | OAuth 授权 + 完整数据读取 |
 | **多用户支持** | SQLite Token 存储，支持多用户隔离 |
 | **MCP 支持** | 完整实现模型上下文协议 |
-| **自我进化** | 内置 LLM-as-Judge 评估系统 |
+| **自我进化** | Evolution Lab — Agent 驱动的自我进化实验室 |
 | **多前端** | Web UI + TUI 终端界面 |
 
 ## 架构
@@ -103,7 +103,7 @@ pha health
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │                      PHA Agent                           │
-│  • pi-agent-core  • 健康数据工具  • 可定制提示词          │
+│  • pi-agent-core  • 健康数据工具  • Git 工具  • Skills    │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -117,11 +117,21 @@ pha/
 │   ├── gateway/            # Gateway 服务
 │   │   ├── server.ts       # HTTP/WebSocket 服务
 │   │   ├── pages.ts        # A2UI 页面生成器
+│   │   ├── evolution-lab.ts # Evolution Lab 页面
 │   │   └── a2ui.ts         # A2UI 组件定义
+│   ├── agent/              # Agent 核心
+│   │   ├── pha-agent.ts    # Agent 主类
+│   │   └── tools.ts        # AgentTool 适配器
+│   ├── tools/              # MCP 工具
+│   │   ├── health-data.ts  # 健康数据
+│   │   └── git-tools.ts    # Git 操作 (12个)
+│   ├── evolution/          # 进化系统
+│   │   └── version-manager.ts # Git worktree 管理
+│   ├── skills/             # Agent Skills
+│   │   └── evolution-driver/ # 自我进化方法论
 │   ├── data-sources/       # 数据源
 │   │   └── huawei/         # 华为健康 API
-│   ├── services/           # 服务层
-│   └── tools/              # MCP 工具
+│   └── services/           # 服务层
 ├── tests/                  # 测试
 │   ├── unit/               # 单元测试
 │   ├── integration/        # 集成测试
@@ -164,6 +174,9 @@ pha tools call <name>  # 调用工具
 # 自我进化
 pha eval traces        # 查看交互记录
 pha eval run           # 运行评估
+
+# 进化实验室 (Web UI)
+# 导航到 Evolution Lab，Agent 驱动进化流程
 ```
 
 ## API 端点

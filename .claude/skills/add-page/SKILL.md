@@ -55,4 +55,15 @@ bun run build    # Build succeeds
 
 - **Frontend is a pure renderer** — All UI generated server-side via A2UI
 - **No frontend changes needed** if existing A2UI components suffice
-- Available components: `text`, `card`, `column`, `row`, `grid`, `chart`, `stat_card`, `data_table`, `table`, `button`, `form`, `form_input`, `badge`, `progress`, `collapsible`, `code_editor`, `tabs`, `score_gauge`, `modal`
+- Available components: `text`, `card`, `column`, `row`, `grid`, `chart`, `stat_card`, `data_table`, `table`, `button`, `form`, `form_input`, `badge`, `progress`, `collapsible`, `code_editor`, `tabs`, `score_gauge`, `modal`, `git_timeline`, `step_indicator`, `file_tree`
+- **Complex pages** can have their own file (e.g. `evolution-lab.ts`) instead of adding to `pages.ts`
+
+## Navigation Structure
+
+```
+Main Nav (top-level):
+  chat, dashboard, memory, evolution
+
+Settings Nav (below divider):
+  settings/prompts, settings/skills, settings/integrations
+```

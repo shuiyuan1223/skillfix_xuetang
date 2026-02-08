@@ -31,6 +31,14 @@ export interface LLMConfig {
   baseUrl?: string;
 }
 
+export interface BenchmarkModelConfig {
+  provider: LLMProvider;
+  modelId: string;
+  apiKey?: string;
+  baseUrl?: string;
+  label?: string;
+}
+
 export interface HuaweiHealthKitConfig {
   clientId?: string;
   clientSecret?: string;
@@ -77,6 +85,7 @@ export interface PHAConfig {
   };
   mcp?: MCPConfig;
   embedding?: EmbeddingConfig;
+  benchmarkModels?: Record<string, BenchmarkModelConfig>;
 }
 
 // Provider configurations
@@ -346,4 +355,74 @@ export function getModelId(provider?: LLMProvider): string {
 export function getUserUuid(): string {
   const config = loadConfig();
   return config.userUuid || FALLBACK_USER_UUID;
+}
+
+/**
+ * Get benchmark models from config.
+ * If benchmarkModels is configured, returns it.
+ * Otherwise, derives a single "default" entry from the llm config.
+ */
+export function getBenchmarkModels(): Record<string, BenchmarkModelConfig> {
+  const config = loadConfig();
+
+  if (config.benchmarkModels && Object.keys(config.benchmarkModels).length > 0) {
+    return config.benchmarkModels;
+  }
+
+  // Derive default from llm config
+  const provider = config.llm.provider;
+  const modelId = config.llm.modelId || PROVIDER_CONFIGS[provider]?.defaultModel || "default";
+  return {
+    default: {
+      provider,
+      modelId,
+      label: `${PROVIDER_CONFIGS[provider]?.name || provider} (${modelId})`,
+    },
+  };
+}
+
+/**
+ * Resolve API key for a benchmark model config.
+ * Priority: model.apiKey → same-provider config key → env var → config fallback
+ */
+export function resolveBenchmarkModelApiKey(model: BenchmarkModelConfig): string | undefined {
+  // 1. Model-specific key
+  if (model.apiKey) return model.apiKey;
+
+  const config = loadConfig();
+
+  // 2. If same provider as config, use config key
+  if (model.provider === config.llm.provider && config.llm.apiKey) {
+    return config.llm.apiKey;
+  }
+
+  // 3. Provider-specific env var
+  const providerConfig = PROVIDER_CONFIGS[model.provider];
+  if (providerConfig) {
+    const envVal = process.env[providerConfig.envVar];
+    if (envVal) return envVal;
+  }
+
+  // 4. Fallback to config key (may work for OpenRouter multi-model)
+  if (config.llm.apiKey) return config.llm.apiKey;
+
+  return undefined;
+}
+
+/**
+ * Resolve base URL for a benchmark model config.
+ * Priority: model.baseUrl → same-provider config baseUrl → provider default baseUrl
+ */
+export function resolveBenchmarkModelBaseUrl(model: BenchmarkModelConfig): string | undefined {
+  if (model.baseUrl) return model.baseUrl;
+
+  const config = loadConfig();
+
+  // Same provider as config — use config baseUrl
+  if (model.provider === config.llm.provider && config.llm.baseUrl) {
+    return config.llm.baseUrl;
+  }
+
+  // Provider default
+  return PROVIDER_CONFIGS[model.provider]?.baseUrl;
 }

@@ -9,6 +9,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
+import { getSkillsDir } from "../tools/skill-tools.js";
 
 /**
  * Build a skill registry section for the system prompt.
@@ -16,7 +17,7 @@ import { join } from "path";
  * The agent uses the `get_skill` tool to load full skill content on demand.
  */
 export function buildSkillRegistry(): string {
-  const skillsDir = "src/skills";
+  const skillsDir = getSkillsDir();
   if (!existsSync(skillsDir)) {
     return "";
   }

@@ -32,14 +32,16 @@ export const myTool = {
 
 ### 2. Create AgentTool Adapter
 
-- [ ] `src/agent/tools.ts` — Add TypeBox schema:
+- [ ] For health/memory tools: `src/agent/tools.ts`
+- [ ] For git tools: `src/agent/git-agent-tools.ts`
+- [ ] Add TypeBox schema:
   ```typescript
   const MyToolSchema = Type.Object({
     param1: Type.String({ description: "..." }),
   });
   ```
 - [ ] Create AgentTool wrapper (follow `healthDataAgentTool` pattern)
-- [ ] Add to `healthAgentTools` array at bottom of file
+- [ ] Add to `healthAgentTools` array (in `tools.ts`) or `gitAgentTools` array (in `git-agent-tools.ts`)
 
 ### 3. Update SOUL.md
 

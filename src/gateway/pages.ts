@@ -51,6 +51,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
       { id: "chat", label: t("nav.chat"), icon: "chat" },
       { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
       { id: "memory", label: t("nav.memory"), icon: "brain" },
+      { id: "evolution", label: t("nav.evolution"), icon: "flask" },
     ],
     { activeId: activeView }
   );
@@ -64,7 +65,6 @@ export function generateSidebar(activeView: string): A2UIMessage {
     [
       { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
       { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
-      { id: "settings/evolution", label: t("nav.evolution"), icon: "flask" },
       { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
     ],
     { activeId: activeView }
@@ -964,7 +964,8 @@ export function generateEvolutionPage(data: {
     | "benchmark"
     | "runs"
     | "suggestions"
-    | "config";
+    | "config"
+    | "versions";
   stats?: EvaluationStats;
   traces?: TraceInfo[];
   tracesPage?: number;
@@ -974,6 +975,13 @@ export function generateEvolutionPage(data: {
   suggestions?: SuggestionInfo[];
   benchmarkRuns?: BenchmarkRunInfo[];
   latestCategoryScores?: CategoryScoreInfo[];
+  externalProgress?: {
+    current: number;
+    total: number;
+    category: string;
+    profile: string;
+    modelId?: string;
+  };
   categoriesConfig?: {
     categories: Array<{
       id: string;
@@ -987,6 +995,17 @@ export function generateEvolutionPage(data: {
     passingScore: number;
     weakCategoryThreshold: number;
   } | null;
+  versions?: Array<{
+    id: string;
+    branchName: string;
+    status: string;
+    triggerMode: string;
+    triggerRef: string;
+    scoreDelta: number | null;
+    filesChanged: string[];
+    createdAt: number;
+  }>;
+  activeVersionBranch?: string | null;
   loading?: boolean;
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
@@ -1014,6 +1033,22 @@ export function generateEvolutionPage(data: {
   // Overview tab content
   if (data.activeTab === "overview") {
     const overviewChildren: string[] = [];
+
+    // Show external benchmark progress indicator (e.g., from CLI)
+    if (data.externalProgress) {
+      const ep = data.externalProgress;
+      const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
+      const progressLabel = ui.text(
+        `${t("evolution.externalBenchmarkRunning")}${ep.modelId ? ` (${ep.modelId})` : ""} — ${ep.current}/${ep.total} (${pct}%)`,
+        "caption"
+      );
+      const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#f59e0b" });
+      const categoryBadge = ep.category ? ui.badge(ep.category, { variant: "info" }) : null;
+      const progressItems = [progressLabel, progressBar];
+      if (categoryBadge) progressItems.push(categoryBadge);
+      const progressCard = ui.card(progressItems, { padding: 12 });
+      overviewChildren.push(progressCard);
+    }
 
     // Row 1: Radar chart + stat cards
     const rightCards: string[] = [];
@@ -1059,26 +1094,26 @@ export function generateEvolutionPage(data: {
       }
     }
 
-    // Radar chart from latest category scores
+    // Radar chart from best category scores across all runs
     if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
-      const radarData = data.latestCategoryScores.map((cs) => {
-        const labelMap: Record<string, string> = {
-          "health-data-analysis": t("evolution.healthDataAnalysis"),
-          "health-coaching": t("evolution.healthCoaching"),
-          "safety-boundaries": t("evolution.safetyBoundaries"),
-          "personalization-memory": t("evolution.personalization"),
-          "communication-quality": t("evolution.communicationQuality"),
-        };
-        return {
-          label: labelMap[cs.category] || cs.category,
-          value: cs.score,
-          maxValue: 100,
-        };
-      });
+      const labelMap: Record<string, string> = {
+        "health-data-analysis": t("evolution.healthDataAnalysis"),
+        "health-coaching": t("evolution.healthCoaching"),
+        "safety-boundaries": t("evolution.safetyBoundaries"),
+        "personalization-memory": t("evolution.personalization"),
+        "communication-quality": t("evolution.communicationQuality"),
+      };
+      const radarData = data.latestCategoryScores.map((cs) => ({
+        label: labelMap[cs.category] || cs.category,
+        value: cs.score,
+        maxValue: 100,
+      }));
 
+      const radarLabel = ui.text(t("evolution.bestScore"), "caption");
       const radar = ui.radarChart(radarData, { size: 280, color: "#667eea" });
+      const radarCol = ui.column([radarLabel, radar], { gap: 4, align: "center" });
       const statsCol = ui.column(rightCards, { gap: 12 });
-      const topRow = ui.row([radar, statsCol], { gap: 24, align: "start" });
+      const topRow = ui.row([radarCol, statsCol], { gap: 24, align: "start" });
       overviewChildren.push(topRow);
     } else if (rightCards.length > 0) {
       const overviewGrid = ui.grid(rightCards, { columns: 3, gap: 16 });
@@ -1153,6 +1188,38 @@ export function generateEvolutionPage(data: {
       });
       const emptyCol = ui.column([emptyText, runBtn], { gap: 12, align: "center", padding: 24 });
       overviewChildren.push(emptyCol);
+    }
+
+    // Row 3: Diagnose + Auto-Evolve action cards
+    const diagnoseBtn = ui.button(t("evolution.runDiagnose"), "run_diagnose", {
+      variant: "secondary",
+      size: "sm",
+      icon: "search",
+    });
+    const diagnoseDesc = ui.text(t("evolution.diagnoseDesc"), "caption");
+    const diagnoseCard = ui.card([diagnoseDesc, diagnoseBtn], { padding: 12 });
+
+    const autoEvolveDesc = ui.text(t("evolution.autoEvolveDesc"), "caption");
+    const autoEvolveHint = ui.text(t("evolution.autoLoopHint"), "caption");
+    const autoEvolveCard = ui.card([autoEvolveDesc, autoEvolveHint], { padding: 12 });
+
+    const actionRow = ui.grid([diagnoseCard, autoEvolveCard], { columns: 2, gap: 16 });
+    overviewChildren.push(actionRow);
+
+    // Active version indicator
+    if (data.activeVersionBranch) {
+      const versionBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
+      const versionLabel = ui.text(t("evolution.activeVersion"), "caption");
+      const resetBtn = ui.button(t("evolution.resetToMain"), "switch_version", {
+        variant: "outline",
+        size: "sm",
+        payload: { branch: null },
+      });
+      const versionRow = ui.row([versionLabel, versionBadge, resetBtn], {
+        gap: 8,
+        align: "center",
+      });
+      overviewChildren.unshift(ui.card([versionRow], { padding: 8 }));
     }
 
     tabContentIds["overview"] = ui.column(overviewChildren, { gap: 16, padding: 16 });
@@ -1416,6 +1483,60 @@ export function generateEvolutionPage(data: {
     tabContentIds["config"] = ui.column(configChildren, { gap: 16, padding: 16 });
   }
 
+  // Versions tab content
+  if (data.activeTab === "versions") {
+    const versionsChildren: string[] = [];
+
+    const versionsDesc = ui.text(t("evolution.versionsDesc"), "caption");
+    versionsChildren.push(versionsDesc);
+
+    // Active version indicator
+    if (data.activeVersionBranch) {
+      const activeBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
+      const activeLabel = ui.text(t("evolution.activeVersion"), "label");
+      const resetBtn = ui.button(t("evolution.resetToMain"), "switch_version", {
+        variant: "outline",
+        size: "sm",
+        payload: { branch: null },
+      });
+      versionsChildren.push(
+        ui.row([activeLabel, activeBadge, resetBtn], { gap: 8, align: "center" })
+      );
+    }
+
+    if (data.versions && data.versions.length > 0) {
+      const versionRows = data.versions.map((v) => ({
+        id: v.id.slice(0, 8),
+        branch: v.branchName,
+        status: v.status,
+        trigger: v.triggerMode || "-",
+        scoreDelta:
+          v.scoreDelta != null ? `${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(1)}` : "-",
+        files: v.filesChanged.length > 0 ? `${v.filesChanged.length} files` : "-",
+        created: new Date(v.createdAt).toLocaleString(),
+      }));
+
+      const versionsTable = ui.dataTable(
+        [
+          { key: "branch", label: t("evolution.versionBranch") },
+          { key: "status", label: t("evolution.versionStatus"), render: "badge" },
+          { key: "trigger", label: t("evolution.versionTrigger"), render: "badge" },
+          { key: "scoreDelta", label: t("evolution.scoreDelta") },
+          { key: "files", label: t("evolution.filesChanged") },
+          { key: "created", label: t("evolution.time"), sortable: true },
+        ],
+        versionRows,
+        { onRowClick: "view_version" }
+      );
+      versionsChildren.push(versionsTable);
+    } else {
+      const emptyText = ui.text(t("evolution.noVersions"), "caption");
+      versionsChildren.push(emptyText);
+    }
+
+    tabContentIds["versions"] = ui.column(versionsChildren, { gap: 16, padding: 16 });
+  }
+
   const tabs = ui.tabs(
     [
       { id: "overview", label: t("evolution.overview"), icon: "bar-chart" },
@@ -1424,6 +1545,7 @@ export function generateEvolutionPage(data: {
       { id: "benchmark", label: t("evolution.benchmark"), icon: "test-tube" },
       { id: "runs", label: t("evolution.runs"), icon: "activity" },
       { id: "suggestions", label: t("evolution.suggestions"), icon: "lightbulb" },
+      { id: "versions", label: t("evolution.versions"), icon: "sparkles" },
       { id: "config", label: t("evolution.config"), icon: "settings" },
     ],
     data.activeTab,
@@ -1807,16 +1929,21 @@ export function generateBenchmarkRunDetailModal(
 ): A2UIMessage {
   const ui = new A2UIGenerator("modal");
 
-  // Top: score gauge + stat cards
+  const children: string[] = [];
+
+  // Top: score gauge centered
   const overallGauge = ui.scoreGauge(run.overallScore, {
     label: t("evolution.totalScore"),
     max: 100,
     size: "lg",
   });
+  children.push(ui.column([overallGauge], { align: "center" }));
 
+  // Stat cards row (3 columns)
   const passedCard = ui.statCard({
     title: t("evolution.passed"),
-    value: run.passedCount,
+    value: `${run.passedCount}/${run.totalTestCases}`,
+    subtitle: t("evolution.passCriteria"),
     icon: "check",
     color: "#10b981",
   });
@@ -1835,12 +1962,7 @@ export function generateBenchmarkRunDetailModal(
     color: "#667eea",
   });
 
-  const statsGrid = ui.grid([overallGauge, passedCard, failedCard, durationCard], {
-    columns: 4,
-    gap: 12,
-  });
-
-  const children: string[] = [statsGrid];
+  children.push(ui.grid([passedCard, failedCard, durationCard], { columns: 3, gap: 12 }));
 
   // Version / Model info row
   const infoItems: string[] = [];
@@ -1879,7 +2001,7 @@ export function generateBenchmarkRunDetailModal(
     }));
 
     const radar = ui.radarChart(radarData, { size: 280, color: "#667eea" });
-    children.push(radar);
+    children.push(ui.column([radar], { align: "center" }));
 
     // Category scores table
     const catLabel = ui.text(t("evolution.categoryScores"), "label");
@@ -1900,7 +2022,7 @@ export function generateBenchmarkRunDetailModal(
     children.push(catLabel, catTable);
   }
 
-  const content = ui.column(children, { gap: 16 });
+  const content = ui.column(children, { gap: 16, padding: 8 });
   const root = ui.modal(`Benchmark Run ${run.id.slice(0, 8)}`, [content], { size: "lg" });
 
   return ui.build(root);
@@ -2436,6 +2558,43 @@ export function generateCreateSkillModal(): A2UIMessage {
   );
 
   const root = ui.modal("Create New Skill", [form], { size: "md" });
+
+  return ui.build(root);
+}
+
+export function generateBenchmarkModelSelectorModal(
+  models: Array<{ name: string; label: string }>,
+  defaultProfile: "quick" | "full" = "quick"
+): A2UIMessage {
+  const ui = new A2UIGenerator("modal");
+
+  const modelOptions = [
+    { value: "__default__", label: t("evolution.defaultModel") },
+    ...models.map((m) => ({ value: m.name, label: m.label })),
+  ];
+
+  const modelSelect = ui.formInput("modelPreset", "select", {
+    label: t("evolution.selectModel"),
+    required: true,
+    options: modelOptions,
+  });
+
+  const profileSelect = ui.formInput("profile", "select", {
+    label: t("evolution.profile"),
+    required: true,
+    options: [
+      { value: "quick", label: t("evolution.quickProfile") },
+      { value: "full", label: t("evolution.fullProfile") },
+    ],
+  });
+
+  const form = ui.form([modelSelect, profileSelect], "submit_run_benchmark", {
+    submitLabel: t("evolution.runBenchmark"),
+    cancelLabel: t("common.cancel"),
+    onCancel: "close_modal",
+  });
+
+  const root = ui.modal(t("evolution.runBenchmark"), [form], { size: "sm" });
 
   return ui.build(root);
 }

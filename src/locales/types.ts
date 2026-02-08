@@ -283,6 +283,70 @@ export interface LocaleMessages {
     dimension: string;
     editConfigHint: string;
     noConfigFile: string;
+    selectModel: string;
+    defaultModel: string;
+    modelComparison: string;
+    runWith: string;
+    bestScore: string;
+    passCriteria: string;
+    externalBenchmarkRunning: string;
+    testCases: string;
+    // Diagnose
+    diagnose: string;
+    diagnoseDesc: string;
+    runDiagnose: string;
+    createIssues: string;
+    issuesCreated: string;
+    weakCategories: string;
+    diagnosing: string;
+    diagnoseComplete: string;
+    noWeaknesses: string;
+    // Auto-evolve
+    autoEvolve: string;
+    autoEvolveDesc: string;
+    targetScore: string;
+    maxIterations: string;
+    startAutoEvolve: string;
+    autoEvolving: string;
+    // Versions
+    versions: string;
+    versionsDesc: string;
+    versionBranch: string;
+    versionStatus: string;
+    versionTrigger: string;
+    scoreDelta: string;
+    filesChanged: string;
+    switchVersion: string;
+    mergeVersion: string;
+    abandonVersion: string;
+    compareVersions: string;
+    activeVersion: string;
+    noVersions: string;
+    versionSwitched: string;
+    versionMerged: string;
+    versionAbandoned: string;
+    resetToMain: string;
+    // Evolution Lab
+    lab: string;
+    labSubtitle: string;
+    contextPanel: string;
+    timeline: string;
+    benchmarks: string;
+    inspector: string;
+    pipelineBenchmark: string;
+    pipelineDiagnose: string;
+    pipelinePropose: string;
+    pipelineApprove: string;
+    pipelineApply: string;
+    pipelineValidate: string;
+    evoChatPlaceholder: string;
+    branchCreated: string;
+    branchMerged: string;
+    branchAbandoned: string;
+    commitMade: string;
+    benchmarkRan: string;
+    selectFileToView: string;
+    noChanges: string;
   };
 
   // Memory page

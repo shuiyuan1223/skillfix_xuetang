@@ -12,6 +12,7 @@ import {
   AutoLoop,
   checkRegression,
   formatRegressionMarkdown,
+  diagnose,
 } from "../evolution/index.js";
 import { ALL_BENCHMARK_TESTS, CATEGORY_LABELS } from "../evolution/benchmark-seed.js";
 import {
@@ -27,11 +28,22 @@ import {
 } from "../evolution/version-tracker.js";
 import type { BenchmarkCategory, AutoLoopConfig, BenchmarkProfile } from "../evolution/types.js";
 import { createPHAAgent } from "../agent/index.js";
-import { loadConfig } from "../utils/config.js";
+import {
+  loadConfig,
+  getBenchmarkModels,
+  resolveBenchmarkModelApiKey,
+  resolveBenchmarkModelBaseUrl,
+  type BenchmarkModelConfig,
+} from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
 import { getModel, complete } from "@mariozechner/pi-ai";
 import type { LLMProvider } from "../agent/pha-agent.js";
 import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
+import {
+  writeBenchmarkProgress,
+  readBenchmarkProgress,
+  clearBenchmarkProgress,
+} from "../evolution/benchmark-progress.js";
 import {
   printHeader,
   printSection,
@@ -565,6 +577,138 @@ export function registerEvalCommand(program: Command): void {
       );
     });
 
+  // eval diagnose - run diagnose pipeline
+  evalCmd
+    .command("diagnose")
+    .description("Run diagnose pipeline: benchmark → analyze weaknesses → suggest fixes")
+    .option("--profile <profile>", "Benchmark profile: quick or full", "quick")
+    .option("--create-issues", "Create GitHub issues for each weakness")
+    .option("--provider <string>", "LLM provider")
+    .option("--model <string>", "Model ID")
+    .option("--json", "Output as JSON")
+    .action(async (options) => {
+      const config = loadConfig();
+      const diagProvider = (options.provider || config.llm.provider) as LLMProvider;
+      const diagModelId = options.model || config.llm.modelId;
+      const apiKey = resolveApiKey(config, diagProvider);
+
+      if (!apiKey) {
+        fatal("No API key found", "Set an API key in config or environment");
+      }
+
+      const tcCount = countTestCases();
+      if (tcCount === 0) {
+        info("No test cases found. Run seed first.");
+        console.log(`  ${c.cyan("pha eval seed")}\n`);
+        return;
+      }
+
+      console.log("");
+      printHeader("Diagnose", "Benchmark → Analyze → Suggest");
+
+      const profile = options.profile as "quick" | "full";
+      const diagBaseUrl = diagProvider === config.llm.provider ? config.llm.baseUrl : undefined;
+
+      const { MockDataSource } = await import("../data-sources/mock.js");
+      const mockDataSource = new MockDataSource();
+
+      const agent = await createPHAAgent({
+        apiKey,
+        provider: diagProvider,
+        modelId: diagModelId,
+        baseUrl: diagBaseUrl,
+        dataSource: mockDataSource,
+      });
+
+      let rawLLMCall: (prompt: string) => Promise<string>;
+      try {
+        rawLLMCall = createRawLLMCall(diagProvider, diagModelId, apiKey!, diagBaseUrl);
+      } catch {
+        rawLLMCall = async (prompt: string) => {
+          agent.reset();
+          return agent.chatAndWait(prompt);
+        };
+      }
+
+      const AGENT_TIMEOUT_MS = 120_000;
+
+      const spinner = new Spinner("Running diagnose pipeline...");
+      spinner.start();
+
+      try {
+        const result = await diagnose({
+          profile,
+          runnerConfig: {
+            agentCall: async (query: string) => {
+              agent.reset();
+              const response = await Promise.race([
+                agent.chatAndWait(query).then((r: string) => ({ response: r })),
+                new Promise<{ response: string }>((_, reject) =>
+                  setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
+                ),
+              ]);
+              return response;
+            },
+            llmCall: rawLLMCall,
+            onProgress: (current, total, testCase) => {
+              spinner.update(`Running ${current}/${total}: ${testCase.id}`);
+            },
+          },
+          createIssues: options.createIssues,
+          onProgress: (msg) => spinner.update(msg),
+        });
+
+        spinner.stop("success");
+
+        if (options.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+
+        // Summary
+        printSection("Benchmark Results");
+        printKV("Overall Score", `${result.overallScore}/100`);
+        printKV("Tests", `${result.run.passedCount}/${result.run.totalTestCases} passed`);
+
+        if (result.weaknesses.length > 0) {
+          printSection("Weak Categories");
+          for (const w of result.weaknesses) {
+            console.log(
+              `  ${c.red("!")} ${w.label}: ${c.yellow(w.score.toFixed(1))} (${w.gap.toFixed(1)} pts below threshold)`
+            );
+            console.log(`    ${c.dim(`${w.failingTests.length} failing tests`)}`);
+            if (w.commonPatterns.length > 0) {
+              console.log(`    ${c.dim("Patterns:")} ${w.commonPatterns.slice(0, 2).join("; ")}`);
+            }
+          }
+        } else {
+          success("No weak categories found!");
+        }
+
+        if (result.suggestions.length > 0) {
+          printSection("Suggestions");
+          for (const s of result.suggestions) {
+            const priorityColor =
+              s.priority === "high" ? c.red : s.priority === "medium" ? c.yellow : c.dim;
+            console.log(`  ${priorityColor(`[${s.priority}]`)} ${s.description}`);
+            console.log(`    ${c.dim("Files:")} ${s.targetFiles.join(", ")}`);
+          }
+        }
+
+        if (result.issuesCreated.length > 0) {
+          printSection("GitHub Issues Created");
+          for (const issue of result.issuesCreated) {
+            console.log(`  ${c.green("+")} #${issue.number}: ${issue.url}`);
+          }
+        }
+
+        console.log("");
+      } catch (error) {
+        spinner.stop("error");
+        fatal("Diagnose failed", error instanceof Error ? error.message : String(error));
+      }
+    });
+
   // eval benchmark - run benchmark suite
   evalCmd
     .command("benchmark")
@@ -574,19 +718,12 @@ export function registerEvalCommand(program: Command): void {
     .option("--version-tag <tag>", "Tag this benchmark run")
     .option("--provider <string>", "LLM provider")
     .option("--model <string>", "Model ID")
+    .option("--preset <name>", "Use a named model preset from benchmarkModels config")
+    .option("--all-models", "Run benchmark with all configured benchmarkModels")
+    .option("--models <names>", "Comma-separated preset names to run")
     .option("--json", "Output as JSON")
     .action(async (options) => {
       const config = loadConfig();
-      const benchProvider = (options.provider || config.llm.provider) as LLMProvider;
-      const benchModelId = options.model || config.llm.modelId;
-      const apiKey = resolveApiKey(config, benchProvider);
-
-      if (!apiKey) {
-        fatal(
-          "No API key found",
-          `Set ${PROVIDER_ENV_KEYS[benchProvider] || "an API key"} in environment or config`
-        );
-      }
 
       // Check test cases exist
       const tcCount = countTestCases();
@@ -597,134 +734,344 @@ export function registerEvalCommand(program: Command): void {
       }
 
       const profile = options.profile as "quick" | "full";
-      console.log("");
-      printHeader("Benchmark", `${profile} profile`);
 
-      // Only pass baseUrl when provider matches config (avoid cross-provider URL contamination)
-      const benchBaseUrl = benchProvider === config.llm.provider ? config.llm.baseUrl : undefined;
-
-      // Use MockDataSource for benchmarks so the agent has realistic data
-      const mockDataSource = new MockDataSource();
-
-      // Create ONE agent and reset between tests (creating fresh agents per test is too slow)
-      const agent = await createPHAAgent({
-        apiKey,
-        provider: benchProvider,
-        modelId: benchModelId,
-        baseUrl: benchBaseUrl,
-        dataSource: mockDataSource,
-      });
-
-      // Create a separate raw LLM call for evaluation (no tools/system prompt)
-      let rawLLMCall: (prompt: string) => Promise<string>;
-      try {
-        rawLLMCall = createRawLLMCall(benchProvider, benchModelId, apiKey!, benchBaseUrl);
-      } catch {
-        // Fallback: use agent for evaluation
-        rawLLMCall = async (prompt: string) => {
-          agent.reset();
-          return agent.chatAndWait(prompt);
-        };
+      // Resolve model list
+      interface ModelEntry {
+        presetName: string;
+        provider: LLMProvider;
+        modelId: string;
+        apiKey: string;
+        baseUrl?: string;
+        label: string;
       }
 
-      const spinner = new Spinner("Running benchmarks...");
-      spinner.start();
+      const modelEntries: ModelEntry[] = [];
 
-      // Agent call timeout (2 minutes per test)
-      const AGENT_TIMEOUT_MS = 120_000;
+      if (options.allModels || options.models) {
+        // Multi-model mode
+        const benchmarkModels = getBenchmarkModels();
+        const presetNames = options.allModels
+          ? Object.keys(benchmarkModels)
+          : (options.models as string)
+              .split(",")
+              .map((s: string) => s.trim())
+              .filter(Boolean);
 
-      const runner = new BenchmarkRunner({
-        agentCall: async (query: string, _mockContext?: Record<string, unknown>) => {
-          // Reset conversation between tests to prevent context bleed
-          agent.reset();
-          const result = await Promise.race([
-            agent.chatAndWaitWithTools(query),
-            new Promise<{
-              response: string;
-              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
-            }>((_, reject) =>
-              setTimeout(
-                () => reject(new Error("Agent call timed out after 2 minutes")),
-                AGENT_TIMEOUT_MS
-              )
-            ),
-          ]);
-          return result;
-        },
-        llmCall: rawLLMCall,
-        onProgress: (current, total, testCase) => {
-          spinner.update(`Running benchmark ${current}/${total}: ${testCase.id}`);
-        },
-      });
-
-      try {
-        const { run, results, categoryScores } = await runner.run({
-          profile,
-          category: options.category as BenchmarkCategory | undefined,
-          versionTag: options.versionTag,
-        });
-
-        spinner.stop("success");
-
-        if (options.json) {
-          console.log(JSON.stringify({ run, results: results.map((r) => ({ ...r })) }, null, 2));
-          return;
+        for (const name of presetNames) {
+          const modelConfig = benchmarkModels[name];
+          if (!modelConfig) {
+            warn(`Unknown model preset: ${name} (skipping)`);
+            continue;
+          }
+          const key = resolveBenchmarkModelApiKey(modelConfig);
+          if (!key) {
+            warn(`No API key for ${name} (skipping)`);
+            continue;
+          }
+          modelEntries.push({
+            presetName: name,
+            provider: modelConfig.provider,
+            modelId: modelConfig.modelId,
+            apiKey: key,
+            baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
+            label: modelConfig.label || `${modelConfig.provider}/${modelConfig.modelId}`,
+          });
         }
 
-        // Summary
-        printSection("Results Summary");
-        printKV("Run ID", c.dim(run.id.substring(0, 8)));
-        printKV("Profile", profile);
-        printKV("Test Cases", String(run.totalTestCases));
-        printKV("Passed", c.green(String(run.passedCount)));
-        printKV("Failed", run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"));
+        if (modelEntries.length === 0) {
+          fatal("No valid model presets found", "Check benchmarkModels in config");
+        }
+      } else if (options.preset) {
+        // Single preset mode
+        const benchmarkModels = getBenchmarkModels();
+        const modelConfig = benchmarkModels[options.preset];
+        if (!modelConfig) {
+          fatal(
+            `Unknown model preset: ${options.preset}`,
+            `Available: ${Object.keys(benchmarkModels).join(", ")}`
+          );
+        }
+        const key = resolveBenchmarkModelApiKey(modelConfig);
+        if (!key) {
+          fatal("No API key found for preset", options.preset);
+        }
+        modelEntries.push({
+          presetName: options.preset,
+          provider: modelConfig.provider,
+          modelId: modelConfig.modelId,
+          apiKey: key,
+          baseUrl: modelConfig.baseUrl,
+          label: modelConfig.label || `${modelConfig.provider}/${modelConfig.modelId}`,
+        });
+      } else {
+        // Default: single model from CLI flags or config
+        const benchProvider = (options.provider || config.llm.provider) as LLMProvider;
+        const benchModelId = options.model || config.llm.modelId;
+        const apiKey = resolveApiKey(config, benchProvider);
 
-        const scoreColor =
-          run.overallScore >= 80 ? c.green : run.overallScore >= 60 ? c.yellow : c.red;
-        printKV("Overall Score", scoreColor(`${run.overallScore}/100`));
-        printKV("Duration", formatDuration(run.durationMs));
+        if (!apiKey) {
+          fatal(
+            "No API key found",
+            `Set ${PROVIDER_ENV_KEYS[benchProvider] || "an API key"} in environment or config`
+          );
+        }
 
-        // Results table
-        printSection("Test Results");
+        modelEntries.push({
+          presetName: "default",
+          provider: benchProvider,
+          modelId: benchModelId,
+          apiKey: apiKey!,
+          baseUrl: benchProvider === config.llm.provider ? config.llm.baseUrl : undefined,
+          label: `${benchProvider}/${benchModelId}`,
+        });
+      }
+
+      // Run benchmark for each model
+      const allRunResults: Array<{
+        presetName: string;
+        label: string;
+        run: Awaited<ReturnType<BenchmarkRunner["run"]>>["run"];
+        results: Awaited<ReturnType<BenchmarkRunner["run"]>>["results"];
+        categoryScores: Awaited<ReturnType<BenchmarkRunner["run"]>>["categoryScores"];
+      }> = [];
+
+      // Check if another benchmark is already running
+      const existingProgress = readBenchmarkProgress();
+      if (existingProgress) {
+        warn(
+          `A benchmark is already running (source: ${existingProgress.source}, ${existingProgress.current}/${existingProgress.total})`
+        );
+        console.log(
+          `  ${c.dim("Wait for it to finish or remove")} ${c.cyan(".pha/benchmark-progress.json")}\n`
+        );
+        return;
+      }
+
+      for (let mi = 0; mi < modelEntries.length; mi++) {
+        const entry = modelEntries[mi];
+        const isMulti = modelEntries.length > 1;
+        const prefix = isMulti ? `[${mi + 1}/${modelEntries.length}] ${entry.label}` : "";
+
+        console.log("");
+        printHeader(isMulti ? `Benchmark — ${entry.label}` : "Benchmark", `${profile} profile`);
+
+        // Write initial progress to shared file
+        writeBenchmarkProgress({
+          running: true,
+          source: "cli",
+          profile,
+          current: 0,
+          total: 0,
+          category: "",
+          startedAt: Date.now(),
+          modelId: entry.modelId,
+          pid: process.pid,
+        });
+
+        // Use MockDataSource for benchmarks
+        const mockDataSource = new MockDataSource();
+
+        const agent = await createPHAAgent({
+          apiKey: entry.apiKey,
+          provider: entry.provider,
+          modelId: entry.modelId,
+          baseUrl: entry.baseUrl,
+          dataSource: mockDataSource,
+        });
+
+        let rawLLMCall: (prompt: string) => Promise<string>;
+        try {
+          rawLLMCall = createRawLLMCall(entry.provider, entry.modelId, entry.apiKey, entry.baseUrl);
+        } catch {
+          rawLLMCall = async (prompt: string) => {
+            agent.reset();
+            return agent.chatAndWait(prompt);
+          };
+        }
+
+        const spinner = new Spinner(`${prefix ? prefix + " — " : ""}Running benchmarks...`);
+        spinner.start();
+
+        const AGENT_TIMEOUT_MS = 120_000;
+
+        const runner = new BenchmarkRunner({
+          agentCall: async (query: string, _mockContext?: Record<string, unknown>) => {
+            agent.reset();
+            const result = await Promise.race([
+              agent.chatAndWaitWithTools(query),
+              new Promise<{
+                response: string;
+                toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+              }>((_, reject) =>
+                setTimeout(
+                  () => reject(new Error("Agent call timed out after 2 minutes")),
+                  AGENT_TIMEOUT_MS
+                )
+              ),
+            ]);
+            return result;
+          },
+          llmCall: rawLLMCall,
+          onProgress: (current, total, testCase) => {
+            spinner.update(
+              `${prefix ? prefix + " — " : ""}Running ${current}/${total}: ${testCase.id}`
+            );
+            // Update shared progress file for UI visibility
+            writeBenchmarkProgress({
+              running: true,
+              source: "cli",
+              profile,
+              current,
+              total,
+              category: testCase.category,
+              startedAt: Date.now(),
+              modelId: entry.modelId,
+              pid: process.pid,
+            });
+          },
+        });
+
+        try {
+          const { run, results, categoryScores } = await runner.run({
+            profile,
+            category: options.category as BenchmarkCategory | undefined,
+            versionTag: options.versionTag,
+            modelOverride: {
+              provider: entry.provider,
+              modelId: entry.modelId,
+              presetName: entry.presetName,
+            },
+          });
+
+          spinner.stop("success");
+
+          allRunResults.push({
+            presetName: entry.presetName,
+            label: entry.label,
+            run,
+            results,
+            categoryScores,
+          });
+
+          if (options.json && !isMulti) {
+            console.log(JSON.stringify({ run, results: results.map((r) => ({ ...r })) }, null, 2));
+            return;
+          }
+
+          // Summary
+          printSection("Results Summary");
+          printKV("Run ID", c.dim(run.id.substring(0, 8)));
+          printKV("Model", c.cyan(entry.label));
+          printKV("Profile", profile);
+          printKV("Test Cases", String(run.totalTestCases));
+          printKV("Passed", c.green(String(run.passedCount)));
+          printKV("Failed", run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"));
+
+          const scoreColor =
+            run.overallScore >= 80 ? c.green : run.overallScore >= 60 ? c.yellow : c.red;
+          printKV("Overall Score", scoreColor(`${run.overallScore}/100`));
+          printKV("Duration", formatDuration(run.durationMs));
+
+          if (!isMulti) {
+            // Detailed output for single model
+            printSection("Test Results");
+            printTable(
+              ["Test", "Category", "Score", "Pass", "Feedback"],
+              results.map((r) => {
+                const sc = r.overallScore >= 80 ? c.green : r.overallScore >= 60 ? c.yellow : c.red;
+                return [
+                  c.dim(r.testCaseId),
+                  truncate(r.testCaseId.split("-").slice(0, 2).join("-"), 15),
+                  sc(`${r.overallScore}`),
+                  r.passed ? c.green("PASS") : c.red("FAIL"),
+                  truncate(r.feedback, 30),
+                ];
+              })
+            );
+
+            const radarData = generateRadarData(categoryScores);
+            console.log(generateAsciiRadar(radarData));
+
+            const weakCategories = identifyWeakCategories(categoryScores);
+            if (weakCategories.length > 0) {
+              printSection("Weakest Categories");
+              for (const weak of weakCategories) {
+                const label = CATEGORY_LABELS[weak.category];
+                console.log(
+                  `  ${c.red("!")} ${label}: ${c.yellow(weak.score.toFixed(1))} (${weak.gap.toFixed(1)} pts below threshold)`
+                );
+              }
+            }
+          }
+        } catch (error) {
+          spinner.stop("error");
+          clearBenchmarkProgress();
+          if (isMulti) {
+            warn(
+              `Benchmark failed for ${entry.label}: ${error instanceof Error ? error.message : String(error)}`
+            );
+          } else {
+            fatal("Benchmark failed", error instanceof Error ? error.message : String(error));
+          }
+        }
+      }
+
+      // Clear progress after all models complete
+      clearBenchmarkProgress();
+
+      // Multi-model comparison summary
+      if (allRunResults.length > 1) {
+        console.log("");
+        printHeader("Model Comparison", `${allRunResults.length} models`);
+
         printTable(
-          ["Test", "Category", "Score", "Pass", "Feedback"],
-          results.map((r) => {
-            const sc = r.overallScore >= 80 ? c.green : r.overallScore >= 60 ? c.yellow : c.red;
+          ["Model", "Score", "Pass", "Fail", "Duration"],
+          allRunResults.map((r) => {
+            const sc =
+              r.run.overallScore >= 80 ? c.green : r.run.overallScore >= 60 ? c.yellow : c.red;
             return [
-              c.dim(r.testCaseId),
-              truncate(r.testCaseId.split("-").slice(0, 2).join("-"), 15),
-              sc(`${r.overallScore}`),
-              r.passed ? c.green("PASS") : c.red("FAIL"),
-              truncate(r.feedback, 30),
+              r.label,
+              sc(`${r.run.overallScore}/100`),
+              c.green(String(r.run.passedCount)),
+              r.run.failedCount > 0 ? c.red(String(r.run.failedCount)) : c.dim("0"),
+              formatDuration(r.run.durationMs),
             ];
           })
         );
 
-        // Radar chart
-        const radarData = generateRadarData(categoryScores);
-        console.log(generateAsciiRadar(radarData));
-
-        // Weaknesses
-        const weakCategories = identifyWeakCategories(categoryScores);
-        if (weakCategories.length > 0) {
-          printSection("Weakest Categories");
-          for (const weak of weakCategories) {
-            const label = CATEGORY_LABELS[weak.category];
-            console.log(
-              `  ${c.red("!")} ${label}: ${c.yellow(weak.score.toFixed(1))} (${weak.gap.toFixed(1)} pts below threshold)`
-            );
-          }
-        }
-
-        console.log("");
-        printDivider();
-        console.log(
-          `\n  ${c.dim("Run")} ${c.cyan("pha eval compare --latest 2")} ${c.dim("to compare with previous runs")}\n`
+        // Best model
+        const best = allRunResults.reduce((a, b) =>
+          a.run.overallScore >= b.run.overallScore ? a : b
         );
-      } catch (error) {
-        spinner.stop("error");
-        fatal("Benchmark failed", error instanceof Error ? error.message : String(error));
+        console.log("");
+        printKV("Best Model", c.green(`${best.label} (${best.run.overallScore}/100)`));
+
+        if (options.json) {
+          console.log(
+            JSON.stringify(
+              {
+                comparison: allRunResults.map((r) => ({
+                  preset: r.presetName,
+                  label: r.label,
+                  score: r.run.overallScore,
+                  passed: r.run.passedCount,
+                  failed: r.run.failedCount,
+                  duration: r.run.durationMs,
+                  runId: r.run.id,
+                })),
+              },
+              null,
+              2
+            )
+          );
+        }
       }
+
+      console.log("");
+      printDivider();
+      console.log(
+        `\n  ${c.dim("Run")} ${c.cyan("pha eval compare --latest 2")} ${c.dim("to compare with previous runs")}\n`
+      );
     });
 
   // eval compare - compare benchmark runs
@@ -734,9 +1081,89 @@ export function registerEvalCommand(program: Command): void {
     .option("--latest <count>", "Compare the latest N runs (default: 2)", "2")
     .option("--run1 <id>", "First run ID to compare")
     .option("--run2 <id>", "Second run ID to compare")
+    .option("--by-model", "Compare latest run from each configured model")
     .option("--json", "Output as JSON")
     .action(async (options) => {
       console.log("");
+
+      // --by-model: compare latest run per model
+      if (options.byModel) {
+        printHeader("Model Comparison", "Latest run per model");
+
+        const benchmarkModels = getBenchmarkModels();
+        const modelRuns: Array<{
+          preset: string;
+          label: string;
+          run: ReturnType<typeof listBenchmarkRuns>[0];
+        }> = [];
+
+        for (const [name, modelConfig] of Object.entries(benchmarkModels)) {
+          const runs = listBenchmarkRuns({ limit: 1, modelId: modelConfig.modelId });
+          if (runs.length > 0) {
+            modelRuns.push({
+              preset: name,
+              label: modelConfig.label || `${modelConfig.provider}/${modelConfig.modelId}`,
+              run: runs[0],
+            });
+          }
+        }
+
+        if (modelRuns.length === 0) {
+          info("No benchmark runs found for any configured model");
+          console.log(
+            `  ${c.dim("Run")} ${c.cyan("pha eval benchmark --all-models")} ${c.dim("first")}\n`
+          );
+          return;
+        }
+
+        if (options.json) {
+          console.log(
+            JSON.stringify(
+              modelRuns.map((m) => ({
+                preset: m.preset,
+                label: m.label,
+                score: m.run.overall_score,
+                passed: m.run.passed_count,
+                failed: m.run.failed_count,
+                total: m.run.total_test_cases,
+                duration: m.run.duration_ms,
+                date: new Date(m.run.timestamp).toISOString(),
+              })),
+              null,
+              2
+            )
+          );
+          return;
+        }
+
+        printTable(
+          ["Model", "Score", "Pass", "Fail", "Tests", "Date"],
+          modelRuns.map((m) => {
+            const sc =
+              m.run.overall_score >= 80 ? c.green : m.run.overall_score >= 60 ? c.yellow : c.red;
+            return [
+              m.label,
+              sc(`${m.run.overall_score}/100`),
+              c.green(String(m.run.passed_count)),
+              m.run.failed_count > 0 ? c.red(String(m.run.failed_count)) : c.dim("0"),
+              String(m.run.total_test_cases),
+              new Date(m.run.timestamp).toLocaleDateString(),
+            ];
+          })
+        );
+
+        if (modelRuns.length > 1) {
+          const best = modelRuns.reduce((a, b) =>
+            a.run.overall_score >= b.run.overall_score ? a : b
+          );
+          console.log("");
+          printKV("Best Model", c.green(`${best.label} (${best.run.overall_score}/100)`));
+        }
+
+        console.log("");
+        return;
+      }
+
       printHeader("Benchmark Comparison");
 
       let comparison;
@@ -1120,13 +1547,16 @@ export function registerEvalCommand(program: Command): void {
       }
     });
 
-  // eval fix-issue - auto-fix a GitHub issue
+  // eval fix-issue - auto-fix a GitHub issue using worktree
   evalCmd
     .command("fix-issue <issue-number>")
-    .description("Auto-fix a GitHub issue by creating a test case and running auto-loop")
+    .description(
+      "Auto-fix a GitHub issue by creating a test case and running auto-loop in a worktree"
+    )
     .option("--max-iterations <n>", "Max optimization iterations", "3")
     .option("--provider <string>", "LLM provider")
     .option("--model <string>", "Model ID")
+    .option("--create-pr", "Create a PR after successful fix")
     .action(async (issueNumberStr, options) => {
       const issueNumber = parseInt(issueNumberStr, 10);
       if (isNaN(issueNumber)) {
@@ -1166,32 +1596,13 @@ export function registerEvalCommand(program: Command): void {
       console.log("");
 
       info("This will:");
-      console.log(`  1. Create branch ${c.cyan(`auto-fix/issue-${issueNumber}`)}`);
-      console.log(`  2. Run auto-loop with max ${options.maxIterations} iterations`);
-      console.log(`  3. Create a PR if improvements are found`);
+      console.log(`  1. Create worktree with evolution branch`);
+      console.log(`  2. Convert issue to test case`);
+      console.log(`  3. Run auto-loop with max ${options.maxIterations} iterations`);
+      if (options.createPr) console.log(`  4. Create a PR if improvements are found`);
       console.log("");
 
-      // Create branch
-      const branchSpinner = new Spinner("Creating branch...");
-      branchSpinner.start();
-
-      try {
-        const { execSync } = await import("child_process");
-        const branchName = `auto-fix/issue-${issueNumber}`;
-        try {
-          execSync(`git checkout -b ${branchName}`, { encoding: "utf-8", timeout: 10000 });
-        } catch {
-          execSync(`git checkout ${branchName}`, { encoding: "utf-8", timeout: 10000 });
-        }
-        branchSpinner.stop("success");
-        printKV("Branch", branchName);
-      } catch (error) {
-        branchSpinner.stop("error");
-        fatal("Failed to create branch", error instanceof Error ? error.message : String(error));
-        return;
-      }
-
-      // Run auto-loop
+      // Run auto-loop using worktree (branch creation happens inside AutoLoop)
       const config = loadConfig();
       const fixProvider = (options.provider || config.llm.provider) as LLMProvider;
       const fixModelId = options.model || config.llm.modelId;
@@ -1224,7 +1635,37 @@ export function registerEvalCommand(program: Command): void {
         };
       }
 
-      const loopSpinner = new Spinner("Running auto-loop...");
+      // Convert issue to test case
+      const tcSpinner = new Spinner("Converting issue to test case...");
+      tcSpinner.start();
+      try {
+        const { issueToTestCase } = await import("../evolution/issue-to-testcase.js");
+        const testCase = await issueToTestCase({
+          issueNumber,
+          issueTitle,
+          issueBody,
+          llmCall: fixRawLLMCall,
+        });
+        const { insertTestCase } = await import("../memory/db.js");
+        insertTestCase({
+          id: testCase.id,
+          category: testCase.category,
+          query: testCase.query,
+          expected: testCase.expected,
+          difficulty: testCase.difficulty,
+        });
+        tcSpinner.stop("success");
+        printKV("Test Case", `${testCase.id} (${testCase.category})`);
+        printKV("Query", testCase.query);
+      } catch (error) {
+        tcSpinner.stop("error");
+        warn(
+          `Could not convert issue to test case: ${error instanceof Error ? error.message : String(error)}`
+        );
+        console.log(`  ${c.dim("Continuing with existing test cases...")}\n`);
+      }
+
+      const loopSpinner = new Spinner("Running auto-loop in worktree...");
       loopSpinner.start();
 
       const autoLoop = new AutoLoop(
@@ -1253,15 +1694,43 @@ export function registerEvalCommand(program: Command): void {
         const result = await autoLoop.run();
         loopSpinner.stop("success");
 
+        // Report results
+        printSection("Results");
+        printKV("Iterations", String(result.iterations));
+        printKV("Initial Score", String(result.initialScore));
+        printKV("Final Score", String(result.finalScore));
+
+        const delta = result.finalScore - result.initialScore;
+        const deltaColor = delta > 0 ? c.green : delta < 0 ? c.red : c.dim;
+        printKV("Change", deltaColor(`${delta > 0 ? "+" : ""}${delta.toFixed(1)} pts`));
+
         if (result.improved) {
           success(`Score improved: ${result.initialScore} -> ${result.finalScore}`);
-          console.log(`\n  ${c.dim("Create a PR with:")} ${c.cyan("gh pr create")}`);
-          console.log(
-            `  ${c.dim("Or run:")} ${c.cyan(`pha eval fix-issue ${issueNumber} --create-pr`)}\n`
-          );
+
+          if (options.createPr) {
+            const prSpinner = new Spinner("Creating PR...");
+            prSpinner.start();
+            try {
+              const { execSync } = await import("child_process");
+              const prResult = execSync(
+                `gh pr create --title "fix: Auto-fix issue #${issueNumber}" --body "Automated fix for #${issueNumber}.\n\nScore: ${result.initialScore} → ${result.finalScore}" --head auto-fix/issue-${issueNumber}`,
+                { encoding: "utf-8", timeout: 30000 }
+              ).trim();
+              prSpinner.stop("success");
+              console.log(`  ${c.green("PR created:")} ${prResult}`);
+            } catch (prError) {
+              prSpinner.stop("error");
+              warn(
+                `Could not create PR: ${prError instanceof Error ? prError.message : String(prError)}`
+              );
+            }
+          } else {
+            console.log(
+              `\n  ${c.dim("Create a PR with:")} ${c.cyan(`pha eval fix-issue ${issueNumber} --create-pr`)}\n`
+            );
+          }
         } else {
           info("No improvement achieved. Consider manual review.");
-          console.log(`\n  ${c.dim("Switch back with:")} ${c.cyan("git checkout main")}\n`);
         }
       } catch (error) {
         loopSpinner.stop("error");

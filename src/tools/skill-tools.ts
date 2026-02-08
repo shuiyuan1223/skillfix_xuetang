@@ -7,7 +7,7 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, renameSync } from "fs";
 import { join, basename, dirname } from "path";
-import { execSync } from "child_process";
+import { gitCommitFiles } from "../evolution/version-manager.js";
 
 // Default skills directory (relative to project root)
 let skillsDir = "src/skills";
@@ -319,14 +319,7 @@ export const updateSkillTool = {
     writeFileSync(skillFile, args.content, "utf-8");
 
     // Git commit
-    try {
-      execSync(`git add "${skillFile}" && git commit -m "Update skill: ${args.name}"`, {
-        cwd: process.cwd(),
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-    } catch {
-      // Ignore git errors
-    }
+    gitCommitFiles(skillFile, `Update skill: ${args.name}`);
 
     return {
       success: true,
@@ -420,14 +413,7 @@ export const createSkillTool = {
     writeFileSync(skillFile, skillContent, "utf-8");
 
     // Git commit
-    try {
-      execSync(`git add "${skillDir}" && git commit -m "Create skill: ${args.name}"`, {
-        cwd: process.cwd(),
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-    } catch {
-      // Ignore git errors
-    }
+    gitCommitFiles(skillFile, `Create skill: ${args.name}`);
 
     return {
       success: true,
@@ -498,17 +484,8 @@ export const toggleSkillTool = {
     }
 
     // Git commit
-    try {
-      execSync(
-        `git add -A "${getSkillsDir()}" && git commit -m "${args.enabled ? "Enable" : "Disable"} skill: ${baseName}"`,
-        {
-          cwd: process.cwd(),
-          stdio: ["pipe", "pipe", "pipe"],
-        }
-      );
-    } catch {
-      // Ignore git errors
-    }
+    const targetDir = args.enabled ? enabledDir : disabledDir;
+    gitCommitFiles(targetDir, `${args.enabled ? "Enable" : "Disable"} skill: ${baseName}`);
 
     return {
       success: true,

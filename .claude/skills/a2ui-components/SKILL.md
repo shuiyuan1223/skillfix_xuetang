@@ -55,6 +55,14 @@ const ui = new A2UIGenerator("main"); // surface: "main" | "sidebar" | "modal" |
 | `ui.tabs(tabs, activeTab, contentIds)` | Tab panels |
 | `ui.modal(title, children, { size })` | Modal dialog |
 
+### Evolution Lab
+
+| Method | Usage |
+|--------|-------|
+| `ui.gitTimeline(events, { activeBranch, onEventClick })` | Git timeline. Events: `{ id, type, label, description?, timestamp, branch?, score?, status? }` |
+| `ui.stepIndicator(steps, { orientation })` | Pipeline steps. Steps: `{ id, label, icon?, status }` |
+| `ui.fileTree(files, { selectedPath, onFileSelect })` | File tree. Files: `{ path, status, additions?, deletions? }` |
+
 ### Building
 
 ```typescript

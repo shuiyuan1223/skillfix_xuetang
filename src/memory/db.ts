@@ -133,6 +133,23 @@ function initializeSchema(db: Database): void {
       duration_ms INTEGER
     );
 
+    -- Evolution Versions: Agent version snapshots managed via git worktrees
+    CREATE TABLE IF NOT EXISTS evolution_versions (
+      id TEXT PRIMARY KEY,
+      branch_name TEXT NOT NULL UNIQUE,
+      parent_branch TEXT,
+      created_at INTEGER NOT NULL,
+      status TEXT DEFAULT 'active',       -- active | merged | abandoned | rollback
+      trigger_mode TEXT,                  -- diagnose | auto-evolve | issue-fix
+      trigger_ref TEXT,                   -- issue number or description
+      baseline_run_id TEXT,
+      latest_run_id TEXT,
+      score_delta REAL,
+      files_changed TEXT,                 -- JSON array
+      worktree_path TEXT,
+      metadata TEXT                       -- JSON
+    );
+
     -- Indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(timestamp);
     CREATE INDEX IF NOT EXISTS idx_traces_session ON traces(session_id);
@@ -146,10 +163,13 @@ function initializeSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_category_scores_category ON category_scores(category);
     CREATE INDEX IF NOT EXISTS idx_benchmark_results_run ON benchmark_results(run_id);
     CREATE INDEX IF NOT EXISTS idx_benchmark_results_test_case ON benchmark_results(test_case_id);
+    CREATE INDEX IF NOT EXISTS idx_evolution_versions_status ON evolution_versions(status);
+    CREATE INDEX IF NOT EXISTS idx_evolution_versions_branch ON evolution_versions(branch_name);
   `);
 
   // Add columns to test_cases if they don't exist (safe migration)
   migrateTestCasesTable(db);
+  migrateBenchmarkRunsTable(db);
 }
 
 /**
@@ -174,6 +194,24 @@ function migrateTestCasesTable(db: Database): void {
     }
   } catch {
     // Table might not exist yet on first run, which is fine
+  }
+}
+
+/**
+ * Migrate benchmark_runs table to add branch_name column
+ */
+function migrateBenchmarkRunsTable(db: Database): void {
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(benchmark_runs)").all() as Array<{
+      name: string;
+    }>;
+    const columnNames = tableInfo.map((c) => c.name);
+
+    if (!columnNames.includes("branch_name")) {
+      db.exec("ALTER TABLE benchmark_runs ADD COLUMN branch_name TEXT");
+    }
+  } catch {
+    // Table might not exist yet on first run
   }
 }
 
@@ -679,11 +717,18 @@ export function getBenchmarkRun(id: string): BenchmarkRunRow | null {
 }
 
 export function listBenchmarkRuns(
-  options: { limit?: number; offset?: number } = {}
+  options: { limit?: number; offset?: number; modelId?: string } = {}
 ): BenchmarkRunRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM benchmark_runs ORDER BY timestamp DESC";
+  let sql = "SELECT * FROM benchmark_runs";
   const params: SQLParam[] = [];
+
+  if (options.modelId) {
+    sql += " WHERE json_extract(metadata, '$.modelId') = ?";
+    params.push(options.modelId);
+  }
+
+  sql += " ORDER BY timestamp DESC";
 
   if (options.limit) {
     sql += " LIMIT ?";
@@ -785,6 +830,26 @@ export function listCategoryScores(runId: string): CategoryScoreRow[] {
   return stmt.all(runId) as CategoryScoreRow[];
 }
 
+/**
+ * Get the best (highest) score per category across all benchmark runs.
+ * Returns one row per category with the max score achieved.
+ */
+export function getBestCategoryScores(): CategoryScoreRow[] {
+  const database = getDatabase();
+  const stmt = database.prepare(`
+    SELECT cs.*
+    FROM category_scores cs
+    INNER JOIN (
+      SELECT category, MAX(score) as max_score
+      FROM category_scores
+      GROUP BY category
+    ) best ON cs.category = best.category AND cs.score = best.max_score
+    GROUP BY cs.category
+    ORDER BY cs.category
+  `);
+  return stmt.all() as CategoryScoreRow[];
+}
+
 // ============================================================================
 // Benchmark Result Operations
 // ============================================================================
@@ -865,6 +930,156 @@ export function listBenchmarkResults(
 
   const stmt = database.prepare(sql);
   return stmt.all(...params) as BenchmarkResultRow[];
+}
+
+// ============================================================================
+// Evolution Version Operations
+// ============================================================================
+
+export interface EvolutionVersionRow {
+  id: string;
+  branch_name: string;
+  parent_branch: string | null;
+  created_at: number;
+  status: string;
+  trigger_mode: string | null;
+  trigger_ref: string | null;
+  baseline_run_id: string | null;
+  latest_run_id: string | null;
+  score_delta: number | null;
+  files_changed: string | null; // JSON
+  worktree_path: string | null;
+  metadata: string | null; // JSON
+}
+
+export function insertEvolutionVersion(version: {
+  id: string;
+  branchName: string;
+  parentBranch?: string;
+  createdAt: number;
+  status?: string;
+  triggerMode?: string;
+  triggerRef?: string;
+  baselineRunId?: string;
+  latestRunId?: string;
+  scoreDelta?: number;
+  filesChanged?: string[];
+  worktreePath?: string;
+  metadata?: Record<string, unknown>;
+}): void {
+  const database = getDatabase();
+  const stmt = database.prepare(`
+    INSERT OR REPLACE INTO evolution_versions (id, branch_name, parent_branch, created_at, status,
+      trigger_mode, trigger_ref, baseline_run_id, latest_run_id, score_delta, files_changed, worktree_path, metadata)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(
+    version.id,
+    version.branchName,
+    version.parentBranch ?? null,
+    version.createdAt,
+    version.status ?? "active",
+    version.triggerMode ?? null,
+    version.triggerRef ?? null,
+    version.baselineRunId ?? null,
+    version.latestRunId ?? null,
+    version.scoreDelta ?? null,
+    version.filesChanged ? JSON.stringify(version.filesChanged) : null,
+    version.worktreePath ?? null,
+    version.metadata ? JSON.stringify(version.metadata) : null
+  );
+}
+
+export function getEvolutionVersion(id: string): EvolutionVersionRow | null {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM evolution_versions WHERE id = ?");
+  return stmt.get(id) as EvolutionVersionRow | null;
+}
+
+export function getEvolutionVersionByBranch(branchName: string): EvolutionVersionRow | null {
+  const database = getDatabase();
+  const stmt = database.prepare("SELECT * FROM evolution_versions WHERE branch_name = ?");
+  return stmt.get(branchName) as EvolutionVersionRow | null;
+}
+
+export function listEvolutionVersions(
+  options: { status?: string; triggerMode?: string; limit?: number; offset?: number } = {}
+): EvolutionVersionRow[] {
+  const database = getDatabase();
+  let sql = "SELECT * FROM evolution_versions WHERE 1=1";
+  const params: SQLParam[] = [];
+
+  if (options.status) {
+    sql += " AND status = ?";
+    params.push(options.status);
+  }
+  if (options.triggerMode) {
+    sql += " AND trigger_mode = ?";
+    params.push(options.triggerMode);
+  }
+
+  sql += " ORDER BY created_at DESC";
+
+  if (options.limit) {
+    sql += " LIMIT ?";
+    params.push(options.limit);
+  }
+  if (options.offset) {
+    sql += " OFFSET ?";
+    params.push(options.offset);
+  }
+
+  const stmt = database.prepare(sql);
+  return stmt.all(...params) as EvolutionVersionRow[];
+}
+
+export function updateEvolutionVersion(
+  id: string,
+  updates: {
+    status?: string;
+    latestRunId?: string;
+    scoreDelta?: number;
+    filesChanged?: string[];
+    worktreePath?: string;
+    metadata?: Record<string, unknown>;
+  }
+): void {
+  const database = getDatabase();
+  const setClauses: string[] = [];
+  const params: SQLParam[] = [];
+
+  if (updates.status !== undefined) {
+    setClauses.push("status = ?");
+    params.push(updates.status);
+  }
+  if (updates.latestRunId !== undefined) {
+    setClauses.push("latest_run_id = ?");
+    params.push(updates.latestRunId);
+  }
+  if (updates.scoreDelta !== undefined) {
+    setClauses.push("score_delta = ?");
+    params.push(updates.scoreDelta);
+  }
+  if (updates.filesChanged !== undefined) {
+    setClauses.push("files_changed = ?");
+    params.push(JSON.stringify(updates.filesChanged));
+  }
+  if (updates.worktreePath !== undefined) {
+    setClauses.push("worktree_path = ?");
+    params.push(updates.worktreePath);
+  }
+  if (updates.metadata !== undefined) {
+    setClauses.push("metadata = ?");
+    params.push(JSON.stringify(updates.metadata));
+  }
+
+  if (setClauses.length === 0) return;
+
+  params.push(id);
+  const stmt = database.prepare(
+    `UPDATE evolution_versions SET ${setClauses.join(", ")} WHERE id = ?`
+  );
+  stmt.run(...params);
 }
 
 export function countTestCases(options: { category?: string; difficulty?: string } = {}): number {

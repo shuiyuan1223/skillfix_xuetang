@@ -41,7 +41,11 @@ export type A2UIComponentType =
   | "status_badge"
   | "collapsible"
   | "radar_chart"
-  | "activity_rings";
+  | "activity_rings"
+  // Evolution Lab components
+  | "git_timeline"
+  | "step_indicator"
+  | "file_tree";
 
 // Base component interface
 export interface A2UIComponent {
@@ -308,6 +312,49 @@ export interface RadarChartComponent extends A2UIComponent {
   compareColor?: string;
 }
 
+// Git Timeline Component
+export interface GitTimelineComponent extends A2UIComponent {
+  type: "git_timeline";
+  events: Array<{
+    id: string;
+    type: "branch" | "commit" | "benchmark" | "merge" | "revert";
+    label: string;
+    description?: string;
+    timestamp: number;
+    branch?: string;
+    hash?: string;
+    score?: number;
+    status?: "success" | "failed" | "pending" | "active";
+  }>;
+  activeBranch?: string;
+  onEventClick?: string;
+}
+
+// Step Indicator Component
+export interface StepIndicatorComponent extends A2UIComponent {
+  type: "step_indicator";
+  steps: Array<{
+    id: string;
+    label: string;
+    icon?: string;
+    status: "pending" | "active" | "completed" | "failed" | "skipped";
+  }>;
+  orientation?: "horizontal" | "vertical";
+}
+
+// File Tree Component
+export interface FileTreeComponent extends A2UIComponent {
+  type: "file_tree";
+  files: Array<{
+    path: string;
+    status: "added" | "modified" | "deleted" | "renamed";
+    additions?: number;
+    deletions?: number;
+  }>;
+  selectedPath?: string;
+  onFileSelect?: string;
+}
+
 // Modal Component
 export interface ModalComponent extends A2UIComponent {
   type: "modal";
@@ -551,6 +598,34 @@ export class A2UIGenerator {
   ): string {
     const id = this.nextId("input");
     this.components.set(id, { id, type: "form_input", name, inputType, ...opts });
+    return id;
+  }
+
+  // ========================================================================
+  // Evolution Lab Component Methods
+  // ========================================================================
+
+  gitTimeline(
+    events: GitTimelineComponent["events"],
+    opts: Partial<GitTimelineComponent> = {}
+  ): string {
+    const id = this.nextId("timeline");
+    this.components.set(id, { id, type: "git_timeline", events, ...opts });
+    return id;
+  }
+
+  stepIndicator(
+    steps: StepIndicatorComponent["steps"],
+    opts: Partial<StepIndicatorComponent> = {}
+  ): string {
+    const id = this.nextId("steps");
+    this.components.set(id, { id, type: "step_indicator", steps, ...opts });
+    return id;
+  }
+
+  fileTree(files: FileTreeComponent["files"], opts: Partial<FileTreeComponent> = {}): string {
+    const id = this.nextId("ftree");
+    this.components.set(id, { id, type: "file_tree", files, ...opts });
     return id;
   }
 

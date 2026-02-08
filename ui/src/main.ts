@@ -124,6 +124,10 @@ const ICONS: Record<string, string> = {
   check: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
   x: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`,
   "alert-triangle": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>`,
+  // Git icons
+  "git-branch": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>`,
+  "git-merge": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>`,
+  "git-commit": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>`,
 };
 
 // Emoji to icon mapping (backward compat - prefer icon names in new code)
@@ -387,6 +391,13 @@ class A2UIRenderer {
         return this.renderForm(c);
       case "form_input":
         return this.renderFormInput(c);
+      // Evolution Lab components
+      case "git_timeline":
+        return this.renderGitTimeline(c);
+      case "step_indicator":
+        return this.renderStepIndicator(c);
+      case "file_tree":
+        return this.renderFileTree(c);
       default:
         return html`<div class="a2ui-unknown">[Unknown: ${c.type}]</div>`;
     }
@@ -1612,6 +1623,213 @@ ${value || ""}</textarea
       </div>
     `;
   }
+
+  // ========================================================================
+  // Evolution Lab Components
+  // ========================================================================
+
+  private renderGitTimeline(c: A2UIComponent): TemplateResult {
+    const events = (c.events as any[]) || [];
+    const activeBranch = c.activeBranch as string | undefined;
+    const onEventClick = c.onEventClick as string | undefined;
+
+    const typeIcons: Record<string, string> = {
+      branch: "git-branch",
+      commit: "git-commit",
+      benchmark: "test-tube",
+      merge: "git-merge",
+      revert: "alert-triangle",
+    };
+
+    const statusColors: Record<string, string> = {
+      success: "var(--color-success, #22c55e)",
+      failed: "var(--color-error, #ef4444)",
+      pending: "var(--color-muted, #94a3b8)",
+      active: "var(--color-primary, #6366f1)",
+    };
+
+    return html`
+      <div class="a2ui-git-timeline">
+        ${events.map(
+          (evt, i) => html`
+            <div
+              class="timeline-event ${evt.status || ""} ${evt.branch === activeBranch
+                ? "active-branch"
+                : ""}"
+              @click=${() => onEventClick && this.sendAction(onEventClick, { eventId: evt.id })}
+              style="cursor: ${onEventClick ? "pointer" : "default"}"
+            >
+              <div class="timeline-line">
+                <div
+                  class="timeline-dot"
+                  style="background: ${statusColors[evt.status as string] || statusColors.pending}"
+                >
+                  <span class="timeline-icon"
+                    >${unsafeHTML(getIcon(typeIcons[evt.type as string] || "git-commit"))}</span
+                  >
+                </div>
+                ${i < events.length - 1 ? html`<div class="timeline-connector"></div>` : nothing}
+              </div>
+              <div class="timeline-content">
+                <div class="timeline-header">
+                  <span class="timeline-label">${evt.label}</span>
+                  ${evt.score !== undefined
+                    ? html`<span class="timeline-score">${evt.score}</span>`
+                    : nothing}
+                  ${evt.hash
+                    ? html`<code class="timeline-hash">${(evt.hash as string).slice(0, 7)}</code>`
+                    : nothing}
+                </div>
+                ${evt.description
+                  ? html`<div class="timeline-desc">${evt.description}</div>`
+                  : nothing}
+                ${evt.branch
+                  ? html`<div class="timeline-branch">
+                      ${unsafeHTML(getIcon("git-branch"))} ${evt.branch}
+                    </div>`
+                  : nothing}
+                <div class="timeline-time">
+                  ${new Date(evt.timestamp as number).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          `
+        )}
+      </div>
+    `;
+  }
+
+  private renderStepIndicator(c: A2UIComponent): TemplateResult {
+    const steps = (c.steps as any[]) || [];
+    const orientation = (c.orientation as string) || "horizontal";
+
+    const statusStyles: Record<string, { bg: string; border: string; text: string }> = {
+      pending: {
+        bg: "transparent",
+        border: "var(--color-border, #e2e8f0)",
+        text: "var(--color-muted, #94a3b8)",
+      },
+      active: {
+        bg: "var(--color-primary, #6366f1)",
+        border: "var(--color-primary, #6366f1)",
+        text: "#fff",
+      },
+      completed: {
+        bg: "var(--color-success, #22c55e)",
+        border: "var(--color-success, #22c55e)",
+        text: "#fff",
+      },
+      failed: {
+        bg: "var(--color-error, #ef4444)",
+        border: "var(--color-error, #ef4444)",
+        text: "#fff",
+      },
+      skipped: {
+        bg: "transparent",
+        border: "var(--color-border, #e2e8f0)",
+        text: "var(--color-muted, #94a3b8)",
+      },
+    };
+
+    return html`
+      <div class="a2ui-step-indicator ${orientation}">
+        ${steps.map((step, i) => {
+          const style = statusStyles[step.status as string] || statusStyles.pending;
+          return html`
+            ${i > 0
+              ? html`<div
+                  class="step-connector ${step.status === "completed" || step.status === "active"
+                    ? "filled"
+                    : ""}"
+                ></div>`
+              : nothing}
+            <div class="step-item ${step.status}">
+              <div
+                class="step-circle"
+                style="background: ${style.bg}; border-color: ${style.border}; color: ${style.text}"
+              >
+                ${step.status === "completed"
+                  ? html`<span class="step-icon">${unsafeHTML(getIcon("check"))}</span>`
+                  : step.icon
+                    ? html`<span class="step-icon"
+                        >${unsafeHTML(getIcon(step.icon as string))}</span
+                      >`
+                    : html`<span class="step-number">${i + 1}</span>`}
+              </div>
+              <span
+                class="step-label"
+                style="color: ${step.status === "active"
+                  ? "var(--color-primary, #6366f1)"
+                  : step.status === "completed"
+                    ? "var(--color-success, #22c55e)"
+                    : "var(--color-muted, #94a3b8)"}"
+                >${step.label}</span
+              >
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private renderFileTree(c: A2UIComponent): TemplateResult {
+    const files = (c.files as any[]) || [];
+    const selectedPath = c.selectedPath as string | undefined;
+    const onFileSelect = c.onFileSelect as string | undefined;
+
+    const statusIcons: Record<string, { symbol: string; color: string }> = {
+      added: { symbol: "+", color: "var(--color-success, #22c55e)" },
+      modified: { symbol: "M", color: "var(--color-primary, #6366f1)" },
+      deleted: { symbol: "-", color: "var(--color-error, #ef4444)" },
+      renamed: { symbol: "R", color: "var(--color-warning, #f59e0b)" },
+    };
+
+    // Group files by directory
+    const tree = new Map<string, typeof files>();
+    for (const f of files) {
+      const parts = (f.path as string).split("/");
+      const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : ".";
+      if (!tree.has(dir)) tree.set(dir, []);
+      tree.get(dir)!.push(f);
+    }
+
+    return html`
+      <div class="a2ui-file-tree">
+        ${Array.from(tree.entries()).map(
+          ([dir, dirFiles]) => html`
+            <div class="file-tree-dir">
+              <div class="file-tree-dir-name">${dir}/</div>
+              ${dirFiles.map((f: any) => {
+                const si = statusIcons[f.status as string] || statusIcons.modified;
+                const filename = (f.path as string).split("/").pop();
+                const isSelected = f.path === selectedPath;
+                return html`
+                  <div
+                    class="file-tree-file ${isSelected ? "selected" : ""}"
+                    @click=${() => onFileSelect && this.sendAction(onFileSelect, { path: f.path })}
+                    style="cursor: ${onFileSelect ? "pointer" : "default"}"
+                  >
+                    <span class="file-status" style="color: ${si.color}">${si.symbol}</span>
+                    <span class="file-name">${filename}</span>
+                    ${f.additions !== undefined || f.deletions !== undefined
+                      ? html`<span class="file-changes">
+                          ${f.additions
+                            ? html`<span class="additions">+${f.additions}</span>`
+                            : nothing}
+                          ${f.deletions
+                            ? html`<span class="deletions">-${f.deletions}</span>`
+                            : nothing}
+                        </span>`
+                      : nothing}
+                  </div>
+                `;
+              })}
+            </div>
+          `
+        )}
+      </div>
+    `;
+  }
 }
 
 // ============================================================================
@@ -1800,9 +2018,7 @@ class PHAApp extends LitElement {
       color: #1e293b;
     }
     .shell.theme-light .surface-modal-content {
-      box-shadow:
-        0 20px 60px rgba(0, 0, 0, 0.1),
-        0 8px 20px rgba(0, 0, 0, 0.06);
+      /* Transparent wrapper - styling handled by inner a2ui-modal */
     }
 
     /* Light: form inputs */
@@ -2115,18 +2331,9 @@ class PHAApp extends LitElement {
     }
 
     .surface-modal-content {
-      background: var(--color-surface-elevated);
-      border-radius: 20px;
-      border: 1px solid var(--color-border);
-      max-width: 500px;
-      width: 90%;
-      max-height: 80vh;
-      overflow: auto;
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      box-shadow:
-        0 24px 48px rgba(0, 0, 0, 0.5),
-        0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      /* No background/border/shadow - inner a2ui-modal handles all visual styling */
+      max-height: 90vh;
+      overflow: visible;
     }
 
     .surface-toast {
@@ -4031,6 +4238,233 @@ class PHAApp extends LitElement {
       margin-top: 8px;
       padding-top: 16px;
       border-top: 1px solid rgba(102, 126, 234, 0.1);
+    }
+
+    /* ========== Git Timeline ========== */
+    .a2ui-git-timeline {
+      display: flex;
+      flex-direction: column;
+      padding: 8px 0;
+    }
+    .timeline-event {
+      display: flex;
+      gap: 16px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+    .timeline-event:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .timeline-event.active-branch {
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .timeline-line {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 32px;
+      flex-shrink: 0;
+    }
+    .timeline-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .timeline-dot .timeline-icon {
+      display: flex;
+      color: #fff;
+    }
+    .timeline-dot .timeline-icon svg {
+      width: 14px;
+      height: 14px;
+    }
+    .timeline-connector {
+      width: 2px;
+      flex: 1;
+      min-height: 16px;
+      background: rgba(102, 126, 234, 0.2);
+    }
+    .timeline-content {
+      flex: 1;
+      padding-bottom: 16px;
+      min-width: 0;
+    }
+    .timeline-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .timeline-label {
+      font-weight: 500;
+      font-size: 0.875rem;
+      color: var(--color-text);
+    }
+    .timeline-score {
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+      padding: 1px 8px;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .timeline-hash {
+      font-family: monospace;
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      background: rgba(255, 255, 255, 0.05);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+    .timeline-desc {
+      font-size: 0.8125rem;
+      color: var(--color-text-muted);
+      margin-top: 4px;
+    }
+    .timeline-branch {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.75rem;
+      color: #818cf8;
+      margin-top: 4px;
+    }
+    .timeline-branch svg {
+      width: 12px;
+      height: 12px;
+    }
+    .timeline-time {
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      margin-top: 4px;
+    }
+
+    /* ========== Step Indicator ========== */
+    .a2ui-step-indicator {
+      display: flex;
+      align-items: center;
+      padding: 12px 0;
+    }
+    .a2ui-step-indicator.vertical {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .step-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      min-width: 64px;
+    }
+    .a2ui-step-indicator.vertical .step-item {
+      flex-direction: row;
+      min-width: unset;
+      gap: 12px;
+    }
+    .step-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 2px solid;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .step-icon {
+      display: flex;
+    }
+    .step-icon svg {
+      width: 16px;
+      height: 16px;
+    }
+    .step-number {
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .step-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .step-connector {
+      height: 2px;
+      flex: 1;
+      min-width: 24px;
+      background: var(--color-border, #e2e8f0);
+      transition: background 0.2s;
+    }
+    .step-connector.filled {
+      background: var(--color-primary, #6366f1);
+    }
+    .a2ui-step-indicator.vertical .step-connector {
+      width: 2px;
+      height: 24px;
+      min-width: unset;
+      margin-left: 15px;
+    }
+
+    /* ========== File Tree ========== */
+    .a2ui-file-tree {
+      font-family: monospace;
+      font-size: 0.8125rem;
+    }
+    .file-tree-dir {
+      margin-bottom: 8px;
+    }
+    .file-tree-dir-name {
+      color: var(--color-text-muted);
+      font-weight: 600;
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .file-tree-file {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px 4px 20px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+    .file-tree-file:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .file-tree-file.selected {
+      background: rgba(99, 102, 241, 0.12);
+    }
+    .file-status {
+      width: 16px;
+      text-align: center;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .file-name {
+      flex: 1;
+      color: var(--color-text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-changes {
+      display: flex;
+      gap: 4px;
+      font-size: 0.75rem;
+      flex-shrink: 0;
+    }
+    .file-changes .additions {
+      color: var(--color-success, #22c55e);
+    }
+    .file-changes .deletions {
+      color: var(--color-error, #ef4444);
     }
   `;
 

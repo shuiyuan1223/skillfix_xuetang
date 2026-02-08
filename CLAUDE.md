@@ -43,11 +43,27 @@ pha/
 │   ├── gateway/               # Gateway 服务
 │   │   ├── server.ts          # Bun HTTP/WebSocket
 │   │   ├── pages.ts           # A2UI 页面生成器
+│   │   ├── evolution-lab.ts   # Evolution Lab 双面板页面
 │   │   └── a2ui.ts            # A2UI 组件定义
 │   ├── agent/                 # Agent 核心
-│   │   └── pha-agent.ts
+│   │   ├── pha-agent.ts
+│   │   ├── tools.ts           # AgentTool 适配器
+│   │   ├── git-agent-tools.ts # Git 工具适配器
+│   │   └── skill-trigger.ts   # Skill 自动触发
 │   ├── tools/                 # MCP 工具
-│   │   └── health-data.ts
+│   │   ├── health-data.ts     # 健康数据工具
+│   │   ├── git-tools.ts       # Git 操作工具 (12个)
+│   │   ├── prompt-tools.ts    # 提示词管理工具
+│   │   ├── skill-tools.ts     # 技能管理工具
+│   │   └── evolution-tools.ts # 进化系统工具
+│   ├── evolution/             # 进化系统
+│   │   ├── version-manager.ts # Git worktree + 分支管理
+│   │   ├── benchmark-runner.ts
+│   │   └── auto-loop.ts
+│   ├── skills/                # Agent Skills (SKILL.md)
+│   │   ├── evolution-driver/  # 自我进化方法论
+│   │   ├── sleep-coach/       # 睡眠教练
+│   │   └── ...
 │   └── data-sources/          # 数据源
 │       ├── interface.ts
 │       └── mock.ts
@@ -62,10 +78,13 @@ pha/
 | 任务 | 文件 |
 |------|------|
 | 添加新页面 | `src/gateway/pages.ts` → `src/gateway/server.ts` |
-| 添加 MCP 工具 | `src/tools/` |
+| 添加 MCP 工具 | `src/tools/` → `src/agent/tools.ts` → `src/gateway/mcp.ts` |
+| 添加 Git 工具 | `src/tools/git-tools.ts` → `src/agent/git-agent-tools.ts` |
+| 修改进化实验室 | `src/gateway/evolution-lab.ts` → `src/gateway/server.ts` |
 | 修改 TUI | `src/commands/tui.ts` |
 | 修改 Web UI 组件 | `ui/src/main.ts` |
 | 修改 Agent 提示词 | `src/prompts/SOUL.md` |
+| 修改进化方法论 | `src/skills/evolution-driver/SKILL.md` |
 
 ## 多人协作 (Trunk Based)
 
@@ -302,8 +321,38 @@ user, bot, send, heart-pulse, stethoscope, wind, flame, timer,
 footprints, bed, star, zap, bar-chart, calendar, search, save,
 test-tube, lightbulb, target, link, shield, trending-up,
 trending-down, sparkles, info, settings, hospital, loader,
-check, x, alert-triangle, chevron-left, chevron-right
+check, x, alert-triangle, chevron-left, chevron-right,
+git-branch, git-merge, git-commit
 ```
+
+### Evolution Lab 架构
+
+Evolution Lab 是顶级导航页面，采用双面板布局：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Evolution Lab                          │
+│  ┌──────────────────┐  ┌─────────────────────────────┐  │
+│  │  Agent Chat      │  │  Context Panel              │  │
+│  │  (左侧 60%)      │  │  [Timeline│Benchmarks│Insp] │  │
+│  │                  │  │  (右侧 40%)                 │  │
+│  │  Step Indicator  │  │  git_timeline / radar_chart  │  │
+│  │  Chat Messages   │  │  file_tree / diff_view      │  │
+│  │  Chat Input      │  │                             │  │
+│  └──────────────────┘  └─────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+- **Agent 驱动**: 用户在左侧对话，Agent 通过 `evolution-driver` Skill 理解进化方法论
+- **Git 操作 MCP 化**: 12 个 git 工具（`git_status`, `git_log`, `git_diff` 等）Agent 可直接调用
+- **实时面板更新**: Agent 调用工具时右侧面板自动切换（benchmark→基准测试 tab，git_*→时间线）
+- **流水线步骤追踪**: 6 步进化流程（Benchmark → Diagnose → Propose → Approve → Apply → Validate）
+
+关键文件：
+- `src/gateway/evolution-lab.ts` — 页面生成器
+- `src/tools/git-tools.ts` — 12 个 Git MCP 工具
+- `src/agent/git-agent-tools.ts` — Git AgentTool 适配器
+- `src/skills/evolution-driver/SKILL.md` — 进化方法论 Skill
 
 ## API 端点
 

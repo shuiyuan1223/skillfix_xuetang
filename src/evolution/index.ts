@@ -24,3 +24,7 @@ export * from "./version-tracker.js";
 export * from "./auto-loop.js";
 export * from "./claude-code-optimizer.js";
 export * from "./regression-checker.js";
+export * from "./version-manager.js";
+export * from "./diagnose.js";
+export * from "./github-issues.js";
+export * from "./issue-to-testcase.js";
