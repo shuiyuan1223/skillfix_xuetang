@@ -23,11 +23,32 @@ import {
   getSuggestion,
   insertSuggestion,
   updateSuggestionStatus,
-  type TraceRow,
-  type EvaluationRow,
-  type TestCaseRow,
-  type SuggestionRow,
 } from "../memory/db.js";
+import { BenchmarkRunner, type BenchmarkRunnerConfig } from "../evolution/benchmark-runner.js";
+import { diagnose, type DiagnoseResult } from "../evolution/diagnose.js";
+import type { BenchmarkProfile, BenchmarkCategory } from "../evolution/types.js";
+
+// ============================================================================
+// Runtime config for benchmark/diagnose (injected by server.ts)
+// ============================================================================
+
+let _runnerConfig: BenchmarkRunnerConfig | null = null;
+
+/**
+ * Set the runner config at runtime (called by server.ts when agent is available).
+ */
+export function setEvolutionRunnerConfig(config: BenchmarkRunnerConfig): void {
+  _runnerConfig = config;
+}
+
+function getRunnerConfig(): BenchmarkRunnerConfig {
+  if (!_runnerConfig) {
+    throw new Error(
+      "Evolution runner not configured. Start the server or initialize the agent first."
+    );
+  }
+  return _runnerConfig;
+}
 
 // ============================================================================
 // Traces Tools
@@ -659,6 +680,135 @@ export const getBenchmarkRunDetailsTool = {
   },
 };
 
+// ============================================================================
+// run_benchmark — Agent can run benchmarks
+// ============================================================================
+
+export const runBenchmarkTool = {
+  name: "run_benchmark",
+  description:
+    "Run benchmark evaluation suite to measure agent capabilities across five dimensions: health data analysis, health coaching, safety boundaries, personalization memory, and communication quality. Returns scores and radar chart data.",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      profile: {
+        type: "string",
+        description:
+          "Benchmark profile: 'quick' (20 core tests) or 'full' (80+ tests). Default: 'quick'",
+      },
+      category: {
+        type: "string",
+        description:
+          "Optional: run only a specific category (health-data-analysis, health-coaching, safety-boundaries, personalization-memory, communication-quality)",
+      },
+      versionTag: {
+        type: "string",
+        description: "Optional version tag for this benchmark run",
+      },
+    },
+  },
+  execute: async (args?: { profile?: string; category?: string; versionTag?: string }) => {
+    const config = getRunnerConfig();
+    const profile = (args?.profile || "quick") as BenchmarkProfile;
+
+    const runner = new BenchmarkRunner(config);
+    await runner.seedTestCases();
+
+    const { run, results, categoryScores } = await runner.run({
+      profile,
+      category: args?.category as BenchmarkCategory | undefined,
+      versionTag: args?.versionTag,
+    });
+
+    const categories: Array<{ category: string; score: number; passed: number; total: number }> =
+      [];
+    for (const [cat, catScore] of categoryScores) {
+      categories.push({
+        category: cat,
+        score: Math.round(catScore.score),
+        passed: catScore.passedCount,
+        total: catScore.testCount,
+      });
+    }
+
+    return {
+      success: true,
+      runId: run.id,
+      overallScore: run.overallScore,
+      passed: run.passedCount,
+      failed: run.failedCount,
+      total: run.totalTestCases,
+      profile,
+      durationMs: run.durationMs,
+      categories,
+      failedTests: results
+        .filter((r) => !r.passed)
+        .slice(0, 10)
+        .map((r) => ({
+          testCaseId: r.testCaseId,
+          score: r.overallScore,
+          feedback: r.feedback,
+        })),
+    };
+  },
+};
+
+// ============================================================================
+// run_diagnose — Agent can run diagnose pipeline
+// ============================================================================
+
+export const runDiagnoseTool = {
+  name: "run_diagnose",
+  description:
+    "Run the diagnose pipeline: benchmark → analyze weaknesses → generate improvement suggestions. Returns weak categories, failing test patterns, and actionable suggestions for which files to modify.",
+  parameters: {
+    type: "object" as const,
+    properties: {
+      profile: {
+        type: "string",
+        description: "Benchmark profile: 'quick' or 'full'. Default: 'quick'",
+      },
+      createIssues: {
+        type: "boolean",
+        description: "Whether to create GitHub issues for each weakness. Default: false",
+      },
+    },
+  },
+  execute: async (args?: { profile?: string; createIssues?: boolean }) => {
+    const config = getRunnerConfig();
+    const profile = (args?.profile || "quick") as BenchmarkProfile;
+
+    const result: DiagnoseResult = await diagnose({
+      profile,
+      runnerConfig: config,
+      createIssues: args?.createIssues || false,
+    });
+
+    return {
+      success: true,
+      overallScore: result.overallScore,
+      passed: result.run.passedCount,
+      failed: result.run.failedCount,
+      total: result.run.totalTestCases,
+      weaknesses: result.weaknesses.map((w) => ({
+        category: w.category,
+        label: w.label,
+        score: Math.round(w.score),
+        gap: Math.round(w.gap),
+        failingTestCount: w.failingTests.length,
+        commonPatterns: w.commonPatterns,
+      })),
+      suggestions: result.suggestions.map((s) => ({
+        category: s.category,
+        description: s.description,
+        targetFiles: s.targetFiles,
+        priority: s.priority,
+      })),
+      issuesCreated: result.issuesCreated,
+    };
+  },
+};
+
 // Export all tools as array
 export const evolutionTools = [
   // Traces
@@ -680,4 +830,7 @@ export const evolutionTools = [
   // Benchmarks
   listBenchmarkRunsTool,
   getBenchmarkRunDetailsTool,
+  // Execution tools (require runtime config)
+  runBenchmarkTool,
+  runDiagnoseTool,
 ];

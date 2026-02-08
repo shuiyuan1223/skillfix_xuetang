@@ -207,6 +207,8 @@ export interface LocaleMessages {
     description: string;
     status: string;
     triggers: string;
+    phaSkills: string;
+    systemSkills: string;
   };
 
   // Evolution page
@@ -347,6 +349,23 @@ export interface LocaleMessages {
     benchmarkRan: string;
     selectFileToView: string;
     noChanges: string;
+    approveProposal: string;
+    rejectProposal: string;
+    // Dashboard tabs
+    tabOverview: string;
+    tabBenchmark: string;
+    tabVersions: string;
+    tabData: string;
+    tabAgent: string;
+    // Overview
+    currentVersion: string;
+    scoreTrend: string;
+    // Agent tab
+    agentSubtitle: string;
+    agentContext: string;
+    startEvolution: string;
+    // Version detail
+    versionDetail: string;
   };
 
   // Memory page

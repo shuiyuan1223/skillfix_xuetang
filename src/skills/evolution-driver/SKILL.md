@@ -78,16 +78,17 @@ Present the comparison to the user for final decision.
 
 | Tool | Purpose |
 |------|---------|
-| `run_benchmark` | Run benchmark tests |
+| `run_benchmark` | Run benchmark tests (quick/full profile) |
+| `run_diagnose` | Run diagnose pipeline (benchmark + analyze + suggest) |
 | `git_status` | Check working tree status |
 | `git_log` | View commit history |
 | `git_diff` | Compare branches |
-| `git_branch_create` | Create evolution branch |
-| `git_branch_delete` | Abandon branch |
+| `git_branch_create` | Create evolution branch (evo/vN + worktree) |
+| `git_branch_delete` | Abandon branch and remove worktree |
 | `git_commit` | Commit changes |
 | `git_merge` | Merge to main |
 | `git_revert` | Undo last commit |
-| `git_changed_files` | List modified files |
+| `git_changed_files` | List modified files on branch |
 | `git_show_file` | Read file from branch |
 | `update_prompt` | Modify prompt files |
 | `update_skill` | Modify skill files |

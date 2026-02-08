@@ -20,6 +20,7 @@ import {
   gitRevertTool,
   gitChangedFilesTool,
 } from "../tools/git-tools.js";
+import { runBenchmarkTool, runDiagnoseTool } from "../tools/evolution-tools.js";
 
 const toResult = async (fn: () => Promise<unknown>): Promise<AgentToolResult<unknown>> => {
   const result = await fn();
@@ -180,7 +181,45 @@ export const gitChangedFilesAgentTool: AgentTool<typeof BranchSchema> = {
     toResult(() => gitChangedFilesTool.execute(params)),
 };
 
-// All git agent tools
+// Evolution execution tools
+const RunBenchmarkSchema = Type.Object({
+  profile: Type.Optional(
+    Type.String({ description: "Benchmark profile: 'quick' or 'full' (default: 'quick')" })
+  ),
+  category: Type.Optional(Type.String({ description: "Optional category filter" })),
+  versionTag: Type.Optional(Type.String({ description: "Optional version tag" })),
+});
+
+export const runBenchmarkAgentTool: AgentTool<typeof RunBenchmarkSchema> = {
+  name: runBenchmarkTool.name,
+  description: runBenchmarkTool.description,
+  label: "Run Benchmark",
+  parameters: RunBenchmarkSchema,
+  execute: async (
+    _id: string,
+    params: { profile?: string; category?: string; versionTag?: string }
+  ) => toResult(() => runBenchmarkTool.execute(params)),
+};
+
+const RunDiagnoseSchema = Type.Object({
+  profile: Type.Optional(
+    Type.String({ description: "Benchmark profile: 'quick' or 'full' (default: 'quick')" })
+  ),
+  createIssues: Type.Optional(
+    Type.Boolean({ description: "Create GitHub issues for weaknesses (default: false)" })
+  ),
+});
+
+export const runDiagnoseAgentTool: AgentTool<typeof RunDiagnoseSchema> = {
+  name: runDiagnoseTool.name,
+  description: runDiagnoseTool.description,
+  label: "Run Diagnose",
+  parameters: RunDiagnoseSchema,
+  execute: async (_id: string, params: { profile?: string; createIssues?: boolean }) =>
+    toResult(() => runDiagnoseTool.execute(params)),
+};
+
+// All git + evolution agent tools
 export const gitAgentTools: AgentTool<any>[] = [
   gitStatusAgentTool,
   gitLogAgentTool,
@@ -194,4 +233,6 @@ export const gitAgentTools: AgentTool<any>[] = [
   gitMergeAgentTool,
   gitRevertAgentTool,
   gitChangedFilesAgentTool,
+  runBenchmarkAgentTool,
+  runDiagnoseAgentTool,
 ];

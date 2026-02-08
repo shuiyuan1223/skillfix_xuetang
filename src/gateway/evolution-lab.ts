@@ -1,8 +1,8 @@
 /**
  * Evolution Lab Page Generator
  *
- * Dual-panel layout: left = Agent chat, right = dynamic context panel.
- * Agent drives the evolution pipeline; user is the supervisor.
+ * 5-Tab Dashboard layout: Overview | Benchmark | Versions | Data | Agent
+ * Dashboard/GUI-centric with Agent mode as a dedicated tab.
  */
 
 import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
@@ -63,28 +63,96 @@ interface ChangedFile {
   deletions?: number;
 }
 
+interface TestCaseInfo {
+  id: string;
+  category: string;
+  query: string;
+  expected: { shouldMention?: string[]; shouldNotMention?: string[]; minScore?: number };
+}
+
+interface EvaluationStats {
+  totalCount: number;
+  averageScore: number;
+  scoreDistribution: Record<string, number>;
+}
+
+interface TraceInfo {
+  id: string;
+  timestamp: number;
+  userMessage: string;
+  score?: number;
+}
+
+interface EvaluationInfo {
+  id: string;
+  traceId: string;
+  timestamp: number;
+  score: number;
+  feedback?: string | null;
+}
+
+interface SuggestionInfo {
+  id: string;
+  timestamp: number;
+  type: string;
+  target: string;
+  status: string;
+  rationale?: string | null;
+}
+
+interface ExternalProgressInfo {
+  current: number;
+  total: number;
+  category: string;
+  profile: string;
+  modelId?: string;
+}
+
+interface VersionInfo {
+  id: string;
+  branchName: string;
+  status: string;
+  triggerMode: string;
+  triggerRef: string;
+  scoreDelta: number | null;
+  filesChanged: string[];
+  createdAt: number;
+}
+
 export interface EvolutionLabData {
-  // Chat
+  activeTab: "overview" | "benchmark" | "versions" | "data" | "agent";
+  // Overview
+  stats?: EvaluationStats;
+  latestCategoryScores?: CategoryScoreInfo[];
+  benchmarkRuns?: BenchmarkRunInfo[];
+  activeVersionBranch?: string | null;
+  scoreTrend?: Array<{ version: string; score: number }>;
+  versionCount?: number;
+  testCaseCount?: number;
+  // Benchmark
+  testCases?: TestCaseInfo[];
+  externalProgress?: ExternalProgressInfo;
+  // Versions
+  versions?: VersionInfo[];
+  timelineEvents?: TimelineEvent[];
+  selectedVersion?: string;
+  changedFiles?: ChangedFile[];
+  diffContent?: { before: string; after: string; path: string };
+  // Data
+  dataSubTab?: "traces" | "evaluations" | "suggestions";
+  traces?: TraceInfo[];
+  tracesPage?: number;
+  tracesTotal?: number;
+  evaluations?: EvaluationInfo[];
+  suggestions?: SuggestionInfo[];
+  // Agent
   chatMessages: EvoChatMessage[];
   streaming: boolean;
   streamingContent: string;
-  // Pipeline
   currentPipelineStep?: string;
   pipelineSteps: PipelineStep[];
-  // Context panel
-  contextTab: "timeline" | "benchmarks" | "inspector";
-  // Timeline data
-  timelineEvents?: TimelineEvent[];
-  activeBranch?: string;
-  // Benchmark data
-  latestCategoryScores?: CategoryScoreInfo[];
-  benchmarkRuns?: BenchmarkRunInfo[];
-  // Inspector data
-  inspectedBranch?: string;
-  changedFiles?: ChangedFile[];
-  diffContent?: { before: string; after: string; path: string };
-  // Version
-  activeVersionBranch?: string | null;
+  agentContextData?: { radarScores?: CategoryScoreInfo[]; changedFiles?: ChangedFile[] };
+  loading?: boolean;
 }
 
 // Default pipeline steps
@@ -114,8 +182,20 @@ export function getDefaultPipelineSteps(currentStep?: string): PipelineStep[] {
   });
 }
 
+// Category label mapping
+function getCategoryLabel(category: string): string {
+  const labelMap: Record<string, string> = {
+    "health-data-analysis": t("evolution.healthDataAnalysis"),
+    "health-coaching": t("evolution.healthCoaching"),
+    "safety-boundaries": t("evolution.safetyBoundaries"),
+    "personalization-memory": t("evolution.personalization"),
+    "communication-quality": t("evolution.communicationQuality"),
+  };
+  return labelMap[category] || category;
+}
+
 // ============================================================================
-// Main Lab Page
+// Main Lab Page — 5-Tab Dashboard
 // ============================================================================
 
 export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
@@ -133,10 +213,631 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
 
   const header = ui.row(headerChildren, { gap: 12, align: "center" });
 
-  // ---- Pipeline Step Indicator ----
-  const stepsId = ui.stepIndicator(data.pipelineSteps, { orientation: "horizontal" });
+  // ---- Loading skeleton ----
+  if (data.loading) {
+    const s1 = ui.skeleton({ variant: "rectangular", height: 80 });
+    const s2 = ui.skeleton({ variant: "rectangular", height: 80 });
+    const s3 = ui.skeleton({ variant: "rectangular", height: 80 });
+    const statsRow = ui.grid([s1, s2, s3], { columns: 3, gap: 16 });
+    const s4 = ui.skeleton({ variant: "rectangular", height: 250 });
+    const loadingContent = ui.column([statsRow, s4], { gap: 16, padding: 24 });
+    const root = ui.column([header, loadingContent], { gap: 0, padding: 16 });
+    return ui.build(root);
+  }
 
-  // ---- Left Panel: Chat ----
+  // ---- Tab Content ----
+  const tabContentIds: Record<string, string> = {};
+
+  if (data.activeTab === "overview") {
+    tabContentIds["overview"] = generateOverviewTab(ui, data);
+  }
+  if (data.activeTab === "benchmark") {
+    tabContentIds["benchmark"] = generateBenchmarkTab(ui, data);
+  }
+  if (data.activeTab === "versions") {
+    tabContentIds["versions"] = generateVersionsTab(ui, data);
+  }
+  if (data.activeTab === "data") {
+    tabContentIds["data"] = generateDataTab(ui, data);
+  }
+  if (data.activeTab === "agent") {
+    tabContentIds["agent"] = generateAgentTab(ui, data);
+  }
+
+  // ---- Tabs ----
+  const tabs = ui.tabs(
+    [
+      { id: "overview", label: t("evolution.tabOverview"), icon: "bar-chart" },
+      { id: "benchmark", label: t("evolution.tabBenchmark"), icon: "test-tube" },
+      { id: "versions", label: t("evolution.tabVersions"), icon: "git-branch" },
+      { id: "data", label: t("evolution.tabData"), icon: "file-text" },
+      { id: "agent", label: t("evolution.tabAgent"), icon: "sparkles" },
+    ],
+    data.activeTab,
+    tabContentIds
+  );
+
+  const content = ui.column([tabs], { gap: 0, padding: 24 });
+  const root = ui.column([header, content], { gap: 12, padding: 16 });
+
+  return ui.build(root);
+}
+
+// ============================================================================
+// Tab 1: Overview
+// ============================================================================
+
+function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string {
+  const children: string[] = [];
+
+  // Row 1: Stat Cards
+  const statCards: string[] = [];
+
+  // Overall score gauge
+  if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
+    const avgScore =
+      data.latestCategoryScores.reduce((sum, cs) => sum + cs.score, 0) /
+      data.latestCategoryScores.length;
+    const gauge = ui.scoreGauge(avgScore, {
+      label: t("evolution.score"),
+      max: 100,
+      size: "lg",
+    });
+    statCards.push(gauge);
+  } else if (data.stats && data.stats.totalCount > 0) {
+    const gauge = ui.scoreGauge(data.stats.averageScore, {
+      label: t("evolution.avgScore"),
+      max: 100,
+      size: "lg",
+    });
+    statCards.push(gauge);
+  } else {
+    statCards.push(
+      ui.statCard({
+        title: t("evolution.score"),
+        value: "-",
+        subtitle: t("evolution.noBenchmarkRuns"),
+        icon: "star",
+        color: "#94a3b8",
+      })
+    );
+  }
+
+  // Tests passed
+  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+    const latest = data.benchmarkRuns[0];
+    statCards.push(
+      ui.statCard({
+        title: t("evolution.testCases"),
+        value: `${latest.passed_count}/${latest.total_test_cases}`,
+        subtitle: t("evolution.passed"),
+        icon: "test-tube",
+        color: "#10b981",
+      })
+    );
+  } else {
+    statCards.push(
+      ui.statCard({
+        title: t("evolution.testCases"),
+        value: data.testCaseCount ?? 0,
+        icon: "test-tube",
+        color: "#10b981",
+      })
+    );
+  }
+
+  // Version count
+  statCards.push(
+    ui.statCard({
+      title: t("evolution.versions"),
+      value: data.versionCount ?? 0,
+      icon: "git-branch",
+      color: "#667eea",
+    })
+  );
+
+  // Current branch
+  statCards.push(
+    ui.statCard({
+      title: t("evolution.currentVersion"),
+      value: data.activeVersionBranch || "main",
+      icon: "git-commit",
+      color: "#818cf8",
+    })
+  );
+
+  children.push(ui.grid(statCards, { columns: 4, gap: 16 }));
+
+  // Row 2: Radar Chart + Score Trend
+  const row2Items: string[] = [];
+
+  if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
+    const radarData = data.latestCategoryScores.map((cs) => ({
+      label: getCategoryLabel(cs.category),
+      value: cs.score,
+      maxValue: 100,
+    }));
+    const radar = ui.radarChart(radarData, {
+      size: 280,
+      showLabels: true,
+      showValues: true,
+      color: "#667eea",
+    });
+    row2Items.push(ui.card([radar], { padding: 16 }));
+  }
+
+  if (data.scoreTrend && data.scoreTrend.length > 0) {
+    const trendLabel = ui.text(t("evolution.scoreTrend"), "label");
+    const trendChart = ui.chart({
+      chartType: "bar",
+      data: data.scoreTrend.map((p) => ({
+        version: p.version,
+        score: Math.round(p.score),
+      })),
+      xKey: "version",
+      yKey: "score",
+      height: 200,
+      color: "#667eea",
+    });
+    row2Items.push(ui.card([trendLabel, trendChart], { padding: 16 }));
+  }
+
+  if (row2Items.length > 0) {
+    children.push(ui.row(row2Items, { gap: 16 }));
+  }
+
+  // Row 3: Recent Benchmark Runs
+  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+    const runsLabel = ui.text(t("evolution.recentRuns"), "label");
+    const runRows = data.benchmarkRuns.slice(0, 5).map((r) => ({
+      id: r.id,
+      version_tag: r.version_tag || "-",
+      overall_score: Math.round(r.overall_score),
+      passed: `${r.passed_count}/${r.total_test_cases}`,
+      profile: r.profile,
+      duration: r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+    }));
+    const runsTable = ui.dataTable(
+      [
+        { key: "version_tag", label: t("evolution.versionTag") },
+        { key: "overall_score", label: t("evolution.score"), render: "progress" },
+        { key: "passed", label: t("evolution.passed") },
+        { key: "profile", label: t("evolution.profile"), render: "badge" },
+        { key: "duration", label: t("evolution.duration") },
+      ],
+      runRows,
+      { onRowClick: "view_benchmark_run" }
+    );
+
+    const quickBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
+      variant: "secondary",
+      size: "sm",
+      payload: { profile: "quick" },
+    });
+    const fullBtn = ui.button(t("evolution.runFullBenchmark"), "run_benchmark", {
+      variant: "secondary",
+      size: "sm",
+      payload: { profile: "full" },
+    });
+    const btnRow = ui.row([quickBtn, fullBtn], { gap: 8, justify: "end" });
+
+    children.push(ui.card([runsLabel, runsTable, btnRow], { padding: 16 }));
+  } else {
+    const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
+    const runBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
+      variant: "primary",
+      size: "sm",
+      payload: { profile: "quick" },
+    });
+    children.push(ui.card([emptyText, runBtn], { padding: 24 }));
+  }
+
+  // Row 4: Active evolution branch (if any)
+  if (data.activeVersionBranch && data.activeVersionBranch !== "main") {
+    const branchBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
+    const branchLabel = ui.text(t("evolution.activeVersion"), "label");
+    const switchBtn = ui.button(t("evolution.switchVersion"), "switch_version", {
+      variant: "outline",
+      size: "sm",
+      payload: { branch: data.activeVersionBranch },
+    });
+    const mergeBtn = ui.button(t("evolution.mergeVersion"), "merge_version", {
+      variant: "primary",
+      size: "sm",
+      payload: { branch: data.activeVersionBranch },
+    });
+    const branchRow = ui.row([branchLabel, branchBadge, switchBtn, mergeBtn], {
+      gap: 8,
+      align: "center",
+    });
+    children.push(ui.card([branchRow], { padding: 12 }));
+  }
+
+  return ui.column(children, { gap: 16, padding: 16 });
+}
+
+// ============================================================================
+// Tab 2: Benchmark
+// ============================================================================
+
+function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string {
+  const children: string[] = [];
+
+  // Action buttons
+  const quickBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
+    variant: "secondary",
+    size: "sm",
+    payload: { profile: "quick" },
+  });
+  const fullBtn = ui.button(t("evolution.runFullBenchmark"), "run_benchmark", {
+    variant: "secondary",
+    size: "sm",
+    payload: { profile: "full" },
+  });
+  const diagnoseBtn = ui.button(t("evolution.runDiagnose"), "run_diagnose", {
+    variant: "outline",
+    size: "sm",
+    icon: "search",
+  });
+  children.push(ui.row([quickBtn, fullBtn, diagnoseBtn], { gap: 8 }));
+
+  // External benchmark progress
+  if (data.externalProgress) {
+    const ep = data.externalProgress;
+    const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
+    const progressLabel = ui.text(
+      `${t("evolution.externalBenchmarkRunning")}${ep.modelId ? ` (${ep.modelId})` : ""} — ${ep.current}/${ep.total} (${pct}%)`,
+      "caption"
+    );
+    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#f59e0b" });
+    children.push(ui.card([progressLabel, progressBar], { padding: 12 }));
+  }
+
+  // Test Cases table
+  if (data.testCases && data.testCases.length > 0) {
+    const testCasesLabel = ui.text(t("evolution.testCases"), "label");
+    const testRows = data.testCases.map((tc) => ({
+      id: tc.id.slice(0, 8),
+      category: tc.category,
+      query: tc.query.slice(0, 60) + (tc.query.length > 60 ? "..." : ""),
+      minScore: tc.expected.minScore ?? "-",
+      keywords: tc.expected.shouldMention?.length || 0,
+    }));
+    const testsTable = ui.dataTable(
+      [
+        { key: "category", label: t("evolution.category"), render: "badge" },
+        { key: "query", label: t("evolution.query") },
+        { key: "minScore", label: t("evolution.minScore") },
+        { key: "keywords", label: t("evolution.keywords") },
+      ],
+      testRows,
+      { onRowClick: "view_test_case" }
+    );
+    const addTestBtn = ui.button(t("evolution.addTestCase"), "create_test_case", {
+      variant: "primary",
+      size: "sm",
+    });
+    children.push(ui.card([testCasesLabel, testsTable, addTestBtn], { padding: 16 }));
+  }
+
+  // Run History table
+  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+    const historyLabel = ui.text(t("evolution.benchmarkRuns"), "label");
+    const runRows = data.benchmarkRuns.map((r) => ({
+      id: r.id,
+      time: new Date(r.timestamp).toLocaleString(),
+      version_tag: r.version_tag || "-",
+      overall_score: Math.round(r.overall_score),
+      passed: `${r.passed_count}/${r.total_test_cases}`,
+      profile: r.profile,
+      duration: r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+    }));
+    const runsTable = ui.dataTable(
+      [
+        { key: "time", label: t("evolution.time"), sortable: true },
+        { key: "version_tag", label: t("evolution.versionTag") },
+        { key: "overall_score", label: t("evolution.score"), render: "progress" },
+        { key: "passed", label: t("evolution.passed") },
+        { key: "profile", label: t("evolution.profile"), render: "badge" },
+        { key: "duration", label: t("evolution.duration") },
+      ],
+      runRows,
+      { onRowClick: "view_benchmark_run" }
+    );
+    children.push(ui.card([historyLabel, runsTable], { padding: 16 }));
+  }
+
+  // Config summary
+  const configHint = ui.text(t("evolution.editConfigHint"), "caption");
+  children.push(configHint);
+
+  return ui.column(children, { gap: 16, padding: 16 });
+}
+
+// ============================================================================
+// Tab 3: Versions
+// ============================================================================
+
+function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string {
+  const children: string[] = [];
+
+  // Left-right layout: timeline + detail
+  const leftChildren: string[] = [];
+  const rightChildren: string[] = [];
+
+  // Git Timeline
+  if (data.timelineEvents && data.timelineEvents.length > 0) {
+    const timelineId = ui.gitTimeline(data.timelineEvents, {
+      activeBranch: data.activeVersionBranch || undefined,
+      onEventClick: "evo_timeline_click",
+    });
+    leftChildren.push(timelineId);
+  } else {
+    leftChildren.push(ui.text(t("evolution.noVersions"), "caption"));
+  }
+
+  // Version detail panel
+  if (data.selectedVersion) {
+    const selectedInfo = data.versions?.find((v) => v.branchName === data.selectedVersion);
+
+    const detailLabel = ui.text(t("evolution.versionDetail"), "label");
+    rightChildren.push(detailLabel);
+
+    if (selectedInfo) {
+      const branchBadge = ui.badge(selectedInfo.branchName, { variant: "info" });
+      const statusBadge = ui.badge(selectedInfo.status, {
+        variant:
+          selectedInfo.status === "active"
+            ? "warning"
+            : selectedInfo.status === "merged"
+              ? "success"
+              : "default",
+      });
+      rightChildren.push(ui.row([branchBadge, statusBadge], { gap: 8 }));
+
+      if (selectedInfo.triggerMode) {
+        const triggerText = ui.text(
+          `${t("evolution.versionTrigger")}: ${selectedInfo.triggerMode} ${selectedInfo.triggerRef || ""}`,
+          "caption"
+        );
+        rightChildren.push(triggerText);
+      }
+
+      if (selectedInfo.scoreDelta != null) {
+        const sign = selectedInfo.scoreDelta > 0 ? "+" : "";
+        const deltaText = ui.text(
+          `${t("evolution.scoreDelta")}: ${sign}${selectedInfo.scoreDelta.toFixed(1)}`,
+          "caption"
+        );
+        rightChildren.push(deltaText);
+      }
+    }
+
+    // Changed files (file tree)
+    if (data.changedFiles && data.changedFiles.length > 0) {
+      const fileTreeId = ui.fileTree(data.changedFiles, {
+        selectedPath: data.diffContent?.path,
+        onFileSelect: "evo_file_select",
+      });
+      rightChildren.push(fileTreeId);
+
+      // Diff view
+      if (data.diffContent) {
+        const diffId = ui.diffView(data.diffContent.before, data.diffContent.after, {
+          title: data.diffContent.path,
+        });
+        rightChildren.push(diffId);
+      }
+    } else {
+      rightChildren.push(ui.text(t("evolution.noChanges"), "caption"));
+    }
+
+    // Action buttons
+    if (selectedInfo && selectedInfo.status === "active") {
+      const switchBtn = ui.button(t("evolution.switchVersion"), "switch_version", {
+        variant: "outline",
+        size: "sm",
+        payload: { branch: selectedInfo.branchName },
+      });
+      const mergeBtn = ui.button(t("evolution.mergeVersion"), "merge_version", {
+        variant: "primary",
+        size: "sm",
+        payload: { branch: selectedInfo.branchName },
+      });
+      const abandonBtn = ui.button(t("evolution.abandonVersion"), "abandon_version", {
+        variant: "ghost",
+        size: "sm",
+        payload: { branch: selectedInfo.branchName },
+      });
+      rightChildren.push(ui.row([switchBtn, mergeBtn, abandonBtn], { gap: 8 }));
+    }
+  } else {
+    rightChildren.push(ui.text(t("evolution.selectFileToView"), "caption"));
+  }
+
+  // Versions table (always shown)
+  if (data.versions && data.versions.length > 0) {
+    const versionRows = data.versions.map((v) => ({
+      id: v.id.slice(0, 8),
+      branch: v.branchName,
+      status: v.status,
+      trigger: v.triggerMode || "-",
+      scoreDelta:
+        v.scoreDelta != null ? `${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(1)}` : "-",
+      files: v.filesChanged.length > 0 ? `${v.filesChanged.length} files` : "-",
+      created: new Date(v.createdAt).toLocaleString(),
+    }));
+    const versionsTable = ui.dataTable(
+      [
+        { key: "branch", label: t("evolution.versionBranch") },
+        { key: "status", label: t("evolution.versionStatus"), render: "badge" },
+        { key: "trigger", label: t("evolution.versionTrigger"), render: "badge" },
+        { key: "scoreDelta", label: t("evolution.scoreDelta") },
+        { key: "files", label: t("evolution.filesChanged") },
+        { key: "created", label: t("evolution.time"), sortable: true },
+      ],
+      versionRows,
+      { onRowClick: "view_version" }
+    );
+    children.push(versionsTable);
+  }
+
+  // Two-column layout: timeline (left) + detail (right)
+  const leftPanel = ui.column(leftChildren, { gap: 8 });
+  const rightPanel = ui.column(rightChildren, { gap: 12 });
+
+  const twoCol = ui.row([leftPanel, rightPanel], {
+    gap: 16,
+    style: "align-items: flex-start;",
+  } as any);
+
+  // Active version indicator
+  if (data.activeVersionBranch) {
+    const activeBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
+    const activeLabel = ui.text(t("evolution.activeVersion"), "label");
+    const resetBtn = ui.button(t("evolution.resetToMain"), "switch_version", {
+      variant: "outline",
+      size: "sm",
+      payload: { branch: null },
+    });
+    children.unshift(ui.row([activeLabel, activeBadge, resetBtn], { gap: 8, align: "center" }));
+  }
+
+  children.push(twoCol);
+
+  return ui.column(children, { gap: 16, padding: 16 });
+}
+
+// ============================================================================
+// Tab 4: Data
+// ============================================================================
+
+function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
+  const children: string[] = [];
+
+  // Sub-tabs as buttons
+  const subTab = data.dataSubTab || "traces";
+  const tracesBtn = ui.button(t("evolution.traces"), "evo_data_subtab_change", {
+    variant: subTab === "traces" ? "primary" : "ghost",
+    size: "sm",
+    payload: { tab: "traces" },
+  });
+  const evalsBtn = ui.button(t("evolution.evaluations"), "evo_data_subtab_change", {
+    variant: subTab === "evaluations" ? "primary" : "ghost",
+    size: "sm",
+    payload: { tab: "evaluations" },
+  });
+  const suggsBtn = ui.button(t("evolution.suggestions"), "evo_data_subtab_change", {
+    variant: subTab === "suggestions" ? "primary" : "ghost",
+    size: "sm",
+    payload: { tab: "suggestions" },
+  });
+  children.push(ui.row([tracesBtn, evalsBtn, suggsBtn], { gap: 8 }));
+
+  // Traces sub-tab
+  if (subTab === "traces") {
+    if (data.traces && data.traces.length > 0) {
+      const traceRows = data.traces.map((tr) => ({
+        id: tr.id.slice(0, 8),
+        time: new Date(tr.timestamp).toLocaleString(),
+        message: tr.userMessage.slice(0, 50) + (tr.userMessage.length > 50 ? "..." : ""),
+        score: tr.score ?? "-",
+      }));
+      const tracesTable = ui.dataTable(
+        [
+          { key: "id", label: "ID" },
+          { key: "time", label: t("evolution.time"), sortable: true },
+          { key: "message", label: t("evolution.message") },
+          { key: "score", label: t("evolution.score"), render: "progress" },
+        ],
+        traceRows,
+        {
+          pagination: {
+            page: data.tracesPage || 0,
+            pageSize: 20,
+            total: data.tracesTotal || 0,
+          },
+          onRowClick: "view_trace",
+          onPageChange: "traces_page_change",
+        }
+      );
+      children.push(tracesTable);
+    } else {
+      children.push(ui.text(t("evolution.noTracesHint"), "caption"));
+    }
+  }
+
+  // Evaluations sub-tab
+  if (subTab === "evaluations") {
+    if (data.evaluations && data.evaluations.length > 0) {
+      const evalRows = data.evaluations.map((e) => ({
+        id: e.id.slice(0, 8),
+        traceId: e.traceId.slice(0, 8),
+        time: new Date(e.timestamp).toLocaleString(),
+        score: e.score,
+        feedback: e.feedback?.slice(0, 50) || "-",
+      }));
+      const evalsTable = ui.dataTable(
+        [
+          { key: "id", label: "ID" },
+          { key: "traceId", label: t("evolution.trace") },
+          { key: "time", label: t("evolution.time"), sortable: true },
+          { key: "score", label: t("evolution.score"), render: "progress" },
+          { key: "feedback", label: t("evolution.feedback") },
+        ],
+        evalRows,
+        { onRowClick: "view_evaluation" }
+      );
+      children.push(evalsTable);
+    } else {
+      children.push(ui.text(t("evolution.noEvaluationsHint"), "caption"));
+    }
+  }
+
+  // Suggestions sub-tab
+  if (subTab === "suggestions") {
+    if (data.suggestions && data.suggestions.length > 0) {
+      const suggRows = data.suggestions.map((s) => ({
+        id: s.id.slice(0, 8),
+        time: new Date(s.timestamp).toLocaleString(),
+        type: s.type,
+        target: s.target,
+        status: s.status,
+        rationale: s.rationale?.slice(0, 50) || "-",
+      }));
+      const suggsTable = ui.dataTable(
+        [
+          { key: "id", label: "ID" },
+          { key: "time", label: t("evolution.time"), sortable: true },
+          { key: "type", label: t("evolution.type"), render: "badge" },
+          { key: "target", label: t("evolution.target") },
+          { key: "status", label: t("skills.status"), render: "badge" },
+          { key: "rationale", label: t("evolution.rationale") },
+        ],
+        suggRows,
+        { onRowClick: "view_suggestion" }
+      );
+      children.push(suggsTable);
+    } else {
+      children.push(ui.text(t("evolution.noSuggestionsHint"), "caption"));
+    }
+  }
+
+  return ui.column(children, { gap: 16, padding: 16 });
+}
+
+// ============================================================================
+// Tab 5: Agent
+// ============================================================================
+
+function generateAgentTab(ui: A2UIGenerator, data: EvolutionLabData): string {
+  const children: string[] = [];
+
+  // Pipeline step indicator
+  const stepsId = ui.stepIndicator(data.pipelineSteps, { orientation: "horizontal" });
+  children.push(stepsId);
+
+  // Chat area
   const chatMsgsId = `evo_chat_msgs_${Date.now()}`;
   ui.addComponent(chatMsgsId, {
     id: chatMsgsId,
@@ -145,7 +846,23 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
     streaming: data.streaming,
     streamingContent: data.streamingContent,
   });
+  children.push(chatMsgsId);
 
+  // Approval buttons (visible when pipeline is at "propose" step)
+  if (data.currentPipelineStep === "propose" && !data.streaming) {
+    const approveBtn = ui.button(t("evolution.approveProposal"), "evo_approve", {
+      variant: "primary",
+      size: "md",
+    });
+    const rejectBtn = ui.button(t("evolution.rejectProposal"), "evo_reject", {
+      variant: "secondary",
+      size: "md",
+    });
+    const approvalRow = ui.row([approveBtn, rejectBtn], { gap: 12, justify: "center" });
+    children.push(ui.card([approvalRow], { padding: 12 }));
+  }
+
+  // Chat input
   const chatInputId = `evo_chat_input_${Date.now()}`;
   ui.addComponent(chatInputId, {
     id: chatInputId,
@@ -154,170 +871,39 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
     placeholder: t("evolution.evoChatPlaceholder"),
     action: "evo_send_message",
   });
+  children.push(chatInputId);
 
-  const leftPanel = ui.column([chatMsgsId, chatInputId], {
-    gap: 0,
-    style: "flex: 3; min-width: 0; min-height: 0; overflow: hidden;",
-  } as any);
+  // Collapsible context section
+  if (data.agentContextData) {
+    const ctxChildren: string[] = [];
+    const ctxLabel = ui.text(t("evolution.agentContext"), "label");
+    ctxChildren.push(ctxLabel);
 
-  // ---- Right Panel: Context ----
-  const rightContent = generateContextPanel(ui, data);
-
-  const contextTabs = ui.tabs(
-    [
-      { id: "timeline", label: t("evolution.timeline"), icon: "git-branch" },
-      { id: "benchmarks", label: t("evolution.benchmarks"), icon: "test-tube" },
-      { id: "inspector", label: t("evolution.inspector"), icon: "search" },
-    ],
-    data.contextTab,
-    {
-      timeline: rightContent.timeline,
-      benchmarks: rightContent.benchmarks,
-      inspector: rightContent.inspector,
-    }
-  );
-
-  const rightPanel = ui.column([contextTabs], {
-    gap: 0,
-    style:
-      "flex: 2; min-width: 280px; min-height: 0; overflow: auto; border-left: 1px solid rgba(102,126,234,0.1); padding-left: 16px;",
-  } as any);
-
-  // ---- Layout ----
-  const panels = ui.row([leftPanel, rightPanel], {
-    gap: 0,
-    style: "flex: 1; min-height: 0; overflow: hidden;",
-  } as any);
-
-  const root = ui.column([header, stepsId, panels], {
-    gap: 12,
-    padding: 16,
-    style: "height: 100%; overflow: hidden;",
-  } as any);
-
-  return ui.build(root);
-}
-
-// ============================================================================
-// Context Panel Content
-// ============================================================================
-
-function generateContextPanel(
-  ui: A2UIGenerator,
-  data: EvolutionLabData
-): { timeline: string; benchmarks: string; inspector: string } {
-  // Timeline tab
-  const timelineContent = generateTimelineContent(ui, data);
-
-  // Benchmarks tab
-  const benchmarksContent = generateBenchmarksContent(ui, data);
-
-  // Inspector tab
-  const inspectorContent = generateInspectorContent(ui, data);
-
-  return {
-    timeline: timelineContent,
-    benchmarks: benchmarksContent,
-    inspector: inspectorContent,
-  };
-}
-
-function generateTimelineContent(ui: A2UIGenerator, data: EvolutionLabData): string {
-  if (!data.timelineEvents || data.timelineEvents.length === 0) {
-    const emptyMsg = ui.text(
-      "No evolution events yet. Start by asking the agent to evolve.",
-      "caption"
-    );
-    return ui.column([emptyMsg], { gap: 8, padding: 8 });
-  }
-
-  const timelineId = ui.gitTimeline(data.timelineEvents, {
-    activeBranch: data.activeBranch,
-    onEventClick: "evo_timeline_click",
-  });
-
-  return ui.column([timelineId], { gap: 0, padding: 4 });
-}
-
-function generateBenchmarksContent(ui: A2UIGenerator, data: EvolutionLabData): string {
-  const children: string[] = [];
-
-  // Radar chart if category scores available
-  if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
-    const radarData = data.latestCategoryScores.map((cs) => ({
-      label: cs.category,
-      value: cs.score,
-      maxValue: 100,
-    }));
-    const radarId = ui.radarChart(radarData, {
-      size: 220,
-      showLabels: true,
-      showValues: true,
-      color: "#818cf8",
-    });
-    children.push(radarId);
-  }
-
-  // Recent runs table
-  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
-    const runsTitle = ui.text(t("evolution.recentRuns"), "h3");
-    children.push(runsTitle);
-
-    const tableId = ui.dataTable(
-      [
-        { key: "version_tag", label: t("evolution.versionTag"), width: "80px" },
-        { key: "overall_score", label: t("evolution.score"), width: "60px" },
-        { key: "passed", label: t("evolution.passed"), width: "60px" },
-        { key: "profile", label: t("evolution.profile"), width: "60px" },
-      ],
-      data.benchmarkRuns.map((r) => ({
-        id: r.id,
-        version_tag: r.version_tag || "-",
-        overall_score: Math.round(r.overall_score),
-        passed: `${r.passed_count}/${r.total_test_cases}`,
-        profile: r.profile,
-      })),
-      { onRowClick: "view_benchmark_run" }
-    );
-    children.push(tableId);
-  } else {
-    const noData = ui.text(t("evolution.noBenchmarkRuns"), "caption");
-    children.push(noData);
-  }
-
-  return ui.column(children, { gap: 12, padding: 8 });
-}
-
-function generateInspectorContent(ui: A2UIGenerator, data: EvolutionLabData): string {
-  const children: string[] = [];
-
-  if (data.inspectedBranch) {
-    const branchLabel = ui.text(`Branch: ${data.inspectedBranch}`, "label");
-    children.push(branchLabel);
-  }
-
-  // File tree
-  if (data.changedFiles && data.changedFiles.length > 0) {
-    const fileTreeId = ui.fileTree(data.changedFiles, {
-      selectedPath: data.diffContent?.path,
-      onFileSelect: "evo_file_select",
-    });
-    children.push(fileTreeId);
-
-    // Diff view
-    if (data.diffContent) {
-      const diffId = ui.diffView(data.diffContent.before, data.diffContent.after, {
-        title: data.diffContent.path,
+    if (data.agentContextData.radarScores && data.agentContextData.radarScores.length > 0) {
+      const radarData = data.agentContextData.radarScores.map((cs) => ({
+        label: getCategoryLabel(cs.category),
+        value: cs.score,
+        maxValue: 100,
+      }));
+      const radar = ui.radarChart(radarData, {
+        size: 200,
+        showLabels: true,
+        color: "#818cf8",
       });
-      children.push(diffId);
+      ctxChildren.push(radar);
     }
-  } else {
-    const noChanges = ui.text(
-      data.inspectedBranch ? t("evolution.noChanges") : t("evolution.selectFileToView"),
-      "caption"
-    );
-    children.push(noChanges);
+
+    if (data.agentContextData.changedFiles && data.agentContextData.changedFiles.length > 0) {
+      const fileTreeId = ui.fileTree(data.agentContextData.changedFiles, {
+        onFileSelect: "evo_file_select",
+      });
+      ctxChildren.push(fileTreeId);
+    }
+
+    if (ctxChildren.length > 1) {
+      children.push(ui.card(ctxChildren, { padding: 12 }));
+    }
   }
 
-  return ui.column(children, { gap: 12, padding: 8 });
+  return ui.column(children, { gap: 12, padding: 16 });
 }

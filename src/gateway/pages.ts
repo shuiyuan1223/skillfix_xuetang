@@ -821,28 +821,62 @@ export function generateSkillsPage(data: {
     return ui.build(root);
   }
 
-  // Skills list
-  const skillRows = data.skills.map((s) => ({
-    name: `${s.emoji || "🧩"} ${s.name}`,
-    description: s.description || "-",
-    status: s.enabled ? "enabled" : "disabled",
-    triggers: s.triggers?.join(", ") || "-",
-  }));
+  // Categorize skills: system vs PHA
+  const SYSTEM_SKILLS = new Set(["benchmark-evaluator", "evolution-driver"]);
+  const phaSkills = data.skills.filter((s) => !SYSTEM_SKILLS.has(s.name));
+  const systemSkills = data.skills.filter((s) => SYSTEM_SKILLS.has(s.name));
 
-  const skillsTable = ui.dataTable(
-    [
-      { key: "name", label: t("skills.skill"), sortable: true },
-      { key: "description", label: t("skills.description") },
-      { key: "status", label: t("skills.status"), render: "badge" },
-      { key: "triggers", label: t("skills.triggers") },
-    ],
-    skillRows,
-    { onRowClick: "select_skill" }
-  );
+  const children: string[] = [];
 
-  const skillsCard = ui.card([skillsTable], { title: t("skills.cardTitle"), padding: 20 });
+  // PHA Skills section
+  if (phaSkills.length > 0) {
+    const phaLabel = ui.text(t("skills.phaSkills"), "label");
+    const phaRows = phaSkills.map((s) => ({
+      name: `${s.emoji || "🧩"} ${s.name}`,
+      description: s.description || "-",
+      status: s.enabled ? "enabled" : "disabled",
+      triggers: s.triggers?.join(", ") || "-",
+    }));
+    const phaTable = ui.dataTable(
+      [
+        { key: "name", label: t("skills.skill"), sortable: true },
+        { key: "description", label: t("skills.description") },
+        { key: "status", label: t("skills.status"), render: "badge" },
+        { key: "triggers", label: t("skills.triggers") },
+      ],
+      phaRows,
+      { onRowClick: "select_skill" }
+    );
+    children.push(ui.card([phaLabel, phaTable], { padding: 20 }));
+  }
 
-  const children: string[] = [skillsCard];
+  // System Skills section
+  if (systemSkills.length > 0) {
+    const sysLabel = ui.text(t("skills.systemSkills"), "label");
+    const sysRows = systemSkills.map((s) => ({
+      name: `${s.emoji || "🧩"} ${s.name}`,
+      description: s.description || "-",
+      status: s.enabled ? "enabled" : "disabled",
+      triggers: s.triggers?.join(", ") || "-",
+    }));
+    const sysTable = ui.dataTable(
+      [
+        { key: "name", label: t("skills.skill"), sortable: true },
+        { key: "description", label: t("skills.description") },
+        { key: "status", label: t("skills.status"), render: "badge" },
+        { key: "triggers", label: t("skills.triggers") },
+      ],
+      sysRows,
+      { onRowClick: "select_skill" }
+    );
+    children.push(ui.card([sysLabel, sysTable], { padding: 20 }));
+  }
+
+  // Fallback: show all if both categories empty
+  if (phaSkills.length === 0 && systemSkills.length === 0) {
+    const emptyText = ui.text("No skills installed", "caption");
+    children.push(emptyText);
+  }
 
   // If a skill is selected, show editor
   if (data.selectedSkill && data.content !== undefined) {
@@ -891,45 +925,9 @@ export function generateSkillsPage(data: {
 }
 
 // ============================================================================
-// Settings: Evolution Page Generator
+// (Evolution Page Generator removed — now in evolution-lab.ts as 5-Tab Dashboard)
+// Types retained for modal generators
 // ============================================================================
-
-interface TraceInfo {
-  id: string;
-  timestamp: number;
-  userMessage: string;
-  score?: number;
-}
-
-interface EvaluationStats {
-  totalCount: number;
-  averageScore: number;
-  scoreDistribution: Record<string, number>;
-}
-
-interface EvaluationInfo {
-  id: string;
-  traceId: string;
-  timestamp: number;
-  score: number;
-  feedback?: string | null;
-}
-
-interface TestCaseInfo {
-  id: string;
-  category: string;
-  query: string;
-  expected: { shouldMention?: string[]; shouldNotMention?: string[]; minScore?: number };
-}
-
-interface SuggestionInfo {
-  id: string;
-  timestamp: number;
-  type: string;
-  target: string;
-  status: string;
-  rationale?: string | null;
-}
 
 interface BenchmarkRunInfo {
   id: string;
@@ -954,609 +952,6 @@ interface CategoryScoreInfo {
   score: number;
   testCount: number;
   passedCount: number;
-}
-
-export function generateEvolutionPage(data: {
-  activeTab:
-    | "overview"
-    | "traces"
-    | "evaluations"
-    | "benchmark"
-    | "runs"
-    | "suggestions"
-    | "config"
-    | "versions";
-  stats?: EvaluationStats;
-  traces?: TraceInfo[];
-  tracesPage?: number;
-  tracesTotal?: number;
-  evaluations?: EvaluationInfo[];
-  testCases?: TestCaseInfo[];
-  suggestions?: SuggestionInfo[];
-  benchmarkRuns?: BenchmarkRunInfo[];
-  latestCategoryScores?: CategoryScoreInfo[];
-  externalProgress?: {
-    current: number;
-    total: number;
-    category: string;
-    profile: string;
-    modelId?: string;
-  };
-  categoriesConfig?: {
-    categories: Array<{
-      id: string;
-      label: string;
-      labelZh: string;
-      weight: number;
-      description: string;
-      dimensionWeights: Record<string, number>;
-    }>;
-    dimensions: Array<{ id: string; label: string; labelZh: string }>;
-    passingScore: number;
-    weakCategoryThreshold: number;
-  } | null;
-  versions?: Array<{
-    id: string;
-    branchName: string;
-    status: string;
-    triggerMode: string;
-    triggerRef: string;
-    scoreDelta: number | null;
-    filesChanged: string[];
-    createdAt: number;
-  }>;
-  activeVersionBranch?: string | null;
-  loading?: boolean;
-}): A2UIMessage {
-  const ui = new A2UIGenerator("main");
-
-  // Header
-  const title = ui.text(t("evolution.title"), "h2");
-  const subtitle = ui.text(t("evolution.subtitle"), "caption");
-  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
-
-  // Loading skeleton
-  if (data.loading) {
-    const s1 = ui.skeleton({ variant: "rectangular", height: 80 });
-    const s2 = ui.skeleton({ variant: "rectangular", height: 80 });
-    const s3 = ui.skeleton({ variant: "rectangular", height: 80 });
-    const statsRow = ui.grid([s1, s2, s3], { columns: 3, gap: 16 });
-    const s4 = ui.skeleton({ variant: "rectangular", height: 250 });
-    const loadingContent = ui.column([statsRow, s4], { gap: 16, padding: 24 });
-    const root = ui.column([header, loadingContent], { gap: 0 });
-    return ui.build(root);
-  }
-
-  // Tabs
-  const tabContentIds: Record<string, string> = {};
-
-  // Overview tab content
-  if (data.activeTab === "overview") {
-    const overviewChildren: string[] = [];
-
-    // Show external benchmark progress indicator (e.g., from CLI)
-    if (data.externalProgress) {
-      const ep = data.externalProgress;
-      const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
-      const progressLabel = ui.text(
-        `${t("evolution.externalBenchmarkRunning")}${ep.modelId ? ` (${ep.modelId})` : ""} — ${ep.current}/${ep.total} (${pct}%)`,
-        "caption"
-      );
-      const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#f59e0b" });
-      const categoryBadge = ep.category ? ui.badge(ep.category, { variant: "info" }) : null;
-      const progressItems = [progressLabel, progressBar];
-      if (categoryBadge) progressItems.push(categoryBadge);
-      const progressCard = ui.card(progressItems, { padding: 12 });
-      overviewChildren.push(progressCard);
-    }
-
-    // Row 1: Radar chart + stat cards
-    const rightCards: string[] = [];
-
-    if (data.stats) {
-      if (data.stats.totalCount > 0) {
-        const avgScoreGauge = ui.scoreGauge(data.stats.averageScore, {
-          label: t("evolution.avgScore"),
-          max: 100,
-          size: "lg",
-        });
-        rightCards.push(avgScoreGauge);
-      } else {
-        // No evaluations yet - show a hint instead of "0"
-        const noEvalCard = ui.statCard({
-          title: t("evolution.avgScore"),
-          value: "-",
-          subtitle: t("evolution.noEvaluationsYet"),
-          icon: "star",
-          color: "#94a3b8",
-        });
-        rightCards.push(noEvalCard);
-      }
-
-      const totalTraces = ui.statCard({
-        title: t("evolution.totalTraces"),
-        value: data.stats.totalCount,
-        icon: "bar-chart",
-        color: "#667eea",
-      });
-      rightCards.push(totalTraces);
-
-      if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
-        const latestRun = data.benchmarkRuns[0];
-        const latestScore = ui.statCard({
-          title: t("evolution.runBenchmark"),
-          value: Math.round(latestRun.overallScore),
-          subtitle: t("evolution.outOf100"),
-          icon: "test-tube",
-          color: "#10b981",
-        });
-        rightCards.push(latestScore);
-      }
-    }
-
-    // Radar chart from best category scores across all runs
-    if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
-      const labelMap: Record<string, string> = {
-        "health-data-analysis": t("evolution.healthDataAnalysis"),
-        "health-coaching": t("evolution.healthCoaching"),
-        "safety-boundaries": t("evolution.safetyBoundaries"),
-        "personalization-memory": t("evolution.personalization"),
-        "communication-quality": t("evolution.communicationQuality"),
-      };
-      const radarData = data.latestCategoryScores.map((cs) => ({
-        label: labelMap[cs.category] || cs.category,
-        value: cs.score,
-        maxValue: 100,
-      }));
-
-      const radarLabel = ui.text(t("evolution.bestScore"), "caption");
-      const radar = ui.radarChart(radarData, { size: 280, color: "#667eea" });
-      const radarCol = ui.column([radarLabel, radar], { gap: 4, align: "center" });
-      const statsCol = ui.column(rightCards, { gap: 12 });
-      const topRow = ui.row([radarCol, statsCol], { gap: 24, align: "start" });
-      overviewChildren.push(topRow);
-    } else if (rightCards.length > 0) {
-      const overviewGrid = ui.grid(rightCards, { columns: 3, gap: 16 });
-      overviewChildren.push(overviewGrid);
-    }
-
-    // Row 2: Recent benchmark runs table
-    if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
-      const runsLabel = ui.text(t("evolution.recentRuns"), "label");
-
-      // Score delta vs previous run
-      if (data.benchmarkRuns.length >= 2) {
-        const latest = data.benchmarkRuns[0].overallScore;
-        const prev = data.benchmarkRuns[1].overallScore;
-        const delta = latest - prev;
-        const sign = delta > 0 ? "+" : "";
-        const deltaColor = delta > 0 ? "#10b981" : delta < 0 ? "#ef4444" : "#94a3b8";
-        const deltaText = ui.text(
-          `${t("evolution.latestChange")}: ${sign}${delta.toFixed(1)} (${Math.round(prev)} -> ${Math.round(latest)})`,
-          "caption"
-        );
-        overviewChildren.push(ui.row([runsLabel, deltaText], { gap: 12, align: "center" }));
-      } else {
-        overviewChildren.push(runsLabel);
-      }
-
-      const runRows = data.benchmarkRuns.slice(0, 5).map((r) => ({
-        id: r.id.slice(0, 8),
-        time: new Date(r.timestamp).toLocaleString(),
-        version: r.versionTag || r.metadata?.gitVersion || "-",
-        model: r.metadata?.modelId || "-",
-        profile: r.profile,
-        score: Math.round(r.overallScore),
-        passed: `${r.passedCount}/${r.totalTestCases}`,
-        duration: r.durationMs ? `${(r.durationMs / 1000).toFixed(1)}s` : "-",
-      }));
-
-      const runsTable = ui.dataTable(
-        [
-          { key: "time", label: t("evolution.time"), sortable: true },
-          { key: "version", label: t("evolution.versionTag") },
-          { key: "model", label: t("evolution.model") },
-          { key: "profile", label: t("evolution.profile"), render: "badge" },
-          { key: "score", label: t("evolution.score"), render: "progress" },
-          { key: "passed", label: t("evolution.passed") },
-          { key: "duration", label: t("evolution.duration") },
-        ],
-        runRows,
-        { onRowClick: "view_benchmark_run" }
-      );
-
-      const rerunQuickBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
-        variant: "secondary",
-        size: "sm",
-        payload: { profile: "quick" },
-      });
-      const rerunFullBtn = ui.button(t("evolution.runFullBenchmark"), "run_benchmark", {
-        variant: "secondary",
-        size: "sm",
-        payload: { profile: "full" },
-      });
-      const rerunRow = ui.row([rerunQuickBtn, rerunFullBtn], { gap: 8, justify: "end" });
-
-      overviewChildren.push(runsLabel, runsTable, rerunRow);
-    } else {
-      // Empty state
-      const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
-      const runBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
-        variant: "primary",
-        size: "sm",
-        payload: { profile: "quick" },
-      });
-      const emptyCol = ui.column([emptyText, runBtn], { gap: 12, align: "center", padding: 24 });
-      overviewChildren.push(emptyCol);
-    }
-
-    // Row 3: Diagnose + Auto-Evolve action cards
-    const diagnoseBtn = ui.button(t("evolution.runDiagnose"), "run_diagnose", {
-      variant: "secondary",
-      size: "sm",
-      icon: "search",
-    });
-    const diagnoseDesc = ui.text(t("evolution.diagnoseDesc"), "caption");
-    const diagnoseCard = ui.card([diagnoseDesc, diagnoseBtn], { padding: 12 });
-
-    const autoEvolveDesc = ui.text(t("evolution.autoEvolveDesc"), "caption");
-    const autoEvolveHint = ui.text(t("evolution.autoLoopHint"), "caption");
-    const autoEvolveCard = ui.card([autoEvolveDesc, autoEvolveHint], { padding: 12 });
-
-    const actionRow = ui.grid([diagnoseCard, autoEvolveCard], { columns: 2, gap: 16 });
-    overviewChildren.push(actionRow);
-
-    // Active version indicator
-    if (data.activeVersionBranch) {
-      const versionBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
-      const versionLabel = ui.text(t("evolution.activeVersion"), "caption");
-      const resetBtn = ui.button(t("evolution.resetToMain"), "switch_version", {
-        variant: "outline",
-        size: "sm",
-        payload: { branch: null },
-      });
-      const versionRow = ui.row([versionLabel, versionBadge, resetBtn], {
-        gap: 8,
-        align: "center",
-      });
-      overviewChildren.unshift(ui.card([versionRow], { padding: 8 }));
-    }
-
-    tabContentIds["overview"] = ui.column(overviewChildren, { gap: 16, padding: 16 });
-  }
-
-  // Traces tab content
-  if (data.activeTab === "traces") {
-    if (data.traces && data.traces.length > 0) {
-      const traceRows = data.traces.map((t) => ({
-        id: t.id.slice(0, 8),
-        time: new Date(t.timestamp).toLocaleString(),
-        message: t.userMessage.slice(0, 50) + (t.userMessage.length > 50 ? "..." : ""),
-        score: t.score ?? "-",
-      }));
-
-      const tracesTable = ui.dataTable(
-        [
-          { key: "id", label: "ID" },
-          { key: "time", label: t("evolution.time"), sortable: true },
-          { key: "message", label: t("evolution.message") },
-          { key: "score", label: t("evolution.score"), render: "progress" },
-        ],
-        traceRows,
-        {
-          pagination: {
-            page: data.tracesPage || 0,
-            pageSize: 20,
-            total: data.tracesTotal || 0,
-          },
-          onRowClick: "view_trace",
-          onPageChange: "traces_page_change",
-        }
-      );
-
-      tabContentIds["traces"] = ui.column([tracesTable], { padding: 16 });
-    } else {
-      const emptyText = ui.text(t("evolution.noTracesHint"), "caption");
-      tabContentIds["traces"] = ui.column([emptyText], { gap: 12, align: "center", padding: 24 });
-    }
-  }
-
-  // Evaluations tab content
-  if (data.activeTab === "evaluations") {
-    if (data.evaluations && data.evaluations.length > 0) {
-      const evalRows = data.evaluations.map((e) => ({
-        id: e.id.slice(0, 8),
-        traceId: e.traceId.slice(0, 8),
-        time: new Date(e.timestamp).toLocaleString(),
-        score: e.score,
-        feedback: e.feedback?.slice(0, 50) || "-",
-      }));
-
-      const evalsTable = ui.dataTable(
-        [
-          { key: "id", label: "ID" },
-          { key: "traceId", label: t("evolution.trace") },
-          { key: "time", label: t("evolution.time"), sortable: true },
-          { key: "score", label: t("evolution.score"), render: "progress" },
-          { key: "feedback", label: t("evolution.feedback") },
-        ],
-        evalRows,
-        { onRowClick: "view_evaluation" }
-      );
-
-      tabContentIds["evaluations"] = ui.column([evalsTable], { padding: 16 });
-    } else {
-      const emptyText = ui.text(t("evolution.noEvaluationsHint"), "caption");
-      tabContentIds["evaluations"] = ui.column([emptyText], {
-        gap: 12,
-        align: "center",
-        padding: 24,
-      });
-    }
-  }
-
-  // Benchmark tab content
-  if (data.activeTab === "benchmark" && data.testCases) {
-    const testRows = data.testCases.map((tc) => ({
-      id: tc.id.slice(0, 8),
-      category: tc.category,
-      query: tc.query.slice(0, 50) + (tc.query.length > 50 ? "..." : ""),
-      minScore: tc.expected.minScore ?? "-",
-      keywords: tc.expected.shouldMention?.length || 0,
-    }));
-
-    const testsTable = ui.dataTable(
-      [
-        { key: "id", label: "ID" },
-        { key: "category", label: t("evolution.category"), render: "badge" },
-        { key: "query", label: t("evolution.query") },
-        { key: "minScore", label: t("evolution.minScore") },
-        { key: "keywords", label: t("evolution.keywords") },
-      ],
-      testRows,
-      { onRowClick: "view_test_case" }
-    );
-
-    const runQuickBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
-      variant: "secondary",
-      size: "sm",
-      payload: { profile: "quick" },
-    });
-    const runFullBtn = ui.button(t("evolution.runFullBenchmark"), "run_benchmark", {
-      variant: "secondary",
-      size: "sm",
-      payload: { profile: "full" },
-    });
-    const autoLoopBtn = ui.button(t("evolution.autoLoop"), "run_auto_loop", {
-      variant: "outline",
-      size: "sm",
-    });
-    const addTestBtn = ui.button(t("evolution.addTestCase"), "create_test_case", {
-      variant: "primary",
-      size: "sm",
-    });
-    const btnRow = ui.row([runQuickBtn, runFullBtn, autoLoopBtn, addTestBtn], {
-      gap: 8,
-      justify: "end",
-      padding: 8,
-    });
-
-    tabContentIds["benchmark"] = ui.column([btnRow, testsTable], { padding: 16 });
-  }
-
-  // Runs tab content
-  if (data.activeTab === "runs") {
-    if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
-      const runRows = data.benchmarkRuns.map((r) => ({
-        id: r.id.slice(0, 8),
-        time: new Date(r.timestamp).toLocaleString(),
-        version: r.versionTag || r.metadata?.gitVersion || "-",
-        model: r.metadata?.modelId || "-",
-        profile: r.profile,
-        score: Math.round(r.overallScore),
-        passed: `${r.passedCount}/${r.totalTestCases}`,
-        duration: r.durationMs ? `${(r.durationMs / 1000).toFixed(1)}s` : "-",
-      }));
-
-      const runsTable = ui.dataTable(
-        [
-          { key: "id", label: "ID" },
-          { key: "time", label: t("evolution.time"), sortable: true },
-          { key: "version", label: t("evolution.versionTag") },
-          { key: "model", label: t("evolution.model") },
-          { key: "profile", label: t("evolution.profile"), render: "badge" },
-          { key: "score", label: t("evolution.score"), render: "progress" },
-          { key: "passed", label: t("evolution.passed") },
-          { key: "duration", label: t("evolution.duration") },
-        ],
-        runRows,
-        { onRowClick: "view_benchmark_run" }
-      );
-
-      tabContentIds["runs"] = ui.column([runsTable], { padding: 16 });
-    } else {
-      const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
-      tabContentIds["runs"] = ui.column([emptyText], { gap: 12, align: "center", padding: 24 });
-    }
-  }
-
-  // Suggestions tab content
-  if (data.activeTab === "suggestions") {
-    if (data.suggestions && data.suggestions.length > 0) {
-      const suggRows = data.suggestions.map((s) => ({
-        id: s.id.slice(0, 8),
-        time: new Date(s.timestamp).toLocaleString(),
-        type: s.type,
-        target: s.target,
-        status: s.status,
-        rationale: s.rationale?.slice(0, 50) || "-",
-      }));
-
-      const suggsTable = ui.dataTable(
-        [
-          { key: "id", label: "ID" },
-          { key: "time", label: t("evolution.time"), sortable: true },
-          { key: "type", label: t("evolution.type"), render: "badge" },
-          { key: "target", label: t("evolution.target") },
-          { key: "status", label: t("skills.status"), render: "badge" },
-          { key: "rationale", label: t("evolution.rationale") },
-        ],
-        suggRows,
-        { onRowClick: "view_suggestion" }
-      );
-
-      tabContentIds["suggestions"] = ui.column([suggsTable], { padding: 16 });
-    } else {
-      const emptyText = ui.text(t("evolution.noSuggestionsHint"), "caption");
-      tabContentIds["suggestions"] = ui.column([emptyText], {
-        gap: 12,
-        align: "center",
-        padding: 24,
-      });
-    }
-  }
-
-  // Config tab content — scoring categories & weights
-  if (data.activeTab === "config") {
-    const configChildren: string[] = [];
-
-    const configDesc = ui.text(t("evolution.configDesc"), "caption");
-    const filePath = ui.text("Skill: src/skills/benchmark-evaluator/SKILL.md", "caption");
-    configChildren.push(configDesc, filePath);
-
-    if (data.categoriesConfig) {
-      const cfg = data.categoriesConfig;
-
-      // Scoring thresholds
-      const thresholdRow = ui.row(
-        [
-          ui.statCard({
-            title: t("evolution.passingScore"),
-            value: cfg.passingScore,
-            icon: "target",
-            color: "#10b981",
-          }),
-          ui.statCard({
-            title: t("evolution.weakThreshold"),
-            value: cfg.weakCategoryThreshold,
-            icon: "alert-triangle",
-            color: "#f59e0b",
-          }),
-        ],
-        { gap: 16 }
-      );
-      configChildren.push(thresholdRow);
-
-      // Category cards
-      for (const cat of cfg.categories) {
-        const catTitle = ui.text(`${cat.label} (${cat.labelZh})`, "label");
-        const catWeight = ui.text(
-          `${t("evolution.weight")}: ${(cat.weight * 100).toFixed(0)}%`,
-          "caption"
-        );
-        const catDesc = ui.text(cat.description, "body");
-
-        // Dimension weights table
-        const dimRows = Object.entries(cat.dimensionWeights).map(([dim, w]) => ({
-          dimension: dim,
-          weight: `${((w as number) * 100).toFixed(0)}%`,
-        }));
-        const dimTable = ui.table(
-          [
-            { key: "dimension", label: t("evolution.dimension") },
-            { key: "weight", label: t("evolution.weight") },
-          ],
-          dimRows
-        );
-
-        configChildren.push(ui.card([catTitle, catWeight, catDesc, dimTable], { padding: 16 }));
-      }
-
-      // Edit hint
-      const editHint = ui.text(t("evolution.editConfigHint"), "caption");
-      configChildren.push(editHint);
-    } else {
-      const noConfig = ui.text(t("evolution.noConfigFile"), "caption");
-      configChildren.push(noConfig);
-    }
-
-    tabContentIds["config"] = ui.column(configChildren, { gap: 16, padding: 16 });
-  }
-
-  // Versions tab content
-  if (data.activeTab === "versions") {
-    const versionsChildren: string[] = [];
-
-    const versionsDesc = ui.text(t("evolution.versionsDesc"), "caption");
-    versionsChildren.push(versionsDesc);
-
-    // Active version indicator
-    if (data.activeVersionBranch) {
-      const activeBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
-      const activeLabel = ui.text(t("evolution.activeVersion"), "label");
-      const resetBtn = ui.button(t("evolution.resetToMain"), "switch_version", {
-        variant: "outline",
-        size: "sm",
-        payload: { branch: null },
-      });
-      versionsChildren.push(
-        ui.row([activeLabel, activeBadge, resetBtn], { gap: 8, align: "center" })
-      );
-    }
-
-    if (data.versions && data.versions.length > 0) {
-      const versionRows = data.versions.map((v) => ({
-        id: v.id.slice(0, 8),
-        branch: v.branchName,
-        status: v.status,
-        trigger: v.triggerMode || "-",
-        scoreDelta:
-          v.scoreDelta != null ? `${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(1)}` : "-",
-        files: v.filesChanged.length > 0 ? `${v.filesChanged.length} files` : "-",
-        created: new Date(v.createdAt).toLocaleString(),
-      }));
-
-      const versionsTable = ui.dataTable(
-        [
-          { key: "branch", label: t("evolution.versionBranch") },
-          { key: "status", label: t("evolution.versionStatus"), render: "badge" },
-          { key: "trigger", label: t("evolution.versionTrigger"), render: "badge" },
-          { key: "scoreDelta", label: t("evolution.scoreDelta") },
-          { key: "files", label: t("evolution.filesChanged") },
-          { key: "created", label: t("evolution.time"), sortable: true },
-        ],
-        versionRows,
-        { onRowClick: "view_version" }
-      );
-      versionsChildren.push(versionsTable);
-    } else {
-      const emptyText = ui.text(t("evolution.noVersions"), "caption");
-      versionsChildren.push(emptyText);
-    }
-
-    tabContentIds["versions"] = ui.column(versionsChildren, { gap: 16, padding: 16 });
-  }
-
-  const tabs = ui.tabs(
-    [
-      { id: "overview", label: t("evolution.overview"), icon: "bar-chart" },
-      { id: "traces", label: t("evolution.traces"), icon: "file-text" },
-      { id: "evaluations", label: t("evolution.evaluations"), icon: "star" },
-      { id: "benchmark", label: t("evolution.benchmark"), icon: "test-tube" },
-      { id: "runs", label: t("evolution.runs"), icon: "activity" },
-      { id: "suggestions", label: t("evolution.suggestions"), icon: "lightbulb" },
-      { id: "versions", label: t("evolution.versions"), icon: "sparkles" },
-      { id: "config", label: t("evolution.config"), icon: "settings" },
-    ],
-    data.activeTab,
-    tabContentIds
-  );
-
-  // Content container - tabs directly without card wrapper to avoid double glass effect
-  const content = ui.column([tabs], { gap: 24, padding: 24 });
-  const root = ui.column([header, content], { gap: 0 });
-
-  return ui.build(root);
 }
 
 // ============================================================================
@@ -2564,7 +1959,7 @@ export function generateCreateSkillModal(): A2UIMessage {
 
 export function generateBenchmarkModelSelectorModal(
   models: Array<{ name: string; label: string }>,
-  defaultProfile: "quick" | "full" = "quick"
+  _defaultProfile: "quick" | "full" = "quick"
 ): A2UIMessage {
   const ui = new A2UIGenerator("modal");
 

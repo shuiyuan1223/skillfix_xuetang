@@ -850,6 +850,30 @@ export function getBestCategoryScores(): CategoryScoreRow[] {
   return stmt.all() as CategoryScoreRow[];
 }
 
+/**
+ * Get the score trend: best overall_score per version_tag from benchmark_runs.
+ * Used for the Overview Tab line chart in Evolution Lab.
+ */
+export function getScoreTrend(
+  limit: number = 20
+): Array<{ version_tag: string; overall_score: number; timestamp: number }> {
+  const database = getDatabase();
+  const stmt = database.prepare(`
+    SELECT version_tag, MAX(overall_score) as overall_score, MAX(timestamp) as timestamp
+    FROM benchmark_runs
+    WHERE version_tag IS NOT NULL AND version_tag != ''
+    GROUP BY version_tag
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `);
+  const rows = stmt.all(limit) as Array<{
+    version_tag: string;
+    overall_score: number;
+    timestamp: number;
+  }>;
+  return rows.reverse();
+}
+
 // ============================================================================
 // Benchmark Result Operations
 // ============================================================================

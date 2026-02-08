@@ -28,21 +28,13 @@ import { getMemoryManager } from "../memory/index.js";
 installFetchInterceptor();
 import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
 import { getUserStore } from "../data-sources/huawei/user-store.js";
-import {
-  startOAuthSession,
-  completeOAuth,
-  getHuaweiAuthUrl,
-} from "../services/huawei-oauth-service.js";
+import { getHuaweiAuthUrl } from "../services/huawei-oauth-service.js";
 import { runOAuthFlowWithChrome } from "../services/chrome-mcp-client.js";
 import {
   generateChatPage,
-  generateHealthPage,
-  generateSleepPage,
-  generateActivityPage,
   generateMemoryPage,
   generatePromptsPage,
   generateSkillsPage,
-  generateEvolutionPage,
   generateBenchmarkRunDetailModal,
   generatePage,
   generateToast,
@@ -97,6 +89,7 @@ import {
   listCategoryScores,
   getBestCategoryScores,
   getBenchmarkRun,
+  getScoreTrend,
 } from "../memory/db.js";
 import { BenchmarkRunner } from "../evolution/benchmark-runner.js";
 import {
@@ -104,27 +97,22 @@ import {
   readBenchmarkProgress,
   clearBenchmarkProgress,
 } from "../evolution/benchmark-progress.js";
-import {
-  listEvolutionVersions,
-  getEvolutionVersionByBranch,
-  updateEvolutionVersion,
-  type EvolutionVersionRow,
-} from "../memory/db.js";
+import { listEvolutionVersions, getEvolutionVersionByBranch } from "../memory/db.js";
 import {
   readFileFromBranch,
   getChangedFilesOnBranch,
   mergeVersion,
   abandonVersion,
-  getCurrentBranch,
   getWorktreePath,
 } from "../evolution/version-manager.js";
-import { setSkillsDir, getSkillsDir } from "../tools/skill-tools.js";
+import { setSkillsDir } from "../tools/skill-tools.js";
 import { resetSkillCache } from "../agent/skill-trigger.js";
 import {
   generateEvolutionLab,
   getDefaultPipelineSteps,
   type EvolutionLabData,
 } from "./evolution-lab.js";
+import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
 
 export interface GatewayConfig {
   port?: number;
@@ -138,10 +126,6 @@ export interface GatewayConfig {
 interface WSMessage {
   type: string;
   [key: string]: unknown;
-}
-
-interface WSInitMessage extends WSMessage {
-  type: "init";
 }
 
 interface WSNavigateMessage extends WSMessage {
@@ -482,7 +466,6 @@ export function createGatewayApp() {
       }
 
       // Exchange code for token directly (no session needed for MCP flow)
-      const port = config.gateway.port || 8000;
       const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
 
       const token = await huaweiAuth.exchangeCodeForUser(
@@ -705,7 +688,10 @@ export class GatewaySession {
   // Evolution version state
   private activeVersionBranch: string | null = null;
 
-  // Evolution Lab state
+  // Evolution Lab state (5-Tab Dashboard)
+  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" | "agent" = "overview";
+  private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
+  private evolutionSelectedVersion: string | null = null;
   private evolutionChatMessages: Array<{
     role: "user" | "assistant" | "tool";
     content: string;
@@ -713,7 +699,6 @@ export class GatewaySession {
   }> = [];
   private evolutionStreaming = false;
   private evolutionStreamingContent = "";
-  private evolutionContextTab: "timeline" | "benchmarks" | "inspector" = "timeline";
   private evolutionPipelineStep: string | null = null;
   private evolutionInspectedBranch: string | null = null;
   private evolutionLabDiffContent: { before: string; after: string; path: string } | null = null;
@@ -751,6 +736,31 @@ export class GatewaySession {
         userUuid: this.userUuid || undefined,
         sessionId: this.sessionId,
         dataSource: this.dataSource,
+      });
+
+      // Configure evolution tools with agent capabilities
+      const AGENT_TIMEOUT_MS = 120_000;
+      const agentRef = this.agent;
+      setEvolutionRunnerConfig({
+        agentCall: async (query: string) => {
+          agentRef.reset();
+          const result = await Promise.race([
+            agentRef.chatAndWait(query).then((response: string) => ({ response })),
+            new Promise<{ response: string }>((_, reject) =>
+              setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+          return result;
+        },
+        llmCall: async (prompt: string) => {
+          const result = await Promise.race([
+            agentRef.chatAndWait(prompt),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error("LLM call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+          return result;
+        },
       });
     }
     return this.agent;
@@ -821,7 +831,6 @@ export class GatewaySession {
 
   private async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
     this.currentView = view;
-    const today = new Date().toISOString().split("T")[0];
 
     let mainPage;
 
@@ -1027,41 +1036,9 @@ export class GatewaySession {
       }
 
       case "settings/evolution-legacy": {
-        // Send loading page immediately
-        send(
-          generatePage(
-            "settings/evolution",
-            generateEvolutionPage({
-              activeTab: this.evolutionTab,
-              loading: true,
-            })
-          )
-        );
-
-        // Fetch data and re-send
-        try {
-          const evoData = this.loadEvolutionData();
-          send(generatePage(view, generateEvolutionPage(evoData)));
-
-          // Show external benchmark progress if running from CLI
-          const extProgress = readBenchmarkProgress();
-          if (extProgress && extProgress.source === "cli") {
-            const progress = generateBenchmarkProgress({
-              current: extProgress.current,
-              total: extProgress.total,
-              category: extProgress.category,
-              profile: extProgress.profile,
-            });
-            send({
-              type: "a2ui",
-              surface_id: "progress",
-              components: progress.components,
-              root_id: progress.root_id,
-            });
-          }
-        } catch (e) {
-          console.error("[Evolution] Load error:", e);
-        }
+        // Redirect legacy route to new Evolution Lab
+        this.currentView = "evolution";
+        await this.handleNavigate("evolution", send);
         return;
       }
 
@@ -1170,7 +1147,7 @@ export class GatewaySession {
 
   /**
    * Handle messages in the Evolution Lab chat.
-   * Agent receives the evolution-driver skill context and git tools.
+   * Forces evolution-driver skill injection and tracks pipeline steps.
    */
   private async handleEvolutionMessage(
     content: string,
@@ -1179,6 +1156,28 @@ export class GatewaySession {
     this.evolutionChatMessages.push({ role: "user", content });
     this.evolutionStreaming = true;
     this.evolutionStreamingContent = "";
+
+    // Check for user approval/rejection responses
+    const lowerContent = content.toLowerCase();
+    if (
+      this.evolutionPipelineStep === "propose" &&
+      (lowerContent.includes("approve") ||
+        lowerContent.includes("批准") ||
+        lowerContent.includes("同意") ||
+        lowerContent.includes("可以") ||
+        lowerContent.includes("好的"))
+    ) {
+      this.evolutionPipelineStep = "approve";
+    } else if (
+      this.evolutionPipelineStep === "propose" &&
+      (lowerContent.includes("reject") ||
+        lowerContent.includes("拒绝") ||
+        lowerContent.includes("不行") ||
+        lowerContent.includes("修改"))
+    ) {
+      // Stay at propose, agent will revise
+    }
+
     this.sendEvolutionLabUpdate(send);
 
     try {
@@ -1192,6 +1191,10 @@ export class GatewaySession {
               if (block.type === "text") text += block.text;
             }
             this.evolutionStreamingContent = text;
+
+            // Detect pipeline steps from assistant content
+            this.detectPipelineStepFromContent(text);
+
             this.sendEvolutionLabUpdate(send);
           }
         } else if (event.type === "message_end") {
@@ -1205,6 +1208,9 @@ export class GatewaySession {
                 role: "assistant",
                 content: text,
               });
+
+              // Final content-based step detection
+              this.detectPipelineStepFromContent(text);
             }
             this.evolutionStreaming = false;
             this.evolutionStreamingContent = "";
@@ -1212,20 +1218,10 @@ export class GatewaySession {
           }
         } else if (event.type === "tool_execution_start") {
           const toolName = event.toolName as string;
-          // Update context panel based on tool calls
-          if (toolName === "run_benchmark") {
-            this.evolutionContextTab = "benchmarks";
-          } else if (toolName?.startsWith("git_") && toolName !== "git_status") {
-            this.evolutionContextTab = "timeline";
-          }
+
           // Detect pipeline step from tool usage
-          if (toolName === "run_benchmark" && !this.evolutionPipelineStep) {
-            this.evolutionPipelineStep = "benchmark";
-          } else if (toolName === "git_branch_create") {
-            this.evolutionPipelineStep = "apply";
-          } else if (toolName === "git_merge") {
-            this.evolutionPipelineStep = "validate";
-          }
+          this.detectPipelineStepFromTool(toolName);
+
           this.evolutionChatMessages.push({
             role: "tool",
             content: `Using ${toolName}...`,
@@ -1238,10 +1234,8 @@ export class GatewaySession {
       });
 
       try {
-        // Inject evolution-driver skill context into the message
-        const evoPrefix =
-          "[Evolution Lab] User is in the Evolution Lab. You have the evolution-driver skill loaded. ";
-        await agent.chat(evoPrefix + content);
+        // Force-inject evolution-driver skill (Task #8)
+        await agent.chatWithSkill(content, "evolution-driver");
         await agent.getAgent().waitForIdle();
       } finally {
         unsubscribe();
@@ -1253,6 +1247,92 @@ export class GatewaySession {
         content: `Error: ${error instanceof Error ? error.message : String(error)}`,
       });
       this.sendEvolutionLabUpdate(send);
+    }
+  }
+
+  /**
+   * Detect pipeline step from tool name (Task #9).
+   */
+  private detectPipelineStepFromTool(toolName: string): void {
+    const STEP_ORDER = ["benchmark", "diagnose", "propose", "approve", "apply", "validate"];
+    const currentIdx = this.evolutionPipelineStep
+      ? STEP_ORDER.indexOf(this.evolutionPipelineStep)
+      : -1;
+
+    let newStep: string | null = null;
+
+    if (toolName === "run_benchmark") {
+      // First benchmark = step 1, second benchmark (after apply) = validate
+      if (currentIdx >= STEP_ORDER.indexOf("apply")) {
+        newStep = "validate";
+      } else if (currentIdx < STEP_ORDER.indexOf("benchmark")) {
+        newStep = "benchmark";
+      }
+    } else if (toolName === "run_diagnose") {
+      if (currentIdx <= STEP_ORDER.indexOf("diagnose")) {
+        newStep = "diagnose";
+      }
+    } else if (toolName === "git_branch_create") {
+      newStep = "apply";
+    } else if (
+      toolName === "git_commit" ||
+      toolName === "update_prompt" ||
+      toolName === "update_skill"
+    ) {
+      if (currentIdx < STEP_ORDER.indexOf("apply")) {
+        newStep = "apply";
+      }
+    } else if (
+      toolName === "git_merge" ||
+      toolName === "git_revert" ||
+      toolName === "git_branch_delete"
+    ) {
+      // Post-validate actions
+    }
+
+    if (newStep) {
+      const newIdx = STEP_ORDER.indexOf(newStep);
+      if (newIdx > currentIdx) {
+        this.evolutionPipelineStep = newStep;
+      }
+    }
+  }
+
+  /**
+   * Detect pipeline step from assistant message content (Task #9).
+   */
+  private detectPipelineStepFromContent(text: string): void {
+    const STEP_ORDER = ["benchmark", "diagnose", "propose", "approve", "apply", "validate"];
+    const currentIdx = this.evolutionPipelineStep
+      ? STEP_ORDER.indexOf(this.evolutionPipelineStep)
+      : -1;
+
+    const lower = text.toLowerCase();
+
+    // Only advance forward, never go backwards
+    if (
+      currentIdx < STEP_ORDER.indexOf("diagnose") &&
+      (lower.includes("analyzing") ||
+        lower.includes("diagnosing") ||
+        lower.includes("分析结果") ||
+        lower.includes("诊断"))
+    ) {
+      if (currentIdx >= STEP_ORDER.indexOf("benchmark")) {
+        this.evolutionPipelineStep = "diagnose";
+      }
+    } else if (
+      currentIdx < STEP_ORDER.indexOf("propose") &&
+      (lower.includes("i recommend") ||
+        lower.includes("i suggest") ||
+        lower.includes("i propose") ||
+        lower.includes("建议修改") ||
+        lower.includes("提案") ||
+        lower.includes("方案如下") ||
+        lower.includes("改进方案"))
+    ) {
+      if (currentIdx >= STEP_ORDER.indexOf("diagnose")) {
+        this.evolutionPipelineStep = "propose";
+      }
     }
   }
 
@@ -1409,29 +1489,43 @@ export class GatewaySession {
     // Evolution Lab actions
     else if (action === "evo_send_message" && payload?.value) {
       await this.handleEvolutionMessage(payload.value as string, send);
-    } else if (action === "evo_context_tab_change" && payload?.tab) {
-      this.evolutionContextTab = payload.tab as "timeline" | "benchmarks" | "inspector";
+    } else if (action === "evo_tab_change" && payload?.tab) {
+      this.evolutionActiveTab = payload.tab as
+        | "overview"
+        | "benchmark"
+        | "versions"
+        | "data"
+        | "agent";
       this.sendEvolutionLabUpdate(send);
+    } else if (action === "evo_data_subtab_change" && payload?.tab) {
+      this.evolutionDataSubTab = payload.tab as "traces" | "evaluations" | "suggestions";
+      this.sendEvolutionLabUpdate(send);
+    } else if (action === "view_version" && payload?.row) {
+      const row = payload.row as { branch?: string };
+      if (row.branch) {
+        this.evolutionSelectedVersion = row.branch;
+        this.evolutionInspectedBranch = row.branch;
+        this.evolutionLabDiffContent = null;
+        this.sendEvolutionLabUpdate(send);
+      }
     } else if (action === "evo_timeline_click" && payload?.id) {
-      // Extract branch from timeline event, switch inspector to it
       const eventId = payload.id as string;
       if (eventId.startsWith("ver_")) {
-        // Version event — inspect the branch
         const branch = payload.branch as string | undefined;
         if (branch) {
+          this.evolutionSelectedVersion = branch;
           this.evolutionInspectedBranch = branch;
-          this.evolutionContextTab = "inspector";
+          this.evolutionLabDiffContent = null;
           this.sendEvolutionLabUpdate(send);
         }
       }
     } else if (action === "evo_file_select" && payload?.path) {
-      // Load diff for selected file in Inspector
-      if (this.evolutionInspectedBranch) {
+      const inspectBranch = this.evolutionSelectedVersion || this.evolutionInspectedBranch;
+      if (inspectBranch) {
         try {
           const filePath = payload.path as string;
-          const afterContent = readFileFromBranch(this.evolutionInspectedBranch, filePath) || "";
+          const afterContent = readFileFromBranch(inspectBranch, filePath) || "";
           const beforeContent = readFileFromBranch("main", filePath) || "";
-          // Store diff and re-render
           this.evolutionLabDiffContent = {
             before: beforeContent,
             after: afterContent,
@@ -1442,6 +1536,19 @@ export class GatewaySession {
           console.error("[Evolution Lab] File select error:", e);
         }
       }
+    }
+    // Evolution Lab: Approve/Reject proposal
+    else if (action === "evo_approve") {
+      this.evolutionPipelineStep = "approve";
+      await this.handleEvolutionMessage(
+        "I approve this proposal. Please proceed with applying the changes.",
+        send
+      );
+    } else if (action === "evo_reject") {
+      await this.handleEvolutionMessage(
+        "I reject this proposal. Please revise the plan and propose again.",
+        send
+      );
     }
     // Evolution actions (legacy)
     else if (action === "tab_change" && payload?.tab) {
@@ -1510,7 +1617,12 @@ export class GatewaySession {
           );
         }
       } else if (this.currentView === "evolution") {
-        this.evolutionContextTab = payload.tab as "timeline" | "benchmarks" | "inspector";
+        this.evolutionActiveTab = payload.tab as
+          | "overview"
+          | "benchmark"
+          | "versions"
+          | "data"
+          | "agent";
         this.sendEvolutionLabUpdate(send);
       } else {
         type EvolutionTab =
@@ -1549,7 +1661,11 @@ export class GatewaySession {
       }
     } else if (action === "traces_page_change" && payload?.page !== undefined) {
       this.tracesPage = payload.page as number;
-      await this.handleNavigate("settings/evolution", send);
+      if (this.currentView === "evolution") {
+        this.sendEvolutionLabUpdate(send);
+      } else {
+        await this.handleNavigate("settings/evolution", send);
+      }
     } else if (action === "view_trace" && payload?.row) {
       const row = payload.row as { id: string };
       const traceId = row.id.length === 8 ? this.findFullTraceId(row.id) : row.id;
@@ -1818,7 +1934,11 @@ export class GatewaySession {
           components: toast.components,
           root_id: toast.root_id,
         });
-        await this.handleNavigate("settings/evolution", send);
+        if (this.currentView === "evolution") {
+          this.sendEvolutionLabUpdate(send);
+        } else {
+          await this.handleNavigate("settings/evolution", send);
+        }
       } catch (error) {
         const toast = generateToast(
           `Failed to switch version: ${error instanceof Error ? error.message : String(error)}`,
@@ -1842,7 +1962,11 @@ export class GatewaySession {
           components: toast.components,
           root_id: toast.root_id,
         });
-        await this.handleNavigate("settings/evolution", send);
+        if (this.currentView === "evolution") {
+          this.sendEvolutionLabUpdate(send);
+        } else {
+          await this.handleNavigate("settings/evolution", send);
+        }
       } catch (error) {
         const toast = generateToast(
           `Failed to merge: ${error instanceof Error ? error.message : String(error)}`,
@@ -1868,7 +1992,12 @@ export class GatewaySession {
           components: toast.components,
           root_id: toast.root_id,
         });
-        await this.handleNavigate("settings/evolution", send);
+        if (this.currentView === "evolution") {
+          this.evolutionSelectedVersion = null;
+          this.sendEvolutionLabUpdate(send);
+        } else {
+          await this.handleNavigate("settings/evolution", send);
+        }
       } catch (error) {
         const toast = generateToast(
           `Failed to abandon: ${error instanceof Error ? error.message : String(error)}`,
@@ -1879,76 +2008,6 @@ export class GatewaySession {
           surface_id: "toast",
           components: toast.components,
           root_id: toast.root_id,
-        });
-      }
-    } else if (action === "view_version" && payload?.row) {
-      const row = payload.row as { branch: string };
-      const version = getEvolutionVersionByBranch(row.branch);
-      if (version) {
-        const filesChanged = version.files_changed ? JSON.parse(version.files_changed) : [];
-        // Build a simple detail card and show as modal
-        const ui = new (await import("./a2ui.js")).A2UIGenerator("modal");
-        const title = ui.text(row.branch, "h3");
-        const statusBadge = ui.badge(version.status || "active", {
-          variant:
-            version.status === "active"
-              ? "success"
-              : version.status === "merged"
-                ? "info"
-                : "warning",
-        });
-        const triggerText = ui.text(
-          `${t("evolution.versionTrigger")}: ${version.trigger_mode || "-"} ${version.trigger_ref || ""}`,
-          "body"
-        );
-        const deltaText = ui.text(
-          `${t("evolution.scoreDelta")}: ${version.score_delta != null ? (version.score_delta > 0 ? "+" : "") + version.score_delta.toFixed(1) : "-"}`,
-          "body"
-        );
-        const filesText = ui.text(
-          `${t("evolution.filesChanged")}: ${filesChanged.length > 0 ? filesChanged.join(", ") : "-"}`,
-          "body"
-        );
-        const createdText = ui.text(
-          `${t("evolution.time")}: ${new Date(version.created_at).toLocaleString()}`,
-          "caption"
-        );
-
-        const children = [title, statusBadge, triggerText, deltaText, filesText, createdText];
-
-        // Action buttons
-        if (version.status === "active") {
-          const switchBtn = ui.button(t("evolution.switchVersion"), "switch_version", {
-            variant: "primary",
-            size: "sm",
-            payload: { branch: row.branch },
-          });
-          const mergeBtn = ui.button(t("evolution.mergeVersion"), "merge_version", {
-            variant: "secondary",
-            size: "sm",
-            payload: { branch: row.branch },
-          });
-          const abandonBtn = ui.button(t("evolution.abandonVersion"), "abandon_version", {
-            variant: "outline",
-            size: "sm",
-            payload: { branch: row.branch },
-          });
-          children.push(ui.row([switchBtn, mergeBtn, abandonBtn], { gap: 8 }));
-        }
-
-        const closeBtn = ui.button(t("common.cancel"), "close_modal", {
-          variant: "outline",
-          size: "sm",
-        });
-        children.push(closeBtn);
-
-        const modal = ui.column(children, { gap: 12, padding: 16 });
-        const built = ui.build(modal);
-        send({
-          type: "a2ui",
-          surface_id: "modal",
-          components: built.components,
-          root_id: built.root_id,
         });
       }
     } else if (action === "view_benchmark_run" && payload?.row) {
@@ -2122,44 +2181,28 @@ export class GatewaySession {
   }
 
   /**
-   * Build data for the Evolution Lab dual-panel page.
+   * Build data for the Evolution Lab 5-Tab Dashboard.
    */
   private buildEvolutionLabData(): EvolutionLabData {
-    // Timeline events from evolution versions + benchmark runs
-    const timelineEvents: EvolutionLabData["timelineEvents"] = [];
+    const activeTab = this.evolutionActiveTab;
 
-    // Gather version events
-    try {
-      const versions = listEvolutionVersions({ limit: 20 });
-      for (const v of versions) {
-        const eventType =
-          v.status === "merged" ? "merge" : v.status === "abandoned" ? "revert" : "branch";
-        timelineEvents.push({
-          id: `ver_${v.id}`,
-          type: eventType as "branch" | "merge" | "revert",
-          label: v.branch_name,
-          description: v.trigger_mode || undefined,
-          timestamp: v.created_at,
-          branch: v.branch_name,
-          status:
-            v.status === "merged"
-              ? "success"
-              : v.status === "abandoned"
-                ? "failed"
-                : v.status === "active"
-                  ? "active"
-                  : "pending",
-        });
-      }
-    } catch {
-      // evolution_versions table may not exist yet
-    }
-
-    // Gather benchmark run events
+    // Common data loaded for multiple tabs
     let latestCategoryScores: EvolutionLabData["latestCategoryScores"];
     let benchmarkRunsList: EvolutionLabData["benchmarkRuns"];
+    let stats: EvolutionLabData["stats"];
+    let scoreTrend: EvolutionLabData["scoreTrend"];
+    let versionCount = 0;
+    let testCaseCount = 0;
+
+    // Timeline events (for Versions tab)
+    const timelineEvents: NonNullable<EvolutionLabData["timelineEvents"]> = [];
+
+    // Versions list
+    let versions: EvolutionLabData["versions"];
+
+    // Always load benchmark runs (used by overview + benchmark tabs)
     try {
-      const runs = listBenchmarkRuns({ limit: 10 });
+      const runs = listBenchmarkRuns({ limit: 20 });
       benchmarkRunsList = runs.map((r) => ({
         id: r.id,
         timestamp: r.timestamp,
@@ -2171,18 +2214,6 @@ export class GatewaySession {
         profile: r.profile,
         duration_ms: r.duration_ms || 0,
       }));
-
-      for (const r of runs) {
-        timelineEvents.push({
-          id: `bench_${r.id}`,
-          type: "benchmark",
-          label: `Benchmark ${r.version_tag || r.profile}`,
-          description: `Score: ${Math.round(r.overall_score)} (${r.passed_count}/${r.total_test_cases} passed)`,
-          timestamp: r.timestamp,
-          score: r.overall_score,
-          status: r.overall_score >= 70 ? "success" : "failed",
-        });
-      }
 
       const bestScores = getBestCategoryScores();
       if (bestScores.length > 0) {
@@ -2197,39 +2228,242 @@ export class GatewaySession {
       // benchmark tables may not exist yet
     }
 
-    // Sort timeline by timestamp descending
-    timelineEvents.sort((a, b) => b.timestamp - a.timestamp);
-
-    // Inspector data
-    let changedFiles: EvolutionLabData["changedFiles"];
-    const diffContent = this.evolutionLabDiffContent || undefined;
-    if (this.evolutionInspectedBranch) {
+    // Overview: stats + score trend + counts
+    if (activeTab === "overview") {
       try {
-        const filePaths = getChangedFilesOnBranch(this.evolutionInspectedBranch);
-        changedFiles = filePaths.map((filePath) => ({
-          path: filePath,
-          status: "modified" as const,
+        stats = getEvaluationStats();
+      } catch {
+        // ok
+      }
+      try {
+        const trend = getScoreTrend(10);
+        if (trend.length > 0) {
+          scoreTrend = trend.map((t) => ({
+            version: t.version_tag,
+            score: t.overall_score,
+          }));
+        }
+      } catch {
+        // ok
+      }
+      try {
+        testCaseCount = listTestCases({ limit: 1000 }).length;
+      } catch {
+        // ok
+      }
+      try {
+        versionCount = listEvolutionVersions().length;
+      } catch {
+        // ok
+      }
+    }
+
+    // Benchmark: test cases + external progress
+    let testCases: EvolutionLabData["testCases"];
+    let externalProgress: EvolutionLabData["externalProgress"];
+    if (activeTab === "benchmark") {
+      try {
+        const tcRows = listTestCases({ limit: 50 });
+        testCases = tcRows.map((tc) => ({
+          id: tc.id,
+          category: tc.category,
+          query: tc.query,
+          expected: JSON.parse(tc.expected),
         }));
       } catch {
-        // branch may not exist
+        // ok
+      }
+      const extProg = readBenchmarkProgress();
+      if (extProg && extProg.source === "cli") {
+        externalProgress = {
+          current: extProg.current,
+          total: extProg.total,
+          category: extProg.category,
+          profile: extProg.profile,
+          modelId: extProg.modelId,
+        };
+      }
+    }
+
+    // Versions: timeline events + version list + inspector data
+    let changedFiles: EvolutionLabData["changedFiles"];
+    const diffContent = this.evolutionLabDiffContent || undefined;
+    if (activeTab === "versions") {
+      try {
+        const versionRows = listEvolutionVersions({ limit: 20 });
+        versions = versionRows.map((v) => ({
+          id: v.id,
+          branchName: v.branch_name,
+          status: v.status || "active",
+          triggerMode: v.trigger_mode || "",
+          triggerRef: v.trigger_ref || "",
+          scoreDelta: v.score_delta,
+          filesChanged: v.files_changed ? JSON.parse(v.files_changed) : [],
+          createdAt: v.created_at,
+        }));
+
+        for (const v of versionRows) {
+          const eventType =
+            v.status === "merged" ? "merge" : v.status === "abandoned" ? "revert" : "branch";
+          timelineEvents.push({
+            id: `ver_${v.id}`,
+            type: eventType as "branch" | "merge" | "revert",
+            label: v.branch_name,
+            description: v.trigger_mode || undefined,
+            timestamp: v.created_at,
+            branch: v.branch_name,
+            status:
+              v.status === "merged"
+                ? "success"
+                : v.status === "abandoned"
+                  ? "failed"
+                  : v.status === "active"
+                    ? "active"
+                    : "pending",
+          });
+        }
+      } catch {
+        // evolution_versions table may not exist yet
+      }
+
+      // Add benchmark events to timeline
+      if (benchmarkRunsList) {
+        for (const r of benchmarkRunsList) {
+          timelineEvents.push({
+            id: `bench_${r.id}`,
+            type: "benchmark",
+            label: `Benchmark ${r.version_tag || r.profile}`,
+            description: `Score: ${Math.round(r.overall_score)} (${r.passed_count}/${r.total_test_cases} passed)`,
+            timestamp: r.timestamp,
+            score: r.overall_score,
+            status: r.overall_score >= 70 ? "success" : "failed",
+          });
+        }
+      }
+
+      timelineEvents.sort((a, b) => b.timestamp - a.timestamp);
+
+      // Inspector data for selected version
+      const inspectBranch = this.evolutionSelectedVersion || this.evolutionInspectedBranch;
+      if (inspectBranch) {
+        try {
+          const filePaths = getChangedFilesOnBranch(inspectBranch);
+          changedFiles = filePaths.map((filePath) => ({
+            path: filePath,
+            status: "modified" as const,
+          }));
+        } catch {
+          // branch may not exist
+        }
+      }
+    }
+
+    // Data: traces / evaluations / suggestions
+    let traces: EvolutionLabData["traces"];
+    let tracesTotal = 0;
+    let evaluations: EvolutionLabData["evaluations"];
+    let suggestions: EvolutionLabData["suggestions"];
+    if (activeTab === "data") {
+      const subTab = this.evolutionDataSubTab;
+      if (subTab === "traces") {
+        try {
+          const traceRows = listTraces({ limit: 20, offset: this.tracesPage * 20 });
+          tracesTotal = countTraces();
+          traces = traceRows.map((tr) => {
+            const evalResult = getEvaluationByTraceId(tr.id);
+            return {
+              id: tr.id,
+              timestamp: tr.timestamp,
+              userMessage: tr.user_message,
+              score: evalResult?.overall_score,
+            };
+          });
+        } catch {
+          // ok
+        }
+      } else if (subTab === "evaluations") {
+        try {
+          const evalRows = listEvaluations({ limit: 50 });
+          evaluations = evalRows.map((e) => ({
+            id: e.id,
+            traceId: e.trace_id,
+            timestamp: e.timestamp,
+            score: e.overall_score,
+            feedback: e.feedback,
+          }));
+        } catch {
+          // ok
+        }
+      } else if (subTab === "suggestions") {
+        try {
+          const suggRows = listSuggestions({ limit: 50 });
+          suggestions = suggRows.map((s) => ({
+            id: s.id,
+            timestamp: s.timestamp,
+            type: s.type,
+            target: s.target,
+            status: s.status,
+            rationale: s.rationale,
+          }));
+        } catch {
+          // ok
+        }
+      }
+    }
+
+    // Agent context data
+    let agentContextData: EvolutionLabData["agentContextData"];
+    if (activeTab === "agent") {
+      agentContextData = {
+        radarScores: latestCategoryScores,
+      };
+      // If there's an inspected branch, include its changed files
+      if (this.evolutionInspectedBranch) {
+        try {
+          const filePaths = getChangedFilesOnBranch(this.evolutionInspectedBranch);
+          agentContextData.changedFiles = filePaths.map((p) => ({
+            path: p,
+            status: "modified" as const,
+          }));
+        } catch {
+          // ok
+        }
       }
     }
 
     return {
+      activeTab,
+      // Overview
+      stats,
+      latestCategoryScores,
+      benchmarkRuns: benchmarkRunsList,
+      activeVersionBranch: this.activeVersionBranch,
+      scoreTrend,
+      versionCount,
+      testCaseCount,
+      // Benchmark
+      testCases,
+      externalProgress,
+      // Versions
+      versions,
+      timelineEvents: timelineEvents.length > 0 ? timelineEvents : undefined,
+      selectedVersion: this.evolutionSelectedVersion || undefined,
+      changedFiles,
+      diffContent,
+      // Data
+      dataSubTab: this.evolutionDataSubTab,
+      traces,
+      tracesPage: this.tracesPage,
+      tracesTotal,
+      evaluations,
+      suggestions,
+      // Agent
       chatMessages: this.evolutionChatMessages,
       streaming: this.evolutionStreaming,
       streamingContent: this.evolutionStreamingContent,
       currentPipelineStep: this.evolutionPipelineStep || undefined,
       pipelineSteps: getDefaultPipelineSteps(this.evolutionPipelineStep || undefined),
-      contextTab: this.evolutionContextTab,
-      timelineEvents,
-      activeBranch: this.activeVersionBranch || undefined,
-      latestCategoryScores,
-      benchmarkRuns: benchmarkRunsList,
-      inspectedBranch: this.evolutionInspectedBranch || undefined,
-      changedFiles,
-      diffContent,
-      activeVersionBranch: this.activeVersionBranch,
+      agentContextData,
     };
   }
 
@@ -2562,7 +2796,11 @@ export class GatewaySession {
       }, 2000);
 
       // Refresh evolution page
-      await this.handleNavigate("settings/evolution", send);
+      if (this.currentView === "evolution") {
+        this.sendEvolutionLabUpdate(send);
+      } else {
+        await this.handleNavigate("settings/evolution", send);
+      }
     } catch (error) {
       // Clear progress surface
       send({ type: "clear_surface", surface_id: "progress" });
@@ -2650,7 +2888,11 @@ export class GatewaySession {
       });
 
       // Refresh evolution page
-      await this.handleNavigate("settings/evolution", send);
+      if (this.currentView === "evolution") {
+        this.sendEvolutionLabUpdate(send);
+      } else {
+        await this.handleNavigate("settings/evolution", send);
+      }
     } catch (error) {
       const toast = generateToast(
         `Diagnose failed: ${error instanceof Error ? error.message : String(error)}`,

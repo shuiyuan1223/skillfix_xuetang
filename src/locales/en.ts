@@ -187,6 +187,8 @@ export const en: LocaleMessages = {
     description: "Description",
     status: "Status",
     triggers: "Triggers",
+    phaSkills: "PHA Skills",
+    systemSkills: "System Skills",
   },
 
   evolution: {
@@ -329,6 +331,23 @@ export const en: LocaleMessages = {
     benchmarkRan: "Benchmark ran",
     selectFileToView: "Select a file to view changes",
     noChanges: "No changes detected",
+    approveProposal: "Approve",
+    rejectProposal: "Reject",
+    // Dashboard tabs
+    tabOverview: "Overview",
+    tabBenchmark: "Benchmark",
+    tabVersions: "Versions",
+    tabData: "Data",
+    tabAgent: "Agent",
+    // Overview
+    currentVersion: "Current Version",
+    scoreTrend: "Score Trend",
+    // Agent tab
+    agentSubtitle: "Agent-driven auto-evolution",
+    agentContext: "Context",
+    startEvolution: "Start Evolution",
+    // Version detail
+    versionDetail: "Version Detail",
   },
 
   memory: {

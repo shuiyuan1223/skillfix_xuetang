@@ -127,6 +127,44 @@ ${message}`;
 }
 
 /**
+ * Force-load a specific skill by name and inject it into the message.
+ * Used by Evolution Lab to guarantee the evolution-driver skill is always present.
+ * Falls back to enrichWithSkills if the skill is not found.
+ */
+export function enrichWithForcedSkill(message: string, skillName: string): string {
+  const skills = getSkillEntries();
+  const forcedSkill = skills.find((s) => s.name === skillName);
+
+  if (!forcedSkill) {
+    // Skill not found, fall back to normal enrichment
+    return enrichWithSkills(message);
+  }
+
+  // Check if enrichWithSkills would already include it
+  const matched = matchSkills(message);
+  const alreadyIncluded = matched.some((s) => s.name === skillName);
+
+  if (alreadyIncluded) {
+    // Already matched by triggers, use normal flow
+    return enrichWithSkills(message);
+  }
+
+  // Force inject the skill + any other trigger-matched skills
+  const allSkills = [forcedSkill, ...matched.filter((s) => s.name !== skillName)];
+  const skillSections = allSkills
+    .map((skill) => `<skill-guide name="${skill.name}">\n${skill.body}\n</skill-guide>`)
+    .join("\n\n");
+
+  return `The following professional skill guide(s) are relevant to this conversation. Follow the guidance within when responding.
+
+${skillSections}
+
+---
+
+${message}`;
+}
+
+/**
  * Reset the skill cache (useful for testing or after skill modifications).
  */
 export function resetSkillCache(): void {

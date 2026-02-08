@@ -186,6 +186,8 @@ export const zhCN: LocaleMessages = {
     description: "描述",
     status: "状态",
     triggers: "触发词",
+    phaSkills: "PHA 技能",
+    systemSkills: "系统技能",
   },
 
   evolution: {
@@ -324,6 +326,23 @@ export const zhCN: LocaleMessages = {
     benchmarkRan: "基准测试已运行",
     selectFileToView: "选择文件查看变更",
     noChanges: "未检测到变更",
+    approveProposal: "批准",
+    rejectProposal: "拒绝",
+    // Dashboard tabs
+    tabOverview: "概览",
+    tabBenchmark: "基准测试",
+    tabVersions: "版本",
+    tabData: "数据",
+    tabAgent: "Agent",
+    // Overview
+    currentVersion: "当前版本",
+    scoreTrend: "分数趋势",
+    // Agent tab
+    agentSubtitle: "Agent 驱动的自动进化",
+    agentContext: "上下文",
+    startEvolution: "开始进化",
+    // Version detail
+    versionDetail: "版本详情",
   },
 
   memory: {

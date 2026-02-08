@@ -10,13 +10,13 @@ import {
   type AgentEvent,
   type AgentMessage,
 } from "@mariozechner/pi-agent-core";
-import { getModel, type Model, type KnownProvider } from "@mariozechner/pi-ai";
+import { getModel, type Model } from "@mariozechner/pi-ai";
 import { healthAgentTools, createHealthAgentTools } from "./tools.js";
 import { getMemoryManager } from "../memory/index.js";
 import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/compaction.js";
 import { getUserUuid } from "../utils/config.js";
 import { preComputeHealthContext } from "./health-context.js";
-import { enrichWithSkills } from "./skill-trigger.js";
+import { enrichWithSkills, enrichWithForcedSkill } from "./skill-trigger.js";
 
 export type LLMProvider =
   | "anthropic"
@@ -221,6 +221,15 @@ export class PHAAgent {
    */
   async chat(message: string): Promise<void> {
     const enriched = enrichWithSkills(message);
+    await this.agent.prompt(enriched);
+  }
+
+  /**
+   * Send a message with a specific skill force-injected.
+   * Used by Evolution Lab to guarantee the evolution-driver skill is always present.
+   */
+  async chatWithSkill(message: string, skillName: string): Promise<void> {
+    const enriched = enrichWithForcedSkill(message, skillName);
     await this.agent.prompt(enriched);
   }
 
