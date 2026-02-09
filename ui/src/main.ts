@@ -4858,14 +4858,18 @@ class PHAApp extends LitElement {
         grid-template-columns: 1fr !important;
       }
 
-      /* Cards: compact */
+      /* Cards: compact + remove blur for clarity on mobile */
       .a2ui-card {
         border-radius: 12px;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
       }
 
       .a2ui-stat-card {
         padding: 16px;
         border-radius: 12px;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
       }
 
       /* Tables: horizontal scroll */
@@ -4942,14 +4946,31 @@ class PHAApp extends LitElement {
 
       /* ---- Evolution Lab mobile optimizations ---- */
 
-      /* Grid background: reduce density for perf */
+      /* Mobile: disable grid background and animation to reduce visual noise */
       .evo-lab {
-        background-size: 30px 30px;
+        background-image: none;
+        animation: none;
       }
 
+      /* Mobile: remove the glow overlay entirely — prevents the "foggy" look */
       .evo-lab::before {
-        width: 80%;
-        height: 80px;
+        display: none;
+      }
+
+      /* Mobile: make cards fully opaque — no frosted glass effect */
+      .evo-lab .a2ui-card {
+        background: var(--color-bg-secondary);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        border-color: var(--color-border);
+      }
+
+      .evo-lab .a2ui-stat-card {
+        background: var(--color-bg-secondary);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       }
 
       /* Stat cards: 2-column grid instead of 1 */
@@ -5018,18 +5039,14 @@ class PHAApp extends LitElement {
 
       /* Disable heavy hover effects on touch devices */
       .evo-lab .a2ui-card:hover {
-        border-color: rgba(0, 229, 255, 0.15);
-        box-shadow:
-          0 0 15px rgba(0, 229, 255, 0.05),
-          0 8px 32px rgba(0, 0, 0, 0.1);
+        border-color: var(--color-border);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       }
 
       .evo-lab .a2ui-stat-card:hover {
         transform: none;
-        border-color: rgba(0, 229, 255, 0.15);
-        box-shadow:
-          0 0 15px rgba(0, 229, 255, 0.05),
-          0 8px 32px rgba(0, 0, 0, 0.1);
+        border-color: var(--color-border);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
       }
 
       .evo-lab .a2ui-button-primary:hover {
