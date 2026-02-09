@@ -4858,9 +4858,22 @@ class PHAApp extends LitElement {
         grid-template-columns: 1fr !important;
       }
 
-      /* Cards: compact + remove blur for clarity on mobile */
+      /* Mobile: disable decorative grid overlay that causes foggy layering */
+      .shell.theme-dark::before {
+        display: none;
+      }
+
+      /* Mobile: remove all backdrop-filter and make surfaces opaque */
+      .surface-main {
+        background: var(--color-bg);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      /* Cards: compact + opaque on mobile */
       .a2ui-card {
         border-radius: 12px;
+        background: var(--color-bg-secondary);
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
       }
@@ -4868,6 +4881,53 @@ class PHAApp extends LitElement {
       .a2ui-stat-card {
         padding: 16px;
         border-radius: 12px;
+        background: var(--color-bg-secondary);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      /* Chat: opaque backgrounds, no blur */
+      .a2ui-chat-input {
+        background: var(--color-bg);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      .a2ui-chat-input-field {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      .a2ui-message-assistant .a2ui-message-content {
+        background: var(--color-bg-secondary);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      .a2ui-message-cards {
+        background: var(--color-bg-secondary);
+      }
+
+      /* Suggestions, tables, collapsibles: opaque */
+      .a2ui-suggestion {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+      }
+
+      .a2ui-data-table-container {
+        background: var(--color-bg-secondary);
+      }
+
+      .a2ui-collapsible {
+        background: var(--color-bg-secondary);
+      }
+
+      .a2ui-commit-item {
+        background: var(--color-bg-secondary);
+      }
+
+      /* Chat empty state icon: no blur */
+      .a2ui-chat-empty-icon {
         backdrop-filter: none;
         -webkit-backdrop-filter: none;
       }
@@ -5084,10 +5144,47 @@ class PHAApp extends LitElement {
         display: none;
       }
 
-      /* Collapsible: compact on mobile */
+      /* Collapsible: compact + opaque on mobile */
+      .evo-lab .a2ui-collapsible {
+        background: var(--color-bg-secondary);
+      }
+
       .evo-lab .a2ui-collapsible-header {
         padding: 10px 12px;
         font-size: 13px;
+        background: var(--color-bg-tertiary);
+      }
+
+      .evo-lab .a2ui-collapsible-header:hover {
+        background: var(--color-bg-tertiary);
+      }
+
+      /* Data table: opaque on mobile */
+      .evo-lab .a2ui-data-table-container {
+        background: var(--color-bg-secondary);
+      }
+
+      /* Timeline: reduce glow effects on mobile */
+      .evo-lab .step-connector.filled {
+        box-shadow: none;
+      }
+
+      .evo-lab .timeline-connector::after {
+        animation: none;
+        display: none;
+      }
+
+      .evo-lab .timeline-score {
+        box-shadow: none;
+      }
+
+      /* Gauge: no glow on mobile */
+      .evo-lab .a2ui-gauge-fill {
+        filter: none;
+      }
+
+      .evo-lab .a2ui-progress-fill {
+        box-shadow: none;
       }
 
       /* Badge: compact */
