@@ -317,7 +317,7 @@ export interface GitTimelineComponent extends A2UIComponent {
   type: "git_timeline";
   events: Array<{
     id: string;
-    type: "branch" | "commit" | "benchmark" | "merge" | "revert";
+    type: "branch" | "commit" | "benchmark" | "merge" | "revert" | "tag";
     label: string;
     description?: string;
     timestamp: number;
@@ -325,9 +325,16 @@ export interface GitTimelineComponent extends A2UIComponent {
     hash?: string;
     score?: number;
     status?: "success" | "failed" | "pending" | "active";
+    author?: string;
+    filesChanged?: number;
+    additions?: number;
+    deletions?: number;
+    tags?: string[];
   }>;
   activeBranch?: string;
   onEventClick?: string;
+  onContextAction?: string;
+  selectedEventId?: string;
 }
 
 // Step Indicator Component

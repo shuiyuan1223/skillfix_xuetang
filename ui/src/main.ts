@@ -1638,6 +1638,8 @@ ${value || ""}</textarea
     const events = (c.events as any[]) || [];
     const activeBranch = c.activeBranch as string | undefined;
     const onEventClick = c.onEventClick as string | undefined;
+    const onContextAction = c.onContextAction as string | undefined;
+    const selectedEventId = c.selectedEventId as string | undefined;
 
     const typeIcons: Record<string, string> = {
       branch: "git-branch",
@@ -1645,6 +1647,7 @@ ${value || ""}</textarea
       benchmark: "test-tube",
       merge: "git-merge",
       revert: "alert-triangle",
+      tag: "star",
     };
 
     const statusColors: Record<string, string> = {
@@ -1654,50 +1657,252 @@ ${value || ""}</textarea
       active: "var(--color-primary, #6366f1)",
     };
 
+    // Relative time helper
+    const relativeTime = (ts: number): string => {
+      const now = Date.now();
+      const diff = now - ts;
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      if (days < 30) return `${days}d ago`;
+      const months = Math.floor(days / 30);
+      return `${months}mo ago`;
+    };
+
+    // Group events by date for GitLens-style date headers
+    const dateGroups: { date: string; events: { evt: any; idx: number }[] }[] = [];
+    let lastDate = "";
+    for (let i = 0; i < events.length; i++) {
+      const evt = events[i];
+      const d = new Date(evt.timestamp as number).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+      if (d !== lastDate) {
+        dateGroups.push({ date: d, events: [] });
+        lastDate = d;
+      }
+      dateGroups[dateGroups.length - 1].events.push({ evt, idx: i });
+    }
+
+    const handleContextMenu = (e: MouseEvent, evtId: string) => {
+      if (!onContextAction) return;
+      e.preventDefault();
+      // Toggle context menu visibility
+      const menu = (e.currentTarget as HTMLElement).querySelector(
+        ".timeline-context-menu"
+      ) as HTMLElement;
+      if (menu) {
+        // Hide all other context menus first
+        const allMenus = (e.currentTarget as HTMLElement)
+          .closest(".a2ui-git-timeline")
+          ?.querySelectorAll(".timeline-context-menu");
+        allMenus?.forEach((m) => ((m as HTMLElement).style.display = "none"));
+        menu.style.display = menu.style.display === "block" ? "none" : "block";
+        // Position relative to click
+        menu.style.top = `${e.offsetY}px`;
+        menu.style.left = `${e.offsetX}px`;
+      }
+    };
+
     return html`
-      <div class="a2ui-git-timeline">
-        ${events.map(
-          (evt, i) => html`
-            <div
-              class="timeline-event ${evt.status || ""} ${evt.branch === activeBranch
-                ? "active-branch"
-                : ""}"
-              @click=${() => onEventClick && this.sendAction(onEventClick, { eventId: evt.id })}
-              style="cursor: ${onEventClick ? "pointer" : "default"}"
-            >
-              <div class="timeline-line">
-                <div
-                  class="timeline-dot"
-                  style="background: ${statusColors[evt.status as string] || statusColors.pending}"
-                >
-                  <span class="timeline-icon"
-                    >${unsafeHTML(getIcon(typeIcons[evt.type as string] || "git-commit"))}</span
+      <div
+        class="a2ui-git-timeline gitlens-style"
+        @click=${(e: MouseEvent) => {
+          // Close all context menus when clicking anywhere in the timeline
+          const target = e.target as HTMLElement;
+          if (
+            !target.closest(".timeline-context-menu") &&
+            !target.closest(".timeline-context-trigger")
+          ) {
+            const menus = (e.currentTarget as HTMLElement).querySelectorAll(
+              ".timeline-context-menu"
+            );
+            menus.forEach((m) => ((m as HTMLElement).style.display = "none"));
+          }
+        }}
+      >
+        ${dateGroups.map(
+          (group) => html`
+            <div class="timeline-date-group">
+              <div class="timeline-date-header">
+                <span class="timeline-date-line"></span>
+                <span class="timeline-date-label">${group.date}</span>
+                <span class="timeline-date-line"></span>
+              </div>
+              ${group.events.map(
+                ({ evt, idx }) => html`
+                  <div
+                    class="timeline-event gitlens-event ${evt.status || ""} ${evt.branch ===
+                    activeBranch
+                      ? "active-branch"
+                      : ""} ${selectedEventId === evt.id ? "selected" : ""}"
+                    @click=${() =>
+                      onEventClick && this.sendAction(onEventClick, { eventId: evt.id })}
+                    @contextmenu=${(e: MouseEvent) => handleContextMenu(e, evt.id)}
+                    style="cursor: ${onEventClick ? "pointer" : "default"}"
                   >
-                </div>
-                ${i < events.length - 1 ? html`<div class="timeline-connector"></div>` : nothing}
-              </div>
-              <div class="timeline-content">
-                <div class="timeline-header">
-                  <span class="timeline-label">${evt.label}</span>
-                  ${evt.score !== undefined
-                    ? html`<span class="timeline-score">${evt.score}</span>`
-                    : nothing}
-                  ${evt.hash
-                    ? html`<code class="timeline-hash">${(evt.hash as string).slice(0, 7)}</code>`
-                    : nothing}
-                </div>
-                ${evt.description
-                  ? html`<div class="timeline-desc">${evt.description}</div>`
-                  : nothing}
-                ${evt.branch
-                  ? html`<div class="timeline-branch">
-                      ${unsafeHTML(getIcon("git-branch"))} ${evt.branch}
-                    </div>`
-                  : nothing}
-                <div class="timeline-time">
-                  ${new Date(evt.timestamp as number).toLocaleString()}
-                </div>
-              </div>
+                    <div class="timeline-line">
+                      <div
+                        class="timeline-dot ${evt.type as string}"
+                        style="background: ${statusColors[evt.status as string] ||
+                        statusColors.pending}"
+                      >
+                        <span class="timeline-icon"
+                          >${unsafeHTML(
+                            getIcon(typeIcons[evt.type as string] || "git-commit")
+                          )}</span
+                        >
+                      </div>
+                      ${idx < events.length - 1
+                        ? html`<div class="timeline-connector"></div>`
+                        : nothing}
+                    </div>
+                    <div class="timeline-content">
+                      <div class="timeline-header">
+                        <span class="timeline-label">${evt.label}</span>
+                        <span class="timeline-meta">
+                          ${evt.hash
+                            ? html`<code class="timeline-hash"
+                                >${(evt.hash as string).slice(0, 7)}</code
+                              >`
+                            : nothing}
+                          ${evt.score !== undefined
+                            ? html`<span class="timeline-score">${evt.score}</span>`
+                            : nothing}
+                        </span>
+                      </div>
+                      ${evt.description
+                        ? html`<div class="timeline-desc">${evt.description}</div>`
+                        : nothing}
+                      <div class="timeline-footer">
+                        ${evt.author
+                          ? html`<span class="timeline-author">
+                              <span class="timeline-avatar"
+                                >${(evt.author as string).charAt(0).toUpperCase()}</span
+                              >
+                              ${evt.author}
+                            </span>`
+                          : nothing}
+                        ${evt.branch
+                          ? html`<span class="timeline-branch-tag">
+                              ${unsafeHTML(getIcon("git-branch"))} ${evt.branch}
+                            </span>`
+                          : nothing}
+                        ${evt.tags
+                          ? (evt.tags as string[]).map(
+                              (tag) =>
+                                html`<span class="timeline-tag"
+                                  >${unsafeHTML(getIcon("star"))} ${tag}</span
+                                >`
+                            )
+                          : nothing}
+                        ${evt.filesChanged
+                          ? html`<span class="timeline-files">
+                              ${evt.filesChanged} file${(evt.filesChanged as number) > 1 ? "s" : ""}
+                              ${evt.additions
+                                ? html`<span class="timeline-additions">+${evt.additions}</span>`
+                                : nothing}
+                              ${evt.deletions
+                                ? html`<span class="timeline-deletions">-${evt.deletions}</span>`
+                                : nothing}
+                            </span>`
+                          : nothing}
+                        <span class="timeline-time">${relativeTime(evt.timestamp as number)}</span>
+                      </div>
+                    </div>
+                    ${onContextAction
+                      ? html`<div class="timeline-context-menu" style="display: none;">
+                          ${evt.type === "commit" || evt.type === "merge"
+                            ? html`
+                                <button
+                                  class="ctx-item"
+                                  @click=${(e: Event) => {
+                                    e.stopPropagation();
+                                    this.sendAction(onContextAction, {
+                                      eventId: evt.id,
+                                      action: "view_diff",
+                                    });
+                                  }}
+                                >
+                                  ${unsafeHTML(getIcon("search"))} View Diff
+                                </button>
+                                <button
+                                  class="ctx-item"
+                                  @click=${(e: Event) => {
+                                    e.stopPropagation();
+                                    this.sendAction(onContextAction, {
+                                      eventId: evt.id,
+                                      action: "cherry_pick",
+                                    });
+                                  }}
+                                >
+                                  ${unsafeHTML(getIcon("git-commit"))} Cherry-Pick
+                                </button>
+                                <button
+                                  class="ctx-item ctx-danger"
+                                  @click=${(e: Event) => {
+                                    e.stopPropagation();
+                                    this.sendAction(onContextAction, {
+                                      eventId: evt.id,
+                                      action: "revert",
+                                    });
+                                  }}
+                                >
+                                  ${unsafeHTML(getIcon("alert-triangle"))} Revert
+                                </button>
+                              `
+                            : nothing}
+                          ${evt.type === "branch"
+                            ? html`
+                                <button
+                                  class="ctx-item"
+                                  @click=${(e: Event) => {
+                                    e.stopPropagation();
+                                    this.sendAction("switch_version", {
+                                      branch: evt.branch,
+                                    });
+                                  }}
+                                >
+                                  ${unsafeHTML(getIcon("git-branch"))} Switch
+                                </button>
+                                <button
+                                  class="ctx-item"
+                                  @click=${(e: Event) => {
+                                    e.stopPropagation();
+                                    this.sendAction("merge_version", {
+                                      branch: evt.branch,
+                                    });
+                                  }}
+                                >
+                                  ${unsafeHTML(getIcon("git-merge"))} Merge
+                                </button>
+                              `
+                            : nothing}
+                          ${evt.type === "benchmark"
+                            ? html`
+                                <button
+                                  class="ctx-item"
+                                  @click=${(e: Event) => {
+                                    e.stopPropagation();
+                                    this.sendAction("view_benchmark_run", {
+                                      eventId: evt.id,
+                                    });
+                                  }}
+                                >
+                                  ${unsafeHTML(getIcon("bar-chart"))} View Results
+                                </button>
+                              `
+                            : nothing}
+                        </div>`
+                      : nothing}
+                  </div>
+                `
+              )}
             </div>
           `
         )}
@@ -4247,25 +4452,87 @@ class PHAApp extends LitElement {
       border-top: 1px solid rgba(102, 126, 234, 0.1);
     }
 
-    /* ========== Git Timeline ========== */
+    /* ========== Git Timeline (GitLens Style) ========== */
     .a2ui-git-timeline {
       display: flex;
       flex-direction: column;
       padding: 8px 0;
     }
+
+    .a2ui-git-timeline.gitlens-style {
+      gap: 0;
+    }
+
+    /* Date group header */
+    .timeline-date-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .timeline-date-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 8px 4px;
+      margin-bottom: 2px;
+    }
+
+    .timeline-date-line {
+      flex: 1;
+      height: 1px;
+      background: rgba(102, 126, 234, 0.15);
+    }
+
+    .timeline-date-label {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    /* Timeline event row */
     .timeline-event {
       display: flex;
       gap: 16px;
       padding: 4px 8px;
       border-radius: 8px;
       transition: background 0.15s;
+      position: relative;
     }
+
+    .timeline-event.gitlens-event {
+      padding: 6px 10px;
+      margin: 1px 0;
+      border-radius: 6px;
+      border: 1px solid transparent;
+    }
+
     .timeline-event:hover {
       background: rgba(255, 255, 255, 0.03);
     }
+
+    .timeline-event.gitlens-event:hover {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(102, 126, 234, 0.1);
+    }
+
     .timeline-event.active-branch {
       background: rgba(99, 102, 241, 0.08);
     }
+
+    .timeline-event.gitlens-event.active-branch {
+      background: rgba(99, 102, 241, 0.06);
+      border-color: rgba(99, 102, 241, 0.15);
+    }
+
+    .timeline-event.gitlens-event.selected {
+      background: rgba(99, 102, 241, 0.12);
+      border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    /* Timeline vertical line + dot */
     .timeline-line {
       display: flex;
       flex-direction: column;
@@ -4273,6 +4540,7 @@ class PHAApp extends LitElement {
       width: 32px;
       flex-shrink: 0;
     }
+
     .timeline-dot {
       width: 28px;
       height: 28px;
@@ -4281,37 +4549,82 @@ class PHAApp extends LitElement {
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
+      transition:
+        transform 0.15s,
+        box-shadow 0.15s;
     }
+
+    .gitlens-event:hover .timeline-dot {
+      transform: scale(1.1);
+    }
+
+    .gitlens-event.selected .timeline-dot {
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+    }
+
+    /* Dot type variations */
+    .timeline-dot.merge {
+      border-radius: 6px;
+    }
+
+    .timeline-dot.branch {
+      border-radius: 8px;
+    }
+
     .timeline-dot .timeline-icon {
       display: flex;
       color: #fff;
     }
+
     .timeline-dot .timeline-icon svg {
       width: 14px;
       height: 14px;
     }
+
     .timeline-connector {
       width: 2px;
       flex: 1;
       min-height: 16px;
       background: rgba(102, 126, 234, 0.2);
     }
+
+    /* Content area */
     .timeline-content {
       flex: 1;
-      padding-bottom: 16px;
+      padding-bottom: 8px;
       min-width: 0;
     }
+
+    .gitlens-event .timeline-content {
+      padding-bottom: 4px;
+    }
+
     .timeline-header {
       display: flex;
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
+      justify-content: space-between;
     }
+
     .timeline-label {
       font-weight: 500;
       font-size: 0.875rem;
       color: var(--color-text);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
+
+    .timeline-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
     .timeline-score {
       background: rgba(99, 102, 241, 0.15);
       color: #818cf8;
@@ -4320,19 +4633,112 @@ class PHAApp extends LitElement {
       font-size: 0.75rem;
       font-weight: 600;
     }
+
     .timeline-hash {
-      font-family: monospace;
-      font-size: 0.75rem;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+      font-size: 0.6875rem;
       color: var(--color-text-muted);
-      background: rgba(255, 255, 255, 0.05);
-      padding: 1px 6px;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 6px;
       border-radius: 4px;
+      letter-spacing: 0.02em;
     }
+
+    .gitlens-event:hover .timeline-hash {
+      color: #818cf8;
+      background: rgba(99, 102, 241, 0.1);
+    }
+
     .timeline-desc {
       font-size: 0.8125rem;
       color: var(--color-text-muted);
       margin-top: 4px;
     }
+
+    /* Footer: author, branch, files, time */
+    .timeline-footer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+    }
+
+    .timeline-author {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .timeline-avatar {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(99, 102, 241, 0.2);
+      color: #818cf8;
+      font-size: 0.625rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .timeline-branch-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      color: #818cf8;
+      background: rgba(99, 102, 241, 0.08);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .timeline-branch-tag svg {
+      width: 11px;
+      height: 11px;
+    }
+
+    .timeline-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      color: #f59e0b;
+      background: rgba(245, 158, 11, 0.1);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    .timeline-tag svg {
+      width: 10px;
+      height: 10px;
+    }
+
+    .timeline-files {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .timeline-additions {
+      color: #22c55e;
+      font-weight: 500;
+    }
+
+    .timeline-deletions {
+      color: #ef4444;
+      font-weight: 500;
+    }
+
+    .timeline-time {
+      font-size: 0.75rem;
+      color: var(--color-text-muted);
+      margin-left: auto;
+    }
+
+    /* Legacy non-gitlens branch display */
     .timeline-branch {
       display: inline-flex;
       align-items: center;
@@ -4341,14 +4747,57 @@ class PHAApp extends LitElement {
       color: #818cf8;
       margin-top: 4px;
     }
+
     .timeline-branch svg {
       width: 12px;
       height: 12px;
     }
-    .timeline-time {
-      font-size: 0.75rem;
-      color: var(--color-text-muted);
-      margin-top: 4px;
+
+    /* Context menu */
+    .timeline-context-menu {
+      position: absolute;
+      z-index: 100;
+      background: var(--color-bg-secondary, #1e1e2e);
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      border-radius: 8px;
+      padding: 4px;
+      min-width: 160px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(8px);
+    }
+
+    .ctx-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 8px 12px;
+      background: none;
+      border: none;
+      border-radius: 6px;
+      color: var(--color-text);
+      font-size: 0.8125rem;
+      cursor: pointer;
+      transition: background 0.1s;
+      text-align: left;
+    }
+
+    .ctx-item:hover {
+      background: rgba(99, 102, 241, 0.12);
+    }
+
+    .ctx-item svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .ctx-item.ctx-danger {
+      color: #ef4444;
+    }
+
+    .ctx-item.ctx-danger:hover {
+      background: rgba(239, 68, 68, 0.12);
     }
 
     /* ========== Step Indicator ========== */
@@ -4639,6 +5088,49 @@ class PHAApp extends LitElement {
     }
 
     /* Git timeline connector gradient + particle */
+    .evo-lab .a2ui-git-timeline .timeline-date-label {
+      color: rgba(0, 229, 255, 0.6);
+    }
+
+    .evo-lab .a2ui-git-timeline .timeline-date-line {
+      background: rgba(0, 229, 255, 0.1);
+    }
+
+    .evo-lab .timeline-event.gitlens-event.selected {
+      background: rgba(0, 229, 255, 0.08);
+      border-color: rgba(0, 229, 255, 0.25);
+    }
+
+    .evo-lab .timeline-event.gitlens-event:hover {
+      border-color: rgba(0, 229, 255, 0.15);
+    }
+
+    .evo-lab .gitlens-event:hover .timeline-hash {
+      color: #00e5ff;
+      background: rgba(0, 229, 255, 0.1);
+    }
+
+    .evo-lab .timeline-branch-tag {
+      color: #00e5ff;
+      background: rgba(0, 229, 255, 0.08);
+    }
+
+    .evo-lab .timeline-avatar {
+      background: rgba(0, 229, 255, 0.2);
+      color: #00e5ff;
+    }
+
+    .evo-lab .timeline-context-menu {
+      border-color: rgba(0, 229, 255, 0.2);
+      box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.5),
+        0 0 12px rgba(0, 229, 255, 0.1);
+    }
+
+    .evo-lab .ctx-item:hover {
+      background: rgba(0, 229, 255, 0.12);
+    }
+
     .evo-lab .timeline-connector {
       background: linear-gradient(180deg, rgba(0, 229, 255, 0.3), rgba(124, 77, 255, 0.3));
       position: relative;
@@ -4751,6 +5243,44 @@ class PHAApp extends LitElement {
     .shell.theme-light .evo-lab .timeline-score {
       background: rgba(0, 151, 167, 0.1);
       color: #0097a7;
+    }
+
+    .shell.theme-light .evo-lab .timeline-date-label {
+      color: rgba(0, 151, 167, 0.7);
+    }
+
+    .shell.theme-light .evo-lab .timeline-date-line {
+      background: rgba(0, 151, 167, 0.15);
+    }
+
+    .shell.theme-light .evo-lab .timeline-event.gitlens-event.selected {
+      background: rgba(0, 151, 167, 0.08);
+      border-color: rgba(0, 151, 167, 0.2);
+    }
+
+    .shell.theme-light .evo-lab .timeline-branch-tag {
+      color: #0097a7;
+      background: rgba(0, 151, 167, 0.08);
+    }
+
+    .shell.theme-light .evo-lab .timeline-avatar {
+      background: rgba(0, 151, 167, 0.15);
+      color: #0097a7;
+    }
+
+    .shell.theme-light .evo-lab .gitlens-event:hover .timeline-hash {
+      color: #0097a7;
+      background: rgba(0, 151, 167, 0.1);
+    }
+
+    .shell.theme-light .evo-lab .timeline-context-menu {
+      background: #fff;
+      border-color: rgba(0, 151, 167, 0.15);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .shell.theme-light .evo-lab .ctx-item:hover {
+      background: rgba(0, 151, 167, 0.08);
     }
 
     .shell.theme-light .evo-lab .step-connector.filled {
@@ -5176,6 +5706,23 @@ class PHAApp extends LitElement {
 
       .evo-lab .timeline-score {
         box-shadow: none;
+      }
+
+      /* GitLens timeline mobile adjustments */
+      .evo-lab .timeline-context-menu {
+        display: none !important;
+      }
+
+      .evo-lab .timeline-footer {
+        gap: 6px;
+      }
+
+      .evo-lab .timeline-event.gitlens-event {
+        padding: 4px 6px;
+      }
+
+      .evo-lab .timeline-label {
+        font-size: 0.8125rem;
       }
 
       /* Gauge: no glow on mobile */

@@ -366,6 +366,13 @@ export interface LocaleMessages {
     startEvolution: string;
     // Version detail
     versionDetail: string;
+    commitDetail: string;
+    commitAuthor: string;
+    viewDiff: string;
+    cherryPick: string;
+    revertCommit: string;
+    selectCommitToView: string;
+    timeAgo: string;
     // Data labels
     latestRun: string;
     bestScoresAllTime: string;

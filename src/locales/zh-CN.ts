@@ -343,6 +343,13 @@ export const zhCN: LocaleMessages = {
     startEvolution: "开始进化",
     // Version detail
     versionDetail: "版本详情",
+    commitDetail: "提交详情",
+    commitAuthor: "作者",
+    viewDiff: "查看差异",
+    cherryPick: "拣选提交",
+    revertCommit: "回退提交",
+    selectCommitToView: "选择提交查看详情",
+    timeAgo: "前",
     // Data labels
     latestRun: "最新运行",
     bestScoresAllTime: "历史最佳",

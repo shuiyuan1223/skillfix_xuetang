@@ -348,6 +348,13 @@ export const en: LocaleMessages = {
     startEvolution: "Start Evolution",
     // Version detail
     versionDetail: "Version Detail",
+    commitDetail: "Commit Detail",
+    commitAuthor: "Author",
+    viewDiff: "View Diff",
+    cherryPick: "Cherry-Pick",
+    revertCommit: "Revert Commit",
+    selectCommitToView: "Select a commit to view details",
+    timeAgo: "ago",
     // Data labels
     latestRun: "Latest Run",
     bestScoresAllTime: "Best Scores (All-Time)",
