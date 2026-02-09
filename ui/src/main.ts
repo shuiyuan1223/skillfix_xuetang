@@ -4939,6 +4939,190 @@ class PHAApp extends LitElement {
       .a2ui-stat-card:hover {
         transform: none;
       }
+
+      /* ---- Evolution Lab mobile optimizations ---- */
+
+      /* Grid background: reduce density for perf */
+      .evo-lab {
+        background-size: 30px 30px;
+      }
+
+      .evo-lab::before {
+        width: 80%;
+        height: 80px;
+      }
+
+      /* Stat cards: 2-column grid instead of 1 */
+      .evo-lab .a2ui-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+      }
+
+      /* Rows: allow wrapping */
+      .evo-lab .a2ui-row {
+        flex-wrap: wrap;
+      }
+
+      /* Column panels inside rows: stack vertically (Versions tab) */
+      .evo-lab .a2ui-row > .a2ui-column {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      /* Cards inside rows: full width (radar + trend charts) */
+      .evo-lab .a2ui-row > .a2ui-card {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+
+      /* Step indicator: horizontal scroll for 6-step pipeline */
+      .evo-lab .a2ui-step-indicator {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 8px;
+      }
+
+      .evo-lab .a2ui-step-indicator::-webkit-scrollbar {
+        display: none;
+      }
+
+      .evo-lab .step-circle {
+        width: 28px;
+        height: 28px;
+      }
+
+      .evo-lab .step-label {
+        font-size: 10px;
+      }
+
+      .evo-lab .step-connector {
+        min-width: 16px;
+      }
+
+      .evo-lab .step-icon svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* Buttons: touch-friendly min 44px */
+      .evo-lab .a2ui-button {
+        min-height: 44px;
+        font-size: 13px;
+      }
+
+      /* Reduce content padding */
+      .evo-lab > .a2ui-column {
+        padding: 12px !important;
+      }
+
+      /* Disable heavy hover effects on touch devices */
+      .evo-lab .a2ui-card:hover {
+        border-color: rgba(0, 229, 255, 0.15);
+        box-shadow:
+          0 0 15px rgba(0, 229, 255, 0.05),
+          0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+
+      .evo-lab .a2ui-stat-card:hover {
+        transform: none;
+        border-color: rgba(0, 229, 255, 0.15);
+        box-shadow:
+          0 0 15px rgba(0, 229, 255, 0.05),
+          0 8px 32px rgba(0, 0, 0, 0.1);
+      }
+
+      .evo-lab .a2ui-button-primary:hover {
+        transform: none;
+        box-shadow: none;
+      }
+
+      /* Radar chart: constrain to container */
+      .evo-lab .a2ui-radar-chart {
+        max-width: 100%;
+        overflow: hidden;
+      }
+
+      .evo-lab .a2ui-radar-chart svg {
+        max-width: 100%;
+        height: auto;
+      }
+
+      /* Score gauge: fit container */
+      .evo-lab .a2ui-score-gauge {
+        max-width: 100%;
+      }
+
+      .evo-lab .a2ui-score-gauge svg {
+        max-width: 100%;
+        height: auto;
+      }
+
+      /* Data tables: hide scrollbar */
+      .evo-lab .a2ui-data-table-container {
+        scrollbar-width: none;
+      }
+
+      .evo-lab .a2ui-data-table-container::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* Collapsible: compact on mobile */
+      .evo-lab .a2ui-collapsible-header {
+        padding: 10px 12px;
+        font-size: 13px;
+      }
+
+      /* Badge: compact */
+      .evo-lab .a2ui-badge {
+        font-size: 11px;
+        padding: 3px 8px;
+      }
+
+      /* Reduce evo-lab root padding */
+      .evo-lab {
+        padding: 12px !important;
+      }
+    }
+
+    /* ========== Extra-small screens (<420px) ========== */
+    @media (max-width: 420px) {
+      /* Single column for stat cards on narrow phones */
+      .evo-lab .a2ui-grid {
+        grid-template-columns: 1fr !important;
+      }
+
+      /* Even smaller step indicators */
+      .evo-lab .step-item {
+        min-width: 52px;
+      }
+
+      .evo-lab .step-circle {
+        width: 24px;
+        height: 24px;
+      }
+
+      .evo-lab .step-label {
+        font-size: 9px;
+      }
+
+      .evo-lab .step-connector {
+        min-width: 12px;
+      }
+
+      /* Tighter padding */
+      .evo-lab {
+        padding: 8px !important;
+      }
+
+      .evo-lab > .a2ui-column {
+        padding: 8px !important;
+      }
+
+      /* Gauge value text smaller */
+      .evo-lab .a2ui-gauge-value {
+        font-size: 20px;
+      }
     }
   `;
 
