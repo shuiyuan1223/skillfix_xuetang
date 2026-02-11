@@ -295,7 +295,11 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
   );
 
   const content = ui.column([tabs], { gap: 0, padding: 24 });
-  const root = ui.column([header, content], { gap: 12, padding: 16, className: "evo-lab" } as any);
+  const root = ui.column([header, content], {
+    gap: 12,
+    padding: 16,
+    className: "relative min-h-full",
+  } as any);
 
   return ui.build(root);
 }
@@ -603,7 +607,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
       sharpCards.push(
         ui.card(cardChildren, {
           padding: 16,
-          className: `sharp-category-card sharp-cat-${cs.category}`,
+          className: `border-t-[3px]`,
         })
       );
     }

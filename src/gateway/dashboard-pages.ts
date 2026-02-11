@@ -1167,8 +1167,15 @@ export function generateDashboardPage(
 
   const tabsComponent = ui.tabs(tabsDef, activeTab, contentIds);
 
+  // Re-auth action (ghost, right-aligned above tabs)
+  const reAuthBtn = ui.button(t("dashboard.reAuth"), "start_huawei_auth", {
+    variant: "ghost",
+    size: "sm",
+  });
+  const toolbar = ui.row([reAuthBtn], { justify: "end" });
+
   // Content container
-  const content = ui.column([tabsComponent], { gap: 0, padding: 24 });
+  const content = ui.column([toolbar, tabsComponent], { gap: 8, padding: 24 });
 
   const root = ui.column([header, content], { gap: 0 });
 

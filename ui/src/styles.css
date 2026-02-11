@@ -1,0 +1,190 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ========== Dark Mode (default) ========== */
+  :root {
+    --color-bg: #0f172a;
+    --color-bg-secondary: #1e293b;
+    --color-bg-tertiary: #334155;
+    --color-surface: rgba(30, 41, 59, 0.8);
+    --color-surface-hover: rgba(51, 65, 85, 0.8);
+    --color-surface-card: rgba(20, 20, 35, 0.5);
+    --color-surface-elevated: rgba(20, 20, 35, 0.95);
+    --color-surface-code: rgba(10, 10, 20, 0.8);
+    --color-surface-inline-code: rgba(255, 255, 255, 0.1);
+    --color-overlay: rgba(0, 0, 0, 0.8);
+    --color-gauge-track: rgba(255, 255, 255, 0.15);
+    --color-border: rgba(100, 116, 139, 0.2);
+    --color-border-hover: rgba(100, 116, 139, 0.4);
+
+    --color-text: #f8fafc;
+    --color-text-secondary: #cbd5e1;
+    --color-text-muted: #64748b;
+
+    --color-primary: #667eea;
+    --color-primary-hover: #818cf8;
+    --color-accent: #764ba2;
+
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-error: #ef4444;
+    --color-info: #3b82f6;
+  }
+
+  /* ========== Light Mode ========== */
+  .light {
+    --color-bg: #f5f7fa;
+    --color-bg-secondary: #eef1f5;
+    --color-bg-tertiary: #e3e8ef;
+    --color-surface: rgba(255, 255, 255, 0.85);
+    --color-surface-hover: rgba(248, 250, 252, 0.9);
+    --color-surface-card: rgba(255, 255, 255, 0.9);
+    --color-surface-elevated: rgba(255, 255, 255, 1);
+    --color-surface-code: #f0f4f8;
+    --color-surface-inline-code: rgba(91, 106, 191, 0.08);
+    --color-overlay: rgba(15, 23, 42, 0.35);
+    --color-gauge-track: rgba(100, 116, 139, 0.1);
+    --color-border: rgba(0, 0, 0, 0.06);
+    --color-border-hover: rgba(91, 106, 191, 0.25);
+
+    --color-text: #1e293b;
+    --color-text-secondary: #475569;
+    --color-text-muted: #94a3b8;
+
+    --color-primary: #5b6abf;
+    --color-primary-hover: #4f5aad;
+    --color-accent: #764ba2;
+
+    --color-success: #10b981;
+    --color-warning: #f59e0b;
+    --color-error: #ef4444;
+    --color-info: #3b82f6;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  #app {
+    height: 100%;
+  }
+
+  /* SVG icons inherit text color */
+  svg {
+    vertical-align: middle;
+  }
+
+  /* Score gauge SVG elements */
+  .gauge-bg {
+    fill: none;
+    stroke: var(--color-gauge-track);
+  }
+
+  .gauge-fill {
+    fill: none;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease;
+  }
+
+  /* Radar chart SVG */
+  .radar-grid {
+    fill: none;
+    stroke: currentColor;
+    stroke-opacity: 0.08;
+    stroke-width: 1;
+  }
+
+  .radar-axis {
+    stroke: currentColor;
+    stroke-opacity: 0.1;
+    stroke-width: 1;
+  }
+
+  .radar-label {
+    fill: var(--color-text-secondary);
+    font-size: 11px;
+    font-family: system-ui;
+  }
+
+  .radar-value {
+    fill: var(--color-primary);
+    font-size: 10px;
+    font-weight: 600;
+    font-family: system-ui;
+  }
+
+  /* Activity ring animation */
+  .ring-fill {
+    transition: stroke-dashoffset 1s ease;
+  }
+
+  /* Line chart SVG animation */
+  .chart-line polyline {
+    stroke-dasharray: 2000;
+    stroke-dashoffset: 2000;
+    animation: drawLine 1.5s ease-out forwards;
+  }
+
+  @keyframes drawLine {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* Chart point interactions */
+  .chart-point {
+    opacity: 0;
+    transition: opacity 0.2s ease, r 0.2s ease;
+  }
+
+  .chart-point-hitarea {
+    cursor: pointer;
+  }
+
+  .chart-point-group:hover .chart-point {
+    opacity: 1;
+    r: 6;
+  }
+
+  /* Sidebar collapsed state: hide labels */
+  .sidebar-collapsed .nav-label,
+  .sidebar-collapsed .status-text {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.3);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.5);
+  }
+}
