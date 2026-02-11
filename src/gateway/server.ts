@@ -20,6 +20,7 @@ import {
   getBenchmarkModels,
   resolveBenchmarkModelApiKey,
   resolveBenchmarkModelBaseUrl,
+  getJudgeModel,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -2783,7 +2784,7 @@ export class GatewaySession {
     const AGENT_TIMEOUT_MS = 120_000; // 2 minutes per test case
 
     try {
-      // Create agent: use override model or default session agent
+      // Create target agent: use override model or default session agent
       let agent;
       if (modelConfig?.apiKey) {
         const { MockDataSource } = await import("../data-sources/mock.js");
@@ -2797,6 +2798,19 @@ export class GatewaySession {
       } else {
         agent = await this.getAgent();
       }
+
+      // Create dedicated judge agent (separate from target)
+      const judgeConfig = getJudgeModel();
+      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
+      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
+      const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+      const judgeAgent = await createPHAAgent({
+        apiKey: judgeApiKey,
+        provider: judgeConfig.provider as any,
+        modelId: judgeConfig.modelId,
+        baseUrl: judgeBaseUrl,
+        dataSource: new JudgeMockDS(),
+      });
 
       const runner = new BenchmarkRunner({
         agentCall: async (query: string) => {
@@ -2814,11 +2828,13 @@ export class GatewaySession {
           return result;
         },
         llmCall: async (prompt: string) => {
+          // Use dedicated judge agent for evaluation
+          if (typeof judgeAgent.reset === "function") judgeAgent.reset();
           const result = await Promise.race([
-            agent.chatAndWait(prompt),
+            judgeAgent.chatAndWait(prompt),
             new Promise<string>((_, reject) =>
               setTimeout(
-                () => reject(new Error("LLM call timed out after 2 minutes")),
+                () => reject(new Error("Judge LLM call timed out after 2 minutes")),
                 AGENT_TIMEOUT_MS
               )
             ),
@@ -2898,6 +2914,19 @@ export class GatewaySession {
       const agent = await this.getAgent();
       const AGENT_TIMEOUT_MS = 120_000;
 
+      // Create dedicated judge agent for diagnose evaluation
+      const djConfig = getJudgeModel();
+      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
+      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
+      const { MockDataSource: DiagMockDS } = await import("../data-sources/mock.js");
+      const diagnoseJudge = await createPHAAgent({
+        apiKey: djApiKey,
+        provider: djConfig.provider as any,
+        modelId: djConfig.modelId,
+        baseUrl: djBaseUrl,
+        dataSource: new DiagMockDS(),
+      });
+
       const result = await diagnose({
         profile: "quick",
         runnerConfig: {
@@ -2912,10 +2941,11 @@ export class GatewaySession {
             return res;
           },
           llmCall: async (prompt: string) => {
+            if (typeof diagnoseJudge.reset === "function") diagnoseJudge.reset();
             return await Promise.race([
-              agent.chatAndWait(prompt),
+              diagnoseJudge.chatAndWait(prompt),
               new Promise<string>((_, reject) =>
-                setTimeout(() => reject(new Error("LLM call timed out")), AGENT_TIMEOUT_MS)
+                setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
               ),
             ]);
           },

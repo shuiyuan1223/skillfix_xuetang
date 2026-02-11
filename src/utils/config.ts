@@ -86,6 +86,8 @@ export interface PHAConfig {
   mcp?: MCPConfig;
   embedding?: EmbeddingConfig;
   benchmarkModels?: Record<string, BenchmarkModelConfig>;
+  /** Dedicated judge model for benchmark evaluation (LLM-as-Judge). Falls back to llm config. */
+  judgeModel?: BenchmarkModelConfig;
 }
 
 // Provider configurations
@@ -425,4 +427,28 @@ export function resolveBenchmarkModelBaseUrl(model: BenchmarkModelConfig): strin
 
   // Provider default
   return PROVIDER_CONFIGS[model.provider]?.baseUrl;
+}
+
+/**
+ * Get the dedicated judge model config for benchmark evaluation.
+ * If config.judgeModel is set, returns it.
+ * Otherwise, derives from the default llm config.
+ */
+export function getJudgeModel(): BenchmarkModelConfig {
+  const config = loadConfig();
+
+  if (config.judgeModel?.provider && config.judgeModel?.modelId) {
+    return config.judgeModel;
+  }
+
+  // Fallback to default llm config
+  const provider = config.llm.provider;
+  const modelId = config.llm.modelId || PROVIDER_CONFIGS[provider]?.defaultModel || "default";
+  return {
+    provider,
+    modelId,
+    apiKey: config.llm.apiKey,
+    baseUrl: config.llm.baseUrl,
+    label: `${PROVIDER_CONFIGS[provider]?.name || provider} (${modelId})`,
+  };
 }

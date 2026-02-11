@@ -32,6 +32,7 @@ import { createPHAAgent } from "../agent/index.js";
 import {
   loadConfig,
   getBenchmarkModels,
+  getJudgeModel,
   resolveBenchmarkModelApiKey,
   resolveBenchmarkModelBaseUrl,
   type BenchmarkModelConfig,
@@ -880,9 +881,19 @@ export function registerEvalCommand(program: Command): void {
           dataSource: mockDataSource,
         });
 
+        // Use dedicated judge model for evaluation (separate from target model)
+        const judgeConfig = getJudgeModel();
+        const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
+        const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
+
         let rawLLMCall: (prompt: string) => Promise<string>;
         try {
-          rawLLMCall = createRawLLMCall(entry.provider, entry.modelId, entry.apiKey, entry.baseUrl);
+          rawLLMCall = createRawLLMCall(
+            judgeConfig.provider as LLMProvider,
+            judgeConfig.modelId,
+            judgeApiKey!,
+            judgeBaseUrl
+          );
         } catch {
           rawLLMCall = async (prompt: string) => {
             agent.reset();
