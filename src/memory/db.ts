@@ -781,17 +781,20 @@ export function updateBenchmarkRun(
 }
 
 /**
- * Mark interrupted benchmark runs (duration_ms IS NULL) as failed.
+ * Mark interrupted benchmark runs as failed.
  * Called on server startup to clean up runs from previous crashed processes.
+ * Interrupted runs have duration_ms = 0 (or NULL) AND overall_score = 0.
  */
 export function markInterruptedBenchmarkRuns(): number {
   const database = getDatabase();
   try {
-    const stmt = database.prepare(
-      "UPDATE benchmark_runs SET duration_ms = -1 WHERE duration_ms IS NULL"
-    );
-    const result = stmt.run();
-    return (result as { changes?: number }).changes || 0;
+    database
+      .prepare(
+        "UPDATE benchmark_runs SET duration_ms = -1 WHERE (duration_ms IS NULL OR duration_ms = 0) AND overall_score = 0"
+      )
+      .run();
+    const row = database.prepare("SELECT changes() as c").get() as { c: number } | null;
+    return row?.c ?? 0;
   } catch {
     return 0;
   }
