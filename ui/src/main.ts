@@ -406,6 +406,12 @@ class A2UIRenderer {
         return this.renderStepIndicator(c);
       case "file_tree":
         return this.renderFileTree(c);
+      case "arena_pills":
+        return this.renderArenaPills(c);
+      case "arena_score_table":
+        return this.renderArenaScoreTable(c);
+      case "arena_category_card":
+        return this.renderArenaCategoryCard(c);
       default:
         return html`<div class="text-text-muted text-xs p-2">[Unknown: ${c.type}]</div>`;
     }
@@ -1486,6 +1492,135 @@ class A2UIRenderer {
     `;
   }
 
+  // ---- Arena custom components ----
+
+  private renderArenaPills(c: A2UIComponent): TemplateResult {
+    const pills =
+      (c.pills as Array<{
+        label: string;
+        color: string;
+        active: boolean;
+        action: string;
+        payload?: Record<string, unknown>;
+      }>) || [];
+    const clearAction = c.clearAction as string | undefined;
+    const hasActive = pills.some((p) => p.active);
+
+    return html`
+      <div class="arena-pills">
+        ${pills.map(
+          (p) => html`
+            <div
+              class="arena-pill ${p.active ? "active" : ""}"
+              @click=${() => this.sendAction(p.action, p.payload)}
+            >
+              <span class="arena-glow-dot" style="background: ${p.color}; color: ${p.color}"></span>
+              <span>${p.label}</span>
+            </div>
+          `
+        )}
+        ${hasActive && clearAction
+          ? html`
+              <div class="arena-clear-pill" @click=${() => this.sendAction(clearAction)}>
+                ✕ Clear
+              </div>
+            `
+          : nothing}
+      </div>
+    `;
+  }
+
+  private renderArenaScoreTable(c: A2UIComponent): TemplateResult {
+    const rows = (c.rows as Array<{ label: string; color: string; score: number }>) || [];
+    const scoreClass = (s: number) =>
+      s >= 0.9 ? "score-high" : s >= 0.7 ? "score-mid" : "score-low";
+
+    return html`
+      <table class="arena-score-table">
+        <thead>
+          <tr>
+            <th>Run</th>
+            <th>Overall Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(
+            (r) => html`
+              <tr>
+                <td>
+                  <div class="arena-score-cell">
+                    <span
+                      style="background: ${r.color}; width: 8px; height: 8px;
+                               border-radius: 50%; display: inline-block;"
+                    ></span>
+                    ${r.label}
+                  </div>
+                </td>
+                <td>
+                  <div class="arena-score-cell">
+                    <div class="arena-score-bar">
+                      <div
+                        class="arena-score-bar-fill"
+                        style="width: ${r.score * 100}%; background: ${r.color};"
+                      ></div>
+                    </div>
+                    <span class="arena-score-value ${scoreClass(r.score)}">
+                      ${r.score.toFixed(2)}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            `
+          )}
+        </tbody>
+      </table>
+    `;
+  }
+
+  private renderArenaCategoryCard(c: A2UIComponent): TemplateResult {
+    const name = c.categoryName as string;
+    const color = c.categoryColor as string;
+    const icon = c.categoryIcon as string;
+    const avgScore = c.avgScore as number;
+    const criteria =
+      (c.criteria as Array<{
+        name: string;
+        scores: Array<{ value: number; color: string }>;
+      }>) || [];
+    const scoreClass = (s: number) =>
+      s >= 0.9 ? "score-high" : s >= 0.7 ? "score-mid" : "score-low";
+
+    return html`
+      <div class="arena-category-card">
+        <div class="arena-category-header">
+          <div class="arena-category-icon" style="background: ${color}20; color: ${color}">
+            ${unsafeHTML(getIcon(icon))}
+          </div>
+          <span class="arena-category-name">${name}</span>
+          <span class="arena-category-avg ${scoreClass(avgScore)}"> ${avgScore.toFixed(2)} </span>
+        </div>
+        <div class="arena-criteria-list">
+          ${criteria.map(
+            (cr) => html`
+              <div class="arena-criterion-row">
+                <span class="arena-criterion-name">${cr.name}</span>
+                <div class="arena-criterion-scores">
+                  ${cr.scores.map(
+                    (s) => html`
+                      <span class="arena-criterion-score" style="color: ${s.color}">
+                        ${s.value.toFixed(2)}
+                      </span>
+                    `
+                  )}
+                </div>
+              </div>
+            `
+          )}
+        </div>
+      </div>
+    `;
+  }
+
   private renderRadarChart(c: A2UIComponent): TemplateResult {
     const multiSeries = c.multiSeries as
       | Array<{
@@ -1623,15 +1758,15 @@ class A2UIRenderer {
       color: string;
     }>
   ): TemplateResult {
-    const size = (c.size as number) || 320;
+    const svgSize = 500;
     const axisData = multiSeries[0].data;
     const n = axisData.length;
     if (n < 3)
       return html`<div class="text-text-muted text-sm p-4">Need at least 3 data points</div>`;
 
-    const cx = size / 2;
-    const cy = size / 2;
-    const radius = size / 2 - 40;
+    const cx = svgSize / 2;
+    const cy = svgSize / 2;
+    const radius = svgSize / 2 - 55;
     const angleStep = (2 * Math.PI) / n;
     const startAngle = -Math.PI / 2;
 
@@ -1643,22 +1778,31 @@ class A2UIRenderer {
       };
     };
 
-    const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
-    const gridPolygons = gridLevels.map((level) =>
-      Array.from({ length: n }, (_, i) => {
+    // 4 concentric grid levels with value labels
+    const gridLevels = [0.25, 0.5, 0.75, 1.0];
+    const gridPolygons = gridLevels.map((level) => ({
+      level,
+      points: Array.from({ length: n }, (_, i) => {
         const p = getPoint(i, level);
         return `${p.x},${p.y}`;
-      }).join(" ")
-    );
+      }).join(" "),
+    }));
 
     const axisLines = Array.from({ length: n }, (_, i) => {
       const p = getPoint(i, 1);
       return { x2: p.x, y2: p.y };
     });
 
+    // Grid value labels on the right (angle = 0, i.e. 3 o'clock direction)
+    const gridLabels = gridLevels.map((level) => ({
+      x: cx + radius * level + 4,
+      y: cy - 4,
+      text: level.toFixed(2),
+    }));
+
+    const labelRadius = radius + 30;
     const labels = axisData.map((d, i) => {
       const angle = startAngle + i * angleStep;
-      const labelRadius = radius + 24;
       const x = cx + labelRadius * Math.cos(angle);
       const y = cy + labelRadius * Math.sin(angle);
       let anchor = "middle";
@@ -1667,64 +1811,74 @@ class A2UIRenderer {
       return { x, y, label: d.label, anchor };
     });
 
-    // Build polygon points for each series
-    const seriesPolygons = multiSeries.map((series) => ({
-      color: series.color,
-      label: series.label,
-      points: series.data
+    // Build polygon + data points for each series
+    const seriesData = multiSeries.map((series) => {
+      const points: Array<{ x: number; y: number }> = [];
+      const polyStr = series.data
         .map((d, i) => {
           const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0;
           const p = getPoint(i, pct);
+          points.push(p);
           return `${p.x},${p.y}`;
         })
-        .join(" "),
-    }));
+        .join(" ");
+      return { color: series.color, label: series.label, polyStr, points };
+    });
 
     return html`
-      <div>
-        <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
-          ${gridPolygons.map((points) => svg`<polygon points="${points}" class="radar-grid" />`)}
+      <div class="arena-radar-container" style="max-width: 500px; width: 100%;">
+        <svg viewBox="0 0 ${svgSize} ${svgSize}" width="100%">
+          ${gridPolygons.map((g) => svg`<polygon points="${g.points}" class="radar-grid" />`)}
           ${axisLines.map(
             (line) =>
               svg`<line x1="${cx}" y1="${cy}" x2="${line.x2}" y2="${line.y2}" class="radar-axis" />`
           )}
-          ${seriesPolygons.map(
+          ${gridLabels.map(
+            (gl) => svg`
+              <text x="${gl.x}" y="${gl.y}" fill="rgb(var(--color-text-muted, 100 116 139))"
+                    font-size="9" font-family="system-ui" opacity="0.6">
+                ${gl.text}
+              </text>
+            `
+          )}
+          ${seriesData.map(
             (sp) => svg`
               <polygon
-                points="${sp.points}"
+                points="${sp.polyStr}"
                 fill="${sp.color}"
-                fill-opacity="0.15"
+                fill-opacity="0.12"
                 stroke="${sp.color}"
                 stroke-width="2"
                 class="motion-safe:animate-radar-expand"
                 style="transform-origin: ${cx}px ${cy}px"
               />
+              ${sp.points.map(
+                (pt) => svg`<circle cx="${pt.x}" cy="${pt.y}" r="3.5" fill="${sp.color}" />`
+              )}
             `
           )}
           ${labels.map(
             (l) => svg`
-              <text x="${l.x}" y="${l.y}" text-anchor="${l.anchor}" class="radar-label" dominant-baseline="central">
+              <text x="${l.x}" y="${l.y}" text-anchor="${l.anchor}" class="radar-label" dominant-baseline="central"
+                    font-size="11">
                 ${l.label}
               </text>
             `
           )}
         </svg>
-        <div
-          style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; justify-content: center;"
-        >
-          ${multiSeries.map(
-            (s) => html`
+      </div>
+      <div class="arena-legend">
+        ${multiSeries.map(
+          (s) => html`
+            <span class="arena-legend-item">
               <span
-                style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--color-text-secondary, #888);"
-              >
-                <span
-                  style="width: 10px; height: 10px; border-radius: 50%; background: ${s.color}; display: inline-block;"
-                ></span>
-                ${s.label}
-              </span>
-            `
-          )}
-        </div>
+                class="arena-legend-dot"
+                style="background: ${s.color}; box-shadow: 0 0 8px ${s.color};"
+              ></span>
+              ${s.label}
+            </span>
+          `
+        )}
       </div>
     `;
   }

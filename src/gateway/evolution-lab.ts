@@ -302,6 +302,17 @@ function getCategoryLabel(category: string): string {
   return labelMap[category] || category;
 }
 
+function getCategoryIcon(category: string): string {
+  const iconMap: Record<string, string> = {
+    safety: "shield",
+    usefulness: "lightbulb",
+    accuracy: "target",
+    relevance: "link",
+    personalization: "user",
+  };
+  return iconMap[category] || "star";
+}
+
 // ============================================================================
 // Main Lab Page — 5-Tab Dashboard
 // ============================================================================
@@ -494,10 +505,13 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   // Row 2: Arena Comparison Area
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const arenaChildren: string[] = [];
-
-    // Header row: title + mode toggle
-    const arenaTitle = ui.text(t("evolution.selectRunsForComparison"), "label");
     const radarMode = data.radarMode || "categories";
+    const selectedIds = new Set(data.selectedRunIds || []);
+    const selectedOrder = data.selectedRunIds || [];
+    const recentRuns = data.benchmarkRuns.slice(0, 10);
+
+    // Header row: title + mode toggle buttons
+    const arenaTitle = ui.text(t("evolution.selectRunsForComparison"), "label");
     const catBtn = ui.button(t("evolution.categoriesMode"), "set_radar_mode", {
       variant: radarMode === "categories" ? "primary" : "outline",
       size: "sm",
@@ -512,104 +526,111 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       ui.row([arenaTitle, catBtn, critBtn], { gap: 8, align: "center", justify: "between" })
     );
 
-    // Run selector pills
-    const selectedIds = new Set(data.selectedRunIds || []);
-    const pillBtns: string[] = [];
-    const recentRuns = data.benchmarkRuns.slice(0, 10);
-    for (const r of recentRuns) {
-      const shortLabel =
-        r.presetName || r.modelId?.split("/").pop() || r.version_tag || r.id.slice(0, 8);
-      const isSelected = selectedIds.has(r.id);
-      pillBtns.push(
-        ui.button(isSelected ? `● ${shortLabel}` : `○ ${shortLabel}`, "toggle_benchmark_run", {
-          variant: isSelected ? "primary" : "outline",
-          size: "sm",
-          payload: { runId: r.id },
-        })
-      );
-    }
-    if (selectedIds.size > 0) {
-      pillBtns.push(
-        ui.button(t("evolution.clearSelection"), "clear_run_selection", {
-          variant: "ghost",
-          size: "sm",
-        })
-      );
-    }
-    arenaChildren.push(ui.row(pillBtns, { gap: 4, wrap: true } as any));
+    // Arena Pills (custom component)
+    const pillsId = `arena_pills_${Date.now()}`;
+    ui.addComponent(pillsId, {
+      id: pillsId,
+      type: "arena_pills",
+      pills: recentRuns.map((r) => ({
+        label: r.presetName || r.modelId?.split("/").pop() || r.version_tag || r.id.slice(0, 8),
+        color: selectedIds.has(r.id)
+          ? RUN_COLORS[selectedOrder.indexOf(r.id) % RUN_COLORS.length]
+          : "#555",
+        active: selectedIds.has(r.id),
+        action: "toggle_benchmark_run",
+        payload: { runId: r.id },
+      })),
+      clearAction: selectedIds.size > 0 ? "clear_run_selection" : undefined,
+    });
+    arenaChildren.push(pillsId);
 
     // Comparison content
     if (data.comparisonRuns && data.comparisonRuns.length > 0) {
       const multiSeries = buildMultiSeriesRadarData(data.comparisonRuns, radarMode);
-      const radar = ui.radarChart([], { multiSeries, size: 320, showLabels: true });
 
-      // Overall scores table
-      const scoreRows = data.comparisonRuns.map((cr) => ({
-        run: `● ${cr.label}`,
-        score: Math.round(cr.overallScore * 100),
-      }));
-      const scoreTable = ui.dataTable(
-        [
-          { key: "run", label: t("evolution.runs") },
-          { key: "score", label: t("evolution.score"), render: "progress" },
-        ],
-        scoreRows
+      // Radar card
+      const radarTitleId = ui.text(
+        radarMode === "criteria" ? "16 Criteria Radar" : "5 Categories Radar",
+        "label"
       );
-      const scoreTitle = ui.text(t("evolution.overallScores"), "label");
-      const rightCol = ui.column([scoreTitle, scoreTable], { gap: 8 });
+      const radar = ui.radarChart([], { multiSeries, size: 500, showLabels: true });
+      const radarCardId = ui.column([radarTitleId, radar], {
+        gap: 8,
+        className: "arena-card",
+      } as any);
 
-      arenaChildren.push(ui.row([radar, rightCol], { gap: 16 }));
+      // Score table card (custom component)
+      const scoreTitleId = ui.text(t("evolution.overallScores"), "label");
+      const scoreTableId = `arena_score_${Date.now()}`;
+      ui.addComponent(scoreTableId, {
+        id: scoreTableId,
+        type: "arena_score_table",
+        rows: data.comparisonRuns.map((cr) => ({
+          label: cr.label,
+          color: cr.color,
+          score: cr.overallScore,
+        })),
+      });
+      const scoreCardId = ui.column([scoreTitleId, scoreTableId], {
+        gap: 8,
+        className: "arena-card",
+      } as any);
 
-      // Category Breakdown (criteria mode)
+      // Dashboard grid (radar + scores)
+      const dashGridId = ui.column([radarCardId, scoreCardId], {
+        gap: 20,
+        className: "arena-dashboard-grid",
+        style: "display: grid;",
+      } as any);
+      arenaChildren.push(dashGridId);
+
+      // Category Breakdown cards (criteria mode)
       if (radarMode === "criteria" && data.comparisonRuns.length > 0) {
         const breakdownTitle = ui.text(t("evolution.categoryBreakdown"), "label");
         arenaChildren.push(breakdownTitle);
 
+        const breakdownCards: string[] = [];
         const refRun = data.comparisonRuns[0];
         for (const cs of refRun.categoryScores) {
           if (!cs.subComponents || cs.subComponents.length === 0) continue;
-          const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
           const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
-          const colDefs: Array<{
-            key: string;
-            label: string;
-            render?: "text" | "badge" | "progress" | "date" | "link";
-          }> = [{ key: "criterion", label: t("evolution.criteria") }];
-          for (const cr of data.comparisonRuns) {
-            colDefs.push({ key: `run_${cr.id.slice(0, 8)}`, label: cr.label, render: "progress" });
-          }
-          const rows = cs.subComponents.map((sub) => {
-            const row: Record<string, unknown> = { criterion: sub.name };
-            for (const cr of data.comparisonRuns!) {
+          const criteria = cs.subComponents.map((sub) => ({
+            name: sub.name,
+            scores: data.comparisonRuns!.map((cr) => {
               const crCat = cr.categoryScores.find((c) => c.category === cs.category);
               const crSub = crCat?.subComponents?.find((s) => s.name === sub.name);
-              row[`run_${cr.id.slice(0, 8)}`] = crSub ? Math.round(crSub.score * 100) : 0;
-            }
-            return row;
+              const val = crSub?.score ?? 0;
+              return { value: val, color: cr.color };
+            }),
+          }));
+
+          const catCardId = `arena_cat_${cs.category}_${Date.now()}`;
+          ui.addComponent(catCardId, {
+            id: catCardId,
+            type: "arena_category_card",
+            categoryName: getCategoryLabel(cs.category),
+            categoryColor: SHARP_CATEGORY_COLORS[cs.category] || "#818cf8",
+            categoryIcon: getCategoryIcon(cs.category),
+            avgScore,
+            criteria,
           });
-          const catTable = ui.dataTable(colDefs, rows);
-          const scoreBadge = ui.badge(`${Math.round(avgScore * 100)}%`, {
-            variant: avgScore >= 0.9 ? "success" : avgScore >= 0.7 ? "warning" : "error",
-          });
-          const header = ui.row([ui.text(getCategoryLabel(cs.category), "label"), scoreBadge], {
-            gap: 8,
-            align: "center",
-          });
-          const progress = ui.progress(Math.round(avgScore * 100), {
-            maxValue: 100,
-            color: catColor,
-            size: "sm",
-          });
-          arenaChildren.push(
-            ui.collapsible(getCategoryLabel(cs.category), [header, progress, catTable])
-          );
+          breakdownCards.push(catCardId);
+        }
+
+        if (breakdownCards.length > 0) {
+          const breakdownGridId = ui.column(breakdownCards, {
+            gap: 16,
+            className: "arena-breakdown-grid",
+            style: "display: grid;",
+          } as any);
+          arenaChildren.push(breakdownGridId);
         }
       }
     } else {
       arenaChildren.push(ui.text(t("evolution.noRunsSelected"), "caption"));
     }
 
-    children.push(ui.card(arenaChildren, { padding: 16 }));
+    children.push(ui.card(arenaChildren, { padding: 16, className: "arena-section" } as any));
   }
 
   // Row 3: Score Trend

@@ -45,7 +45,11 @@ export type A2UIComponentType =
   // Evolution Lab components
   | "git_timeline"
   | "step_indicator"
-  | "file_tree";
+  | "file_tree"
+  // Arena dashboard components
+  | "arena_pills"
+  | "arena_score_table"
+  | "arena_category_card";
 
 // Base component interface
 export interface A2UIComponent {

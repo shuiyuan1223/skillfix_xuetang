@@ -135,6 +135,12 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderCodeEditor(comp, ctx);
     case "commit_list":
       return renderCommitList(comp, ctx);
+    case "arena_pills":
+      return renderArenaPills(comp, ctx);
+    case "arena_score_table":
+      return renderArenaScoreTable(comp, ctx);
+    case "arena_category_card":
+      return renderArenaCategoryCard(comp, ctx);
     case "collapsible":
       return renderCollapsible(comp, ctx);
     case "activity_rings":
@@ -864,6 +870,90 @@ function renderCommitList(comp: A2UIComponent, ctx: RenderContext): string[] {
     const hash = ansi.yellow(c.shortHash);
     const msg = c.message.length > 50 ? c.message.substring(0, 50) + "..." : c.message;
     lines.push(indent(ctx, `${hash} ${msg} ${ansi.dim(c.date)}`));
+  }
+
+  return lines;
+}
+
+function renderArenaPills(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const pills =
+    (comp.pills as Array<{
+      label: string;
+      active: boolean;
+      action: string;
+      payload?: Record<string, unknown>;
+    }>) || [];
+  const clearAction = comp.clearAction as string | undefined;
+  const lines: string[] = [];
+
+  for (const p of pills) {
+    ctx.actionCounter++;
+    const marker = p.active ? ansi.cyan("●") : ansi.dim("○");
+    const label = p.active ? ansi.bold(p.label) : p.label;
+    ctx.actions.push({
+      number: ctx.actionCounter,
+      label: p.label,
+      action: p.action,
+      payload: p.payload,
+    });
+    lines.push(indent(ctx, `${ansi.cyan(`[${ctx.actionCounter}]`)} ${marker} ${label}`));
+  }
+
+  if (clearAction) {
+    ctx.actionCounter++;
+    ctx.actions.push({
+      number: ctx.actionCounter,
+      label: "Clear",
+      action: clearAction,
+    });
+    lines.push(indent(ctx, `${ansi.cyan(`[${ctx.actionCounter}]`)} ${ansi.dim("✕ Clear")}`));
+  }
+
+  return lines;
+}
+
+function renderArenaScoreTable(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const rows = (comp.rows as Array<{ label: string; score: number }>) || [];
+  const lines: string[] = [];
+  const colWidth = 20;
+
+  lines.push(indent(ctx, ansi.bold(padRight("Run", colWidth) + padRight("Score", 12))));
+  lines.push(indent(ctx, "─".repeat(colWidth + 12)));
+
+  for (const r of rows) {
+    const pct = Math.round(r.score * 100);
+    const barLen = Math.round(pct / 5);
+    const bar = "█".repeat(barLen) + "░".repeat(20 - barLen);
+    const scoreColor = r.score >= 0.9 ? ansi.green : r.score >= 0.7 ? ansi.yellow : ansi.red;
+    lines.push(
+      indent(
+        ctx,
+        `${padRight(r.label, colWidth)}${ansi.cyan(bar)} ${scoreColor(r.score.toFixed(2))}`
+      )
+    );
+  }
+
+  return lines;
+}
+
+function renderArenaCategoryCard(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const name = comp.categoryName as string;
+  const avgScore = comp.avgScore as number;
+  const criteria =
+    (comp.criteria as Array<{
+      name: string;
+      scores: Array<{ value: number }>;
+    }>) || [];
+  const lines: string[] = [];
+  const scoreColor = avgScore >= 0.9 ? ansi.green : avgScore >= 0.7 ? ansi.yellow : ansi.red;
+
+  lines.push(
+    indent(ctx, `${ansi.bold(`=== ${name}`)} ${scoreColor(`(${avgScore.toFixed(2)})`)} ===`)
+  );
+
+  for (const cr of criteria) {
+    const scores = cr.scores.map((s) => s.value.toFixed(2)).join(" / ");
+    lines.push(indent(ctx, `  ${padRight(cr.name, 22)} ${scores}`));
   }
 
   return lines;
