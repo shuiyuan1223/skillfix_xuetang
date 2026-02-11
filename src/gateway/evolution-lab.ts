@@ -121,6 +121,7 @@ interface ExternalProgressInfo {
   category: string;
   profile: string;
   modelId?: string;
+  presetName?: string;
 }
 
 interface VersionInfo {
@@ -147,7 +148,7 @@ export interface EvolutionLabData {
   testCaseCount?: number;
   // Benchmark
   testCases?: TestCaseInfo[];
-  externalProgress?: ExternalProgressInfo;
+  externalProgressMap?: Record<string, ExternalProgressInfo>;
   // Versions
   versions?: VersionInfo[];
   timelineEvents?: TimelineEvent[];
@@ -315,7 +316,10 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
  * - running   → "N|running"  (blue + pulse)
  * - failed    → "N|error"    (red)
  */
-function formatRunProgress(r: BenchmarkRunInfo, ep?: ExternalProgressInfo): string {
+function formatRunProgress(
+  r: BenchmarkRunInfo,
+  progressMap?: Record<string, ExternalProgressInfo>
+): string {
   const status = r.status || (r.duration_ms && r.duration_ms > 0 ? "completed" : "running");
   if (status === "completed") return "100|success";
   if (status === "failed") {
@@ -323,7 +327,21 @@ function formatRunProgress(r: BenchmarkRunInfo, ep?: ExternalProgressInfo): stri
       r.total_test_cases > 0 ? Math.round((r.passed_count / r.total_test_cases) * 100) : 0;
     return `${pct}|error`;
   }
-  // running — use external progress if available
+  // running — find matching progress entry from the map
+  let ep: ExternalProgressInfo | undefined;
+  if (progressMap) {
+    const entries = Object.values(progressMap);
+    // Match by modelId or presetName
+    ep = entries.find(
+      (e) =>
+        (r.modelId && e.modelId && r.modelId === e.modelId) ||
+        (r.presetName && e.presetName && r.presetName === e.presetName)
+    );
+    // Fallback: if only one entry and no match, use it (default model case)
+    if (!ep && entries.length === 1 && !r.modelId && !r.presetName) {
+      ep = entries[0];
+    }
+  }
   const pct = ep && ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
   return `${pct}|running`;
 }
@@ -461,7 +479,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     const runsLabel = ui.text(t("evolution.recentRuns"), "label");
     const runRows = data.benchmarkRuns.slice(0, 5).map((r) => ({
       id: r.id,
-      progress: formatRunProgress(r, data.externalProgress),
+      progress: formatRunProgress(r, data.externalProgressMap),
       version_tag: r.version_tag || "-",
       passed: `${r.passed_count}/${r.total_test_cases}`,
       model: r.presetName || r.modelId || "-",
@@ -636,7 +654,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     const runRows = data.benchmarkRuns.map((r) => ({
       id: r.id,
       time: new Date(r.timestamp).toLocaleString(),
-      progress: formatRunProgress(r, data.externalProgress),
+      progress: formatRunProgress(r, data.externalProgressMap),
       version_tag: r.version_tag || "-",
       passed: `${r.passed_count}/${r.total_test_cases}`,
       model: r.presetName || r.modelId || "-",

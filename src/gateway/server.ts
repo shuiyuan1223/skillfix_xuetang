@@ -96,6 +96,10 @@ import {
   writeBenchmarkProgress,
   readBenchmarkProgress,
   clearBenchmarkProgress,
+  readAllBenchmarkProgress,
+  writeBenchmarkProgressForRun,
+  clearBenchmarkProgressForRun,
+  clearAllUiBenchmarkProgress,
 } from "../evolution/benchmark-progress.js";
 import { listEvolutionVersions, getEvolutionVersionByBranch } from "../memory/db.js";
 import {
@@ -661,7 +665,14 @@ export class GatewaySession {
     | "config"
     | "versions" = "overview";
   private tracesPage = 0;
-  private benchmarkRunning = false;
+  private runningBenchmarks = new Map<
+    string,
+    { modelId: string; presetName?: string; startedAt: number }
+  >();
+
+  private get benchmarkRunning(): boolean {
+    return this.runningBenchmarks.size > 0;
+  }
 
   // Dashboard state
   private dashboardTab: "overview" | "vitals" | "activity" | "sleep" | "body" | "heart" | "trends" =
@@ -820,10 +831,16 @@ export class GatewaySession {
       session_id: this.sessionId,
     });
 
-    // Restore benchmark running state from progress file
-    const extProg = readBenchmarkProgress();
-    if (extProg && extProg.running && extProg.source === "ui") {
-      this.benchmarkRunning = true;
+    // Restore benchmark running state from all progress files
+    const allProgress = readAllBenchmarkProgress();
+    for (const [trackingId, info] of Object.entries(allProgress)) {
+      if (info.source === "ui" && trackingId !== "__cli__") {
+        this.runningBenchmarks.set(trackingId, {
+          modelId: info.modelId || "",
+          presetName: info.presetName,
+          startedAt: info.startedAt,
+        });
+      }
     }
 
     // Send initial UI - default to chat view
@@ -1870,8 +1887,10 @@ export class GatewaySession {
       send({ type: "clear_surface", surface_id: "modal" });
       await this.handleNavigate("settings/prompts", send);
     } else if (action === "run_benchmark" || action === "open_benchmark_modal") {
-      if (this.benchmarkRunning) {
-        const toast = generateToast(t("evolution.benchmarkRunning"), "warning");
+      // Check if CLI is running a benchmark (block UI runs while CLI is active)
+      const cliProgress = readBenchmarkProgress();
+      if (cliProgress && cliProgress.running && cliProgress.source !== "ui") {
+        const toast = generateToast(t("evolution.externalBenchmarkRunning"), "warning");
         send({
           type: "a2ui",
           surface_id: "toast",
@@ -1910,21 +1929,23 @@ export class GatewaySession {
       // From model selector modal
       send({ type: "clear_surface", surface_id: "modal" });
 
-      if (this.benchmarkRunning) {
-        const toast = generateToast(t("evolution.benchmarkRunning"), "warning");
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
-        return;
-      }
-
       const profile = (payload?.profile as "quick" | "full") || "quick";
       const modelPreset = payload?.modelPreset as string;
 
-      if (modelPreset && modelPreset !== "__default__") {
+      if (modelPreset === "__all_models__") {
+        // Run all configured models in parallel
+        const benchmarkModels = getBenchmarkModels();
+        for (const [name, modelConfig] of Object.entries(benchmarkModels)) {
+          const apiKey = resolveBenchmarkModelApiKey(modelConfig);
+          this.runBenchmarkAsync(profile, send, {
+            provider: modelConfig.provider,
+            modelId: modelConfig.modelId,
+            apiKey,
+            baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
+            presetName: name,
+          }).catch(console.error);
+        }
+      } else if (modelPreset && modelPreset !== "__default__") {
         const benchmarkModels = getBenchmarkModels();
         const modelConfig = benchmarkModels[modelPreset];
         if (modelConfig) {
@@ -2356,19 +2377,36 @@ export class GatewaySession {
 
     // Benchmark: test cases + external progress
     let testCases: EvolutionLabData["testCases"];
-    let externalProgress: EvolutionLabData["externalProgress"];
+    let externalProgressMap: EvolutionLabData["externalProgressMap"];
 
     // External progress shared between overview + benchmark tabs
     if (activeTab === "overview" || activeTab === "benchmark") {
-      const extProg = readBenchmarkProgress();
-      if (extProg && extProg.running) {
-        externalProgress = {
-          current: extProg.current,
-          total: extProg.total,
-          category: extProg.category,
-          profile: extProg.profile,
-          modelId: extProg.modelId,
-        };
+      const allProgress = readAllBenchmarkProgress();
+      const map: Record<
+        string,
+        {
+          current: number;
+          total: number;
+          category: string;
+          profile: string;
+          modelId?: string;
+          presetName?: string;
+        }
+      > = {};
+      for (const [trackingId, info] of Object.entries(allProgress)) {
+        if (info.running) {
+          map[trackingId] = {
+            current: info.current,
+            total: info.total,
+            category: info.category,
+            profile: info.profile,
+            modelId: info.modelId,
+            presetName: info.presetName,
+          };
+        }
+      }
+      if (Object.keys(map).length > 0) {
+        externalProgressMap = map;
       }
     }
 
@@ -2545,7 +2583,7 @@ export class GatewaySession {
       testCaseCount,
       // Benchmark
       testCases,
-      externalProgress,
+      externalProgressMap,
       // Versions
       versions,
       timelineEvents: timelineEvents.length > 0 ? timelineEvents : undefined,
@@ -2583,6 +2621,16 @@ export class GatewaySession {
         root_id: labPage.root_id,
       });
     }
+  }
+
+  // Throttled version to avoid flooding during concurrent benchmark progress updates
+  private _throttleTimer: ReturnType<typeof setTimeout> | null = null;
+  private sendEvolutionLabUpdateThrottled(send: (msg: unknown) => void): void {
+    if (this._throttleTimer) return;
+    this._throttleTimer = setTimeout(() => {
+      this._throttleTimer = null;
+      this.sendEvolutionLabUpdate(send);
+    }, 500);
   }
 
   /**
@@ -2687,15 +2735,32 @@ export class GatewaySession {
     // Check for benchmark progress (UI or CLI started)
     let externalProgress;
     if (this.evolutionTab === "overview" || this.evolutionTab === "benchmark") {
-      const extProg = readBenchmarkProgress();
-      if (extProg && extProg.running) {
-        externalProgress = {
-          current: extProg.current,
-          total: extProg.total,
-          category: extProg.category,
-          profile: extProg.profile,
-          modelId: extProg.modelId,
-        };
+      const allProgress = readAllBenchmarkProgress();
+      const map: Record<
+        string,
+        {
+          current: number;
+          total: number;
+          category: string;
+          profile: string;
+          modelId?: string;
+          presetName?: string;
+        }
+      > = {};
+      for (const [trackingId, info] of Object.entries(allProgress)) {
+        if (info.running) {
+          map[trackingId] = {
+            current: info.current,
+            total: info.total,
+            category: info.category,
+            profile: info.profile,
+            modelId: info.modelId,
+            presetName: info.presetName,
+          };
+        }
+      }
+      if (Object.keys(map).length > 0) {
+        externalProgress = map;
       }
     }
 
@@ -2763,10 +2828,31 @@ export class GatewaySession {
       return;
     }
 
-    this.benchmarkRunning = true;
+    // Check if the same model is already running
+    const targetModelId = modelConfig?.modelId || "__default__";
+    for (const entry of this.runningBenchmarks.values()) {
+      if (entry.modelId === targetModelId) {
+        const toast = generateToast(t("evolution.modelAlreadyRunning"), "warning");
+        send({
+          type: "a2ui",
+          surface_id: "toast",
+          components: toast.components,
+          root_id: toast.root_id,
+        });
+        return;
+      }
+    }
 
-    // Write initial progress to shared file
-    writeBenchmarkProgress({
+    // Generate unique tracking ID for this run
+    const trackingId = crypto.randomUUID();
+    this.runningBenchmarks.set(trackingId, {
+      modelId: targetModelId,
+      presetName: modelConfig?.presetName,
+      startedAt: Date.now(),
+    });
+
+    // Write initial progress to per-run file
+    writeBenchmarkProgressForRun(trackingId, {
       running: true,
       source: "ui",
       profile,
@@ -2775,6 +2861,8 @@ export class GatewaySession {
       category: "",
       startedAt: Date.now(),
       modelId: modelConfig?.modelId,
+      presetName: modelConfig?.presetName,
+      trackingId,
       pid: process.pid,
     });
 
@@ -2842,8 +2930,8 @@ export class GatewaySession {
           return result;
         },
         onProgress: (current, total, testCase) => {
-          // Update shared progress file
-          writeBenchmarkProgress({
+          // Update per-run progress file
+          writeBenchmarkProgressForRun(trackingId, {
             running: true,
             source: "ui",
             profile,
@@ -2852,10 +2940,12 @@ export class GatewaySession {
             category: testCase.category,
             startedAt: Date.now(),
             modelId: modelConfig?.modelId,
+            presetName: modelConfig?.presetName,
+            trackingId,
             pid: process.pid,
           });
-          // Refresh evolution lab to update progress in table
-          this.sendEvolutionLabUpdate(send);
+          // Refresh evolution lab with throttling to avoid flooding
+          this.sendEvolutionLabUpdateThrottled(send);
         },
       });
 
@@ -2890,8 +2980,8 @@ export class GatewaySession {
         root_id: errorToast.root_id,
       });
     } finally {
-      this.benchmarkRunning = false;
-      clearBenchmarkProgress();
+      this.runningBenchmarks.delete(trackingId);
+      clearBenchmarkProgressForRun(trackingId);
       // Refresh table to reflect final state
       this.sendEvolutionLabUpdate(send);
     }
@@ -3139,6 +3229,7 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
     console.log(`[Gateway] Marked ${interrupted} interrupted benchmark run(s) as failed`);
   }
   clearBenchmarkProgress();
+  clearAllUiBenchmarkProgress();
 
   Bun.serve<WSData>({
     port,

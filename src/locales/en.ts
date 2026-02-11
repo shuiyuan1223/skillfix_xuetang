@@ -371,6 +371,8 @@ export const en: LocaleMessages = {
     scoreFail: "Fail",
     criticalFailure: "Critical Failure",
     subComponents: "Sub-Components",
+    allModelsParallel: "All Models (Parallel)",
+    modelAlreadyRunning: "This model is already running a benchmark",
   },
 
   memory: {

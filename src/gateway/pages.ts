@@ -1994,6 +1994,9 @@ export function generateBenchmarkModelSelectorModal(
   const modelOptions = [
     { value: "__default__", label: t("evolution.defaultModel") },
     ...models.map((m) => ({ value: m.name, label: m.label })),
+    ...(models.length > 1
+      ? [{ value: "__all_models__", label: t("evolution.allModelsParallel") }]
+      : []),
   ];
 
   const modelSelect = ui.formInput("modelPreset", "select", {

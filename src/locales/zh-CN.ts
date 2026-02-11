@@ -366,6 +366,8 @@ export const zhCN: LocaleMessages = {
     scoreFail: "不合格",
     criticalFailure: "严重失败",
     subComponents: "子维度",
+    allModelsParallel: "全部模型（并行）",
+    modelAlreadyRunning: "该模型的基准测试已在运行中",
   },
 
   memory: {

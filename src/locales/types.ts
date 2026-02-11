@@ -389,6 +389,8 @@ export interface LocaleMessages {
     scoreFail: string;
     criticalFailure: string;
     subComponents: string;
+    allModelsParallel: string;
+    modelAlreadyRunning: string;
   };
 
   // Memory page
