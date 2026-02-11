@@ -2645,8 +2645,11 @@ class PHAApp extends LitElement {
 
     .surface-modal-content {
       /* No background/border/shadow - inner a2ui-modal handles all visual styling */
+      width: 100%;
       max-height: 90vh;
       overflow: visible;
+      display: flex;
+      justify-content: center;
     }
 
     .surface-toast {
