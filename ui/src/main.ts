@@ -5134,15 +5134,7 @@ class PHAApp extends LitElement {
       }
     }
 
-    @keyframes evoGridPulse {
-      0%,
-      100% {
-        opacity: 0.3;
-      }
-      50% {
-        opacity: 0.5;
-      }
-    }
+    /* evoGridPulse removed — opacity animation on container made all content semi-transparent */
 
     @keyframes evoParticleTravel {
       0% {
@@ -5207,7 +5199,7 @@ class PHAApp extends LitElement {
         linear-gradient(rgba(129, 140, 248, 0.04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(129, 140, 248, 0.04) 1px, transparent 1px);
       background-size: 40px 40px;
-      animation: evoGridPulse 8s ease-in-out infinite;
+      /* no opacity animation — was causing foggy overlay on all content */
     }
 
     .evo-lab::before {

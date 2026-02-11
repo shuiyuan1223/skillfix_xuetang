@@ -1989,7 +1989,7 @@ export function generateBenchmarkModelSelectorModal(
     onCancel: "close_modal",
   });
 
-  const root = ui.modal(t("evolution.runBenchmark"), [form], { size: "sm" });
+  const root = ui.modal(t("evolution.runBenchmark"), [form], { size: "md" });
 
   return ui.build(root);
 }
