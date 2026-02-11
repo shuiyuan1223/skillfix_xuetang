@@ -4651,6 +4651,35 @@ class PHAApp extends LitElement {
       border-top: 1px solid rgba(102, 126, 234, 0.1);
     }
 
+    .a2ui-btn {
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid var(--color-border);
+    }
+
+    .a2ui-btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      border: none;
+    }
+    .a2ui-btn-primary:hover {
+      opacity: 0.9;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .a2ui-btn-ghost {
+      background: transparent;
+      color: var(--color-text-secondary);
+    }
+    .a2ui-btn-ghost:hover {
+      background: rgba(129, 140, 248, 0.1);
+      color: var(--color-text);
+    }
+
     /* ========== Git Timeline (GitLens Style) ========== */
     .a2ui-git-timeline {
       display: flex;
