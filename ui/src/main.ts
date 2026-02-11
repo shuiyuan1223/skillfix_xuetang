@@ -2088,47 +2088,47 @@ class PHAApp extends LitElement {
       --color-info: #3b82f6; /* blue-500 */
     }
 
-    /* ========== Light Mode — 小清新 Fresh & Clean ========== */
+    /* ========== Light Mode — Indigo/Violet Glassmorphism ========== */
     .shell.theme-light {
       --color-bg: #f5f7fa;
       --color-bg-secondary: #eef1f5;
       --color-bg-tertiary: #e3e8ef;
-      --color-surface: rgba(255, 255, 255, 0.95);
-      --color-surface-hover: rgba(248, 250, 252, 0.95);
-      --color-surface-card: rgba(255, 255, 255, 0.98);
+      --color-surface: rgba(255, 255, 255, 0.85);
+      --color-surface-hover: rgba(248, 250, 252, 0.9);
+      --color-surface-card: rgba(255, 255, 255, 0.9);
       --color-surface-elevated: rgba(255, 255, 255, 1);
       --color-surface-code: #f0f4f8;
-      --color-surface-inline-code: rgba(16, 185, 129, 0.08);
+      --color-surface-inline-code: rgba(91, 106, 191, 0.08);
       --color-overlay: rgba(15, 23, 42, 0.35);
       --color-gauge-track: rgba(100, 116, 139, 0.1);
       --color-border: rgba(0, 0, 0, 0.06);
-      --color-border-hover: rgba(16, 185, 129, 0.25);
+      --color-border-hover: rgba(91, 106, 191, 0.25);
 
       --color-text: #1e293b;
       --color-text-secondary: #475569;
       --color-text-muted: #94a3b8;
 
-      --color-primary: #10b981;
-      --color-primary-hover: #059669;
+      --color-primary: #5b6abf;
+      --color-primary-hover: #4f5aad;
     }
 
     /* Light: buttons — soft filled style, no jarring colored text */
     .shell.theme-light .a2ui-button-primary {
-      background: linear-gradient(135deg, #10b981 0%, #0d9488 100%);
+      background: linear-gradient(135deg, #5b6abf 0%, #764ba2 100%);
       color: #fff;
-      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+      box-shadow: 0 2px 8px rgba(91, 106, 191, 0.25);
     }
     .shell.theme-light .a2ui-button-primary:hover {
-      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+      box-shadow: 0 4px 14px rgba(91, 106, 191, 0.35);
     }
     .shell.theme-light .a2ui-button-secondary {
-      background: #f0fdf4;
+      background: #eef0fb;
       color: #1e293b;
-      border: 1px solid rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(91, 106, 191, 0.2);
     }
     .shell.theme-light .a2ui-button-secondary:hover {
-      background: #dcfce7;
-      border-color: rgba(16, 185, 129, 0.35);
+      background: #dde0f7;
+      border-color: rgba(91, 106, 191, 0.35);
     }
     .shell.theme-light .a2ui-button-outline {
       background: transparent;
@@ -2136,8 +2136,8 @@ class PHAApp extends LitElement {
       color: #334155;
     }
     .shell.theme-light .a2ui-button-outline:hover {
-      border-color: rgba(16, 185, 129, 0.4);
-      background: rgba(16, 185, 129, 0.04);
+      border-color: rgba(91, 106, 191, 0.4);
+      background: rgba(91, 106, 191, 0.04);
       color: #1e293b;
     }
     .shell.theme-light .a2ui-button-ghost {
@@ -2162,7 +2162,7 @@ class PHAApp extends LitElement {
       border-bottom: 1px solid rgba(0, 0, 0, 0.04);
     }
     .shell.theme-light .a2ui-data-table tbody tr:hover {
-      background: rgba(16, 185, 129, 0.03);
+      background: rgba(91, 106, 191, 0.03);
     }
 
     /* Light: tabs */
@@ -2173,12 +2173,12 @@ class PHAApp extends LitElement {
       color: #64748b;
     }
     .shell.theme-light .a2ui-tab:hover {
-      color: #10b981;
-      background: rgba(16, 185, 129, 0.04);
+      color: #5b6abf;
+      background: rgba(91, 106, 191, 0.04);
     }
     .shell.theme-light .a2ui-tab.active {
-      color: #10b981;
-      border-bottom-color: #10b981;
+      color: #5b6abf;
+      border-bottom-color: #5b6abf;
     }
 
     /* Light: progress bar */
@@ -2195,30 +2195,34 @@ class PHAApp extends LitElement {
       color: #475569;
     }
 
-    /* Light: cards — clean white with soft shadow */
+    /* Light: cards — glassmorphism with indigo tint */
     .shell.theme-light .a2ui-card {
-      background: #ffffff;
-      border: 1px solid rgba(0, 0, 0, 0.05);
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(91, 106, 191, 0.1);
       box-shadow:
         0 1px 3px rgba(0, 0, 0, 0.04),
         0 1px 2px rgba(0, 0, 0, 0.02);
     }
     .shell.theme-light .a2ui-card:hover {
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-      border-color: rgba(0, 0, 0, 0.08);
+      box-shadow: 0 4px 16px rgba(91, 106, 191, 0.08);
+      border-color: rgba(91, 106, 191, 0.2);
     }
     .shell.theme-light .a2ui-stat-card {
-      background: #ffffff;
-      border: 1px solid rgba(0, 0, 0, 0.05);
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(91, 106, 191, 0.1);
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     }
     .shell.theme-light .a2ui-stat-card::before {
-      background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.2), transparent);
+      background: linear-gradient(90deg, transparent, rgba(91, 106, 191, 0.2), transparent);
     }
     .shell.theme-light .a2ui-stat-card:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
-      border-color: rgba(16, 185, 129, 0.15);
+      box-shadow: 0 6px 20px rgba(91, 106, 191, 0.1);
+      border-color: rgba(91, 106, 191, 0.2);
     }
 
     /* Light: modal */
@@ -2241,18 +2245,20 @@ class PHAApp extends LitElement {
     }
     .shell.theme-light .a2ui-input:focus {
       background: #ffffff;
-      border-color: #10b981;
-      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+      border-color: #5b6abf;
+      box-shadow: 0 0 0 3px rgba(91, 106, 191, 0.1);
     }
     .shell.theme-light .a2ui-select {
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(71,85,105,0.6)' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
     }
 
-    /* Light: sidebar */
+    /* Light: sidebar — glassmorphism */
     .shell.theme-light .surface-sidebar {
-      background: #ffffff;
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       box-shadow: 1px 0 12px rgba(0, 0, 0, 0.03);
-      border-right: 1px solid rgba(0, 0, 0, 0.04);
+      border-right: 1px solid rgba(91, 106, 191, 0.08);
     }
     .shell.theme-light .shell-header {
       background: transparent;
@@ -2266,14 +2272,14 @@ class PHAApp extends LitElement {
       color: #475569;
     }
     .shell.theme-light .a2ui-nav-item:hover {
-      background: rgba(16, 185, 129, 0.05);
+      background: rgba(91, 106, 191, 0.05);
       color: #1e293b;
     }
     .shell.theme-light .a2ui-nav-item.active {
-      background: rgba(16, 185, 129, 0.08);
-      border: 1px solid rgba(16, 185, 129, 0.15);
-      color: #10b981;
-      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+      background: rgba(91, 106, 191, 0.08);
+      border: 1px solid rgba(91, 106, 191, 0.15);
+      color: #5b6abf;
+      box-shadow: 0 2px 8px rgba(91, 106, 191, 0.08);
     }
     .shell.theme-light.collapsed .a2ui-nav-item {
       background: rgba(0, 0, 0, 0.02);
@@ -2285,7 +2291,7 @@ class PHAApp extends LitElement {
       background: linear-gradient(
         90deg,
         rgba(0, 0, 0, 0.04) 25%,
-        rgba(16, 185, 129, 0.06) 50%,
+        rgba(91, 106, 191, 0.06) 50%,
         rgba(0, 0, 0, 0.04) 75%
       );
       background-size: 200% 100%;
@@ -2298,8 +2304,8 @@ class PHAApp extends LitElement {
       color: #1e293b;
     }
     .shell.theme-light .inline-code {
-      background: rgba(16, 185, 129, 0.06);
-      color: #059669;
+      background: rgba(91, 106, 191, 0.06);
+      color: #4f5aad;
     }
 
     /* Light: collapsible */
@@ -2309,8 +2315,8 @@ class PHAApp extends LitElement {
 
     /* Light: progress surface */
     .shell.theme-light .surface-progress {
-      background: rgba(16, 185, 129, 0.05);
-      border-bottom: 1px solid rgba(16, 185, 129, 0.1);
+      background: rgba(91, 106, 191, 0.05);
+      border-bottom: 1px solid rgba(91, 106, 191, 0.1);
     }
 
     /* Light: chart backgrounds */
@@ -2385,6 +2391,18 @@ class PHAApp extends LitElement {
       background-image:
         linear-gradient(rgba(102, 126, 234, 0.03) 1px, transparent 1px),
         linear-gradient(90deg, rgba(102, 126, 234, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+      pointer-events: none;
+    }
+
+    /* Light theme decorative grid */
+    .shell.theme-light::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(91, 106, 191, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91, 106, 191, 0.04) 1px, transparent 1px);
       background-size: 50px 50px;
       pointer-events: none;
     }
@@ -4968,10 +4986,10 @@ class PHAApp extends LitElement {
     @keyframes evoPulseNode {
       0%,
       100% {
-        box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4);
+        box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.4);
       }
       50% {
-        box-shadow: 0 0 0 8px rgba(0, 229, 255, 0);
+        box-shadow: 0 0 0 8px rgba(129, 140, 248, 0);
       }
     }
 
@@ -4979,8 +4997,8 @@ class PHAApp extends LitElement {
     .evo-lab {
       position: relative;
       background-image:
-        linear-gradient(rgba(0, 229, 255, 0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0, 229, 255, 0.04) 1px, transparent 1px);
+        linear-gradient(rgba(129, 140, 248, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(129, 140, 248, 0.04) 1px, transparent 1px);
       background-size: 40px 40px;
       animation: evoGridPulse 8s ease-in-out infinite;
     }
@@ -4993,7 +5011,7 @@ class PHAApp extends LitElement {
       transform: translateX(-50%);
       width: 60%;
       height: 120px;
-      background: radial-gradient(ellipse at center, rgba(0, 229, 255, 0.08) 0%, transparent 70%);
+      background: radial-gradient(ellipse at center, rgba(129, 140, 248, 0.08) 0%, transparent 70%);
       pointer-events: none;
       z-index: 0;
     }
@@ -5005,7 +5023,7 @@ class PHAApp extends LitElement {
 
     /* Title gradient text */
     .evo-lab .a2ui-text-h1 {
-      background: linear-gradient(90deg, #00e5ff, #7c4dff, #00e5ff);
+      background: linear-gradient(90deg, #818cf8, #a855f7, #818cf8);
       background-size: 200% 100%;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -5015,124 +5033,124 @@ class PHAApp extends LitElement {
 
     /* Card neon border */
     .evo-lab .a2ui-card {
-      border-color: rgba(0, 229, 255, 0.15);
+      border-color: rgba(129, 140, 248, 0.15);
       box-shadow:
-        0 0 15px rgba(0, 229, 255, 0.05),
+        0 0 15px rgba(129, 140, 248, 0.05),
         0 8px 32px rgba(0, 0, 0, 0.1);
     }
 
     .evo-lab .a2ui-card:hover {
-      border-color: rgba(0, 229, 255, 0.3);
+      border-color: rgba(129, 140, 248, 0.3);
       box-shadow:
-        0 0 20px rgba(0, 229, 255, 0.1),
+        0 0 20px rgba(129, 140, 248, 0.1),
         0 12px 40px rgba(0, 0, 0, 0.4);
     }
 
-    /* Stat card cyan top line */
+    /* Stat card indigo top line */
     .evo-lab .a2ui-stat-card::before {
-      background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.4), transparent);
+      background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.4), transparent);
     }
 
     .evo-lab .a2ui-stat-card:hover {
-      border-color: rgba(0, 229, 255, 0.3);
+      border-color: rgba(129, 140, 248, 0.3);
       box-shadow:
         0 16px 48px rgba(0, 0, 0, 0.4),
-        0 0 24px rgba(0, 229, 255, 0.15);
+        0 0 24px rgba(129, 140, 248, 0.15);
     }
 
     /* Active tab underline glow */
     .evo-lab .a2ui-tab.active::after {
-      background: linear-gradient(90deg, #00e5ff, #7c4dff);
-      box-shadow: 0 2px 8px rgba(0, 229, 255, 0.3);
+      background: linear-gradient(90deg, #818cf8, #a855f7);
+      box-shadow: 0 2px 8px rgba(129, 140, 248, 0.3);
     }
 
-    /* Primary button cyan→purple gradient */
+    /* Primary button indigo→violet gradient */
     .evo-lab .a2ui-button-primary {
-      background: linear-gradient(135deg, #00e5ff 0%, #7c4dff 100%);
+      background: linear-gradient(135deg, #818cf8 0%, #a855f7 100%);
     }
 
     .evo-lab .a2ui-button-primary:hover {
-      box-shadow: 0 4px 16px rgba(0, 229, 255, 0.4);
+      box-shadow: 0 4px 16px rgba(129, 140, 248, 0.4);
     }
 
-    /* Secondary button cyan border */
+    /* Secondary button indigo border */
     .evo-lab .a2ui-button-secondary {
-      border: 1px solid rgba(0, 229, 255, 0.3);
-      background: rgba(0, 229, 255, 0.05);
+      border: 1px solid rgba(129, 140, 248, 0.3);
+      background: rgba(129, 140, 248, 0.05);
     }
 
     .evo-lab .a2ui-button-secondary:hover {
-      background: rgba(0, 229, 255, 0.1);
-      border-color: rgba(0, 229, 255, 0.5);
+      background: rgba(129, 140, 248, 0.1);
+      border-color: rgba(129, 140, 248, 0.5);
     }
 
     /* Progress bar glow */
     .evo-lab .a2ui-progress-fill {
-      box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+      box-shadow: 0 0 8px rgba(129, 140, 248, 0.3);
     }
 
     /* Gauge fill glow */
     .evo-lab .a2ui-gauge-fill {
-      filter: drop-shadow(0 0 4px rgba(0, 229, 255, 0.4));
+      filter: drop-shadow(0 0 4px rgba(129, 140, 248, 0.4));
     }
 
-    /* Table header cyan accent */
+    /* Table header indigo accent */
     .evo-lab .a2ui-data-table th {
-      border-bottom: 1px solid rgba(0, 229, 255, 0.15);
+      border-bottom: 1px solid rgba(129, 140, 248, 0.15);
     }
 
     /* Step connector gradient + glow */
     .evo-lab .step-connector.filled {
-      background: linear-gradient(90deg, #00e5ff, #7c4dff);
-      box-shadow: 0 0 6px rgba(0, 229, 255, 0.3);
+      background: linear-gradient(90deg, #818cf8, #a855f7);
+      box-shadow: 0 0 6px rgba(129, 140, 248, 0.3);
     }
 
     /* Git timeline connector gradient + particle */
     .evo-lab .a2ui-git-timeline .timeline-date-label {
-      color: rgba(0, 229, 255, 0.6);
+      color: rgba(129, 140, 248, 0.6);
     }
 
     .evo-lab .a2ui-git-timeline .timeline-date-line {
-      background: rgba(0, 229, 255, 0.1);
+      background: rgba(129, 140, 248, 0.1);
     }
 
     .evo-lab .timeline-event.gitlens-event.selected {
-      background: rgba(0, 229, 255, 0.08);
-      border-color: rgba(0, 229, 255, 0.25);
+      background: rgba(129, 140, 248, 0.08);
+      border-color: rgba(129, 140, 248, 0.25);
     }
 
     .evo-lab .timeline-event.gitlens-event:hover {
-      border-color: rgba(0, 229, 255, 0.15);
+      border-color: rgba(129, 140, 248, 0.15);
     }
 
     .evo-lab .gitlens-event:hover .timeline-hash {
-      color: #00e5ff;
-      background: rgba(0, 229, 255, 0.1);
+      color: #818cf8;
+      background: rgba(129, 140, 248, 0.1);
     }
 
     .evo-lab .timeline-branch-tag {
-      color: #00e5ff;
-      background: rgba(0, 229, 255, 0.08);
+      color: #818cf8;
+      background: rgba(129, 140, 248, 0.08);
     }
 
     .evo-lab .timeline-avatar {
-      background: rgba(0, 229, 255, 0.2);
-      color: #00e5ff;
+      background: rgba(129, 140, 248, 0.2);
+      color: #818cf8;
     }
 
     .evo-lab .timeline-context-menu {
-      border-color: rgba(0, 229, 255, 0.2);
+      border-color: rgba(129, 140, 248, 0.2);
       box-shadow:
         0 8px 24px rgba(0, 0, 0, 0.5),
-        0 0 12px rgba(0, 229, 255, 0.1);
+        0 0 12px rgba(129, 140, 248, 0.1);
     }
 
     .evo-lab .ctx-item:hover {
-      background: rgba(0, 229, 255, 0.12);
+      background: rgba(129, 140, 248, 0.12);
     }
 
     .evo-lab .timeline-connector {
-      background: linear-gradient(180deg, rgba(0, 229, 255, 0.3), rgba(124, 77, 255, 0.3));
+      background: linear-gradient(180deg, rgba(129, 140, 248, 0.3), rgba(168, 85, 247, 0.3));
       position: relative;
       overflow: hidden;
     }
@@ -5144,8 +5162,8 @@ class PHAApp extends LitElement {
       width: 4px;
       height: 8px;
       border-radius: 2px;
-      background: #00e5ff;
-      box-shadow: 0 0 6px #00e5ff;
+      background: #818cf8;
+      box-shadow: 0 0 6px #818cf8;
       animation: evoParticleTravel 2s linear infinite;
     }
 
@@ -5159,39 +5177,39 @@ class PHAApp extends LitElement {
       transition: box-shadow 0.3s ease;
     }
 
-    /* Timeline score badge cyan */
+    /* Timeline score badge indigo */
     .evo-lab .timeline-score {
-      background: rgba(0, 229, 255, 0.15);
-      color: #00e5ff;
-      box-shadow: 0 0 6px rgba(0, 229, 255, 0.1);
+      background: rgba(129, 140, 248, 0.15);
+      color: #818cf8;
+      box-shadow: 0 0 6px rgba(129, 140, 248, 0.1);
     }
 
     /* Collapsible sections in evo lab */
     .evo-lab .a2ui-collapsible {
-      border-color: rgba(0, 229, 255, 0.15);
+      border-color: rgba(129, 140, 248, 0.15);
     }
 
     .evo-lab .a2ui-collapsible-header {
-      background: rgba(0, 229, 255, 0.03);
+      background: rgba(129, 140, 248, 0.03);
     }
 
     .evo-lab .a2ui-collapsible-header:hover {
-      background: rgba(0, 229, 255, 0.08);
+      background: rgba(129, 140, 248, 0.08);
     }
 
     /* Light mode adjustments — reduce glow intensity */
     .shell.theme-light .evo-lab {
       background-image:
-        linear-gradient(rgba(0, 180, 200, 0.06) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0, 180, 200, 0.06) 1px, transparent 1px);
+        linear-gradient(rgba(91, 106, 191, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(91, 106, 191, 0.06) 1px, transparent 1px);
     }
 
     .shell.theme-light .evo-lab::before {
-      background: radial-gradient(ellipse at center, rgba(0, 180, 200, 0.06) 0%, transparent 70%);
+      background: radial-gradient(ellipse at center, rgba(91, 106, 191, 0.06) 0%, transparent 70%);
     }
 
     .shell.theme-light .evo-lab .a2ui-text-h1 {
-      background: linear-gradient(90deg, #0097a7, #5e35b1, #0097a7);
+      background: linear-gradient(90deg, #5b6abf, #764ba2, #5b6abf);
       background-size: 200% 100%;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -5200,104 +5218,104 @@ class PHAApp extends LitElement {
     }
 
     .shell.theme-light .evo-lab .a2ui-card {
-      border-color: rgba(0, 151, 167, 0.15);
+      border-color: rgba(91, 106, 191, 0.15);
       box-shadow:
-        0 0 10px rgba(0, 151, 167, 0.03),
+        0 0 10px rgba(91, 106, 191, 0.03),
         0 8px 32px rgba(0, 0, 0, 0.05);
     }
 
     .shell.theme-light .evo-lab .a2ui-card:hover {
-      border-color: rgba(0, 151, 167, 0.25);
+      border-color: rgba(91, 106, 191, 0.25);
       box-shadow:
-        0 0 12px rgba(0, 151, 167, 0.06),
+        0 0 12px rgba(91, 106, 191, 0.06),
         0 12px 40px rgba(0, 0, 0, 0.08);
     }
 
     .shell.theme-light .evo-lab .a2ui-stat-card::before {
-      background: linear-gradient(90deg, transparent, rgba(0, 151, 167, 0.3), transparent);
+      background: linear-gradient(90deg, transparent, rgba(91, 106, 191, 0.3), transparent);
     }
 
     .shell.theme-light .evo-lab .a2ui-tab.active::after {
-      background: linear-gradient(90deg, #0097a7, #5e35b1);
-      box-shadow: 0 2px 6px rgba(0, 151, 167, 0.2);
+      background: linear-gradient(90deg, #5b6abf, #764ba2);
+      box-shadow: 0 2px 6px rgba(91, 106, 191, 0.2);
     }
 
     .shell.theme-light .evo-lab .a2ui-button-primary {
-      background: linear-gradient(135deg, #0097a7 0%, #5e35b1 100%);
+      background: linear-gradient(135deg, #5b6abf 0%, #764ba2 100%);
     }
 
     .shell.theme-light .evo-lab .a2ui-button-secondary {
-      border-color: rgba(0, 151, 167, 0.3);
-      background: rgba(0, 151, 167, 0.05);
+      border-color: rgba(91, 106, 191, 0.3);
+      background: rgba(91, 106, 191, 0.05);
     }
 
     .shell.theme-light .evo-lab .timeline-connector {
-      background: linear-gradient(180deg, rgba(0, 151, 167, 0.3), rgba(94, 53, 177, 0.3));
+      background: linear-gradient(180deg, rgba(91, 106, 191, 0.3), rgba(118, 75, 162, 0.3));
     }
 
     .shell.theme-light .evo-lab .timeline-connector::after {
-      background: #0097a7;
-      box-shadow: 0 0 4px #0097a7;
+      background: #5b6abf;
+      box-shadow: 0 0 4px #5b6abf;
     }
 
     .shell.theme-light .evo-lab .timeline-score {
-      background: rgba(0, 151, 167, 0.1);
-      color: #0097a7;
+      background: rgba(91, 106, 191, 0.1);
+      color: #5b6abf;
     }
 
     .shell.theme-light .evo-lab .timeline-date-label {
-      color: rgba(0, 151, 167, 0.7);
+      color: rgba(91, 106, 191, 0.7);
     }
 
     .shell.theme-light .evo-lab .timeline-date-line {
-      background: rgba(0, 151, 167, 0.15);
+      background: rgba(91, 106, 191, 0.15);
     }
 
     .shell.theme-light .evo-lab .timeline-event.gitlens-event.selected {
-      background: rgba(0, 151, 167, 0.08);
-      border-color: rgba(0, 151, 167, 0.2);
+      background: rgba(91, 106, 191, 0.08);
+      border-color: rgba(91, 106, 191, 0.2);
     }
 
     .shell.theme-light .evo-lab .timeline-branch-tag {
-      color: #0097a7;
-      background: rgba(0, 151, 167, 0.08);
+      color: #5b6abf;
+      background: rgba(91, 106, 191, 0.08);
     }
 
     .shell.theme-light .evo-lab .timeline-avatar {
-      background: rgba(0, 151, 167, 0.15);
-      color: #0097a7;
+      background: rgba(91, 106, 191, 0.15);
+      color: #5b6abf;
     }
 
     .shell.theme-light .evo-lab .gitlens-event:hover .timeline-hash {
-      color: #0097a7;
-      background: rgba(0, 151, 167, 0.1);
+      color: #5b6abf;
+      background: rgba(91, 106, 191, 0.1);
     }
 
     .shell.theme-light .evo-lab .timeline-context-menu {
       background: #fff;
-      border-color: rgba(0, 151, 167, 0.15);
+      border-color: rgba(91, 106, 191, 0.15);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
     }
 
     .shell.theme-light .evo-lab .ctx-item:hover {
-      background: rgba(0, 151, 167, 0.08);
+      background: rgba(91, 106, 191, 0.08);
     }
 
     .shell.theme-light .evo-lab .step-connector.filled {
-      background: linear-gradient(90deg, #0097a7, #5e35b1);
-      box-shadow: 0 0 4px rgba(0, 151, 167, 0.2);
+      background: linear-gradient(90deg, #5b6abf, #764ba2);
+      box-shadow: 0 0 4px rgba(91, 106, 191, 0.2);
     }
 
     .shell.theme-light .evo-lab .a2ui-collapsible {
-      border-color: rgba(0, 151, 167, 0.15);
+      border-color: rgba(91, 106, 191, 0.15);
     }
 
     .shell.theme-light .evo-lab .a2ui-collapsible-header {
-      background: rgba(0, 151, 167, 0.03);
+      background: rgba(91, 106, 191, 0.03);
     }
 
     .shell.theme-light .evo-lab .a2ui-collapsible-header:hover {
-      background: rgba(0, 151, 167, 0.06);
+      background: rgba(91, 106, 191, 0.06);
     }
 
     /* ========== Mobile Menu Button (hidden on desktop) ========== */
@@ -5389,7 +5407,8 @@ class PHAApp extends LitElement {
       }
 
       /* Mobile: disable decorative grid overlay that causes foggy layering */
-      .shell.theme-dark::before {
+      .shell.theme-dark::before,
+      .shell.theme-light::before {
         display: none;
       }
 
