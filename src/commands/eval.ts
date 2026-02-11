@@ -14,7 +14,11 @@ import {
   formatRegressionMarkdown,
   diagnose,
 } from "../evolution/index.js";
-import { ALL_BENCHMARK_TESTS, CATEGORY_LABELS } from "../evolution/benchmark-seed.js";
+import {
+  ALL_BENCHMARK_TESTS,
+  CATEGORY_LABELS,
+  getBenchmarkTests,
+} from "../evolution/benchmark-seed.js";
 import {
   generateAsciiRadar,
   generateRadarData,
@@ -864,11 +868,18 @@ export function registerEvalCommand(program: Command): void {
       async function runSingleModel(
         entry: ModelEntry,
         mi: number,
-        opts: { quiet?: boolean } = {}
+        opts: {
+          noSpinner?: boolean;
+          onProgressOverride?: (
+            current: number,
+            total: number,
+            testCase: { id: string; category: string }
+          ) => void;
+        } = {}
       ): Promise<RunResult | null> {
         const prefix = isMulti ? `[${mi + 1}/${modelEntries.length}] ${entry.label}` : "";
 
-        if (!opts.quiet) {
+        if (!opts.noSpinner) {
           console.log("");
           printHeader(isMulti ? `Benchmark — ${entry.label}` : "Benchmark", `${profile} profile`);
         }
@@ -897,10 +908,7 @@ export function registerEvalCommand(program: Command): void {
           };
         }
 
-        // In parallel mode, track progress per-model without spinner/file conflicts
-        const progressState = { current: 0, total: 0 };
-
-        const spinner = opts.quiet
+        const spinner = opts.noSpinner
           ? null
           : new Spinner(`${prefix ? prefix + " — " : ""}Running benchmarks...`);
         spinner?.start();
@@ -924,14 +932,12 @@ export function registerEvalCommand(program: Command): void {
           },
           llmCall: rawLLMCall,
           onProgress: (current, total, testCase) => {
-            progressState.current = current;
-            progressState.total = total;
-            if (spinner) {
-              spinner.update(
+            if (opts.onProgressOverride) {
+              opts.onProgressOverride(current, total, testCase);
+            } else {
+              spinner?.update(
                 `${prefix ? prefix + " — " : ""}Running ${current}/${total}: ${testCase.id}`
               );
-            }
-            if (!opts.quiet) {
               writeBenchmarkProgress({
                 running: true,
                 source: "cli",
@@ -963,7 +969,7 @@ export function registerEvalCommand(program: Command): void {
           return { presetName: entry.presetName, label: entry.label, run, results, categoryScores };
         } catch (error) {
           spinner?.stop("error");
-          if (!opts.quiet) clearBenchmarkProgress();
+          if (!opts.onProgressOverride) clearBenchmarkProgress();
           warn(
             `Benchmark failed for ${entry.label}: ${error instanceof Error ? error.message : String(error)}`
           );
@@ -976,23 +982,48 @@ export function registerEvalCommand(program: Command): void {
         console.log("");
         printHeader(`Benchmark — ${modelEntries.length} models (parallel)`, `${profile} profile`);
 
-        writeBenchmarkProgress({
-          running: true,
-          source: "cli",
+        const perModelProgress = new Array(modelEntries.length).fill(0);
+        const testsPerModel = getBenchmarkTests({
           profile,
-          current: 0,
-          total: modelEntries.length,
-          category: "",
-          startedAt: Date.now(),
-          modelId: modelEntries.map((e) => e.modelId).join(","),
-          pid: process.pid,
-        });
+          category: options.category as BenchmarkCategory | undefined,
+        }).length;
+        const totalTests = testsPerModel * modelEntries.length;
+        const startedAt = Date.now();
+
+        const updateAggregateProgress = () => {
+          const current = perModelProgress.reduce((a: number, b: number) => a + b, 0);
+          writeBenchmarkProgress({
+            running: true,
+            source: "cli",
+            profile,
+            current,
+            total: totalTests,
+            category: "",
+            startedAt,
+            modelId: `${modelEntries.length} models`,
+            pid: process.pid,
+          });
+          parallelSpinner.update(
+            `Running ${modelEntries.length} models... (${current}/${totalTests})`
+          );
+        };
 
         const parallelSpinner = new Spinner(`Running ${modelEntries.length} models in parallel...`);
         parallelSpinner.start();
 
+        // Write initial progress
+        updateAggregateProgress();
+
         const settled = await Promise.allSettled(
-          modelEntries.map((entry, mi) => runSingleModel(entry, mi, { quiet: true }))
+          modelEntries.map((entry, mi) =>
+            runSingleModel(entry, mi, {
+              noSpinner: true,
+              onProgressOverride: (current) => {
+                perModelProgress[mi] = current;
+                updateAggregateProgress();
+              },
+            })
+          )
         );
 
         parallelSpinner.stop("success");
