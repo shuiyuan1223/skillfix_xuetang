@@ -2257,6 +2257,7 @@ export class GatewaySession {
     // Always load benchmark runs (used by overview + benchmark tabs)
     try {
       const runs = listBenchmarkRuns({ limit: 20 });
+      const benchmarkModelsCfg = getBenchmarkModels();
       benchmarkRunsList = runs.map((r) => {
         let modelId: string | undefined;
         let presetName: string | undefined;
@@ -2264,7 +2265,13 @@ export class GatewaySession {
           try {
             const meta = JSON.parse(r.metadata);
             modelId = meta.modelId;
-            presetName = meta.presetName;
+            // Resolve label from config: presetName key → config.label
+            const rawPreset = meta.presetName as string | undefined;
+            if (rawPreset && benchmarkModelsCfg[rawPreset]?.label) {
+              presetName = benchmarkModelsCfg[rawPreset].label;
+            } else {
+              presetName = rawPreset;
+            }
           } catch {
             // ok
           }
@@ -2623,13 +2630,22 @@ export class GatewaySession {
     }
   }
 
-  // Throttled version to avoid flooding during concurrent benchmark progress updates
+  // Throttled version to avoid flooding during concurrent benchmark progress updates.
+  // Uses trailing-edge: always sends the most recent state after the throttle window.
   private _throttleTimer: ReturnType<typeof setTimeout> | null = null;
+  private _throttlePendingSend: ((msg: unknown) => void) | null = null;
   private sendEvolutionLabUpdateThrottled(send: (msg: unknown) => void): void {
+    this._throttlePendingSend = send;
     if (this._throttleTimer) return;
+    // Send immediately on first call
+    this.sendEvolutionLabUpdate(send);
     this._throttleTimer = setTimeout(() => {
       this._throttleTimer = null;
-      this.sendEvolutionLabUpdate(send);
+      // Flush any pending update that arrived during throttle window
+      if (this._throttlePendingSend) {
+        this.sendEvolutionLabUpdate(this._throttlePendingSend);
+        this._throttlePendingSend = null;
+      }
     }, 500);
   }
 

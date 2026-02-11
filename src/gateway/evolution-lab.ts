@@ -331,14 +331,10 @@ function formatRunProgress(
   let ep: ExternalProgressInfo | undefined;
   if (progressMap) {
     const entries = Object.values(progressMap);
-    // Match by modelId or presetName
-    ep = entries.find(
-      (e) =>
-        (r.modelId && e.modelId && r.modelId === e.modelId) ||
-        (r.presetName && e.presetName && r.presetName === e.presetName)
-    );
+    // Match primarily by modelId (always consistent between DB and progress files)
+    ep = entries.find((e) => r.modelId && e.modelId && r.modelId === e.modelId);
     // Fallback: if only one entry and no match, use it (default model case)
-    if (!ep && entries.length === 1 && !r.modelId && !r.presetName) {
+    if (!ep && entries.length === 1 && !r.modelId) {
       ep = entries[0];
     }
   }
