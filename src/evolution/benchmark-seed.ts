@@ -65,6 +65,11 @@ function loadSkillConfig(): {
 
     const meta = JSON.parse(jsonStr);
     const config = meta?.pha?.config;
+    // SHARP 2.0 config uses subComponents instead of dimensionWeights — skip it
+    // so the old dimension-weighted scoring falls through to defaults
+    if (config?.framework === "SHARP 2.0") {
+      return null;
+    }
     if (config?.categories && Array.isArray(config.categories)) {
       return config;
     }

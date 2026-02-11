@@ -1557,23 +1557,74 @@ ${value || ""}</textarea
         `;
         break;
 
-      case "select":
+      case "select": {
+        const selectedOpt = options?.find((opt) => opt.value === value);
+        const selectedLabel = selectedOpt?.label || placeholder || "Select...";
         input = html`
-          <select
-            class="a2ui-input a2ui-select"
-            name=${name}
-            ?required=${required}
-            @change=${handleChange}
-          >
-            ${!value ? html`<option value="">${placeholder || "Select..."}</option>` : nothing}
-            ${options?.map(
-              (opt) => html`
-                <option value=${opt.value} ?selected=${value === opt.value}>${opt.label}</option>
-              `
-            )}
-          </select>
+          <div class="a2ui-custom-select" data-name=${name}>
+            <button
+              type="button"
+              class="a2ui-select-trigger"
+              @click=${(e: Event) => {
+                const btn = e.currentTarget as HTMLElement;
+                const wrapper = btn.closest(".a2ui-custom-select") as HTMLElement;
+                wrapper.classList.toggle("open");
+                // Close on outside click
+                const closeHandler = (ev: Event) => {
+                  if (!wrapper.contains(ev.target as Node)) {
+                    wrapper.classList.remove("open");
+                    document.removeEventListener("click", closeHandler);
+                  }
+                };
+                setTimeout(() => document.addEventListener("click", closeHandler), 0);
+              }}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === "Escape") {
+                  const wrapper = (e.currentTarget as HTMLElement).closest(
+                    ".a2ui-custom-select"
+                  ) as HTMLElement;
+                  wrapper.classList.remove("open");
+                }
+              }}
+            >
+              <span class="a2ui-select-value ${!selectedOpt ? "placeholder" : ""}"
+                >${selectedLabel}</span
+              >
+              <svg
+                class="a2ui-select-arrow"
+                width="12"
+                height="12"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+              >
+                <path d="M8 11L3 6h10l-5 5z" />
+              </svg>
+            </button>
+            <div class="a2ui-select-dropdown">
+              ${options?.map(
+                (opt) => html`
+                  <div
+                    class="a2ui-select-option ${value === opt.value ? "selected" : ""}"
+                    data-value=${opt.value}
+                    @click=${() => {
+                      if (onChange) {
+                        this.sendAction(onChange, { name, value: opt.value });
+                      }
+                      const wrapper = document.querySelector(
+                        `.a2ui-custom-select[data-name="${name}"]`
+                      ) as HTMLElement;
+                      if (wrapper) wrapper.classList.remove("open");
+                    }}
+                  >
+                    ${opt.label}
+                  </div>
+                `
+              )}
+            </div>
+          </div>
         `;
         break;
+      }
 
       case "checkbox":
         input = html`
@@ -2252,6 +2303,38 @@ class PHAApp extends LitElement {
       background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(71,85,105,0.6)' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
     }
 
+    .shell.theme-light .a2ui-select-trigger {
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      color: #1e293b;
+    }
+    .shell.theme-light .a2ui-select-trigger:hover {
+      border-color: rgba(91, 106, 191, 0.3);
+      background: #ffffff;
+    }
+    .shell.theme-light .a2ui-custom-select.open .a2ui-select-trigger {
+      border-color: #5b6abf;
+      box-shadow: 0 0 0 3px rgba(91, 106, 191, 0.1);
+    }
+    .shell.theme-light .a2ui-select-dropdown {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.12),
+        0 0 0 1px rgba(0, 0, 0, 0.04);
+    }
+    .shell.theme-light .a2ui-select-option {
+      color: #1e293b;
+    }
+    .shell.theme-light .a2ui-select-option:hover {
+      background: rgba(91, 106, 191, 0.1);
+    }
+    .shell.theme-light .a2ui-select-option.selected {
+      background: rgba(91, 106, 191, 0.12);
+      border-left-color: #5b6abf;
+    }
+
     /* Light: sidebar — glassmorphism */
     .shell.theme-light .surface-sidebar {
       background: rgba(255, 255, 255, 0.75);
@@ -2727,6 +2810,11 @@ class PHAApp extends LitElement {
     }
     .a2ui-row > .a2ui-form-field .a2ui-select {
       padding: 8px 32px 8px 12px;
+      font-size: 0.875rem;
+    }
+
+    .a2ui-row > .a2ui-form-field .a2ui-select-trigger {
+      padding: 8px 12px;
       font-size: 0.875rem;
     }
 
@@ -4446,6 +4534,96 @@ class PHAApp extends LitElement {
       padding-right: 36px;
     }
 
+    /* Custom Select Dropdown */
+    .a2ui-custom-select {
+      position: relative;
+      width: 100%;
+    }
+
+    .a2ui-select-trigger {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      border-radius: 10px;
+      color: var(--color-text);
+      font-size: 0.9375rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: left;
+    }
+
+    .a2ui-select-trigger:hover {
+      border-color: rgba(102, 126, 234, 0.4);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .a2ui-custom-select.open .a2ui-select-trigger {
+      border-color: rgba(102, 126, 234, 0.5);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .a2ui-select-value.placeholder {
+      color: var(--color-text-muted);
+    }
+
+    .a2ui-select-arrow {
+      flex-shrink: 0;
+      opacity: 0.5;
+      transition: transform 0.2s;
+    }
+
+    .a2ui-custom-select.open .a2ui-select-arrow {
+      transform: rotate(180deg);
+    }
+
+    .a2ui-select-dropdown {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      z-index: 50;
+      background: rgba(30, 41, 59, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      border-radius: 12px;
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.05);
+      padding: 4px;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+
+    .a2ui-custom-select.open .a2ui-select-dropdown {
+      display: block;
+    }
+
+    .a2ui-select-option {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      color: var(--color-text);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .a2ui-select-option:hover {
+      background: rgba(129, 140, 248, 0.15);
+    }
+
+    .a2ui-select-option.selected {
+      background: rgba(129, 140, 248, 0.2);
+      border-left: 3px solid #818cf8;
+      padding-left: 9px;
+      font-weight: 500;
+    }
+
     .a2ui-checkbox-label {
       display: flex;
       align-items: center;
@@ -4993,6 +5171,35 @@ class PHAApp extends LitElement {
       }
     }
 
+    /* SHARP Category Cards */
+    .sharp-category-card {
+      border-top: 3px solid rgba(129, 140, 248, 0.3);
+      transition: border-color 0.2s;
+    }
+    .sharp-cat-safety {
+      border-top-color: #ff6b6b;
+    }
+    .sharp-cat-usefulness {
+      border-top-color: #4ecdc4;
+    }
+    .sharp-cat-accuracy {
+      border-top-color: #ffe66d;
+    }
+    .sharp-cat-relevance {
+      border-top-color: #95e1d3;
+    }
+    .sharp-cat-personalization {
+      border-top-color: #dda0dd;
+    }
+
+    .sharp-category-card .a2ui-row {
+      padding: 4px 0;
+    }
+
+    .sharp-category-card .a2ui-progress {
+      flex: 1;
+    }
+
     /* Grid background + breathing glow */
     .evo-lab {
       position: relative;
@@ -5197,15 +5404,14 @@ class PHAApp extends LitElement {
       background: rgba(129, 140, 248, 0.08);
     }
 
-    /* Light mode adjustments — reduce glow intensity */
+    /* Light mode adjustments — disable evo-lab grid/glow/animation (shell grid is enough) */
     .shell.theme-light .evo-lab {
-      background-image:
-        linear-gradient(rgba(91, 106, 191, 0.06) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(91, 106, 191, 0.06) 1px, transparent 1px);
+      background-image: none;
+      animation: none;
     }
 
     .shell.theme-light .evo-lab::before {
-      background: radial-gradient(ellipse at center, rgba(91, 106, 191, 0.06) 0%, transparent 70%);
+      display: none;
     }
 
     .shell.theme-light .evo-lab .a2ui-text-h1 {

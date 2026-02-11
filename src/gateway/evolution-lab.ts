@@ -42,11 +42,18 @@ interface TimelineEvent {
   tags?: string[];
 }
 
+interface SubComponentScore {
+  name: string;
+  score: number;
+  scoring: "binary" | "3-point";
+}
+
 interface CategoryScoreInfo {
   category: string;
   score: number;
   test_count: number;
   passed_count: number;
+  subComponents?: SubComponentScore[];
 }
 
 interface BenchmarkRunInfo {
@@ -192,6 +199,21 @@ export function getDefaultPipelineSteps(currentStep?: string): PipelineStep[] {
 }
 
 // Category label mapping
+// SHARP category color mapping
+const SHARP_CATEGORY_COLORS: Record<string, string> = {
+  safety: "#ff6b6b",
+  usefulness: "#4ecdc4",
+  accuracy: "#ffe66d",
+  relevance: "#95e1d3",
+  personalization: "#dda0dd",
+};
+
+function getScoreColor(score: number): string {
+  if (score >= 0.9) return "#4ade80";
+  if (score >= 0.7) return "#fbbf24";
+  return "#f87171";
+}
+
 function getCategoryLabel(category: string): string {
   const labelMap: Record<string, string> = {
     "health-data-analysis": t("evolution.healthDataAnalysis"),
@@ -199,6 +221,12 @@ function getCategoryLabel(category: string): string {
     "safety-boundaries": t("evolution.safetyBoundaries"),
     "personalization-memory": t("evolution.personalization"),
     "communication-quality": t("evolution.communicationQuality"),
+    // SHARP 2.0 categories
+    safety: "Safety",
+    usefulness: "Usefulness",
+    accuracy: "Accuracy",
+    relevance: "Relevance",
+    personalization: "Personalization",
   };
   return labelMap[category] || category;
 }
@@ -287,7 +315,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       `${t("evolution.externalBenchmarkRunning")}${ep.modelId ? ` (${ep.modelId})` : ""} — ${ep.current}/${ep.total} (${pct}%)`,
       "caption"
     );
-    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#00e5ff" });
+    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#818cf8" });
     children.push(ui.card([progressLabel, progressBar], { padding: 12 }));
   }
 
@@ -521,8 +549,8 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     const pctText = ui.text(`${pct}%`, "h2");
     progressChildren.push(pctText);
 
-    // Progress bar with cyan color
-    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#00e5ff" });
+    // Progress bar
+    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#818cf8" });
     progressChildren.push(progressBar);
 
     // Current category badge
@@ -533,6 +561,56 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     }
 
     children.push(ui.card(progressChildren, { padding: 16 }));
+  }
+
+  // SHARP Category Breakdown Cards
+  if (data.latestRunCategoryScores && data.latestRunCategoryScores.length > 0) {
+    const sharpCards: string[] = [];
+
+    for (const cs of data.latestRunCategoryScores) {
+      const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
+      const avgScore = cs.score / 100; // normalize to 0-1 range
+      const scoreColor = getScoreColor(avgScore);
+      const cardChildren: string[] = [];
+
+      // Header: category name + score badge
+      const catName = ui.text(getCategoryLabel(cs.category), "label");
+      const scoreBadge = ui.badge(`${avgScore.toFixed(2)}`, {
+        variant: avgScore >= 0.9 ? "success" : avgScore >= 0.7 ? "warning" : "error",
+      });
+      cardChildren.push(ui.row([catName, scoreBadge], { gap: 8, align: "center" }));
+
+      // Overall category progress bar
+      cardChildren.push(
+        ui.progress(avgScore * 100, { maxValue: 100, color: catColor, size: "sm" })
+      );
+
+      // Sub-component scores
+      if (cs.subComponents && cs.subComponents.length > 0) {
+        for (const sub of cs.subComponents) {
+          const subColor = getScoreColor(sub.score);
+          const subName = ui.text(sub.name, "caption");
+          const subProgress = ui.progress(sub.score * 100, {
+            maxValue: 100,
+            color: subColor,
+            size: "sm",
+          });
+          const subValue = ui.text(sub.score.toFixed(1), "caption");
+          cardChildren.push(ui.row([subName, subProgress, subValue], { gap: 8, align: "center" }));
+        }
+      }
+
+      sharpCards.push(
+        ui.card(cardChildren, {
+          padding: 16,
+          className: `sharp-category-card sharp-cat-${cs.category}`,
+        })
+      );
+    }
+
+    const sharpGrid = ui.grid(sharpCards, { columns: 2, gap: 16, responsive: true });
+    const sharpTitle = ui.text("SHARP 2.0 Evaluation", "h3");
+    children.push(ui.card([sharpTitle, sharpGrid], { padding: 16 }));
   }
 
   // Test Cases table
