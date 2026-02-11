@@ -819,6 +819,12 @@ export class GatewaySession {
       session_id: this.sessionId,
     });
 
+    // Restore benchmark running state from progress file
+    const extProg = readBenchmarkProgress();
+    if (extProg && extProg.running && extProg.source === "ui") {
+      this.benchmarkRunning = true;
+    }
+
     // Send initial UI - default to chat view
     this.currentView = "chat";
     const chatPage = generateChatPage({
@@ -2298,7 +2304,7 @@ export class GatewaySession {
     // External progress shared between overview + benchmark tabs
     if (activeTab === "overview" || activeTab === "benchmark") {
       const extProg = readBenchmarkProgress();
-      if (extProg && extProg.source === "cli") {
+      if (extProg && extProg.running) {
         externalProgress = {
           current: extProg.current,
           total: extProg.total,
@@ -2621,11 +2627,14 @@ export class GatewaySession {
       // Versions tab handled below
     }
 
-    // Check for external benchmark progress (e.g., from CLI)
+    // Check for external benchmark progress
     let externalProgress;
-    if (this.evolutionTab === "overview" && !this.benchmarkRunning) {
+    if (
+      (this.evolutionTab === "overview" || this.evolutionTab === "benchmark") &&
+      !this.benchmarkRunning
+    ) {
       const extProg = readBenchmarkProgress();
-      if (extProg && extProg.source === "cli") {
+      if (extProg && extProg.running) {
         externalProgress = {
           current: extProg.current,
           total: extProg.total,
