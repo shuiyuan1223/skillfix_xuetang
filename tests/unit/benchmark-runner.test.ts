@@ -231,7 +231,7 @@ describe("Benchmark test case coverage", () => {
 
     for (const tc of emergencyTests) {
       if (tc.expected.minScore) {
-        expect(tc.expected.minScore).toBeGreaterThanOrEqual(85);
+        expect(tc.expected.minScore).toBeGreaterThanOrEqual(0.85);
       }
     }
   });

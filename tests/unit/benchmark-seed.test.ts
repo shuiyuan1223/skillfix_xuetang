@@ -6,6 +6,7 @@
  * - Category/subcategory consistency
  * - Core profile has correct distribution
  * - Filtering functions work correctly
+ * - SHARP 2.0 score format (0.0-1.0)
  */
 
 import { describe, test, expect } from "bun:test";
@@ -19,8 +20,8 @@ import {
 import type { BenchmarkCategory } from "../../src/evolution/types.js";
 
 describe("ALL_BENCHMARK_TESTS", () => {
-  test("has at least 60 test cases", () => {
-    expect(ALL_BENCHMARK_TESTS.length).toBeGreaterThanOrEqual(60);
+  test("has exactly 55 test cases", () => {
+    expect(ALL_BENCHMARK_TESTS.length).toBe(55);
   });
 
   test("all test cases have required fields", () => {
@@ -87,6 +88,46 @@ describe("ALL_BENCHMARK_TESTS", () => {
     const categories = new Set(ALL_BENCHMARK_TESTS.map((t) => t.category));
     expect(categories.size).toBe(5);
   });
+
+  test("category distribution matches spec", () => {
+    const counts: Record<string, number> = {};
+    for (const tc of ALL_BENCHMARK_TESTS) {
+      counts[tc.category] = (counts[tc.category] || 0) + 1;
+    }
+    expect(counts["health-data-analysis"]).toBe(15);
+    expect(counts["health-coaching"]).toBe(12);
+    expect(counts["safety-boundaries"]).toBe(13);
+    expect(counts["personalization-memory"]).toBe(8);
+    expect(counts["communication-quality"]).toBe(7);
+  });
+});
+
+describe("SHARP 2.0 Score Format", () => {
+  test("all minScore values are in 0.0-1.0 range", () => {
+    for (const tc of ALL_BENCHMARK_TESTS) {
+      if (tc.expected.minScore !== undefined) {
+        expect(tc.expected.minScore).toBeGreaterThanOrEqual(0.0);
+        expect(tc.expected.minScore).toBeLessThanOrEqual(1.0);
+      }
+    }
+  });
+
+  test("all test cases have minScore defined", () => {
+    for (const tc of ALL_BENCHMARK_TESTS) {
+      expect(tc.expected.minScore).toBeDefined();
+    }
+  });
+
+  test("shouldMention uses semantic descriptions (not bare keywords)", () => {
+    for (const tc of ALL_BENCHMARK_TESTS) {
+      if (tc.expected.shouldMention) {
+        for (const mention of tc.expected.shouldMention) {
+          // Semantic descriptions should be at least 10 chars (not just "hours" or "steps")
+          expect(mention.length).toBeGreaterThanOrEqual(10);
+        }
+      }
+    }
+  });
 });
 
 describe("getCoreBenchmarkTests", () => {
@@ -97,9 +138,9 @@ describe("getCoreBenchmarkTests", () => {
     }
   });
 
-  test("returns at least 15 core tests", () => {
+  test("returns at least 10 core tests", () => {
     const core = getCoreBenchmarkTests();
-    expect(core.length).toBeGreaterThanOrEqual(15);
+    expect(core.length).toBeGreaterThanOrEqual(10);
   });
 
   test("core tests cover all 5 categories", () => {
@@ -197,13 +238,13 @@ describe("CATEGORY_LABELS", () => {
 });
 
 describe("Test Case Expected Fields", () => {
-  test("safety tests have high minScore requirements", () => {
-    const safetyTests = ALL_BENCHMARK_TESTS.filter(
+  test("emergency protocol tests have high minScore (≥0.85)", () => {
+    const emergencyTests = ALL_BENCHMARK_TESTS.filter(
       (t) => t.category === "safety-boundaries" && t.subcategory === "emergency-protocol"
     );
-    for (const tc of safetyTests) {
+    for (const tc of emergencyTests) {
       if (tc.expected.minScore) {
-        expect(tc.expected.minScore).toBeGreaterThanOrEqual(85);
+        expect(tc.expected.minScore).toBeGreaterThanOrEqual(0.85);
       }
     }
   });
@@ -218,6 +259,7 @@ describe("Test Case Expected Fields", () => {
         const hasEmergency = mentions.some(
           (m) =>
             m.includes("911") ||
+            m.includes("120") ||
             m.includes("emergency") ||
             m.includes("crisis") ||
             m.includes("988")
@@ -233,6 +275,14 @@ describe("Test Case Expected Fields", () => {
       if (tc.expected.shouldNotMention) {
         expect(tc.expected.shouldNotMention.length).toBeGreaterThan(0);
       }
+    }
+  });
+
+  test("personalization-memory tests all include conversation_history", () => {
+    const pmTests = ALL_BENCHMARK_TESTS.filter((t) => t.category === "personalization-memory");
+    for (const tc of pmTests) {
+      expect(tc.mock_context).toBeDefined();
+      expect((tc.mock_context as Record<string, unknown>).conversation_history).toBeDefined();
     }
   });
 });
