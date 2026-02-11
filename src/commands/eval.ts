@@ -669,14 +669,14 @@ export function registerEvalCommand(program: Command): void {
 
         // Summary
         printSection("Benchmark Results");
-        printKV("Overall Score", `${normalizeScoreForDisplay(result.overallScore)}/100`);
+        printKV("Overall Score", `${normalizeScoreForDisplay(result.overallScore).toFixed(2)}`);
         printKV("Tests", `${result.run.passedCount}/${result.run.totalTestCases} passed`);
 
         if (result.weaknesses.length > 0) {
           printSection("Weak Categories");
           for (const w of result.weaknesses) {
             console.log(
-              `  ${c.red("!")} ${w.label}: ${c.yellow(normalizeScoreForDisplay(w.score).toString())} (${normalizeScoreForDisplay(w.gap).toString()} pts below threshold)`
+              `  ${c.red("!")} ${w.label}: ${c.yellow(normalizeScoreForDisplay(w.score).toFixed(2))} (${normalizeScoreForDisplay(w.gap).toFixed(2)} below threshold)`
             );
             console.log(`    ${c.dim(`${w.failingTests.length} failing tests`)}`);
             if (w.commonPatterns.length > 0) {
@@ -1051,8 +1051,8 @@ export function registerEvalCommand(program: Command): void {
 
             const runDisplayScore = normalizeScoreForDisplay(result.run.overallScore);
             const scoreColor =
-              runDisplayScore >= 80 ? c.green : runDisplayScore >= 60 ? c.yellow : c.red;
-            printKV("Overall Score", scoreColor(`${runDisplayScore}/100`));
+              runDisplayScore >= 0.8 ? c.green : runDisplayScore >= 0.6 ? c.yellow : c.red;
+            printKV("Overall Score", scoreColor(runDisplayScore.toFixed(2)));
             printKV("Duration", formatDuration(result.run.durationMs));
 
             if (!isMulti) {
@@ -1062,11 +1062,11 @@ export function registerEvalCommand(program: Command): void {
                 ["Test", "Category", "Score", "Pass", "Feedback"],
                 result.results.map((r) => {
                   const ds = normalizeScoreForDisplay(r.overallScore);
-                  const sc = ds >= 80 ? c.green : ds >= 60 ? c.yellow : c.red;
+                  const sc = ds >= 0.8 ? c.green : ds >= 0.6 ? c.yellow : c.red;
                   return [
                     c.dim(r.testCaseId),
                     truncate(r.testCaseId.split("-").slice(0, 2).join("-"), 15),
-                    sc(`${ds}`),
+                    sc(ds.toFixed(2)),
                     r.passed ? c.green("PASS") : c.red("FAIL"),
                     truncate(r.feedback, 30),
                   ];
@@ -1082,7 +1082,7 @@ export function registerEvalCommand(program: Command): void {
                 for (const weak of weakCategories) {
                   const label = CATEGORY_LABELS[weak.category];
                   console.log(
-                    `  ${c.red("!")} ${label}: ${c.yellow(normalizeScoreForDisplay(weak.score).toString())} (${normalizeScoreForDisplay(weak.gap).toString()} pts below threshold)`
+                    `  ${c.red("!")} ${label}: ${c.yellow(normalizeScoreForDisplay(weak.score).toFixed(2))} (${normalizeScoreForDisplay(weak.gap).toFixed(2)} below threshold)`
                   );
                 }
               }
@@ -1103,10 +1103,10 @@ export function registerEvalCommand(program: Command): void {
           ["Model", "Score", "Pass", "Fail", "Duration"],
           allRunResults.map((r) => {
             const ds = normalizeScoreForDisplay(r.run.overallScore);
-            const sc = ds >= 80 ? c.green : ds >= 60 ? c.yellow : c.red;
+            const sc = ds >= 0.8 ? c.green : ds >= 0.6 ? c.yellow : c.red;
             return [
               r.label,
-              sc(`${ds}/100`),
+              sc(ds.toFixed(2)),
               c.green(String(r.run.passedCount)),
               r.run.failedCount > 0 ? c.red(String(r.run.failedCount)) : c.dim("0"),
               formatDuration(r.run.durationMs),
@@ -1121,7 +1121,7 @@ export function registerEvalCommand(program: Command): void {
         console.log("");
         printKV(
           "Best Model",
-          c.green(`${best.label} (${normalizeScoreForDisplay(best.run.overallScore)}/100)`)
+          c.green(`${best.label} (${normalizeScoreForDisplay(best.run.overallScore).toFixed(2)})`)
         );
 
         if (options.json) {
@@ -1217,11 +1217,11 @@ export function registerEvalCommand(program: Command): void {
         printTable(
           ["Model", "Score", "Pass", "Fail", "Tests", "Date"],
           modelRuns.map((m) => {
-            const sc =
-              m.run.overall_score >= 80 ? c.green : m.run.overall_score >= 60 ? c.yellow : c.red;
+            const ds = normalizeScoreForDisplay(m.run.overall_score);
+            const sc = ds >= 0.8 ? c.green : ds >= 0.6 ? c.yellow : c.red;
             return [
               m.label,
-              sc(`${m.run.overall_score}/100`),
+              sc(ds.toFixed(2)),
               c.green(String(m.run.passed_count)),
               m.run.failed_count > 0 ? c.red(String(m.run.failed_count)) : c.dim("0"),
               String(m.run.total_test_cases),
@@ -1235,7 +1235,12 @@ export function registerEvalCommand(program: Command): void {
             a.run.overall_score >= b.run.overall_score ? a : b
           );
           console.log("");
-          printKV("Best Model", c.green(`${best.label} (${best.run.overall_score}/100)`));
+          printKV(
+            "Best Model",
+            c.green(
+              `${best.label} (${normalizeScoreForDisplay(best.run.overall_score).toFixed(2)})`
+            )
+          );
         }
 
         console.log("");
@@ -1372,7 +1377,7 @@ export function registerEvalCommand(program: Command): void {
         ["Run ID", "Date", "Profile", "Tests", "Pass", "Fail", "Score", "Duration"],
         runs.map((run) => {
           const ds = normalizeScoreForDisplay(run.overallScore);
-          const scoreColor = ds >= 80 ? c.green : ds >= 60 ? c.yellow : c.red;
+          const scoreColor = ds >= 0.8 ? c.green : ds >= 0.6 ? c.yellow : c.red;
           return [
             c.dim(run.id.substring(0, 8)),
             new Date(run.timestamp).toLocaleDateString(),
@@ -1380,7 +1385,7 @@ export function registerEvalCommand(program: Command): void {
             String(run.totalTestCases),
             c.green(String(run.passedCount)),
             run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"),
-            scoreColor(`${ds}`),
+            scoreColor(ds.toFixed(2)),
             formatDuration(run.durationMs),
           ];
         })
@@ -1481,7 +1486,9 @@ export function registerEvalCommand(program: Command): void {
             spinner.update(`Iteration ${iter}/${max}...`);
           },
           onBenchmarkComplete: (run) => {
-            spinner.update(`Benchmark complete: ${normalizeScoreForDisplay(run.overallScore)}/100`);
+            spinner.update(
+              `Benchmark complete: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)}`
+            );
           },
           onWeakCategoriesFound: (cats) => {
             const names = cats.map((c) => CATEGORY_LABELS[c.category]).join(", ");
@@ -1581,11 +1588,11 @@ export function registerEvalCommand(program: Command): void {
 
       printKV(
         "Base Run",
-        `${c.dim(report.baseRun.id.substring(0, 8))} (${report.baseRun.score}/100)`
+        `${c.dim(report.baseRun.id.substring(0, 8))} (${normalizeScoreForDisplay(report.baseRun.score).toFixed(2)})`
       );
       printKV(
         "Current Run",
-        `${c.dim(report.currentRun.id.substring(0, 8))} (${report.currentRun.score}/100)`
+        `${c.dim(report.currentRun.id.substring(0, 8))} (${normalizeScoreForDisplay(report.currentRun.score).toFixed(2)})`
       );
 
       const deltaColor = report.overallDelta >= 0 ? c.green : c.red;

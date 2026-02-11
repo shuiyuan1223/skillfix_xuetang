@@ -70,7 +70,7 @@ export async function diagnose(opts: {
   const { run, results, categoryScores } = await runner.run({ profile });
 
   log(
-    `Benchmark complete: ${normalizeScoreForDisplay(run.overallScore)}/100 (${run.passedCount}/${run.totalTestCases} passed)`
+    `Benchmark complete: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)} (${run.passedCount}/${run.totalTestCases} passed)`
   );
 
   // Step 2: Identify weaknesses
@@ -118,7 +118,7 @@ export async function diagnose(opts: {
       try {
         const body = buildDiagnoseIssueBody(weakness);
         const result = await createGitHubIssue({
-          title: `[Evolution] Improve ${weakness.label}: score ${normalizeScoreForDisplay(weakness.score)}/100`,
+          title: `[Evolution] Improve ${weakness.label}: score ${normalizeScoreForDisplay(weakness.score).toFixed(2)}`,
           body,
           labels: ["evolution", "auto-diagnose"],
         });

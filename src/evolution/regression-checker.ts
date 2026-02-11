@@ -160,15 +160,15 @@ export function checkRegression(
 
   let summary: string;
   if (!hasRegression) {
-    summary = `No regression detected. Overall: ${dsBase} -> ${dsCurrent} (${displayDelta >= 0 ? "+" : ""}${displayDelta.toFixed(1)})`;
+    summary = `No regression detected. Overall: ${dsBase.toFixed(2)} -> ${dsCurrent.toFixed(2)} (${displayDelta >= 0 ? "+" : ""}${displayDelta.toFixed(2)})`;
   } else {
     const parts: string[] = [];
     if (overallDelta < -threshold) {
-      parts.push(`Overall score dropped by ${Math.abs(displayDelta).toFixed(1)} pts`);
+      parts.push(`Overall score dropped by ${Math.abs(displayDelta).toFixed(2)}`);
     }
     if (categoryRegressions.length > 0) {
       parts.push(
-        `${categoryRegressions.length} category regression(s): ${categoryRegressions.map((r) => `${r.label} (${normalizeScoreForDisplay(r.delta)})`).join(", ")}`
+        `${categoryRegressions.length} category regression(s): ${categoryRegressions.map((r) => `${r.label} (${normalizeScoreForDisplay(r.delta).toFixed(2)})`).join(", ")}`
       );
     }
     if (newFailures.length > 0) {
@@ -221,7 +221,9 @@ export function formatRegressionMarkdown(report: RegressionReport): string {
     lines.push("");
     lines.push(`| Metric | Base | Current | Delta |`);
     lines.push(`|--------|------|---------|-------|`);
-    lines.push(`| Overall | ${dsBase} | ${dsCurrent} | ${dd >= 0 ? "+" : ""}${dd.toFixed(1)} |`);
+    lines.push(
+      `| Overall | ${dsBase.toFixed(2)} | ${dsCurrent.toFixed(2)} | ${dd >= 0 ? "+" : ""}${dd.toFixed(2)} |`
+    );
   }
 
   if (report.categoryRegressions.length > 0) {
@@ -232,8 +234,8 @@ export function formatRegressionMarkdown(report: RegressionReport): string {
     lines.push(`|----------|------|---------|-------|`);
     for (const reg of report.categoryRegressions) {
       const b = normalizeScoreForDisplay(reg.baseScore);
-      const c = normalizeScoreForDisplay(reg.currentScore);
-      lines.push(`| ${reg.label} | ${b} | ${c} | ${(c - b).toFixed(1)} |`);
+      const cv = normalizeScoreForDisplay(reg.currentScore);
+      lines.push(`| ${reg.label} | ${b.toFixed(2)} | ${cv.toFixed(2)} | ${(cv - b).toFixed(2)} |`);
     }
   }
 
@@ -243,7 +245,7 @@ export function formatRegressionMarkdown(report: RegressionReport): string {
     lines.push("");
     for (const fail of report.newFailures) {
       lines.push(
-        `- \`${fail.testCaseId}\`: ${normalizeScoreForDisplay(fail.baseScore)} -> ${normalizeScoreForDisplay(fail.currentScore)}`
+        `- \`${fail.testCaseId}\`: ${normalizeScoreForDisplay(fail.baseScore).toFixed(2)} -> ${normalizeScoreForDisplay(fail.currentScore).toFixed(2)}`
       );
     }
   }

@@ -8,8 +8,7 @@
  * Note: checkRegression() depends on SQLite DB state, so we test
  * the formatting function and report structure directly.
  *
- * SHARP 2.0: scores are now displayed via normalizeScoreForDisplay()
- * which rounds to integers (85.0 -> "85", 72.0 -> "72").
+ * SHARP 2.0: scores are 0.0-1.0, displayed via normalizeScoreForDisplay() as 0.XX.
  */
 
 import { describe, test, expect } from "bun:test";
@@ -22,12 +21,12 @@ import type { BenchmarkCategory } from "../../src/evolution/types.js";
 function makeReport(overrides: Partial<RegressionReport> = {}): RegressionReport {
   return {
     hasRegression: false,
-    baseRun: { id: "run-base", score: 75, timestamp: Date.now() - 60000 },
-    currentRun: { id: "run-current", score: 78, timestamp: Date.now() },
-    overallDelta: 3,
+    baseRun: { id: "run-base", score: 0.75, timestamp: Date.now() - 60000 },
+    currentRun: { id: "run-current", score: 0.78, timestamp: Date.now() },
+    overallDelta: 0.03,
     categoryRegressions: [],
     newFailures: [],
-    summary: "No regression detected. Overall: 75 -> 78 (+3.0)",
+    summary: "No regression detected. Overall: 0.75 -> 0.78 (+0.03)",
     ...overrides,
   };
 }
@@ -43,9 +42,9 @@ describe("formatRegressionMarkdown", () => {
   test("shows REGRESSION DETECTED for regressions", () => {
     const report = makeReport({
       hasRegression: true,
-      overallDelta: -8,
-      summary: "REGRESSION DETECTED: Overall score dropped by 8.0 pts",
-      currentRun: { id: "run-current", score: 67, timestamp: Date.now() },
+      overallDelta: -0.08,
+      summary: "REGRESSION DETECTED: Overall score dropped by 0.08",
+      currentRun: { id: "run-current", score: 0.67, timestamp: Date.now() },
     });
 
     const md = formatRegressionMarkdown(report);
@@ -58,8 +57,8 @@ describe("formatRegressionMarkdown", () => {
     const md = formatRegressionMarkdown(report);
     expect(md).toContain("### Score Comparison");
     expect(md).toContain("| Overall |");
-    expect(md).toContain("75");
-    expect(md).toContain("78");
+    expect(md).toContain("0.75");
+    expect(md).toContain("0.78");
   });
 
   test("includes category regression table when present", () => {
@@ -69,9 +68,9 @@ describe("formatRegressionMarkdown", () => {
         {
           category: "safety-boundaries" as BenchmarkCategory,
           label: "Safety & Boundaries",
-          baseScore: 85,
-          currentScore: 72,
-          delta: -13,
+          baseScore: 0.85,
+          currentScore: 0.72,
+          delta: -0.13,
         },
       ],
       summary: "REGRESSION DETECTED: 1 category regression(s)",
@@ -80,18 +79,17 @@ describe("formatRegressionMarkdown", () => {
     const md = formatRegressionMarkdown(report);
     expect(md).toContain("### Category Regressions");
     expect(md).toContain("Safety & Boundaries");
-    // normalizeScoreForDisplay rounds to integers
-    expect(md).toContain("85");
-    expect(md).toContain("72");
-    expect(md).toContain("-13");
+    expect(md).toContain("0.85");
+    expect(md).toContain("0.72");
+    expect(md).toContain("-0.13");
   });
 
   test("includes newly failing tests when present", () => {
     const report = makeReport({
       hasRegression: true,
       newFailures: [
-        { testCaseId: "sb-medical-001", baseScore: 82, currentScore: 55 },
-        { testCaseId: "hda-sleep-002", baseScore: 75, currentScore: 60 },
+        { testCaseId: "sb-medical-001", baseScore: 0.82, currentScore: 0.55 },
+        { testCaseId: "hda-sleep-002", baseScore: 0.75, currentScore: 0.6 },
       ],
       summary: "REGRESSION DETECTED: 2 test(s) newly failing",
     });
@@ -100,8 +98,8 @@ describe("formatRegressionMarkdown", () => {
     expect(md).toContain("### Newly Failing Tests");
     expect(md).toContain("`sb-medical-001`");
     expect(md).toContain("`hda-sleep-002`");
-    expect(md).toContain("82 -> 55");
-    expect(md).toContain("75 -> 60");
+    expect(md).toContain("0.82 -> 0.55");
+    expect(md).toContain("0.75 -> 0.60");
   });
 
   test("omits category table when no category regressions", () => {
@@ -124,40 +122,38 @@ describe("formatRegressionMarkdown", () => {
   });
 
   test("shows positive delta with + sign", () => {
-    const report = makeReport({ overallDelta: 5 });
+    const report = makeReport({ overallDelta: 0.05 });
     const md = formatRegressionMarkdown(report);
-    // Delta is computed from normalizeScoreForDisplay(base) and normalizeScoreForDisplay(current)
-    // base=75, current=78 → display delta = 78-75 = 3
-    expect(md).toContain("+3.0");
+    // base=0.75, current=0.78 → display delta = 0.78-0.75 = 0.03
+    expect(md).toContain("+0.03");
   });
 
   test("shows negative delta in display", () => {
     const report = makeReport({
       hasRegression: true,
-      baseRun: { id: "run-base", score: 85, timestamp: Date.now() - 60000 },
-      currentRun: { id: "run-current", score: 70, timestamp: Date.now() },
-      overallDelta: -15,
+      baseRun: { id: "run-base", score: 0.85, timestamp: Date.now() - 60000 },
+      currentRun: { id: "run-current", score: 0.7, timestamp: Date.now() },
+      overallDelta: -0.15,
       summary: "REGRESSION DETECTED: dropped",
     });
     const md = formatRegressionMarkdown(report);
-    // Display delta from normalized scores: 70-85 = -15
-    expect(md).toContain("-15");
+    expect(md).toContain("-0.15");
   });
 
   test("handles complete regression report with all sections", () => {
     const report = makeReport({
       hasRegression: true,
-      overallDelta: -10,
+      overallDelta: -0.1,
       categoryRegressions: [
         {
           category: "health-coaching" as BenchmarkCategory,
           label: "Health Coaching",
-          baseScore: 80,
-          currentScore: 65,
-          delta: -15,
+          baseScore: 0.8,
+          currentScore: 0.65,
+          delta: -0.15,
         },
       ],
-      newFailures: [{ testCaseId: "hc-goal-001", baseScore: 78, currentScore: 50 }],
+      newFailures: [{ testCaseId: "hc-goal-001", baseScore: 0.78, currentScore: 0.5 }],
       summary: "REGRESSION DETECTED: Overall dropped, 1 category regression, 1 test newly failing",
     });
 

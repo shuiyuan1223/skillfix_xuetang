@@ -20,10 +20,12 @@ import type {
 import { loadCategoryWeights, loadCategoryLabels } from "./benchmark-seed.js";
 
 /**
- * Normalize score for display: 0.0-1.0 → 0-100 (backward compatible with old 0-100 data)
+ * Normalize score for display: always return 0.00-1.00 (SHARP 2.0 standard).
+ * Handles legacy 0-100 data by dividing back to 0.0-1.0.
  */
 export function normalizeScoreForDisplay(score: number): number {
-  return score <= 1.0 ? Math.round(score * 100) : Math.round(score);
+  const s = score > 1.0 ? score / 100 : score;
+  return Math.round(s * 100) / 100; // 2 decimal places
 }
 
 // ============================================================================
@@ -314,10 +316,7 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
     const barLen = Math.round(pct * width);
     const bar = "\u2588".repeat(barLen) + "\u2591".repeat(width - barLen);
     const label = point.label.padEnd(maxLabelLen);
-    const displayScore =
-      point.maxScore <= 1.0
-        ? `${(point.score * 100).toFixed(0)}%`
-        : `${point.score.toFixed(1)}/${point.maxScore}`;
+    const displayScore = point.score.toFixed(2);
     const scoreStr = displayScore.padStart(6);
     const indicator = pct >= 0.8 ? " +" : pct >= 0.6 ? " ~" : " !";
 

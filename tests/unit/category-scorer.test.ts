@@ -481,20 +481,25 @@ describe("identifyWeakCategories", () => {
 });
 
 describe("normalizeScoreForDisplay", () => {
-  test("converts 0.0-1.0 to 0-100", () => {
-    expect(normalizeScoreForDisplay(0.85)).toBe(85);
+  test("keeps 0.0-1.0 scores in 0.0-1.0 range (SHARP 2.0)", () => {
+    expect(normalizeScoreForDisplay(0.85)).toBe(0.85);
     expect(normalizeScoreForDisplay(0.0)).toBe(0);
-    expect(normalizeScoreForDisplay(1.0)).toBe(100);
+    expect(normalizeScoreForDisplay(1.0)).toBe(1.0);
   });
 
-  test("passes through 0-100 values unchanged", () => {
-    expect(normalizeScoreForDisplay(85)).toBe(85);
-    expect(normalizeScoreForDisplay(100)).toBe(100);
+  test("converts legacy 0-100 values back to 0.0-1.0", () => {
+    expect(normalizeScoreForDisplay(85)).toBe(0.85);
+    expect(normalizeScoreForDisplay(100)).toBe(1.0);
     expect(normalizeScoreForDisplay(0)).toBe(0);
   });
 
   test("handles edge case of exactly 1.0", () => {
-    expect(normalizeScoreForDisplay(1.0)).toBe(100);
+    expect(normalizeScoreForDisplay(1.0)).toBe(1.0);
+  });
+
+  test("rounds to 2 decimal places", () => {
+    expect(normalizeScoreForDisplay(0.856)).toBe(0.86);
+    expect(normalizeScoreForDisplay(0.123)).toBe(0.12);
   });
 });
 

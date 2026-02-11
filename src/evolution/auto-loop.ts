@@ -125,7 +125,7 @@ export class AutoLoop {
     // Check if already at target
     if (initialRun.run.overallScore >= targetNormalized) {
       this.log(
-        `Already at target score (${normalizeScoreForDisplay(initialRun.run.overallScore)} >= ${this.config.targetScore})`
+        `Already at target score (${normalizeScoreForDisplay(initialRun.run.overallScore).toFixed(2)} >= ${normalizeScoreForDisplay(this.config.targetScore).toFixed(2)})`
       );
       result.finalScore = initialRun.run.overallScore;
       this.callbacks.onComplete?.(0, result.finalScore, false);
@@ -279,7 +279,7 @@ export class AutoLoop {
       // Check if target reached
       if (currentScore >= targetNormalized) {
         this.log(
-          `Target score reached! ${normalizeScoreForDisplay(currentScore)} >= ${this.config.targetScore}`
+          `Target score reached! ${normalizeScoreForDisplay(currentScore).toFixed(2)} >= ${normalizeScoreForDisplay(this.config.targetScore).toFixed(2)}`
         );
         break;
       }

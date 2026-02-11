@@ -140,7 +140,7 @@ export function formatComparison(comparison: VersionComparison): string {
   const ds2 = normalizeScoreForDisplay(run2.overallScore);
   const displayDelta = ds2 - ds1;
   lines.push(
-    `  Overall: ${ds1} -> ${ds2} (${overallArrow}${displayDelta.toFixed(1)}) [${overallColor}]`
+    `  Overall: ${ds1.toFixed(2)} -> ${ds2.toFixed(2)} (${overallArrow}${displayDelta.toFixed(2)}) [${overallColor}]`
   );
   lines.push("");
 
@@ -155,7 +155,7 @@ export function formatComparison(comparison: VersionComparison): string {
     const s2 = normalizeScoreForDisplay(delta.score2);
     const dd = s2 - s1;
     lines.push(
-      `  ${delta.category.padEnd(30)} ${s1} -> ${s2} (${arrow}${dd.toFixed(1)})${indicator}`
+      `  ${delta.category.padEnd(30)} ${s1.toFixed(2)} -> ${s2.toFixed(2)} (${arrow}${dd.toFixed(2)})${indicator}`
     );
   }
 
