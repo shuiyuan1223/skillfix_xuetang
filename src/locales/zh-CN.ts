@@ -243,6 +243,7 @@ export const zhCN: LocaleMessages = {
     noBenchmarkRuns: "暂无基准测试运行记录",
     recentRuns: "最近基准测试运行",
     viewDetails: "查看详情",
+    status: "状态",
     duration: "耗时",
     totalScore: "总分",
     categoryScores: "分类得分",

@@ -244,6 +244,7 @@ export const en: LocaleMessages = {
     noBenchmarkRuns: "No benchmark runs yet",
     recentRuns: "Recent Benchmark Runs",
     viewDetails: "View Details",
+    status: "Status",
     duration: "Duration",
     totalScore: "Total Score",
     categoryScores: "Category Scores",

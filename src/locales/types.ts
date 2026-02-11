@@ -266,6 +266,7 @@ export interface LocaleMessages {
     noBenchmarkRuns: string;
     recentRuns: string;
     viewDetails: string;
+    status: string;
     duration: string;
     totalScore: string;
     categoryScores: string;

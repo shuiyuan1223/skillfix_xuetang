@@ -68,6 +68,7 @@ interface BenchmarkRunInfo {
   duration_ms: number;
   modelId?: string;
   presetName?: string;
+  status?: "running" | "completed" | "failed";
 }
 
 interface ChangedFile {
@@ -443,6 +444,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     const runsLabel = ui.text(t("evolution.recentRuns"), "label");
     const runRows = data.benchmarkRuns.slice(0, 5).map((r) => ({
       id: r.id,
+      status: r.status || (r.duration_ms ? "completed" : "running"),
       version_tag: r.version_tag || "-",
       overall_score: Math.round(r.overall_score),
       passed: `${r.passed_count}/${r.total_test_cases}`,
@@ -452,6 +454,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     }));
     const runsTable = ui.dataTable(
       [
+        { key: "status", label: t("evolution.status"), render: "badge" },
         { key: "version_tag", label: t("evolution.versionTag") },
         { key: "overall_score", label: t("evolution.score"), render: "progress" },
         { key: "passed", label: t("evolution.passed") },
@@ -650,6 +653,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     const runRows = data.benchmarkRuns.map((r) => ({
       id: r.id,
       time: new Date(r.timestamp).toLocaleString(),
+      status: r.status || (r.duration_ms ? "completed" : "running"),
       version_tag: r.version_tag || "-",
       overall_score: Math.round(r.overall_score),
       passed: `${r.passed_count}/${r.total_test_cases}`,
@@ -660,6 +664,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     const runsTable = ui.dataTable(
       [
         { key: "time", label: t("evolution.time"), sortable: true },
+        { key: "status", label: t("evolution.status"), render: "badge" },
         { key: "version_tag", label: t("evolution.versionTag") },
         { key: "overall_score", label: t("evolution.score"), render: "progress" },
         { key: "passed", label: t("evolution.passed") },

@@ -2222,6 +2222,12 @@ export class GatewaySession {
             // ok
           }
         }
+        // Determine run status from duration_ms
+        const status: "running" | "completed" | "failed" = r.duration_ms
+          ? r.failed_count > 0 && r.passed_count === 0
+            ? "failed"
+            : "completed"
+          : "running";
         return {
           id: r.id,
           timestamp: r.timestamp,
@@ -2234,6 +2240,7 @@ export class GatewaySession {
           duration_ms: r.duration_ms || 0,
           modelId,
           presetName,
+          status,
         };
       });
 
