@@ -46,8 +46,6 @@ import {
   generateCreateSkillModal,
   generatePromptRevertModal,
   generateAuthRequiredPage,
-  generateBenchmarkProgress,
-  generateBenchmarkProgressComplete,
   generateBenchmarkModelSelectorModal,
   generateToolCards,
   mergePendingCards,
@@ -2638,12 +2636,9 @@ export class GatewaySession {
       // Versions tab handled below
     }
 
-    // Check for external benchmark progress
+    // Check for benchmark progress (UI or CLI started)
     let externalProgress;
-    if (
-      (this.evolutionTab === "overview" || this.evolutionTab === "benchmark") &&
-      !this.benchmarkRunning
-    ) {
+    if (this.evolutionTab === "overview" || this.evolutionTab === "benchmark") {
       const extProg = readBenchmarkProgress();
       if (extProg && extProg.running) {
         externalProgress = {
@@ -2735,19 +2730,8 @@ export class GatewaySession {
       pid: process.pid,
     });
 
-    // Show initial progress (current=0)
-    const initProgress = generateBenchmarkProgress({
-      current: 0,
-      total: 0,
-      category: "",
-      profile,
-    });
-    send({
-      type: "a2ui",
-      surface_id: "progress",
-      components: initProgress.components,
-      root_id: initProgress.root_id,
-    });
+    // Refresh evolution lab to show running state in table
+    this.sendEvolutionLabUpdate(send);
 
     const AGENT_TIMEOUT_MS = 120_000; // 2 minutes per test case
 
@@ -2807,18 +2791,8 @@ export class GatewaySession {
             modelId: modelConfig?.modelId,
             pid: process.pid,
           });
-          const progress = generateBenchmarkProgress({
-            current,
-            total,
-            category: testCase.category,
-            profile,
-          });
-          send({
-            type: "a2ui",
-            surface_id: "progress",
-            components: progress.components,
-            root_id: progress.root_id,
-          });
+          // Refresh evolution lab to update progress in table
+          this.sendEvolutionLabUpdate(send);
         },
       });
 
@@ -2835,35 +2809,13 @@ export class GatewaySession {
         : undefined;
       const result = await runner.run({ profile, modelOverride });
 
-      // Show completion progress
-      const complete = generateBenchmarkProgressComplete({
-        score: result.run.overallScore,
-        passed: result.run.passedCount,
-        failed: result.run.failedCount,
-        total: result.run.totalTestCases,
-      });
-      send({
-        type: "a2ui",
-        surface_id: "progress",
-        components: complete.components,
-        root_id: complete.root_id,
-      });
-
-      // Clear progress after 2 seconds
-      setTimeout(() => {
-        send({ type: "clear_surface", surface_id: "progress" });
-      }, 2000);
-
-      // Refresh evolution page
+      // Refresh evolution page — table will now show completed run
       if (this.currentView === "evolution") {
         this.sendEvolutionLabUpdate(send);
       } else {
         await this.handleNavigate("settings/evolution", send);
       }
     } catch (error) {
-      // Clear progress surface
-      send({ type: "clear_surface", surface_id: "progress" });
-
       const errorToast = generateToast(
         `Benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
         "error"
@@ -2877,6 +2829,8 @@ export class GatewaySession {
     } finally {
       this.benchmarkRunning = false;
       clearBenchmarkProgress();
+      // Refresh table to reflect final state
+      this.sendEvolutionLabUpdate(send);
     }
   }
 

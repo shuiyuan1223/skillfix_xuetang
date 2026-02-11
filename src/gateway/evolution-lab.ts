@@ -312,18 +312,6 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
 function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
 
-  // External progress at top of overview (if benchmark running)
-  if (data.externalProgress) {
-    const ep = data.externalProgress;
-    const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
-    const progressLabel = ui.text(
-      `${t("evolution.externalBenchmarkRunning")}${ep.modelId ? ` (${ep.modelId})` : ""} — ${ep.current}/${ep.total} (${pct}%)`,
-      "caption"
-    );
-    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#818cf8" });
-    children.push(ui.card([progressLabel, progressBar], { padding: 12 }));
-  }
-
   // Row 1: Stat Cards
   const statCards: string[] = [];
 
@@ -439,32 +427,54 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     children.push(ui.row(row2Items, { gap: 16 }));
   }
 
-  // Row 3: Recent Benchmark Runs
-  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+  // Row 3: Recent Benchmark Runs (with inline progress)
+  {
+    const cardChildren: string[] = [];
     const runsLabel = ui.text(t("evolution.recentRuns"), "label");
-    const runRows = data.benchmarkRuns.slice(0, 5).map((r) => ({
-      id: r.id,
-      status: r.status || (r.duration_ms && r.duration_ms > 0 ? "completed" : "running"),
-      version_tag: r.version_tag || "-",
-      overall_score: Math.round(r.overall_score),
-      passed: `${r.passed_count}/${r.total_test_cases}`,
-      model: r.presetName || r.modelId || "-",
-      profile: r.profile,
-      duration: r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
-    }));
-    const runsTable = ui.dataTable(
-      [
-        { key: "status", label: t("evolution.status"), render: "badge" },
-        { key: "version_tag", label: t("evolution.versionTag") },
-        { key: "overall_score", label: t("evolution.score"), render: "progress" },
-        { key: "passed", label: t("evolution.passed") },
-        { key: "model", label: t("evolution.model") },
-        { key: "profile", label: t("evolution.profile"), render: "badge" },
-        { key: "duration", label: t("evolution.duration") },
-      ],
-      runRows,
-      { onRowClick: "view_benchmark_run" }
-    );
+    cardChildren.push(runsLabel);
+
+    // Inline progress bar (when benchmark is running)
+    if (data.externalProgress) {
+      const ep = data.externalProgress;
+      const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
+      const statusBadge = ui.badge("running", { variant: "warning" });
+      const modelBadge = ep.modelId ? ui.badge(ep.modelId, { variant: "info" }) : null;
+      const pctText = ui.text(`${ep.current}/${ep.total} (${pct}%)`, "caption");
+      const badgeItems = modelBadge ? [statusBadge, modelBadge, pctText] : [statusBadge, pctText];
+      const badgeRow = ui.row(badgeItems, { gap: 8, align: "center" });
+      const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#818cf8" });
+      cardChildren.push(badgeRow, progressBar);
+    }
+
+    if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+      const runRows = data.benchmarkRuns.slice(0, 5).map((r) => ({
+        id: r.id,
+        status: r.status || (r.duration_ms && r.duration_ms > 0 ? "completed" : "running"),
+        version_tag: r.version_tag || "-",
+        overall_score: Math.round(r.overall_score),
+        passed: `${r.passed_count}/${r.total_test_cases}`,
+        model: r.presetName || r.modelId || "-",
+        profile: r.profile,
+        duration:
+          r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+      }));
+      const runsTable = ui.dataTable(
+        [
+          { key: "status", label: t("evolution.status"), render: "badge" },
+          { key: "version_tag", label: t("evolution.versionTag") },
+          { key: "overall_score", label: t("evolution.score"), render: "progress" },
+          { key: "passed", label: t("evolution.passed") },
+          { key: "model", label: t("evolution.model") },
+          { key: "profile", label: t("evolution.profile"), render: "badge" },
+          { key: "duration", label: t("evolution.duration") },
+        ],
+        runRows,
+        { onRowClick: "view_benchmark_run" }
+      );
+      cardChildren.push(runsTable);
+    } else if (!data.externalProgress) {
+      cardChildren.push(ui.text(t("evolution.noBenchmarkRuns"), "caption"));
+    }
 
     const quickBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
       variant: "secondary",
@@ -477,16 +487,9 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       payload: { profile: "full" },
     });
     const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "end" });
+    cardChildren.push(btnRow);
 
-    children.push(ui.card([runsLabel, runsTable, btnRow], { padding: 16 }));
-  } else {
-    const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
-    const runBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
-      variant: "primary",
-      size: "sm",
-      payload: { profile: "quick" },
-    });
-    children.push(ui.card([emptyText, runBtn], { padding: 24 }));
+    children.push(ui.card(cardChildren, { padding: 16 }));
   }
 
   // Row 4: Active evolution branch (if any)
@@ -537,38 +540,6 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     icon: "search",
   });
   children.push(ui.row([quickBtn, fullBtn, diagnoseBtn], { gap: 8 }));
-
-  // External benchmark progress — enhanced display
-  if (data.externalProgress) {
-    const ep = data.externalProgress;
-    const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
-    const progressChildren: string[] = [];
-
-    // Status + model badges
-    const statusBadge = ui.badge("running", { variant: "warning" });
-    const modelBadge = ep.modelId ? ui.badge(ep.modelId, { variant: "info" }) : null;
-    const badgeRow = modelBadge
-      ? ui.row([statusBadge, modelBadge], { gap: 8, align: "center" })
-      : statusBadge;
-    progressChildren.push(badgeRow);
-
-    // Large percentage text
-    const pctText = ui.text(`${pct}%`, "h2");
-    progressChildren.push(pctText);
-
-    // Progress bar
-    const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#818cf8" });
-    progressChildren.push(progressBar);
-
-    // Current category badge
-    if (ep.category) {
-      const catBadge = ui.badge(getCategoryLabel(ep.category), { variant: "default" });
-      const detailText = ui.text(`${ep.current}/${ep.total}`, "caption");
-      progressChildren.push(ui.row([catBadge, detailText], { gap: 8, align: "center" }));
-    }
-
-    children.push(ui.card(progressChildren, { padding: 16 }));
-  }
 
   // SHARP Category Breakdown Cards
   if (data.latestRunCategoryScores && data.latestRunCategoryScores.length > 0) {
@@ -647,35 +618,61 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     children.push(ui.card([testCasesLabel, testsTable, addTestBtn], { padding: 16 }));
   }
 
-  // Run History table
-  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+  // Run History table (with inline progress)
+  {
+    const historyChildren: string[] = [];
     const historyLabel = ui.text(t("evolution.benchmarkRuns"), "label");
-    const runRows = data.benchmarkRuns.map((r) => ({
-      id: r.id,
-      time: new Date(r.timestamp).toLocaleString(),
-      status: r.status || (r.duration_ms && r.duration_ms > 0 ? "completed" : "running"),
-      version_tag: r.version_tag || "-",
-      overall_score: Math.round(r.overall_score),
-      passed: `${r.passed_count}/${r.total_test_cases}`,
-      model: r.presetName || r.modelId || "-",
-      profile: r.profile,
-      duration: r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
-    }));
-    const runsTable = ui.dataTable(
-      [
-        { key: "time", label: t("evolution.time"), sortable: true },
-        { key: "status", label: t("evolution.status"), render: "badge" },
-        { key: "version_tag", label: t("evolution.versionTag") },
-        { key: "overall_score", label: t("evolution.score"), render: "progress" },
-        { key: "passed", label: t("evolution.passed") },
-        { key: "model", label: t("evolution.model") },
-        { key: "profile", label: t("evolution.profile"), render: "badge" },
-        { key: "duration", label: t("evolution.duration") },
-      ],
-      runRows,
-      { onRowClick: "view_benchmark_run" }
-    );
-    children.push(ui.card([historyLabel, runsTable], { padding: 16 }));
+    historyChildren.push(historyLabel);
+
+    // Inline progress bar (when benchmark is running)
+    if (data.externalProgress) {
+      const ep = data.externalProgress;
+      const pct = ep.total > 0 ? Math.round((ep.current / ep.total) * 100) : 0;
+      const statusBadge = ui.badge("running", { variant: "warning" });
+      const modelBadge = ep.modelId ? ui.badge(ep.modelId, { variant: "info" }) : null;
+      const pctText = ui.text(`${ep.current}/${ep.total} (${pct}%)`, "caption");
+      const badgeItems = modelBadge ? [statusBadge, modelBadge, pctText] : [statusBadge, pctText];
+      if (ep.category) {
+        badgeItems.push(ui.badge(getCategoryLabel(ep.category), { variant: "default" }));
+      }
+      historyChildren.push(ui.row(badgeItems, { gap: 8, align: "center" }));
+      const progressBar = ui.progress(ep.current, { maxValue: ep.total || 1, color: "#818cf8" });
+      historyChildren.push(progressBar);
+    }
+
+    if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+      const runRows = data.benchmarkRuns.map((r) => ({
+        id: r.id,
+        time: new Date(r.timestamp).toLocaleString(),
+        status: r.status || (r.duration_ms && r.duration_ms > 0 ? "completed" : "running"),
+        version_tag: r.version_tag || "-",
+        overall_score: Math.round(r.overall_score),
+        passed: `${r.passed_count}/${r.total_test_cases}`,
+        model: r.presetName || r.modelId || "-",
+        profile: r.profile,
+        duration:
+          r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+      }));
+      const runsTable = ui.dataTable(
+        [
+          { key: "time", label: t("evolution.time"), sortable: true },
+          { key: "status", label: t("evolution.status"), render: "badge" },
+          { key: "version_tag", label: t("evolution.versionTag") },
+          { key: "overall_score", label: t("evolution.score"), render: "progress" },
+          { key: "passed", label: t("evolution.passed") },
+          { key: "model", label: t("evolution.model") },
+          { key: "profile", label: t("evolution.profile"), render: "badge" },
+          { key: "duration", label: t("evolution.duration") },
+        ],
+        runRows,
+        { onRowClick: "view_benchmark_run" }
+      );
+      historyChildren.push(runsTable);
+    } else if (!data.externalProgress) {
+      historyChildren.push(ui.text(t("evolution.noBenchmarkRuns"), "caption"));
+    }
+
+    children.push(ui.card(historyChildren, { padding: 16 }));
   }
 
   // Config summary
