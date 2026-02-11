@@ -2276,14 +2276,12 @@ export class GatewaySession {
             // ok
           }
         }
-        // Determine run status: -1 = interrupted, NULL/0 = running, >0 = done
+        // Determine run status: -1 = interrupted, NULL/0 = running, >0 = completed
         const status: "running" | "completed" | "failed" =
           r.duration_ms != null && r.duration_ms < 0
             ? "failed"
-            : r.duration_ms
-              ? r.failed_count > 0 && r.passed_count === 0
-                ? "failed"
-                : "completed"
+            : r.duration_ms && r.duration_ms > 0
+              ? "completed"
               : "running";
         return {
           id: r.id,

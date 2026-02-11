@@ -473,19 +473,25 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   // Row 3: Recent Benchmark Runs
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const runsLabel = ui.text(t("evolution.recentRuns"), "label");
-    const runRows = data.benchmarkRuns.slice(0, 5).map((r) => ({
-      id: r.id,
-      progress: formatRunProgress(r, data.externalProgressMap),
-      version_tag: r.version_tag || "-",
-      passed: `${r.passed_count}/${r.total_test_cases}`,
-      model: r.presetName || r.modelId || "-",
-      profile: r.profile,
-      duration: r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
-    }));
+    const runRows = data.benchmarkRuns.slice(0, 5).map((r) => {
+      const scoreDisplay = r.overall_score > 0 ? `${Math.round(r.overall_score * 100)}%` : "-";
+      return {
+        id: r.id,
+        progress: formatRunProgress(r, data.externalProgressMap),
+        version_tag: r.version_tag || "-",
+        score: scoreDisplay,
+        passed: `${r.passed_count}/${r.total_test_cases}`,
+        model: r.presetName || r.modelId || "-",
+        profile: r.profile,
+        duration:
+          r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+      };
+    });
     const runsTable = ui.dataTable(
       [
         { key: "progress", label: t("evolution.progress"), render: "progress" },
         { key: "version_tag", label: t("evolution.versionTag") },
+        { key: "score", label: t("evolution.score") },
         { key: "passed", label: t("evolution.passed") },
         { key: "model", label: t("evolution.model") },
         { key: "profile", label: t("evolution.profile"), render: "badge" },
@@ -648,21 +654,27 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
   // Run History table
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const historyLabel = ui.text(t("evolution.benchmarkRuns"), "label");
-    const runRows = data.benchmarkRuns.map((r) => ({
-      id: r.id,
-      time: new Date(r.timestamp).toLocaleString(),
-      progress: formatRunProgress(r, data.externalProgressMap),
-      version_tag: r.version_tag || "-",
-      passed: `${r.passed_count}/${r.total_test_cases}`,
-      model: r.presetName || r.modelId || "-",
-      profile: r.profile,
-      duration: r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
-    }));
+    const runRows = data.benchmarkRuns.map((r) => {
+      const scoreDisplay = r.overall_score > 0 ? `${Math.round(r.overall_score * 100)}%` : "-";
+      return {
+        id: r.id,
+        time: new Date(r.timestamp).toLocaleString(),
+        progress: formatRunProgress(r, data.externalProgressMap),
+        version_tag: r.version_tag || "-",
+        score: scoreDisplay,
+        passed: `${r.passed_count}/${r.total_test_cases}`,
+        model: r.presetName || r.modelId || "-",
+        profile: r.profile,
+        duration:
+          r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+      };
+    });
     const runsTable = ui.dataTable(
       [
         { key: "time", label: t("evolution.time"), sortable: true },
         { key: "progress", label: t("evolution.progress"), render: "progress" },
         { key: "version_tag", label: t("evolution.versionTag") },
+        { key: "score", label: t("evolution.score") },
         { key: "passed", label: t("evolution.passed") },
         { key: "model", label: t("evolution.model") },
         { key: "profile", label: t("evolution.profile"), render: "badge" },
