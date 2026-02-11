@@ -723,6 +723,7 @@ export function registerEvalCommand(program: Command): void {
     .option("--preset <name>", "Use a named model preset from benchmarkModels config")
     .option("--all-models", "Run benchmark with all configured benchmarkModels")
     .option("--models <names>", "Comma-separated preset names to run")
+    .option("--parallel", "Run all models in parallel (default: sequential)")
     .option("--json", "Output as JSON")
     .action(async (options) => {
       const config = loadConfig();
@@ -829,13 +830,14 @@ export function registerEvalCommand(program: Command): void {
       }
 
       // Run benchmark for each model
-      const allRunResults: Array<{
+      type RunResult = {
         presetName: string;
         label: string;
         run: Awaited<ReturnType<BenchmarkRunner["run"]>>["run"];
         results: Awaited<ReturnType<BenchmarkRunner["run"]>>["results"];
         categoryScores: Awaited<ReturnType<BenchmarkRunner["run"]>>["categoryScores"];
-      }> = [];
+      };
+      const allRunResults: RunResult[] = [];
 
       // Check if another benchmark is already running
       const existingProgress = readBenchmarkProgress();
@@ -849,30 +851,29 @@ export function registerEvalCommand(program: Command): void {
         return;
       }
 
-      for (let mi = 0; mi < modelEntries.length; mi++) {
-        const entry = modelEntries[mi];
-        const isMulti = modelEntries.length > 1;
+      const isMulti = modelEntries.length > 1;
+      const isParallel = options.parallel && isMulti;
+      const AGENT_TIMEOUT_MS = 120_000;
+
+      // Shared judge config (one judge for all models)
+      const judgeConfig = getJudgeModel();
+      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
+      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
+
+      /** Run benchmark for a single model entry. Returns result or null on failure. */
+      async function runSingleModel(
+        entry: ModelEntry,
+        mi: number,
+        opts: { quiet?: boolean } = {}
+      ): Promise<RunResult | null> {
         const prefix = isMulti ? `[${mi + 1}/${modelEntries.length}] ${entry.label}` : "";
 
-        console.log("");
-        printHeader(isMulti ? `Benchmark — ${entry.label}` : "Benchmark", `${profile} profile`);
+        if (!opts.quiet) {
+          console.log("");
+          printHeader(isMulti ? `Benchmark — ${entry.label}` : "Benchmark", `${profile} profile`);
+        }
 
-        // Write initial progress to shared file
-        writeBenchmarkProgress({
-          running: true,
-          source: "cli",
-          profile,
-          current: 0,
-          total: 0,
-          category: "",
-          startedAt: Date.now(),
-          modelId: entry.modelId,
-          pid: process.pid,
-        });
-
-        // Use MockDataSource for benchmarks
         const mockDataSource = new MockDataSource();
-
         const agent = await createPHAAgent({
           apiKey: entry.apiKey,
           provider: entry.provider,
@@ -880,11 +881,6 @@ export function registerEvalCommand(program: Command): void {
           baseUrl: entry.baseUrl,
           dataSource: mockDataSource,
         });
-
-        // Use dedicated judge model for evaluation (separate from target model)
-        const judgeConfig = getJudgeModel();
-        const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
-        const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
 
         let rawLLMCall: (prompt: string) => Promise<string>;
         try {
@@ -901,10 +897,13 @@ export function registerEvalCommand(program: Command): void {
           };
         }
 
-        const spinner = new Spinner(`${prefix ? prefix + " — " : ""}Running benchmarks...`);
-        spinner.start();
+        // In parallel mode, track progress per-model without spinner/file conflicts
+        const progressState = { current: 0, total: 0 };
 
-        const AGENT_TIMEOUT_MS = 120_000;
+        const spinner = opts.quiet
+          ? null
+          : new Spinner(`${prefix ? prefix + " — " : ""}Running benchmarks...`);
+        spinner?.start();
 
         const runner = new BenchmarkRunner({
           agentCall: async (query: string, _mockContext?: Record<string, unknown>) => {
@@ -925,21 +924,26 @@ export function registerEvalCommand(program: Command): void {
           },
           llmCall: rawLLMCall,
           onProgress: (current, total, testCase) => {
-            spinner.update(
-              `${prefix ? prefix + " — " : ""}Running ${current}/${total}: ${testCase.id}`
-            );
-            // Update shared progress file for UI visibility
-            writeBenchmarkProgress({
-              running: true,
-              source: "cli",
-              profile,
-              current,
-              total,
-              category: testCase.category,
-              startedAt: Date.now(),
-              modelId: entry.modelId,
-              pid: process.pid,
-            });
+            progressState.current = current;
+            progressState.total = total;
+            if (spinner) {
+              spinner.update(
+                `${prefix ? prefix + " — " : ""}Running ${current}/${total}: ${testCase.id}`
+              );
+            }
+            if (!opts.quiet) {
+              writeBenchmarkProgress({
+                running: true,
+                source: "cli",
+                profile,
+                current,
+                total,
+                category: testCase.category,
+                startedAt: Date.now(),
+                modelId: entry.modelId,
+                pid: process.pid,
+              });
+            }
           },
         });
 
@@ -955,77 +959,134 @@ export function registerEvalCommand(program: Command): void {
             },
           });
 
-          spinner.stop("success");
+          spinner?.stop("success");
+          return { presetName: entry.presetName, label: entry.label, run, results, categoryScores };
+        } catch (error) {
+          spinner?.stop("error");
+          if (!opts.quiet) clearBenchmarkProgress();
+          warn(
+            `Benchmark failed for ${entry.label}: ${error instanceof Error ? error.message : String(error)}`
+          );
+          return null;
+        }
+      }
 
-          allRunResults.push({
-            presetName: entry.presetName,
-            label: entry.label,
-            run,
-            results,
-            categoryScores,
-          });
+      // --- Parallel mode ---
+      if (isParallel) {
+        console.log("");
+        printHeader(`Benchmark — ${modelEntries.length} models (parallel)`, `${profile} profile`);
 
-          if (options.json && !isMulti) {
-            console.log(JSON.stringify({ run, results: results.map((r) => ({ ...r })) }, null, 2));
-            return;
+        writeBenchmarkProgress({
+          running: true,
+          source: "cli",
+          profile,
+          current: 0,
+          total: modelEntries.length,
+          category: "",
+          startedAt: Date.now(),
+          modelId: modelEntries.map((e) => e.modelId).join(","),
+          pid: process.pid,
+        });
+
+        const parallelSpinner = new Spinner(`Running ${modelEntries.length} models in parallel...`);
+        parallelSpinner.start();
+
+        const settled = await Promise.allSettled(
+          modelEntries.map((entry, mi) => runSingleModel(entry, mi, { quiet: true }))
+        );
+
+        parallelSpinner.stop("success");
+        clearBenchmarkProgress();
+
+        let doneCount = 0;
+        for (let i = 0; i < settled.length; i++) {
+          const s = settled[i];
+          const entry = modelEntries[i];
+          if (s.status === "fulfilled" && s.value) {
+            allRunResults.push(s.value);
+            doneCount++;
+          } else {
+            const reason =
+              s.status === "rejected"
+                ? s.reason instanceof Error
+                  ? s.reason.message
+                  : String(s.reason)
+                : "returned null";
+            warn(`${entry.label}: ${reason}`);
           }
+        }
 
-          // Summary
-          printSection("Results Summary");
-          printKV("Run ID", c.dim(run.id.substring(0, 8)));
-          printKV("Model", c.cyan(entry.label));
-          printKV("Profile", profile);
-          printKV("Test Cases", String(run.totalTestCases));
-          printKV("Passed", c.green(String(run.passedCount)));
-          printKV("Failed", run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"));
+        console.log(
+          `\n  ${c.green(String(doneCount))} completed, ${c.red(String(modelEntries.length - doneCount))} failed\n`
+        );
+      } else {
+        // --- Sequential mode ---
+        for (let mi = 0; mi < modelEntries.length; mi++) {
+          const result = await runSingleModel(modelEntries[mi], mi);
+          if (result) {
+            allRunResults.push(result);
 
-          const runDisplayScore = normalizeScoreForDisplay(run.overallScore);
-          const scoreColor =
-            runDisplayScore >= 80 ? c.green : runDisplayScore >= 60 ? c.yellow : c.red;
-          printKV("Overall Score", scoreColor(`${runDisplayScore}/100`));
-          printKV("Duration", formatDuration(run.durationMs));
+            if (options.json && !isMulti) {
+              console.log(
+                JSON.stringify(
+                  { run: result.run, results: result.results.map((r) => ({ ...r })) },
+                  null,
+                  2
+                )
+              );
+              return;
+            }
 
-          if (!isMulti) {
-            // Detailed output for single model
-            printSection("Test Results");
-            printTable(
-              ["Test", "Category", "Score", "Pass", "Feedback"],
-              results.map((r) => {
-                const ds = normalizeScoreForDisplay(r.overallScore);
-                const sc = ds >= 80 ? c.green : ds >= 60 ? c.yellow : c.red;
-                return [
-                  c.dim(r.testCaseId),
-                  truncate(r.testCaseId.split("-").slice(0, 2).join("-"), 15),
-                  sc(`${ds}`),
-                  r.passed ? c.green("PASS") : c.red("FAIL"),
-                  truncate(r.feedback, 30),
-                ];
-              })
+            // Summary
+            printSection("Results Summary");
+            printKV("Run ID", c.dim(result.run.id.substring(0, 8)));
+            printKV("Model", c.cyan(result.label));
+            printKV("Profile", profile);
+            printKV("Test Cases", String(result.run.totalTestCases));
+            printKV("Passed", c.green(String(result.run.passedCount)));
+            printKV(
+              "Failed",
+              result.run.failedCount > 0 ? c.red(String(result.run.failedCount)) : c.dim("0")
             );
 
-            const radarData = generateRadarData(categoryScores);
-            console.log(generateAsciiRadar(radarData));
+            const runDisplayScore = normalizeScoreForDisplay(result.run.overallScore);
+            const scoreColor =
+              runDisplayScore >= 80 ? c.green : runDisplayScore >= 60 ? c.yellow : c.red;
+            printKV("Overall Score", scoreColor(`${runDisplayScore}/100`));
+            printKV("Duration", formatDuration(result.run.durationMs));
 
-            const weakCategories = identifyWeakCategories(categoryScores);
-            if (weakCategories.length > 0) {
-              printSection("Weakest Categories");
-              for (const weak of weakCategories) {
-                const label = CATEGORY_LABELS[weak.category];
-                console.log(
-                  `  ${c.red("!")} ${label}: ${c.yellow(normalizeScoreForDisplay(weak.score).toString())} (${normalizeScoreForDisplay(weak.gap).toString()} pts below threshold)`
-                );
+            if (!isMulti) {
+              // Detailed output for single model
+              printSection("Test Results");
+              printTable(
+                ["Test", "Category", "Score", "Pass", "Feedback"],
+                result.results.map((r) => {
+                  const ds = normalizeScoreForDisplay(r.overallScore);
+                  const sc = ds >= 80 ? c.green : ds >= 60 ? c.yellow : c.red;
+                  return [
+                    c.dim(r.testCaseId),
+                    truncate(r.testCaseId.split("-").slice(0, 2).join("-"), 15),
+                    sc(`${ds}`),
+                    r.passed ? c.green("PASS") : c.red("FAIL"),
+                    truncate(r.feedback, 30),
+                  ];
+                })
+              );
+
+              const radarData = generateRadarData(result.categoryScores);
+              console.log(generateAsciiRadar(radarData));
+
+              const weakCategories = identifyWeakCategories(result.categoryScores);
+              if (weakCategories.length > 0) {
+                printSection("Weakest Categories");
+                for (const weak of weakCategories) {
+                  const label = CATEGORY_LABELS[weak.category];
+                  console.log(
+                    `  ${c.red("!")} ${label}: ${c.yellow(normalizeScoreForDisplay(weak.score).toString())} (${normalizeScoreForDisplay(weak.gap).toString()} pts below threshold)`
+                  );
+                }
               }
             }
-          }
-        } catch (error) {
-          spinner.stop("error");
-          clearBenchmarkProgress();
-          if (isMulti) {
-            warn(
-              `Benchmark failed for ${entry.label}: ${error instanceof Error ? error.message : String(error)}`
-            );
-          } else {
-            fatal("Benchmark failed", error instanceof Error ? error.message : String(error));
           }
         }
       }
