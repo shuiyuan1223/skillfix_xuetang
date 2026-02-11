@@ -1239,9 +1239,27 @@ class A2UIRenderer {
         >`;
       }
       if (render === "progress") {
-        const num = Number(value) || 0;
-        return html`<div class="h-1.5 bg-surface rounded-full overflow-hidden w-full">
-          <div class="h-full rounded-full bg-primary" style="width: ${num}%"></div>
+        const str = String(value);
+        let num: number;
+        let barCls = "bg-primary";
+        let anim = "";
+        if (str.includes("|")) {
+          const [n, v] = str.split("|");
+          num = Number(n) || 0;
+          if (v === "success") barCls = "bg-success";
+          else if (v === "error") barCls = "bg-error";
+          else if (v === "running") anim = "animate-status-pulse";
+        } else {
+          num = Number(str) || 0;
+        }
+        return html`<div class="flex items-center gap-2">
+          <div class="h-1.5 bg-surface rounded-full overflow-hidden flex-1 min-w-[48px]">
+            <div
+              class="h-full rounded-full ${barCls} ${anim}"
+              style="width: ${Math.max(num, 3)}%"
+            ></div>
+          </div>
+          <span class="text-xs text-text-muted whitespace-nowrap">${num}%</span>
         </div>`;
       }
       if (render === "date") {
