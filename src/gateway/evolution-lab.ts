@@ -135,6 +135,14 @@ interface VersionInfo {
   createdAt: number;
 }
 
+export interface ComparisonRun {
+  id: string;
+  label: string;
+  color: string;
+  overallScore: number;
+  categoryScores: CategoryScoreInfo[];
+}
+
 export interface EvolutionLabData {
   activeTab: "overview" | "benchmark" | "versions" | "data" | "agent";
   // Overview
@@ -146,6 +154,10 @@ export interface EvolutionLabData {
   scoreTrend?: Array<{ version: string; score: number }>;
   versionCount?: number;
   testCaseCount?: number;
+  // Arena comparison
+  selectedRunIds?: string[];
+  radarMode?: "categories" | "criteria";
+  comparisonRuns?: ComparisonRun[];
   // Benchmark
   testCases?: TestCaseInfo[];
   externalProgressMap?: Record<string, ExternalProgressInfo>;
@@ -210,10 +222,67 @@ const SHARP_CATEGORY_COLORS: Record<string, string> = {
   personalization: "#dda0dd",
 };
 
+export const RUN_COLORS = ["#6366f1", "#ec4899", "#22d3ee", "#f59e0b", "#10b981"];
+
 function getScoreColor(score: number): string {
   if (score >= 0.9) return "#4ade80";
   if (score >= 0.7) return "#fbbf24";
   return "#f87171";
+}
+
+/**
+ * Build multiSeries radar data from comparison runs.
+ * categories mode: 5 SHARP data points per series.
+ * criteria mode: all sub-component data points per series.
+ */
+function buildMultiSeriesRadarData(
+  comparisonRuns: ComparisonRun[],
+  mode: "categories" | "criteria"
+): Array<{
+  label: string;
+  data: Array<{ label: string; value: number; maxValue: number }>;
+  color: string;
+}> {
+  if (mode === "categories") {
+    return comparisonRuns.map((run) => ({
+      label: run.label,
+      color: run.color,
+      data: run.categoryScores.map((cs) => ({
+        label: getCategoryLabel(cs.category),
+        value: Math.round((cs.score <= 1.0 ? cs.score : cs.score / 100) * 100),
+        maxValue: 100,
+      })),
+    }));
+  }
+  // criteria mode: collect all sub-components in fixed order
+  // Use first run's category order and sub-component order as reference
+  const ref = comparisonRuns[0];
+  const criteriaOrder: Array<{ category: string; name: string }> = [];
+  for (const cs of ref.categoryScores) {
+    if (cs.subComponents) {
+      for (const sub of cs.subComponents) {
+        criteriaOrder.push({ category: cs.category, name: sub.name });
+      }
+    }
+  }
+  if (criteriaOrder.length === 0) {
+    // Fallback to categories mode if no sub-components
+    return buildMultiSeriesRadarData(comparisonRuns, "categories");
+  }
+  return comparisonRuns.map((run) => ({
+    label: run.label,
+    color: run.color,
+    data: criteriaOrder.map((cr) => {
+      const cat = run.categoryScores.find((cs) => cs.category === cr.category);
+      const sub = cat?.subComponents?.find((s) => s.name === cr.name);
+      const score = sub ? sub.score : 0;
+      return {
+        label: cr.name.length > 14 ? cr.name.slice(0, 12) + ".." : cr.name,
+        value: Math.round(score * 100),
+        maxValue: 100,
+      };
+    }),
+  }));
 }
 
 function getCategoryLabel(category: string): string {
@@ -352,8 +421,6 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   // Row 1: Stat Cards
   const statCards: string[] = [];
 
-  // Overall score gauge — use latest run score for consistency
-  // Normalize: SHARP 2.0 scores are 0.0-1.0, old scores are 0-100
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const rawScore = data.benchmarkRuns[0].overall_score;
     const displayScore = rawScore <= 1.0 ? Math.round(rawScore * 100) : Math.round(rawScore);
@@ -382,7 +449,6 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     );
   }
 
-  // Tests passed
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const latest = data.benchmarkRuns[0];
     statCards.push(
@@ -405,7 +471,6 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     );
   }
 
-  // Version count
   statCards.push(
     ui.statCard({
       title: t("evolution.versions"),
@@ -415,7 +480,6 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     })
   );
 
-  // Current branch
   statCards.push(
     ui.statCard({
       title: t("evolution.currentVersion"),
@@ -427,29 +491,128 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
   children.push(ui.grid(statCards, { columns: 4, gap: 16 }));
 
-  // Row 2: Radar Chart + Score Trend
-  const row2Items: string[] = [];
+  // Row 2: Arena Comparison Area
+  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+    const arenaChildren: string[] = [];
 
-  if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
-    const radarTitle = ui.text(t("evolution.bestScoresAllTime"), "label");
-    const radarData = data.latestCategoryScores.map((cs) => {
-      // Normalize: 0.0-1.0 → 0-100 for display
-      const displayScore = cs.score <= 1.0 ? Math.round(cs.score * 100) : Math.round(cs.score);
-      return {
-        label: getCategoryLabel(cs.category),
-        value: displayScore,
-        maxValue: 100,
-      };
+    // Header row: title + mode toggle
+    const arenaTitle = ui.text(t("evolution.selectRunsForComparison"), "label");
+    const radarMode = data.radarMode || "categories";
+    const catBtn = ui.button(t("evolution.categoriesMode"), "set_radar_mode", {
+      variant: radarMode === "categories" ? "primary" : "outline",
+      size: "sm",
+      payload: { mode: "categories" },
     });
-    const radar = ui.radarChart(radarData, {
-      size: 280,
-      showLabels: true,
-      showValues: true,
-      color: "#667eea",
+    const critBtn = ui.button(t("evolution.criteriaMode"), "set_radar_mode", {
+      variant: radarMode === "criteria" ? "primary" : "outline",
+      size: "sm",
+      payload: { mode: "criteria" },
     });
-    row2Items.push(ui.card([radarTitle, radar], { padding: 16 }));
+    arenaChildren.push(
+      ui.row([arenaTitle, catBtn, critBtn], { gap: 8, align: "center", justify: "between" })
+    );
+
+    // Run selector pills
+    const selectedIds = new Set(data.selectedRunIds || []);
+    const pillBtns: string[] = [];
+    const recentRuns = data.benchmarkRuns.slice(0, 10);
+    for (const r of recentRuns) {
+      const shortLabel =
+        r.presetName || r.modelId?.split("/").pop() || r.version_tag || r.id.slice(0, 8);
+      const isSelected = selectedIds.has(r.id);
+      pillBtns.push(
+        ui.button(isSelected ? `● ${shortLabel}` : `○ ${shortLabel}`, "toggle_benchmark_run", {
+          variant: isSelected ? "primary" : "outline",
+          size: "sm",
+          payload: { runId: r.id },
+        })
+      );
+    }
+    if (selectedIds.size > 0) {
+      pillBtns.push(
+        ui.button(t("evolution.clearSelection"), "clear_run_selection", {
+          variant: "ghost",
+          size: "sm",
+        })
+      );
+    }
+    arenaChildren.push(ui.row(pillBtns, { gap: 4, wrap: true } as any));
+
+    // Comparison content
+    if (data.comparisonRuns && data.comparisonRuns.length > 0) {
+      const multiSeries = buildMultiSeriesRadarData(data.comparisonRuns, radarMode);
+      const radar = ui.radarChart([], { multiSeries, size: 320, showLabels: true });
+
+      // Overall scores table
+      const scoreRows = data.comparisonRuns.map((cr) => ({
+        run: `● ${cr.label}`,
+        score: Math.round(cr.overallScore * 100),
+      }));
+      const scoreTable = ui.dataTable(
+        [
+          { key: "run", label: t("evolution.runs") },
+          { key: "score", label: t("evolution.score"), render: "progress" },
+        ],
+        scoreRows
+      );
+      const scoreTitle = ui.text(t("evolution.overallScores"), "label");
+      const rightCol = ui.column([scoreTitle, scoreTable], { gap: 8 });
+
+      arenaChildren.push(ui.row([radar, rightCol], { gap: 16 }));
+
+      // Category Breakdown (criteria mode)
+      if (radarMode === "criteria" && data.comparisonRuns.length > 0) {
+        const breakdownTitle = ui.text(t("evolution.categoryBreakdown"), "label");
+        arenaChildren.push(breakdownTitle);
+
+        const refRun = data.comparisonRuns[0];
+        for (const cs of refRun.categoryScores) {
+          if (!cs.subComponents || cs.subComponents.length === 0) continue;
+          const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
+          const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
+          const colDefs: Array<{
+            key: string;
+            label: string;
+            render?: "text" | "badge" | "progress" | "date" | "link";
+          }> = [{ key: "criterion", label: t("evolution.criteria") }];
+          for (const cr of data.comparisonRuns) {
+            colDefs.push({ key: `run_${cr.id.slice(0, 8)}`, label: cr.label, render: "progress" });
+          }
+          const rows = cs.subComponents.map((sub) => {
+            const row: Record<string, unknown> = { criterion: sub.name };
+            for (const cr of data.comparisonRuns!) {
+              const crCat = cr.categoryScores.find((c) => c.category === cs.category);
+              const crSub = crCat?.subComponents?.find((s) => s.name === sub.name);
+              row[`run_${cr.id.slice(0, 8)}`] = crSub ? Math.round(crSub.score * 100) : 0;
+            }
+            return row;
+          });
+          const catTable = ui.dataTable(colDefs, rows);
+          const scoreBadge = ui.badge(`${Math.round(avgScore * 100)}%`, {
+            variant: avgScore >= 0.9 ? "success" : avgScore >= 0.7 ? "warning" : "error",
+          });
+          const header = ui.row([ui.text(getCategoryLabel(cs.category), "label"), scoreBadge], {
+            gap: 8,
+            align: "center",
+          });
+          const progress = ui.progress(Math.round(avgScore * 100), {
+            maxValue: 100,
+            color: catColor,
+            size: "sm",
+          });
+          arenaChildren.push(
+            ui.collapsible(getCategoryLabel(cs.category), [header, progress, catTable])
+          );
+        }
+      }
+    } else {
+      arenaChildren.push(ui.text(t("evolution.noRunsSelected"), "caption"));
+    }
+
+    children.push(ui.card(arenaChildren, { padding: 16 }));
   }
 
+  // Row 3: Score Trend
   if (data.scoreTrend && data.scoreTrend.length > 0) {
     const trendLabel = ui.text(t("evolution.scoreTrend"), "label");
     const trendChart = ui.chart({
@@ -463,14 +626,10 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       height: 200,
       color: "#667eea",
     });
-    row2Items.push(ui.card([trendLabel, trendChart], { padding: 16 }));
+    children.push(ui.card([trendLabel, trendChart], { padding: 16 }));
   }
 
-  if (row2Items.length > 0) {
-    children.push(ui.row(row2Items, { gap: 16 }));
-  }
-
-  // Row 3: Recent Benchmark Runs
+  // Row 4: Recent Benchmark Runs
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const runsLabel = ui.text(t("evolution.recentRuns"), "label");
     const runRows = data.benchmarkRuns.slice(0, 5).map((r) => {
@@ -525,7 +684,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     children.push(ui.card([emptyText, runBtn], { padding: 24 }));
   }
 
-  // Row 4: Active evolution branch (if any)
+  // Row 5: Active evolution branch (if any)
   if (data.activeVersionBranch && data.activeVersionBranch !== "main") {
     const branchBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
     const branchLabel = ui.text(t("evolution.activeVersion"), "label");

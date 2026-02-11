@@ -356,9 +356,43 @@ function renderChart(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderRadarChart(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const data = (comp.data as Array<{ label: string; value: number; maxValue: number }>) || [];
+  const multiSeries = comp.multiSeries as
+    | Array<{
+        label: string;
+        data: Array<{ label: string; value: number; maxValue: number }>;
+        color: string;
+      }>
+    | undefined;
   const lines: string[] = [];
 
+  if (multiSeries && multiSeries.length > 0) {
+    // Multi-series: render as a comparison table
+    lines.push(indent(ctx, ansi.dim("[Radar Chart — Multi-Series]")));
+    // Header: dimension + each series name
+    const axisLabels = multiSeries[0].data.map((d) => d.label);
+    const seriesNames = multiSeries.map((s) => s.label);
+    const colWidth = 10;
+    const headerLine =
+      "  " +
+      padRight("Dimension", 18) +
+      seriesNames.map((n) => padRight(n.slice(0, colWidth), colWidth)).join(" ");
+    lines.push(indent(ctx, ansi.bold(headerLine)));
+    lines.push(indent(ctx, "  " + "─".repeat(18 + seriesNames.length * (colWidth + 1))));
+
+    for (let i = 0; i < axisLabels.length; i++) {
+      const label = axisLabels[i];
+      const vals = multiSeries.map((s) => {
+        const d = s.data[i];
+        const pct = d && d.maxValue > 0 ? Math.round((d.value / d.maxValue) * 100) : 0;
+        return padRight(`${pct}%`, colWidth);
+      });
+      lines.push(indent(ctx, `  ${padRight(label, 18)}${vals.join(" ")}`));
+    }
+    return lines;
+  }
+
+  // Single-series fallback
+  const data = (comp.data as Array<{ label: string; value: number; maxValue: number }>) || [];
   lines.push(indent(ctx, ansi.dim("[Radar Chart]")));
 
   for (const item of data) {

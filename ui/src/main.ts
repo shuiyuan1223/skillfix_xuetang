@@ -1487,6 +1487,20 @@ class A2UIRenderer {
   }
 
   private renderRadarChart(c: A2UIComponent): TemplateResult {
+    const multiSeries = c.multiSeries as
+      | Array<{
+          label: string;
+          data: Array<{ label: string; value: number; maxValue: number }>;
+          color: string;
+        }>
+      | undefined;
+
+    // Multi-series mode: render N overlapping polygons + legend
+    if (multiSeries && multiSeries.length > 0) {
+      return this.renderRadarChartMultiSeries(c, multiSeries);
+    }
+
+    // Original single/compare mode
     const data = (c.data as Array<{ label: string; value: number; maxValue: number }>) || [];
     const compareData = c.compareData as
       | Array<{ label: string; value: number; maxValue: number }>
@@ -1500,11 +1514,10 @@ class A2UIRenderer {
 
     const cx = size / 2;
     const cy = size / 2;
-    const radius = size / 2 - 40; // Leave space for labels
+    const radius = size / 2 - 40;
     const angleStep = (2 * Math.PI) / n;
-    const startAngle = -Math.PI / 2; // Start from top
+    const startAngle = -Math.PI / 2;
 
-    // Helper: get polygon point
     const getPoint = (i: number, pct: number) => {
       const angle = startAngle + i * angleStep;
       return {
@@ -1513,7 +1526,6 @@ class A2UIRenderer {
       };
     };
 
-    // Build concentric grid polygons (20%, 40%, 60%, 80%, 100%)
     const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
     const gridPolygons = gridLevels.map((level) => {
       const points = Array.from({ length: n }, (_, i) => {
@@ -1523,13 +1535,11 @@ class A2UIRenderer {
       return points;
     });
 
-    // Axis lines from center to each vertex
     const axisLines = Array.from({ length: n }, (_, i) => {
       const p = getPoint(i, 1);
       return { x2: p.x, y2: p.y };
     });
 
-    // Data polygon
     const dataPoints = data
       .map((d, i) => {
         const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0;
@@ -1538,7 +1548,6 @@ class A2UIRenderer {
       })
       .join(" ");
 
-    // Compare polygon (if provided)
     let comparePoints = "";
     if (compareData && compareData.length === n) {
       comparePoints = compareData
@@ -1550,13 +1559,11 @@ class A2UIRenderer {
         .join(" ");
     }
 
-    // Label positions (slightly beyond outer polygon)
     const labels = data.map((d, i) => {
       const angle = startAngle + i * angleStep;
       const labelRadius = radius + 24;
       const x = cx + labelRadius * Math.cos(angle);
       const y = cy + labelRadius * Math.sin(angle);
-      // Text anchor based on position
       let anchor = "middle";
       if (Math.cos(angle) < -0.1) anchor = "end";
       else if (Math.cos(angle) > 0.1) anchor = "start";
@@ -1566,23 +1573,19 @@ class A2UIRenderer {
     return html`
       <div style="width: ${size}px; height: ${size}px">
         <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
-          <!-- Grid polygons -->
           ${gridPolygons.map(
             (points) => svg`
               <polygon points="${points}" class="radar-grid" />
             `
           )}
-          <!-- Axis lines -->
           ${axisLines.map(
             (line) => svg`
               <line x1="${cx}" y1="${cy}" x2="${line.x2}" y2="${line.y2}" class="radar-axis" />
             `
           )}
-          <!-- Compare data polygon -->
           ${comparePoints
             ? svg`<polygon points="${comparePoints}" fill="${compareColor}" fill-opacity="0.15" stroke="${compareColor}" stroke-width="1.5" stroke-opacity="0.6" />`
             : nothing}
-          <!-- Data polygon -->
           <polygon
             points="${dataPoints}"
             fill="${color}"
@@ -1592,13 +1595,11 @@ class A2UIRenderer {
             class="motion-safe:animate-radar-expand"
             style="transform-origin: ${cx}px ${cy}px"
           />
-          <!-- Data points -->
           ${data.map((d, i) => {
             const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0;
             const p = getPoint(i, pct);
             return svg`<circle cx="${p.x}" cy="${p.y}" r="4" fill="${color}" />`;
           })}
-          <!-- Labels -->
           ${labels.map(
             (l) => svg`
               <text x="${l.x}" y="${l.y}" text-anchor="${l.anchor}" class="radar-label" dominant-baseline="central">
@@ -1610,6 +1611,120 @@ class A2UIRenderer {
             `
           )}
         </svg>
+      </div>
+    `;
+  }
+
+  private renderRadarChartMultiSeries(
+    c: A2UIComponent,
+    multiSeries: Array<{
+      label: string;
+      data: Array<{ label: string; value: number; maxValue: number }>;
+      color: string;
+    }>
+  ): TemplateResult {
+    const size = (c.size as number) || 320;
+    const axisData = multiSeries[0].data;
+    const n = axisData.length;
+    if (n < 3)
+      return html`<div class="text-text-muted text-sm p-4">Need at least 3 data points</div>`;
+
+    const cx = size / 2;
+    const cy = size / 2;
+    const radius = size / 2 - 40;
+    const angleStep = (2 * Math.PI) / n;
+    const startAngle = -Math.PI / 2;
+
+    const getPoint = (i: number, pct: number) => {
+      const angle = startAngle + i * angleStep;
+      return {
+        x: cx + radius * pct * Math.cos(angle),
+        y: cy + radius * pct * Math.sin(angle),
+      };
+    };
+
+    const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
+    const gridPolygons = gridLevels.map((level) =>
+      Array.from({ length: n }, (_, i) => {
+        const p = getPoint(i, level);
+        return `${p.x},${p.y}`;
+      }).join(" ")
+    );
+
+    const axisLines = Array.from({ length: n }, (_, i) => {
+      const p = getPoint(i, 1);
+      return { x2: p.x, y2: p.y };
+    });
+
+    const labels = axisData.map((d, i) => {
+      const angle = startAngle + i * angleStep;
+      const labelRadius = radius + 24;
+      const x = cx + labelRadius * Math.cos(angle);
+      const y = cy + labelRadius * Math.sin(angle);
+      let anchor = "middle";
+      if (Math.cos(angle) < -0.1) anchor = "end";
+      else if (Math.cos(angle) > 0.1) anchor = "start";
+      return { x, y, label: d.label, anchor };
+    });
+
+    // Build polygon points for each series
+    const seriesPolygons = multiSeries.map((series) => ({
+      color: series.color,
+      label: series.label,
+      points: series.data
+        .map((d, i) => {
+          const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0;
+          const p = getPoint(i, pct);
+          return `${p.x},${p.y}`;
+        })
+        .join(" "),
+    }));
+
+    return html`
+      <div>
+        <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+          ${gridPolygons.map((points) => svg`<polygon points="${points}" class="radar-grid" />`)}
+          ${axisLines.map(
+            (line) =>
+              svg`<line x1="${cx}" y1="${cy}" x2="${line.x2}" y2="${line.y2}" class="radar-axis" />`
+          )}
+          ${seriesPolygons.map(
+            (sp) => svg`
+              <polygon
+                points="${sp.points}"
+                fill="${sp.color}"
+                fill-opacity="0.15"
+                stroke="${sp.color}"
+                stroke-width="2"
+                class="motion-safe:animate-radar-expand"
+                style="transform-origin: ${cx}px ${cy}px"
+              />
+            `
+          )}
+          ${labels.map(
+            (l) => svg`
+              <text x="${l.x}" y="${l.y}" text-anchor="${l.anchor}" class="radar-label" dominant-baseline="central">
+                ${l.label}
+              </text>
+            `
+          )}
+        </svg>
+        <div
+          style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; justify-content: center;"
+        >
+          ${multiSeries.map(
+            (s) => html`
+              <span
+                style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--color-text-secondary, #888);"
+              >
+                <span
+                  style="width: 10px; height: 10px; border-radius: 50%; background: ${s.color}; display: inline-block;"
+                ></span>
+                ${s.label}
+              </span>
+            `
+          )}
+        </div>
       </div>
     `;
   }

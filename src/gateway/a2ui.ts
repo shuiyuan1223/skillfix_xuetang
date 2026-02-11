@@ -310,6 +310,12 @@ export interface RadarChartComponent extends A2UIComponent {
     maxValue: number;
   }>;
   compareColor?: string;
+  /** N-series overlay mode. When present, `data`/`compareData` are ignored. */
+  multiSeries?: Array<{
+    label: string;
+    data: Array<{ label: string; value: number; maxValue: number }>;
+    color: string;
+  }>;
 }
 
 // Git Timeline Component

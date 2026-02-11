@@ -980,6 +980,7 @@ interface CategoryScoreInfo {
   score: number;
   testCount: number;
   passedCount: number;
+  subComponents?: Array<{ name: string; score: number; scoring: "binary" | "3-point" }>;
 }
 
 // ============================================================================
@@ -1354,6 +1355,27 @@ export function generateBenchmarkRunDetailModal(
 
   const children: string[] = [];
 
+  const SHARP_COLORS: Record<string, string> = {
+    safety: "#ff6b6b",
+    usefulness: "#4ecdc4",
+    accuracy: "#ffe66d",
+    relevance: "#95e1d3",
+    personalization: "#dda0dd",
+  };
+
+  const labelMap: Record<string, string> = {
+    "health-data-analysis": t("evolution.healthDataAnalysis"),
+    "health-coaching": t("evolution.healthCoaching"),
+    "safety-boundaries": t("evolution.safetyBoundaries"),
+    "personalization-memory": t("evolution.personalization"),
+    "communication-quality": t("evolution.communicationQuality"),
+    safety: "Safety",
+    usefulness: "Usefulness",
+    accuracy: "Accuracy",
+    relevance: "Relevance",
+    personalization: "Personalization",
+  };
+
   // Top: score gauge centered
   const overallGauge = ui.scoreGauge(run.overallScore, {
     label: t("evolution.totalScore"),
@@ -1362,7 +1384,7 @@ export function generateBenchmarkRunDetailModal(
   });
   children.push(ui.column([overallGauge], { align: "center" }));
 
-  // Stat cards row (3 columns)
+  // Stat cards row
   const passedCard = ui.statCard({
     title: t("evolution.passed"),
     value: `${run.passedCount}/${run.totalTestCases}`,
@@ -1370,21 +1392,18 @@ export function generateBenchmarkRunDetailModal(
     icon: "check",
     color: "#10b981",
   });
-
   const failedCard = ui.statCard({
     title: t("evolution.failed"),
     value: run.failedCount,
     icon: "x",
     color: "#ef4444",
   });
-
   const durationCard = ui.statCard({
     title: t("evolution.duration"),
     value: run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : "-",
     icon: "timer",
     color: "#667eea",
   });
-
   children.push(ui.grid([passedCard, failedCard, durationCard], { columns: 3, gap: 12 }));
 
   // Version / Model info row
@@ -1407,42 +1426,106 @@ export function generateBenchmarkRunDetailModal(
     children.push(ui.row(infoItems, { gap: 16 }));
   }
 
-  // Radar chart of category scores
+  // Radar chart — 16 criteria mode if sub-components available, else category mode
   if (categoryScores.length > 0) {
-    const labelMap: Record<string, string> = {
-      "health-data-analysis": t("evolution.healthDataAnalysis"),
-      "health-coaching": t("evolution.healthCoaching"),
-      "safety-boundaries": t("evolution.safetyBoundaries"),
-      "personalization-memory": t("evolution.personalization"),
-      "communication-quality": t("evolution.communicationQuality"),
-    };
-
-    const radarData = categoryScores.map((cs) => ({
-      label: labelMap[cs.category] || cs.category,
-      value: cs.score,
-      maxValue: 100,
-    }));
-
-    const radar = ui.radarChart(radarData, { size: 280, color: "#667eea" });
-    children.push(ui.column([radar], { align: "center" }));
-
-    // Category scores table
-    const catLabel = ui.text(t("evolution.categoryScores"), "label");
-    const catRows = categoryScores.map((cs) => ({
-      category: labelMap[cs.category] || cs.category,
-      score: Math.round(cs.score),
-      passed: `${cs.passedCount}/${cs.testCount}`,
-    }));
-
-    const catTable = ui.dataTable(
-      [
-        { key: "category", label: t("evolution.category") },
-        { key: "score", label: t("evolution.score"), render: "progress" },
-        { key: "passed", label: t("evolution.passed") },
-      ],
-      catRows
+    const hasSubComponents = categoryScores.some(
+      (cs) => cs.subComponents && cs.subComponents.length > 0
     );
-    children.push(catLabel, catTable);
+
+    if (hasSubComponents) {
+      // 16-criteria radar
+      const criteriaData: Array<{ label: string; value: number; maxValue: number }> = [];
+      for (const cs of categoryScores) {
+        if (cs.subComponents) {
+          for (const sub of cs.subComponents) {
+            criteriaData.push({
+              label: sub.name.length > 14 ? sub.name.slice(0, 12) + ".." : sub.name,
+              value: Math.round(sub.score * 100),
+              maxValue: 100,
+            });
+          }
+        }
+      }
+      if (criteriaData.length >= 3) {
+        const radar = ui.radarChart(criteriaData, {
+          size: 300,
+          color: "#667eea",
+          showLabels: true,
+        });
+        children.push(ui.column([radar], { align: "center" }));
+      }
+    } else {
+      // Original category-level radar
+      const radarData = categoryScores.map((cs) => ({
+        label: labelMap[cs.category] || cs.category,
+        value: cs.score <= 1.0 ? Math.round(cs.score * 100) : Math.round(cs.score),
+        maxValue: 100,
+      }));
+      const radar = ui.radarChart(radarData, { size: 280, color: "#667eea" });
+      children.push(ui.column([radar], { align: "center" }));
+    }
+
+    // Collapsible category cards with sub-component details
+    if (hasSubComponents) {
+      for (const cs of categoryScores) {
+        const catColor = SHARP_COLORS[cs.category] || "#818cf8";
+        const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
+        const catLabel = labelMap[cs.category] || cs.category;
+
+        const cardChildren: string[] = [];
+        // Header: category + score badge
+        const scoreBadge = ui.badge(`${Math.round(avgScore * 100)}%`, {
+          variant: avgScore >= 0.9 ? "success" : avgScore >= 0.7 ? "warning" : "error",
+        });
+        cardChildren.push(
+          ui.row([ui.text(catLabel, "label"), scoreBadge], { gap: 8, align: "center" })
+        );
+        cardChildren.push(
+          ui.progress(Math.round(avgScore * 100), { maxValue: 100, color: catColor, size: "sm" })
+        );
+
+        // Sub-component rows
+        if (cs.subComponents && cs.subComponents.length > 0) {
+          const subRows = cs.subComponents.map((sub) => ({
+            criterion: sub.name,
+            score: Math.round(sub.score * 100),
+            scoring: sub.scoring,
+          }));
+          const subTable = ui.dataTable(
+            [
+              { key: "criterion", label: t("evolution.criteria") },
+              { key: "score", label: t("evolution.score"), render: "progress" as const },
+              { key: "scoring", label: t("evolution.scoringType"), render: "badge" as const },
+            ],
+            subRows
+          );
+          cardChildren.push(subTable);
+        }
+
+        children.push(
+          ui.collapsible(`${catLabel} (${Math.round(avgScore * 100)}%)`, cardChildren, {
+            expanded: true,
+          })
+        );
+      }
+    } else {
+      // Fallback: simple category scores table
+      const catLabel = ui.text(t("evolution.categoryScores"), "label");
+      const catRows = categoryScores.map((cs) => ({
+        category: labelMap[cs.category] || cs.category,
+        score: Math.round(cs.score),
+        passed: `${cs.passedCount}/${cs.testCount}`,
+      }));
+      const catTable = ui.dataTable(
+        [
+          { key: "category", label: t("evolution.category") },
+          { key: "score", label: t("evolution.score"), render: "progress" },
+          { key: "passed", label: t("evolution.passed") },
+        ],
+        catRows
+      );
+      children.push(catLabel, catTable);
+    }
   }
 
   const content = ui.column(children, { gap: 16, padding: 8 });

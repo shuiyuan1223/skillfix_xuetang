@@ -391,6 +391,16 @@ export interface LocaleMessages {
     subComponents: string;
     allModelsParallel: string;
     modelAlreadyRunning: string;
+    // Arena dashboard
+    selectRunsForComparison: string;
+    categoriesMode: string;
+    criteriaMode: string;
+    overallScores: string;
+    categoryBreakdown: string;
+    clearSelection: string;
+    noRunsSelected: string;
+    criteria: string;
+    scoringType: string;
   };
 
   // Memory page

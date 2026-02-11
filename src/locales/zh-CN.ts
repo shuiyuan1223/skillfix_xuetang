@@ -368,6 +368,16 @@ export const zhCN: LocaleMessages = {
     subComponents: "子维度",
     allModelsParallel: "全部模型（并行）",
     modelAlreadyRunning: "该模型的基准测试已在运行中",
+    // Arena dashboard
+    selectRunsForComparison: "选择对比的运行记录",
+    categoriesMode: "5 类别",
+    criteriaMode: "16 准则",
+    overallScores: "总体分数",
+    categoryBreakdown: "分类明细",
+    clearSelection: "清除选择",
+    noRunsSelected: "点击运行记录以添加到对比",
+    criteria: "准则",
+    scoringType: "评分类型",
   },
 
   memory: {

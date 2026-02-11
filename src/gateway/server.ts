@@ -114,6 +114,7 @@ import { resetSkillCache } from "../agent/skill-trigger.js";
 import {
   generateEvolutionLab,
   getDefaultPipelineSteps,
+  RUN_COLORS,
   type EvolutionLabData,
 } from "./evolution-lab.js";
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
@@ -714,6 +715,10 @@ export class GatewaySession {
   private evolutionPipelineStep: string | null = null;
   private evolutionInspectedBranch: string | null = null;
   private evolutionLabDiffContent: { before: string; after: string; path: string } | null = null;
+
+  // Arena comparison state
+  private benchmarkSelectedRunIds: Set<string> = new Set();
+  private benchmarkRadarMode: "categories" | "criteria" = "categories";
 
   constructor(config: GatewayConfig = {}, userUuid?: string) {
     this.config = config;
@@ -2082,12 +2087,33 @@ export class GatewaySession {
               totalTestCases: run.total_test_cases,
               durationMs: run.duration_ms,
             },
-            scores.map((s) => ({
-              category: s.category,
-              score: s.score,
-              testCount: s.test_count,
-              passedCount: s.passed_count,
-            }))
+            scores.map((s) => {
+              // Parse sub-components from details JSON
+              let subComponents:
+                | Array<{ name: string; score: number; scoring: "binary" | "3-point" }>
+                | undefined;
+              if (s.details) {
+                try {
+                  const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
+                  if (Array.isArray(details)) {
+                    subComponents = details.map((d: any) => ({
+                      name: d.subComponent || d.name || "Unknown",
+                      score: typeof d.score === "number" ? d.score : 0,
+                      scoring: d.scoringType || d.scoring || "binary",
+                    }));
+                  }
+                } catch {
+                  // legacy format
+                }
+              }
+              return {
+                category: s.category,
+                score: s.score,
+                testCount: s.test_count,
+                passedCount: s.passed_count,
+                subComponents,
+              };
+            })
           );
           send({
             type: "a2ui",
@@ -2097,6 +2123,26 @@ export class GatewaySession {
           });
         }
       }
+    } else if (action === "toggle_benchmark_run") {
+      const runId = (payload?.runId as string) || (payload?.row as { id: string })?.id;
+      if (runId) {
+        const fullId = this.findFullBenchmarkRunId(runId) || runId;
+        if (this.benchmarkSelectedRunIds.has(fullId)) {
+          this.benchmarkSelectedRunIds.delete(fullId);
+        } else {
+          this.benchmarkSelectedRunIds.add(fullId);
+        }
+        this.sendEvolutionLabUpdate(send);
+      }
+    } else if (action === "set_radar_mode") {
+      const mode = payload?.mode as "categories" | "criteria";
+      if (mode === "categories" || mode === "criteria") {
+        this.benchmarkRadarMode = mode;
+        this.sendEvolutionLabUpdate(send);
+      }
+    } else if (action === "clear_run_selection") {
+      this.benchmarkSelectedRunIds.clear();
+      this.sendEvolutionLabUpdate(send);
     } else if (action === "run_test_case" && payload?.id) {
       const toast = generateToast("Running test case...", "info");
       send({
@@ -2380,6 +2426,68 @@ export class GatewaySession {
       }
     }
 
+    // Arena comparison runs
+    let comparisonRuns: EvolutionLabData["comparisonRuns"];
+    if (
+      (activeTab === "overview" || activeTab === "benchmark") &&
+      this.benchmarkSelectedRunIds.size > 0
+    ) {
+      comparisonRuns = [];
+      let colorIdx = 0;
+      for (const selId of this.benchmarkSelectedRunIds) {
+        try {
+          const run = getBenchmarkRun(selId);
+          if (!run) continue;
+          const scores = listCategoryScores(selId);
+          let presetName: string | undefined;
+          if (run.metadata) {
+            try {
+              const meta = JSON.parse(run.metadata);
+              presetName = meta.presetName;
+            } catch {
+              // ok
+            }
+          }
+          const shortLabel = presetName || run.version_tag || selId.slice(0, 8);
+          comparisonRuns.push({
+            id: selId,
+            label: shortLabel,
+            color: RUN_COLORS[colorIdx % RUN_COLORS.length],
+            overallScore: run.overall_score,
+            categoryScores: scores.map((s) => {
+              let subComponents:
+                | Array<{ name: string; score: number; scoring: "binary" | "3-point" }>
+                | undefined;
+              if (s.details) {
+                try {
+                  const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
+                  if (Array.isArray(details)) {
+                    subComponents = details.map((d: any) => ({
+                      name: d.subComponent || d.name || "Unknown",
+                      score: typeof d.score === "number" ? d.score : 0,
+                      scoring: d.scoringType || d.scoring || "binary",
+                    }));
+                  }
+                } catch {
+                  // legacy
+                }
+              }
+              return {
+                category: s.category,
+                score: s.score,
+                test_count: s.test_count,
+                passed_count: s.passed_count,
+                subComponents,
+              };
+            }),
+          });
+          colorIdx++;
+        } catch {
+          // run may have been deleted
+        }
+      }
+    }
+
     // Benchmark: test cases + external progress
     let testCases: EvolutionLabData["testCases"];
     let externalProgressMap: EvolutionLabData["externalProgressMap"];
@@ -2586,6 +2694,13 @@ export class GatewaySession {
       scoreTrend,
       versionCount,
       testCaseCount,
+      // Arena comparison
+      selectedRunIds:
+        this.benchmarkSelectedRunIds.size > 0
+          ? Array.from(this.benchmarkSelectedRunIds)
+          : undefined,
+      radarMode: this.benchmarkRadarMode,
+      comparisonRuns,
       // Benchmark
       testCases,
       externalProgressMap,

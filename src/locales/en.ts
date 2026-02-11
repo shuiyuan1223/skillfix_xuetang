@@ -373,6 +373,16 @@ export const en: LocaleMessages = {
     subComponents: "Sub-Components",
     allModelsParallel: "All Models (Parallel)",
     modelAlreadyRunning: "This model is already running a benchmark",
+    // Arena dashboard
+    selectRunsForComparison: "Select runs to compare",
+    categoriesMode: "5 Categories",
+    criteriaMode: "16 Criteria",
+    overallScores: "Overall Scores",
+    categoryBreakdown: "Category Breakdown",
+    clearSelection: "Clear",
+    noRunsSelected: "Click a run to add to comparison",
+    criteria: "Criteria",
+    scoringType: "Scoring",
   },
 
   memory: {
