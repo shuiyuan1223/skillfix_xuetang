@@ -1947,10 +1947,10 @@ ${value || ""}</textarea
     };
 
     const statusColors: Record<string, string> = {
-      success: "var(--color-success, #22c55e)",
-      failed: "var(--color-error, #ef4444)",
-      pending: "var(--color-muted, #94a3b8)",
-      active: "var(--color-primary, #6366f1)",
+      success: "rgb(var(--color-success))",
+      failed: "rgb(var(--color-error))",
+      pending: "rgb(var(--color-text-muted))",
+      active: "rgb(var(--color-primary))",
     };
 
     // Relative time helper
@@ -2228,28 +2228,28 @@ ${value || ""}</textarea
     const statusStyles: Record<string, { bg: string; border: string; text: string }> = {
       pending: {
         bg: "transparent",
-        border: "var(--color-border, #e2e8f0)",
-        text: "var(--color-muted, #94a3b8)",
+        border: "var(--color-border)",
+        text: "rgb(var(--color-text-muted))",
       },
       active: {
-        bg: "var(--color-primary, #6366f1)",
-        border: "var(--color-primary, #6366f1)",
+        bg: "rgb(var(--color-primary))",
+        border: "rgb(var(--color-primary))",
         text: "#fff",
       },
       completed: {
-        bg: "var(--color-success, #22c55e)",
-        border: "var(--color-success, #22c55e)",
+        bg: "rgb(var(--color-success))",
+        border: "rgb(var(--color-success))",
         text: "#fff",
       },
       failed: {
-        bg: "var(--color-error, #ef4444)",
-        border: "var(--color-error, #ef4444)",
+        bg: "rgb(var(--color-error))",
+        border: "rgb(var(--color-error))",
         text: "#fff",
       },
       skipped: {
         bg: "transparent",
-        border: "var(--color-border, #e2e8f0)",
-        text: "var(--color-muted, #94a3b8)",
+        border: "var(--color-border)",
+        text: "rgb(var(--color-text-muted))",
       },
     };
 
@@ -2283,10 +2283,10 @@ ${value || ""}</textarea
               <span
                 class="text-xs font-medium whitespace-nowrap"
                 style="color: ${step.status === "active"
-                  ? "var(--color-primary, #6366f1)"
+                  ? "rgb(var(--color-primary))"
                   : step.status === "completed"
-                    ? "var(--color-success, #22c55e)"
-                    : "var(--color-muted, #94a3b8)"}"
+                    ? "rgb(var(--color-success))"
+                    : "rgb(var(--color-text-muted))"}"
                 >${step.label}</span
               >
             </div>
@@ -2302,10 +2302,10 @@ ${value || ""}</textarea
     const onFileSelect = c.onFileSelect as string | undefined;
 
     const statusIcons: Record<string, { symbol: string; color: string }> = {
-      added: { symbol: "+", color: "var(--color-success, #22c55e)" },
-      modified: { symbol: "M", color: "var(--color-primary, #6366f1)" },
-      deleted: { symbol: "-", color: "var(--color-error, #ef4444)" },
-      renamed: { symbol: "R", color: "var(--color-warning, #f59e0b)" },
+      added: { symbol: "+", color: "rgb(var(--color-success))" },
+      modified: { symbol: "M", color: "rgb(var(--color-primary))" },
+      deleted: { symbol: "-", color: "rgb(var(--color-error))" },
+      renamed: { symbol: "R", color: "rgb(var(--color-warning))" },
     };
 
     // Group files by directory

@@ -11,12 +11,13 @@ export default {
         xs: "420px",
       },
       colors: {
-        // Theme-aware colors via CSS variables
+        // Opaque colors: space-separated RGB + <alpha-value> for opacity modifier support
         bg: {
-          DEFAULT: "var(--color-bg)",
-          secondary: "var(--color-bg-secondary)",
-          tertiary: "var(--color-bg-tertiary)",
+          DEFAULT: "rgb(var(--color-bg) / <alpha-value>)",
+          secondary: "rgb(var(--color-bg-secondary) / <alpha-value>)",
+          tertiary: "rgb(var(--color-bg-tertiary) / <alpha-value>)",
         },
+        // Semi-transparent colors: keep as-is (no opacity modifier)
         surface: {
           DEFAULT: "var(--color-surface)",
           hover: "var(--color-surface-hover)",
@@ -31,20 +32,21 @@ export default {
           DEFAULT: "var(--color-border)",
           hover: "var(--color-border-hover)",
         },
+        // Opaque colors: space-separated RGB + <alpha-value>
         text: {
-          DEFAULT: "var(--color-text)",
-          secondary: "var(--color-text-secondary)",
-          muted: "var(--color-text-muted)",
+          DEFAULT: "rgb(var(--color-text) / <alpha-value>)",
+          secondary: "rgb(var(--color-text-secondary) / <alpha-value>)",
+          muted: "rgb(var(--color-text-muted) / <alpha-value>)",
         },
         primary: {
-          DEFAULT: "var(--color-primary)",
-          hover: "var(--color-primary-hover)",
+          DEFAULT: "rgb(var(--color-primary) / <alpha-value>)",
+          hover: "rgb(var(--color-primary-hover) / <alpha-value>)",
         },
-        accent: "var(--color-accent)",
-        success: "var(--color-success)",
-        warning: "var(--color-warning)",
-        error: "var(--color-error)",
-        info: "var(--color-info)",
+        accent: "rgb(var(--color-accent) / <alpha-value>)",
+        success: "rgb(var(--color-success) / <alpha-value>)",
+        warning: "rgb(var(--color-warning) / <alpha-value>)",
+        error: "rgb(var(--color-error) / <alpha-value>)",
+        info: "rgb(var(--color-info) / <alpha-value>)",
       },
       // Motion Design Tokens
       transitionDuration: {

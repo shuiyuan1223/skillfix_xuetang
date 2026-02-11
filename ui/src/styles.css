@@ -4,10 +4,11 @@
 
 @layer base {
   /* ========== Dark Mode (default) ========== */
+  /* Opaque colors use space-separated RGB for Tailwind opacity modifier support */
   :root {
-    --color-bg: #0f172a;
-    --color-bg-secondary: #1e293b;
-    --color-bg-tertiary: #334155;
+    --color-bg: 15 23 42;
+    --color-bg-secondary: 30 41 59;
+    --color-bg-tertiary: 51 65 85;
     --color-surface: rgba(30, 41, 59, 0.8);
     --color-surface-hover: rgba(51, 65, 85, 0.8);
     --color-surface-card: rgba(20, 20, 35, 0.5);
@@ -19,25 +20,25 @@
     --color-border: rgba(100, 116, 139, 0.2);
     --color-border-hover: rgba(100, 116, 139, 0.4);
 
-    --color-text: #f8fafc;
-    --color-text-secondary: #cbd5e1;
-    --color-text-muted: #64748b;
+    --color-text: 248 250 252;
+    --color-text-secondary: 203 213 225;
+    --color-text-muted: 100 116 139;
 
-    --color-primary: #667eea;
-    --color-primary-hover: #818cf8;
-    --color-accent: #764ba2;
+    --color-primary: 102 126 234;
+    --color-primary-hover: 129 140 248;
+    --color-accent: 118 75 162;
 
-    --color-success: #10b981;
-    --color-warning: #f59e0b;
-    --color-error: #ef4444;
-    --color-info: #3b82f6;
+    --color-success: 16 185 129;
+    --color-warning: 245 158 11;
+    --color-error: 239 68 68;
+    --color-info: 59 130 246;
   }
 
   /* ========== Light Mode ========== */
   .light {
-    --color-bg: #f5f7fa;
-    --color-bg-secondary: #eef1f5;
-    --color-bg-tertiary: #e3e8ef;
+    --color-bg: 245 247 250;
+    --color-bg-secondary: 238 241 245;
+    --color-bg-tertiary: 227 232 239;
     --color-surface: rgba(255, 255, 255, 0.85);
     --color-surface-hover: rgba(248, 250, 252, 0.9);
     --color-surface-card: rgba(255, 255, 255, 0.9);
@@ -49,18 +50,18 @@
     --color-border: rgba(0, 0, 0, 0.06);
     --color-border-hover: rgba(91, 106, 191, 0.25);
 
-    --color-text: #1e293b;
-    --color-text-secondary: #475569;
-    --color-text-muted: #94a3b8;
+    --color-text: 30 41 59;
+    --color-text-secondary: 71 85 105;
+    --color-text-muted: 148 163 184;
 
-    --color-primary: #5b6abf;
-    --color-primary-hover: #4f5aad;
-    --color-accent: #764ba2;
+    --color-primary: 91 106 191;
+    --color-primary-hover: 79 90 173;
+    --color-accent: 118 75 162;
 
-    --color-success: #10b981;
-    --color-warning: #f59e0b;
-    --color-error: #ef4444;
-    --color-info: #3b82f6;
+    --color-success: 16 185 129;
+    --color-warning: 245 158 11;
+    --color-error: 239 68 68;
+    --color-info: 59 130 246;
   }
 
   *,
@@ -74,8 +75,8 @@
     margin: 0;
     padding: 0;
     height: 100%;
-    background: var(--color-bg);
-    color: var(--color-text);
+    background: rgb(var(--color-bg));
+    color: rgb(var(--color-text));
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
 
@@ -115,13 +116,13 @@
   }
 
   .radar-label {
-    fill: var(--color-text-secondary);
+    fill: rgb(var(--color-text-secondary));
     font-size: 11px;
     font-family: system-ui;
   }
 
   .radar-value {
-    fill: var(--color-primary);
+    fill: rgb(var(--color-primary));
     font-size: 10px;
     font-weight: 600;
     font-family: system-ui;
