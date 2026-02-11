@@ -752,9 +752,9 @@ class A2UIRenderer {
     const btnVariants: Record<string, string> = {
       primary:
         "bg-gradient-to-br from-primary to-accent text-white hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(102,126,234,0.4)]",
-      secondary: "bg-white/10 text-text hover:bg-white/20",
+      secondary: "bg-surface text-text hover:bg-surface-hover",
       outline:
-        "bg-transparent !border !border-solid !border-white/20 text-text hover:!border-primary/50",
+        "bg-transparent !border !border-solid !border-border text-text hover:!border-primary/50",
       ghost: "bg-transparent text-text-secondary hover:bg-primary/10 hover:text-text",
     };
 
@@ -849,7 +849,7 @@ class A2UIRenderer {
     return html`
       <div>
         ${label ? html`<div class="text-xs text-text-secondary mb-1.5">${label}</div>` : nothing}
-        <div class="h-2 bg-white/10 rounded-full overflow-hidden">
+        <div class="h-2 bg-surface rounded-full overflow-hidden">
           <div
             class="h-full rounded-full transition-[width] duration-slow"
             style="width: ${pct}%; background: ${color}"
@@ -1032,7 +1032,7 @@ class A2UIRenderer {
       <div class="flex shrink-0 gap-3 p-6 border-t border-border bg-surface backdrop-blur-[12px]">
         <input
           type="text"
-          class="flex-1 py-3.5 px-5 bg-white/5 border border-primary/20 rounded-2xl text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-white/[0.08] focus:ring-4 focus:ring-primary/10"
+          class="flex-1 py-3.5 px-5 bg-surface border border-border rounded-2xl text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-surface-hover focus:ring-4 focus:ring-primary/10"
           placeholder="${placeholder}"
           ?disabled=${disabled}
           @keydown=${(e: KeyboardEvent) => {
@@ -1240,7 +1240,7 @@ class A2UIRenderer {
       }
       if (render === "progress") {
         const num = Number(value) || 0;
-        return html`<div class="h-1.5 bg-white/10 rounded-full overflow-hidden w-full">
+        return html`<div class="h-1.5 bg-surface rounded-full overflow-hidden w-full">
           <div class="h-full rounded-full bg-primary" style="width: ${num}%"></div>
         </div>`;
       }
@@ -1759,7 +1759,7 @@ class A2UIRenderer {
     };
 
     const inputCls =
-      "w-full py-2.5 px-3.5 bg-white/5 border border-primary/20 rounded-[10px] text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-white/[0.08] focus:ring-4 focus:ring-primary/10";
+      "w-full py-2.5 px-3.5 bg-surface border border-border rounded-[10px] text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-surface-hover focus:ring-4 focus:ring-primary/10";
 
     let input: TemplateResult;
 
@@ -1783,6 +1783,7 @@ ${value || ""}</textarea
         const selectedLabel = selectedOpt?.label || placeholder || "Select...";
         input = html`
           <div class="custom-select relative" data-name=${name}>
+            <input type="hidden" name=${name} .value=${String(value ?? "")} />
             <button
               type="button"
               class="${inputCls} flex items-center justify-between cursor-pointer"
@@ -1807,7 +1808,7 @@ ${value || ""}</textarea
                 }
               }}
             >
-              <span class="${!selectedOpt ? "text-text-muted" : "text-text"}"
+              <span class="select-label ${!selectedOpt ? "text-text-muted" : "text-text"}"
                 >${selectedLabel}</span
               >
               <svg
@@ -1821,24 +1822,40 @@ ${value || ""}</textarea
               </svg>
             </button>
             <div
-              class="select-dropdown absolute top-full mt-1 left-0 right-0 z-50 bg-surface-elevated backdrop-blur-[12px] border border-primary/20 rounded-xl shadow-2xl max-h-[200px] overflow-y-auto transition-all duration-fast origin-top opacity-0 scale-y-[0.96] -translate-y-1 pointer-events-none [.open>&]:opacity-100 [.open>&]:scale-y-100 [.open>&]:translate-y-0 [.open>&]:pointer-events-auto"
+              class="select-dropdown absolute top-full mt-1 left-0 right-0 z-50 bg-surface-elevated backdrop-blur-[12px] border border-primary/20 rounded-xl shadow-2xl max-h-[200px] overflow-y-auto"
             >
               ${options?.map(
                 (opt) => html`
                   <div
-                    class="px-3 py-2 cursor-pointer text-sm transition-colors ${value === opt.value
+                    class="select-option px-3 py-2 cursor-pointer text-sm transition-colors ${value ===
+                    opt.value
                       ? "text-text bg-primary/10 border-l-2 border-l-primary"
                       : "text-text-secondary border-l-2 border-l-transparent hover:bg-primary/10 hover:text-text"}"
                     data-value=${opt.value}
-                    @click=${() => {
+                    data-label=${opt.label}
+                    @click=${(e: Event) => {
+                      const optEl = e.currentTarget as HTMLElement;
+                      const wrapper = optEl.closest(".custom-select") as HTMLElement;
+                      if (wrapper) {
+                        const hidden = wrapper.querySelector(
+                          'input[type="hidden"]'
+                        ) as HTMLInputElement;
+                        if (hidden) hidden.value = opt.value as string;
+                        const label = wrapper.querySelector(".select-label") as HTMLElement;
+                        if (label) {
+                          label.textContent = opt.label as string;
+                          label.className = "select-label text-text";
+                        }
+                        wrapper.querySelectorAll(".select-option").forEach((el) => {
+                          el.className =
+                            el === optEl
+                              ? "select-option px-3 py-2 cursor-pointer text-sm transition-colors text-text bg-primary/10 border-l-2 border-l-primary"
+                              : "select-option px-3 py-2 cursor-pointer text-sm transition-colors text-text-secondary border-l-2 border-l-transparent hover:bg-primary/10 hover:text-text";
+                        });
+                        wrapper.classList.remove("open");
+                      }
                       if (onChange) {
                         this.sendAction(onChange, { name, value: opt.value });
-                      }
-                      const wrapper = document.querySelector(
-                        `.custom-select[data-name="${name}"]`
-                      ) as HTMLElement;
-                      if (wrapper) {
-                        wrapper.classList.remove("open");
                       }
                     }}
                   >
@@ -1857,7 +1874,7 @@ ${value || ""}</textarea
           <label class="flex items-center gap-2 cursor-pointer text-sm text-text">
             <input
               type="checkbox"
-              class="w-4 h-4 rounded border-primary/30 bg-white/5 text-primary focus:ring-primary/20"
+              class="w-4 h-4 rounded border-primary/30 bg-surface text-primary focus:ring-primary/20"
               name=${name}
               ?checked=${value === true}
               @change=${handleChange}

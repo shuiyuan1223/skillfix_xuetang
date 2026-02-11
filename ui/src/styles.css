@@ -196,6 +196,21 @@
     animation-delay: calc(var(--stagger-index, 0) * 50ms);
   }
 
+  /* Custom select dropdown animation */
+  .custom-select .select-dropdown {
+    opacity: 0;
+    transform: scaleY(0.96) translateY(-4px);
+    transform-origin: top;
+    pointer-events: none;
+    transition: opacity 150ms ease, transform 150ms ease, pointer-events 0ms;
+  }
+
+  .custom-select.open .select-dropdown {
+    opacity: 1;
+    transform: scaleY(1) translateY(0);
+    pointer-events: auto;
+  }
+
   /* Scrollbar styling */
   ::-webkit-scrollbar {
     width: 6px;
