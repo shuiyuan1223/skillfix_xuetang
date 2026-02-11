@@ -1,5 +1,6 @@
 import type { Config } from "tailwindcss";
 import forms from "@tailwindcss/forms";
+import animate from "tailwindcss-animate";
 
 export default {
   content: ["./src/**/*.ts", "./index.html"],
@@ -45,6 +46,17 @@ export default {
         error: "var(--color-error)",
         info: "var(--color-info)",
       },
+      // Motion Design Tokens
+      transitionDuration: {
+        fast: "150ms",
+        normal: "250ms",
+        slow: "400ms",
+        slower: "600ms",
+      },
+      transitionTimingFunction: {
+        "ease-out-expo": "cubic-bezier(0.16, 1, 0.3, 1)",
+        spring: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      },
       animation: {
         "card-entrance": "cardEntrance 0.5s ease-out backwards",
         "fade-in": "fadeIn 0.3s ease",
@@ -55,6 +67,7 @@ export default {
         "skeleton-shimmer": "skeletonShimmer 1.5s infinite",
         "toast-slide-in": "toastSlideIn 0.4s ease-out",
         "ring-draw": "ringDraw 1s ease-out forwards",
+        "radar-expand": "radarExpand 0.6s ease-out forwards",
       },
       keyframes: {
         cardEntrance: {
@@ -91,8 +104,12 @@ export default {
         ringDraw: {
           from: { strokeDashoffset: "var(--circumference)" },
         },
+        radarExpand: {
+          from: { opacity: "0", transform: "scale(0.3)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
       },
     },
   },
-  plugins: [forms({ strategy: "class" })],
+  plugins: [forms({ strategy: "class" }), animate],
 } satisfies Config;

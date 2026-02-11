@@ -452,8 +452,14 @@ class A2UIRenderer {
     const columns = (c.columns as number) || 2;
     const gap = (c.gap as number) || 16;
     return html`
-      <div class="grid" style="grid-template-columns: repeat(${columns}, 1fr); gap: ${gap}px">
-        ${this.renderChildren(c.children)}
+      <div
+        class="grid stagger-children"
+        style="grid-template-columns: repeat(${columns}, 1fr); gap: ${gap}px"
+      >
+        ${(c.children || []).map(
+          (id, index) =>
+            html`<div style="--stagger-index:${index}">${this.renderComponent(id)}</div>`
+        )}
       </div>
     `;
   }
@@ -487,7 +493,7 @@ class A2UIRenderer {
     const className = (c.className as string) || "";
     return html`
       <div
-        class="bg-surface border border-border rounded-[20px] backdrop-blur-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.1)] transition-all duration-300 hover:border-primary/25 hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)] ${className}"
+        class="bg-surface border border-border rounded-[20px] backdrop-blur-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.1)] transition-all duration-normal hover:border-primary/25 hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)] ${className}"
         style="padding: ${padding}px"
       >
         ${title
@@ -514,7 +520,7 @@ class A2UIRenderer {
 
     return html`
       <div
-        class="bg-surface border border-border rounded-[20px] p-6 backdrop-blur-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.1)] transition-all duration-300 relative overflow-hidden hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_16px_48px_rgba(0,0,0,0.4)] animate-card-entrance"
+        class="bg-surface border border-border rounded-[20px] p-6 backdrop-blur-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.1)] transition-all duration-normal relative overflow-hidden hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_16px_48px_rgba(0,0,0,0.4)] motion-safe:animate-card-entrance"
       >
         <div
           class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent"
@@ -586,12 +592,12 @@ class A2UIRenderer {
                 class="flex-1 flex flex-col items-center h-full justify-end relative cursor-pointer group"
               >
                 <div
-                  class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full bg-surface-elevated text-text px-2 py-1 rounded text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none transition-opacity duration-200 z-10 shadow-lg group-hover:opacity-100"
+                  class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full bg-surface-elevated text-text px-2 py-1 rounded text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none transition-opacity duration-fast z-10 shadow-lg group-hover:opacity-100"
                 >
                   ${values[i]}
                 </div>
                 <div
-                  class="w-full max-w-[40px] min-h-[4px] rounded-t transition-[height] duration-300 origin-bottom animate-bar-grow group-hover:brightness-125"
+                  class="w-full max-w-[40px] min-h-[4px] rounded-t transition-[height] duration-normal origin-bottom motion-safe:animate-bar-grow group-hover:brightness-125"
                   style="height: ${pct}%; background: ${color}"
                 ></div>
                 <div class="text-[10px] text-text-muted mt-2 whitespace-nowrap">${d[xKey]}</div>
@@ -742,7 +748,7 @@ class A2UIRenderer {
     const payload = c.payload as Record<string, unknown>;
 
     const btnBase =
-      "px-5 py-2.5 rounded-[10px] text-sm font-medium cursor-pointer transition-all duration-200 border-none disabled:opacity-50 disabled:cursor-not-allowed";
+      "px-5 py-2.5 rounded-[10px] text-sm font-medium cursor-pointer transition-all duration-fast border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97]";
     const btnVariants: Record<string, string> = {
       primary:
         "bg-gradient-to-br from-primary to-accent text-white hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(102,126,234,0.4)]",
@@ -778,16 +784,16 @@ class A2UIRenderer {
             : "text-text-secondary border-transparent hover:text-text hover:border-border-hover";
           return html`
             <button
-              class="flex items-center gap-3 py-3.5 px-[18px] rounded-[14px] cursor-pointer transition-all duration-[250ms] border border-solid bg-transparent text-sm font-normal text-left w-full relative overflow-hidden ${activeClass}"
+              class="flex items-center gap-3 py-3.5 px-[18px] rounded-[14px] cursor-pointer transition-all duration-normal border border-solid bg-transparent text-sm font-normal text-left w-full relative overflow-hidden ${activeClass}"
               @click=${() => this.sendNavigate(item.id)}
             >
-              ${isActive
-                ? html`<div
-                    class="absolute left-0 top-[15%] bottom-[15%] w-[3px] rounded-r-full bg-gradient-to-b from-primary to-accent shadow-[0_0_8px_rgba(102,126,234,0.5)]"
-                  ></div>`
-                : nothing}
+              <div
+                class="absolute left-0 top-[15%] bottom-[15%] w-[3px] rounded-r-full bg-gradient-to-b from-primary to-accent shadow-[0_0_8px_rgba(102,126,234,0.5)] transition-all duration-normal origin-center ${isActive
+                  ? "opacity-100 scale-y-100"
+                  : "opacity-0 scale-y-0"}"
+              ></div>
               ${item.icon
-                ? html`<span class="transition-transform duration-200"
+                ? html`<span class="transition-transform duration-fast"
                     >${unsafeHTML(getIcon(item.icon))}</span
                   >`
                 : nothing}
@@ -811,17 +817,17 @@ class A2UIRenderer {
             const isActive = tab.id === activeTab;
             return html`
               <button
-                class="py-3 px-5 bg-transparent border-none text-sm cursor-pointer relative transition-colors duration-200 ${isActive
+                class="py-3 px-5 bg-transparent border-none text-sm cursor-pointer relative transition-colors duration-normal ${isActive
                   ? "text-text"
                   : "text-text-muted hover:text-text-secondary"}"
                 @click=${() => this.sendAction("tab_change", { tab: tab.id })}
               >
                 ${tab.label}
-                ${isActive
-                  ? html`<div
-                      class="absolute bottom-[-2px] left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent"
-                    ></div>`
-                  : nothing}
+                <div
+                  class="absolute bottom-[-2px] left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent transition-all duration-normal origin-center ${isActive
+                    ? "opacity-100 scale-x-100"
+                    : "opacity-0 scale-x-0"}"
+                ></div>
               </button>
             `;
           })}
@@ -845,7 +851,7 @@ class A2UIRenderer {
         ${label ? html`<div class="text-xs text-text-secondary mb-1.5">${label}</div>` : nothing}
         <div class="h-2 bg-white/10 rounded-full overflow-hidden">
           <div
-            class="h-full rounded-full transition-[width] duration-500"
+            class="h-full rounded-full transition-[width] duration-slow"
             style="width: ${pct}%; background: ${color}"
           ></div>
         </div>
@@ -879,7 +885,7 @@ class A2UIRenderer {
       variant === "circular" ? "rounded-full" : variant === "text" ? "rounded" : "rounded-xl";
     return html`
       <div
-        class="bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] animate-skeleton-shimmer ${radiusClass}"
+        class="bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] motion-safe:animate-skeleton-shimmer ${radiusClass}"
         style="width: ${typeof width === "number"
           ? width + "px"
           : width}; height: ${typeof height === "number" ? height + "px" : height}"
@@ -900,7 +906,7 @@ class A2UIRenderer {
 
     if (messages.length === 0 && !streaming) {
       const sugBtn =
-        "flex items-center gap-2 px-4 py-3 rounded-2xl bg-surface border border-border text-text-secondary text-sm cursor-pointer transition-all duration-200 hover:border-primary/30 hover:bg-surface-hover hover:text-text hover:shadow-[0_4px_12px_rgba(102,126,234,0.15)]";
+        "flex items-center gap-2 px-4 py-3 rounded-2xl bg-surface border border-border text-text-secondary text-sm cursor-pointer transition-all duration-fast hover:border-primary/30 hover:bg-surface-hover hover:text-text hover:shadow-[0_4px_12px_rgba(102,126,234,0.15)]";
       return html`
         <div class="flex-1 flex flex-col items-center justify-center p-8 gap-6 text-center">
           <div
@@ -946,7 +952,11 @@ class A2UIRenderer {
         ${messages.map((msg) => {
           const isUser = msg.role === "user";
           return html`
-            <div class="flex gap-4 animate-fade-in ${isUser ? "flex-row-reverse" : ""}">
+            <div
+              class="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal ${isUser
+                ? "flex-row-reverse motion-safe:slide-in-from-right-4"
+                : "motion-safe:slide-in-from-left-4"}"
+            >
               ${msg.role !== "tool"
                 ? html`
                     <div
@@ -983,7 +993,9 @@ class A2UIRenderer {
         })}
         ${streaming
           ? html`
-              <div class="flex gap-4 animate-fade-in">
+              <div
+                class="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal"
+              >
                 <div class="${avatarBase} bg-gradient-to-br from-primary to-accent">
                   ${unsafeHTML(ICONS["bot"])}
                 </div>
@@ -996,13 +1008,13 @@ class A2UIRenderer {
                   : html`
                       <div class="flex gap-1.5 px-5 py-4">
                         <div
-                          class="w-2 h-2 rounded-full bg-text-muted animate-bounce-dot [animation-delay:0s]"
+                          class="w-2 h-2 rounded-full bg-text-muted motion-safe:animate-bounce-dot [animation-delay:0s]"
                         ></div>
                         <div
-                          class="w-2 h-2 rounded-full bg-text-muted animate-bounce-dot [animation-delay:0.2s]"
+                          class="w-2 h-2 rounded-full bg-text-muted motion-safe:animate-bounce-dot [animation-delay:0.2s]"
                         ></div>
                         <div
-                          class="w-2 h-2 rounded-full bg-text-muted animate-bounce-dot [animation-delay:0.4s]"
+                          class="w-2 h-2 rounded-full bg-text-muted motion-safe:animate-bounce-dot [animation-delay:0.4s]"
                         ></div>
                       </div>
                     `}
@@ -1020,7 +1032,7 @@ class A2UIRenderer {
       <div class="flex shrink-0 gap-3 p-6 border-t border-border bg-surface backdrop-blur-[12px]">
         <input
           type="text"
-          class="flex-1 py-3.5 px-5 bg-white/5 border border-primary/20 rounded-2xl text-text text-[0.9375rem] transition-all duration-200 outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-white/[0.08] focus:ring-4 focus:ring-primary/10"
+          class="flex-1 py-3.5 px-5 bg-white/5 border border-primary/20 rounded-2xl text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-white/[0.08] focus:ring-4 focus:ring-primary/10"
           placeholder="${placeholder}"
           ?disabled=${disabled}
           @keydown=${(e: KeyboardEvent) => {
@@ -1035,7 +1047,7 @@ class A2UIRenderer {
           }}
         />
         <button
-          class="w-[54px] h-[54px] rounded-2xl border-none bg-gradient-to-br from-primary to-accent text-white cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200 hover:shadow-[0_4px_16px_rgba(102,126,234,0.4)] hover:-translate-y-px disabled:opacity-50"
+          class="w-[54px] h-[54px] rounded-2xl border-none bg-gradient-to-br from-primary to-accent text-white cursor-pointer flex items-center justify-center shrink-0 transition-all duration-fast hover:shadow-[0_4px_16px_rgba(102,126,234,0.4)] hover:-translate-y-px disabled:opacity-50"
           ?disabled=${disabled}
           @click=${(e: Event) => {
             const container = (e.target as HTMLElement).parentElement;
@@ -1110,7 +1122,7 @@ class A2UIRenderer {
         ${commits.map(
           (commit) => html`
             <div
-              class="p-3 rounded-lg cursor-pointer transition-all duration-200 border border-transparent hover:bg-surface-hover ${commit.hash ===
+              class="p-3 rounded-lg cursor-pointer transition-all duration-fast border border-transparent hover:bg-surface-hover ${commit.hash ===
               selectedHash
                 ? "bg-primary/10 border-primary/30"
                 : ""}"
@@ -1559,6 +1571,8 @@ class A2UIRenderer {
             fill-opacity="0.25"
             stroke="${color}"
             stroke-width="2"
+            class="motion-safe:animate-radar-expand"
+            style="transform-origin: ${cx}px ${cy}px"
           />
           <!-- Data points -->
           ${data.map((d, i) => {
@@ -1606,7 +1620,7 @@ class A2UIRenderer {
       <span
         class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${statusColors[
           status
-        ] || statusColors.pending} ${pulse ? "animate-status-pulse" : ""}"
+        ] || statusColors.pending} ${pulse ? "motion-safe:animate-status-pulse" : ""}"
       >
         <span class="w-4 h-4">${unsafeHTML(ICONS[statusIcons[status]] || "•")}</span>
         <span>${label}</span>
@@ -1618,7 +1632,6 @@ class A2UIRenderer {
     const title = c.title as string;
     const expanded = c.expanded !== false;
     const icon = c.icon as string;
-    const id = c.id;
 
     return html`
       <div class="collapsible-group ${expanded ? "is-open" : ""}">
@@ -1627,22 +1640,17 @@ class A2UIRenderer {
           @click=${(e: Event) => {
             const target = (e.currentTarget as HTMLElement).parentElement;
             target?.classList.toggle("is-open");
-            const content = target?.querySelector(".collapsible-body") as HTMLElement;
-            if (content) {
-              content.style.display = target?.classList.contains("is-open") ? "block" : "none";
-            }
           }}
         >
           ${icon ? html`<span>${icon}</span>` : nothing}
           <span class="font-medium flex-1">${title}</span>
           <span
-            class="text-text-muted transition-transform duration-200"
-            style="transform: ${expanded ? "rotate(90deg)" : "rotate(0)"}"
+            class="text-text-muted transition-transform duration-normal [.is-open>button>&]:rotate-90"
             >▶</span
           >
         </button>
-        <div class="collapsible-body pl-4" style="display: ${expanded ? "block" : "none"}">
-          ${this.renderChildren(c.children)}
+        <div class="collapsible-grid pl-4">
+          <div>${this.renderChildren(c.children)}</div>
         </div>
       </div>
     `;
@@ -1694,7 +1702,7 @@ class A2UIRenderer {
     const onCancel = c.onCancel as string | undefined;
 
     const btnBase =
-      "px-5 py-2.5 rounded-[10px] text-sm font-medium cursor-pointer transition-all duration-200 border-none";
+      "px-5 py-2.5 rounded-[10px] text-sm font-medium cursor-pointer transition-all duration-fast border-none";
     return html`
       <form
         class="flex flex-col gap-4"
@@ -1751,7 +1759,7 @@ class A2UIRenderer {
     };
 
     const inputCls =
-      "w-full py-2.5 px-3.5 bg-white/5 border border-primary/20 rounded-[10px] text-text text-[0.9375rem] transition-all duration-200 outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-white/[0.08] focus:ring-4 focus:ring-primary/10";
+      "w-full py-2.5 px-3.5 bg-white/5 border border-primary/20 rounded-[10px] text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-white/[0.08] focus:ring-4 focus:ring-primary/10";
 
     let input: TemplateResult;
 
@@ -1782,13 +1790,9 @@ ${value || ""}</textarea
                 const btn = e.currentTarget as HTMLElement;
                 const wrapper = btn.closest(".custom-select") as HTMLElement;
                 wrapper.classList.toggle("open");
-                const dropdown = wrapper.querySelector(".select-dropdown") as HTMLElement;
-                if (dropdown)
-                  dropdown.style.display = wrapper.classList.contains("open") ? "block" : "none";
                 const closeHandler = (ev: Event) => {
                   if (!wrapper.contains(ev.target as Node)) {
                     wrapper.classList.remove("open");
-                    if (dropdown) dropdown.style.display = "none";
                     document.removeEventListener("click", closeHandler);
                   }
                 };
@@ -1800,8 +1804,6 @@ ${value || ""}</textarea
                     ".custom-select"
                   ) as HTMLElement;
                   wrapper.classList.remove("open");
-                  const dropdown = wrapper.querySelector(".select-dropdown") as HTMLElement;
-                  if (dropdown) dropdown.style.display = "none";
                 }
               }}
             >
@@ -1813,14 +1815,13 @@ ${value || ""}</textarea
                 height="12"
                 viewBox="0 0 16 16"
                 fill="currentColor"
-                class="text-text-muted shrink-0"
+                class="text-text-muted shrink-0 transition-transform duration-fast"
               >
                 <path d="M8 11L3 6h10l-5 5z" />
               </svg>
             </button>
             <div
-              class="select-dropdown absolute top-full mt-1 left-0 right-0 z-50 bg-surface-elevated backdrop-blur-[12px] border border-primary/20 rounded-xl shadow-2xl max-h-[200px] overflow-y-auto"
-              style="display: none"
+              class="select-dropdown absolute top-full mt-1 left-0 right-0 z-50 bg-surface-elevated backdrop-blur-[12px] border border-primary/20 rounded-xl shadow-2xl max-h-[200px] overflow-y-auto transition-all duration-fast origin-top opacity-0 scale-y-[0.96] -translate-y-1 pointer-events-none [.open>&]:opacity-100 [.open>&]:scale-y-100 [.open>&]:translate-y-0 [.open>&]:pointer-events-auto"
             >
               ${options?.map(
                 (opt) => html`
@@ -1838,8 +1839,6 @@ ${value || ""}</textarea
                       ) as HTMLElement;
                       if (wrapper) {
                         wrapper.classList.remove("open");
-                        const dropdown = wrapper.querySelector(".select-dropdown") as HTMLElement;
-                        if (dropdown) dropdown.style.display = "none";
                       }
                     }}
                   >
@@ -2358,10 +2357,13 @@ class PHAApp extends LitElement {
   @state() private sidebarData: A2UISurfaceData | null = null;
   @state() private mainData: A2UISurfaceData | null = null;
   @state() private modalData: A2UISurfaceData | null = null;
+  @state() private modalVisible = false; // Animation state for modal enter/exit
   @state() private toastData: A2UISurfaceData | null = null;
+  @state() private toastExiting = false; // Animation state for toast exit
   @state() private progressData: A2UISurfaceData | null = null;
   @state() private sidebarCollapsed = false;
   @state() private mobileSidebarOpen = false;
+  @state() private mobileSidebarVisible = false; // Animation state for mobile sidebar
   @state() private pageKey = 0; // For page transition animations
   @state() private darkMode = true; // Theme state
 
@@ -2430,12 +2432,21 @@ class PHAApp extends LitElement {
             break;
           case "modal":
             this.modalData = { components: msg.components, root_id: msg.root_id };
+            // Trigger enter animation on next frame
+            requestAnimationFrame(() => {
+              this.modalVisible = true;
+            });
             break;
           case "toast":
             this.toastData = { components: msg.components, root_id: msg.root_id };
-            // Auto-dismiss toast after 5 seconds
+            this.toastExiting = false;
+            // Auto-dismiss toast: start exit animation at 4.6s, remove DOM at 5s
+            setTimeout(() => {
+              this.toastExiting = true;
+            }, 4600);
             setTimeout(() => {
               this.toastData = null;
+              this.toastExiting = false;
             }, 5000);
             break;
           case "progress":
@@ -2447,7 +2458,7 @@ class PHAApp extends LitElement {
       case "clear_surface":
         switch (msg.surface_id) {
           case "modal":
-            this.modalData = null;
+            this.closeModal();
             break;
           case "toast":
             this.toastData = null;
@@ -2474,8 +2485,24 @@ class PHAApp extends LitElement {
 
   private sendNavigate(view: string) {
     this.pageKey++; // Trigger page transition animation
-    this.mobileSidebarOpen = false; // Close mobile sidebar on navigation
+    // Close mobile sidebar with animation
+    if (this.mobileSidebarOpen) {
+      this.mobileSidebarVisible = false;
+      setTimeout(() => {
+        this.mobileSidebarOpen = false;
+      }, 250);
+    }
+    // Scroll main content to top on navigation
+    const mainEl = this.querySelector("main .overflow-auto");
+    if (mainEl) mainEl.scrollTop = 0;
     this.ws?.send(JSON.stringify({ type: "navigate", view }));
+  }
+
+  private closeModal() {
+    this.modalVisible = false;
+    setTimeout(() => {
+      this.modalData = null;
+    }, 250);
   }
 
   // ============================================================================
@@ -2764,7 +2791,7 @@ class PHAApp extends LitElement {
 
   private renderSkeleton() {
     const skel =
-      "bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] animate-skeleton-shimmer rounded-xl";
+      "bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] motion-safe:animate-skeleton-shimmer rounded-xl";
     return html`
       <div class="flex flex-col gap-3 p-2">
         <div class="${skel}" style="height: 44px;"></div>
@@ -2777,7 +2804,7 @@ class PHAApp extends LitElement {
 
   private renderMainSkeleton() {
     const skel =
-      "bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] animate-skeleton-shimmer rounded-xl";
+      "bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] motion-safe:animate-skeleton-shimmer rounded-xl";
     return html`
       <div class="flex flex-col gap-4 p-6">
         <div class="${skel}" style="height: 32px; width: 200px;"></div>
@@ -2793,7 +2820,19 @@ class PHAApp extends LitElement {
   }
 
   private toggleMobileSidebar() {
-    this.mobileSidebarOpen = !this.mobileSidebarOpen;
+    if (this.mobileSidebarOpen) {
+      // Close with exit animation
+      this.mobileSidebarVisible = false;
+      setTimeout(() => {
+        this.mobileSidebarOpen = false;
+      }, 250);
+    } else {
+      // Open with enter animation
+      this.mobileSidebarOpen = true;
+      requestAnimationFrame(() => {
+        this.mobileSidebarVisible = true;
+      });
+    }
   }
 
   private toggleTheme() {
@@ -2830,7 +2869,7 @@ class PHAApp extends LitElement {
   render() {
     return html`
       <div
-        class="flex w-full h-dvh relative bg-bg text-text transition-colors duration-300 overflow-hidden"
+        class="flex w-full h-dvh relative bg-bg text-text transition-colors duration-normal overflow-hidden"
         style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
       >
         <!-- Decorative grid -->
@@ -2841,17 +2880,20 @@ class PHAApp extends LitElement {
         <!-- Mobile sidebar overlay -->
         ${this.mobileSidebarOpen
           ? html`<div
-              class="fixed inset-0 bg-black/50 z-40 md:hidden"
+              class="fixed inset-0 z-40 md:hidden transition-colors duration-normal ${this
+                .mobileSidebarVisible
+                ? "bg-black/50"
+                : "bg-transparent"}"
               @click=${() => this.toggleMobileSidebar()}
             ></div>`
           : nothing}
         <!-- Sidebar Surface -->
         <aside
-          class="flex flex-col bg-surface border-r border-border backdrop-blur-[24px] shadow-[4px_0_24px_rgba(0,0,0,0.1)] transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] z-50 ${this
+          class="flex flex-col bg-surface border-r border-border backdrop-blur-[24px] shadow-[4px_0_24px_rgba(0,0,0,0.1)] transition-[width,transform] duration-normal ease-[cubic-bezier(0.4,0,0.2,1)] z-50 ${this
             .sidebarCollapsed
-            ? "w-[73px]"
+            ? "w-[73px] sidebar-collapsed"
             : "w-[280px]"} ${this.mobileSidebarOpen
-            ? "fixed inset-y-0 left-0 w-[280px] md:relative"
+            ? `fixed inset-y-0 left-0 w-[280px] md:relative transition-transform duration-slow ease-out-expo ${this.mobileSidebarVisible ? "translate-x-0" : "-translate-x-full"}`
             : "hidden md:flex"}"
         >
           <div
@@ -2909,7 +2951,7 @@ class PHAApp extends LitElement {
                   <div class="flex items-center gap-2 text-xs text-text-muted w-full">
                     <div
                       class="w-2 h-2 rounded-full ${this.connected
-                        ? "bg-success shadow-[0_0_12px_rgba(16,185,129,0.6)] animate-[pulse_2s_ease-in-out_infinite]"
+                        ? "bg-success shadow-[0_0_12px_rgba(16,185,129,0.6)] motion-safe:animate-[pulse_2s_ease-in-out_infinite]"
                         : "bg-error shadow-[0_0_12px_rgba(239,68,68,0.6)]"}"
                     ></div>
                     <span class="status-text"
@@ -2952,7 +2994,7 @@ class PHAApp extends LitElement {
               </div>`
             : nothing}
           <div
-            class="flex-1 min-h-0 flex flex-col overflow-auto animate-fade-in"
+            class="flex-1 min-h-0 flex flex-col overflow-auto motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-slow motion-safe:ease-out"
             key=${this.pageKey}
           >
             ${this.mainData ? this.renderer.render(this.mainData) : this.renderMainSkeleton()}
@@ -2963,12 +3005,20 @@ class PHAApp extends LitElement {
         ${this.modalData
           ? html`
               <div
-                class="fixed inset-0 bg-overlay backdrop-blur-sm flex items-center justify-center z-[100]"
+                class="fixed inset-0 flex items-center justify-center z-[100] transition-all duration-normal ${this
+                  .modalVisible
+                  ? "bg-overlay backdrop-blur-sm"
+                  : "bg-transparent pointer-events-none"}"
                 @click=${(e: Event) => {
-                  if (e.target === e.currentTarget) this.modalData = null;
+                  if (e.target === e.currentTarget) this.closeModal();
                 }}
               >
-                <div class="w-full max-h-[90vh] overflow-visible flex justify-center">
+                <div
+                  class="w-full max-h-[90vh] overflow-visible flex justify-center transition-all duration-slow ease-spring ${this
+                    .modalVisible
+                    ? "opacity-100 translate-y-0 scale-100"
+                    : "opacity-0 translate-y-2 scale-[0.97]"}"
+                >
                   ${this.renderer.render(this.modalData)}
                 </div>
               </div>
@@ -2978,7 +3028,12 @@ class PHAApp extends LitElement {
         <!-- Toast Surface (fixed position) -->
         ${this.toastData
           ? html`
-              <div class="fixed bottom-6 right-6 z-[200] animate-toast-slide-in">
+              <div
+                class="fixed bottom-6 right-6 z-[200] motion-safe:animate-toast-slide-in transition-all duration-normal ${this
+                  .toastExiting
+                  ? "translate-x-[120%] opacity-0"
+                  : ""}"
+              >
                 ${this.renderer.render(this.toastData)}
               </div>
             `

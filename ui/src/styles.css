@@ -160,13 +160,40 @@
     r: 6;
   }
 
-  /* Sidebar collapsed state: hide labels */
+  /* Sidebar collapsed state: hide labels with transition */
+  .nav-label,
+  .status-text {
+    opacity: 1;
+    max-width: 200px;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: opacity 200ms ease, max-width 300ms ease;
+  }
+
   .sidebar-collapsed .nav-label,
   .sidebar-collapsed .status-text {
     opacity: 0;
-    width: 0;
+    max-width: 0;
+  }
+
+  /* Collapsible: CSS Grid rows technique for smooth height */
+  .collapsible-grid {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 250ms ease-out;
+  }
+
+  .is-open > .collapsible-grid {
+    grid-template-rows: 1fr;
+  }
+
+  .collapsible-grid > div {
     overflow: hidden;
-    white-space: nowrap;
+  }
+
+  /* Stagger children animation delay */
+  .stagger-children > * {
+    animation-delay: calc(var(--stagger-index, 0) * 50ms);
   }
 
   /* Scrollbar styling */
@@ -186,5 +213,16 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(100, 116, 139, 0.5);
+  }
+}
+
+/* ========== Reduced Motion (Accessibility) ========== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
