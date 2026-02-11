@@ -3239,10 +3239,10 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
   const sessions = new Map<string, GatewaySession>();
   const webDir = config.webDir;
 
-  // Clean up interrupted benchmark runs from previous process
+  // Clean up interrupted benchmark runs from previous process (deletes incomplete runs with no data)
   const interrupted = markInterruptedBenchmarkRuns();
   if (interrupted > 0) {
-    console.log(`[Gateway] Marked ${interrupted} interrupted benchmark run(s) as failed`);
+    console.log(`[Gateway] Cleaned up ${interrupted} interrupted benchmark run(s)`);
   }
   clearBenchmarkProgress();
   clearAllUiBenchmarkProgress();

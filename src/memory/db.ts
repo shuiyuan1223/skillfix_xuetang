@@ -781,16 +781,18 @@ export function updateBenchmarkRun(
 }
 
 /**
- * Mark interrupted benchmark runs as failed.
- * Called on server startup to clean up runs from previous crashed processes.
- * Interrupted runs have duration_ms = 0 (or NULL) AND overall_score = 0.
+ * Clean up interrupted benchmark runs on server startup.
+ * Interrupted runs (duration_ms = 0/NULL AND overall_score = 0) contain
+ * no useful data, so delete them outright instead of marking as failed.
+ * Also cleans up legacy marked-interrupted runs (duration_ms = -1) with no score.
  */
 export function markInterruptedBenchmarkRuns(): number {
   const database = getDatabase();
   try {
+    // Delete runs with no progress (never started or interrupted before any test completed)
     database
       .prepare(
-        "UPDATE benchmark_runs SET duration_ms = -1 WHERE (duration_ms IS NULL OR duration_ms = 0) AND overall_score = 0"
+        "DELETE FROM benchmark_runs WHERE ((duration_ms IS NULL OR duration_ms = 0) AND overall_score = 0) OR (duration_ms = -1 AND overall_score = 0)"
       )
       .run();
     const row = database.prepare("SELECT changes() as c").get() as { c: number } | null;

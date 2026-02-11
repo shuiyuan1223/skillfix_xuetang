@@ -507,7 +507,8 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     });
     const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "end" });
 
-    children.push(ui.card([runsLabel, runsTable, btnRow], { padding: 16 }));
+    const cardContent = ui.column([runsLabel, runsTable, btnRow], { gap: 16 });
+    children.push(ui.card([cardContent], { padding: 16 }));
   } else {
     const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
     const runBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
@@ -565,7 +566,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     size: "sm",
     icon: "search",
   });
-  children.push(ui.row([quickBtn, fullBtn, diagnoseBtn], { gap: 8 }));
+  children.push(ui.card([ui.row([quickBtn, fullBtn, diagnoseBtn], { gap: 8 })], { padding: 12 }));
 
   // SHARP Category Breakdown Cards
   if (data.latestRunCategoryScores && data.latestRunCategoryScores.length > 0) {
@@ -677,7 +678,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
   const configHint = ui.text(t("evolution.editConfigHint"), "caption");
   children.push(configHint);
 
-  return ui.column(children, { gap: 16, padding: 16 });
+  return ui.column(children, { gap: 20, padding: 16 });
 }
 
 // ============================================================================
