@@ -90,6 +90,7 @@ import {
   getBestCategoryScores,
   getBenchmarkRun,
   getScoreTrend,
+  markInterruptedBenchmarkRuns,
 } from "../memory/db.js";
 import { BenchmarkRunner } from "../evolution/benchmark-runner.js";
 import {
@@ -2222,12 +2223,15 @@ export class GatewaySession {
             // ok
           }
         }
-        // Determine run status from duration_ms
-        const status: "running" | "completed" | "failed" = r.duration_ms
-          ? r.failed_count > 0 && r.passed_count === 0
+        // Determine run status: -1 = interrupted, NULL/0 = running, >0 = done
+        const status: "running" | "completed" | "failed" =
+          r.duration_ms != null && r.duration_ms < 0
             ? "failed"
-            : "completed"
-          : "running";
+            : r.duration_ms
+              ? r.failed_count > 0 && r.passed_count === 0
+                ? "failed"
+                : "completed"
+              : "running";
         return {
           id: r.id,
           timestamp: r.timestamp,
@@ -3097,6 +3101,13 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
   const app = createGatewayApp();
   const sessions = new Map<string, GatewaySession>();
   const webDir = config.webDir;
+
+  // Clean up interrupted benchmark runs from previous process
+  const interrupted = markInterruptedBenchmarkRuns();
+  if (interrupted > 0) {
+    console.log(`[Gateway] Marked ${interrupted} interrupted benchmark run(s) as failed`);
+  }
+  clearBenchmarkProgress();
 
   Bun.serve<WSData>({
     port,

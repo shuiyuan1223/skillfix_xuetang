@@ -444,13 +444,13 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     const runsLabel = ui.text(t("evolution.recentRuns"), "label");
     const runRows = data.benchmarkRuns.slice(0, 5).map((r) => ({
       id: r.id,
-      status: r.status || (r.duration_ms ? "completed" : "running"),
+      status: r.status || (r.duration_ms && r.duration_ms > 0 ? "completed" : "running"),
       version_tag: r.version_tag || "-",
       overall_score: Math.round(r.overall_score),
       passed: `${r.passed_count}/${r.total_test_cases}`,
       model: r.presetName || r.modelId || "-",
       profile: r.profile,
-      duration: r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+      duration: r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
     }));
     const runsTable = ui.dataTable(
       [
@@ -653,13 +653,13 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     const runRows = data.benchmarkRuns.map((r) => ({
       id: r.id,
       time: new Date(r.timestamp).toLocaleString(),
-      status: r.status || (r.duration_ms ? "completed" : "running"),
+      status: r.status || (r.duration_ms && r.duration_ms > 0 ? "completed" : "running"),
       version_tag: r.version_tag || "-",
       overall_score: Math.round(r.overall_score),
       passed: `${r.passed_count}/${r.total_test_cases}`,
       model: r.presetName || r.modelId || "-",
       profile: r.profile,
-      duration: r.duration_ms ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+      duration: r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
     }));
     const runsTable = ui.dataTable(
       [

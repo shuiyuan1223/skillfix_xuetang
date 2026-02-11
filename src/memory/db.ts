@@ -780,6 +780,23 @@ export function updateBenchmarkRun(
   stmt.run(...params);
 }
 
+/**
+ * Mark interrupted benchmark runs (duration_ms IS NULL) as failed.
+ * Called on server startup to clean up runs from previous crashed processes.
+ */
+export function markInterruptedBenchmarkRuns(): number {
+  const database = getDatabase();
+  try {
+    const stmt = database.prepare(
+      "UPDATE benchmark_runs SET duration_ms = -1 WHERE duration_ms IS NULL"
+    );
+    const result = stmt.run();
+    return (result as { changes?: number }).changes || 0;
+  } catch {
+    return 0;
+  }
+}
+
 // ============================================================================
 // Category Score Operations
 // ============================================================================
