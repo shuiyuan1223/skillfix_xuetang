@@ -646,6 +646,7 @@ export class GatewaySession {
   // Settings state
   private selectedPrompt: string | null = null;
   private selectedSkill: string | null = null;
+  private selectedSkillFile: string = "SKILL.md";
   private editingPrompt = false;
   private editingSkill = false;
   private editBuffer: string | null = null;
@@ -996,21 +997,39 @@ export class GatewaySession {
         try {
           const skillsResult = await listSkillsTool.execute({});
           let content: string | undefined;
+          let language: string | undefined;
 
           if (this.selectedSkill) {
-            const skillResult = await getSkillTool.execute({ name: this.selectedSkill });
+            const skillResult = await getSkillTool.execute({
+              name: this.selectedSkill,
+              filePath: this.selectedSkillFile,
+            });
             if (skillResult.success && "content" in skillResult) {
               content = this.editBuffer ?? skillResult.content;
+              language = skillResult.language as string | undefined;
             }
           }
+
+          // Enrich skills with structure info
+          const enrichedSkills = await Promise.all(
+            (skillsResult.skills || []).map(async (s: any) => {
+              if (s.name === this.selectedSkill) {
+                const info = await getSkillTool.execute({ name: s.name });
+                return { ...s, structure: info.success ? (info as any).structure : undefined };
+              }
+              return s;
+            })
+          );
 
           send(
             generatePage(
               view,
               generateSkillsPage({
-                skills: skillsResult.skills || [],
+                skills: enrichedSkills,
                 selectedSkill: this.selectedSkill || undefined,
+                selectedSkillFile: this.selectedSkillFile,
                 content,
+                language,
                 editing: this.editingSkill,
               })
             )
@@ -1437,6 +1456,12 @@ export class GatewaySession {
       // Extract skill name (remove emoji prefix)
       const name = row.name.replace(/^[^\s]+\s+/, "");
       this.selectedSkill = name;
+      this.selectedSkillFile = "SKILL.md";
+      this.editingSkill = false;
+      this.editBuffer = null;
+      await this.handleNavigate("settings/skills", send);
+    } else if (action === "select_skill_file" && payload?.value) {
+      this.selectedSkillFile = payload.value as string;
       this.editingSkill = false;
       this.editBuffer = null;
       await this.handleNavigate("settings/skills", send);
@@ -1449,6 +1474,7 @@ export class GatewaySession {
       await updateSkillTool.execute({
         name: this.selectedSkill,
         content: this.editBuffer,
+        filePath: this.selectedSkillFile,
       });
       this.editingSkill = false;
       this.editBuffer = null;
@@ -2261,12 +2287,33 @@ export class GatewaySession {
         try {
           const latestScores = listCategoryScores(runs[0].id);
           if (latestScores.length > 0) {
-            latestRunCategoryScores = latestScores.map((s) => ({
-              category: s.category,
-              score: s.score,
-              test_count: s.test_count,
-              passed_count: s.passed_count,
-            }));
+            latestRunCategoryScores = latestScores.map((s) => {
+              // Parse SHARP sub-component details from JSON
+              let subComponents:
+                | Array<{ name: string; score: number; scoring: "binary" | "3-point" }>
+                | undefined;
+              if (s.details) {
+                try {
+                  const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
+                  if (Array.isArray(details)) {
+                    subComponents = details.map((d: any) => ({
+                      name: d.subComponent || d.name || "Unknown",
+                      score: typeof d.score === "number" ? d.score : 0,
+                      scoring: d.scoringType || d.scoring || "binary",
+                    }));
+                  }
+                } catch {
+                  // legacy format, ignore
+                }
+              }
+              return {
+                category: s.category,
+                score: s.score,
+                test_count: s.test_count,
+                passed_count: s.passed_count,
+                subComponents,
+              };
+            });
           }
         } catch {
           // ok

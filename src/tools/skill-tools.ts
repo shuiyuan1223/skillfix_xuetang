@@ -5,8 +5,16 @@
  * Skills follow the OpenClaw pattern: each skill is a folder with SKILL.md.
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, renameSync } from "fs";
-import { join, basename, dirname } from "path";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  readdirSync,
+  mkdirSync,
+  renameSync,
+  statSync,
+} from "fs";
+import { join, basename, relative, extname } from "path";
 import { gitCommitFiles } from "../evolution/version-manager.js";
 
 // Default skills directory (relative to project root)
@@ -126,6 +134,51 @@ function serializeFrontmatter(frontmatter: Record<string, unknown>): string {
 }
 
 /**
+ * Discover all files in a skill directory (SKILL.md + reference/ + scripts/)
+ */
+function discoverSkillFiles(skillDir: string): string[] {
+  const files: string[] = [];
+  if (!existsSync(skillDir)) return files;
+
+  const skillFile = join(skillDir, "SKILL.md");
+  if (existsSync(skillFile)) {
+    files.push("SKILL.md");
+  }
+
+  for (const subDir of ["reference", "scripts"]) {
+    const subPath = join(skillDir, subDir);
+    if (existsSync(subPath) && statSync(subPath).isDirectory()) {
+      for (const entry of readdirSync(subPath)) {
+        const fullPath = join(subPath, entry);
+        if (statSync(fullPath).isFile()) {
+          files.push(`${subDir}/${entry}`);
+        }
+      }
+    }
+  }
+
+  return files;
+}
+
+/**
+ * Get editor language from file extension
+ */
+function getLanguageFromFile(filePath: string): string {
+  const ext = extname(filePath).toLowerCase();
+  const langMap: Record<string, string> = {
+    ".md": "markdown",
+    ".json": "json",
+    ".py": "python",
+    ".ts": "typescript",
+    ".js": "javascript",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+    ".txt": "plaintext",
+  };
+  return langMap[ext] || "plaintext";
+}
+
+/**
  * Get skill info from a skill directory
  */
 function getSkillInfo(skillDir: string): {
@@ -134,6 +187,7 @@ function getSkillInfo(skillDir: string): {
   enabled: boolean;
   frontmatter: Record<string, unknown>;
   body: string;
+  structure: { files: string[]; hasReference: boolean; hasScripts: boolean };
 } | null {
   const skillFile = join(skillDir, "SKILL.md");
   if (!existsSync(skillFile)) return null;
@@ -145,12 +199,19 @@ function getSkillInfo(skillDir: string): {
   const dirName = basename(skillDir);
   const enabled = !dirName.endsWith("_disabled") && frontmatter.enabled !== false;
 
+  const files = discoverSkillFiles(skillDir);
+
   return {
     name: (frontmatter.name as string) || dirName,
     path: skillDir,
     enabled,
     frontmatter,
     body,
+    structure: {
+      files,
+      hasReference: files.some((f) => f.startsWith("reference/")),
+      hasScripts: files.some((f) => f.startsWith("scripts/")),
+    },
   };
 }
 
@@ -228,7 +289,8 @@ export const listSkillsTool = {
  */
 export const getSkillTool = {
   name: "get_skill",
-  description: "Get the full content and metadata of a specific skill",
+  description:
+    "Get the full content and metadata of a specific skill. Supports reading sub-files via filePath.",
   parameters: {
     type: "object" as const,
     properties: {
@@ -236,35 +298,51 @@ export const getSkillTool = {
         type: "string",
         description: "Skill name (folder name)",
       },
+      filePath: {
+        type: "string",
+        description:
+          'Relative file path within skill directory (default: "SKILL.md"). E.g. "reference/sharp_rubrics.json"',
+      },
     },
     required: ["name"],
   },
-  execute: async (args: { name: string }) => {
-    const skillDir = join(getSkillsDir(), args.name);
-    const info = getSkillInfo(skillDir);
+  execute: async (args: { name: string; filePath?: string }) => {
+    let skillDir = join(getSkillsDir(), args.name);
+    let info = getSkillInfo(skillDir);
 
     if (!info) {
       // Try with _disabled suffix
       const disabledDir = join(getSkillsDir(), `${args.name}_disabled`);
-      const disabledInfo = getSkillInfo(disabledDir);
-      if (disabledInfo) {
+      info = getSkillInfo(disabledDir);
+      if (info) {
+        skillDir = disabledDir;
+      } else {
         return {
-          success: true,
-          ...disabledInfo,
-          content: readFileSync(join(disabledDir, "SKILL.md"), "utf-8"),
+          success: false,
+          error: `Skill not found: ${args.name}`,
         };
       }
+    }
 
+    const targetFile = args.filePath || "SKILL.md";
+    const fullPath = join(skillDir, targetFile);
+
+    if (!existsSync(fullPath)) {
       return {
         success: false,
-        error: `Skill not found: ${args.name}`,
+        error: `File not found: ${targetFile}`,
       };
     }
+
+    const content = readFileSync(fullPath, "utf-8");
+    const language = getLanguageFromFile(targetFile);
 
     return {
       success: true,
       ...info,
-      content: readFileSync(join(skillDir, "SKILL.md"), "utf-8"),
+      content,
+      filePath: targetFile,
+      language,
     };
   },
 };
@@ -274,7 +352,7 @@ export const getSkillTool = {
  */
 export const updateSkillTool = {
   name: "update_skill",
-  description: "Update a skill's SKILL.md content",
+  description: "Update a skill file's content. Supports sub-files via filePath.",
   parameters: {
     type: "object" as const,
     properties: {
@@ -284,12 +362,17 @@ export const updateSkillTool = {
       },
       content: {
         type: "string",
-        description: "New SKILL.md content (including frontmatter)",
+        description: "New file content",
+      },
+      filePath: {
+        type: "string",
+        description:
+          'Relative file path within skill directory (default: "SKILL.md"). E.g. "reference/sharp_rubrics.json"',
       },
     },
     required: ["name", "content"],
   },
-  execute: async (args: { name: string; content: string }) => {
+  execute: async (args: { name: string; content: string; filePath?: string }) => {
     let skillDir = join(getSkillsDir(), args.name);
 
     // Check for disabled version
@@ -305,25 +388,38 @@ export const updateSkillTool = {
       }
     }
 
-    const skillFile = join(skillDir, "SKILL.md");
-    const oldContent = readFileSync(skillFile, "utf-8");
+    const targetFile = args.filePath || "SKILL.md";
+    const fullPath = join(skillDir, targetFile);
 
-    if (oldContent === args.content) {
-      return {
-        success: true,
-        message: "No changes detected",
-        changed: false,
-      };
+    // Ensure parent directory exists for sub-files
+    const parentDir = join(fullPath, "..");
+    if (!existsSync(parentDir)) {
+      mkdirSync(parentDir, { recursive: true });
     }
 
-    writeFileSync(skillFile, args.content, "utf-8");
+    if (existsSync(fullPath)) {
+      const oldContent = readFileSync(fullPath, "utf-8");
+      if (oldContent === args.content) {
+        return {
+          success: true,
+          message: "No changes detected",
+          changed: false,
+        };
+      }
+    }
+
+    writeFileSync(fullPath, args.content, "utf-8");
 
     // Git commit
-    gitCommitFiles(skillFile, `Update skill: ${args.name}`);
+    const commitMsg =
+      targetFile === "SKILL.md"
+        ? `Update skill: ${args.name}`
+        : `Update skill: ${args.name}/${targetFile}`;
+    gitCommitFiles(fullPath, commitMsg);
 
     return {
       success: true,
-      message: `Updated skill: ${args.name}`,
+      message: `Updated ${args.name}/${targetFile}`,
       changed: true,
     };
   },

@@ -823,7 +823,7 @@ export function insertCategoryScore(score: {
   score: number;
   testCount: number;
   passedCount: number;
-  details?: Record<string, unknown>;
+  details?: Record<string, unknown> | unknown[];
 }): void {
   const database = getDatabase();
   const stmt = database.prepare(`
@@ -920,7 +920,7 @@ export function insertBenchmarkResult(result: {
   timestamp: number;
   agentResponse?: string;
   toolCalls?: unknown[];
-  scores?: Record<string, number>;
+  scores?: Record<string, number> | unknown[];
   overallScore: number;
   passed: boolean;
   feedback?: string;

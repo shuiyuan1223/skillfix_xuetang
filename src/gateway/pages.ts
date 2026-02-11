@@ -788,12 +788,15 @@ interface SkillInfo {
   enabled: boolean;
   emoji?: string;
   triggers?: string[];
+  structure?: { files: string[]; hasReference: boolean; hasScripts: boolean };
 }
 
 export function generateSkillsPage(data: {
   skills: SkillInfo[];
   selectedSkill?: string;
+  selectedSkillFile?: string;
   content?: string;
+  language?: string;
   editing?: boolean;
   loading?: boolean;
 }): A2UIMessage {
@@ -881,10 +884,32 @@ export function generateSkillsPage(data: {
   // If a skill is selected, show editor
   if (data.selectedSkill && data.content !== undefined) {
     const selectedInfo = data.skills.find((s) => s.name === data.selectedSkill);
+    const currentFile = data.selectedSkillFile || "SKILL.md";
+    const editorLanguage = (data.language || "markdown") as
+      | "markdown"
+      | "json"
+      | "yaml"
+      | "typescript"
+      | "javascript";
+
+    const editorChildren: string[] = [];
+
+    // File selector (when skill has multiple files)
+    const skillFiles = selectedInfo?.structure?.files;
+    if (skillFiles && skillFiles.length > 1) {
+      const fileButtons = skillFiles.map((f) =>
+        ui.button(f, "select_skill_file", {
+          variant: f === currentFile ? "primary" : "outline",
+          size: "sm",
+          payload: { file: f },
+        })
+      );
+      editorChildren.push(ui.row(fileButtons));
+    }
 
     // Editor
     const editor = ui.codeEditor(data.content, {
-      language: "markdown",
+      language: editorLanguage,
       readonly: !data.editing,
       lineNumbers: true,
       height: 400,
@@ -909,8 +934,11 @@ export function generateSkillsPage(data: {
 
     const editorHeader = ui.row(editorActions, { gap: 8, justify: "end" });
 
-    const editorCard = ui.card([editorHeader, editor], {
-      title: `${data.selectedSkill}/SKILL.md`,
+    editorChildren.push(editorHeader);
+    editorChildren.push(editor);
+
+    const editorCard = ui.card(editorChildren, {
+      title: `${data.selectedSkill}/${currentFile}`,
       padding: 20,
     });
 

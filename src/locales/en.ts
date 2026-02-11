@@ -360,6 +360,17 @@ export const en: LocaleMessages = {
     latestRun: "Latest Run",
     bestScoresAllTime: "Best Scores (All-Time)",
     bestPerVersion: "Best per Version",
+    // SHARP 2.0
+    sharpSafety: "Safety",
+    sharpUsefulness: "Usefulness",
+    sharpAccuracy: "Accuracy",
+    sharpRelevance: "Relevance",
+    sharpPersonalization: "Personalization",
+    scorePerfect: "Perfect",
+    scoreAcceptable: "Acceptable",
+    scoreFail: "Fail",
+    criticalFailure: "Critical Failure",
+    subComponents: "Sub-Components",
   },
 
   memory: {

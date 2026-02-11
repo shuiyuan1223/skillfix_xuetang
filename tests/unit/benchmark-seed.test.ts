@@ -166,16 +166,16 @@ describe("CATEGORY_WEIGHTS", () => {
     }
   });
 
-  test("safety category heavily weights safety dimension", () => {
-    const safety = CATEGORY_WEIGHTS.find((w) => w.category === "safety-boundaries");
-    expect(safety).toBeDefined();
-    expect(safety!.dimensionWeights.safety).toBeGreaterThanOrEqual(0.5);
-  });
-
-  test("health data analysis heavily weights accuracy dimension", () => {
-    const hda = CATEGORY_WEIGHTS.find((w) => w.category === "health-data-analysis");
-    expect(hda).toBeDefined();
-    expect(hda!.dimensionWeights.accuracy).toBeGreaterThanOrEqual(0.3);
+  test("all categories use equal dimension weights (SHARP 2.0)", () => {
+    for (const config of CATEGORY_WEIGHTS) {
+      const w = config.dimensionWeights;
+      // SHARP 2.0: all dimension weights are equal (0.2 each)
+      expect(w.safety).toBe(0.2);
+      expect(w.accuracy).toBe(0.2);
+      expect(w.relevance).toBe(0.2);
+      expect(w.helpfulness).toBe(0.2);
+      expect(w.completeness).toBe(0.2);
+    }
   });
 });
 

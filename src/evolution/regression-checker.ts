@@ -7,6 +7,7 @@
 
 import type { BenchmarkCategory, BenchmarkRun, CategoryScore } from "./types.js";
 import { CATEGORY_LABELS } from "./benchmark-seed.js";
+import { normalizeScoreForDisplay } from "./category-scorer.js";
 import {
   listBenchmarkRuns,
   listCategoryScores,
@@ -44,7 +45,9 @@ export function checkRegression(
     baseRunId?: string; // specific base run to compare against
   } = {}
 ): RegressionReport {
-  const threshold = options.threshold ?? 5;
+  const rawThreshold = options.threshold ?? 5;
+  // Normalize threshold: user provides 0-100 scale, scores may be 0.0-1.0
+  const threshold = rawThreshold <= 1.0 ? rawThreshold : rawThreshold / 100;
 
   // Get runs
   const runs = listBenchmarkRuns({ limit: 10 });
@@ -151,17 +154,21 @@ export function checkRegression(
   const hasRegression = categoryRegressions.length > 0 || overallDelta < -threshold;
 
   // Build summary
+  const dsBase = normalizeScoreForDisplay(baseRunRow.overall_score);
+  const dsCurrent = normalizeScoreForDisplay(currentRunRow.overall_score);
+  const displayDelta = dsCurrent - dsBase;
+
   let summary: string;
   if (!hasRegression) {
-    summary = `No regression detected. Overall: ${baseRunRow.overall_score} -> ${currentRunRow.overall_score} (${overallDelta >= 0 ? "+" : ""}${overallDelta.toFixed(1)})`;
+    summary = `No regression detected. Overall: ${dsBase} -> ${dsCurrent} (${displayDelta >= 0 ? "+" : ""}${displayDelta.toFixed(1)})`;
   } else {
     const parts: string[] = [];
     if (overallDelta < -threshold) {
-      parts.push(`Overall score dropped by ${Math.abs(overallDelta).toFixed(1)} pts`);
+      parts.push(`Overall score dropped by ${Math.abs(displayDelta).toFixed(1)} pts`);
     }
     if (categoryRegressions.length > 0) {
       parts.push(
-        `${categoryRegressions.length} category regression(s): ${categoryRegressions.map((r) => `${r.label} (${r.delta.toFixed(1)})`).join(", ")}`
+        `${categoryRegressions.length} category regression(s): ${categoryRegressions.map((r) => `${r.label} (${normalizeScoreForDisplay(r.delta)})`).join(", ")}`
       );
     }
     if (newFailures.length > 0) {
@@ -206,14 +213,15 @@ export function formatRegressionMarkdown(report: RegressionReport): string {
   }
 
   if (report.baseRun && report.currentRun) {
+    const dsBase = normalizeScoreForDisplay(report.baseRun.score);
+    const dsCurrent = normalizeScoreForDisplay(report.currentRun.score);
+    const dd = dsCurrent - dsBase;
     lines.push("");
     lines.push("### Score Comparison");
     lines.push("");
     lines.push(`| Metric | Base | Current | Delta |`);
     lines.push(`|--------|------|---------|-------|`);
-    lines.push(
-      `| Overall | ${report.baseRun.score} | ${report.currentRun.score} | ${report.overallDelta >= 0 ? "+" : ""}${report.overallDelta.toFixed(1)} |`
-    );
+    lines.push(`| Overall | ${dsBase} | ${dsCurrent} | ${dd >= 0 ? "+" : ""}${dd.toFixed(1)} |`);
   }
 
   if (report.categoryRegressions.length > 0) {
@@ -223,9 +231,9 @@ export function formatRegressionMarkdown(report: RegressionReport): string {
     lines.push(`| Category | Base | Current | Delta |`);
     lines.push(`|----------|------|---------|-------|`);
     for (const reg of report.categoryRegressions) {
-      lines.push(
-        `| ${reg.label} | ${reg.baseScore.toFixed(1)} | ${reg.currentScore.toFixed(1)} | ${reg.delta.toFixed(1)} |`
-      );
+      const b = normalizeScoreForDisplay(reg.baseScore);
+      const c = normalizeScoreForDisplay(reg.currentScore);
+      lines.push(`| ${reg.label} | ${b} | ${c} | ${(c - b).toFixed(1)} |`);
     }
   }
 
@@ -234,7 +242,9 @@ export function formatRegressionMarkdown(report: RegressionReport): string {
     lines.push("### Newly Failing Tests");
     lines.push("");
     for (const fail of report.newFailures) {
-      lines.push(`- \`${fail.testCaseId}\`: ${fail.baseScore} -> ${fail.currentScore}`);
+      lines.push(
+        `- \`${fail.testCaseId}\`: ${normalizeScoreForDisplay(fail.baseScore)} -> ${normalizeScoreForDisplay(fail.currentScore)}`
+      );
     }
   }
 

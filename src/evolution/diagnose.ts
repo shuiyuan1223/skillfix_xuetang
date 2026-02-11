@@ -14,7 +14,11 @@ import type {
   CategoryScore,
 } from "./types.js";
 import { BenchmarkRunner, type BenchmarkRunnerConfig } from "./benchmark-runner.js";
-import { identifyWeakCategories, computeOverallScore } from "./category-scorer.js";
+import {
+  identifyWeakCategories,
+  computeOverallScore,
+  normalizeScoreForDisplay,
+} from "./category-scorer.js";
 import { CATEGORY_LABELS } from "./benchmark-seed.js";
 import { createGitHubIssue, buildDiagnoseIssueBody } from "./github-issues.js";
 
@@ -66,7 +70,7 @@ export async function diagnose(opts: {
   const { run, results, categoryScores } = await runner.run({ profile });
 
   log(
-    `Benchmark complete: ${run.overallScore}/100 (${run.passedCount}/${run.totalTestCases} passed)`
+    `Benchmark complete: ${normalizeScoreForDisplay(run.overallScore)}/100 (${run.passedCount}/${run.totalTestCases} passed)`
   );
 
   // Step 2: Identify weaknesses
@@ -114,7 +118,7 @@ export async function diagnose(opts: {
       try {
         const body = buildDiagnoseIssueBody(weakness);
         const result = await createGitHubIssue({
-          title: `[Evolution] Improve ${weakness.label}: score ${weakness.score.toFixed(0)}/100`,
+          title: `[Evolution] Improve ${weakness.label}: score ${normalizeScoreForDisplay(weakness.score)}/100`,
           body,
           labels: ["evolution", "auto-diagnose"],
         });

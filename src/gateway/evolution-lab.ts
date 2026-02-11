@@ -339,9 +339,11 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   const statCards: string[] = [];
 
   // Overall score gauge — use latest run score for consistency
+  // Normalize: SHARP 2.0 scores are 0.0-1.0, old scores are 0-100
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
-    const latestScore = data.benchmarkRuns[0].overall_score;
-    const gauge = ui.scoreGauge(latestScore, {
+    const rawScore = data.benchmarkRuns[0].overall_score;
+    const displayScore = rawScore <= 1.0 ? Math.round(rawScore * 100) : Math.round(rawScore);
+    const gauge = ui.scoreGauge(displayScore, {
       label: t("evolution.latestRun"),
       max: 100,
       size: "lg",
@@ -416,11 +418,15 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
   if (data.latestCategoryScores && data.latestCategoryScores.length > 0) {
     const radarTitle = ui.text(t("evolution.bestScoresAllTime"), "label");
-    const radarData = data.latestCategoryScores.map((cs) => ({
-      label: getCategoryLabel(cs.category),
-      value: cs.score,
-      maxValue: 100,
-    }));
+    const radarData = data.latestCategoryScores.map((cs) => {
+      // Normalize: 0.0-1.0 → 0-100 for display
+      const displayScore = cs.score <= 1.0 ? Math.round(cs.score * 100) : Math.round(cs.score);
+      return {
+        label: getCategoryLabel(cs.category),
+        value: displayScore,
+        maxValue: 100,
+      };
+    });
     const radar = ui.radarChart(radarData, {
       size: 280,
       showLabels: true,
@@ -434,10 +440,10 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     const trendLabel = ui.text(t("evolution.scoreTrend"), "label");
     const trendChart = ui.chart({
       chartType: "bar",
-      data: data.scoreTrend.map((p) => ({
-        version: p.version,
-        score: Math.round(p.score),
-      })),
+      data: data.scoreTrend.map((p) => {
+        const displayScore = p.score <= 1.0 ? Math.round(p.score * 100) : Math.round(p.score);
+        return { version: p.version, score: displayScore };
+      }),
       xKey: "version",
       yKey: "score",
       height: 200,
@@ -553,20 +559,20 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
 
     for (const cs of data.latestRunCategoryScores) {
       const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
-      const avgScore = cs.score / 100; // normalize to 0-1 range
-      const scoreColor = getScoreColor(avgScore);
+      // Normalize: 0.0-1.0 (SHARP 2.0) or 0-100 (legacy)
+      const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
       const cardChildren: string[] = [];
 
-      // Header: category name + score badge
+      // Header: category name + score badge (percentage display)
       const catName = ui.text(getCategoryLabel(cs.category), "label");
-      const scoreBadge = ui.badge(`${avgScore.toFixed(2)}`, {
+      const scoreBadge = ui.badge(`${Math.round(avgScore * 100)}%`, {
         variant: avgScore >= 0.9 ? "success" : avgScore >= 0.7 ? "warning" : "error",
       });
       cardChildren.push(ui.row([catName, scoreBadge], { gap: 8, align: "center" }));
 
       // Overall category progress bar
       cardChildren.push(
-        ui.progress(avgScore * 100, { maxValue: 100, color: catColor, size: "sm" })
+        ui.progress(Math.round(avgScore * 100), { maxValue: 100, color: catColor, size: "sm" })
       );
 
       // Sub-component scores
@@ -1108,11 +1114,14 @@ function generateAgentTab(ui: A2UIGenerator, data: EvolutionLabData): string {
     ctxChildren.push(ctxLabel);
 
     if (data.agentContextData.radarScores && data.agentContextData.radarScores.length > 0) {
-      const radarData = data.agentContextData.radarScores.map((cs) => ({
-        label: getCategoryLabel(cs.category),
-        value: cs.score,
-        maxValue: 100,
-      }));
+      const radarData = data.agentContextData.radarScores.map((cs) => {
+        const displayScore = cs.score <= 1.0 ? Math.round(cs.score * 100) : Math.round(cs.score);
+        return {
+          label: getCategoryLabel(cs.category),
+          value: displayScore,
+          maxValue: 100,
+        };
+      });
       const radar = ui.radarChart(radarData, {
         size: 200,
         showLabels: true,

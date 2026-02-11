@@ -355,6 +355,17 @@ export const zhCN: LocaleMessages = {
     latestRun: "最新运行",
     bestScoresAllTime: "历史最佳",
     bestPerVersion: "各版本最佳",
+    // SHARP 2.0
+    sharpSafety: "安全性",
+    sharpUsefulness: "实用性",
+    sharpAccuracy: "准确性",
+    sharpRelevance: "相关性",
+    sharpPersonalization: "个性化",
+    scorePerfect: "优秀",
+    scoreAcceptable: "合格",
+    scoreFail: "不合格",
+    criticalFailure: "严重失败",
+    subComponents: "子维度",
   },
 
   memory: {

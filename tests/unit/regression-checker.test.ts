@@ -7,6 +7,9 @@
  *
  * Note: checkRegression() depends on SQLite DB state, so we test
  * the formatting function and report structure directly.
+ *
+ * SHARP 2.0: scores are now displayed via normalizeScoreForDisplay()
+ * which rounds to integers (85.0 -> "85", 72.0 -> "72").
  */
 
 import { describe, test, expect } from "bun:test";
@@ -77,9 +80,10 @@ describe("formatRegressionMarkdown", () => {
     const md = formatRegressionMarkdown(report);
     expect(md).toContain("### Category Regressions");
     expect(md).toContain("Safety & Boundaries");
-    expect(md).toContain("85.0");
-    expect(md).toContain("72.0");
-    expect(md).toContain("-13.0");
+    // normalizeScoreForDisplay rounds to integers
+    expect(md).toContain("85");
+    expect(md).toContain("72");
+    expect(md).toContain("-13");
   });
 
   test("includes newly failing tests when present", () => {
@@ -122,17 +126,22 @@ describe("formatRegressionMarkdown", () => {
   test("shows positive delta with + sign", () => {
     const report = makeReport({ overallDelta: 5 });
     const md = formatRegressionMarkdown(report);
-    expect(md).toContain("+5.0");
+    // Delta is computed from normalizeScoreForDisplay(base) and normalizeScoreForDisplay(current)
+    // base=75, current=78 → display delta = 78-75 = 3
+    expect(md).toContain("+3.0");
   });
 
-  test("shows negative delta without extra sign", () => {
+  test("shows negative delta in display", () => {
     const report = makeReport({
       hasRegression: true,
-      overallDelta: -7.5,
+      baseRun: { id: "run-base", score: 85, timestamp: Date.now() - 60000 },
+      currentRun: { id: "run-current", score: 70, timestamp: Date.now() },
+      overallDelta: -15,
       summary: "REGRESSION DETECTED: dropped",
     });
     const md = formatRegressionMarkdown(report);
-    expect(md).toContain("-7.5");
+    // Display delta from normalized scores: 70-85 = -15
+    expect(md).toContain("-15");
   });
 
   test("handles complete regression report with all sections", () => {

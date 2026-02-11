@@ -118,6 +118,48 @@ export interface OptimizationSuggestion {
   };
 }
 
+// ============================================================================
+// SHARP 2.0 Types
+// ============================================================================
+
+/** SHARP 2.0 single sub-component rating */
+export interface SharpRating {
+  category: string; // "Safety" | "Usefulness" | "Accuracy" | "Relevance" | "Personalization"
+  subComponent: string; // "Risk Disclosure" | "Medical Boundary" | ...
+  score: number; // 1.0 | 0.5 | 0.0
+  scoringType: "binary" | "3-point";
+  reason: string;
+}
+
+/** SHARP 2.0 evaluation summary */
+export interface SharpSummary {
+  totalComponents: number; // 16
+  perfectScores: number;
+  failedComponents: number;
+  averageScore: number; // 0.0-1.0
+  passRate: number; // 0-100%
+  criticalFailures: number; // binary 0.0 count
+}
+
+/** SHARP Rubric sub-component definition (loaded from JSON) */
+export interface SharpSubComponent {
+  name: string;
+  evaluation_criteria: string;
+  scoring_mechanism: "Binary" | "3-Point Scale";
+  scoring_logic: string;
+}
+
+/** SHARP Rubric category definition */
+export interface SharpRubricCategory {
+  category: string;
+  description: string;
+  sub_components: SharpSubComponent[];
+}
+
+// ============================================================================
+// Test & Benchmark Types
+// ============================================================================
+
 // Test case for evaluation
 export interface TestCase {
   id: string;
@@ -145,7 +187,7 @@ export type BenchmarkCategory =
   | "personalization-memory"
   | "communication-quality";
 
-// Category-specific dimension weights
+/** @deprecated Use SHARP 2.0 equal-weight categories instead */
 export interface CategoryDimensionWeights {
   accuracy: number;
   relevance: number;
@@ -179,7 +221,7 @@ export interface CategoryScore {
   score: number;
   testCount: number;
   passedCount: number;
-  details?: Record<string, unknown>;
+  details?: SharpRating[]; // SHARP 2.0 sub-component details
 }
 
 // Individual benchmark result for a test case
@@ -190,14 +232,8 @@ export interface BenchmarkResult {
   timestamp: number;
   agentResponse: string;
   toolCalls?: Array<{ tool: string; arguments: unknown; result: unknown }>;
-  scores: {
-    accuracy: number;
-    relevance: number;
-    helpfulness: number;
-    safety: number;
-    completeness: number;
-  };
-  overallScore: number;
+  scores: SharpRating[]; // 16 SHARP sub-component ratings
+  overallScore: number; // 0.0-1.0 (SHARP 2.0)
   passed: boolean;
   feedback: string;
   issues?: Array<{ type: string; description: string; severity: string }>;
@@ -211,7 +247,7 @@ export type BenchmarkProfile = "quick" | "full";
 export interface CategoryWeightConfig {
   category: BenchmarkCategory;
   weight: number;
-  dimensionWeights: CategoryDimensionWeights;
+  dimensionWeights: CategoryDimensionWeights; // @deprecated - kept for backward compat
 }
 
 // Radar chart data point

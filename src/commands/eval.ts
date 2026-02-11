@@ -19,6 +19,7 @@ import {
   generateAsciiRadar,
   generateRadarData,
   identifyWeakCategories,
+  normalizeScoreForDisplay,
 } from "../evolution/category-scorer.js";
 import {
   compareRuns,
@@ -667,14 +668,14 @@ export function registerEvalCommand(program: Command): void {
 
         // Summary
         printSection("Benchmark Results");
-        printKV("Overall Score", `${result.overallScore}/100`);
+        printKV("Overall Score", `${normalizeScoreForDisplay(result.overallScore)}/100`);
         printKV("Tests", `${result.run.passedCount}/${result.run.totalTestCases} passed`);
 
         if (result.weaknesses.length > 0) {
           printSection("Weak Categories");
           for (const w of result.weaknesses) {
             console.log(
-              `  ${c.red("!")} ${w.label}: ${c.yellow(w.score.toFixed(1))} (${w.gap.toFixed(1)} pts below threshold)`
+              `  ${c.red("!")} ${w.label}: ${c.yellow(normalizeScoreForDisplay(w.score).toString())} (${normalizeScoreForDisplay(w.gap).toString()} pts below threshold)`
             );
             console.log(`    ${c.dim(`${w.failingTests.length} failing tests`)}`);
             if (w.commonPatterns.length > 0) {
@@ -967,9 +968,10 @@ export function registerEvalCommand(program: Command): void {
           printKV("Passed", c.green(String(run.passedCount)));
           printKV("Failed", run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"));
 
+          const runDisplayScore = normalizeScoreForDisplay(run.overallScore);
           const scoreColor =
-            run.overallScore >= 80 ? c.green : run.overallScore >= 60 ? c.yellow : c.red;
-          printKV("Overall Score", scoreColor(`${run.overallScore}/100`));
+            runDisplayScore >= 80 ? c.green : runDisplayScore >= 60 ? c.yellow : c.red;
+          printKV("Overall Score", scoreColor(`${runDisplayScore}/100`));
           printKV("Duration", formatDuration(run.durationMs));
 
           if (!isMulti) {
@@ -978,11 +980,12 @@ export function registerEvalCommand(program: Command): void {
             printTable(
               ["Test", "Category", "Score", "Pass", "Feedback"],
               results.map((r) => {
-                const sc = r.overallScore >= 80 ? c.green : r.overallScore >= 60 ? c.yellow : c.red;
+                const ds = normalizeScoreForDisplay(r.overallScore);
+                const sc = ds >= 80 ? c.green : ds >= 60 ? c.yellow : c.red;
                 return [
                   c.dim(r.testCaseId),
                   truncate(r.testCaseId.split("-").slice(0, 2).join("-"), 15),
-                  sc(`${r.overallScore}`),
+                  sc(`${ds}`),
                   r.passed ? c.green("PASS") : c.red("FAIL"),
                   truncate(r.feedback, 30),
                 ];
@@ -998,7 +1001,7 @@ export function registerEvalCommand(program: Command): void {
               for (const weak of weakCategories) {
                 const label = CATEGORY_LABELS[weak.category];
                 console.log(
-                  `  ${c.red("!")} ${label}: ${c.yellow(weak.score.toFixed(1))} (${weak.gap.toFixed(1)} pts below threshold)`
+                  `  ${c.red("!")} ${label}: ${c.yellow(normalizeScoreForDisplay(weak.score).toString())} (${normalizeScoreForDisplay(weak.gap).toString()} pts below threshold)`
                 );
               }
             }
@@ -1027,11 +1030,11 @@ export function registerEvalCommand(program: Command): void {
         printTable(
           ["Model", "Score", "Pass", "Fail", "Duration"],
           allRunResults.map((r) => {
-            const sc =
-              r.run.overallScore >= 80 ? c.green : r.run.overallScore >= 60 ? c.yellow : c.red;
+            const ds = normalizeScoreForDisplay(r.run.overallScore);
+            const sc = ds >= 80 ? c.green : ds >= 60 ? c.yellow : c.red;
             return [
               r.label,
-              sc(`${r.run.overallScore}/100`),
+              sc(`${ds}/100`),
               c.green(String(r.run.passedCount)),
               r.run.failedCount > 0 ? c.red(String(r.run.failedCount)) : c.dim("0"),
               formatDuration(r.run.durationMs),
@@ -1044,7 +1047,10 @@ export function registerEvalCommand(program: Command): void {
           a.run.overallScore >= b.run.overallScore ? a : b
         );
         console.log("");
-        printKV("Best Model", c.green(`${best.label} (${best.run.overallScore}/100)`));
+        printKV(
+          "Best Model",
+          c.green(`${best.label} (${normalizeScoreForDisplay(best.run.overallScore)}/100)`)
+        );
 
         if (options.json) {
           console.log(
@@ -1293,8 +1299,8 @@ export function registerEvalCommand(program: Command): void {
       printTable(
         ["Run ID", "Date", "Profile", "Tests", "Pass", "Fail", "Score", "Duration"],
         runs.map((run) => {
-          const scoreColor =
-            run.overallScore >= 80 ? c.green : run.overallScore >= 60 ? c.yellow : c.red;
+          const ds = normalizeScoreForDisplay(run.overallScore);
+          const scoreColor = ds >= 80 ? c.green : ds >= 60 ? c.yellow : c.red;
           return [
             c.dim(run.id.substring(0, 8)),
             new Date(run.timestamp).toLocaleDateString(),
@@ -1302,7 +1308,7 @@ export function registerEvalCommand(program: Command): void {
             String(run.totalTestCases),
             c.green(String(run.passedCount)),
             run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"),
-            scoreColor(`${run.overallScore}`),
+            scoreColor(`${ds}`),
             formatDuration(run.durationMs),
           ];
         })
@@ -1403,7 +1409,7 @@ export function registerEvalCommand(program: Command): void {
             spinner.update(`Iteration ${iter}/${max}...`);
           },
           onBenchmarkComplete: (run) => {
-            spinner.update(`Benchmark complete: ${run.overallScore}/100`);
+            spinner.update(`Benchmark complete: ${normalizeScoreForDisplay(run.overallScore)}/100`);
           },
           onWeakCategoriesFound: (cats) => {
             const names = cats.map((c) => CATEGORY_LABELS[c.category]).join(", ");

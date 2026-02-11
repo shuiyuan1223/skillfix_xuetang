@@ -19,6 +19,7 @@ import {
   type BenchmarkRunRow,
   type CategoryScoreRow,
 } from "../memory/db.js";
+import { normalizeScoreForDisplay } from "./category-scorer.js";
 
 /**
  * Get the N most recent benchmark runs
@@ -135,8 +136,11 @@ export function formatComparison(comparison: VersionComparison): string {
   // Overall
   const overallArrow = overallDelta > 0 ? "+" : overallDelta < 0 ? "" : " ";
   const overallColor = overallDelta > 0 ? "improved" : overallDelta < 0 ? "regressed" : "unchanged";
+  const ds1 = normalizeScoreForDisplay(run1.overallScore);
+  const ds2 = normalizeScoreForDisplay(run2.overallScore);
+  const displayDelta = ds2 - ds1;
   lines.push(
-    `  Overall: ${run1.overallScore} -> ${run2.overallScore} (${overallArrow}${overallDelta.toFixed(1)}) [${overallColor}]`
+    `  Overall: ${ds1} -> ${ds2} (${overallArrow}${displayDelta.toFixed(1)}) [${overallColor}]`
   );
   lines.push("");
 
@@ -147,8 +151,11 @@ export function formatComparison(comparison: VersionComparison): string {
   for (const delta of categoryDeltas) {
     const arrow = delta.delta > 0 ? "+" : delta.delta < 0 ? "" : " ";
     const indicator = delta.delta > 0 ? " ^" : delta.delta < 0 ? " v" : "  ";
+    const s1 = normalizeScoreForDisplay(delta.score1);
+    const s2 = normalizeScoreForDisplay(delta.score2);
+    const dd = s2 - s1;
     lines.push(
-      `  ${delta.category.padEnd(30)} ${delta.score1.toFixed(1)} -> ${delta.score2.toFixed(1)} (${arrow}${delta.delta.toFixed(1)})${indicator}`
+      `  ${delta.category.padEnd(30)} ${s1} -> ${s2} (${arrow}${dd.toFixed(1)})${indicator}`
     );
   }
 

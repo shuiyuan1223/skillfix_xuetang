@@ -20,7 +20,11 @@ import type {
   CategoryScore,
 } from "./types.js";
 import { BenchmarkRunner, type BenchmarkRunnerConfig } from "./benchmark-runner.js";
-import { identifyWeakCategories, computeOverallScore } from "./category-scorer.js";
+import {
+  identifyWeakCategories,
+  computeOverallScore,
+  normalizeScoreForDisplay,
+} from "./category-scorer.js";
 import { CATEGORY_LABELS } from "./benchmark-seed.js";
 import {
   optimizeWithClaudeCode,
@@ -114,10 +118,14 @@ export class AutoLoop {
 
     this.callbacks.onBenchmarkComplete?.(initialRun.run, initialRun.categoryScores);
 
+    // Normalize target score: CLI provides 0-100, internal scores are 0.0-1.0
+    const targetNormalized =
+      this.config.targetScore <= 1.0 ? this.config.targetScore : this.config.targetScore / 100;
+
     // Check if already at target
-    if (initialRun.run.overallScore >= this.config.targetScore) {
+    if (initialRun.run.overallScore >= targetNormalized) {
       this.log(
-        `Already at target score (${initialRun.run.overallScore} >= ${this.config.targetScore})`
+        `Already at target score (${normalizeScoreForDisplay(initialRun.run.overallScore)} >= ${this.config.targetScore})`
       );
       result.finalScore = initialRun.run.overallScore;
       this.callbacks.onComplete?.(0, result.finalScore, false);
@@ -133,8 +141,8 @@ export class AutoLoop {
       this.callbacks.onIterationStart?.(iteration, this.config.maxIterations);
       this.log(`\n--- Iteration ${iteration}/${this.config.maxIterations} ---`);
 
-      // Find weakest categories
-      const weakCategories = identifyWeakCategories(lastCategoryScores, this.config.targetScore);
+      // Find weakest categories (threshold in 0.0-1.0 scale)
+      const weakCategories = identifyWeakCategories(lastCategoryScores, targetNormalized);
       if (weakCategories.length === 0) {
         this.log("No weak categories found. Done!");
         break;
@@ -214,10 +222,15 @@ export class AutoLoop {
         const delta = newScore - oldCatScore;
 
         const improved = delta > 0;
+        // Normalize regression threshold: CLI provides 0-100 points, scores are 0.0-1.0
+        const regressionNormalized =
+          this.config.regressionThreshold <= 1.0
+            ? this.config.regressionThreshold
+            : this.config.regressionThreshold / 100;
         const noRegression = !this.hasRegression(
           lastCategoryScores,
           rerunResult.categoryScores,
-          this.config.regressionThreshold
+          regressionNormalized
         );
 
         this.callbacks.onComparisonResult?.(improved && noRegression, delta);
@@ -264,8 +277,10 @@ export class AutoLoop {
       currentScore = computeOverallScore(lastCategoryScores);
 
       // Check if target reached
-      if (currentScore >= this.config.targetScore) {
-        this.log(`Target score reached! ${currentScore.toFixed(1)} >= ${this.config.targetScore}`);
+      if (currentScore >= targetNormalized) {
+        this.log(
+          `Target score reached! ${normalizeScoreForDisplay(currentScore)} >= ${this.config.targetScore}`
+        );
         break;
       }
     }

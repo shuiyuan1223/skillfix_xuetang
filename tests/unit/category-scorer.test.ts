@@ -1,13 +1,14 @@
 /**
- * Tests for Category Scorer
+ * Tests for Category Scorer — SHARP 2.0
  *
  * Tests the scoring, aggregation, and visualization logic:
- * - Category-weighted score calculation
+ * - Category-weighted score calculation (legacy compat)
  * - Result aggregation by category/subcategory
- * - Overall score computation
- * - Radar data generation
- * - Weakness identification
+ * - Overall score computation (equal weights)
+ * - Radar data generation (0.0-1.0 scale)
+ * - Weakness identification (threshold 0.7)
  * - ASCII radar chart generation
+ * - Score normalization for display
  */
 
 import { describe, test, expect } from "bun:test";
@@ -19,12 +20,62 @@ import {
   generateRadarData,
   identifyWeakCategories,
   generateAsciiRadar,
+  normalizeScoreForDisplay,
 } from "../../src/evolution/category-scorer.js";
 import type {
   BenchmarkResult,
   CategoryScore,
   BenchmarkCategory,
+  SharpRating,
 } from "../../src/evolution/types.js";
+
+// Helper to create mock SharpRating[]
+function mockSharpRatings(overallScore: number = 0.8): SharpRating[] {
+  return [
+    {
+      category: "Safety",
+      subComponent: "Risk Disclosure",
+      score: overallScore,
+      scoringType: "binary",
+      reason: "test",
+    },
+    {
+      category: "Safety",
+      subComponent: "Medical Boundary",
+      score: overallScore,
+      scoringType: "binary",
+      reason: "test",
+    },
+    {
+      category: "Usefulness",
+      subComponent: "Actionability",
+      score: overallScore,
+      scoringType: "3-point",
+      reason: "test",
+    },
+    {
+      category: "Accuracy",
+      subComponent: "Data Accuracy",
+      score: overallScore,
+      scoringType: "binary",
+      reason: "test",
+    },
+    {
+      category: "Relevance",
+      subComponent: "Query Relevance",
+      score: overallScore,
+      scoringType: "3-point",
+      reason: "test",
+    },
+    {
+      category: "Personalization",
+      subComponent: "Memory Usage",
+      score: overallScore,
+      scoringType: "3-point",
+      reason: "test",
+    },
+  ];
+}
 
 // Helper to create mock BenchmarkResult
 function mockResult(overrides: Partial<BenchmarkResult> & { testCaseId: string }): BenchmarkResult {
@@ -34,14 +85,8 @@ function mockResult(overrides: Partial<BenchmarkResult> & { testCaseId: string }
     testCaseId: overrides.testCaseId,
     timestamp: Date.now(),
     agentResponse: "Test response",
-    scores: overrides.scores || {
-      accuracy: 80,
-      relevance: 80,
-      helpfulness: 80,
-      safety: 80,
-      completeness: 80,
-    },
-    overallScore: overrides.overallScore ?? 80,
+    scores: overrides.scores || mockSharpRatings(),
+    overallScore: overrides.overallScore ?? 0.8,
     passed: overrides.passed ?? true,
     feedback: "Good",
     durationMs: 100,
@@ -63,43 +108,18 @@ describe("calculateCategoryWeightedScore", () => {
     expect(result).toBe(80);
   });
 
-  test("safety category weights safety dimension heavily", () => {
+  test("SHARP 2.0: all categories use equal weights (0.2 each)", () => {
     const scores = { accuracy: 50, relevance: 50, helpfulness: 50, safety: 100, completeness: 50 };
     const result = calculateCategoryWeightedScore(scores, "safety-boundaries");
-    // safety weight is 0.6, others sum to 0.4, each at 0.1 => 0.4 * 50 + 0.6 * 100 = 20 + 60 = 80
+    // Equal weights: (50+50+50+100+50)/5 = 60
+    expect(result).toBe(60);
+  });
+
+  test("returns equal-weight average for any category", () => {
+    const scores = { accuracy: 60, relevance: 70, helpfulness: 80, safety: 90, completeness: 100 };
+    const result = calculateCategoryWeightedScore(scores, "health-data-analysis");
+    // Equal weights: (60+70+80+90+100)/5 = 80
     expect(result).toBe(80);
-  });
-
-  test("health data analysis weights accuracy heavily", () => {
-    const highAccuracy = {
-      accuracy: 100,
-      relevance: 50,
-      helpfulness: 50,
-      safety: 50,
-      completeness: 50,
-    };
-    const lowAccuracy = {
-      accuracy: 50,
-      relevance: 100,
-      helpfulness: 100,
-      safety: 100,
-      completeness: 100,
-    };
-
-    const scoreHigh = calculateCategoryWeightedScore(highAccuracy, "health-data-analysis");
-    const scoreLow = calculateCategoryWeightedScore(lowAccuracy, "health-data-analysis");
-
-    // With accuracy=100 rest=50: 0.35*100 + 0.2*50 + 0.15*50 + 0.15*50 + 0.15*50 = 35 + 10 + 7.5 + 7.5 + 7.5 = 67.5
-    expect(scoreHigh).toBeCloseTo(67.5, 1);
-    // With accuracy=50 rest=100: 0.35*50 + 0.2*100 + 0.15*100 + 0.15*100 + 0.15*100 = 17.5 + 20 + 15 + 15 + 15 = 82.5
-    expect(scoreLow).toBeCloseTo(82.5, 1);
-  });
-
-  test("health coaching weights helpfulness heavily", () => {
-    const scores = { accuracy: 50, relevance: 50, helpfulness: 100, safety: 50, completeness: 50 };
-    const result = calculateCategoryWeightedScore(scores, "health-coaching");
-    // 0.1*50 + 0.25*50 + 0.35*100 + 0.15*50 + 0.15*50 = 5 + 12.5 + 35 + 7.5 + 7.5 = 67.5
-    expect(result).toBeCloseTo(67.5, 1);
   });
 
   test("returns equal-weight average for unknown category", () => {
@@ -130,9 +150,9 @@ describe("calculateCategoryWeightedScore", () => {
 describe("aggregateByCategory", () => {
   test("groups results by category prefix", () => {
     const results = [
-      mockResult({ testCaseId: "hda-sleep-001", overallScore: 80, passed: true }),
-      mockResult({ testCaseId: "hda-hr-001", overallScore: 70, passed: true }),
-      mockResult({ testCaseId: "sb-medical-001", overallScore: 90, passed: true }),
+      mockResult({ testCaseId: "hda-sleep-001", overallScore: 0.8, passed: true }),
+      mockResult({ testCaseId: "hda-hr-001", overallScore: 0.7, passed: true }),
+      mockResult({ testCaseId: "sb-medical-001", overallScore: 0.9, passed: true }),
     ];
 
     const categories = aggregateByCategory(results);
@@ -143,13 +163,13 @@ describe("aggregateByCategory", () => {
 
   test("calculates correct average score per category", () => {
     const results = [
-      mockResult({ testCaseId: "hda-sleep-001", overallScore: 80, passed: true }),
-      mockResult({ testCaseId: "hda-hr-001", overallScore: 60, passed: false }),
+      mockResult({ testCaseId: "hda-sleep-001", overallScore: 0.8, passed: true }),
+      mockResult({ testCaseId: "hda-hr-001", overallScore: 0.6, passed: false }),
     ];
 
     const categories = aggregateByCategory(results);
     const hda = categories.get("health-data-analysis")!;
-    expect(hda.score).toBe(70); // (80+60)/2
+    expect(hda.score).toBeCloseTo(0.7, 1); // (0.8+0.6)/2
     expect(hda.testCount).toBe(2);
     expect(hda.passedCount).toBe(1);
   });
@@ -160,41 +180,49 @@ describe("aggregateByCategory", () => {
   });
 
   test("handles single result", () => {
-    const results = [mockResult({ testCaseId: "cq-tone-001", overallScore: 85, passed: true })];
+    const results = [mockResult({ testCaseId: "cq-tone-001", overallScore: 0.85, passed: true })];
     const categories = aggregateByCategory(results);
     expect(categories.size).toBe(1);
-    expect(categories.get("communication-quality")!.score).toBe(85);
+    expect(categories.get("communication-quality")!.score).toBeCloseTo(0.85, 2);
   });
 
-  test("computes average dimension scores in details", () => {
+  test("stores SHARP sub-component ratings in details", () => {
+    const ratings: SharpRating[] = [
+      {
+        category: "Safety",
+        subComponent: "Risk Disclosure",
+        score: 1.0,
+        scoringType: "binary",
+        reason: "Good",
+      },
+      {
+        category: "Accuracy",
+        subComponent: "Data Accuracy",
+        score: 0.5,
+        scoringType: "3-point",
+        reason: "Fair",
+      },
+    ];
+
     const results = [
-      mockResult({
-        testCaseId: "hc-goal-001",
-        scores: { accuracy: 80, relevance: 70, helpfulness: 90, safety: 85, completeness: 75 },
-      }),
-      mockResult({
-        testCaseId: "hc-motiv-001",
-        scores: { accuracy: 60, relevance: 90, helpfulness: 80, safety: 95, completeness: 65 },
-      }),
+      mockResult({ testCaseId: "hc-goal-001", scores: ratings }),
+      mockResult({ testCaseId: "hc-motiv-001", scores: ratings }),
     ];
 
     const categories = aggregateByCategory(results);
     const hc = categories.get("health-coaching")!;
 
-    expect(hc.details.avgAccuracy).toBe(70); // (80+60)/2
-    expect(hc.details.avgRelevance).toBe(80); // (70+90)/2
-    expect(hc.details.avgHelpfulness).toBe(85); // (90+80)/2
-    expect(hc.details.avgSafety).toBe(90); // (85+95)/2
-    expect(hc.details.avgCompleteness).toBe(70); // (75+65)/2
+    // details should be SharpRating[] (aggregated from all results)
+    expect(Array.isArray(hc.details)).toBe(true);
   });
 });
 
 describe("aggregateBySubcategory", () => {
   test("groups results by subcategory prefix", () => {
     const results = [
-      mockResult({ testCaseId: "hda-sleep-001", overallScore: 80 }),
-      mockResult({ testCaseId: "hda-sleep-002", overallScore: 70 }),
-      mockResult({ testCaseId: "hda-hr-001", overallScore: 90 }),
+      mockResult({ testCaseId: "hda-sleep-001", overallScore: 0.8 }),
+      mockResult({ testCaseId: "hda-sleep-002", overallScore: 0.7 }),
+      mockResult({ testCaseId: "hda-hr-001", overallScore: 0.9 }),
     ];
 
     const subcategories = aggregateBySubcategory(results);
@@ -205,24 +233,24 @@ describe("aggregateBySubcategory", () => {
 
   test("calculates correct stats per subcategory", () => {
     const results = [
-      mockResult({ testCaseId: "sb-medical-001", overallScore: 90, passed: true }),
-      mockResult({ testCaseId: "sb-medical-002", overallScore: 60, passed: false }),
-      mockResult({ testCaseId: "sb-medical-003", overallScore: 80, passed: true }),
+      mockResult({ testCaseId: "sb-medical-001", overallScore: 0.9, passed: true }),
+      mockResult({ testCaseId: "sb-medical-002", overallScore: 0.6, passed: false }),
+      mockResult({ testCaseId: "sb-medical-003", overallScore: 0.8, passed: true }),
     ];
 
     const subcategories = aggregateBySubcategory(results);
     const medical = subcategories.get("medical-escalation")!;
-    expect(medical.score).toBeCloseTo(76.7, 1); // (90+60+80)/3
+    expect(medical.score).toBeCloseTo(0.767, 1); // (0.9+0.6+0.8)/3
     expect(medical.testCount).toBe(3);
     expect(medical.passedCount).toBe(2);
   });
 });
 
 describe("computeOverallScore", () => {
-  test("computes weighted average across categories", () => {
+  test("computes equal-weight average across categories", () => {
     const categoryScores = new Map<BenchmarkCategory, CategoryScore>();
 
-    // All categories at 80
+    // All categories at 0.8
     const categories: BenchmarkCategory[] = [
       "health-data-analysis",
       "health-coaching",
@@ -236,41 +264,27 @@ describe("computeOverallScore", () => {
         id: crypto.randomUUID(),
         runId: "run-1",
         category: cat,
-        score: 80,
+        score: 0.8,
         testCount: 10,
         passedCount: 8,
-        details: {
-          avgAccuracy: 80,
-          avgRelevance: 80,
-          avgHelpfulness: 80,
-          avgSafety: 80,
-          avgCompleteness: 80,
-        },
       });
     }
 
     const overall = computeOverallScore(categoryScores);
-    expect(overall).toBe(80); // All 80, weighted average = 80
+    expect(overall).toBeCloseTo(0.8, 2); // All 0.8, equal weight average = 0.8
   });
 
-  test("applies category weights correctly", () => {
+  test("applies equal weights (SHARP 2.0)", () => {
     const categoryScores = new Map<BenchmarkCategory, CategoryScore>();
 
-    // health-data-analysis (0.25 weight) = 100, everything else = 0
+    // health-data-analysis = 1.0, everything else = 0
     categoryScores.set("health-data-analysis", {
       id: "1",
       runId: "run-1",
       category: "health-data-analysis",
-      score: 100,
+      score: 1.0,
       testCount: 5,
       passedCount: 5,
-      details: {
-        avgAccuracy: 100,
-        avgRelevance: 100,
-        avgHelpfulness: 100,
-        avgSafety: 100,
-        avgCompleteness: 100,
-      },
     });
     categoryScores.set("health-coaching", {
       id: "2",
@@ -279,13 +293,6 @@ describe("computeOverallScore", () => {
       score: 0,
       testCount: 5,
       passedCount: 0,
-      details: {
-        avgAccuracy: 0,
-        avgRelevance: 0,
-        avgHelpfulness: 0,
-        avgSafety: 0,
-        avgCompleteness: 0,
-      },
     });
     categoryScores.set("safety-boundaries", {
       id: "3",
@@ -294,13 +301,6 @@ describe("computeOverallScore", () => {
       score: 0,
       testCount: 5,
       passedCount: 0,
-      details: {
-        avgAccuracy: 0,
-        avgRelevance: 0,
-        avgHelpfulness: 0,
-        avgSafety: 0,
-        avgCompleteness: 0,
-      },
     });
     categoryScores.set("personalization-memory", {
       id: "4",
@@ -309,13 +309,6 @@ describe("computeOverallScore", () => {
       score: 0,
       testCount: 5,
       passedCount: 0,
-      details: {
-        avgAccuracy: 0,
-        avgRelevance: 0,
-        avgHelpfulness: 0,
-        avgSafety: 0,
-        avgCompleteness: 0,
-      },
     });
     categoryScores.set("communication-quality", {
       id: "5",
@@ -324,18 +317,11 @@ describe("computeOverallScore", () => {
       score: 0,
       testCount: 5,
       passedCount: 0,
-      details: {
-        avgAccuracy: 0,
-        avgRelevance: 0,
-        avgHelpfulness: 0,
-        avgSafety: 0,
-        avgCompleteness: 0,
-      },
     });
 
     const overall = computeOverallScore(categoryScores);
-    // (100 * 0.25 + 0 * 0.2 + 0 * 0.25 + 0 * 0.15 + 0 * 0.15) / 1.0 = 25
-    expect(overall).toBe(25);
+    // Equal weights: 1.0/5 = 0.2
+    expect(overall).toBeCloseTo(0.2, 2);
   });
 
   test("handles empty category scores", () => {
@@ -350,21 +336,14 @@ describe("computeOverallScore", () => {
       id: "1",
       runId: "run-1",
       category: "health-data-analysis",
-      score: 80,
+      score: 0.8,
       testCount: 5,
       passedCount: 4,
-      details: {
-        avgAccuracy: 80,
-        avgRelevance: 80,
-        avgHelpfulness: 80,
-        avgSafety: 80,
-        avgCompleteness: 80,
-      },
     });
 
     const overall = computeOverallScore(categoryScores);
-    // Only one category, its weight / total weight = 0.25 / 0.25 = 1.0, so score = 80
-    expect(overall).toBe(80);
+    // Only one category, its weight / total weight = 0.2 / 0.2 = 1.0, so score = 0.8
+    expect(overall).toBeCloseTo(0.8, 2);
   });
 });
 
@@ -375,29 +354,22 @@ describe("generateRadarData", () => {
       id: "1",
       runId: "run-1",
       category: "health-data-analysis",
-      score: 85,
+      score: 0.85,
       testCount: 5,
       passedCount: 4,
-      details: {
-        avgAccuracy: 85,
-        avgRelevance: 80,
-        avgHelpfulness: 80,
-        avgSafety: 80,
-        avgCompleteness: 80,
-      },
     });
 
     const data = generateRadarData(categoryScores);
     expect(data.length).toBe(5);
   });
 
-  test("each point has correct structure", () => {
+  test("each point has correct structure with 0.0-1.0 scale", () => {
     const data = generateRadarData(new Map());
     for (const point of data) {
       expect(point.category).toBeTruthy();
       expect(point.label).toBeTruthy();
       expect(typeof point.score).toBe("number");
-      expect(point.maxScore).toBe(100);
+      expect(point.maxScore).toBe(1); // SHARP 2.0: maxScore is 1.0
     }
   });
 
@@ -414,21 +386,14 @@ describe("generateRadarData", () => {
       id: "1",
       runId: "run-1",
       category: "safety-boundaries",
-      score: 92,
+      score: 0.92,
       testCount: 5,
       passedCount: 5,
-      details: {
-        avgAccuracy: 90,
-        avgRelevance: 90,
-        avgHelpfulness: 90,
-        avgSafety: 95,
-        avgCompleteness: 90,
-      },
     });
 
     const data = generateRadarData(categoryScores);
     const safetyPoint = data.find((d) => d.category === "safety-boundaries");
-    expect(safetyPoint!.score).toBe(92);
+    expect(safetyPoint!.score).toBeCloseTo(0.92, 2);
   });
 });
 
@@ -439,38 +404,24 @@ describe("identifyWeakCategories", () => {
       id: "1",
       runId: "run-1",
       category: "health-data-analysis",
-      score: 80,
+      score: 0.8,
       testCount: 5,
       passedCount: 4,
-      details: {
-        avgAccuracy: 80,
-        avgRelevance: 80,
-        avgHelpfulness: 80,
-        avgSafety: 80,
-        avgCompleteness: 80,
-      },
     });
     categoryScores.set("safety-boundaries", {
       id: "2",
       runId: "run-1",
       category: "safety-boundaries",
-      score: 55,
+      score: 0.55,
       testCount: 5,
       passedCount: 2,
-      details: {
-        avgAccuracy: 55,
-        avgRelevance: 55,
-        avgHelpfulness: 55,
-        avgSafety: 55,
-        avgCompleteness: 55,
-      },
     });
 
-    const weak = identifyWeakCategories(categoryScores, 70);
+    const weak = identifyWeakCategories(categoryScores, 0.7);
     expect(weak.length).toBe(1);
     expect(weak[0].category).toBe("safety-boundaries");
-    expect(weak[0].score).toBe(55);
-    expect(weak[0].gap).toBe(15);
+    expect(weak[0].score).toBeCloseTo(0.55, 2);
+    expect(weak[0].gap).toBeCloseTo(0.15, 2);
   });
 
   test("returns empty array when all above threshold", () => {
@@ -479,19 +430,12 @@ describe("identifyWeakCategories", () => {
       id: "1",
       runId: "run-1",
       category: "health-data-analysis",
-      score: 85,
+      score: 0.85,
       testCount: 5,
       passedCount: 5,
-      details: {
-        avgAccuracy: 85,
-        avgRelevance: 85,
-        avgHelpfulness: 85,
-        avgSafety: 85,
-        avgCompleteness: 85,
-      },
     });
 
-    const weak = identifyWeakCategories(categoryScores, 70);
+    const weak = identifyWeakCategories(categoryScores, 0.7);
     expect(weak.length).toBe(0);
   });
 
@@ -501,59 +445,56 @@ describe("identifyWeakCategories", () => {
       id: "1",
       runId: "run-1",
       category: "health-data-analysis",
-      score: 60,
+      score: 0.6,
       testCount: 5,
       passedCount: 3,
-      details: {
-        avgAccuracy: 60,
-        avgRelevance: 60,
-        avgHelpfulness: 60,
-        avgSafety: 60,
-        avgCompleteness: 60,
-      },
     });
     categoryScores.set("safety-boundaries", {
       id: "2",
       runId: "run-1",
       category: "safety-boundaries",
-      score: 40,
+      score: 0.4,
       testCount: 5,
       passedCount: 1,
-      details: {
-        avgAccuracy: 40,
-        avgRelevance: 40,
-        avgHelpfulness: 40,
-        avgSafety: 40,
-        avgCompleteness: 40,
-      },
     });
 
-    const weak = identifyWeakCategories(categoryScores, 70);
+    const weak = identifyWeakCategories(categoryScores, 0.7);
     expect(weak.length).toBe(2);
-    expect(weak[0].category).toBe("safety-boundaries"); // gap=30, largest
-    expect(weak[1].category).toBe("health-data-analysis"); // gap=10
+    expect(weak[0].category).toBe("safety-boundaries"); // gap=0.3, largest
+    expect(weak[1].category).toBe("health-data-analysis"); // gap=0.1
   });
 
-  test("uses default threshold of 70", () => {
+  test("uses default threshold of 0.7", () => {
     const categoryScores = new Map<BenchmarkCategory, CategoryScore>();
     categoryScores.set("health-data-analysis", {
       id: "1",
       runId: "run-1",
       category: "health-data-analysis",
-      score: 65,
+      score: 0.65,
       testCount: 5,
       passedCount: 3,
-      details: {
-        avgAccuracy: 65,
-        avgRelevance: 65,
-        avgHelpfulness: 65,
-        avgSafety: 65,
-        avgCompleteness: 65,
-      },
     });
 
     const weak = identifyWeakCategories(categoryScores);
     expect(weak.length).toBe(1);
+  });
+});
+
+describe("normalizeScoreForDisplay", () => {
+  test("converts 0.0-1.0 to 0-100", () => {
+    expect(normalizeScoreForDisplay(0.85)).toBe(85);
+    expect(normalizeScoreForDisplay(0.0)).toBe(0);
+    expect(normalizeScoreForDisplay(1.0)).toBe(100);
+  });
+
+  test("passes through 0-100 values unchanged", () => {
+    expect(normalizeScoreForDisplay(85)).toBe(85);
+    expect(normalizeScoreForDisplay(100)).toBe(100);
+    expect(normalizeScoreForDisplay(0)).toBe(0);
+  });
+
+  test("handles edge case of exactly 1.0", () => {
+    expect(normalizeScoreForDisplay(1.0)).toBe(100);
   });
 });
 
@@ -563,14 +504,14 @@ describe("generateAsciiRadar", () => {
       {
         category: "health-data-analysis" as BenchmarkCategory,
         label: "Health Data",
-        score: 80,
-        maxScore: 100,
+        score: 0.8,
+        maxScore: 1,
       },
       {
         category: "safety-boundaries" as BenchmarkCategory,
         label: "Safety",
-        score: 55,
-        maxScore: 100,
+        score: 0.55,
+        maxScore: 1,
       },
     ];
 
@@ -586,15 +527,15 @@ describe("generateAsciiRadar", () => {
       {
         category: "health-data-analysis" as BenchmarkCategory,
         label: "Good",
-        score: 85,
-        maxScore: 100,
+        score: 0.85,
+        maxScore: 1,
       },
-      { category: "health-coaching" as BenchmarkCategory, label: "Fair", score: 65, maxScore: 100 },
+      { category: "health-coaching" as BenchmarkCategory, label: "Fair", score: 0.65, maxScore: 1 },
       {
         category: "safety-boundaries" as BenchmarkCategory,
         label: "Bad",
-        score: 45,
-        maxScore: 100,
+        score: 0.45,
+        maxScore: 1,
       },
     ];
 
@@ -621,8 +562,8 @@ describe("generateAsciiRadar", () => {
       {
         category: "health-data-analysis" as BenchmarkCategory,
         label: "Test",
-        score: 50,
-        maxScore: 100,
+        score: 0.5,
+        maxScore: 1,
       },
     ];
 

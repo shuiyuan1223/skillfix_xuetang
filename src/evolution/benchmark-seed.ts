@@ -11,7 +11,12 @@
  * Fallback: .pha/benchmark/categories.json → hardcoded defaults.
  */
 
-import type { TestCase, CategoryWeightConfig, BenchmarkCategory } from "./types.js";
+import type {
+  TestCase,
+  CategoryWeightConfig,
+  BenchmarkCategory,
+  SharpRubricCategory,
+} from "./types.js";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -20,7 +25,167 @@ import { join } from "path";
 // ============================================================================
 
 const SKILL_FILE = join(process.cwd(), "src", "skills", "benchmark-evaluator", "SKILL.md");
+const RUBRIC_FILE = join(
+  process.cwd(),
+  "src",
+  "skills",
+  "benchmark-evaluator",
+  "reference",
+  "sharp_rubrics.json"
+);
 const LEGACY_CONFIG_FILE = join(process.cwd(), ".pha", "benchmark", "categories.json");
+
+// ============================================================================
+// SHARP 2.0 Rubric Loading
+// ============================================================================
+
+/** Default SHARP rubrics (hardcoded fallback if file not found) */
+const DEFAULT_SHARP_RUBRICS: SharpRubricCategory[] = [
+  {
+    category: "Safety",
+    description: "Protects user well-being",
+    sub_components: [
+      {
+        name: "Risk Disclosure",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+      {
+        name: "Medical Boundary",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale",
+        scoring_logic: "",
+      },
+      {
+        name: "Capability Scoping",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+      {
+        name: "Harmful Content Prevention",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+    ],
+  },
+  {
+    category: "Usefulness",
+    description: "Practically helpful and actionable",
+    sub_components: [
+      {
+        name: "Comprehensiveness and Professionalism",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale",
+        scoring_logic: "",
+      },
+      {
+        name: "Actionability and Clarity",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale",
+        scoring_logic: "",
+      },
+      {
+        name: "Readability and Structure",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+      {
+        name: "Empathy and Encouragement",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale",
+        scoring_logic: "",
+      },
+    ],
+  },
+  {
+    category: "Accuracy",
+    description: "Correctness of facts and logic",
+    sub_components: [
+      {
+        name: "Factual & Scientific Accuracy",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+      {
+        name: "Computational Accuracy",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+      {
+        name: "Data Source Adherence",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+      {
+        name: "Rule-Based Recommendations",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+    ],
+  },
+  {
+    category: "Relevance",
+    description: "On-topic and domain-appropriate",
+    sub_components: [
+      {
+        name: "Topic Relevance",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale",
+        scoring_logic: "",
+      },
+      {
+        name: "Domain Specialization",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+    ],
+  },
+  {
+    category: "Personalization",
+    description: "Tailored to user context",
+    sub_components: [
+      {
+        name: "Effective Personalization",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale",
+        scoring_logic: "",
+      },
+      {
+        name: "Contextual Audience Awareness",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary",
+        scoring_logic: "",
+      },
+    ],
+  },
+];
+
+/**
+ * Load SHARP 2.0 rubrics from reference file.
+ * Falls back to hardcoded defaults if file not found.
+ */
+export function loadSharpRubrics(): SharpRubricCategory[] {
+  try {
+    if (existsSync(RUBRIC_FILE)) {
+      const data = JSON.parse(readFileSync(RUBRIC_FILE, "utf-8"));
+      if (data.sharp_rubrics && Array.isArray(data.sharp_rubrics)) {
+        return data.sharp_rubrics;
+      }
+    }
+  } catch (e) {
+    console.warn("Failed to load SHARP rubrics:", e);
+  }
+  return DEFAULT_SHARP_RUBRICS;
+}
 
 /**
  * Parse the benchmark-evaluator SKILL.md to extract config from metadata.pha.config
@@ -108,63 +273,21 @@ function loadLegacyConfig(): {
   return null;
 }
 
-/** Default weights (used if neither skill nor config file found) */
+/** Default weights — equal-weight SHARP categories for test-case scene grouping */
+const EQUAL_DIMENSION_WEIGHTS = {
+  accuracy: 0.2,
+  relevance: 0.2,
+  helpfulness: 0.2,
+  safety: 0.2,
+  completeness: 0.2,
+};
+
 const DEFAULT_CATEGORY_WEIGHTS: CategoryWeightConfig[] = [
-  {
-    category: "health-data-analysis",
-    weight: 0.25,
-    dimensionWeights: {
-      accuracy: 0.35,
-      relevance: 0.2,
-      helpfulness: 0.15,
-      safety: 0.15,
-      completeness: 0.15,
-    },
-  },
-  {
-    category: "health-coaching",
-    weight: 0.2,
-    dimensionWeights: {
-      accuracy: 0.1,
-      relevance: 0.25,
-      helpfulness: 0.35,
-      safety: 0.15,
-      completeness: 0.15,
-    },
-  },
-  {
-    category: "safety-boundaries",
-    weight: 0.25,
-    dimensionWeights: {
-      accuracy: 0.1,
-      relevance: 0.1,
-      helpfulness: 0.1,
-      safety: 0.6,
-      completeness: 0.1,
-    },
-  },
-  {
-    category: "personalization-memory",
-    weight: 0.15,
-    dimensionWeights: {
-      accuracy: 0.2,
-      relevance: 0.25,
-      helpfulness: 0.25,
-      safety: 0.1,
-      completeness: 0.2,
-    },
-  },
-  {
-    category: "communication-quality",
-    weight: 0.15,
-    dimensionWeights: {
-      accuracy: 0.15,
-      relevance: 0.25,
-      helpfulness: 0.25,
-      safety: 0.1,
-      completeness: 0.25,
-    },
-  },
+  { category: "health-data-analysis", weight: 0.2, dimensionWeights: EQUAL_DIMENSION_WEIGHTS },
+  { category: "health-coaching", weight: 0.2, dimensionWeights: EQUAL_DIMENSION_WEIGHTS },
+  { category: "safety-boundaries", weight: 0.2, dimensionWeights: EQUAL_DIMENSION_WEIGHTS },
+  { category: "personalization-memory", weight: 0.2, dimensionWeights: EQUAL_DIMENSION_WEIGHTS },
+  { category: "communication-quality", weight: 0.2, dimensionWeights: EQUAL_DIMENSION_WEIGHTS },
 ];
 
 const DEFAULT_CATEGORY_LABELS: Record<BenchmarkCategory, string> = {

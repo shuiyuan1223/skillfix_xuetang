@@ -1,8 +1,12 @@
 /**
- * Category Scorer
+ * Category Scorer — SHARP 2.0
  *
- * Aggregates benchmark results into per-category scores
- * using category-specific dimension weights.
+ * Aggregates benchmark results (with SharpRating[] scores) into per-category scores.
+ * SHARP categories: Safety, Usefulness, Accuracy, Relevance, Personalization.
+ * Test-case categories: health-data-analysis, health-coaching, etc. (scene grouping).
+ *
+ * Both coexist: test cases are grouped by scene category, each result carries
+ * 16 SHARP ratings that are aggregated for the SHARP breakdown.
  */
 
 import type {
@@ -11,47 +15,133 @@ import type {
   CategoryWeightConfig,
   BenchmarkResult,
   RadarDataPoint,
+  SharpRating,
 } from "./types.js";
 import { loadCategoryWeights, loadCategoryLabels } from "./benchmark-seed.js";
 
 /**
- * Calculate weighted score for a single result using category-specific weights
+ * Normalize score for display: 0.0-1.0 → 0-100 (backward compatible with old 0-100 data)
  */
-export function calculateCategoryWeightedScore(
-  scores: {
-    accuracy: number;
-    relevance: number;
-    helpfulness: number;
-    safety: number;
-    completeness: number;
-  },
-  category: BenchmarkCategory
-): number {
-  const config = loadCategoryWeights().find((w) => w.category === category);
-  if (!config) {
-    // Fallback to equal weights
-    return (
-      (scores.accuracy +
-        scores.relevance +
-        scores.helpfulness +
-        scores.safety +
-        scores.completeness) /
-      5
-    );
+export function normalizeScoreForDisplay(score: number): number {
+  return score <= 1.0 ? Math.round(score * 100) : Math.round(score);
+}
+
+// ============================================================================
+// SHARP 2.0 Aggregation
+// ============================================================================
+
+/** SHARP category names */
+const SHARP_CATEGORIES = ["safety", "usefulness", "accuracy", "relevance", "personalization"];
+
+/** SHARP category display labels */
+const SHARP_LABELS: Record<string, string> = {
+  safety: "Safety",
+  usefulness: "Usefulness",
+  accuracy: "Accuracy",
+  relevance: "Relevance",
+  personalization: "Personalization",
+};
+
+/**
+ * Compute SHARP category scores from a flat list of ratings.
+ * Returns { category → averageScore } for the 5 SHARP categories.
+ */
+export function computeSharpCategoryScores(
+  ratings: SharpRating[]
+): Map<string, { score: number; subScores: SharpRating[] }> {
+  const grouped = new Map<string, SharpRating[]>();
+
+  for (const r of ratings) {
+    const cat = r.category.toLowerCase();
+    const list = grouped.get(cat) || [];
+    list.push(r);
+    grouped.set(cat, list);
   }
 
-  const weights = config.dimensionWeights;
-  return (
-    scores.accuracy * weights.accuracy +
-    scores.relevance * weights.relevance +
-    scores.helpfulness * weights.helpfulness +
-    scores.safety * weights.safety +
-    scores.completeness * weights.completeness
-  );
+  const result = new Map<string, { score: number; subScores: SharpRating[] }>();
+
+  for (const cat of SHARP_CATEGORIES) {
+    const catRatings = grouped.get(cat) || [];
+    if (catRatings.length === 0) {
+      result.set(cat, { score: 0, subScores: [] });
+    } else {
+      const avg = catRatings.reduce((sum, r) => sum + r.score, 0) / catRatings.length;
+      result.set(cat, {
+        score: Math.round(avg * 1000) / 1000,
+        subScores: catRatings,
+      });
+    }
+  }
+
+  return result;
 }
 
 /**
- * Group results by category and compute aggregate scores
+ * Compute SHARP overall score (0.0-1.0): equal-weight average of 5 SHARP categories.
+ */
+export function computeSharpOverall(
+  catScores: Map<string, { score: number; subScores: SharpRating[] }>
+): number {
+  let sum = 0;
+  let count = 0;
+  for (const cat of SHARP_CATEGORIES) {
+    const entry = catScores.get(cat);
+    if (entry) {
+      sum += entry.score;
+      count++;
+    }
+  }
+  return count > 0 ? Math.round((sum / count) * 1000) / 1000 : 0;
+}
+
+/**
+ * Aggregate SHARP ratings across multiple benchmark results.
+ * Groups by category + sub-component, takes average score per sub-component.
+ */
+export function aggregateSharpResults(
+  results: BenchmarkResult[]
+): Map<string, { score: number; subScores: SharpRating[] }> {
+  // Collect all ratings from all results
+  const allRatings: SharpRating[] = [];
+  for (const r of results) {
+    if (Array.isArray(r.scores)) {
+      allRatings.push(...r.scores);
+    }
+  }
+
+  // Group by category + sub-component, compute average
+  const subMap = new Map<string, { scores: number[]; rating: SharpRating }>();
+  for (const r of allRatings) {
+    const key = `${r.category.toLowerCase()}::${r.subComponent}`;
+    const entry = subMap.get(key);
+    if (entry) {
+      entry.scores.push(r.score);
+    } else {
+      subMap.set(key, { scores: [r.score], rating: r });
+    }
+  }
+
+  // Build averaged ratings
+  const averagedRatings: SharpRating[] = [];
+  for (const entry of subMap.values()) {
+    const avg = entry.scores.reduce((a, b) => a + b, 0) / entry.scores.length;
+    averagedRatings.push({
+      ...entry.rating,
+      score: Math.round(avg * 1000) / 1000,
+      reason: `Average of ${entry.scores.length} evaluations`,
+    });
+  }
+
+  return computeSharpCategoryScores(averagedRatings);
+}
+
+// ============================================================================
+// Test-Case Category Aggregation (scene grouping)
+// ============================================================================
+
+/**
+ * Group results by test-case category and compute aggregate scores.
+ * Score is now SHARP-based: average of per-result overallScore (0.0-1.0).
  */
 export function aggregateByCategory(
   results: BenchmarkResult[]
@@ -59,8 +149,6 @@ export function aggregateByCategory(
   const grouped = new Map<BenchmarkCategory, BenchmarkResult[]>();
 
   for (const result of results) {
-    // Extract category from testCaseId pattern (e.g., "hda-sleep-001" → need lookup)
-    // We use the category from a lookup, but results should carry it from the runner
     const category = getCategoryFromTestId(result.testCaseId);
     if (!category) continue;
 
@@ -76,20 +164,21 @@ export function aggregateByCategory(
     const avgScore = categoryResults.length > 0 ? totalScore / categoryResults.length : 0;
     const passedCount = categoryResults.filter((r) => r.passed).length;
 
+    // Aggregate SHARP sub-component details across all results in this category
+    const sharpDetails = aggregateSharpResults(categoryResults);
+    const detailRatings: SharpRating[] = [];
+    for (const entry of sharpDetails.values()) {
+      detailRatings.push(...entry.subScores);
+    }
+
     scores.set(category, {
       id: crypto.randomUUID(),
       runId: categoryResults[0]?.runId || "",
       category,
-      score: Math.round(avgScore * 10) / 10,
+      score: Math.round(avgScore * 1000) / 1000,
       testCount: categoryResults.length,
       passedCount,
-      details: {
-        avgAccuracy: avg(categoryResults.map((r) => r.scores.accuracy)),
-        avgRelevance: avg(categoryResults.map((r) => r.scores.relevance)),
-        avgHelpfulness: avg(categoryResults.map((r) => r.scores.helpfulness)),
-        avgSafety: avg(categoryResults.map((r) => r.scores.safety)),
-        avgCompleteness: avg(categoryResults.map((r) => r.scores.completeness)),
-      },
+      details: detailRatings.length > 0 ? detailRatings : undefined,
     });
   }
 
@@ -121,7 +210,7 @@ export function aggregateBySubcategory(
     const passedCount = subResults.filter((r) => r.passed).length;
 
     scores.set(subcategory, {
-      score: Math.round(avgScore * 10) / 10,
+      score: Math.round(avgScore * 1000) / 1000,
       testCount: subResults.length,
       passedCount,
     });
@@ -131,7 +220,8 @@ export function aggregateBySubcategory(
 }
 
 /**
- * Compute overall benchmark score from category scores
+ * Compute overall benchmark score from category scores.
+ * Uses equal weights for test-case categories.
  */
 export function computeOverallScore(categoryScores: Map<BenchmarkCategory, CategoryScore>): number {
   let weightedSum = 0;
@@ -146,11 +236,12 @@ export function computeOverallScore(categoryScores: Map<BenchmarkCategory, Categ
   }
 
   if (totalWeight === 0) return 0;
-  return Math.round((weightedSum / totalWeight) * 10) / 10;
+  return Math.round((weightedSum / totalWeight) * 1000) / 1000;
 }
 
 /**
- * Generate radar chart data from category scores
+ * Generate radar chart data from SHARP category scores.
+ * 5 SHARP categories, maxValue = 1.0.
  */
 export function generateRadarData(
   categoryScores: Map<BenchmarkCategory, CategoryScore>
@@ -162,7 +253,24 @@ export function generateRadarData(
       category: config.category,
       label: labels[config.category] || config.category,
       score: catScore?.score ?? 0,
-      maxScore: 100,
+      maxScore: 1.0,
+    };
+  });
+}
+
+/**
+ * Generate SHARP radar data from aggregated SHARP scores.
+ * 5 SHARP categories, values in 0.0-1.0 range.
+ */
+export function generateSharpRadarData(
+  sharpScores: Map<string, { score: number; subScores: SharpRating[] }>
+): Array<{ label: string; value: number; maxValue: number }> {
+  return SHARP_CATEGORIES.map((cat) => {
+    const entry = sharpScores.get(cat);
+    return {
+      label: SHARP_LABELS[cat] || cat,
+      value: entry?.score ?? 0,
+      maxValue: 1.0,
     };
   });
 }
@@ -172,7 +280,7 @@ export function generateRadarData(
  */
 export function identifyWeakCategories(
   categoryScores: Map<BenchmarkCategory, CategoryScore>,
-  threshold: number = 70
+  threshold: number = 0.7
 ): Array<{ category: BenchmarkCategory; score: number; gap: number }> {
   const weak: Array<{ category: BenchmarkCategory; score: number; gap: number }> = [];
 
@@ -202,17 +310,22 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
   lines.push("");
 
   for (const point of data) {
-    const barLen = Math.round((point.score / point.maxScore) * width);
+    const pct = point.maxScore > 0 ? point.score / point.maxScore : 0;
+    const barLen = Math.round(pct * width);
     const bar = "\u2588".repeat(barLen) + "\u2591".repeat(width - barLen);
     const label = point.label.padEnd(maxLabelLen);
-    const scoreStr = `${point.score.toFixed(1)}`.padStart(5);
-    const indicator = point.score >= 80 ? " +" : point.score >= 60 ? " ~" : " !";
+    const displayScore =
+      point.maxScore <= 1.0
+        ? `${(point.score * 100).toFixed(0)}%`
+        : `${point.score.toFixed(1)}/${point.maxScore}`;
+    const scoreStr = displayScore.padStart(6);
+    const indicator = pct >= 0.8 ? " +" : pct >= 0.6 ? " ~" : " !";
 
-    lines.push(`  ${label}  ${bar} ${scoreStr}/100${indicator}`);
+    lines.push(`  ${label}  ${bar} ${scoreStr}${indicator}`);
   }
 
   lines.push("");
-  lines.push("  Legend: + Good (>=80)  ~ Fair (>=60)  ! Needs Work (<60)");
+  lines.push("  Legend: + Good (>=80%)  ~ Fair (>=60%)  ! Needs Work (<60%)");
   lines.push("  " + "=".repeat(width + maxLabelLen + 10));
 
   return lines.join("\n");
@@ -221,11 +334,6 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
 // ============================================================================
 // Internal Helpers
 // ============================================================================
-
-function avg(values: number[]): number {
-  if (values.length === 0) return 0;
-  return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
-}
 
 // Test ID prefix to category mapping
 const TEST_ID_CATEGORY_MAP: Record<string, BenchmarkCategory> = {
@@ -268,4 +376,30 @@ function getSubcategoryFromTestId(testId: string): string | null {
   const parts = testId.split("-");
   const prefix = parts.slice(0, 2).join("-");
   return TEST_ID_SUBCATEGORY_MAP[prefix] || null;
+}
+
+// Legacy compat — kept for any code that imports this
+/** @deprecated Use SHARP 2.0 scoring */
+export function calculateCategoryWeightedScore(
+  scores: SharpRating[] | Record<string, number>,
+  _category: BenchmarkCategory
+): number {
+  // If old-style scores object, compute simple average
+  if (!Array.isArray(scores)) {
+    const vals = Object.values(scores);
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  }
+  // SHARP ratings: compute category-averaged overall
+  const catGroups = new Map<string, number[]>();
+  for (const r of scores) {
+    const cat = r.category.toLowerCase();
+    const list = catGroups.get(cat) || [];
+    list.push(r.score);
+    catGroups.set(cat, list);
+  }
+  const avgs: number[] = [];
+  for (const vals of catGroups.values()) {
+    avgs.push(vals.reduce((a, b) => a + b, 0) / vals.length);
+  }
+  return avgs.length > 0 ? avgs.reduce((a, b) => a + b, 0) / avgs.length : 0;
 }

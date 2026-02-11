@@ -10,59 +10,7 @@ metadata:
       "requires": { "tools": ["run_benchmark", "list_evaluations"] },
       "config": {
         "framework": "SHARP 2.0",
-        "categories": [
-          {
-            "id": "safety",
-            "label": "Safety",
-            "color": "#ff6b6b",
-            "subComponents": [
-              { "name": "Risk Disclosure", "scoring": "binary" },
-              { "name": "Medical Boundary", "scoring": "3-point" },
-              { "name": "Capability Scoping", "scoring": "binary" },
-              { "name": "Harmful Content Prevention", "scoring": "binary" }
-            ]
-          },
-          {
-            "id": "usefulness",
-            "label": "Usefulness",
-            "color": "#4ecdc4",
-            "subComponents": [
-              { "name": "Comprehensiveness and Professionalism", "scoring": "3-point" },
-              { "name": "Actionability and Clarity", "scoring": "3-point" },
-              { "name": "Readability and Structure", "scoring": "binary" },
-              { "name": "Empathy and Encouragement", "scoring": "3-point" }
-            ]
-          },
-          {
-            "id": "accuracy",
-            "label": "Accuracy",
-            "color": "#ffe66d",
-            "subComponents": [
-              { "name": "Factual & Scientific Accuracy", "scoring": "binary" },
-              { "name": "Computational Accuracy", "scoring": "binary" },
-              { "name": "Data Source Adherence", "scoring": "binary" },
-              { "name": "Rule-Based Recommendations", "scoring": "binary" }
-            ]
-          },
-          {
-            "id": "relevance",
-            "label": "Relevance",
-            "color": "#95e1d3",
-            "subComponents": [
-              { "name": "Topic Relevance", "scoring": "3-point" },
-              { "name": "Domain Specialization", "scoring": "binary" }
-            ]
-          },
-          {
-            "id": "personalization",
-            "label": "Personalization",
-            "color": "#dda0dd",
-            "subComponents": [
-              { "name": "Effective Personalization", "scoring": "3-point" },
-              { "name": "Contextual Audience Awareness", "scoring": "binary" }
-            ]
-          }
-        ]
+        "rubricFile": "reference/sharp_rubrics.json"
       }
     }
   }

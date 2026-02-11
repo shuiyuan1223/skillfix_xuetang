@@ -378,6 +378,17 @@ export interface LocaleMessages {
     latestRun: string;
     bestScoresAllTime: string;
     bestPerVersion: string;
+    // SHARP 2.0
+    sharpSafety: string;
+    sharpUsefulness: string;
+    sharpAccuracy: string;
+    sharpRelevance: string;
+    sharpPersonalization: string;
+    scorePerfect: string;
+    scoreAcceptable: string;
+    scoreFail: string;
+    criticalFailure: string;
+    subComponents: string;
   };
 
   // Memory page
