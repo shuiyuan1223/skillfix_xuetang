@@ -10,9 +10,8 @@ git clone https://github.com/ibytechaos/pha.git
 cd pha
 bun install
 
-# 2. 配置环境
-cp .env.example .env
-# 编辑 .env 填入 API Key
+# 2. 首次配置（交互式引导，生成 .pha/config.json）
+pha onboard
 
 # 3. 构建运行
 bun run build
@@ -20,14 +19,77 @@ pha start         # 启动服务 http://localhost:8000
 pha tui           # 终端聊天界面
 ```
 
-## 开发模式
+## 运行时配置 (.pha/)
+
+所有运行时状态存放在项目根目录的 `.pha/` 目录下（已 gitignore）：
+
+```
+.pha/
+├── config.json        # 核心配置（LLM provider、API Key、端口等）
+├── gateway.pid        # Gateway 进程 PID
+├── gateway.log        # Gateway 运行日志
+├── users.db           # 用户数据 (SQLite)
+├── memory.db          # 记忆系统数据 (SQLite)
+├── huawei-tokens.json # 华为健康 OAuth Token
+├── SOUL.md            # Agent 灵魂提示词（运行时副本）
+├── api-cache/         # API 响应缓存
+├── llm-logs/          # LLM 调用日志
+├── users/             # 用户会话数据
+└── vectors/           # 向量索引
+```
+
+### config.json 结构
+
+```jsonc
+{
+  "gateway": { "port": 8000 },
+  "llm": {
+    "provider": "openrouter",     // 支持: anthropic, openrouter, openai
+    "apiKey": "sk-or-v1-xxx",     // API Key（优先级高于环境变量）
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "modelId": "anthropic/claude-opus-4.6"
+  },
+  "dataSources": { "type": "huawei" },
+  "embedding": { "enabled": true, "model": "openai/text-embedding-3-small" }
+}
+```
+
+配置加载逻辑（`src/utils/config.ts`）：
+1. `findProjectRoot()` — 沿目录树向上查找 `package.json` 定位项目根
+2. 读取 `<projectRoot>/.pha/config.json`
+3. 与 `DEFAULT_CONFIG` 浅合并
+4. API Key 优先级：`config.llm.apiKey` > 环境变量（`ANTHROPIC_API_KEY` 等）
+
+## PHA CLI 命令
 
 ```bash
-# 终端 1: 启动 Gateway
-pha start
+# 服务管理
+pha start           # 后台启动 Gateway（默认 http://localhost:8000）
+pha start -f        # 前台启动（调试用，日志直接输出到终端）
+pha stop            # 停止服务
+pha restart         # 重启服务（开发完成后验证改动用）
+pha status          # 查看服务状态
+pha logs -f         # 实时查看日志
 
-# 终端 2: UI 热更新 (可选)
-cd ui && bun run dev   # http://localhost:5173
+# 其他
+pha tui             # 终端聊天界面
+pha onboard         # 首次配置引导
+```
+
+### 开发调试流程
+
+```bash
+# 标准开发流程
+bun run build       # 构建（TypeScript → dist/ + Vite → ui/dist/）
+bun test            # 运行测试
+pha restart         # 重启 Gateway 加载新代码
+# 浏览器访问 http://localhost:8000 验证
+
+# 查看运行日志排查问题
+pha logs -f
+
+# UI 热更新开发（可选，仅前端改动时用）
+cd ui && bun run dev   # http://localhost:5173（连接同一个 Gateway WebSocket）
 ```
 
 ## 项目结构
@@ -395,7 +457,15 @@ Evolution Lab 是顶级导航页面，采用 5-Tab Dashboard 布局：
 
 ## 环境变量
 
+环境变量仅作为 `.pha/config.json` 的备选，**优先使用 config.json 中的配置**：
+
 ```bash
-# .env
-ANTHROPIC_API_KEY=sk-ant-xxx  # 或其他 Provider
+# 仅在 config.json 未配置 apiKey 时才读取
+ANTHROPIC_API_KEY=sk-ant-xxx     # provider=anthropic 时
+OPENAI_API_KEY=sk-xxx            # provider=openai 时
+OPENROUTER_API_KEY=sk-or-xxx     # provider=openrouter 时
+
+# 可选覆盖
+PHA_STATE_DIR=/path/to/.pha      # 覆盖 .pha 目录位置
+PHA_CONFIG_PATH=/path/to/config  # 覆盖 config.json 路径
 ```
