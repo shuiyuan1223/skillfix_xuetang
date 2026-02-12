@@ -924,6 +924,14 @@ class A2UIRenderer {
     const streaming = c.streaming as boolean;
     const streamingContent = c.streamingContent as string;
 
+    const noWelcome = c.noWelcome as boolean;
+    if (messages.length === 0 && !streaming && noWelcome) {
+      return html`
+        <div class="flex-1 flex items-center justify-center p-4 text-text-muted text-sm opacity-50">
+          ${i18n.evolution?.playgroundChatPlaceholder || "Waiting for messages..."}
+        </div>
+      `;
+    }
     if (messages.length === 0 && !streaming) {
       const sugBtn =
         "flex items-center gap-2 px-4 py-3 rounded-2xl bg-surface border border-border text-text-secondary text-sm cursor-pointer transition-all duration-fast hover:border-primary/30 hover:bg-surface-hover hover:text-text hover:shadow-[0_4px_12px_rgba(102,126,234,0.15)]";

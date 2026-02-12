@@ -21,6 +21,7 @@ import {
   resolveBenchmarkModelApiKey,
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
+  getBenchmarkConcurrency,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -3256,6 +3257,7 @@ export class GatewaySession {
           // Refresh evolution lab with throttling to avoid flooding
           this.sendEvolutionLabUpdateThrottled(send);
         },
+        concurrency: getBenchmarkConcurrency(),
       });
 
       // Seed test cases if needed
@@ -3469,6 +3471,7 @@ export class GatewaySession {
           this.playgroundState.benchmarkProgress = { current, total };
           this.sendEvolutionLabUpdateThrottled(send);
         },
+        concurrency: getBenchmarkConcurrency(),
       });
 
       await runner.seedTestCases();
@@ -3710,6 +3713,7 @@ export class GatewaySession {
             ),
           ]);
         },
+        concurrency: getBenchmarkConcurrency(),
       });
 
       await runner.seedTestCases();

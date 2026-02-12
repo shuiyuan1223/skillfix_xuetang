@@ -28,6 +28,7 @@ import {
 import { getBenchmarkTests, ALL_BENCHMARK_TESTS, loadSharpRubrics } from "./benchmark-seed.js";
 import { loadConfig } from "../utils/config.js";
 import { aggregateByCategory, computeOverallScore } from "./category-scorer.js";
+import { Semaphore } from "../utils/semaphore.js";
 
 export interface BenchmarkRunnerConfig {
   /** Function to send a query to the agent and get response */
@@ -42,6 +43,8 @@ export interface BenchmarkRunnerConfig {
   llmCall: (prompt: string) => Promise<string>;
   /** Optional progress callback */
   onProgress?: (current: number, total: number, testCase: TestCase) => void;
+  /** Number of concurrent test executions, default 1 (sequential) */
+  concurrency?: number;
 }
 
 /**
@@ -255,21 +258,45 @@ export class BenchmarkRunner {
     let passedCount = 0;
     let failedCount = 0;
 
-    for (let i = 0; i < testCases.length; i++) {
-      const testCase = testCases[i];
+    const concurrency = this.config.concurrency || 1;
+    if (concurrency <= 1) {
+      // Sequential execution (original behavior)
+      for (let i = 0; i < testCases.length; i++) {
+        const testCase = testCases[i];
 
-      if (this.config.onProgress) {
-        this.config.onProgress(i + 1, testCases.length, testCase);
+        if (this.config.onProgress) {
+          this.config.onProgress(i + 1, testCases.length, testCase);
+        }
+
+        const result = await this.runSingleTest(runId, testCase, rubrics);
+        results.push(result);
+
+        if (result.passed) {
+          passedCount++;
+        } else {
+          failedCount++;
+        }
       }
+    } else {
+      // Concurrent execution with semaphore
+      const sem = new Semaphore(concurrency);
+      let completed = 0;
 
-      const result = await this.runSingleTest(runId, testCase, rubrics);
-      results.push(result);
+      const promises = testCases.map((testCase) =>
+        sem.run(async () => {
+          const result = await this.runSingleTest(runId, testCase, rubrics);
+          completed++;
+          if (this.config.onProgress) {
+            this.config.onProgress(completed, testCases.length, testCase);
+          }
+          return result;
+        })
+      );
 
-      if (result.passed) {
-        passedCount++;
-      } else {
-        failedCount++;
-      }
+      const allResults = await Promise.all(promises);
+      results.push(...allResults);
+      passedCount = allResults.filter((r) => r.passed).length;
+      failedCount = allResults.filter((r) => !r.passed).length;
     }
 
     // Aggregate by test-case category (scene grouping)

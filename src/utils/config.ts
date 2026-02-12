@@ -88,6 +88,11 @@ export interface PHAConfig {
   benchmarkModels?: Record<string, BenchmarkModelConfig>;
   /** Dedicated judge model for benchmark evaluation (LLM-as-Judge). Falls back to llm config. */
   judgeModel?: BenchmarkModelConfig;
+  /** Benchmark execution settings */
+  benchmark?: {
+    /** Number of concurrent test executions, default 1 (sequential) */
+    concurrency?: number;
+  };
 }
 
 // Provider configurations
@@ -451,4 +456,13 @@ export function getJudgeModel(): BenchmarkModelConfig {
     baseUrl: config.llm.baseUrl,
     label: `${PROVIDER_CONFIGS[provider]?.name || provider} (${modelId})`,
   };
+}
+
+/**
+ * Get benchmark concurrency setting.
+ * Returns 1 (sequential) if not configured.
+ */
+export function getBenchmarkConcurrency(): number {
+  const config = loadConfig();
+  return config.benchmark?.concurrency || 1;
 }

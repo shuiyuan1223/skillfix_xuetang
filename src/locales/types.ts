@@ -420,6 +420,7 @@ export interface LocaleMessages {
     cycleComplete: string;
     proposalHint: string;
     agentDriven: string;
+    evolutionConsole: string;
   };
 
   // Memory page

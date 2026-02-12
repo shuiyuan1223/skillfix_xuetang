@@ -1566,64 +1566,78 @@ function buildPlaygroundPipelineSteps(state: PlaygroundState): PipelineStep[] {
 
 function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const state = data.playgroundState || { step: "idle" as const, log: [], cycleId: null };
-  const children: string[] = [];
+  const topChildren: string[] = [];
+  const leftChildren: string[] = [];
+  const rightChildren: string[] = [];
 
-  // 1. Pipeline step indicator
+  // 1. Pipeline step indicator (full-width top) — show when not idle
   if (state.step !== "idle") {
     const steps = buildPlaygroundPipelineSteps(state);
-    children.push(ui.stepIndicator(steps, { orientation: "horizontal" }));
+    topChildren.push(ui.stepIndicator(steps, { orientation: "horizontal" }));
   }
 
-  // 2. Step-specific content area
+  // 2. Left panel: Step-specific content
   switch (state.step) {
     case "idle":
-      children.push(generatePgIdle(ui));
+      leftChildren.push(generatePgIdle(ui));
       break;
     case "benchmark":
-      children.push(generatePgBenchmark(ui, state));
+      leftChildren.push(generatePgBenchmark(ui, state));
       break;
     case "diagnose":
-      children.push(generatePgDiagnose(ui, state));
+      leftChildren.push(generatePgDiagnose(ui, state));
       break;
     case "propose":
-      children.push(generatePgPropose(ui, state));
+      leftChildren.push(generatePgPropose(ui, state));
       break;
     case "approve":
-      children.push(generatePgApprove(ui, state));
+      leftChildren.push(generatePgApprove(ui, state));
       break;
     case "apply":
-      children.push(generatePgApply(ui, state));
+      leftChildren.push(generatePgApply(ui, state));
       break;
     case "validate":
-      children.push(generatePgValidate(ui, state));
+      leftChildren.push(generatePgValidate(ui, state));
       break;
     case "complete":
-      children.push(generatePgComplete(ui, state));
+      leftChildren.push(generatePgComplete(ui, state));
       break;
   }
 
-  // 3. Event Log
-  if (state.log.length > 0) {
-    const logItems = state.log
-      .slice(-20)
-      .reverse()
-      .map((e) => `[${new Date(e.timestamp).toLocaleTimeString()}] ${e.message}`)
-      .join("\n");
-    const logText = ui.text(logItems, "body");
-    children.push(
-      ui.card([ui.text(t("evolution.playgroundLog"), "label"), logText], { padding: 12 })
-    );
-  }
+  // 3. Right panel: Evolution Console (terminal-style agent chat + event log)
+  rightChildren.push(generateEvolutionConsole(ui, data, state));
 
-  // 4. Agent chat panel (bottom)
-  children.push(generatePlaygroundChat(ui, data));
+  // 4. Assemble layout
+  const leftPanel = ui.column(leftChildren, {
+    gap: 16,
+    className: "pg-left-panel",
+  } as any);
+  const rightPanel = ui.column(rightChildren, {
+    gap: 0,
+    className: "pg-right-panel",
+  } as any);
 
-  return ui.column(children, { gap: 16, padding: 16 });
+  const mainRow = ui.row([leftPanel, rightPanel], {
+    gap: 20,
+    style: "align-items: stretch;",
+    className: "pg-main-layout",
+  } as any);
+
+  const all = [...topChildren, mainRow];
+  return ui.column(all, { gap: 16, padding: 16, className: "pg-container" } as any);
 }
 
 function generatePgIdle(ui: A2UIGenerator): string {
-  const title = ui.text(t("evolution.playgroundWelcome"), "h2");
+  const title = ui.text(t("evolution.playgroundWelcome"), "h1");
   const desc = ui.text(t("evolution.playgroundWelcomeDesc"), "body");
+
+  // 6-step flow badges
+  const stepLabels = ["Benchmark", "Diagnose", "Propose", "Approve", "Apply", "Validate"];
+  const stepBadges = stepLabels.map((s, i) =>
+    ui.badge(`${i + 1}. ${s}`, { variant: i === 0 ? "info" : "default" })
+  );
+  const stepsRow = ui.row(stepBadges, { gap: 8, wrap: true, justify: "center" } as any);
+
   const quickBtn = ui.button(t("evolution.startQuickCycle"), "pg_start_cycle", {
     variant: "primary",
     size: "md",
@@ -1635,7 +1649,10 @@ function generatePgIdle(ui: A2UIGenerator): string {
     payload: { profile: "full" },
   });
   const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "center" });
-  return ui.card([title, desc, btnRow], { padding: 24 });
+  return ui.card([title, desc, stepsRow, btnRow], {
+    padding: 32,
+    className: "pg-idle-card",
+  } as any);
 }
 
 function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string {
@@ -2040,7 +2057,44 @@ function generatePgComplete(ui: A2UIGenerator, state: PlaygroundState): string {
   return ui.card(children, { padding: 24 });
 }
 
-function generatePlaygroundChat(ui: A2UIGenerator, data: EvolutionLabData): string {
+function generateEvolutionConsole(
+  ui: A2UIGenerator,
+  data: EvolutionLabData,
+  state: PlaygroundState
+): string {
+  const children: string[] = [];
+
+  // Header: "Evolution Console" title + status badge
+  const headerRow = ui.row(
+    [
+      ui.text(t("evolution.evolutionConsole"), "h3"),
+      ui.badge(state.step, { variant: state.step === "idle" ? "default" : "info" }),
+    ],
+    { gap: 8, align: "center" }
+  );
+  children.push(headerRow);
+
+  // Event Log (terminal-style — last 10 entries)
+  if (state.log.length > 0) {
+    const logLines = state.log
+      .slice(-10)
+      .map((e) => {
+        const time = new Date(e.timestamp).toLocaleTimeString();
+        const prefix =
+          e.type === "error"
+            ? "ERR"
+            : e.type === "success"
+              ? "OK "
+              : e.type === "warning"
+                ? "WRN"
+                : "INF";
+        return `[${time}] ${prefix} ${e.message}`;
+      })
+      .join("\n");
+    children.push(ui.text(logLines, "body"));
+  }
+
+  // Agent Chat (with noWelcome flag — no PHA welcome page)
   const chatMsgsId = `pg_chat_msgs_${Date.now()}`;
   ui.addComponent(chatMsgsId, {
     id: chatMsgsId,
@@ -2048,8 +2102,11 @@ function generatePlaygroundChat(ui: A2UIGenerator, data: EvolutionLabData): stri
     messages: data.chatMessages,
     streaming: data.streaming,
     streamingContent: data.streamingContent,
+    noWelcome: true,
   });
+  children.push(chatMsgsId);
 
+  // Chat Input
   const chatInputId = `pg_chat_input_${Date.now()}`;
   ui.addComponent(chatInputId, {
     id: chatInputId,
@@ -2058,8 +2115,7 @@ function generatePlaygroundChat(ui: A2UIGenerator, data: EvolutionLabData): stri
     placeholder: t("evolution.playgroundChatPlaceholder"),
     action: "pg_send_message",
   });
+  children.push(chatInputId);
 
-  return ui.card([ui.text(t("evolution.agentDriven"), "label"), chatMsgsId, chatInputId], {
-    padding: 12,
-  });
+  return ui.card(children, { padding: 0, className: "pg-console-card" } as any);
 }
