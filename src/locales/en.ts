@@ -441,6 +441,8 @@ export const en: LocaleMessages = {
     improvementPlan: "Improvement Plan",
     iterationHistory: "Iteration History",
     cycleSummary: "Summary",
+    noDetailData:
+      "Detailed data not available for this historical step. Future iterations will preserve full step data.",
   },
 
   memory: {

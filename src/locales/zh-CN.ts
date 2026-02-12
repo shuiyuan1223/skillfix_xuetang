@@ -433,6 +433,7 @@ export const zhCN: LocaleMessages = {
     improvementPlan: "改进计划",
     iterationHistory: "迭代历史",
     cycleSummary: "摘要",
+    noDetailData: "该历史步骤的详细数据不可用。后续迭代将自动保存完整步骤数据。",
   },
 
   memory: {

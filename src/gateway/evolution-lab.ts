@@ -1729,7 +1729,7 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
   if (viewing !== "idle") {
     // If viewing a historical cycle without stepResults, show a summary fallback
     if (isViewingHistory && historyCycle && !historyCycle.stepResults) {
-      children.push(generatePgHistorySummaryFallback(ui, historyCycle, viewing));
+      children.push(generatePgHistorySummaryFallback(ui, historyCycle, viewing, state, data));
     } else {
       let detailContent: string;
       switch (viewing) {
@@ -1779,50 +1779,91 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
 function generatePgHistorySummaryFallback(
   ui: A2UIGenerator,
   cycle: NonNullable<PlaygroundState["cycleHistory"]>[number],
-  _viewing: string
+  viewing: string,
+  state: PlaygroundState,
+  data: EvolutionLabData
 ): string {
-  const deltaSign = cycle.delta >= 0 ? "+" : "";
-  const scoreText = `${cycle.benchmarkScore.toFixed(3)} → ${cycle.validateScore.toFixed(3)} (${deltaSign}${cycle.delta.toFixed(3)})`;
+  const cycleLabel = `Cycle ${cycle.cycleNumber}`;
 
-  const items: string[] = [
-    ui.text(`Cycle ${cycle.cycleNumber} ${t("evolution.cycleSummary")}`, "label"),
-  ];
-
-  // Score
-  items.push(ui.text(scoreText, "body"));
-
-  // Recommendation badge
-  items.push(
-    ui.badge(cycle.recommendation, {
-      variant:
-        cycle.recommendation === "merge"
-          ? "success"
-          : cycle.recommendation === "revert"
-            ? "error"
-            : "warning",
-    })
-  );
-
-  const details: string[] = [];
-
-  // Proposal
-  if (cycle.proposal) {
-    details.push(ui.text(`${t("evolution.pipelinePropose")}: ${cycle.proposal}`, "body"));
+  // benchmark: the benchmarkResult is preserved across iterations, so show the real panel
+  if (viewing === "benchmark" && state.benchmarkResult) {
+    return generatePgBenchmark(ui, state, data);
   }
 
-  // Analysis
-  if (cycle.analysisSummary) {
-    details.push(ui.text(`${t("evolution.pipelineAnalyse")}: ${cycle.analysisSummary}`, "body"));
+  // propose: use the full proposal text from history
+  if (viewing === "propose" && cycle.proposal) {
+    const children = [
+      ui.text(`${cycleLabel} — ${t("evolution.pipelinePropose")}`, "label"),
+      ui.text(cycle.proposal, "body"),
+    ];
+    return ui.card(children, { padding: 16 });
   }
 
-  // Improvement plan
-  if (cycle.improvementPlan.length > 0) {
-    details.push(
-      ui.text(`${t("evolution.improvementPlan")}: ${cycle.improvementPlan.join("; ")}`, "caption")
+  // validate: use score data from history
+  if (viewing === "validate") {
+    const deltaSign = cycle.delta >= 0 ? "+" : "";
+    const children = [
+      ui.text(`${cycleLabel} — ${t("evolution.pipelineValidate")}`, "label"),
+      ui.row(
+        [
+          ui.text(`${cycle.benchmarkScore.toFixed(3)} → ${cycle.validateScore.toFixed(3)}`, "body"),
+          ui.text(`(${deltaSign}${cycle.delta.toFixed(3)})`, "body"),
+          ui.badge(cycle.recommendation, {
+            variant:
+              cycle.recommendation === "merge"
+                ? "success"
+                : cycle.recommendation === "revert"
+                  ? "error"
+                  : "warning",
+          }),
+        ],
+        { gap: 8, align: "center" }
+      ),
+    ];
+    return ui.card(children, { padding: 16 });
+  }
+
+  // analyse: use analysis summary + improvement plan from history
+  if (viewing === "analyse" && (cycle.analysisSummary || cycle.improvementPlan.length > 0)) {
+    const children: string[] = [
+      ui.text(`${cycleLabel} — ${t("evolution.pipelineAnalyse")}`, "label"),
+    ];
+    if (cycle.analysisSummary) {
+      children.push(ui.text(cycle.analysisSummary, "body"));
+    }
+    children.push(
+      ui.badge(cycle.recommendation, {
+        variant:
+          cycle.recommendation === "merge"
+            ? "success"
+            : cycle.recommendation === "revert"
+              ? "error"
+              : "warning",
+      })
     );
+    if (cycle.improvementPlan.length > 0) {
+      children.push(ui.text(`${t("evolution.improvementPlan")}:`, "label"));
+      for (const item of cycle.improvementPlan) {
+        children.push(ui.text(`• ${item}`, "caption"));
+      }
+    }
+    return ui.card(children, { padding: 16 });
   }
 
-  return ui.card([ui.row(items, { gap: 8, align: "center" }), ...details], { padding: 16 });
+  // diagnose / approve / apply: no summary data available
+  const stepLabels: Record<string, string> = {
+    diagnose: t("evolution.pipelineDiagnose"),
+    approve: t("evolution.pipelineApprove"),
+    apply: t("evolution.pipelineApply"),
+  };
+  const stepName = stepLabels[viewing] || viewing;
+  return ui.card(
+    [
+      ui.text(`${cycleLabel} — ${stepName}`, "label"),
+      ui.text(t("evolution.noDetailData"), "caption"),
+    ],
+    { padding: 16 }
+  );
 }
 
 // ─── FAB helpers ───

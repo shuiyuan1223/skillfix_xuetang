@@ -455,6 +455,7 @@ export interface LocaleMessages {
     improvementPlan: string;
     iterationHistory: string;
     cycleSummary: string;
+    noDetailData: string;
   };
 
   // Memory page
