@@ -1585,7 +1585,7 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
     let detailContent: string;
     switch (viewing) {
       case "benchmark":
-        detailContent = generatePgBenchmark(ui, state);
+        detailContent = generatePgBenchmark(ui, state, data);
         break;
       case "diagnose":
         detailContent = generatePgDiagnose(ui, state);
@@ -1611,8 +1611,8 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
     if (detailContent) children.push(detailContent);
   }
 
-  // ─── Bottom-right: Action Buttons ───
-  children.push(generatePgActionButtons(ui, state));
+  // ─── Bottom-right: FAB ───
+  children.push(generatePgFab(ui, state));
 
   return ui.column(children, {
     gap: 24,
@@ -1621,59 +1621,104 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
   } as any);
 }
 
-function generatePgActionButtons(ui: A2UIGenerator, state: PlaygroundState): string {
-  const buttons: string[] = [];
+// ─── FAB helpers ───
 
-  if (state.step === "idle") {
-    // Idle: show Start Quick + Start Full
-    buttons.push(
-      ui.button(t("evolution.startQuickCycle"), "pg_start_cycle", {
-        variant: "primary",
-        size: "sm",
-        payload: { profile: "quick" },
-      })
-    );
-    buttons.push(
-      ui.button(t("evolution.startFullCycle"), "pg_start_cycle", {
-        variant: "secondary",
-        size: "sm",
-        payload: { profile: "full" },
-      })
-    );
-  } else if (state.step === "complete") {
-    // Complete: show Start New
-    buttons.push(
-      ui.button(t("evolution.startNewCycle"), "pg_reset", {
-        variant: "primary",
-        size: "sm",
-      })
-    );
-  } else if (state.paused) {
-    // Paused: show Continue
-    buttons.push(
-      ui.button(t("evolution.continueCycle"), "pg_continue", {
-        variant: "primary",
-        size: "sm",
-      })
-    );
-  } else {
-    // Running: show Pause
-    buttons.push(
-      ui.button(t("evolution.pauseCycle"), "pg_pause", {
-        variant: "secondary",
-        size: "sm",
-      })
-    );
+const PG_STEP_ORDER: PlaygroundStep[] = [
+  "benchmark",
+  "diagnose",
+  "propose",
+  "approve",
+  "apply",
+  "validate",
+  "complete",
+];
+
+function pgStepHasResult(state: PlaygroundState): boolean {
+  switch (state.step) {
+    case "benchmark":
+      return !!state.benchmarkResult;
+    case "diagnose":
+      return !!state.diagnoseResult;
+    case "propose":
+      return !!state.proposal;
+    case "approve":
+      return !!state.approval;
+    case "apply":
+      return !!state.applyResult;
+    case "validate":
+      return !!state.validateResult;
+    default:
+      return false;
   }
-
-  return ui.row(buttons, {
-    gap: 8,
-    justify: "end",
-    style: "margin-top: auto;",
-  } as any);
 }
 
-function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string {
+function pgGetNextStep(current: PlaygroundStep): string {
+  const idx = PG_STEP_ORDER.indexOf(current);
+  return idx >= 0 && idx < PG_STEP_ORDER.length - 1 ? PG_STEP_ORDER[idx + 1] : "complete";
+}
+
+function generatePgFab(ui: A2UIGenerator, state: PlaygroundState): string {
+  let primary: { icon: string; action: string; payload?: Record<string, unknown> };
+  const actions: {
+    icon: string;
+    action: string;
+    payload?: Record<string, unknown>;
+    tooltip?: string;
+  }[] = [];
+
+  if (state.step === "idle") {
+    primary = { icon: "play", action: "pg_start_cycle", payload: { profile: "quick" } };
+    actions.push(
+      {
+        icon: "zap",
+        action: "pg_start_cycle",
+        payload: { profile: "quick" },
+        tooltip: "Quick (5)",
+      },
+      {
+        icon: "target",
+        action: "pg_start_cycle",
+        payload: { profile: "full" },
+        tooltip: "Full (16)",
+      }
+    );
+  } else if (state.step === "complete") {
+    primary = { icon: "refresh-cw", action: "pg_reset" };
+  } else if (state.paused) {
+    primary = { icon: "play", action: "pg_continue" };
+  } else if (pgStepHasResult(state)) {
+    const nextStep = pgGetNextStep(state.step);
+    primary = { icon: "skip-forward", action: "pg_advance", payload: { nextStep } };
+    if (state.step === "benchmark") {
+      actions.push(
+        {
+          icon: "zap",
+          action: "pg_start_cycle",
+          payload: { profile: "quick" },
+          tooltip: "Rerun Quick (5)",
+        },
+        {
+          icon: "target",
+          action: "pg_start_cycle",
+          payload: { profile: "full" },
+          tooltip: "Rerun Full (16)",
+        }
+      );
+    }
+  } else {
+    primary = { icon: "pause", action: "pg_pause" };
+  }
+
+  const fabId = `pg_fab_${Date.now()}`;
+  ui.addComponent(fabId, { id: fabId, type: "playground_fab", primary, actions });
+  return fabId;
+}
+
+function generatePgBenchmark(
+  ui: A2UIGenerator,
+  state: PlaygroundState,
+  data: EvolutionLabData
+): string {
   // Running: progress bar
   if (state.benchmarkProgress && !state.benchmarkResult) {
     const pct = Math.round(
@@ -1702,6 +1747,20 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
       { gap: 8, align: "center", style: "flex: 0 0 auto; min-width: 180px;" } as any
     );
 
+    // Radar mode toggle (5 categories / 16 criteria)
+    const radarMode = data.radarMode || "categories";
+    const toggleId = `pg_radar_toggle_${Date.now()}`;
+    ui.addComponent(toggleId, {
+      id: toggleId,
+      type: "arena_mode_toggle",
+      options: [
+        { label: t("evolution.categoriesMode"), value: "categories" },
+        { label: t("evolution.criteriaMode"), value: "criteria" },
+      ],
+      active: radarMode,
+      action: "set_radar_mode",
+    });
+
     // Build plotly radar (same style as overview page)
     const pgRun: ComparisonRun = {
       id: result.runId,
@@ -1710,7 +1769,7 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
       overallScore: result.overallScore,
       categoryScores: result.categoryScores,
     };
-    const traces = buildPlotlyRadarTraces([pgRun], "categories");
+    const traces = buildPlotlyRadarTraces([pgRun], radarMode);
     const radarId = `pg_radar_${Date.now()}`;
     ui.addComponent(radarId, {
       id: radarId,
@@ -1744,33 +1803,19 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
       style: "display: grid; grid-template-columns: repeat(2, 1fr);",
     } as any);
 
-    const quickBtn = ui.button(t("evolution.runQuickBenchmark"), "pg_start_cycle", {
-      variant: "secondary",
-      size: "sm",
-      payload: { profile: "quick" },
-    });
-    const fullBtn = ui.button(t("evolution.runFullBenchmark"), "pg_start_cycle", {
-      variant: "secondary",
-      size: "sm",
-      payload: { profile: "full" },
-    });
-    const continueBtn = ui.button(t("evolution.continueToDiagnose"), "pg_advance", {
-      variant: "primary",
-      size: "sm",
-      payload: { nextStep: "diagnose" },
-    });
-
     return ui.column(
       [
         ui.card(
           [
             ui.text(t("evolution.benchmarkComplete"), "h3"),
-            ui.row([statsCol, radarId], { gap: 24, align: "center" }),
+            ui.row([statsCol, ui.column([toggleId, radarId], { gap: 8 })], {
+              gap: 24,
+              align: "center",
+            }),
           ],
           { padding: 20 }
         ),
         catGrid,
-        ui.row([quickBtn, fullBtn, continueBtn], { gap: 8, justify: "end" }),
       ],
       { gap: 16 }
     );
@@ -1839,13 +1884,6 @@ function generatePgDiagnose(ui: A2UIGenerator, state: PlaygroundState): string {
     children.push(ui.card([ui.text(t("evolution.noWeaknesses"), "body")], { padding: 16 }));
   }
 
-  const continueBtn = ui.button(t("evolution.continueToPropose"), "pg_advance", {
-    variant: "primary",
-    size: "md",
-    payload: { nextStep: "propose" },
-  });
-  children.push(ui.row([continueBtn], { justify: "center" }));
-
   return ui.column(children, { gap: 12 });
 }
 
@@ -1878,13 +1916,6 @@ function generatePgPropose(ui: A2UIGenerator, state: PlaygroundState): string {
     if (expectedImprovement) {
       children.push(ui.badge(`Expected: ${expectedImprovement}`, { variant: "info" }));
     }
-
-    const submitBtn = ui.button(t("evolution.submitForApproval"), "pg_advance", {
-      variant: "primary",
-      size: "md",
-      payload: { nextStep: "approve" },
-    });
-    children.push(ui.row([submitBtn], { justify: "center" }));
   }
 
   return ui.card(children, { padding: 16 });
@@ -1943,12 +1974,6 @@ function generatePgApply(ui: A2UIGenerator, state: PlaygroundState): string {
       );
       children.push(fileTree);
     }
-    const continueBtn = ui.button(t("evolution.continueToValidate"), "pg_advance", {
-      variant: "primary",
-      size: "md",
-      payload: { nextStep: "validate" },
-    });
-    children.push(ui.row([continueBtn], { justify: "center" }));
   } else {
     children.push(ui.text(t("evolution.applying"), "body"));
     children.push(ui.skeleton({ variant: "rectangular", height: 100 }));

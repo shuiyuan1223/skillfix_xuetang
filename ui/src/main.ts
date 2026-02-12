@@ -130,6 +130,11 @@ const ICONS: Record<string, string> = {
   "git-merge": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>`,
   "git-commit": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>`,
   menu: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>`,
+  // FAB icons
+  play: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>`,
+  pause: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>`,
+  "skip-forward": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>`,
+  "refresh-cw": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`,
 };
 
 // Emoji to icon mapping (backward compat - prefer icon names in new code)
@@ -424,6 +429,8 @@ class A2UIRenderer {
         return this.renderArenaRunPicker(c);
       case "arena_mode_toggle":
         return this.renderArenaModeToggle(c);
+      case "playground_fab":
+        return this.renderPlaygroundFab(c);
       default:
         return html`<div class="text-text-muted text-xs p-2">[Unknown: ${c.type}]</div>`;
     }
@@ -1721,6 +1728,43 @@ class A2UIRenderer {
               @click=${() => this.sendAction(action, { mode: opt.value })}
             >
               ${opt.label}
+            </button>
+          `
+        )}
+      </div>
+    `;
+  }
+
+  private renderPlaygroundFab(c: A2UIComponent): TemplateResult {
+    const primary = c.primary as {
+      icon: string;
+      action: string;
+      payload?: Record<string, unknown>;
+    };
+    const actions =
+      (c.actions as Array<{
+        icon: string;
+        action: string;
+        payload?: Record<string, unknown>;
+        tooltip?: string;
+      }>) || [];
+
+    return html`
+      <div class="pg-fab-container">
+        <button
+          class="pg-fab-primary"
+          @click=${() => this.sendAction(primary.action, primary.payload)}
+        >
+          ${unsafeHTML(getIcon(primary.icon))}
+        </button>
+        ${actions.map(
+          (a) => html`
+            <button
+              class="pg-fab-secondary"
+              data-tooltip="${a.tooltip || ""}"
+              @click=${() => this.sendAction(a.action, a.payload)}
+            >
+              ${unsafeHTML(getIcon(a.icon))}
             </button>
           `
         )}

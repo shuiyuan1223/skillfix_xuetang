@@ -751,6 +751,80 @@
   }
 }
 
+/* ========== Playground FAB ========== */
+  .pg-fab-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column-reverse;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pg-fab-primary {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent)));
+    color: white;
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.4);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .pg-fab-primary:hover {
+    transform: scale(1.08);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  }
+
+  .pg-fab-secondary {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-surface);
+    color: rgb(var(--color-text));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transform: translateY(10px) scale(0.8);
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    position: relative;
+  }
+
+  .pg-fab-container:hover .pg-fab-secondary {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+
+  .pg-fab-secondary::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: 52px;
+    white-space: nowrap;
+    background: var(--color-surface);
+    color: rgb(var(--color-text-secondary));
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+  }
+  .pg-fab-secondary:hover::before {
+    opacity: 1;
+  }
+
 /* (Playground styles removed — using Tailwind only) */
 
 /* ========== Reduced Motion (Accessibility) ========== */
