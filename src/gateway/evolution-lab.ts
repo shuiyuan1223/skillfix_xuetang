@@ -884,34 +884,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     );
   }
 
-  // Test Cases table
-  if (data.testCases && data.testCases.length > 0) {
-    const testCasesLabel = ui.text(t("evolution.testCases"), "label");
-    const testRows = data.testCases.map((tc) => ({
-      id: tc.id.slice(0, 8),
-      category: tc.category,
-      query: tc.query.slice(0, 60) + (tc.query.length > 60 ? "..." : ""),
-      minScore: tc.expected.minScore ?? "-",
-      keywords: tc.expected.shouldMention?.length || 0,
-    }));
-    const testsTable = ui.dataTable(
-      [
-        { key: "category", label: t("evolution.category"), render: "badge" },
-        { key: "query", label: t("evolution.query") },
-        { key: "minScore", label: t("evolution.minScore") },
-        { key: "keywords", label: t("evolution.keywords") },
-      ],
-      testRows,
-      { onRowClick: "view_test_case" }
-    );
-    const addTestBtn = ui.button(t("evolution.addTestCase"), "create_test_case", {
-      variant: "primary",
-      size: "sm",
-    });
-    children.push(ui.card([testCasesLabel, testsTable, addTestBtn], { padding: 16 }));
-  }
-
-  // Run History table
+  // Run History table (above test cases so progress is immediately visible)
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const historyLabel = ui.text(t("evolution.benchmarkRuns"), "label");
     const runRows = data.benchmarkRuns.map((r) => {
@@ -947,6 +920,33 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
       { onRowClick: "view_benchmark_run" }
     );
     children.push(ui.card([historyLabel, runsTable], { padding: 16 }));
+  }
+
+  // Test Cases table
+  if (data.testCases && data.testCases.length > 0) {
+    const testCasesLabel = ui.text(t("evolution.testCases"), "label");
+    const testRows = data.testCases.map((tc) => ({
+      id: tc.id.slice(0, 8),
+      category: tc.category,
+      query: tc.query.slice(0, 60) + (tc.query.length > 60 ? "..." : ""),
+      minScore: tc.expected.minScore ?? "-",
+      keywords: tc.expected.shouldMention?.length || 0,
+    }));
+    const testsTable = ui.dataTable(
+      [
+        { key: "category", label: t("evolution.category"), render: "badge" },
+        { key: "query", label: t("evolution.query") },
+        { key: "minScore", label: t("evolution.minScore") },
+        { key: "keywords", label: t("evolution.keywords") },
+      ],
+      testRows,
+      { onRowClick: "view_test_case" }
+    );
+    const addTestBtn = ui.button(t("evolution.addTestCase"), "create_test_case", {
+      variant: "primary",
+      size: "sm",
+    });
+    children.push(ui.card([testCasesLabel, testsTable, addTestBtn], { padding: 16 }));
   }
 
   // Config summary
