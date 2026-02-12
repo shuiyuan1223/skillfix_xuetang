@@ -1963,26 +1963,53 @@ function generatePgPropose(ui: A2UIGenerator, state: PlaygroundState): string {
     children.push(ui.card(loadingChildren, { padding: 16 }));
   } else {
     const { description, changes, expectedImprovement } = state.proposal;
-    children.push(ui.text(t("evolution.pipelinePropose"), "h3"));
-    children.push(ui.text(description, "body"));
 
+    // ── Header row: title + file count badge ──
+    const headerItems: string[] = [ui.text(t("evolution.pipelinePropose"), "h3")];
     if (changes.length > 0) {
-      const fileRows = changes.map((f) => ({
-        path: f.path,
-        change: f.description,
-      }));
-      const fileTable = ui.dataTable(
-        [
-          { key: "path", label: t("evolution.target") },
-          { key: "change", label: t("evolution.rationale") },
-        ],
-        fileRows
+      headerItems.push(
+        ui.badge(`${changes.length} ${t("evolution.filesChanged")}`, {
+          variant: "info",
+          size: "sm",
+        })
       );
-      children.push(fileTable);
+    }
+    children.push(ui.row(headerItems, { gap: 8, align: "center" }));
+
+    // ── Summary stat cards ──
+    const statCards: string[] = [];
+    if (expectedImprovement) {
+      statCards.push(
+        ui.statCard({
+          title: t("evolution.expectedImprovement"),
+          value: expectedImprovement,
+          icon: "trending-up",
+          color: "green",
+        })
+      );
+    }
+    if (statCards.length > 0) {
+      children.push(ui.row(statCards, { gap: 12 }));
     }
 
-    if (expectedImprovement) {
-      children.push(ui.badge(`Expected: ${expectedImprovement}`, { variant: "info" }));
+    // ── Description in collapsible ──
+    children.push(
+      ui.collapsible(t("evolution.proposalOverview"), [ui.text(description, "body")], {
+        expanded: true,
+        icon: "lightbulb",
+      })
+    );
+
+    // ── File changes as individual cards ──
+    if (changes.length > 0) {
+      children.push(ui.text(t("evolution.changeDescription"), "label"));
+      const fileCards = changes.map((f) =>
+        ui.card(
+          [ui.badge(f.path, { variant: "default", size: "sm" }), ui.text(f.description, "body")],
+          { padding: 12 }
+        )
+      );
+      children.push(ui.column(fileCards, { gap: 8 }));
     }
   }
 

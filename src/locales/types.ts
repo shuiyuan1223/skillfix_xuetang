@@ -439,6 +439,9 @@ export interface LocaleMessages {
     cycleComplete: string;
     proposalHint: string;
     proposeGenerating: string;
+    expectedImprovement: string;
+    proposalOverview: string;
+    changeDescription: string;
     agentDriven: string;
     evolutionConsole: string;
     taskFlowControl: string;
