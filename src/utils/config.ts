@@ -93,6 +93,8 @@ export interface PHAConfig {
     /** Number of concurrent test executions, default 1 (sequential) */
     concurrency?: number;
   };
+  /** Evolution apply engine: "claude-code" (default, requires global claude CLI) or "pi-coding-agent" (in-process) */
+  applyEngine?: "claude-code" | "pi-coding-agent";
 }
 
 // Provider configurations

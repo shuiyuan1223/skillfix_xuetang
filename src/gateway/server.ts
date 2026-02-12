@@ -4113,48 +4113,7 @@ ${fileContentSection}
       this.playgroundState.applyProgress = `Branch: ${branch}`;
       this.sendEvolutionLabUpdate(send);
 
-      // 2. Create coding tools scoped to worktree (read, edit, write, grep, find, ls)
-      const { createCodingTools } = await import("@mariozechner/pi-coding-agent");
-      const codingTools = createCodingTools(
-        worktreePath
-      ) as import("@mariozechner/pi-agent-core").AgentTool<any>[];
-
-      this.playgroundState.applyProgress = "Agent exploring codebase...";
-      this.sendEvolutionLabUpdate(send);
-
-      // 3. Create coding sub-agent with full tool set
-      const djConfig = getJudgeModel();
-      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
-      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
-      const editAgent = await createPHAAgent({
-        apiKey: djApiKey,
-        provider: djConfig.provider as import("../agent/pha-agent.js").LLMProvider,
-        modelId: djConfig.modelId,
-        baseUrl: djBaseUrl,
-        tools: codingTools,
-      });
-
-      // 4. Subscribe to agent events for real-time progress
-      const toolLabels: Record<string, string> = {
-        read: "Reading",
-        edit: "Editing",
-        write: "Writing",
-        grep: "Searching",
-        find: "Finding",
-        ls: "Listing",
-        bash: "Running",
-      };
-      const unsubscribe = editAgent.subscribe((event) => {
-        if (event.type === "tool_execution_start") {
-          const label = toolLabels[event.toolName] || event.toolName;
-          const filePath = event.args?.path || event.args?.pattern || "";
-          const display = typeof filePath === "string" ? filePath.split("/").pop() || filePath : "";
-          this.playgroundState.applyProgress = `${label} ${display}...`;
-          this.sendEvolutionLabUpdate(send);
-        }
-      });
-
-      // 5. Build prompt and let the agent apply changes
+      // 2. Build prompt from proposal changes
       const changesDesc = proposal.changes
         .map((c, i) => `${i + 1}. File: ${c.path}\n   Change: ${c.description}`)
         .join("\n\n");
@@ -4162,46 +4121,31 @@ ${fileContentSection}
       const prompt = `You are a coding agent working in a PHA (Personal Health Agent) project.
 Your task is to apply the following changes to the codebase.
 
-## Workflow
-1. First, use ls and find to understand the project structure
-2. For each change, read the target file fully to understand its content, style, and language
-3. Use grep to find related code if you need more context
-4. Apply changes using the edit tool (oldText → newText) — match the existing file's language, style, and conventions exactly
-5. If a file is in English, your additions must be in English. If in Chinese, use Chinese.
-
 ## Changes to apply:
 
 ${changesDesc}
 
 ## Rules:
-- ALWAYS read the full file before editing — understand its structure first
+- Read the target file first to understand its structure, style, and language
 - Match the existing code style, language, and conventions exactly
-- Use edit (not write) for modifications to existing files
+- If a file is in English, your additions must be in English. If in Chinese, use Chinese.
+- Use Edit tool (not Write) for modifications to existing files
 - Do NOT add unrelated changes
 - Do NOT add meta-comments like "Added by evolution" or "Modified for improvement"`;
 
       this.playgroundState.applyPrompt = prompt;
       this.sendEvolutionLabUpdate(send);
 
-      const AGENT_TIMEOUT_MS = 180_000;
-      try {
-        await Promise.race([
-          editAgent.chatAndWait(prompt),
-          new Promise<string>((_, reject) =>
-            setTimeout(() => reject(new Error("Apply agent timeout")), AGENT_TIMEOUT_MS)
-          ),
-        ]);
-      } catch (agentErr) {
-        this.pgAddLog(
-          "apply",
-          `Agent warning: ${agentErr instanceof Error ? agentErr.message : String(agentErr)}`,
-          "warning"
-        );
-      } finally {
-        unsubscribe();
+      // 3. Execute via configured apply engine
+      const config = loadConfig();
+      const engine = config.applyEngine || "claude-code";
+      if (engine === "pi-coding-agent") {
+        await this.pgApplyViaPiCodingAgent(prompt, worktreePath, send);
+      } else {
+        await this.pgApplyViaClaudeCode(prompt, worktreePath, send);
       }
 
-      // 6. Detect changed files via git status and commit
+      // 4. Detect changed files via git status and commit
       const statusOutput = getGitStatusPorcelain(worktreePath);
       const changedFiles: Array<{ path: string; status: string }> = statusOutput
         .split("\n")
@@ -4245,14 +4189,14 @@ ${changesDesc}
         }
       }
 
-      // 7. Switch agent to use this version
+      // 5. Switch agent to use this version
       this.switchAgentVersion(branch);
 
       this.playgroundState.applyResult = { branch, commits, filesChanged: changedFiles };
       this.playgroundState.applyProgress = undefined;
       this.pgAddLog(
         "apply",
-        `Applied via Claude Code: ${changedFiles.length} files, ${commits.length} commits`,
+        `Applied (${engine}): ${changedFiles.length} files, ${commits.length} commits`,
         "success"
       );
       this.sendEvolutionLabUpdate(send);
@@ -4263,6 +4207,114 @@ ${changesDesc}
       this.playgroundState.applyError = errMsg;
       this.pgAddLog("apply", `Apply failed: ${errMsg}`, "error");
       this.sendEvolutionLabUpdate(send);
+    }
+  }
+
+  /** Apply engine: Claude Code CLI (default) */
+  private async pgApplyViaClaudeCode(
+    prompt: string,
+    worktreePath: string,
+    send: (msg: unknown) => void
+  ) {
+    this.playgroundState.applyProgress = "Claude Code editing files...";
+    this.sendEvolutionLabUpdate(send);
+
+    const proc = Bun.spawn(
+      [
+        "claude",
+        "-p",
+        "--output-format",
+        "json",
+        "--dangerously-skip-permissions",
+        "--allowedTools",
+        "Read",
+        "Edit",
+        "Write",
+        "Glob",
+        "Grep",
+        "--model",
+        "sonnet",
+        "--max-turns",
+        "20",
+        prompt,
+      ],
+      { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
+    );
+
+    const stdout = await new Response(proc.stdout).text();
+    await proc.exited;
+
+    let ccResult: { result?: string; error?: string } = {};
+    try {
+      ccResult = JSON.parse(stdout);
+    } catch {
+      /* non-JSON output is ok */
+    }
+    if (ccResult.error) {
+      this.pgAddLog("apply", `Claude Code warning: ${ccResult.error}`, "warning");
+    }
+  }
+
+  /** Apply engine: pi-coding-agent (in-process) */
+  private async pgApplyViaPiCodingAgent(
+    prompt: string,
+    worktreePath: string,
+    send: (msg: unknown) => void
+  ) {
+    const { createCodingTools } = await import("@mariozechner/pi-coding-agent");
+    const codingTools = createCodingTools(
+      worktreePath
+    ) as import("@mariozechner/pi-agent-core").AgentTool<any>[];
+
+    this.playgroundState.applyProgress = "Agent exploring codebase...";
+    this.sendEvolutionLabUpdate(send);
+
+    const djConfig = getJudgeModel();
+    const djApiKey = resolveBenchmarkModelApiKey(djConfig);
+    const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
+    const editAgent = await createPHAAgent({
+      apiKey: djApiKey,
+      provider: djConfig.provider as import("../agent/pha-agent.js").LLMProvider,
+      modelId: djConfig.modelId,
+      baseUrl: djBaseUrl,
+      tools: codingTools,
+    });
+
+    const toolLabels: Record<string, string> = {
+      read: "Reading",
+      edit: "Editing",
+      write: "Writing",
+      grep: "Searching",
+      find: "Finding",
+      ls: "Listing",
+      bash: "Running",
+    };
+    const unsubscribe = editAgent.subscribe((event) => {
+      if (event.type === "tool_execution_start") {
+        const label = toolLabels[event.toolName] || event.toolName;
+        const filePath = event.args?.path || event.args?.pattern || "";
+        const display = typeof filePath === "string" ? filePath.split("/").pop() || filePath : "";
+        this.playgroundState.applyProgress = `${label} ${display}...`;
+        this.sendEvolutionLabUpdate(send);
+      }
+    });
+
+    const AGENT_TIMEOUT_MS = 180_000;
+    try {
+      await Promise.race([
+        editAgent.chatAndWait(prompt),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error("Apply agent timeout")), AGENT_TIMEOUT_MS)
+        ),
+      ]);
+    } catch (agentErr) {
+      this.pgAddLog(
+        "apply",
+        `Agent warning: ${agentErr instanceof Error ? agentErr.message : String(agentErr)}`,
+        "warning"
+      );
+    } finally {
+      unsubscribe();
     }
   }
 
