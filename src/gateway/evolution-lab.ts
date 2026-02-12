@@ -427,6 +427,13 @@ export function buildPlotlyRadarTraces(
         name,
         score: scores.reduce((a, b) => a + b, 0) / scores.length,
       }));
+      // Fallback to categories mode if no sub-components available
+      if (dataPoints.length === 0) {
+        dataPoints = run.categoryScores.map((cs) => ({
+          name: getCategoryLabel(cs.category),
+          score: cs.score <= 1 ? cs.score : cs.score / 100,
+        }));
+      }
     } else {
       dataPoints = run.categoryScores.map((cs) => ({
         name: getCategoryLabel(cs.category),
@@ -2147,8 +2154,6 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
 
   if (state.validateResult) {
     const { beforeScore, afterScore, delta, categoryDeltas, recommendation } = state.validateResult;
-    const radarMode = state.validateRadarMode || "categories";
-
     const deltaSign = delta >= 0 ? "+" : "";
     const scoreSummary = ui.text(
       `${beforeScore.toFixed(2)} → ${afterScore.toFixed(2)} (${deltaSign}${delta.toFixed(2)})`,
@@ -2156,24 +2161,33 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
     );
     children.push(scoreSummary);
 
-    // Radar mode toggle (5 categories / 16 criteria)
-    const toggleId = `pg_validate_toggle_${Date.now()}`;
-    ui.addComponent(toggleId, {
-      id: toggleId,
-      type: "arena_mode_toggle",
-      options: [
-        { label: t("evolution.categoriesMode"), value: "categories" },
-        { label: t("evolution.criteriaMode"), value: "criteria" },
-      ],
-      active: radarMode,
-      action: "pg_validate_radar_mode",
-    });
-    children.push(toggleId);
-
-    // Build before/after ComparisonRuns with full category data (including subComponents)
+    // Check if sub-component data is available for criteria mode
     const beforeCatScores = state.validateResult.beforeCategoryScores;
     const afterCatScores = state.validateResult.afterCategoryScores;
+    const hasSubComponents =
+      beforeCatScores &&
+      afterCatScores &&
+      beforeCatScores.some((cs) => cs.subComponents && cs.subComponents.length > 0);
 
+    // Only show toggle when criteria data exists; otherwise force categories mode
+    const radarMode = hasSubComponents ? state.validateRadarMode || "categories" : "categories";
+
+    if (hasSubComponents) {
+      const toggleId = `pg_validate_toggle_${Date.now()}`;
+      ui.addComponent(toggleId, {
+        id: toggleId,
+        type: "arena_mode_toggle",
+        options: [
+          { label: t("evolution.categoriesMode"), value: "categories" },
+          { label: t("evolution.criteriaMode"), value: "criteria" },
+        ],
+        active: radarMode,
+        action: "pg_validate_radar_mode",
+      });
+      children.push(toggleId);
+    }
+
+    // Build before/after ComparisonRuns with full category data (including subComponents)
     let beforeCategories: CategoryScoreInfo[];
     let afterCategories: CategoryScoreInfo[];
 
@@ -2226,7 +2240,7 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
     children.push(validateRadarId);
 
     // Delta table: criteria mode shows sub-components, categories mode shows 5 categories
-    if (radarMode === "criteria" && beforeCatScores && afterCatScores) {
+    if (radarMode === "criteria" && hasSubComponents && beforeCatScores && afterCatScores) {
       // Build rows from sub-components
       const subRows: Array<{ category: string; before: string; after: string; delta: string }> = [];
       for (const bcs of beforeCatScores) {
