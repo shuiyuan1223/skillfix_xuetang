@@ -314,6 +314,7 @@ export interface LocaleMessages {
     diagnoseUsingExisting: string;
     diagnoseFoundWeak: string;
     diagnoseGenerated: string;
+    diagnoseAnalyzing: string;
     retry: string;
     retryStep: string;
     rerunQuick: string;

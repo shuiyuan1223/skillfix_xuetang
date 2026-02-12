@@ -3698,9 +3698,32 @@ export class GatewaySession {
         }
       }
 
+      // Create judge LLM for analysis
+      const djConfig = getJudgeModel();
+      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
+      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
+      const { MockDataSource: DiagMockDS } = await import("../data-sources/mock.js");
+      const diagnoseJudge = await createPHAAgent({
+        apiKey: djApiKey,
+        provider: djConfig.provider as any,
+        modelId: djConfig.modelId,
+        baseUrl: djBaseUrl,
+        dataSource: new DiagMockDS(),
+      });
+      const AGENT_TIMEOUT_MS = 120_000;
+
       const result = await diagnose({
         profile: (this.playgroundState.benchmarkResult?.profile || "quick") as "quick" | "full",
         existingBenchmark: { run, results, categoryScores },
+        llmCall: async (prompt: string) => {
+          if (typeof diagnoseJudge.reset === "function") diagnoseJudge.reset();
+          return await Promise.race([
+            diagnoseJudge.chatAndWait(prompt),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+        },
         onProgress: (msg: string) => {
           this.playgroundState.diagnoseProgress = msg;
           this.sendEvolutionLabUpdateThrottled(send);
