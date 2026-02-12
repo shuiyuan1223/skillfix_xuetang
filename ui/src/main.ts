@@ -2702,12 +2702,16 @@ ${value || ""}</textarea
               ? html`<div
                   class="${isHorizontal
                     ? "h-0.5 flex-1 min-w-[20px]"
-                    : "w-0.5 h-6 ml-4"} ${connectorFilled
+                    : "w-0.5 h-8 ml-[17px]"} ${connectorFilled
                     ? "bg-primary"
                     : "bg-border"} transition-colors"
                 ></div>`
               : nothing}
-            <div class="flex ${isHorizontal ? "flex-col" : "flex-row"} items-center gap-2">
+            <div
+              class="flex ${isHorizontal ? "flex-col" : "flex-row"} items-center ${isHorizontal
+                ? "gap-2"
+                : "gap-3"}"
+            >
               <div
                 class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border-2 shrink-0 transition-all"
                 style="background: ${style.bg}; border-color: ${style.border}; color: ${style.text}"
@@ -2719,7 +2723,9 @@ ${value || ""}</textarea
                     : html`<span>${i + 1}</span>`}
               </div>
               <span
-                class="text-xs font-medium whitespace-nowrap"
+                class="text-xs whitespace-nowrap ${step.status === "active"
+                  ? "font-semibold"
+                  : "font-medium"}"
                 style="color: ${step.status === "active"
                   ? "rgb(var(--color-primary))"
                   : step.status === "completed"

@@ -751,7 +751,7 @@
   }
 }
 
-/* ========== Playground — Sci-fi Styling ========== */
+/* ========== Playground — CI/CD Pipeline Layout ========== */
 
 /* Container */
 .pg-container {
@@ -759,40 +759,68 @@
   min-height: calc(100vh - 200px);
 }
 
-/* Left-right split layout */
+/* Main layout: sidebar + content */
 .pg-main-layout {
   align-items: stretch !important;
-  min-height: calc(100vh - 260px);
-}
-.pg-main-layout > :first-child { flex: 55; min-width: 0; }
-.pg-main-layout > :last-child { flex: 45; min-width: 0; }
-
-/* Responsive: stack vertically on small screens */
-@media (max-width: 900px) {
-  .pg-main-layout { flex-direction: column !important; }
-  .pg-main-layout > :first-child,
-  .pg-main-layout > :last-child { flex: none; }
+  min-height: calc(100vh - 220px);
 }
 
-/* Left panel: center content vertically when idle */
-.pg-left-panel {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+/* ─── Left Pipeline Sidebar — fixed width ─── */
+.pg-sidebar {
+  width: 220px !important;
+  min-width: 220px !important;
+  max-width: 220px !important;
+  flex-shrink: 0 !important;
+  padding: 24px 20px !important;
+  border-right: 1px solid rgba(99, 102, 241, 0.12);
+  background: rgba(15, 23, 42, 0.4);
 }
 
-/* ---- Idle card ---- */
+/* Right content area */
+.pg-right-panel {
+  flex: 1 !important;
+  min-width: 0;
+  padding: 16px 20px !important;
+}
+
+/* ─── Pipeline Step Indicator vertical enhancements ─── */
+.pg-sidebar .flex-col .w-8 {
+  width: 36px !important;
+  height: 36px !important;
+}
+.pg-sidebar .flex-col .w-0\.5 {
+  height: 32px !important;
+  margin-left: 17px !important;
+}
+.pg-sidebar .flex-col .text-xs {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+}
+
+/* Active step pulse glow */
+.pg-sidebar [style*="background: rgb(var(--color-primary))"] {
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+  animation: pg-pipeline-pulse 2s ease-in-out infinite;
+}
+
+@keyframes pg-pipeline-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(99, 102, 241, 0.4); }
+  50% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.7); }
+}
+
+/* Sidebar buttons full-width */
+.pg-sidebar button {
+  width: 100%;
+}
+
+/* ─── Idle card ─── */
 .pg-idle-card {
   border: 1px solid rgba(99, 102, 241, 0.15) !important;
   background: linear-gradient(145deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95)) !important;
 }
 
-.pg-idle-inner {
-  gap: 20px;
-}
-
-/* Idle title — gradient glow (A2UI renders h1 as span.text-\[2rem\]) */
-.pg-idle-card .text-\[2rem\] {
+/* Idle title gradient (A2UI renders h2 as span.text-\[1\.5rem\]) */
+.pg-idle-card .text-\[1\.5rem\] {
   background: linear-gradient(135deg, #818cf8, #a78bfa, #c084fc);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -811,15 +839,14 @@
   to   { filter: brightness(1.3); }
 }
 
-/* ---- Evolution Console (right panel) ---- */
+/* ─── Evolution Console ─── */
 .pg-console-card {
   background: rgba(10, 15, 30, 0.97) !important;
   border: 1px solid rgba(99, 102, 241, 0.2) !important;
   border-radius: 16px !important;
   display: flex !important;
   flex-direction: column !important;
-  height: 100%;
-  min-height: 500px;
+  min-height: 400px;
   overflow: hidden;
   position: relative;
 }
@@ -856,7 +883,7 @@
   animation: pg-pulse 2s ease-in-out infinite;
 }
 
-/* Event log — terminal style (class-based, not nth-child) */
+/* Event log — terminal style */
 .pg-event-log {
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace !important;
   font-size: 11px !important;
@@ -890,21 +917,21 @@
   padding: 10px 12px !important;
 }
 
-/* Compact chat: smaller avatars and bubbles inside console */
+/* Compact chat inside console */
 .pg-console-card .w-9 { width: 28px !important; height: 28px !important; }
 .pg-console-card .max-w-\[70\%\] { max-width: 85% !important; }
 .pg-console-card .px-5 { padding-left: 12px !important; padding-right: 12px !important; }
 .pg-console-card .py-4 { padding-top: 8px !important; padding-bottom: 8px !important; }
 
 /* Step content cards hover glow */
-.pg-left-panel > div {
+.pg-right-panel > div {
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
-.pg-left-panel > div:hover {
+.pg-right-panel > div:hover {
   box-shadow: 0 0 20px rgba(129, 140, 248, 0.1), 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
-/* Pulse animation — for in-progress states */
+/* Pulse animation */
 @keyframes pg-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
@@ -940,7 +967,26 @@
   z-index: 3;
 }
 
+/* Responsive: small screen sidebar becomes top bar */
+@media (max-width: 768px) {
+  .pg-main-layout {
+    flex-direction: column !important;
+  }
+  .pg-sidebar {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    border-right: none;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+    padding: 12px 16px !important;
+  }
+}
+
 /* Light mode overrides */
+.light .pg-sidebar {
+  background: rgba(238, 241, 245, 0.6);
+  border-right-color: rgba(0, 0, 0, 0.06);
+}
 .light .pg-console-card {
   background: rgba(248, 250, 252, 0.98) !important;
   border-color: rgba(99, 102, 241, 0.15) !important;
@@ -952,7 +998,7 @@
 .light .pg-idle-card {
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98)) !important;
 }
-.light .pg-idle-card .text-\[2rem\] {
+.light .pg-idle-card .text-\[1\.5rem\] {
   background: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
