@@ -168,6 +168,7 @@ export interface PlaygroundState {
   cycleId: string | null;
   step: PlaygroundStep;
   startedAt?: number;
+  viewingStep?: PlaygroundStep;
 
   benchmarkResult?: {
     runId: string;
@@ -546,9 +547,6 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
   if (data.activeTab === "data") {
     tabContentIds["data"] = generateDataTab(ui, data);
   }
-  if (data.activeTab === "agent") {
-    tabContentIds["agent"] = generateAgentTab(ui, data);
-  }
   if (data.activeTab === "playground") {
     tabContentIds["playground"] = generatePlaygroundTab(ui, data);
   }
@@ -561,7 +559,6 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
       { id: "playground", label: t("evolution.tabPlayground"), icon: "zap" },
       { id: "versions", label: t("evolution.tabVersions"), icon: "git-branch" },
       { id: "data", label: t("evolution.tabData"), icon: "file-text" },
-      { id: "agent", label: t("evolution.tabAgent"), icon: "sparkles" },
     ],
     data.activeTab,
     tabContentIds
@@ -1567,83 +1564,54 @@ function buildPlaygroundPipelineSteps(state: PlaygroundState): PipelineStep[] {
 function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const state = data.playgroundState || { step: "idle" as const, log: [], cycleId: null };
 
+  // Determine which step to show details for
+  const viewing =
+    state.viewingStep ||
+    (state.step === "idle" || state.step === "complete" ? state.step : state.step);
+
   // ─── Top: Horizontal Pipeline (always visible) ───
   const steps = buildPlaygroundPipelineSteps(state);
   const pipeline = ui.stepIndicator(steps, {
     orientation: "horizontal",
-    className: "pg-pipeline",
-  } as any);
-  const pipelineArea = ui.column([pipeline], {
-    gap: 0,
-    className: "pg-pipeline-area",
+    onStepClick: "pg_view_step",
   } as any);
 
-  // ─── Bottom Left: Agent Chat ───
-  const chatPanel = generateEvolutionConsole(ui, data, state);
-
-  // ─── Bottom Right: Task & Flow Control ───
-  const taskChildren: string[] = [];
-
-  // Task panel header
-  const taskHeader = ui.row(
-    [
-      ui.text(t("evolution.taskFlowControl"), "label"),
-      ui.badge(state.step === "idle" ? "IDLE" : state.step.toUpperCase(), {
-        variant: state.step === "idle" ? "default" : state.step === "complete" ? "success" : "info",
-      }),
-    ],
-    { gap: 8, align: "center", className: "pg-task-header" } as any
-  );
-  taskChildren.push(taskHeader);
-
-  // Step-specific content
-  switch (state.step) {
+  // ─── Details Panel (below pipeline) ───
+  let detailContent: string;
+  switch (viewing) {
     case "idle":
-      taskChildren.push(generatePgIdleContent(ui));
+      detailContent = generatePgIdleContent(ui);
       break;
     case "benchmark":
-      taskChildren.push(generatePgBenchmark(ui, state));
+      detailContent = generatePgBenchmark(ui, state);
       break;
     case "diagnose":
-      taskChildren.push(generatePgDiagnose(ui, state));
+      detailContent = generatePgDiagnose(ui, state);
       break;
     case "propose":
-      taskChildren.push(generatePgPropose(ui, state));
+      detailContent = generatePgPropose(ui, state);
       break;
     case "approve":
-      taskChildren.push(generatePgApprove(ui, state));
+      detailContent = generatePgApprove(ui, state);
       break;
     case "apply":
-      taskChildren.push(generatePgApply(ui, state));
+      detailContent = generatePgApply(ui, state);
       break;
     case "validate":
-      taskChildren.push(generatePgValidate(ui, state));
+      detailContent = generatePgValidate(ui, state);
       break;
     case "complete":
-      taskChildren.push(generatePgComplete(ui, state));
+      detailContent = generatePgComplete(ui, state);
       break;
+    default:
+      detailContent = generatePgIdleContent(ui);
   }
 
-  const taskPanel = ui.card(taskChildren, {
-    padding: 0,
-    className: "pg-task-card",
-  } as any);
-
-  // ─── Bottom Row: Chat + Task ───
-  const bottomRow = ui.row([chatPanel, taskPanel], {
-    gap: 20,
-    style: "align-items: stretch;",
-    className: "pg-bottom-row",
-  } as any);
-
-  return ui.column([pipelineArea, bottomRow], {
-    gap: 24,
-    padding: 16,
-    className: "pg-container",
-  } as any);
+  return ui.column([pipeline, detailContent], { gap: 24, padding: 16 });
 }
 
 function generatePgIdleContent(ui: A2UIGenerator): string {
+  const title = ui.text(t("evolution.playgroundWelcome"), "h2");
   const desc = ui.text(t("evolution.playgroundWelcomeDesc"), "body");
 
   const quickBtn = ui.button(t("evolution.startQuickCycle"), "pg_start_cycle", {
@@ -1656,9 +1624,9 @@ function generatePgIdleContent(ui: A2UIGenerator): string {
     size: "md",
     payload: { profile: "full" },
   });
-  const btnRow = ui.row([quickBtn, fullBtn], { gap: 12 });
+  const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "center" });
 
-  return ui.column([desc, btnRow], { gap: 16, padding: 20 });
+  return ui.card([title, desc, btnRow], { padding: 24 });
 }
 
 function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string {

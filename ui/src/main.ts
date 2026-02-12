@@ -2662,77 +2662,65 @@ ${value || ""}</textarea
   private renderStepIndicator(c: A2UIComponent): TemplateResult {
     const steps = (c.steps as any[]) || [];
     const orientation = (c.orientation as string) || "horizontal";
-    const className = (c.className as string) || "";
-
-    const statusStyles: Record<string, { bg: string; border: string; text: string }> = {
-      pending: {
-        bg: "transparent",
-        border: "var(--color-border)",
-        text: "rgb(var(--color-text-muted))",
-      },
-      active: {
-        bg: "rgb(var(--color-primary))",
-        border: "rgb(var(--color-primary))",
-        text: "#fff",
-      },
-      completed: {
-        bg: "rgb(var(--color-success))",
-        border: "rgb(var(--color-success))",
-        text: "#fff",
-      },
-      failed: {
-        bg: "rgb(var(--color-error))",
-        border: "rgb(var(--color-error))",
-        text: "#fff",
-      },
-      skipped: {
-        bg: "transparent",
-        border: "var(--color-border)",
-        text: "rgb(var(--color-text-muted))",
-      },
-    };
+    const onStepClick = c.onStepClick as string | undefined;
 
     const isHorizontal = orientation === "horizontal";
     return html`
-      <div class="flex ${isHorizontal ? "flex-row items-center" : "flex-col"} gap-0 ${className}">
+      <div class="flex ${isHorizontal ? "flex-row items-center justify-center" : "flex-col"} gap-0">
         ${steps.map((step, i) => {
-          const style = statusStyles[step.status as string] || statusStyles.pending;
-          const connectorFilled = step.status === "completed" || step.status === "active";
-          const statusClass = `step-${step.status || "pending"}`;
+          const status = (step.status as string) || "pending";
+          const connectorDone = status === "completed" || status === "active";
+
+          const circleClass =
+            status === "completed"
+              ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]"
+              : status === "active"
+                ? "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+                : status === "failed"
+                  ? "bg-red-500 border-red-500 text-white"
+                  : "bg-transparent border-slate-600 text-slate-500";
+
+          const labelClass =
+            status === "active"
+              ? "text-indigo-400 font-semibold"
+              : status === "completed"
+                ? "text-emerald-400 font-medium"
+                : "text-slate-500 font-medium";
+
+          const sizeClass = status === "active" ? "w-12 h-12" : "w-9 h-9";
+          const iconSize = status === "active" ? "w-5 h-5" : "w-4 h-4";
+          const clickable = onStepClick && (status === "completed" || status === "active");
+
           return html`
             ${i > 0
               ? html`<div
-                  class="step-connector ${isHorizontal
-                    ? "h-0.5 flex-1 min-w-[20px]"
-                    : "w-0.5 h-8 ml-[17px]"} ${connectorFilled
-                    ? "bg-primary"
-                    : "bg-border"} transition-colors"
+                  class="${isHorizontal
+                    ? "h-1 flex-1 min-w-[24px] rounded-full"
+                    : "w-1 h-8 ml-[17px] rounded-full"} ${connectorDone
+                    ? "bg-gradient-to-r from-emerald-500 to-indigo-500"
+                    : "bg-slate-700"} transition-colors"
                 ></div>`
               : nothing}
             <div
-              class="step-item flex ${isHorizontal
-                ? "flex-col"
-                : "flex-row"} items-center ${isHorizontal ? "gap-2" : "gap-3"}"
+              class="flex ${isHorizontal ? "flex-col" : "flex-row"} items-center ${isHorizontal
+                ? "gap-2"
+                : "gap-3"} ${clickable ? "cursor-pointer" : ""}"
+              @click=${clickable
+                ? () => this.sendAction(onStepClick!, { stepId: step.id })
+                : nothing}
             >
               <div
-                class="step-circle ${statusClass} w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border-2 shrink-0 transition-all"
-                style="background: ${style.bg}; border-color: ${style.border}; color: ${style.text}"
+                class="${sizeClass} rounded-full flex items-center justify-center text-xs border-2 shrink-0 transition-all ${circleClass}"
               >
                 ${step.status === "completed"
-                  ? html`<span class="w-4 h-4">${unsafeHTML(getIcon("check"))}</span>`
+                  ? html`<span class="${iconSize}">${unsafeHTML(getIcon("check"))}</span>`
                   : step.icon
-                    ? html`<span class="w-4 h-4">${unsafeHTML(getIcon(step.icon as string))}</span>`
+                    ? html`<span class="${iconSize}"
+                        >${unsafeHTML(getIcon(step.icon as string))}</span
+                      >`
                     : html`<span>${i + 1}</span>`}
               </div>
-              <span
-                class="step-label text-xs whitespace-nowrap ${step.status === "active"
-                  ? "font-semibold"
-                  : "font-medium"}"
-                style="color: ${step.status === "active"
-                  ? "rgb(var(--color-primary))"
-                  : step.status === "completed"
-                    ? "rgb(var(--color-success))"
-                    : "rgb(var(--color-text-muted))"}"
+              <span class="text-[11px] whitespace-nowrap uppercase tracking-wider ${labelClass}"
                 >${step.label}</span
               >
             </div>
