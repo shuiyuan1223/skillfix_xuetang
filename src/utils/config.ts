@@ -173,7 +173,7 @@ const DEFAULT_CONFIG: PHAConfig = {
 /**
  * Find project root by looking for package.json
  */
-function findProjectRoot(): string {
+export function findProjectRoot(): string {
   let dir = process.cwd();
   while (dir !== path.dirname(dir)) {
     if (fs.existsSync(path.join(dir, "package.json"))) {

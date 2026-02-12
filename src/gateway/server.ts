@@ -1099,10 +1099,10 @@ export class GatewaySession {
   switchAgentVersion(branch: string | null): void {
     if (branch) {
       const worktreePath = getWorktreePath(branch);
-      setPromptsDir(join(worktreePath, "src/prompts"));
+      setPromptsDir(join(worktreePath, "src/prompts/pha"));
       setSkillsDir(join(worktreePath, "src/skills"));
     } else {
-      setPromptsDir("src/prompts");
+      setPromptsDir("src/prompts/pha");
       setSkillsDir("src/skills");
     }
     resetSkillCache();

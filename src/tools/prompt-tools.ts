@@ -10,7 +10,9 @@ import { execSync } from "child_process";
 import { gitCommitFiles } from "../evolution/version-manager.js";
 
 // Default prompts directory (relative to project root)
-let promptsDir = "src/prompts";
+// PHA agent prompts live under src/prompts/pha/
+// System agent prompts live under src/prompts/system-agent/
+let promptsDir = "src/prompts/pha";
 
 export function setPromptsDir(dir: string): void {
   promptsDir = dir;
