@@ -760,13 +760,19 @@ export const runBenchmarkTool = {
 export const runDiagnoseTool = {
   name: "run_diagnose",
   description:
-    "Run the diagnose pipeline: benchmark → analyze weaknesses → generate improvement suggestions. Returns weak categories, failing test patterns, and actionable suggestions for which files to modify.",
+    "Run the diagnose pipeline: analyze benchmark weaknesses using LLM and generate improvement suggestions. If runId is provided, uses existing benchmark results from DB (fast, no re-run). Otherwise runs a fresh benchmark first.",
   parameters: {
     type: "object" as const,
     properties: {
+      runId: {
+        type: "string",
+        description:
+          "Existing benchmark run ID to analyze. If provided, loads results from DB instead of re-running benchmark. Use list_benchmark_runs to find available run IDs.",
+      },
       profile: {
         type: "string",
-        description: "Benchmark profile: 'quick' or 'full'. Default: 'quick'",
+        description:
+          "Benchmark profile: 'quick' or 'full'. Only used when runId is not provided. Default: 'quick'",
       },
       createIssues: {
         type: "boolean",
@@ -774,13 +780,82 @@ export const runDiagnoseTool = {
       },
     },
   },
-  execute: async (args?: { profile?: string; createIssues?: boolean }) => {
+  execute: async (args?: { runId?: string; profile?: string; createIssues?: boolean }) => {
     const config = getRunnerConfig();
     const profile = (args?.profile || "quick") as BenchmarkProfile;
 
+    // If runId provided, load existing benchmark data from DB
+    let existingBenchmark: import("../evolution/diagnose.js").ExistingBenchmarkData | undefined;
+    if (args?.runId) {
+      const {
+        getBenchmarkRun,
+        listBenchmarkResults: listBR,
+        listCategoryScores: listCS,
+      } = await import("../memory/db.js");
+
+      const runRow = getBenchmarkRun(args.runId);
+      if (!runRow) {
+        return { success: false, error: `Benchmark run ${args.runId} not found in database` };
+      }
+
+      const resultRows = listBR({ runId: args.runId });
+      const categoryRows = listCS(args.runId);
+
+      const run: import("../evolution/types.js").BenchmarkRun = {
+        id: runRow.id,
+        timestamp: runRow.timestamp,
+        versionTag: runRow.version_tag ?? undefined,
+        promptVersions: runRow.prompt_versions ? JSON.parse(runRow.prompt_versions) : {},
+        skillVersions: runRow.skill_versions ? JSON.parse(runRow.skill_versions) : {},
+        totalTestCases: runRow.total_test_cases,
+        passedCount: runRow.passed_count,
+        failedCount: runRow.failed_count,
+        overallScore: runRow.overall_score,
+        durationMs: runRow.duration_ms ?? 0,
+        profile: runRow.profile as "quick" | "full",
+        metadata: runRow.metadata ? JSON.parse(runRow.metadata) : undefined,
+      };
+
+      const results: import("../evolution/types.js").BenchmarkResult[] = resultRows.map((r) => ({
+        id: r.id,
+        runId: r.run_id,
+        testCaseId: r.test_case_id,
+        timestamp: r.timestamp,
+        agentResponse: r.agent_response ?? "",
+        toolCalls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
+        scores: r.scores ? JSON.parse(r.scores) : [],
+        overallScore: r.overall_score,
+        passed: r.passed === 1,
+        feedback: r.feedback ?? "",
+        issues: r.issues ? JSON.parse(r.issues) : undefined,
+        durationMs: r.duration_ms ?? 0,
+      }));
+
+      type BC = import("../evolution/types.js").BenchmarkCategory;
+      type CS = import("../evolution/types.js").CategoryScore;
+      const categoryScores = new Map<BC, CS>();
+      for (const row of categoryRows) {
+        if (!row.subcategory) {
+          categoryScores.set(row.category as BC, {
+            id: row.id,
+            runId: row.run_id,
+            category: row.category as BC,
+            score: row.score,
+            testCount: row.test_count,
+            passedCount: row.passed_count,
+            details: row.details ? JSON.parse(row.details) : undefined,
+          });
+        }
+      }
+
+      existingBenchmark = { run, results, categoryScores };
+    }
+
     const result: DiagnoseResult = await diagnose({
       profile,
-      runnerConfig: config,
+      existingBenchmark,
+      runnerConfig: existingBenchmark ? undefined : config,
+      llmCall: config.llmCall,
       createIssues: args?.createIssues || false,
     });
 
@@ -793,8 +868,8 @@ export const runDiagnoseTool = {
       weaknesses: result.weaknesses.map((w) => ({
         category: w.category,
         label: w.label,
-        score: Math.round(w.score),
-        gap: Math.round(w.gap),
+        score: w.score,
+        gap: w.gap,
         failingTestCount: w.failingTests.length,
         commonPatterns: w.commonPatterns,
       })),

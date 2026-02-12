@@ -23,8 +23,12 @@ Use `git_log` to understand recent changes and current state.
 Report the radar chart scores to the user.
 
 ### Step 2: Diagnose (Analyze)
-Analyze benchmark results to identify the weakest 1-2 dimensions.
-Look at failed test cases and find common patterns.
+Use `run_diagnose` with the benchmark's `runId` to analyze results with LLM.
+This loads existing benchmark data from DB (no re-run) and uses the LLM to:
+- Identify the weakest 1-2 dimensions
+- Find common failure patterns across test cases
+- Generate specific, actionable improvement suggestions
+
 Use `git_log` to review recent changes that may have caused regressions.
 Summarize findings clearly for the user.
 
@@ -79,7 +83,7 @@ Present the comparison to the user for final decision.
 | Tool | Purpose |
 |------|---------|
 | `run_benchmark` | Run benchmark tests (quick/full profile) |
-| `run_diagnose` | Run diagnose pipeline (benchmark + analyze + suggest) |
+| `run_diagnose` | Run diagnose pipeline (analyze + suggest). Pass `runId` to use existing benchmark results |
 | `git_status` | Check working tree status |
 | `git_log` | View commit history |
 | `git_diff` | Compare branches |

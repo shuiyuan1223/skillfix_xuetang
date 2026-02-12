@@ -22,6 +22,9 @@ import {
 import { CATEGORY_LABELS } from "./benchmark-seed.js";
 import { createGitHubIssue, buildDiagnoseIssueBody } from "./github-issues.js";
 import { t } from "../locales/index.js";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
+import { getSkillsDir } from "../tools/skill-tools.js";
 
 export interface DiagnoseWeakness {
   category: BenchmarkCategory;
@@ -208,7 +211,26 @@ interface LLMDiagnoseResult {
 }
 
 /**
+ * Load the diagnose-analyst Skill content for the LLM prompt.
+ */
+function loadDiagnoseSkill(): string {
+  try {
+    const skillPath = join(getSkillsDir(), "diagnose-analyst", "SKILL.md");
+    if (existsSync(skillPath)) {
+      const content = readFileSync(skillPath, "utf-8");
+      // Strip YAML frontmatter, keep body
+      const match = content.match(/^---[\s\S]*?---\s*([\s\S]*)$/);
+      return match ? match[1].trim() : content;
+    }
+  } catch {
+    // noop
+  }
+  return "";
+}
+
+/**
  * Use LLM to analyze benchmark weaknesses and generate intelligent suggestions.
+ * Loads the diagnose-analyst Skill as analysis framework.
  */
 async function analyzeDiagnoseWithLLM(
   llmCall: (prompt: string) => Promise<string>,
@@ -216,6 +238,9 @@ async function analyzeDiagnoseWithLLM(
   weaknesses: DiagnoseWeakness[],
   allResults: BenchmarkResult[]
 ): Promise<LLMDiagnoseResult> {
+  // Load analysis framework from Skill
+  const skillGuide = loadDiagnoseSkill();
+
   // Build context for LLM
   const categorySummaries = weaknesses.map((w) => {
     const failingSummary = w.failingTests
@@ -242,28 +267,21 @@ ${failingSummary}`;
     )
     .join("\n");
 
-  const prompt = `你是 PHA (Personal Health Agent) 的诊断分析师。以下是基准测试结果，请分析薄弱环节并给出改进建议。
+  const prompt = `你是 PHA (Personal Health Agent) 的诊断分析师。请根据以下分析框架和基准测试数据，分析薄弱环节并给出改进建议。
 
-## 总体情况
+${skillGuide ? `## 分析框架（来自 diagnose-analyst Skill）\n\n${skillGuide}\n\n` : ""}## 基准测试数据
+
+### 总体情况
 - 总分: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)}
 - 通过/总计: ${run.passedCount}/${run.totalTestCases}
 - 版本: ${run.versionTag || "unknown"}
 
-## 薄弱分类（低于 0.7 阈值）
+### 薄弱分类（低于 0.7 阈值）
 
 ${categorySummaries.join("\n\n")}
 
-## 通过测试示例（对比参考）
+### 通过测试示例（对比参考）
 ${passingSample || "无"}
-
-## 项目结构
-- \`src/prompts/SOUL.md\` — Agent 灵魂提示词（核心人格和行为规则）
-- \`src/skills/*/SKILL.md\` — 各领域专家技能
-  - \`sleep-coach\` — 睡眠教练
-  - \`health-overview\` — 健康概览
-  - \`goal-coach\` — 目标教练
-  - \`safety-guard\` — 安全防护
-- \`src/tools/health-data.ts\` — 健康数据获取工具
 
 ## 请输出 JSON（无 markdown 包裹）
 
@@ -282,14 +300,7 @@ ${passingSample || "无"}
       "priority": "high|medium|low"
     }
   ]
-}
-
-要求：
-1. patterns 提炼失败测试的共性问题（不是逐条翻译 feedback，而是归纳根因）
-2. suggestions 要具体可操作，说明改什么文件、怎么改、为什么
-3. priority 根据 gap 大小和影响范围判断
-4. 全部使用中文输出
-5. 每个薄弱分类至少给出 1-2 条建议`;
+}`;
 
   try {
     const response = await llmCall(prompt);
