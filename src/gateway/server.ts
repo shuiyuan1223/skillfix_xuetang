@@ -4135,7 +4135,23 @@ ${fileContentSection}
         tools: fileTools,
       });
 
-      // 4. Build prompt and let the agent apply changes
+      // 4. Subscribe to agent events for real-time progress
+      const toolLabels: Record<string, string> = {
+        read: "Reading",
+        edit: "Editing",
+        write: "Writing",
+      };
+      const unsubscribe = editAgent.subscribe((event) => {
+        if (event.type === "tool_execution_start") {
+          const label = toolLabels[event.toolName] || event.toolName;
+          const filePath = event.args?.path || "";
+          const fileName = filePath.split("/").pop() || filePath;
+          this.playgroundState.applyProgress = `${label} ${fileName}...`;
+          this.sendEvolutionLabUpdate(send);
+        }
+      });
+
+      // 5. Build prompt and let the agent apply changes
       const changesDesc = proposal.changes
         .map((c, i) => `${i + 1}. File: ${c.path}\n   Change: ${c.description}`)
         .join("\n\n");
@@ -4168,9 +4184,11 @@ ${changesDesc}
           `Agent warning: ${agentErr instanceof Error ? agentErr.message : String(agentErr)}`,
           "warning"
         );
+      } finally {
+        unsubscribe();
       }
 
-      // 5. Detect changed files via git status and commit
+      // 6. Detect changed files via git status and commit
       const statusOutput = getGitStatusPorcelain(worktreePath);
       const changedFiles: Array<{ path: string; status: string }> = statusOutput
         .split("\n")
@@ -4214,7 +4232,7 @@ ${changesDesc}
         }
       }
 
-      // 6. Switch agent to use this version
+      // 7. Switch agent to use this version
       this.switchAgentVersion(branch);
 
       this.playgroundState.applyResult = { branch, commits, filesChanged: changedFiles };
