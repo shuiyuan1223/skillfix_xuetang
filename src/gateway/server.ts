@@ -3480,6 +3480,30 @@ export class GatewaySession {
 
   private async pgRunBenchmarkAsync(profile: string, send: (msg: unknown) => void) {
     const AGENT_TIMEOUT_MS = 120_000;
+
+    // Generate tracking ID for progress visibility in Overview tab
+    const trackingId = `pg_${crypto.randomUUID()}`;
+    this.runningBenchmarks.set(trackingId, {
+      modelId: "playground",
+      presetName: "Playground",
+      startedAt: Date.now(),
+    });
+
+    // Write initial progress file so Overview can show running state
+    writeBenchmarkProgressForRun(trackingId, {
+      running: true,
+      source: "ui",
+      profile,
+      current: 0,
+      total: 0,
+      category: "",
+      startedAt: Date.now(),
+      modelId: undefined,
+      presetName: "Playground",
+      trackingId,
+      pid: process.pid,
+    });
+
     try {
       const agent = await this.getAgent();
 
@@ -3514,8 +3538,23 @@ export class GatewaySession {
             ),
           ]);
         },
-        onProgress: (current, total) => {
+        onProgress: (current, total, testCase) => {
+          // Update playground progress
           this.playgroundState.benchmarkProgress = { current, total };
+          // Update external progress file for Overview tab
+          writeBenchmarkProgressForRun(trackingId, {
+            running: true,
+            source: "ui",
+            profile,
+            current,
+            total,
+            category: testCase?.category || "",
+            startedAt: Date.now(),
+            modelId: undefined,
+            presetName: "Playground",
+            trackingId,
+            pid: process.pid,
+          });
           this.sendEvolutionLabUpdateThrottled(send);
         },
         concurrency: getBenchmarkConcurrency(),
@@ -3554,6 +3593,11 @@ export class GatewaySession {
       );
       this.sendEvolutionLabUpdate(send);
       throw error;
+    } finally {
+      // Clean up tracking
+      this.runningBenchmarks.delete(trackingId);
+      clearBenchmarkProgressForRun(trackingId);
+      this.sendEvolutionLabUpdate(send);
     }
   }
 
