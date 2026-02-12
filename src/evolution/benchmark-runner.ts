@@ -23,6 +23,7 @@ import {
   insertCategoryScore,
   updateBenchmarkRun,
   insertTestCase,
+  listBenchmarkRuns,
 } from "../memory/db.js";
 import { getBenchmarkTests, ALL_BENCHMARK_TESTS, loadSharpRubrics } from "./benchmark-seed.js";
 import { loadConfig } from "../utils/config.js";
@@ -180,7 +181,6 @@ export class BenchmarkRunner {
       throw new Error("No test cases found for the specified profile/category");
     }
 
-    const runId = crypto.randomUUID();
     const startTime = Date.now();
 
     // Capture model and version info
@@ -195,11 +195,27 @@ export class BenchmarkRunner {
       /* ignore */
     }
 
+    // Generate semantic ID: version_model_N
+    const versionTag = options.versionTag || gitVersion;
+    const modelShort =
+      modelId
+        .split("/")
+        .pop()
+        ?.replace(/[^a-zA-Z0-9._-]/g, "") || "unknown";
+    const sanitizedVersion = versionTag.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const existingRuns = listBenchmarkRuns({ limit: 1000 });
+    const matchCount = existingRuns.filter((r) => {
+      const meta = r.metadata ? JSON.parse(r.metadata) : {};
+      const existingModel = (meta.modelId as string)?.split("/").pop() || "";
+      return r.version_tag === versionTag && existingModel === modelShort;
+    }).length;
+    const runId = `${sanitizedVersion}_${modelShort}_${matchCount + 1}`;
+
     // Create benchmark run record
     const run: BenchmarkRun = {
       id: runId,
       timestamp: startTime,
-      versionTag: options.versionTag || gitVersion,
+      versionTag,
       promptVersions: await this.getPromptVersions(),
       skillVersions: await this.getSkillVersions(),
       totalTestCases: testCases.length,

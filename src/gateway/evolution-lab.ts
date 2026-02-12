@@ -214,7 +214,7 @@ export function getDefaultPipelineSteps(currentStep?: string): PipelineStep[] {
 
 // Category label mapping
 // SHARP category color mapping
-const SHARP_CATEGORY_COLORS: Record<string, string> = {
+export const SHARP_CATEGORY_COLORS: Record<string, string> = {
   safety: "#ff6b6b",
   usefulness: "#4ecdc4",
   accuracy: "#ffe66d",
@@ -300,7 +300,7 @@ function buildMultiSeriesRadarData(
 /**
  * Build Plotly scatterpolar traces from comparison runs.
  */
-function buildPlotlyRadarTraces(
+export function buildPlotlyRadarTraces(
   runs: ComparisonRun[],
   mode: "categories" | "criteria"
 ): Array<Record<string, unknown>> {
@@ -350,7 +350,7 @@ function buildPlotlyRadarTraces(
   });
 }
 
-const PLOTLY_LAYOUT = {
+export const PLOTLY_LAYOUT = {
   polar: {
     radialaxis: {
       visible: true,
@@ -386,7 +386,7 @@ const PLOTLY_LAYOUT = {
   dragmode: false,
 };
 
-function getCategoryLabel(category: string): string {
+export function getCategoryLabel(category: string): string {
   const labelMap: Record<string, string> = {
     "health-data-analysis": "Health Data Analysis",
     "health-coaching": "Health Coaching",
@@ -403,7 +403,7 @@ function getCategoryLabel(category: string): string {
   return labelMap[category] || category;
 }
 
-function getCategoryIcon(category: string): string {
+export function getCategoryIcon(category: string): string {
   const iconMap: Record<string, string> = {
     safety: "shield",
     usefulness: "lightbulb",
@@ -540,17 +540,19 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const rawScore = data.benchmarkRuns[0].overall_score;
-    const displayScore = rawScore <= 1.0 ? Math.round(rawScore * 100) : Math.round(rawScore);
+    const displayScore = rawScore <= 1.0 ? rawScore : rawScore / 100;
     const gauge = ui.scoreGauge(displayScore, {
       label: t("evolution.latestRun"),
-      max: 100,
+      max: 1.0,
       size: "lg",
     });
     statCards.push(gauge);
   } else if (data.stats && data.stats.totalCount > 0) {
-    const gauge = ui.scoreGauge(data.stats.averageScore, {
+    const avgNorm =
+      data.stats.averageScore <= 1.0 ? data.stats.averageScore : data.stats.averageScore / 100;
+    const gauge = ui.scoreGauge(avgNorm, {
       label: t("evolution.avgScore"),
-      max: 100,
+      max: 1.0,
       size: "lg",
     });
     statCards.push(gauge);
@@ -614,8 +616,8 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     const trendChart = ui.chart({
       chartType: "bar",
       data: data.scoreTrend.map((p) => {
-        const displayScore = p.score <= 1.0 ? Math.round(p.score * 100) : Math.round(p.score);
-        return { version: p.version, score: displayScore };
+        const displayScore = p.score <= 1.0 ? p.score : p.score / 100;
+        return { version: p.version, score: parseFloat(displayScore.toFixed(2)) };
       }),
       xKey: "version",
       yKey: "score",
@@ -771,7 +773,10 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     // Recent Benchmark Runs table (merged into Arena section)
     const runsLabel = ui.text(t("evolution.recentRuns"), "label");
     const runRows = data.benchmarkRuns.slice(0, 5).map((r) => {
-      const scoreDisplay = r.overall_score > 0 ? `${Math.round(r.overall_score * 100)}%` : "-";
+      const scoreDisplay =
+        r.overall_score > 0
+          ? (r.overall_score <= 1.0 ? r.overall_score : r.overall_score / 100).toFixed(2)
+          : "-";
       return {
         id: r.id,
         progress: formatRunProgress(r, data.externalProgressMap),
@@ -798,28 +803,12 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       { onRowClick: "view_benchmark_run" }
     );
 
-    const quickBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
-      variant: "secondary",
-      size: "sm",
-      payload: { profile: "quick" },
-    });
-    const fullBtn = ui.button(t("evolution.runFullBenchmark"), "run_benchmark", {
-      variant: "secondary",
-      size: "sm",
-      payload: { profile: "full" },
-    });
-    const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "end" });
-    arenaChildren.push(runsLabel, runsTable, btnRow);
+    arenaChildren.push(runsLabel, runsTable);
 
     children.push(ui.card(arenaChildren, { padding: 16, className: "arena-section" } as any));
   } else {
     const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
-    const runBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
-      variant: "primary",
-      size: "sm",
-      payload: { profile: "quick" },
-    });
-    children.push(ui.card([emptyText, runBtn], { padding: 24 }));
+    children.push(ui.card([emptyText], { padding: 24 }));
   }
 
   // Row 4: Active evolution branch (if any)
@@ -871,54 +860,38 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
   });
   children.push(ui.card([ui.row([quickBtn, fullBtn, diagnoseBtn], { gap: 8 })], { padding: 12 }));
 
-  // SHARP Category Breakdown Cards
+  // SHARP Category Breakdown Cards (using arena_category_card style)
   if (data.latestRunCategoryScores && data.latestRunCategoryScores.length > 0) {
+    const sharpTitle = ui.text("SHARP 2.0 Evaluation", "h3");
     const sharpCards: string[] = [];
 
     for (const cs of data.latestRunCategoryScores) {
       const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
-      // Normalize: 0.0-1.0 (SHARP 2.0) or 0-100 (legacy)
       const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
-      const cardChildren: string[] = [];
-
-      // Header: category name + score badge (percentage display)
-      const catName = ui.text(getCategoryLabel(cs.category), "label");
-      const scoreBadge = ui.badge(`${Math.round(avgScore * 100)}%`, {
-        variant: avgScore >= 0.9 ? "success" : avgScore >= 0.7 ? "warning" : "error",
+      const criteria = (cs.subComponents || []).map((sub) => ({
+        name: sub.name,
+        scores: [{ value: sub.score <= 1 ? sub.score : sub.score / 100, color: catColor }],
+      }));
+      const catCardId = `bench_cat_${cs.category}_${Date.now()}`;
+      ui.addComponent(catCardId, {
+        id: catCardId,
+        type: "arena_category_card",
+        categoryName: getCategoryLabel(cs.category),
+        categoryColor: catColor,
+        categoryIcon: getCategoryIcon(cs.category),
+        avgScore,
+        criteria,
       });
-      cardChildren.push(ui.row([catName, scoreBadge], { gap: 8, align: "center" }));
-
-      // Overall category progress bar
-      cardChildren.push(
-        ui.progress(Math.round(avgScore * 100), { maxValue: 100, color: catColor, size: "sm" })
-      );
-
-      // Sub-component scores
-      if (cs.subComponents && cs.subComponents.length > 0) {
-        for (const sub of cs.subComponents) {
-          const subColor = getScoreColor(sub.score);
-          const subName = ui.text(sub.name, "caption");
-          const subProgress = ui.progress(sub.score * 100, {
-            maxValue: 100,
-            color: subColor,
-            size: "sm",
-          });
-          const subValue = ui.text(sub.score.toFixed(1), "caption");
-          cardChildren.push(ui.row([subName, subProgress, subValue], { gap: 8, align: "center" }));
-        }
-      }
-
-      sharpCards.push(
-        ui.card(cardChildren, {
-          padding: 16,
-          className: `border-t-[3px]`,
-        })
-      );
+      sharpCards.push(catCardId);
     }
 
-    const sharpGrid = ui.grid(sharpCards, { columns: 2, gap: 16, responsive: true });
-    const sharpTitle = ui.text("SHARP 2.0 Evaluation", "h3");
-    children.push(ui.card([sharpTitle, sharpGrid], { padding: 16 }));
+    const sharpGrid = ui.column(sharpCards, {
+      gap: 16,
+      style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
+    } as any);
+    children.push(
+      ui.card([sharpTitle, sharpGrid], { padding: 16, className: "arena-section" } as any)
+    );
   }
 
   // Test Cases table
@@ -952,7 +925,10 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const historyLabel = ui.text(t("evolution.benchmarkRuns"), "label");
     const runRows = data.benchmarkRuns.map((r) => {
-      const scoreDisplay = r.overall_score > 0 ? `${Math.round(r.overall_score * 100)}%` : "-";
+      const scoreDisplay =
+        r.overall_score > 0
+          ? (r.overall_score <= 1.0 ? r.overall_score : r.overall_score / 100).toFixed(2)
+          : "-";
       return {
         id: r.id,
         time: new Date(r.timestamp).toLocaleString(),

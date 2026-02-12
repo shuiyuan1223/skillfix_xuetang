@@ -1388,11 +1388,19 @@ class A2UIRenderer {
     const label = c.label as string;
     const showValue = c.showValue !== false;
     const size = (c.size as string) || "md";
-    const thresholds = (c.thresholds as { value: number; color: string }[]) || [
-      { value: 30, color: "#ef4444" },
-      { value: 60, color: "#f59e0b" },
-      { value: 100, color: "#10b981" },
-    ];
+    const defaultThresholds =
+      max <= 1
+        ? [
+            { value: 0.3, color: "#ef4444" },
+            { value: 0.6, color: "#f59e0b" },
+            { value: 1.0, color: "#10b981" },
+          ]
+        : [
+            { value: 30, color: "#ef4444" },
+            { value: 60, color: "#f59e0b" },
+            { value: 100, color: "#10b981" },
+          ];
+    const thresholds = (c.thresholds as { value: number; color: string }[]) || defaultThresholds;
 
     const pct = Math.min(100, (value / max) * 100);
     let color = thresholds[thresholds.length - 1]?.color || "#667eea";
@@ -1438,7 +1446,7 @@ class A2UIRenderer {
         <div class="absolute inset-0 flex flex-col items-center justify-center">
           ${showValue
             ? html`<div class="text-2xl font-bold" style="color: ${color}">
-                ${Math.round(value)}
+                ${max <= 1 ? value.toFixed(2) : Math.round(value)}
               </div>`
             : nothing}
           ${label ? html`<div class="text-[10px] text-text-muted mt-0.5">${label}</div>` : nothing}

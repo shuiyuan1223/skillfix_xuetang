@@ -802,6 +802,22 @@ export function markInterruptedBenchmarkRuns(): number {
   }
 }
 
+/**
+ * Delete a benchmark run and its associated results and category scores.
+ */
+export function deleteBenchmarkRun(id: string): boolean {
+  const database = getDatabase();
+  try {
+    database.prepare("DELETE FROM benchmark_results WHERE run_id = ?").run(id);
+    database.prepare("DELETE FROM category_scores WHERE run_id = ?").run(id);
+    database.prepare("DELETE FROM benchmark_runs WHERE id = ?").run(id);
+    const row = database.prepare("SELECT changes() as c").get() as { c: number } | null;
+    return (row?.c ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 // ============================================================================
 // Category Score Operations
 // ============================================================================

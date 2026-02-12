@@ -90,6 +90,7 @@ import {
   getBenchmarkRun,
   getScoreTrend,
   markInterruptedBenchmarkRuns,
+  deleteBenchmarkRun,
 } from "../memory/db.js";
 import { BenchmarkRunner } from "../evolution/benchmark-runner.js";
 import {
@@ -719,6 +720,10 @@ export class GatewaySession {
   // Arena comparison state
   private benchmarkSelectedRunIds: Set<string> = new Set();
   private benchmarkRadarMode: "categories" | "criteria" = "categories";
+
+  // Modal state
+  private modalRadarMode: "categories" | "criteria" = "categories";
+  private lastViewedBenchmarkRunId: string | null = null;
 
   constructor(config: GatewayConfig = {}, userUuid?: string) {
     this.config = config;
@@ -2072,56 +2077,31 @@ export class GatewaySession {
       const row = payload.row as { id: string };
       const runId = this.findFullBenchmarkRunId(row.id);
       if (runId) {
-        const run = getBenchmarkRun(runId);
-        if (run) {
-          const scores = listCategoryScores(runId);
-          const modal = generateBenchmarkRunDetailModal(
-            {
-              id: run.id,
-              timestamp: run.timestamp,
-              versionTag: run.version_tag,
-              profile: run.profile,
-              overallScore: run.overall_score,
-              passedCount: run.passed_count,
-              failedCount: run.failed_count,
-              totalTestCases: run.total_test_cases,
-              durationMs: run.duration_ms,
-            },
-            scores.map((s) => {
-              // Parse sub-components from details JSON
-              let subComponents:
-                | Array<{ name: string; score: number; scoring: "binary" | "3-point" }>
-                | undefined;
-              if (s.details) {
-                try {
-                  const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
-                  if (Array.isArray(details)) {
-                    subComponents = details.map((d: any) => ({
-                      name: d.subComponent || d.name || "Unknown",
-                      score: typeof d.score === "number" ? d.score : 0,
-                      scoring: d.scoringType || d.scoring || "binary",
-                    }));
-                  }
-                } catch {
-                  // legacy format
-                }
-              }
-              return {
-                category: s.category,
-                score: s.score,
-                testCount: s.test_count,
-                passedCount: s.passed_count,
-                subComponents,
-              };
-            })
-          );
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
-        }
+        this.lastViewedBenchmarkRunId = runId;
+        this.modalRadarMode = "categories";
+        this.sendBenchmarkRunModal(runId, send);
+      }
+    } else if (action === "delete_benchmark_run") {
+      const runId = payload?.runId as string;
+      if (runId) {
+        const fullId = this.findFullBenchmarkRunId(runId) || runId;
+        deleteBenchmarkRun(fullId);
+        this.benchmarkSelectedRunIds.delete(fullId);
+        // Close modal + refresh page
+        send({ type: "a2ui", surface_id: "modal", components: {}, root_id: "" });
+        this.sendEvolutionLabUpdate(send);
+        const toast = generateToast("Benchmark run deleted", "success");
+        send({
+          type: "a2ui",
+          surface_id: "toast",
+          components: toast.components,
+          root_id: toast.root_id,
+        });
+      }
+    } else if (action === "set_modal_radar_mode") {
+      this.modalRadarMode = (payload?.mode as string) === "criteria" ? "criteria" : "categories";
+      if (this.lastViewedBenchmarkRunId) {
+        this.sendBenchmarkRunModal(this.lastViewedBenchmarkRunId, send);
       }
     } else if (action === "toggle_benchmark_run") {
       const runId = (payload?.runId as string) || (payload?.row as { id: string })?.id;
@@ -2939,8 +2919,60 @@ export class GatewaySession {
 
   private findFullBenchmarkRunId(shortId: string): string | null {
     const runs = listBenchmarkRuns({ limit: 100 });
-    const found = runs.find((r) => r.id.startsWith(shortId));
+    const found = runs.find((r) => r.id === shortId || r.id.startsWith(shortId));
     return found?.id || null;
+  }
+
+  private sendBenchmarkRunModal(runId: string, send: (msg: unknown) => void): void {
+    const run = getBenchmarkRun(runId);
+    if (!run) return;
+    const scores = listCategoryScores(runId);
+    const modal = generateBenchmarkRunDetailModal(
+      {
+        id: run.id,
+        timestamp: run.timestamp,
+        versionTag: run.version_tag,
+        profile: run.profile,
+        overallScore: run.overall_score,
+        passedCount: run.passed_count,
+        failedCount: run.failed_count,
+        totalTestCases: run.total_test_cases,
+        durationMs: run.duration_ms,
+      },
+      scores.map((s) => {
+        let subComponents:
+          | Array<{ name: string; score: number; scoring: "binary" | "3-point" }>
+          | undefined;
+        if (s.details) {
+          try {
+            const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
+            if (Array.isArray(details)) {
+              subComponents = details.map((d: any) => ({
+                name: d.subComponent || d.name || "Unknown",
+                score: typeof d.score === "number" ? d.score : 0,
+                scoring: d.scoringType || d.scoring || "binary",
+              }));
+            }
+          } catch {
+            // legacy format
+          }
+        }
+        return {
+          category: s.category,
+          score: s.score,
+          testCount: s.test_count,
+          passedCount: s.passed_count,
+          subComponents,
+        };
+      }),
+      this.modalRadarMode
+    );
+    send({
+      type: "a2ui",
+      surface_id: "modal",
+      components: modal.components,
+      root_id: modal.root_id,
+    });
   }
 
   private async runBenchmarkAsync(
