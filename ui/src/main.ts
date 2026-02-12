@@ -1446,7 +1446,7 @@ class A2UIRenderer {
         <div class="absolute inset-0 flex flex-col items-center justify-center">
           ${showValue
             ? html`<div class="text-2xl font-bold" style="color: ${color}">
-                ${max <= 1 ? value.toFixed(2) : Math.round(value)}
+                ${max <= 1 ? (Math.floor(value * 1000) / 1000).toString() : Math.round(value)}
               </div>`
             : nothing}
           ${label ? html`<div class="text-[10px] text-text-muted mt-0.5">${label}</div>` : nothing}

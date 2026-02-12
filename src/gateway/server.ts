@@ -120,6 +120,177 @@ import {
 } from "./evolution-lab.js";
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
 
+// ============================================================================
+// SHARP Category Re-aggregation
+// ============================================================================
+
+/**
+ * Re-aggregate scene-category DB rows (with all 16 SHARP sub-components in details)
+ * into 5 SHARP categories (Safety, Usefulness, Accuracy, Relevance, Personalization),
+ * each with only its own 2-4 sub-components.
+ *
+ * DB stores: health-data-analysis → details: [all 16 SHARP ratings]
+ * UI needs: safety → subComponents: [Risk Disclosure, Medical Boundary, ...]
+ */
+interface SubComp {
+  name: string;
+  score: number;
+  scoring: "binary" | "3-point";
+}
+interface SceneCategoryRow {
+  category: string;
+  score: number;
+  test_count: number;
+  passed_count: number;
+  subComponents?: SubComp[];
+}
+interface SharpCategoryRow {
+  category: string;
+  score: number;
+  test_count: number;
+  passed_count: number;
+  subComponents: SubComp[];
+}
+
+function reAggregateToSharpCategories(sceneRows: SceneCategoryRow[]): SharpCategoryRow[] {
+  // Collect all sub-component ratings from all scene categories
+  const sharpMap = new Map<
+    string,
+    Map<string, { scores: number[]; scoring: "binary" | "3-point" }>
+  >();
+
+  for (const row of sceneRows) {
+    if (!row.subComponents) continue;
+    for (const sub of row.subComponents) {
+      // sub.name = e.g. "Risk Disclosure", and it has a SHARP category in the rating
+      // But the subComponent doesn't carry its SHARP category directly.
+      // We need to figure out which SHARP category it belongs to.
+      // The category info is embedded in the original SharpRating.category field,
+      // which is stored in the details JSON. Let's check if it's there.
+    }
+  }
+
+  // Since the details JSON stores SharpRating objects with {category, subComponent, score, scoringType},
+  // we need the raw details. But at this point we only have parsed subComponents.
+  // The subComponents were parsed losing the SHARP category info.
+  // We need to go back to the raw details JSON.
+  // For now, let's match sub-component names to known SHARP categories.
+
+  const SHARP_SUB_MAP: Record<string, string> = {
+    // Safety (4)
+    "risk disclosure": "safety",
+    "medical boundary": "safety",
+    "capability scoping": "safety",
+    "harmful content prevention": "safety",
+    // Usefulness (4)
+    "comprehensiveness and professionalism": "usefulness",
+    "actionability and clarity": "usefulness",
+    "readability and structure": "usefulness",
+    "empathy and encouragement": "usefulness",
+    // Accuracy (4)
+    "factual & scientific accuracy": "accuracy",
+    "computational accuracy": "accuracy",
+    "data source adherence": "accuracy",
+    "rule-based recommendations": "accuracy",
+    // Relevance (2)
+    "topic relevance": "relevance",
+    "domain specialization": "relevance",
+    // Personalization (2)
+    "effective personalization": "personalization",
+    "contextual audience awareness": "personalization",
+  };
+
+  // Collect and average across all scene rows
+  const catSubMap = new Map<
+    string,
+    Map<string, { scores: number[]; scoring: "binary" | "3-point" }>
+  >();
+
+  for (const row of sceneRows) {
+    if (!row.subComponents) continue;
+    for (const sub of row.subComponents) {
+      const sharpCat = SHARP_SUB_MAP[sub.name.toLowerCase()] || "unknown";
+      if (sharpCat === "unknown") continue;
+
+      if (!catSubMap.has(sharpCat)) catSubMap.set(sharpCat, new Map());
+      const subMap = catSubMap.get(sharpCat)!;
+      if (!subMap.has(sub.name)) {
+        subMap.set(sub.name, { scores: [], scoring: sub.scoring });
+      }
+      subMap.get(sub.name)!.scores.push(sub.score);
+    }
+  }
+
+  // Total test count / passed count across all scene rows
+  const totalTests = sceneRows.reduce((sum, r) => sum + r.test_count, 0);
+  const totalPassed = sceneRows.reduce((sum, r) => sum + r.passed_count, 0);
+
+  // Build SHARP category rows
+  const SHARP_ORDER = ["safety", "usefulness", "accuracy", "relevance", "personalization"];
+  const result: SharpCategoryRow[] = [];
+
+  for (const cat of SHARP_ORDER) {
+    const subMap = catSubMap.get(cat);
+    if (!subMap || subMap.size === 0) continue;
+
+    const subs: SubComp[] = [];
+    let catScoreSum = 0;
+    for (const [name, data] of subMap) {
+      const avg = data.scores.reduce((a, b) => a + b, 0) / data.scores.length;
+      subs.push({ name, score: Math.round(avg * 1000) / 1000, scoring: data.scoring });
+      catScoreSum += avg;
+    }
+    const catScore = subs.length > 0 ? catScoreSum / subs.length : 0;
+
+    result.push({
+      category: cat,
+      score: Math.round(catScore * 1000) / 1000,
+      test_count: totalTests,
+      passed_count: totalPassed,
+      subComponents: subs,
+    });
+  }
+
+  return result;
+}
+
+/** Parse raw DB CategoryScoreRow[] into scene-category rows with subComponents, then re-aggregate into SHARP categories. */
+function parseAndReAggregateScores(
+  dbRows: Array<{
+    category: string;
+    score: number;
+    test_count: number;
+    passed_count: number;
+    details: string | null;
+  }>
+): SharpCategoryRow[] {
+  const sceneRows: SceneCategoryRow[] = dbRows.map((s) => {
+    let subComponents: SubComp[] | undefined;
+    if (s.details) {
+      try {
+        const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
+        if (Array.isArray(details)) {
+          subComponents = details.map((d: any) => ({
+            name: d.subComponent || d.name || "Unknown",
+            score: typeof d.score === "number" ? d.score : 0,
+            scoring: d.scoringType || d.scoring || "binary",
+          }));
+        }
+      } catch {
+        // legacy format
+      }
+    }
+    return {
+      category: s.category,
+      score: s.score,
+      test_count: s.test_count,
+      passed_count: s.passed_count,
+      subComponents,
+    };
+  });
+  return reAggregateToSharpCategories(sceneRows);
+}
+
 export interface GatewayConfig {
   port?: number;
   apiKey?: string;
@@ -2345,38 +2516,12 @@ export class GatewaySession {
         }));
       }
 
-      // Latest run category scores (for overview consistency)
+      // Latest run category scores — re-aggregate into SHARP categories
       if (runs.length > 0) {
         try {
           const latestScores = listCategoryScores(runs[0].id);
           if (latestScores.length > 0) {
-            latestRunCategoryScores = latestScores.map((s) => {
-              // Parse SHARP sub-component details from JSON
-              let subComponents:
-                | Array<{ name: string; score: number; scoring: "binary" | "3-point" }>
-                | undefined;
-              if (s.details) {
-                try {
-                  const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
-                  if (Array.isArray(details)) {
-                    subComponents = details.map((d: any) => ({
-                      name: d.subComponent || d.name || "Unknown",
-                      score: typeof d.score === "number" ? d.score : 0,
-                      scoring: d.scoringType || d.scoring || "binary",
-                    }));
-                  }
-                } catch {
-                  // legacy format, ignore
-                }
-              }
-              return {
-                category: s.category,
-                score: s.score,
-                test_count: s.test_count,
-                passed_count: s.passed_count,
-                subComponents,
-              };
-            });
+            latestRunCategoryScores = parseAndReAggregateScores(latestScores);
           }
         } catch {
           // ok
@@ -2444,32 +2589,7 @@ export class GatewaySession {
             label: shortLabel,
             color: RUN_COLORS[colorIdx % RUN_COLORS.length],
             overallScore: run.overall_score,
-            categoryScores: scores.map((s) => {
-              let subComponents:
-                | Array<{ name: string; score: number; scoring: "binary" | "3-point" }>
-                | undefined;
-              if (s.details) {
-                try {
-                  const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
-                  if (Array.isArray(details)) {
-                    subComponents = details.map((d: any) => ({
-                      name: d.subComponent || d.name || "Unknown",
-                      score: typeof d.score === "number" ? d.score : 0,
-                      scoring: d.scoringType || d.scoring || "binary",
-                    }));
-                  }
-                } catch {
-                  // legacy
-                }
-              }
-              return {
-                category: s.category,
-                score: s.score,
-                test_count: s.test_count,
-                passed_count: s.passed_count,
-                subComponents,
-              };
-            }),
+            categoryScores: parseAndReAggregateScores(scores),
           });
           colorIdx++;
         } catch {
@@ -2927,6 +3047,7 @@ export class GatewaySession {
     const run = getBenchmarkRun(runId);
     if (!run) return;
     const scores = listCategoryScores(runId);
+    const sharpCategories = parseAndReAggregateScores(scores);
     const modal = generateBenchmarkRunDetailModal(
       {
         id: run.id,
@@ -2939,32 +3060,13 @@ export class GatewaySession {
         totalTestCases: run.total_test_cases,
         durationMs: run.duration_ms,
       },
-      scores.map((s) => {
-        let subComponents:
-          | Array<{ name: string; score: number; scoring: "binary" | "3-point" }>
-          | undefined;
-        if (s.details) {
-          try {
-            const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
-            if (Array.isArray(details)) {
-              subComponents = details.map((d: any) => ({
-                name: d.subComponent || d.name || "Unknown",
-                score: typeof d.score === "number" ? d.score : 0,
-                scoring: d.scoringType || d.scoring || "binary",
-              }));
-            }
-          } catch {
-            // legacy format
-          }
-        }
-        return {
-          category: s.category,
-          score: s.score,
-          testCount: s.test_count,
-          passedCount: s.passed_count,
-          subComponents,
-        };
-      }),
+      sharpCategories.map((s) => ({
+        category: s.category,
+        score: s.score,
+        testCount: s.test_count,
+        passedCount: s.passed_count,
+        subComponents: s.subComponents,
+      })),
       this.modalRadarMode
     );
     send({

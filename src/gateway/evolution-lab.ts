@@ -1415,11 +1415,11 @@ function generateAgentTab(ui: A2UIGenerator, data: EvolutionLabData): string {
 
     if (data.agentContextData.radarScores && data.agentContextData.radarScores.length > 0) {
       const radarData = data.agentContextData.radarScores.map((cs) => {
-        const displayScore = cs.score <= 1.0 ? Math.round(cs.score * 100) : Math.round(cs.score);
+        const displayScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
         return {
           label: getCategoryLabel(cs.category),
-          value: displayScore,
-          maxValue: 100,
+          value: parseFloat(displayScore.toFixed(3)),
+          maxValue: 1.0,
         };
       });
       const radar = ui.radarChart(radarData, {
