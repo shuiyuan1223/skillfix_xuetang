@@ -3706,6 +3706,8 @@ export class GatewaySession {
         break;
       case "validate":
         this.playgroundState.validateResult = undefined;
+        this.playgroundState.validateProgress = undefined;
+        this.playgroundState.validateError = undefined;
         this.pgRunValidation(send);
         break;
       case "apply":
@@ -4379,6 +4381,7 @@ ${changesDesc}
   }
 
   private async pgRunValidation(send: (msg: unknown) => void) {
+    this.playgroundState.validateProgress = "Preparing validation benchmark...";
     this.sendEvolutionLabUpdate(send);
     try {
       const profile = (this.playgroundState.benchmarkResult?.profile || "quick") as
@@ -4386,6 +4389,9 @@ ${changesDesc}
         | "full";
       const AGENT_TIMEOUT_MS = 120_000;
       const agent = await this.getAgent();
+
+      this.playgroundState.validateProgress = "Creating judge agent...";
+      this.sendEvolutionLabUpdate(send);
 
       const judgeConfig = getJudgeModel();
       const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
@@ -4399,6 +4405,7 @@ ${changesDesc}
         dataSource: new JudgeMockDS(),
       });
 
+      let testsDone = 0;
       const runner = new BenchmarkRunner({
         agentCall: async (query: string) => {
           if (typeof agent.reset === "function") agent.reset();
@@ -4419,9 +4426,19 @@ ${changesDesc}
           ]);
         },
         concurrency: getBenchmarkConcurrency(),
+        onProgress: (current: number, total: number, _testCase: any) => {
+          testsDone = current;
+          this.playgroundState.validateProgress = `Running tests: ${current}/${total}`;
+          this.sendEvolutionLabUpdateThrottled(send);
+        },
       });
 
+      this.playgroundState.validateProgress = "Seeding test cases...";
+      this.sendEvolutionLabUpdate(send);
       await runner.seedTestCases();
+
+      this.playgroundState.validateProgress = "Running validation benchmark...";
+      this.sendEvolutionLabUpdate(send);
       const result = await runner.run({ profile });
 
       const afterScore =
@@ -4442,6 +4459,7 @@ ${changesDesc}
       if (delta >= 0.02) recommendation = "merge";
       else if (delta < -0.05) recommendation = "revert";
 
+      this.playgroundState.validateProgress = undefined;
       this.playgroundState.validateResult = {
         beforeScore,
         afterScore,
@@ -4457,11 +4475,11 @@ ${changesDesc}
       );
       this.sendEvolutionLabUpdate(send);
     } catch (error) {
-      this.pgAddLog(
-        "validate",
-        `Validation failed: ${error instanceof Error ? error.message : String(error)}`,
-        "error"
-      );
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error("[Playground Validate]", errMsg);
+      this.playgroundState.validateProgress = undefined;
+      this.playgroundState.validateError = errMsg;
+      this.pgAddLog("validate", `Validation failed: ${errMsg}`, "error");
       this.sendEvolutionLabUpdate(send);
     }
   }

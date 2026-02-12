@@ -230,6 +230,8 @@ export interface PlaygroundState {
   applyProgress?: string;
   applyError?: string;
   applyPrompt?: string;
+  validateProgress?: string;
+  validateError?: string;
 }
 
 export interface EvolutionLabData {
@@ -2225,7 +2227,13 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
       payload: { action: "new_cycle" },
     });
     children.push(ui.row([mergeBtn, revertBtn, newCycleBtn], { gap: 12, justify: "center" }));
+  } else if (state.validateError) {
+    children.push(ui.badge("Failed", { variant: "error" }));
+    children.push(ui.text(state.validateError, "body"));
   } else {
+    if (state.validateProgress) {
+      children.push(ui.badge(state.validateProgress, { variant: "info" }));
+    }
     children.push(ui.text(t("evolution.validating"), "body"));
     children.push(ui.skeleton({ variant: "rectangular", height: 200 }));
   }
