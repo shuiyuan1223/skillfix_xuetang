@@ -299,6 +299,7 @@ export const en: LocaleMessages = {
     diagnoseFoundWeak: "Found {count} weak categories",
     diagnoseGenerated: "Generated {count} optimization suggestions",
     retry: "Retry",
+    retryStep: "Retry Current Step",
     rerunQuick: "Rerun Quick (5)",
     rerunFull: "Rerun Full (16)",
     // Auto-evolve

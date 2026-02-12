@@ -1711,7 +1711,13 @@ function generatePgFab(ui: A2UIGenerator, state: PlaygroundState): string {
   } else if (pgStepHasResult(state)) {
     const nextStep = pgGetNextStep(state.step);
     primary = { icon: "skip-forward", action: "pg_advance", payload: { nextStep } };
-    // Always show rerun options when benchmark result exists
+    // Retry current step
+    actions.push({
+      icon: "refresh-cw",
+      action: "pg_retry_step",
+      tooltip: t("evolution.retryStep"),
+    });
+    // Rerun benchmark from scratch
     actions.push(
       {
         icon: "zap",

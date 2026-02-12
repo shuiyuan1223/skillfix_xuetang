@@ -315,6 +315,7 @@ export interface LocaleMessages {
     diagnoseFoundWeak: string;
     diagnoseGenerated: string;
     retry: string;
+    retryStep: string;
     rerunQuick: string;
     rerunFull: string;
     // Auto-evolve

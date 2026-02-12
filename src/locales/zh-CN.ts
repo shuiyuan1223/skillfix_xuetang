@@ -292,6 +292,7 @@ export const zhCN: LocaleMessages = {
     diagnoseFoundWeak: "发现 {count} 个薄弱分类",
     diagnoseGenerated: "生成 {count} 条优化建议",
     retry: "重试",
+    retryStep: "重跑当前步骤",
     rerunQuick: "重跑 Quick (5)",
     rerunFull: "重跑 Full (16)",
     // Auto-evolve
