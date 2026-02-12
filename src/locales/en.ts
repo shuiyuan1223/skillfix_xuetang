@@ -424,6 +424,7 @@ export const en: LocaleMessages = {
     cycleComplete: "Evolution Cycle Complete",
     proposalHint:
       "Ask the agent to generate proposals via chat below, or submit proposals manually",
+    proposeGenerating: "Generating optimization proposal from diagnose results...",
     agentDriven: "Agent Driven",
     evolutionConsole: "Evolution Console",
     taskFlowControl: "Task & Flow Control",

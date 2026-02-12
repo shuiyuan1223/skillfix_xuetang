@@ -3584,6 +3584,8 @@ export class GatewaySession {
     // Auto-processing for certain transitions
     if (nextStep === "diagnose" && this.playgroundState.benchmarkResult) {
       this.pgRunDiagnose(send);
+    } else if (nextStep === "propose" && this.playgroundState.diagnoseResult) {
+      this.pgRunPropose(send);
     } else if (nextStep === "validate") {
       this.pgRunValidation(send);
     } else {
@@ -3617,12 +3619,17 @@ export class GatewaySession {
         this.playgroundState.diagnoseProgress = undefined;
         this.pgRunDiagnose(send);
         break;
+      case "propose":
+        this.playgroundState.proposal = undefined;
+        this.playgroundState.proposeProgress = undefined;
+        this.pgRunPropose(send);
+        break;
       case "validate":
         this.playgroundState.validateResult = undefined;
         this.pgRunValidation(send);
         break;
       default:
-        // For propose/approve/apply — just reset and let user re-trigger
+        // For approve/apply — just reset and let user re-trigger
         this.sendEvolutionLabUpdate(send);
         break;
     }
@@ -3765,6 +3772,232 @@ export class GatewaySession {
       this.playgroundState.diagnoseResult = { weaknesses: [], suggestions: [] };
       this.sendEvolutionLabUpdate(send);
     }
+  }
+
+  private async pgRunPropose(send: (msg: unknown) => void) {
+    this.sendEvolutionLabUpdate(send);
+    const diagnoseResult = this.playgroundState.diagnoseResult;
+    if (!diagnoseResult || diagnoseResult.weaknesses.length === 0) {
+      // No weaknesses found — auto-fill an empty proposal
+      this.playgroundState.proposal = {
+        description: "No weaknesses detected — all SHARP dimensions above threshold.",
+        changes: [],
+        expectedImprovement: "N/A",
+      };
+      this.pgAddLog("propose", "No weaknesses to address", "warning");
+      this.sendEvolutionLabUpdate(send);
+      return;
+    }
+
+    try {
+      const progress = (msg: string) => {
+        this.playgroundState.proposeProgress = msg;
+        this.sendEvolutionLabUpdateThrottled(send);
+      };
+
+      progress("Reading target files...");
+
+      // Collect unique target files from diagnose suggestions
+      const targetPaths = new Set<string>();
+      for (const s of diagnoseResult.suggestions) {
+        for (const f of s.targetFiles) {
+          targetPaths.add(f);
+        }
+      }
+      // Also include SOUL.md as primary target
+      targetPaths.add("src/prompts/SOUL.md");
+
+      // Read target file contents
+      const { existsSync, readFileSync } = await import("fs");
+      const { join } = await import("path");
+      const { getProjectRoot } = await import("../evolution/version-manager.js");
+      const root = getProjectRoot();
+
+      const fileContents: Record<string, string> = {};
+      for (const fp of targetPaths) {
+        try {
+          const fullPath = join(root, fp);
+          if (existsSync(fullPath)) {
+            const content = readFileSync(fullPath, "utf-8");
+            // Truncate to 2000 chars to avoid token overflow
+            fileContents[fp] =
+              content.length > 2000 ? content.slice(0, 2000) + "\n... (truncated)" : content;
+          }
+        } catch {
+          // skip unreadable files
+        }
+      }
+
+      progress("Generating proposal with LLM...");
+
+      // Build LLM prompt
+      const weakSummary = diagnoseResult.weaknesses
+        .map((w) => {
+          const subs = w.weakSubComponents
+            ? w.weakSubComponents.map((sc) => `${sc.name}(${sc.score.toFixed(2)})`).join(", ")
+            : "";
+          return `- **${w.label}** (${w.score.toFixed(3)}): ${subs}`;
+        })
+        .join("\n");
+
+      const suggestionSummary = diagnoseResult.suggestions
+        .map((s, i) => `${i + 1}. [${s.priority}] ${s.description}`)
+        .join("\n");
+
+      const patternSummary = diagnoseResult.weaknesses
+        .filter((w) => w.patterns.length > 0)
+        .map((w) => `- ${w.label}: ${w.patterns.join("; ")}`)
+        .join("\n");
+
+      const fileContentSection = Object.entries(fileContents)
+        .map(([path, content]) => `### ${path}\n\`\`\`\n${content}\n\`\`\``)
+        .join("\n\n");
+
+      const prompt = `你是 PHA (Personal Health Agent) 的进化架构师。请根据诊断结果和当前文件内容，生成具体的优化提案。
+
+## 诊断结果
+
+### 薄弱 SHARP 维度
+${weakSummary}
+
+### 共性问题
+${patternSummary || "（无 LLM 分析结果）"}
+
+### 改进建议
+${suggestionSummary}
+
+## 当前文件内容
+
+${fileContentSection}
+
+## 要求
+
+请为每个需要修改的文件生成具体的修改方案。每条修改必须包含：
+1. 要修改的文件路径
+2. 具体修改内容描述（应该添加什么、修改什么、删除什么）
+3. 修改理由（对应哪个薄弱维度）
+
+## 输出 JSON（不要 markdown 包裹）
+
+{
+  "description": "提案总体描述（中文，2-3句话概述修改方向和预期效果）",
+  "changes": [
+    {
+      "path": "src/prompts/SOUL.md",
+      "description": "在回复规则中添加数据引用要求：Agent 回复时必须引用具体的健康数据来源和数值，禁止凭空编造数据"
+    }
+  ],
+  "expectedImprovement": "Accuracy 从 0.64 提升至 0.75+，Usefulness 从 0.65 提升至 0.72+"
+}`;
+
+      // Create judge LLM for proposal generation
+      const djConfig = getJudgeModel();
+      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
+      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
+      const { MockDataSource: ProposeMockDS } = await import("../data-sources/mock.js");
+      const proposeAgent = await createPHAAgent({
+        apiKey: djApiKey,
+        provider: djConfig.provider as any,
+        modelId: djConfig.modelId,
+        baseUrl: djBaseUrl,
+        dataSource: new ProposeMockDS(),
+      });
+
+      const AGENT_TIMEOUT_MS = 120_000;
+      const response = await Promise.race([
+        proposeAgent.chatAndWait(prompt),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error("Propose LLM call timed out")), AGENT_TIMEOUT_MS)
+        ),
+      ]);
+
+      // Parse LLM response
+      const parsed = this.parseProposalJSON(response);
+
+      if (parsed && parsed.changes && Array.isArray(parsed.changes)) {
+        this.playgroundState.proposal = {
+          description: parsed.description || "LLM-generated optimization proposal",
+          changes: parsed.changes.map((c: { path?: string; description?: string }) => ({
+            path: c.path || "src/prompts/SOUL.md",
+            description: c.description || "",
+          })),
+          expectedImprovement: parsed.expectedImprovement || "",
+        };
+        this.pgAddLog("propose", "Proposal generated successfully", "success");
+      } else {
+        // Fallback: generate from diagnose suggestions
+        console.error("[propose] LLM response parsing failed. Response:", response?.slice(0, 500));
+        this.pgGenerateFallbackProposal();
+        this.pgAddLog("propose", "Generated fallback proposal from diagnose results", "warning");
+      }
+
+      this.playgroundState.proposeProgress = undefined;
+      this.sendEvolutionLabUpdate(send);
+    } catch (error) {
+      console.error("[propose] Proposal generation failed:", error);
+      this.playgroundState.proposeProgress = undefined;
+      // Fallback to diagnose-based proposal
+      this.pgGenerateFallbackProposal();
+      this.pgAddLog(
+        "propose",
+        `LLM proposal failed, using fallback: ${error instanceof Error ? error.message : String(error)}`,
+        "warning"
+      );
+      this.sendEvolutionLabUpdate(send);
+    }
+  }
+
+  private parseProposalJSON(text: string): any {
+    if (!text || typeof text !== "string") return null;
+    try {
+      return JSON.parse(text.trim());
+    } catch {
+      /* noop */
+    }
+    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) {
+      try {
+        return JSON.parse(fenceMatch[1].trim());
+      } catch {
+        /* noop */
+      }
+    }
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        return JSON.parse(jsonMatch[0]);
+      } catch {
+        /* noop */
+      }
+    }
+    return null;
+  }
+
+  private pgGenerateFallbackProposal() {
+    const diagnoseResult = this.playgroundState.diagnoseResult;
+    if (!diagnoseResult) return;
+
+    const changes: Array<{ path: string; description: string }> = [];
+    const seenPaths = new Set<string>();
+
+    for (const s of diagnoseResult.suggestions) {
+      for (const file of s.targetFiles) {
+        if (!seenPaths.has(file)) {
+          seenPaths.add(file);
+          changes.push({ path: file, description: s.description });
+        }
+      }
+    }
+
+    const weakSummary = diagnoseResult.weaknesses
+      .map((w) => `${w.label}(${w.score.toFixed(2)})`)
+      .join(", ");
+
+    this.playgroundState.proposal = {
+      description: diagnoseResult.suggestions.map((s) => s.description).join("\n\n"),
+      changes,
+      expectedImprovement: `Improve weak dimensions: ${weakSummary}`,
+    };
   }
 
   private pgHandleApproval(

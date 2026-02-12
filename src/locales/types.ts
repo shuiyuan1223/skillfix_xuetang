@@ -438,6 +438,7 @@ export interface LocaleMessages {
     validating: string;
     cycleComplete: string;
     proposalHint: string;
+    proposeGenerating: string;
     agentDriven: string;
     evolutionConsole: string;
     taskFlowControl: string;

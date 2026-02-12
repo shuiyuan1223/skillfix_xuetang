@@ -226,6 +226,7 @@ export interface PlaygroundState {
   log: PlaygroundLogEntry[];
   benchmarkProgress?: { current: number; total: number };
   diagnoseProgress?: string;
+  proposeProgress?: string;
 }
 
 export interface EvolutionLabData {
@@ -1953,8 +1954,13 @@ function generatePgPropose(ui: A2UIGenerator, state: PlaygroundState): string {
   const children: string[] = [];
 
   if (!state.proposal) {
-    const hint = ui.text(t("evolution.proposalHint"), "body");
-    children.push(ui.card([ui.text(t("evolution.pipelinePropose"), "h3"), hint], { padding: 16 }));
+    const loadingChildren: string[] = [ui.text(t("evolution.pipelinePropose"), "h3")];
+    if (state.proposeProgress) {
+      loadingChildren.push(ui.badge(state.proposeProgress, { variant: "info" }));
+    }
+    loadingChildren.push(ui.skeleton({ variant: "rectangular", height: 120 }));
+    loadingChildren.push(ui.text(t("evolution.proposeGenerating"), "caption"));
+    children.push(ui.card(loadingChildren, { padding: 16 }));
   } else {
     const { description, changes, expectedImprovement } = state.proposal;
     children.push(ui.text(t("evolution.pipelinePropose"), "h3"));
