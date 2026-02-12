@@ -3632,46 +3632,78 @@ export class GatewaySession {
     this.sendEvolutionLabUpdate(send);
     try {
       const { diagnose } = await import("../evolution/diagnose.js");
-      const agent = await this.getAgent();
-      const AGENT_TIMEOUT_MS = 120_000;
+      const { getBenchmarkRun, listBenchmarkResults, listCategoryScores } =
+        await import("../memory/db.js");
 
-      const djConfig = getJudgeModel();
-      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
-      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
-      const { MockDataSource: DiagMockDS } = await import("../data-sources/mock.js");
-      const diagnoseJudge = await createPHAAgent({
-        apiKey: djApiKey,
-        provider: djConfig.provider as any,
-        modelId: djConfig.modelId,
-        baseUrl: djBaseUrl,
-        dataSource: new DiagMockDS(),
-      });
+      const runId = this.playgroundState.benchmarkResult?.runId;
+      if (!runId) {
+        throw new Error("No benchmark result available — run benchmark first");
+      }
+
+      // Load existing benchmark data from DB instead of re-running
+      const runRow = getBenchmarkRun(runId);
+      if (!runRow) {
+        throw new Error(`Benchmark run ${runId} not found in database`);
+      }
+
+      const resultRows = listBenchmarkResults({ runId });
+      const categoryRows = listCategoryScores(runId);
+
+      // Convert DB rows → domain types
+      const run: import("../evolution/types.js").BenchmarkRun = {
+        id: runRow.id,
+        timestamp: runRow.timestamp,
+        versionTag: runRow.version_tag ?? undefined,
+        promptVersions: runRow.prompt_versions ? JSON.parse(runRow.prompt_versions) : {},
+        skillVersions: runRow.skill_versions ? JSON.parse(runRow.skill_versions) : {},
+        totalTestCases: runRow.total_test_cases,
+        passedCount: runRow.passed_count,
+        failedCount: runRow.failed_count,
+        overallScore: runRow.overall_score,
+        durationMs: runRow.duration_ms ?? 0,
+        profile: runRow.profile as "quick" | "full",
+        metadata: runRow.metadata ? JSON.parse(runRow.metadata) : undefined,
+      };
+
+      const results: import("../evolution/types.js").BenchmarkResult[] = resultRows.map((r) => ({
+        id: r.id,
+        runId: r.run_id,
+        testCaseId: r.test_case_id,
+        timestamp: r.timestamp,
+        agentResponse: r.agent_response ?? "",
+        toolCalls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
+        scores: r.scores ? JSON.parse(r.scores) : [],
+        overallScore: r.overall_score,
+        passed: r.passed === 1,
+        feedback: r.feedback ?? "",
+        issues: r.issues ? JSON.parse(r.issues) : undefined,
+        durationMs: r.duration_ms ?? 0,
+      }));
+
+      type BenchmarkCategory = import("../evolution/types.js").BenchmarkCategory;
+      type CategoryScore = import("../evolution/types.js").CategoryScore;
+      const categoryScores = new Map<BenchmarkCategory, CategoryScore>();
+      for (const row of categoryRows) {
+        // Only use top-level category scores (no subcategory)
+        if (!row.subcategory) {
+          categoryScores.set(row.category as BenchmarkCategory, {
+            id: row.id,
+            runId: row.run_id,
+            category: row.category as BenchmarkCategory,
+            score: row.score,
+            testCount: row.test_count,
+            passedCount: row.passed_count,
+            details: row.details ? JSON.parse(row.details) : undefined,
+          });
+        }
+      }
 
       const result = await diagnose({
         profile: (this.playgroundState.benchmarkResult?.profile || "quick") as "quick" | "full",
+        existingBenchmark: { run, results, categoryScores },
         onProgress: (msg: string) => {
           this.playgroundState.diagnoseProgress = msg;
           this.sendEvolutionLabUpdateThrottled(send);
-        },
-        runnerConfig: {
-          agentCall: async (query: string) => {
-            if (typeof agent.reset === "function") agent.reset();
-            return await Promise.race([
-              agent.chatAndWait(query).then((response: string) => ({ response })),
-              new Promise<{ response: string }>((_, reject) =>
-                setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
-              ),
-            ]);
-          },
-          llmCall: async (prompt: string) => {
-            if (typeof diagnoseJudge.reset === "function") diagnoseJudge.reset();
-            return await Promise.race([
-              diagnoseJudge.chatAndWait(prompt),
-              new Promise<string>((_, reject) =>
-                setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
-              ),
-            ]);
-          },
         },
       });
 

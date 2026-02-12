@@ -52,26 +52,53 @@ export interface DiagnoseResult {
 }
 
 /**
- * Run diagnose pipeline: benchmark → analyze → suggest → (optional) create issues
+ * Pre-existing benchmark data — pass this to skip re-running the benchmark
+ */
+export interface ExistingBenchmarkData {
+  run: BenchmarkRun;
+  results: BenchmarkResult[];
+  categoryScores: Map<BenchmarkCategory, CategoryScore>;
+}
+
+/**
+ * Run diagnose pipeline: analyze weaknesses → generate suggestions → (optional) create issues
+ *
+ * If `existingBenchmark` is provided, uses that data directly instead of re-running the benchmark.
  */
 export async function diagnose(opts: {
   profile: BenchmarkProfile;
-  runnerConfig: BenchmarkRunnerConfig;
+  runnerConfig?: BenchmarkRunnerConfig;
+  existingBenchmark?: ExistingBenchmarkData;
   createIssues?: boolean;
   onProgress?: (msg: string) => void;
 }): Promise<DiagnoseResult> {
-  const { profile, runnerConfig, createIssues = false, onProgress } = opts;
+  const { profile, runnerConfig, existingBenchmark, createIssues = false, onProgress } = opts;
   const log = onProgress || (() => {});
 
-  // Step 1: Run benchmark
-  log("Running benchmark...");
-  const runner = new BenchmarkRunner(runnerConfig);
-  await runner.seedTestCases();
-  const { run, results, categoryScores } = await runner.run({ profile });
+  let run: BenchmarkRun;
+  let results: BenchmarkResult[];
+  let categoryScores: Map<BenchmarkCategory, CategoryScore>;
 
-  log(
-    `Benchmark complete: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)} (${run.passedCount}/${run.totalTestCases} passed)`
-  );
+  if (existingBenchmark) {
+    // Use pre-existing benchmark results — no re-run needed
+    run = existingBenchmark.run;
+    results = existingBenchmark.results;
+    categoryScores = existingBenchmark.categoryScores;
+    log(
+      `Using existing benchmark: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)} (${run.passedCount}/${run.totalTestCases} passed)`
+    );
+  } else if (runnerConfig) {
+    // Fallback: Run benchmark from scratch
+    log("Running benchmark...");
+    const runner = new BenchmarkRunner(runnerConfig);
+    await runner.seedTestCases();
+    ({ run, results, categoryScores } = await runner.run({ profile }));
+    log(
+      `Benchmark complete: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)} (${run.passedCount}/${run.totalTestCases} passed)`
+    );
+  } else {
+    throw new Error("diagnose() requires either existingBenchmark or runnerConfig");
+  }
 
   // Step 2: Identify weaknesses
   const weakCategories = identifyWeakCategories(categoryScores);
