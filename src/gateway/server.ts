@@ -815,6 +815,11 @@ export class GatewaySession {
   // User identification (from cookie)
   public userUuid: string | null = null;
 
+  // Active WebSocket send function — updated on connect, cleared on disconnect.
+  // Async tasks (benchmark, agent streaming) use this to push updates
+  // even after a page refresh replaces the WebSocket connection.
+  private _activeSend: ((msg: unknown) => void) | null = null;
+
   // Chat state
   private chatMessages: Array<{
     role: "user" | "assistant" | "tool";
@@ -917,6 +922,30 @@ export class GatewaySession {
     } else {
       this.dataSource = getDataSource();
     }
+  }
+
+  /**
+   * Bind the active WebSocket send function.
+   * Called on every new WebSocket connection so in-flight async tasks
+   * (benchmarks, agent streaming) can push to the latest connection.
+   */
+  setSend(fn: (msg: unknown) => void): void {
+    this._activeSend = fn;
+  }
+
+  /**
+   * Clear the active send function (WebSocket disconnected).
+   */
+  clearSend(): void {
+    this._activeSend = null;
+  }
+
+  /**
+   * Get the best available send function.
+   * Prefers the live WebSocket connection (_activeSend) over a stale closure.
+   */
+  private getSend(fallback: (msg: unknown) => void): (msg: unknown) => void {
+    return this._activeSend || fallback;
   }
 
   /**
@@ -1404,13 +1433,14 @@ export class GatewaySession {
   }
 
   private sendChatUpdate(send: (msg: unknown) => void): void {
+    const activeSend = this.getSend(send);
     if (this.currentView === "chat") {
       const chatPage = generateChatPage({
         messages: this.chatMessages,
         streaming: this.isStreaming,
         streamingContent: this.streamingContent,
       });
-      send({
+      activeSend({
         type: "a2ui",
         surface_id: "main",
         components: chatPage.components,
@@ -2869,12 +2899,13 @@ export class GatewaySession {
    * Send an Evolution Lab page update to the client.
    */
   private sendEvolutionLabUpdate(send: (msg: unknown) => void): void {
+    const activeSend = this.getSend(send);
     if (this.currentView === "system-agent") {
-      this.sendSystemAgentUpdate(send);
+      this.sendSystemAgentUpdate(activeSend);
     } else if (this.currentView === "evolution") {
       const labData = this.buildEvolutionLabData();
       const labPage = generateEvolutionLab(labData);
-      send({
+      activeSend({
         type: "a2ui",
         surface_id: "main",
         components: labPage.components,
@@ -2887,6 +2918,7 @@ export class GatewaySession {
    * Send a System Agent page update to the client.
    */
   private sendSystemAgentUpdate(send: (msg: unknown) => void): void {
+    const activeSend = this.getSend(send);
     if (this.currentView === "system-agent") {
       const page = generateSystemAgentPage({
         chatMessages: this.systemAgentChatMessages,
@@ -2895,7 +2927,7 @@ export class GatewaySession {
         pipelineSteps: getDefaultPipelineSteps(this.systemAgentPipelineStep || undefined),
         currentPipelineStep: this.systemAgentPipelineStep || undefined,
       });
-      send({
+      activeSend({
         type: "a2ui",
         surface_id: "main",
         components: page.components,
@@ -3139,11 +3171,14 @@ export class GatewaySession {
       presetName?: string;
     }
   ): Promise<void> {
+    // Use live WebSocket connection for all sends in this async method
+    const liveSend = () => this.getSend(send);
+
     // Check if another benchmark is running externally (e.g., from CLI)
     const externalProgress = readBenchmarkProgress();
     if (externalProgress && externalProgress.source !== "ui") {
       const toast = generateToast(t("evolution.externalBenchmarkRunning"), "warning");
-      send({
+      liveSend()({
         type: "a2ui",
         surface_id: "toast",
         components: toast.components,
@@ -3157,7 +3192,7 @@ export class GatewaySession {
     for (const entry of this.runningBenchmarks.values()) {
       if (entry.modelId === targetModelId) {
         const toast = generateToast(t("evolution.modelAlreadyRunning"), "warning");
-        send({
+        liveSend()({
           type: "a2ui",
           surface_id: "toast",
           components: toast.components,
@@ -3191,7 +3226,7 @@ export class GatewaySession {
     });
 
     // Refresh evolution lab to show running state in table
-    this.sendEvolutionLabUpdate(send);
+    this.sendEvolutionLabUpdate(liveSend());
 
     const AGENT_TIMEOUT_MS = 120_000; // 2 minutes per test case
 
@@ -3269,7 +3304,7 @@ export class GatewaySession {
             pid: process.pid,
           });
           // Refresh evolution lab with throttling to avoid flooding
-          this.sendEvolutionLabUpdateThrottled(send);
+          this.sendEvolutionLabUpdateThrottled(liveSend());
         },
         concurrency: getBenchmarkConcurrency(),
       });
@@ -3289,16 +3324,16 @@ export class GatewaySession {
 
       // Refresh evolution page — table will now show completed run
       if (this.currentView === "evolution") {
-        this.sendEvolutionLabUpdate(send);
+        this.sendEvolutionLabUpdate(liveSend());
       } else {
-        await this.handleNavigate("settings/evolution", send);
+        await this.handleNavigate("settings/evolution", liveSend());
       }
     } catch (error) {
       const errorToast = generateToast(
         `Benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
         "error"
       );
-      send({
+      liveSend()({
         type: "a2ui",
         surface_id: "toast",
         components: errorToast.components,
@@ -3308,14 +3343,16 @@ export class GatewaySession {
       this.runningBenchmarks.delete(trackingId);
       clearBenchmarkProgressForRun(trackingId);
       // Refresh table to reflect final state
-      this.sendEvolutionLabUpdate(send);
+      this.sendEvolutionLabUpdate(liveSend());
     }
   }
 
   private async runDiagnoseAsync(send: (msg: unknown) => void): Promise<void> {
+    const liveSend = () => this.getSend(send);
+
     // Show diagnosing toast
     const startToast = generateToast(t("evolution.diagnosing"), "info");
-    send({
+    liveSend()({
       type: "a2ui",
       surface_id: "toast",
       components: startToast.components,
@@ -3367,7 +3404,7 @@ export class GatewaySession {
         },
         onProgress: (msg: string) => {
           const progress = generateToast(msg, "info");
-          send({
+          liveSend()({
             type: "a2ui",
             surface_id: "toast",
             components: progress.components,
@@ -3385,7 +3422,7 @@ export class GatewaySession {
         completeMsg,
         result.weaknesses.length > 0 ? "warning" : "success"
       );
-      send({
+      liveSend()({
         type: "a2ui",
         surface_id: "toast",
         components: toast.components,
@@ -3394,16 +3431,16 @@ export class GatewaySession {
 
       // Refresh evolution page
       if (this.currentView === "evolution") {
-        this.sendEvolutionLabUpdate(send);
+        this.sendEvolutionLabUpdate(liveSend());
       } else {
-        await this.handleNavigate("settings/evolution", send);
+        await this.handleNavigate("settings/evolution", liveSend());
       }
     } catch (error) {
       const toast = generateToast(
         `Diagnose failed: ${error instanceof Error ? error.message : String(error)}`,
         "error"
       );
-      send({
+      liveSend()({
         type: "a2ui",
         surface_id: "toast",
         components: toast.components,
@@ -3413,6 +3450,7 @@ export class GatewaySession {
   }
 
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
+    const activeSend = this.getSend(send);
     switch (event.type) {
       case "message_start":
       case "message_update":
@@ -3427,7 +3465,7 @@ export class GatewaySession {
           }
           this.streamingContent = text;
           this.sendChatUpdate(send);
-          send({ type: "agent_text", content: text, is_final: false });
+          activeSend({ type: "agent_text", content: text, is_final: false });
         }
         break;
 
@@ -3453,7 +3491,7 @@ export class GatewaySession {
             this.streamingContent = "";
             this.pendingCards = [];
             this.sendChatUpdate(send);
-            send({ type: "agent_text", content: errorMsg, is_final: true });
+            activeSend({ type: "agent_text", content: errorMsg, is_final: true });
             break;
           }
 
@@ -3471,7 +3509,7 @@ export class GatewaySession {
             this.isStreaming = false;
             this.streamingContent = "";
             this.sendChatUpdate(send);
-            send({ type: "agent_text", content: text, is_final: true });
+            activeSend({ type: "agent_text", content: text, is_final: true });
           }
         }
         break;
@@ -3485,7 +3523,7 @@ export class GatewaySession {
         const toolMsg = memoryToolLabels[event.toolName] || `Using ${event.toolName}...`;
         this.chatMessages.push({ role: "tool", content: toolMsg });
         this.sendChatUpdate(send);
-        send({ type: "tool_call", tool: event.toolName });
+        activeSend({ type: "tool_call", tool: event.toolName });
         break;
       }
 
@@ -3634,6 +3672,15 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
             `WebSocket connected: ${sessionId}${userUuid ? ` (user: ${userUuid.slice(0, 8)}...)` : ""}`
           );
         }
+
+        // Bind live send function so in-flight async tasks push to this connection
+        session.setSend((msg) => {
+          try {
+            ws.send(JSON.stringify(msg));
+          } catch {
+            // WebSocket may have closed between check and send
+          }
+        });
       },
       async message(ws, message) {
         const session = sessions.get(ws.data.sessionKey);
@@ -3657,6 +3704,8 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
       },
       close(ws) {
         // Don't delete session — keep it alive for reconnection (page refresh)
+        const session = sessions.get(ws.data.sessionKey);
+        if (session) session.clearSend();
         console.log(`WebSocket disconnected: ${ws.data.sessionId}`);
       },
     },
