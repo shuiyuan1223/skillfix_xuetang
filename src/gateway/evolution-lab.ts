@@ -1692,26 +1692,14 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
   // Complete: score gauge + radar + category cards
   if (state.benchmarkResult) {
     const result = state.benchmarkResult;
-    const gauge = ui.scoreGauge(result.overallScore, { max: 1.0 });
-    const statsRow = ui.row(
+    const gauge = ui.scoreGauge(result.overallScore, { max: 1.0, size: "lg" });
+    const statsCol = ui.column(
       [
-        ui.statCard({
-          title: t("evolution.score"),
-          value: result.overallScore.toFixed(2),
-          icon: "target",
-        }),
-        ui.statCard({
-          title: t("evolution.passed"),
-          value: `${result.passedCount}/${result.totalCount}`,
-          icon: "check",
-        }),
-        ui.statCard({
-          title: t("evolution.duration"),
-          value: `${(result.durationMs / 1000).toFixed(1)}s`,
-          icon: "timer",
-        }),
+        gauge,
+        ui.text(`${result.passedCount}/${result.totalCount} passed`, "caption"),
+        ui.text(`${(result.durationMs / 1000).toFixed(1)}s`, "caption"),
       ],
-      { gap: 12 }
+      { gap: 8, align: "center", style: "flex: 0 0 auto; min-width: 180px;" } as any
     );
 
     // Build plotly radar (same style as overview page)
@@ -1728,7 +1716,8 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
       id: radarId,
       type: "plotly_radar",
       traces,
-      layout: { ...PLOTLY_LAYOUT, showlegend: false, margin: { t: 40, b: 40, l: 60, r: 60 } },
+      height: 350,
+      layout: { ...PLOTLY_LAYOUT, showlegend: false, margin: { t: 30, b: 30, l: 50, r: 50 } },
       config: { responsive: true, displayModeBar: false },
     });
 
@@ -1766,10 +1755,9 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
         ui.card(
           [
             ui.text(t("evolution.benchmarkComplete"), "h3"),
-            ui.row([gauge, radarId], { gap: 16 }),
-            statsRow,
+            ui.row([statsCol, radarId], { gap: 24, align: "center" }),
           ],
-          { padding: 16 }
+          { padding: 20 }
         ),
         catGrid,
         ui.row([continueBtn], { justify: "end" }),

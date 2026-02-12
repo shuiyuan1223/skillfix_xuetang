@@ -496,7 +496,7 @@
 
   .arena-criterion-name {
     flex-shrink: 0;
-    width: 140px;
+    width: 180px;
     font-size: 0.82rem;
     color: rgb(var(--color-text-secondary));
     overflow: hidden;

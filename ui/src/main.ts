@@ -1681,7 +1681,7 @@ class A2UIRenderer {
     });
     const legend = (c.categoryLegend as Array<{ name: string; color: string }>) || [];
     return html`
-      <div id="${elementId}" style="width:100%; height:500px;"></div>
+      <div id="${elementId}" style="width:100%; height:${(c as any).height || 500}px;"></div>
       ${legend.length > 0
         ? html`
             <div
