@@ -1633,6 +1633,11 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
   } as any);
   children.push(pipeline);
 
+  // ─── Iteration History Bar (persistent, visible whenever cycleHistory exists) ───
+  if (state.cycleHistory && state.cycleHistory.length > 0) {
+    children.push(generatePgIterationHistory(ui, state));
+  }
+
   // ─── Details Panel (below pipeline, empty when idle) ───
   if (viewing !== "idle") {
     let detailContent: string;
@@ -1675,6 +1680,66 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
     padding: 16,
     style: "min-height: calc(100vh - 220px); position: relative;",
   } as any);
+}
+
+// ─── Iteration History (persistent bar) ───
+
+function generatePgIterationHistory(ui: A2UIGenerator, state: PlaygroundState): string {
+  const history = state.cycleHistory || [];
+  if (history.length === 0) return "";
+
+  const currentCycle = history.length + 1;
+  const headerItems: string[] = [
+    ui.text(t("evolution.iterationHistory"), "label"),
+    ui.badge(`Cycle ${currentCycle}`, { variant: "info" }),
+  ];
+
+  // Compact summary per cycle: score delta + proposal excerpt
+  const cycleCards = history.map((h) => {
+    const deltaSign = h.delta >= 0 ? "+" : "";
+    const deltaColor = h.delta > 0 ? "#4ade80" : h.delta < 0 ? "#f87171" : "#94a3b8";
+    const scoreText = `${h.benchmarkScore.toFixed(2)} → ${h.validateScore.toFixed(2)}`;
+    const deltaText = `(${deltaSign}${h.delta.toFixed(3)})`;
+    const proposalExcerpt = h.proposal.length > 50 ? h.proposal.slice(0, 50) + "..." : h.proposal;
+    const recBadge = ui.badge(h.recommendation, {
+      variant:
+        h.recommendation === "merge"
+          ? "success"
+          : h.recommendation === "revert"
+            ? "error"
+            : "warning",
+    });
+
+    const cardChildren = [
+      ui.row(
+        [
+          ui.text(`#${h.cycleNumber}`, "label"),
+          ui.text(scoreText, "body"),
+          ui.text(deltaText, "body"),
+          recBadge,
+        ],
+        { gap: 8, align: "center" }
+      ),
+      ui.text(proposalExcerpt, "caption"),
+    ];
+
+    // Show improvement plan if available
+    if (h.improvementPlan.length > 0) {
+      cardChildren.push(
+        ui.text(
+          `${t("evolution.improvementPlan")}: ${h.improvementPlan.slice(0, 2).join("; ")}${h.improvementPlan.length > 2 ? " ..." : ""}`,
+          "caption"
+        )
+      );
+    }
+
+    return ui.card(cardChildren, { padding: 10 });
+  });
+
+  return ui.card(
+    [ui.row(headerItems, { gap: 8, align: "center" }), ui.column(cycleCards, { gap: 8 })],
+    { padding: 12 }
+  );
 }
 
 // ─── FAB helpers ───
@@ -2401,23 +2466,6 @@ function generatePgAnalyse(ui: A2UIGenerator, state: PlaygroundState): string {
           improvementPlan.map((item, i) => ui.text(`${i + 1}. ${item}`, "body")),
           { expanded: true, icon: "trending-up" }
         )
-      );
-    }
-
-    // Iteration history (if cycleHistory exists)
-    if (state.cycleHistory && state.cycleHistory.length > 0) {
-      const historyItems = state.cycleHistory.map((h) => {
-        const deltaSign = h.delta >= 0 ? "+" : "";
-        return ui.text(
-          `#${h.cycleNumber}: ${h.benchmarkScore.toFixed(3)} → ${h.validateScore.toFixed(3)} (${deltaSign}${h.delta.toFixed(3)}) — ${h.proposal.slice(0, 60)}${h.proposal.length > 60 ? "..." : ""}`,
-          "body"
-        );
-      });
-      children.push(
-        ui.collapsible(t("evolution.iterationHistory"), historyItems, {
-          expanded: false,
-          icon: "bar-chart",
-        })
       );
     }
 
