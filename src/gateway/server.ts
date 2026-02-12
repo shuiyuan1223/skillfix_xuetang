@@ -1071,14 +1071,8 @@ export class GatewaySession {
       }
     }
 
-    // Send initial UI - default to chat view
-    this.currentView = "chat";
-    const chatPage = generateChatPage({
-      messages: this.chatMessages,
-      streaming: this.isStreaming,
-      streamingContent: this.streamingContent,
-    });
-    send(generatePage("chat", chatPage));
+    // Restore previous view (session persists across reconnects)
+    await this.handleNavigate(this.currentView, send);
   }
 
   private async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
