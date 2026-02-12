@@ -4200,10 +4200,11 @@ ${changesDesc}
         .split("\n")
         .filter(Boolean)
         .map((line) => {
-          // porcelain format: XY<space>path — use regex for robustness
-          const m = line.match(/^(.{2})\s+(.+)$/);
+          // porcelain format: XY<space>path — XY is 2 chars (may have leading space)
+          // Also handle trimmed lines where leading space was lost (e.g. "M path")
+          const m = line.match(/^(.{1,2})\s+(.+)$/);
           if (!m) return null;
-          const xy = m[1].trim();
+          const xy = m[1];
           const filePath = m[2];
           return {
             path: filePath,

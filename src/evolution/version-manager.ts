@@ -355,7 +355,7 @@ export function getGitStatusPorcelain(path?: string): string {
       cwd,
       encoding: "utf-8",
       timeout: 10000,
-    }).trim();
+    }).trimEnd();
   } catch {
     return "";
   }
