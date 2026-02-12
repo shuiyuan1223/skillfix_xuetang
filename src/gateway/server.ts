@@ -1861,6 +1861,8 @@ export class GatewaySession {
       this.sendEvolutionLabUpdate(send);
     } else if (action === "pg_view_step" && payload?.stepId) {
       this.playgroundState.viewingStep = payload.stepId as any;
+      this.playgroundState.viewingCycle =
+        payload.cycleNumber != null ? Number(payload.cycleNumber) : undefined;
       this.sendEvolutionLabUpdate(send);
     } else if (action === "pg_validate_radar_mode" && payload?.mode) {
       this.playgroundState.validateRadarMode = payload.mode as "categories" | "criteria";
@@ -4424,6 +4426,14 @@ ${changesDesc}
         improvementPlan: this.playgroundState.analyseResult?.improvementPlan || [],
         recommendation: this.playgroundState.analyseResult?.recommendation || "",
         timestamp: Date.now(),
+        stepResults: {
+          benchmarkResult: this.playgroundState.benchmarkResult,
+          diagnoseResult: this.playgroundState.diagnoseResult,
+          proposal: this.playgroundState.proposal,
+          applyResult: this.playgroundState.applyResult,
+          validateResult: this.playgroundState.validateResult,
+          analyseResult: this.playgroundState.analyseResult,
+        },
       });
 
       // Revert current branch (code goes back, next cycle re-applies)

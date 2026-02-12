@@ -247,7 +247,18 @@ export interface PlaygroundState {
     improvementPlan: string[];
     recommendation: string;
     timestamp: number;
+    // Full step results for drill-down
+    stepResults?: {
+      benchmarkResult?: PlaygroundState["benchmarkResult"];
+      diagnoseResult?: PlaygroundState["diagnoseResult"];
+      proposal?: PlaygroundState["proposal"];
+      applyResult?: PlaygroundState["applyResult"];
+      validateResult?: PlaygroundState["validateResult"];
+      analyseResult?: PlaygroundState["analyseResult"];
+    };
   }>;
+
+  viewingCycle?: number; // which cycle's step is being viewed (undefined = current)
 
   paused?: boolean;
   log: PlaygroundLogEntry[];
@@ -1691,32 +1702,50 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
   }
 
   // ─── Details Panel (below pipeline, empty when idle) ───
+  // When viewing a historical cycle's step, overlay that cycle's results onto a temporary state
+  let viewState = state;
+  const currentCycleNum = (state.cycleHistory?.length || 0) + 1;
+  if (state.viewingCycle != null && state.viewingCycle < currentCycleNum && state.cycleHistory) {
+    const historyCycle = state.cycleHistory.find((h) => h.cycleNumber === state.viewingCycle);
+    if (historyCycle?.stepResults) {
+      viewState = {
+        ...state,
+        benchmarkResult: historyCycle.stepResults.benchmarkResult ?? state.benchmarkResult,
+        diagnoseResult: historyCycle.stepResults.diagnoseResult,
+        proposal: historyCycle.stepResults.proposal,
+        applyResult: historyCycle.stepResults.applyResult,
+        validateResult: historyCycle.stepResults.validateResult,
+        analyseResult: historyCycle.stepResults.analyseResult,
+      };
+    }
+  }
+
   if (viewing !== "idle") {
     let detailContent: string;
     switch (viewing) {
       case "benchmark":
-        detailContent = generatePgBenchmark(ui, state, data);
+        detailContent = generatePgBenchmark(ui, viewState, data);
         break;
       case "diagnose":
-        detailContent = generatePgDiagnose(ui, state);
+        detailContent = generatePgDiagnose(ui, viewState);
         break;
       case "propose":
-        detailContent = generatePgPropose(ui, state);
+        detailContent = generatePgPropose(ui, viewState);
         break;
       case "approve":
-        detailContent = generatePgApprove(ui, state);
+        detailContent = generatePgApprove(ui, viewState);
         break;
       case "apply":
-        detailContent = generatePgApply(ui, state, data);
+        detailContent = generatePgApply(ui, viewState, data);
         break;
       case "validate":
-        detailContent = generatePgValidate(ui, state);
+        detailContent = generatePgValidate(ui, viewState);
         break;
       case "analyse":
-        detailContent = generatePgAnalyse(ui, state);
+        detailContent = generatePgAnalyse(ui, viewState);
         break;
       case "complete":
-        detailContent = generatePgComplete(ui, state);
+        detailContent = generatePgComplete(ui, viewState);
         break;
       default:
         detailContent = "";

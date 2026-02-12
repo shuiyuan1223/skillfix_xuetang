@@ -2937,7 +2937,11 @@ ${value || ""}</textarea
                     <div
                       class="flex flex-col items-center gap-2 ${clickable ? "cursor-pointer" : ""}"
                       @click=${clickable
-                        ? () => this.sendAction(onStepClick!, { stepId: step.id })
+                        ? () =>
+                            this.sendAction(onStepClick!, {
+                              stepId: step.id,
+                              cycleNumber: cycle.cycleNumber,
+                            })
                         : nothing}
                     >
                       <div
