@@ -410,6 +410,8 @@ export interface LocaleMessages {
     startQuickCycle: string;
     startFullCycle: string;
     startNewCycle: string;
+    pauseCycle: string;
+    continueCycle: string;
     continueToDiagnose: string;
     continueToPropose: string;
     submitForApproval: string;

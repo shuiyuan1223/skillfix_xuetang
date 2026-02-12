@@ -219,6 +219,7 @@ export interface PlaygroundState {
     validationRunId: string;
   };
 
+  paused?: boolean;
   log: PlaygroundLogEntry[];
   benchmarkProgress?: { current: number; total: number };
 }
@@ -1569,64 +1570,107 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
     state.viewingStep ||
     (state.step === "idle" || state.step === "complete" ? state.step : state.step);
 
+  const children: string[] = [];
+
   // ─── Top: Horizontal Pipeline (always visible) ───
   const steps = buildPlaygroundPipelineSteps(state);
   const pipeline = ui.stepIndicator(steps, {
     orientation: "horizontal",
     onStepClick: "pg_view_step",
   } as any);
+  children.push(pipeline);
 
-  // ─── Details Panel (below pipeline) ───
-  let detailContent: string;
-  switch (viewing) {
-    case "idle":
-      detailContent = generatePgIdleContent(ui);
-      break;
-    case "benchmark":
-      detailContent = generatePgBenchmark(ui, state);
-      break;
-    case "diagnose":
-      detailContent = generatePgDiagnose(ui, state);
-      break;
-    case "propose":
-      detailContent = generatePgPropose(ui, state);
-      break;
-    case "approve":
-      detailContent = generatePgApprove(ui, state);
-      break;
-    case "apply":
-      detailContent = generatePgApply(ui, state);
-      break;
-    case "validate":
-      detailContent = generatePgValidate(ui, state);
-      break;
-    case "complete":
-      detailContent = generatePgComplete(ui, state);
-      break;
-    default:
-      detailContent = generatePgIdleContent(ui);
+  // ─── Details Panel (below pipeline, empty when idle) ───
+  if (viewing !== "idle") {
+    let detailContent: string;
+    switch (viewing) {
+      case "benchmark":
+        detailContent = generatePgBenchmark(ui, state);
+        break;
+      case "diagnose":
+        detailContent = generatePgDiagnose(ui, state);
+        break;
+      case "propose":
+        detailContent = generatePgPropose(ui, state);
+        break;
+      case "approve":
+        detailContent = generatePgApprove(ui, state);
+        break;
+      case "apply":
+        detailContent = generatePgApply(ui, state);
+        break;
+      case "validate":
+        detailContent = generatePgValidate(ui, state);
+        break;
+      case "complete":
+        detailContent = generatePgComplete(ui, state);
+        break;
+      default:
+        detailContent = "";
+    }
+    if (detailContent) children.push(detailContent);
   }
 
-  return ui.column([pipeline, detailContent], { gap: 24, padding: 16 });
+  // ─── Bottom-right: Action Buttons ───
+  children.push(generatePgActionButtons(ui, state));
+
+  return ui.column(children, {
+    gap: 24,
+    padding: 16,
+    style: "min-height: calc(100vh - 220px); position: relative;",
+  } as any);
 }
 
-function generatePgIdleContent(ui: A2UIGenerator): string {
-  const title = ui.text(t("evolution.playgroundWelcome"), "h2");
-  const desc = ui.text(t("evolution.playgroundWelcomeDesc"), "body");
+function generatePgActionButtons(ui: A2UIGenerator, state: PlaygroundState): string {
+  const buttons: string[] = [];
 
-  const quickBtn = ui.button(t("evolution.startQuickCycle"), "pg_start_cycle", {
-    variant: "primary",
-    size: "md",
-    payload: { profile: "quick" },
-  });
-  const fullBtn = ui.button(t("evolution.startFullCycle"), "pg_start_cycle", {
-    variant: "secondary",
-    size: "md",
-    payload: { profile: "full" },
-  });
-  const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "center" });
+  if (state.step === "idle") {
+    // Idle: show Start Quick + Start Full
+    buttons.push(
+      ui.button(t("evolution.startQuickCycle"), "pg_start_cycle", {
+        variant: "primary",
+        size: "sm",
+        payload: { profile: "quick" },
+      })
+    );
+    buttons.push(
+      ui.button(t("evolution.startFullCycle"), "pg_start_cycle", {
+        variant: "secondary",
+        size: "sm",
+        payload: { profile: "full" },
+      })
+    );
+  } else if (state.step === "complete") {
+    // Complete: show Start New
+    buttons.push(
+      ui.button(t("evolution.startNewCycle"), "pg_reset", {
+        variant: "primary",
+        size: "sm",
+      })
+    );
+  } else if (state.paused) {
+    // Paused: show Continue
+    buttons.push(
+      ui.button(t("evolution.continueCycle"), "pg_continue", {
+        variant: "primary",
+        size: "sm",
+      })
+    );
+  } else {
+    // Running: show Pause
+    buttons.push(
+      ui.button(t("evolution.pauseCycle"), "pg_pause", {
+        variant: "secondary",
+        size: "sm",
+      })
+    );
+  }
 
-  return ui.card([title, desc, btnRow], { padding: 24 });
+  return ui.row(buttons, {
+    gap: 8,
+    justify: "end",
+    style: "margin-top: auto;",
+  } as any);
 }
 
 function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string {
@@ -2021,12 +2065,6 @@ function generatePgComplete(ui: A2UIGenerator, state: PlaygroundState): string {
 
   const duration = state.startedAt ? `${((Date.now() - state.startedAt) / 1000).toFixed(0)}s` : "-";
   children.push(ui.text(`Duration: ${duration}`, "caption"));
-
-  const newCycleBtn = ui.button(t("evolution.startNewCycle"), "pg_reset", {
-    variant: "primary",
-    size: "md",
-  });
-  children.push(ui.row([newCycleBtn], { justify: "center" }));
 
   return ui.card(children, { padding: 24 });
 }

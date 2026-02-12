@@ -1811,6 +1811,14 @@ export class GatewaySession {
       this.pgHandleComplete((payload?.action as string) || "merge", send);
     } else if (action === "pg_reset") {
       this.pgReset(send);
+    } else if (action === "pg_pause") {
+      this.playgroundState.paused = true;
+      this.pgAddLog(this.playgroundState.step, "Cycle paused", "warning");
+      this.sendEvolutionLabUpdate(send);
+    } else if (action === "pg_continue") {
+      this.playgroundState.paused = false;
+      this.pgAddLog(this.playgroundState.step, "Cycle resumed", "info");
+      this.sendEvolutionLabUpdate(send);
     } else if (action === "pg_view_step" && payload?.stepId) {
       this.playgroundState.viewingStep = payload.stepId as any;
       this.sendEvolutionLabUpdate(send);

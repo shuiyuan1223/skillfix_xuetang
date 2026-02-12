@@ -393,6 +393,8 @@ export const en: LocaleMessages = {
     startQuickCycle: "Quick Cycle",
     startFullCycle: "Full Cycle",
     startNewCycle: "Start New Cycle",
+    pauseCycle: "Pause",
+    continueCycle: "Continue",
     continueToDiagnose: "Continue to Diagnose →",
     continueToPropose: "Generate Proposal →",
     submitForApproval: "Submit for Approval →",

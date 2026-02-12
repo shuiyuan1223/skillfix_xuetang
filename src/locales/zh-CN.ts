@@ -388,6 +388,8 @@ export const zhCN: LocaleMessages = {
     startQuickCycle: "快速周期",
     startFullCycle: "完整周期",
     startNewCycle: "开始新周期",
+    pauseCycle: "暂停",
+    continueCycle: "继续",
     continueToDiagnose: "继续诊断 →",
     continueToPropose: "生成提案 →",
     submitForApproval: "提交审批 →",
