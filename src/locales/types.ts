@@ -359,6 +359,12 @@ export interface LocaleMessages {
     pipelineApprove: string;
     pipelineApply: string;
     pipelineValidate: string;
+    pipelineAnalyse: string;
+    analysing: string;
+    analyseComplete: string;
+    analyseReport: string;
+    keyFindings: string;
+    analyseConfidence: string;
     evoChatPlaceholder: string;
     branchCreated: string;
     branchMerged: string;

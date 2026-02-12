@@ -1862,6 +1862,9 @@ export class GatewaySession {
     } else if (action === "pg_view_step" && payload?.stepId) {
       this.playgroundState.viewingStep = payload.stepId as any;
       this.sendEvolutionLabUpdate(send);
+    } else if (action === "pg_validate_radar_mode" && payload?.mode) {
+      this.playgroundState.validateRadarMode = payload.mode as "categories" | "criteria";
+      this.sendEvolutionLabUpdate(send);
     } else if (action === "pg_file_select" && payload?.path) {
       const filePath = payload.path as string;
       const branch = this.playgroundState.applyResult?.branch;
@@ -3651,6 +3654,7 @@ export class GatewaySession {
       "approve",
       "apply",
       "validate",
+      "analyse",
       "complete",
     ];
     if (!validSteps.includes(nextStep as PlaygroundStep)) return;
@@ -3668,6 +3672,8 @@ export class GatewaySession {
       this.pgRunApply(send);
     } else if (nextStep === "validate") {
       this.pgRunValidation(send);
+    } else if (nextStep === "analyse" && this.playgroundState.validateResult) {
+      this.pgRunAnalyse(send);
     } else {
       this.sendEvolutionLabUpdate(send);
     }
@@ -3716,6 +3722,12 @@ export class GatewaySession {
         this.playgroundState.applyError = undefined;
         this.playgroundState.applyPrompt = undefined;
         this.pgRunApply(send);
+        break;
+      case "analyse":
+        this.playgroundState.analyseResult = undefined;
+        this.playgroundState.analyseProgress = undefined;
+        this.playgroundState.analyseError = undefined;
+        this.pgRunAnalyse(send);
         break;
       default:
         this.sendEvolutionLabUpdate(send);
@@ -4467,6 +4479,8 @@ ${changesDesc}
         categoryDeltas,
         recommendation,
         validationRunId: result.run.id,
+        beforeCategoryScores: beforeCatScores,
+        afterCategoryScores: afterCatScores,
       };
       this.pgAddLog(
         "validate",
@@ -4480,6 +4494,108 @@ ${changesDesc}
       this.playgroundState.validateProgress = undefined;
       this.playgroundState.validateError = errMsg;
       this.pgAddLog("validate", `Validation failed: ${errMsg}`, "error");
+      this.sendEvolutionLabUpdate(send);
+    }
+  }
+
+  private async pgRunAnalyse(send: (msg: unknown) => void) {
+    this.playgroundState.analyseProgress = "Preparing analysis...";
+    this.sendEvolutionLabUpdate(send);
+    try {
+      const vr = this.playgroundState.validateResult;
+      if (!vr) throw new Error("No validation result");
+
+      const beforeData = vr.beforeCategoryScores || [];
+      const afterData = vr.afterCategoryScores || [];
+      const proposal = this.playgroundState.proposal;
+
+      const subComponentLines = beforeData
+        .map((bc) => {
+          const ac = afterData.find((a) => a.category === bc.category);
+          return (bc.subComponents || [])
+            .map((bsub) => {
+              const asub = ac?.subComponents?.find((s) => s.name === bsub.name);
+              const bScore = bsub.score;
+              const aScore = asub?.score || 0;
+              return `- ${bc.category}/${bsub.name}: ${bScore.toFixed(3)} → ${aScore.toFixed(3)}`;
+            })
+            .join("\n");
+        })
+        .join("\n");
+
+      const prompt = `You are analyzing the results of a PHA agent evolution cycle.
+Compare the benchmark results before and after code changes.
+
+## Overall Score
+Before: ${vr.beforeScore.toFixed(3)}
+After: ${vr.afterScore.toFixed(3)}
+Delta: ${vr.delta >= 0 ? "+" : ""}${vr.delta.toFixed(3)}
+
+## Category Breakdown (Before → After)
+${vr.categoryDeltas
+  .map((d) => {
+    const delta = d.after - d.before;
+    return `- ${d.category}: ${d.before.toFixed(3)} → ${d.after.toFixed(3)} (${delta >= 0 ? "+" : ""}${delta.toFixed(3)})`;
+  })
+  .join("\n")}
+
+## Sub-Component Details (Before → After)
+${subComponentLines}
+
+## Applied Changes
+${proposal?.description || "N/A"}
+
+## Task
+1. Provide a concise analysis (3-5 sentences) of the changes' impact
+2. List 3-5 key findings as bullet points
+3. Recommend: "merge" (improved), "revert" (degraded), or "iterate" (mixed/marginal)
+4. Rate your confidence 0-100
+
+Respond in this JSON format:
+{"summary":"...","keyFindings":["..."],"recommendation":"merge|revert|iterate","confidence":N}`;
+
+      this.playgroundState.analyseProgress = "Running LLM analysis...";
+      this.sendEvolutionLabUpdate(send);
+
+      const judgeConfig = getJudgeModel();
+      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
+      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
+      const judgeAgent = await createPHAAgent({
+        apiKey: judgeApiKey,
+        provider: judgeConfig.provider as any,
+        modelId: judgeConfig.modelId,
+        baseUrl: judgeBaseUrl,
+      });
+      const responseText = await Promise.race([
+        judgeAgent.chatAndWait(prompt),
+        new Promise<string>((_, reject) =>
+          setTimeout(() => reject(new Error("Analysis timed out")), 120_000)
+        ),
+      ]);
+
+      // Parse JSON from response (extract from possible markdown code block)
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+
+      this.playgroundState.analyseProgress = undefined;
+      this.playgroundState.analyseResult = {
+        summary: parsed?.summary || responseText,
+        recommendation: parsed?.recommendation || vr.recommendation,
+        confidence: (parsed?.confidence || 50) / 100,
+        keyFindings: parsed?.keyFindings || [],
+      };
+      this.pgAddLog(
+        "analyse",
+        `Analysis complete: ${this.playgroundState.analyseResult.recommendation}`,
+        "success"
+      );
+      this.sendEvolutionLabUpdate(send);
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error("[Playground Analyse]", errMsg);
+      this.playgroundState.analyseProgress = undefined;
+      this.playgroundState.analyseError = errMsg;
+      this.pgAddLog("analyse", `Analysis failed: ${errMsg}`, "error");
       this.sendEvolutionLabUpdate(send);
     }
   }

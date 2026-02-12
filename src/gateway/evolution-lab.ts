@@ -155,6 +155,7 @@ export type PlaygroundStep =
   | "approve"
   | "apply"
   | "validate"
+  | "analyse"
   | "complete";
 
 export interface PlaygroundLogEntry {
@@ -220,7 +221,20 @@ export interface PlaygroundState {
     categoryDeltas: Array<{ category: string; before: number; after: number }>;
     recommendation: "merge" | "revert" | "iterate";
     validationRunId: string;
+    // Full category data with subComponents for radar toggle
+    beforeCategoryScores?: CategoryScoreInfo[];
+    afterCategoryScores?: CategoryScoreInfo[];
   };
+  validateRadarMode?: "categories" | "criteria";
+
+  analyseResult?: {
+    summary: string;
+    recommendation: "merge" | "revert" | "iterate";
+    confidence: number;
+    keyFindings: string[];
+  };
+  analyseProgress?: string;
+  analyseError?: string;
 
   paused?: boolean;
   log: PlaygroundLogEntry[];
@@ -1546,6 +1560,7 @@ function buildPlaygroundPipelineSteps(state: PlaygroundState): PipelineStep[] {
     "approve",
     "apply",
     "validate",
+    "analyse",
   ];
   const stepLabels: Record<string, { label: string; icon: string }> = {
     benchmark: { label: t("evolution.pipelineBenchmark"), icon: "test-tube" },
@@ -1554,6 +1569,7 @@ function buildPlaygroundPipelineSteps(state: PlaygroundState): PipelineStep[] {
     approve: { label: t("evolution.pipelineApprove"), icon: "check" },
     apply: { label: t("evolution.pipelineApply"), icon: "zap" },
     validate: { label: t("evolution.pipelineValidate"), icon: "shield" },
+    analyse: { label: t("evolution.pipelineAnalyse"), icon: "brain" },
   };
 
   const currentIdx = stepIds.indexOf(state.step as PlaygroundStep);
@@ -1613,6 +1629,9 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
       case "validate":
         detailContent = generatePgValidate(ui, state);
         break;
+      case "analyse":
+        detailContent = generatePgAnalyse(ui, state);
+        break;
       case "complete":
         detailContent = generatePgComplete(ui, state);
         break;
@@ -1641,6 +1660,7 @@ const PG_STEP_ORDER: PlaygroundStep[] = [
   "approve",
   "apply",
   "validate",
+  "analyse",
   "complete",
 ];
 
@@ -1658,6 +1678,8 @@ function pgStepHasResult(state: PlaygroundState): boolean {
       return !!state.applyResult;
     case "validate":
       return !!state.validateResult;
+    case "analyse":
+      return !!state.analyseResult;
     default:
       return false;
   }
@@ -2125,6 +2147,7 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
 
   if (state.validateResult) {
     const { beforeScore, afterScore, delta, categoryDeltas, recommendation } = state.validateResult;
+    const radarMode = state.validateRadarMode || "categories";
 
     const deltaSign = delta >= 0 ? "+" : "";
     const scoreSummary = ui.text(
@@ -2133,19 +2156,46 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
     );
     children.push(scoreSummary);
 
-    // Dual plotly radar (before vs after)
-    const beforeCategories: CategoryScoreInfo[] = categoryDeltas.map((d) => ({
-      category: d.category,
-      score: d.before,
-      test_count: 0,
-      passed_count: 0,
-    }));
-    const afterCategories: CategoryScoreInfo[] = categoryDeltas.map((d) => ({
-      category: d.category,
-      score: d.after,
-      test_count: 0,
-      passed_count: 0,
-    }));
+    // Radar mode toggle (5 categories / 16 criteria)
+    const toggleId = `pg_validate_toggle_${Date.now()}`;
+    ui.addComponent(toggleId, {
+      id: toggleId,
+      type: "arena_mode_toggle",
+      options: [
+        { label: t("evolution.categoriesMode"), value: "categories" },
+        { label: t("evolution.criteriaMode"), value: "criteria" },
+      ],
+      active: radarMode,
+      action: "pg_validate_radar_mode",
+    });
+    children.push(toggleId);
+
+    // Build before/after ComparisonRuns with full category data (including subComponents)
+    const beforeCatScores = state.validateResult.beforeCategoryScores;
+    const afterCatScores = state.validateResult.afterCategoryScores;
+
+    let beforeCategories: CategoryScoreInfo[];
+    let afterCategories: CategoryScoreInfo[];
+
+    if (beforeCatScores && afterCatScores) {
+      beforeCategories = beforeCatScores;
+      afterCategories = afterCatScores;
+    } else {
+      // Fallback: construct from categoryDeltas (no subComponents)
+      beforeCategories = categoryDeltas.map((d) => ({
+        category: d.category,
+        score: d.before,
+        test_count: 0,
+        passed_count: 0,
+      }));
+      afterCategories = categoryDeltas.map((d) => ({
+        category: d.category,
+        score: d.after,
+        test_count: 0,
+        passed_count: 0,
+      }));
+    }
+
     const validateTraces = buildPlotlyRadarTraces(
       [
         {
@@ -2163,7 +2213,7 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
           categoryScores: afterCategories,
         },
       ],
-      "categories"
+      radarMode
     );
     const validateRadarId = `pg_validate_radar_${Date.now()}`;
     ui.addComponent(validateRadarId, {
@@ -2175,24 +2225,55 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
     });
     children.push(validateRadarId);
 
-    // Category delta table
-    const deltaRows = categoryDeltas.map((d) => ({
-      category: d.category,
-      before: d.before.toFixed(2),
-      after: d.after.toFixed(2),
-      delta: `${d.after - d.before >= 0 ? "+" : ""}${(d.after - d.before).toFixed(2)}`,
-    }));
-    children.push(
-      ui.dataTable(
-        [
-          { key: "category", label: t("evolution.category"), render: "badge" },
-          { key: "before", label: "Before" },
-          { key: "after", label: "After" },
-          { key: "delta", label: "Delta" },
-        ],
-        deltaRows
-      )
-    );
+    // Delta table: criteria mode shows sub-components, categories mode shows 5 categories
+    if (radarMode === "criteria" && beforeCatScores && afterCatScores) {
+      // Build rows from sub-components
+      const subRows: Array<{ category: string; before: string; after: string; delta: string }> = [];
+      for (const bcs of beforeCatScores) {
+        const acs = afterCatScores.find((a) => a.category === bcs.category);
+        for (const bsub of bcs.subComponents || []) {
+          const asub = acs?.subComponents?.find((s) => s.name === bsub.name);
+          const bScore = bsub.score <= 1 ? bsub.score : bsub.score / 100;
+          const aScore = asub ? (asub.score <= 1 ? asub.score : asub.score / 100) : 0;
+          const d = aScore - bScore;
+          subRows.push({
+            category: bsub.name,
+            before: bScore.toFixed(2),
+            after: aScore.toFixed(2),
+            delta: `${d >= 0 ? "+" : ""}${d.toFixed(2)}`,
+          });
+        }
+      }
+      children.push(
+        ui.dataTable(
+          [
+            { key: "category", label: t("evolution.criteria"), render: "badge" },
+            { key: "before", label: "Before" },
+            { key: "after", label: "After" },
+            { key: "delta", label: "Delta" },
+          ],
+          subRows
+        )
+      );
+    } else {
+      const deltaRows = categoryDeltas.map((d) => ({
+        category: d.category,
+        before: d.before.toFixed(2),
+        after: d.after.toFixed(2),
+        delta: `${d.after - d.before >= 0 ? "+" : ""}${(d.after - d.before).toFixed(2)}`,
+      }));
+      children.push(
+        ui.dataTable(
+          [
+            { key: "category", label: t("evolution.category"), render: "badge" },
+            { key: "before", label: "Before" },
+            { key: "after", label: "After" },
+            { key: "delta", label: "Delta" },
+          ],
+          deltaRows
+        )
+      );
+    }
 
     const recBadge = ui.badge(
       recommendation === "merge"
@@ -2210,7 +2291,75 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
       }
     );
     children.push(recBadge);
+  } else if (state.validateError) {
+    children.push(ui.badge("Failed", { variant: "error" }));
+    children.push(ui.text(state.validateError, "body"));
+  } else {
+    if (state.validateProgress) {
+      children.push(ui.badge(state.validateProgress, { variant: "info" }));
+    }
+    children.push(ui.text(t("evolution.validating"), "body"));
+    children.push(ui.skeleton({ variant: "rectangular", height: 200 }));
+  }
 
+  return ui.card(children, { padding: 16 });
+}
+
+function generatePgAnalyse(ui: A2UIGenerator, state: PlaygroundState): string {
+  const children: string[] = [];
+  children.push(ui.text(t("evolution.pipelineAnalyse"), "h3"));
+
+  if (state.analyseResult) {
+    const { summary, recommendation, confidence, keyFindings } = state.analyseResult;
+
+    // Stat cards: recommendation + confidence
+    const recCard = ui.statCard({
+      title: t("evolution.pipelineAnalyse"),
+      value:
+        recommendation === "merge"
+          ? t("evolution.mergeVersion")
+          : recommendation === "revert"
+            ? t("evolution.abandonVersion")
+            : t("evolution.startNewCycle"),
+      icon:
+        recommendation === "merge"
+          ? "git-merge"
+          : recommendation === "revert"
+            ? "alert-triangle"
+            : "refresh-cw",
+      color:
+        recommendation === "merge"
+          ? "#4ade80"
+          : recommendation === "revert"
+            ? "#f87171"
+            : "#fbbf24",
+    });
+    const confCard = ui.statCard({
+      title: t("evolution.analyseConfidence"),
+      value: `${Math.round(confidence * 100)}%`,
+      icon: "target",
+      color: confidence >= 0.7 ? "#4ade80" : confidence >= 0.4 ? "#fbbf24" : "#f87171",
+    });
+    children.push(ui.grid([recCard, confCard], { columns: 2, gap: 16 }));
+
+    // Key findings
+    if (keyFindings.length > 0) {
+      children.push(ui.text(t("evolution.keyFindings"), "label"));
+      const findingItems = keyFindings.map((f) => ui.text(`- ${f}`, "body"));
+      children.push(ui.column(findingItems, { gap: 4 }));
+    }
+
+    // Detailed analysis (collapsible)
+    if (summary) {
+      children.push(
+        ui.collapsible(t("evolution.analyseReport"), [ui.text(summary, "body")], {
+          expanded: false,
+          icon: "brain",
+        })
+      );
+    }
+
+    // Decision buttons (moved from validate)
     const mergeBtn = ui.button(t("evolution.mergeVersion"), "pg_complete", {
       variant: "primary",
       size: "md",
@@ -2227,15 +2376,15 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
       payload: { action: "new_cycle" },
     });
     children.push(ui.row([mergeBtn, revertBtn, newCycleBtn], { gap: 12, justify: "center" }));
-  } else if (state.validateError) {
+  } else if (state.analyseError) {
     children.push(ui.badge("Failed", { variant: "error" }));
-    children.push(ui.text(state.validateError, "body"));
+    children.push(ui.text(state.analyseError, "body"));
   } else {
-    if (state.validateProgress) {
-      children.push(ui.badge(state.validateProgress, { variant: "info" }));
+    if (state.analyseProgress) {
+      children.push(ui.badge(state.analyseProgress, { variant: "info" }));
     }
-    children.push(ui.text(t("evolution.validating"), "body"));
-    children.push(ui.skeleton({ variant: "rectangular", height: 200 }));
+    children.push(ui.text(t("evolution.analysing"), "body"));
+    children.push(ui.skeleton({ variant: "rectangular", height: 150 }));
   }
 
   return ui.card(children, { padding: 16 });
