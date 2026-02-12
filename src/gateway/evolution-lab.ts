@@ -178,6 +178,8 @@ export interface PlaygroundState {
     totalCount: number;
     durationMs: number;
     profile: string;
+    versionTag?: string;
+    modelId?: string;
   };
   diagnoseResult?: {
     weaknesses: Array<{
@@ -222,6 +224,7 @@ export interface PlaygroundState {
   paused?: boolean;
   log: PlaygroundLogEntry[];
   benchmarkProgress?: { current: number; total: number };
+  diagnoseProgress?: string;
 }
 
 export interface EvolutionLabData {
@@ -1738,14 +1741,23 @@ function generatePgBenchmark(
   if (state.benchmarkResult) {
     const result = state.benchmarkResult;
     const gauge = ui.scoreGauge(result.overallScore, { max: 1.0, size: "lg" });
-    const statsCol = ui.column(
-      [
-        gauge,
-        ui.text(`${result.passedCount}/${result.totalCount} passed`, "caption"),
-        ui.text(`${(result.durationMs / 1000).toFixed(1)}s`, "caption"),
-      ],
-      { gap: 8, align: "center", style: "flex: 0 0 auto; min-width: 180px;" } as any
-    );
+    const statItems: string[] = [
+      gauge,
+      ui.text(`${result.passedCount}/${result.totalCount} passed`, "caption"),
+      ui.text(`${(result.durationMs / 1000).toFixed(1)}s`, "caption"),
+    ];
+    if (result.versionTag) {
+      statItems.push(ui.badge(result.versionTag, { variant: "default" }));
+    }
+    if (result.modelId) {
+      const shortModel = result.modelId.split("/").pop() || result.modelId;
+      statItems.push(ui.text(shortModel, "caption"));
+    }
+    const statsCol = ui.column(statItems, {
+      gap: 8,
+      align: "center",
+      style: "flex: 0 0 auto; min-width: 180px;",
+    } as any);
 
     // Radar mode toggle (5 categories / 16 criteria)
     const radarMode = data.radarMode || "categories";
@@ -1813,6 +1825,7 @@ function generatePgBenchmark(
                 statsCol,
                 ui.column([toggleId, radarId], {
                   gap: 8,
+                  align: "center",
                   style: "flex: 1; min-width: 0;",
                 } as any),
               ],
@@ -1838,13 +1851,17 @@ function generatePgBenchmark(
 
 function generatePgDiagnose(ui: A2UIGenerator, state: PlaygroundState): string {
   if (!state.diagnoseResult) {
-    return ui.card(
-      [
-        ui.text(t("evolution.diagnosing"), "h3"),
-        ui.skeleton({ variant: "rectangular", height: 150 }),
-      ],
-      { padding: 16 }
+    const children: string[] = [ui.text(t("evolution.diagnosing"), "h3")];
+    if (state.diagnoseProgress) {
+      children.push(ui.badge(state.diagnoseProgress, { variant: "info" }));
+    } else {
+      children.push(ui.text("Initializing diagnose pipeline...", "body"));
+    }
+    children.push(ui.skeleton({ variant: "rectangular", height: 120 }));
+    children.push(
+      ui.text("Benchmark → Analyze weaknesses → Extract patterns → Generate suggestions", "caption")
     );
+    return ui.card(children, { padding: 16 });
   }
 
   const { weaknesses, suggestions } = state.diagnoseResult;

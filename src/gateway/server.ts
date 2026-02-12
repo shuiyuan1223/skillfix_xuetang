@@ -3534,6 +3534,8 @@ export class GatewaySession {
         totalCount: result.run.totalTestCases,
         durationMs: result.run.durationMs,
         profile,
+        versionTag: result.run.versionTag,
+        modelId: (result.run.metadata?.modelId as string) || undefined,
       };
       this.playgroundState.benchmarkProgress = undefined;
       this.pgAddLog(
@@ -3608,6 +3610,10 @@ export class GatewaySession {
 
       const result = await diagnose({
         profile: (this.playgroundState.benchmarkResult?.profile || "quick") as "quick" | "full",
+        onProgress: (msg: string) => {
+          this.playgroundState.diagnoseProgress = msg;
+          this.sendEvolutionLabUpdateThrottled(send);
+        },
         runnerConfig: {
           agentCall: async (query: string) => {
             if (typeof agent.reset === "function") agent.reset();
@@ -3630,6 +3636,7 @@ export class GatewaySession {
         },
       });
 
+      this.playgroundState.diagnoseProgress = undefined;
       this.playgroundState.diagnoseResult = {
         weaknesses: result.weaknesses.map((w) => ({
           category: w.category,
@@ -3653,6 +3660,7 @@ export class GatewaySession {
       );
       this.sendEvolutionLabUpdate(send);
     } catch (error) {
+      this.playgroundState.diagnoseProgress = undefined;
       this.pgAddLog(
         "diagnose",
         `Diagnose failed: ${error instanceof Error ? error.message : String(error)}`,
