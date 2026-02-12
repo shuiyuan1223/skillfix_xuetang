@@ -3663,6 +3663,7 @@ export class GatewaySession {
 
     this.playgroundState.step = nextStep as PlaygroundStep;
     this.playgroundState.viewingStep = undefined; // follow current step
+    this.playgroundState.viewingCycle = undefined;
     this.pgAddLog(nextStep, `Advanced to step: ${nextStep}`, "info");
 
     // Auto-processing for certain transitions
@@ -4373,6 +4374,7 @@ ${changesDesc}
   ) {
     this.playgroundState.approval = { approved, reason, timestamp: Date.now() };
     this.playgroundState.viewingStep = undefined; // follow current step
+    this.playgroundState.viewingCycle = undefined;
     if (approved) {
       this.playgroundState.step = "apply";
       this.pgAddLog("approve", "Proposal approved", "success");
