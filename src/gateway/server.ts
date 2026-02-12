@@ -6,6 +6,7 @@
  */
 
 import { join } from "path";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mcpHandler } from "./mcp.js";
@@ -22,6 +23,8 @@ import {
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
   getBenchmarkConcurrency,
+  getStateDir,
+  ensureConfigDir,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -122,6 +125,36 @@ import {
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
 import { setPlaygroundCallbacks } from "../tools/playground-tools.js";
 import type { PlaygroundState, PlaygroundStep } from "./evolution-lab.js";
+
+// ============================================================================
+// Playground State Persistence
+// ============================================================================
+
+function getPlaygroundStatePath(): string {
+  return join(getStateDir(), "playground-state.json");
+}
+
+function loadPlaygroundState(): PlaygroundState {
+  try {
+    const p = getPlaygroundStatePath();
+    if (!existsSync(p)) return { step: "idle", log: [], cycleId: null };
+    const state = JSON.parse(readFileSync(p, "utf-8")) as PlaygroundState;
+    // Clear transient progress — the benchmark runner process is dead after restart
+    delete state.benchmarkProgress;
+    return state;
+  } catch {
+    return { step: "idle", log: [], cycleId: null };
+  }
+}
+
+function savePlaygroundState(state: PlaygroundState): void {
+  try {
+    ensureConfigDir();
+    writeFileSync(getPlaygroundStatePath(), JSON.stringify(state, null, 2));
+  } catch {
+    /* non-critical */
+  }
+}
 
 // ============================================================================
 // SHARP Category Re-aggregation
@@ -898,7 +931,7 @@ export class GatewaySession {
   private evolutionLabDiffContent: { before: string; after: string; path: string } | null = null;
 
   // Playground state
-  private playgroundState: PlaygroundState = { step: "idle", log: [], cycleId: null };
+  private playgroundState: PlaygroundState = loadPlaygroundState();
 
   // Arena comparison state
   private benchmarkSelectedRunIds: Set<string> = new Set();
@@ -2889,6 +2922,7 @@ export class GatewaySession {
    * Send an Evolution Lab page update to the client.
    */
   private sendEvolutionLabUpdate(send: (msg: unknown) => void): void {
+    savePlaygroundState(this.playgroundState);
     if (this.currentView === "evolution") {
       const labData = this.buildEvolutionLabData();
       const labPage = generateEvolutionLab(labData);
