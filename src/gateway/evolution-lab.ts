@@ -228,6 +228,8 @@ export interface PlaygroundState {
   diagnoseProgress?: string;
   proposeProgress?: string;
   applyProgress?: string;
+  applyError?: string;
+  applyPrompt?: string;
 }
 
 export interface EvolutionLabData {
@@ -2092,8 +2094,19 @@ function generatePgApply(
         })
       );
     }
+  } else if (state.applyError) {
+    // Error state
+    children.push(ui.badge("Failed", { variant: "error" }));
+    children.push(ui.text(state.applyError, "body"));
   } else {
     // Loading state with progress
+    if (state.applyPrompt) {
+      children.push(
+        ui.collapsible(t("evolution.pipelineApply") + " — Task", [
+          ui.text(state.applyPrompt, "body"),
+        ])
+      );
+    }
     if (state.applyProgress) {
       children.push(ui.badge(state.applyProgress, { variant: "info" }));
     }

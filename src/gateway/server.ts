@@ -3711,6 +3711,8 @@ export class GatewaySession {
       case "apply":
         this.playgroundState.applyResult = undefined;
         this.playgroundState.applyProgress = undefined;
+        this.playgroundState.applyError = undefined;
+        this.playgroundState.applyPrompt = undefined;
         this.pgRunApply(send);
         break;
       default:
@@ -4195,6 +4197,9 @@ ${changesDesc}
 - Do NOT add unrelated changes
 - Do NOT add meta-comments like "Added by evolution" or "Modified for improvement"`;
 
+      this.playgroundState.applyPrompt = prompt;
+      this.sendEvolutionLabUpdate(send);
+
       const AGENT_TIMEOUT_MS = 180_000;
       try {
         await Promise.race([
@@ -4269,12 +4274,11 @@ ${changesDesc}
       );
       this.sendEvolutionLabUpdate(send);
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error("[Playground Apply]", errMsg);
       this.playgroundState.applyProgress = undefined;
-      this.pgAddLog(
-        "apply",
-        `Apply failed: ${error instanceof Error ? error.message : String(error)}`,
-        "error"
-      );
+      this.playgroundState.applyError = errMsg;
+      this.pgAddLog("apply", `Apply failed: ${errMsg}`, "error");
       this.sendEvolutionLabUpdate(send);
     }
   }
