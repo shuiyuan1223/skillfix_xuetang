@@ -1625,17 +1625,69 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
 
   const children: string[] = [];
 
-  // ─── Top: Horizontal Pipeline (always visible) ───
-  const steps = buildPlaygroundPipelineSteps(state);
-  const pipeline = ui.stepIndicator(steps, {
-    orientation: "horizontal",
-    onStepClick: "pg_view_step",
-  } as any);
-  children.push(pipeline);
+  // ─── Top: S-shaped Multi-Cycle Pipeline ───
+  const stepIds: PlaygroundStep[] = [
+    "benchmark",
+    "diagnose",
+    "propose",
+    "approve",
+    "apply",
+    "validate",
+    "analyse",
+  ];
+  const stepLabelMap: Record<string, { label: string; icon: string }> = {
+    benchmark: { label: t("evolution.pipelineBenchmark"), icon: "test-tube" },
+    diagnose: { label: t("evolution.pipelineDiagnose"), icon: "search" },
+    propose: { label: t("evolution.pipelinePropose"), icon: "lightbulb" },
+    approve: { label: t("evolution.pipelineApprove"), icon: "check" },
+    apply: { label: t("evolution.pipelineApply"), icon: "zap" },
+    validate: { label: t("evolution.pipelineValidate"), icon: "shield" },
+    analyse: { label: t("evolution.pipelineAnalyse"), icon: "brain" },
+  };
 
-  // ─── Iteration History Bar (persistent, visible whenever cycleHistory exists) ───
-  if (state.cycleHistory && state.cycleHistory.length > 0) {
-    children.push(generatePgIterationHistory(ui, state));
+  const allCycles: Array<{
+    cycleNumber: number;
+    steps: PipelineStep[];
+    score: { before: number; after: number; delta: number } | null;
+    recommendation: string | null;
+    proposal: string | null;
+  }> = [];
+
+  // Historical cycles (all completed)
+  for (const h of state.cycleHistory || []) {
+    allCycles.push({
+      cycleNumber: h.cycleNumber,
+      steps: stepIds.map((id) => {
+        const cfg = stepLabelMap[id];
+        return { id, label: cfg.label, icon: cfg.icon, status: "completed" as const };
+      }),
+      score: { before: h.benchmarkScore, after: h.validateScore, delta: h.delta },
+      recommendation: h.recommendation,
+      proposal: h.proposal.length > 60 ? h.proposal.slice(0, 60) + "..." : h.proposal,
+    });
+  }
+
+  // Current cycle
+  if (state.step !== "idle") {
+    const currentSteps = buildPlaygroundPipelineSteps(state);
+    allCycles.push({
+      cycleNumber: (state.cycleHistory?.length || 0) + 1,
+      steps: currentSteps,
+      score: null,
+      recommendation: null,
+      proposal: state.proposal?.description || null,
+    });
+  }
+
+  if (allCycles.length > 0) {
+    const pipelineId = `evo_pipeline_${Date.now()}`;
+    ui.addComponent(pipelineId, {
+      id: pipelineId,
+      type: "evolution_pipeline",
+      cycles: allCycles,
+      onStepClick: "pg_view_step",
+    });
+    children.push(pipelineId);
   }
 
   // ─── Details Panel (below pipeline, empty when idle) ───
@@ -1680,66 +1732,6 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
     padding: 16,
     style: "min-height: calc(100vh - 220px); position: relative;",
   } as any);
-}
-
-// ─── Iteration History (persistent bar) ───
-
-function generatePgIterationHistory(ui: A2UIGenerator, state: PlaygroundState): string {
-  const history = state.cycleHistory || [];
-  if (history.length === 0) return "";
-
-  const currentCycle = history.length + 1;
-  const headerItems: string[] = [
-    ui.text(t("evolution.iterationHistory"), "label"),
-    ui.badge(`Cycle ${currentCycle}`, { variant: "info" }),
-  ];
-
-  // Compact summary per cycle: score delta + proposal excerpt
-  const cycleCards = history.map((h) => {
-    const deltaSign = h.delta >= 0 ? "+" : "";
-    const deltaColor = h.delta > 0 ? "#4ade80" : h.delta < 0 ? "#f87171" : "#94a3b8";
-    const scoreText = `${h.benchmarkScore.toFixed(2)} → ${h.validateScore.toFixed(2)}`;
-    const deltaText = `(${deltaSign}${h.delta.toFixed(3)})`;
-    const proposalExcerpt = h.proposal.length > 50 ? h.proposal.slice(0, 50) + "..." : h.proposal;
-    const recBadge = ui.badge(h.recommendation, {
-      variant:
-        h.recommendation === "merge"
-          ? "success"
-          : h.recommendation === "revert"
-            ? "error"
-            : "warning",
-    });
-
-    const cardChildren = [
-      ui.row(
-        [
-          ui.text(`#${h.cycleNumber}`, "label"),
-          ui.text(scoreText, "body"),
-          ui.text(deltaText, "body"),
-          recBadge,
-        ],
-        { gap: 8, align: "center" }
-      ),
-      ui.text(proposalExcerpt, "caption"),
-    ];
-
-    // Show improvement plan if available
-    if (h.improvementPlan.length > 0) {
-      cardChildren.push(
-        ui.text(
-          `${t("evolution.improvementPlan")}: ${h.improvementPlan.slice(0, 2).join("; ")}${h.improvementPlan.length > 2 ? " ..." : ""}`,
-          "caption"
-        )
-      );
-    }
-
-    return ui.card(cardChildren, { padding: 10 });
-  });
-
-  return ui.card(
-    [ui.row(headerItems, { gap: 8, align: "center" }), ui.column(cycleCards, { gap: 8 })],
-    { padding: 12 }
-  );
 }
 
 // ─── FAB helpers ───

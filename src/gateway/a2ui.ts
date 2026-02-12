@@ -53,7 +53,8 @@ export type A2UIComponentType =
   | "plotly_radar"
   | "arena_run_picker"
   | "arena_mode_toggle"
-  | "playground_fab";
+  | "playground_fab"
+  | "evolution_pipeline";
 
 // Base component interface
 export interface A2UIComponent {

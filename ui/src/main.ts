@@ -431,6 +431,8 @@ class A2UIRenderer {
         return this.renderArenaModeToggle(c);
       case "playground_fab":
         return this.renderPlaygroundFab(c);
+      case "evolution_pipeline":
+        return this.renderEvolutionPipeline(c);
       default:
         return html`<div class="text-text-muted text-xs p-2">[Unknown: ${c.type}]</div>`;
     }
@@ -2844,6 +2846,150 @@ ${value || ""}</textarea
                 >${step.label}</span
               >
             </div>
+          `;
+        })}
+      </div>
+    `;
+  }
+
+  private renderEvolutionPipeline(c: A2UIComponent): TemplateResult {
+    const cycles = (c.cycles as any[]) || [];
+    const onStepClick = c.onStepClick as string | undefined;
+
+    return html`
+      <div class="flex flex-col gap-0">
+        ${cycles.map((cycle: any, cycleIdx: number) => {
+          const isLast = cycleIdx === cycles.length - 1;
+          const steps = (cycle.steps as any[]) || [];
+
+          return html`
+            <!-- Cycle row -->
+            <div class="flex flex-col gap-1 py-2">
+              <!-- Cycle label + score -->
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+                  Cycle ${cycle.cycleNumber}
+                </span>
+                ${cycle.score
+                  ? html`
+                      <span class="text-[11px] text-slate-400">
+                        ${cycle.score.before.toFixed(2)} → ${cycle.score.after.toFixed(2)}
+                      </span>
+                      <span
+                        class="text-[11px] font-semibold ${cycle.score.delta >= 0
+                          ? "text-emerald-400"
+                          : "text-red-400"}"
+                      >
+                        (${cycle.score.delta >= 0 ? "+" : ""}${cycle.score.delta.toFixed(3)})
+                      </span>
+                      ${cycle.recommendation
+                        ? html` <span
+                            class="text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase
+                      ${cycle.recommendation === "merge"
+                              ? "bg-emerald-500/15 text-emerald-400"
+                              : cycle.recommendation === "revert"
+                                ? "bg-red-500/15 text-red-400"
+                                : "bg-amber-500/15 text-amber-400"}"
+                          >
+                            ${cycle.recommendation}
+                          </span>`
+                        : nothing}
+                    `
+                  : nothing}
+              </div>
+
+              <!-- Steps row -->
+              <div class="flex flex-row items-center justify-center gap-0">
+                ${steps.map((step: any, i: number) => {
+                  const status = (step.status as string) || "pending";
+                  const connectorDone = status === "completed" || status === "active";
+
+                  const circleClass =
+                    status === "completed"
+                      ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]"
+                      : status === "active"
+                        ? "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+                        : status === "failed"
+                          ? "bg-red-500 border-red-500 text-white"
+                          : status === "skipped"
+                            ? "bg-transparent border-slate-600 border-dashed text-slate-500"
+                            : "bg-transparent border-slate-600 text-slate-500";
+
+                  const labelClass =
+                    status === "active"
+                      ? "text-indigo-400 font-semibold"
+                      : status === "completed"
+                        ? "text-emerald-400 font-medium"
+                        : "text-slate-500 font-medium";
+
+                  const sizeClass = status === "active" ? "w-12 h-12" : "w-9 h-9";
+                  const iconSize = status === "active" ? "w-5 h-5" : "w-4 h-4";
+                  const clickable = onStepClick && (status === "completed" || status === "active");
+
+                  return html`
+                    ${i > 0
+                      ? html`<div
+                          class="h-1 flex-1 min-w-[24px] rounded-full ${connectorDone
+                            ? "bg-gradient-to-r from-emerald-500 to-indigo-500"
+                            : "bg-slate-700"} transition-colors"
+                        ></div>`
+                      : nothing}
+                    <div
+                      class="flex flex-col items-center gap-2 ${clickable ? "cursor-pointer" : ""}"
+                      @click=${clickable
+                        ? () => this.sendAction(onStepClick!, { stepId: step.id })
+                        : nothing}
+                    >
+                      <div
+                        class="${sizeClass} rounded-full flex items-center justify-center text-xs border-2 shrink-0 transition-all ${circleClass}"
+                      >
+                        ${step.status === "completed"
+                          ? html`<span class="${iconSize}">${unsafeHTML(getIcon("check"))}</span>`
+                          : step.icon
+                            ? html`<span class="${iconSize}"
+                                >${unsafeHTML(getIcon(step.icon as string))}</span
+                              >`
+                            : html`<span>${i + 1}</span>`}
+                      </div>
+                      <span
+                        class="text-[11px] whitespace-nowrap uppercase tracking-wider ${labelClass}"
+                        >${step.label}</span
+                      >
+                    </div>
+                  `;
+                })}
+              </div>
+            </div>
+
+            <!-- Iterate connector between cycles -->
+            ${!isLast
+              ? html`
+                  <div class="flex justify-end pr-8 py-1">
+                    <div class="flex items-center gap-2">
+                      <span class="text-[10px] text-amber-400/60 uppercase tracking-wider"
+                        >iterate</span
+                      >
+                      <svg width="40" height="24" viewBox="0 0 40 24">
+                        <path
+                          d="M 38 0 C 38 12, 20 12, 20 24"
+                          stroke="rgb(245,158,11)"
+                          stroke-width="1.5"
+                          fill="none"
+                          opacity="0.4"
+                          stroke-dasharray="4 2"
+                        />
+                        <path
+                          d="M 17 20 L 20 24 L 23 20"
+                          stroke="rgb(245,158,11)"
+                          stroke-width="1.5"
+                          fill="none"
+                          opacity="0.4"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                `
+              : nothing}
           `;
         })}
       </div>
