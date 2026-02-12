@@ -928,7 +928,12 @@ export class GatewaySession {
   private evolutionStreamingContent = "";
   private evolutionPipelineStep: string | null = null;
   private evolutionInspectedBranch: string | null = null;
-  private evolutionLabDiffContent: { before: string; after: string; path: string } | null = null;
+  private evolutionLabDiffContent: {
+    before: string;
+    after: string;
+    path: string;
+    unifiedDiff?: string;
+  } | null = null;
 
   // Playground state
   private playgroundState: PlaygroundState = loadPlaygroundState();
@@ -1863,10 +1868,25 @@ export class GatewaySession {
       if (branch) {
         const afterContent = readFileFromBranch(branch, filePath) || "";
         const beforeContent = readFileFromBranch("main", filePath) || "";
+        // Compute unified diff via git
+        let unifiedDiff = "";
+        try {
+          const { execSync: execSyncDiff } = await import("child_process");
+          const { getProjectRoot } = await import("../evolution/version-manager.js");
+          unifiedDiff = execSyncDiff(`git diff main..${branch} -- "${filePath}"`, {
+            cwd: getProjectRoot(),
+            encoding: "utf-8",
+            timeout: 10000,
+            stdio: ["pipe", "pipe", "pipe"],
+          });
+        } catch {
+          /* diff may fail for new files */
+        }
         this.evolutionLabDiffContent = {
           before: beforeContent,
           after: afterContent,
           path: filePath,
+          unifiedDiff: unifiedDiff || undefined,
         };
       }
       this.sendEvolutionLabUpdate(send);
@@ -4155,24 +4175,41 @@ ${changesDesc}
         .split("\n")
         .filter(Boolean)
         .map((line) => {
-          const status = line.slice(0, 2).trim();
-          const path = line.slice(3);
+          // porcelain format: XY<space>path — use regex for robustness
+          const m = line.match(/^(.{2})\s+(.+)$/);
+          if (!m) return null;
+          const xy = m[1].trim();
+          const filePath = m[2];
           return {
-            path,
-            status: status === "A" ? "added" : status === "D" ? "deleted" : "modified",
+            path: filePath,
+            status: xy.includes("A") ? "added" : xy.includes("D") ? "deleted" : "modified",
           };
-        });
+        })
+        .filter((f): f is { path: string; status: string } => f !== null);
 
       const commits: string[] = [];
       if (changedFiles.length > 0) {
-        const allPaths = changedFiles.map((f) => f.path);
-        const result = gitCommitFiles(
-          allPaths,
-          `evo: apply proposal (${changedFiles.length} files)`,
-          worktreePath
-        );
-        if (result.success && result.commitHash) {
-          commits.push(result.commitHash);
+        // Use git add -A to stage all changes (handles staged, unstaged, and untracked)
+        const { execSync } = await import("child_process");
+        try {
+          execSync("git add -A", { cwd: worktreePath, timeout: 10000, stdio: "pipe" });
+          execSync(`git commit -m "evo: apply proposal (${changedFiles.length} files)"`, {
+            cwd: worktreePath,
+            timeout: 15000,
+            stdio: "pipe",
+          });
+          const hash = execSync("git rev-parse --short HEAD", {
+            cwd: worktreePath,
+            timeout: 5000,
+            encoding: "utf-8",
+          }).trim();
+          commits.push(hash);
+        } catch (commitErr) {
+          this.pgAddLog(
+            "apply",
+            `Commit warning: ${commitErr instanceof Error ? commitErr.message : String(commitErr)}`,
+            "warning"
+          );
         }
       }
 

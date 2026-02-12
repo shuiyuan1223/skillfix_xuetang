@@ -254,7 +254,7 @@ export interface EvolutionLabData {
   selectedVersion?: string;
   selectedTimelineEvent?: string;
   changedFiles?: ChangedFile[];
-  diffContent?: { before: string; after: string; path: string };
+  diffContent?: { before: string; after: string; path: string; unifiedDiff?: string };
   // Data
   dataSubTab?: "traces" | "evaluations" | "suggestions";
   traces?: TraceInfo[];
@@ -1138,6 +1138,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       if (data.diffContent) {
         const diffId = ui.diffView(data.diffContent.before, data.diffContent.after, {
           title: data.diffContent.path,
+          unifiedDiff: data.diffContent.unifiedDiff,
         });
         rightChildren.push(diffId);
       }
@@ -2087,6 +2088,7 @@ function generatePgApply(
       children.push(
         ui.diffView(data.diffContent.before, data.diffContent.after, {
           title: data.diffContent.path,
+          unifiedDiff: data.diffContent.unifiedDiff,
         })
       );
     }

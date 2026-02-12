@@ -233,6 +233,7 @@ export interface DiffViewComponent extends A2UIComponent {
   after: string;
   language?: string;
   title?: string;
+  unifiedDiff?: string;
 }
 
 // Data Table Component (enhanced table with pagination, sorting, filtering)

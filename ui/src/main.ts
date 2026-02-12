@@ -1185,8 +1185,14 @@ class A2UIRenderer {
     const before = c.before as string;
     const after = c.after as string;
     const title = c.title as string;
+    const unifiedDiff = c.unifiedDiff as string | undefined;
 
-    // Simple line-by-line diff
+    // Prefer unified diff if available
+    if (unifiedDiff) {
+      return this.renderUnifiedDiff(title, unifiedDiff);
+    }
+
+    // Fallback: simple line-by-line side-by-side diff
     const beforeLines = before.split("\n");
     const afterLines = after.split("\n");
 
@@ -1238,6 +1244,75 @@ class A2UIRenderer {
               )}
             </div>
           </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderUnifiedDiff(title: string, diff: string): TemplateResult {
+    const lines = diff.split("\n");
+    // Skip diff header lines (diff --git, index, ---, +++)
+    const bodyLines: { text: string; type: "add" | "remove" | "context" | "hunk" }[] = [];
+    for (const line of lines) {
+      if (line.startsWith("@@")) {
+        bodyLines.push({ text: line, type: "hunk" });
+      } else if (line.startsWith("+") && !line.startsWith("+++")) {
+        bodyLines.push({ text: line, type: "add" });
+      } else if (line.startsWith("-") && !line.startsWith("---")) {
+        bodyLines.push({ text: line, type: "remove" });
+      } else if (
+        line.startsWith("diff ") ||
+        line.startsWith("index ") ||
+        line.startsWith("---") ||
+        line.startsWith("+++")
+      ) {
+        // skip header lines
+      } else {
+        bodyLines.push({ text: line, type: "context" });
+      }
+    }
+
+    const lineClass = (type: string) => {
+      switch (type) {
+        case "add":
+          return "bg-emerald-500/20 text-emerald-300";
+        case "remove":
+          return "bg-red-500/20 text-red-300";
+        case "hunk":
+          return "bg-blue-500/10 text-blue-400";
+        default:
+          return "";
+      }
+    };
+
+    return html`
+      <div class="rounded-xl border border-border overflow-hidden">
+        ${title
+          ? html`<div
+              class="px-4 py-2 text-sm font-medium text-text border-b border-border bg-surface"
+            >
+              ${title}
+            </div>`
+          : nothing}
+        <div class="font-mono text-xs overflow-x-auto max-h-[600px] overflow-y-auto">
+          ${bodyLines.map(
+            (l) => html`
+              <div class="flex ${lineClass(l.type)}">
+                <span class="w-8 text-center text-text-muted select-none shrink-0 py-px opacity-60"
+                  >${l.type === "add"
+                    ? "+"
+                    : l.type === "remove"
+                      ? "-"
+                      : l.type === "hunk"
+                        ? "@@"
+                        : " "}</span
+                >
+                <span class="flex-1 py-px px-2 whitespace-pre"
+                  >${l.type === "hunk" ? l.text : l.text.slice(1) || " "}</span
+                >
+              </div>
+            `
+          )}
         </div>
       </div>
     `;
