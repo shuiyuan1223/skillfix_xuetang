@@ -304,6 +304,19 @@ export interface LocaleMessages {
     diagnosing: string;
     diagnoseComplete: string;
     noWeaknesses: string;
+    diagnosePipelineHint: string;
+    diagnosePipelineSteps: string;
+    diagnoseInitializing: string;
+    diagnosePatterns: string;
+    diagnoseFailingTests: string;
+    diagnoseSuggestionImprove: string;
+    diagnoseSuggestionSkill: string;
+    diagnoseUsingExisting: string;
+    diagnoseFoundWeak: string;
+    diagnoseGenerated: string;
+    retry: string;
+    rerunQuick: string;
+    rerunFull: string;
     // Auto-evolve
     autoEvolve: string;
     autoEvolveDesc: string;
@@ -319,6 +332,7 @@ export interface LocaleMessages {
     versionTrigger: string;
     scoreDelta: string;
     filesChanged: string;
+    priority: string;
     switchVersion: string;
     mergeVersion: string;
     abandonVersion: string;

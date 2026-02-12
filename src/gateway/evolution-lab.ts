@@ -1687,34 +1687,52 @@ function generatePgFab(ui: A2UIGenerator, state: PlaygroundState): string {
     );
   } else if (state.step === "complete") {
     primary = { icon: "refresh-cw", action: "pg_reset" };
+    actions.push(
+      {
+        icon: "zap",
+        action: "pg_start_cycle",
+        payload: { profile: "quick" },
+        tooltip: t("evolution.rerunQuick"),
+      },
+      {
+        icon: "target",
+        action: "pg_start_cycle",
+        payload: { profile: "full" },
+        tooltip: t("evolution.rerunFull"),
+      }
+    );
   } else if (state.paused) {
     primary = { icon: "play", action: "pg_continue" };
+    actions.push({
+      icon: "refresh-cw",
+      action: "pg_retry_step",
+      tooltip: t("evolution.retry"),
+    });
   } else if (pgStepHasResult(state)) {
     const nextStep = pgGetNextStep(state.step);
     primary = { icon: "skip-forward", action: "pg_advance", payload: { nextStep } };
-    if (state.step === "benchmark") {
-      actions.push(
-        {
-          icon: "zap",
-          action: "pg_start_cycle",
-          payload: { profile: "quick" },
-          tooltip: "Rerun Quick (5)",
-        },
-        {
-          icon: "target",
-          action: "pg_start_cycle",
-          payload: { profile: "full" },
-          tooltip: "Rerun Full (16)",
-        }
-      );
-    }
+    // Always show rerun options when benchmark result exists
+    actions.push(
+      {
+        icon: "zap",
+        action: "pg_start_cycle",
+        payload: { profile: "quick" },
+        tooltip: t("evolution.rerunQuick"),
+      },
+      {
+        icon: "target",
+        action: "pg_start_cycle",
+        payload: { profile: "full" },
+        tooltip: t("evolution.rerunFull"),
+      }
+    );
   } else {
     // Running: show pause + retry
     primary = { icon: "pause", action: "pg_pause" };
     actions.push({
       icon: "refresh-cw",
       action: "pg_retry_step",
-      tooltip: "Retry",
+      tooltip: t("evolution.retry"),
     });
   }
 
@@ -1861,12 +1879,10 @@ function generatePgDiagnose(ui: A2UIGenerator, state: PlaygroundState): string {
     if (state.diagnoseProgress) {
       children.push(ui.badge(state.diagnoseProgress, { variant: "info" }));
     } else {
-      children.push(ui.text("Initializing diagnose pipeline...", "body"));
+      children.push(ui.text(t("evolution.diagnosePipelineSteps"), "body"));
     }
     children.push(ui.skeleton({ variant: "rectangular", height: 120 }));
-    children.push(
-      ui.text("Benchmark → Analyze weaknesses → Extract patterns → Generate suggestions", "caption")
-    );
+    children.push(ui.text(t("evolution.diagnosePipelineHint"), "caption"));
     return ui.card(children, { padding: 16 });
   }
 
@@ -1877,13 +1893,14 @@ function generatePgDiagnose(ui: A2UIGenerator, state: PlaygroundState): string {
   children.push(weakTitle);
 
   for (const w of weaknesses) {
-    const catColor = SHARP_CATEGORY_COLORS[w.category] || "#f87171";
     const scoreText = ui.text(`${w.label}: ${w.score.toFixed(2)}`, "h3");
     const gap = ui.badge(`gap: ${w.gap.toFixed(2)}`, { variant: "warning" });
-    const failing = ui.text(`${w.failingCount} ${t("evolution.failed")} tests`, "body");
+    const failing = ui.text(`${w.failingCount} ${t("evolution.diagnoseFailingTests")}`, "body");
     const cardChildren = [ui.row([scoreText, gap], { gap: 8, align: "center" }), failing];
     if (w.patterns.length > 0) {
-      cardChildren.push(ui.text(`Patterns: ${w.patterns.join(", ")}`, "caption"));
+      cardChildren.push(
+        ui.text(`${t("evolution.diagnosePatterns")}: ${w.patterns.join(", ")}`, "caption")
+      );
     }
     children.push(ui.card(cardChildren, { padding: 12 }));
   }
@@ -1902,7 +1919,7 @@ function generatePgDiagnose(ui: A2UIGenerator, state: PlaygroundState): string {
         { key: "category", label: t("evolution.category"), render: "badge" },
         { key: "description", label: t("evolution.rationale") },
         { key: "files", label: t("evolution.filesChanged") },
-        { key: "priority", label: "Priority", render: "badge" },
+        { key: "priority", label: t("evolution.priority"), render: "badge" },
       ],
       sugRows
     );

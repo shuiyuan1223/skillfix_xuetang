@@ -21,6 +21,7 @@ import {
 } from "./category-scorer.js";
 import { CATEGORY_LABELS } from "./benchmark-seed.js";
 import { createGitHubIssue, buildDiagnoseIssueBody } from "./github-issues.js";
+import { t } from "../locales/index.js";
 
 export interface DiagnoseWeakness {
   category: BenchmarkCategory;
@@ -84,17 +85,22 @@ export async function diagnose(opts: {
     run = existingBenchmark.run;
     results = existingBenchmark.results;
     categoryScores = existingBenchmark.categoryScores;
+    const score = normalizeScoreForDisplay(run.overallScore).toFixed(2);
     log(
-      `Using existing benchmark: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)} (${run.passedCount}/${run.totalTestCases} passed)`
+      t("evolution.diagnoseUsingExisting", {
+        score,
+        passed: run.passedCount,
+        total: run.totalTestCases,
+      })
     );
   } else if (runnerConfig) {
     // Fallback: Run benchmark from scratch
-    log("Running benchmark...");
+    log(t("evolution.diagnosing"));
     const runner = new BenchmarkRunner(runnerConfig);
     await runner.seedTestCases();
     ({ run, results, categoryScores } = await runner.run({ profile }));
     log(
-      `Benchmark complete: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)} (${run.passedCount}/${run.totalTestCases} passed)`
+      `${t("evolution.diagnoseComplete")}: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)} (${run.passedCount}/${run.totalTestCases})`
     );
   } else {
     throw new Error("diagnose() requires either existingBenchmark or runnerConfig");
@@ -130,11 +136,11 @@ export async function diagnose(opts: {
     });
   }
 
-  log(`Found ${weaknesses.length} weak categories`);
+  log(t("evolution.diagnoseFoundWeak", { count: weaknesses.length }));
 
   // Step 3: Generate suggestions
   const suggestions = generateSuggestions(weaknesses);
-  log(`Generated ${suggestions.length} optimization suggestions`);
+  log(t("evolution.diagnoseGenerated", { count: suggestions.length }));
 
   // Step 4: Optionally create GitHub issues
   const issuesCreated: Array<{ number: number; url: string }> = [];
@@ -211,7 +217,11 @@ function generateSuggestions(weaknesses: DiagnoseWeakness[]): DiagnoseSuggestion
     // Suggest prompt modifications
     suggestions.push({
       category: weakness.category,
-      description: `Improve ${weakness.label} — ${weakness.failingTests.length} tests failing, ${weakness.gap.toFixed(0)} points below threshold`,
+      description: t("evolution.diagnoseSuggestionImprove", {
+        label: weakness.label,
+        count: weakness.failingTests.length,
+        gap: weakness.gap.toFixed(0),
+      }),
       targetFiles: ["src/prompts/SOUL.md"],
       priority,
     });
@@ -229,7 +239,7 @@ function generateSuggestions(weaknesses: DiagnoseWeakness[]): DiagnoseSuggestion
     if (targetSkill && targetSkill !== "src/prompts/SOUL.md") {
       suggestions.push({
         category: weakness.category,
-        description: `Create or update skill for ${weakness.label}`,
+        description: t("evolution.diagnoseSuggestionSkill", { label: weakness.label }),
         targetFiles: [targetSkill],
         priority,
       });
