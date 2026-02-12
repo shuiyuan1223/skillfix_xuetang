@@ -30,7 +30,6 @@ import type { HealthDataSource } from "../data-sources/interface.js";
 import { memorySearchTool, memorySaveTool, dailyLogTool } from "../tools/memory-tools.js";
 import { getSkillTool } from "../tools/skill-tools.js";
 import { gitAgentTools } from "./git-agent-tools.js";
-import { playgroundTools } from "../tools/playground-tools.js";
 
 // Define TypeBox schemas for each tool
 const DateSchema = Type.Object({
@@ -446,34 +445,6 @@ export const getSkillAgentTool: AgentTool<typeof GetSkillSchema> = {
   },
 };
 
-// ========================================================================
-// Playground Tools as AgentTools (generic wrappers)
-// ========================================================================
-
-const playgroundAgentTools: AgentTool<any>[] = playgroundTools.map((tool) => ({
-  name: tool.name,
-  description: tool.description,
-  label: tool.name,
-  parameters: Type.Object(
-    Object.fromEntries(
-      Object.entries(tool.parameters.properties || {}).map(([key, schema]) => {
-        const s = schema as { type?: string; description?: string };
-        if (s.type === "array") return [key, Type.Any({ description: s.description })];
-        if (s.type === "string")
-          return [key, Type.Optional(Type.String({ description: s.description || key }))];
-        return [key, Type.Optional(Type.Any({ description: s.description || key }))];
-      })
-    )
-  ),
-  execute: async (_toolCallId: string, params: Record<string, unknown>) => {
-    const result = await tool.execute(params as any);
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      details: result,
-    };
-  },
-}));
-
 // All health tools as AgentTools - use 'any' to avoid variance issues
 export const healthAgentTools: AgentTool<any>[] = [
   healthDataAgentTool,
@@ -498,7 +469,6 @@ export const healthAgentTools: AgentTool<any>[] = [
   dailyLogAgentTool,
   getSkillAgentTool,
   ...gitAgentTools,
-  ...playgroundAgentTools,
 ];
 
 /**
@@ -588,7 +558,5 @@ export function createHealthAgentTools(dataSource: HealthDataSource): AgentTool<
     getSkillAgentTool,
     // Git tools are not data-source dependent
     ...gitAgentTools,
-    // Playground tools
-    ...playgroundAgentTools,
   ];
 }

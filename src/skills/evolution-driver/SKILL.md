@@ -49,7 +49,7 @@ Never skip this step. User oversight is mandatory for all changes.
 
 ### Step 5: Apply (Execute)
 1. Create an evolution branch: `git_branch_create` (creates evo/vN with worktree)
-2. Modify files using `update_prompt` or `update_skill` tools
+2. Use `claude_code` to execute coding tasks in the worktree directory, or use `update_prompt`/`update_skill` for simple modifications
 3. Commit changes: `git_commit`
 
 All modifications happen in a worktree — the main branch is never affected until merge.
@@ -94,6 +94,7 @@ Present the comparison to the user for final decision.
 | `git_revert` | Undo last commit |
 | `git_changed_files` | List modified files on branch |
 | `git_show_file` | Read file from branch |
+| `claude_code` | Execute coding tasks in a git worktree directory |
 | `update_prompt` | Modify prompt files |
 | `update_skill` | Modify skill files |
 | `get_skill` | Read skill content |

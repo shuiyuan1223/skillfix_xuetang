@@ -6,11 +6,12 @@
  */
 
 import { join } from "path";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mcpHandler } from "./mcp.js";
 import { createPHAAgent, type PHAAgent } from "../agent/pha-agent.js";
+import { createSystemAgent } from "../agent/system-agent.js";
 import { getDataSource } from "../tools/health-data.js";
 import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
@@ -23,8 +24,6 @@ import {
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
   getBenchmarkConcurrency,
-  getStateDir,
-  ensureConfigDir,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -123,38 +122,6 @@ import {
   type EvolutionLabData,
 } from "./evolution-lab.js";
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
-import { setPlaygroundCallbacks } from "../tools/playground-tools.js";
-import type { PlaygroundState, PlaygroundStep } from "./evolution-lab.js";
-
-// ============================================================================
-// Playground State Persistence
-// ============================================================================
-
-function getPlaygroundStatePath(): string {
-  return join(getStateDir(), "playground-state.json");
-}
-
-function loadPlaygroundState(): PlaygroundState {
-  try {
-    const p = getPlaygroundStatePath();
-    if (!existsSync(p)) return { step: "idle", log: [], cycleId: null };
-    const state = JSON.parse(readFileSync(p, "utf-8")) as PlaygroundState;
-    // Clear transient progress — the benchmark runner process is dead after restart
-    delete state.benchmarkProgress;
-    return state;
-  } catch {
-    return { step: "idle", log: [], cycleId: null };
-  }
-}
-
-function savePlaygroundState(state: PlaygroundState): void {
-  try {
-    ensureConfigDir();
-    writeFileSync(getPlaygroundStatePath(), JSON.stringify(state, null, 2));
-  } catch {
-    /* non-critical */
-  }
-}
 
 // ============================================================================
 // SHARP Category Re-aggregation
@@ -839,6 +806,7 @@ function generateOAuthErrorPage(message: string): string {
  */
 export class GatewaySession {
   private agent: PHAAgent | null = null;
+  private systemAgent: PHAAgent | null = null;
   private config: GatewayConfig;
   private sessionId: string;
   private dataSource: HealthDataSource;
@@ -910,13 +878,7 @@ export class GatewaySession {
   private activeVersionBranch: string | null = null;
 
   // Evolution Lab state (5-Tab Dashboard)
-  private evolutionActiveTab:
-    | "overview"
-    | "benchmark"
-    | "versions"
-    | "data"
-    | "agent"
-    | "playground" = "overview";
+  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" | "agent" = "overview";
   private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
   private evolutionSelectedVersion: string | null = null;
   private evolutionChatMessages: Array<{
@@ -934,9 +896,6 @@ export class GatewaySession {
     path: string;
     unifiedDiff?: string;
   } | null = null;
-
-  // Playground state
-  private playgroundState: PlaygroundState = loadPlaygroundState();
 
   // Arena comparison state
   private benchmarkSelectedRunIds: Set<string> = new Set();
@@ -1005,11 +964,45 @@ export class GatewaySession {
           return result;
         },
       });
-
-      // Configure playground callbacks
-      this.setupPlaygroundCallbacks();
     }
     return this.agent;
+  }
+
+  private async getSystemAgent(): Promise<PHAAgent> {
+    if (!this.systemAgent) {
+      this.systemAgent = await createSystemAgent({
+        apiKey: this.config.apiKey,
+        provider: this.config.provider,
+        modelId: this.config.modelId,
+        baseUrl: this.config.baseUrl,
+      });
+
+      // Configure evolution tools with system agent capabilities
+      const AGENT_TIMEOUT_MS = 120_000;
+      const agentRef = this.systemAgent;
+      setEvolutionRunnerConfig({
+        agentCall: async (query: string) => {
+          agentRef.reset();
+          const result = await Promise.race([
+            agentRef.chatAndWait(query).then((response: string) => ({ response })),
+            new Promise<{ response: string }>((_, reject) =>
+              setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+          return result;
+        },
+        llmCall: async (prompt: string) => {
+          const result = await Promise.race([
+            agentRef.chatAndWait(prompt),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error("LLM call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+          return result;
+        },
+      });
+    }
+    return this.systemAgent;
   }
 
   /**
@@ -1457,7 +1450,7 @@ export class GatewaySession {
     this.sendEvolutionLabUpdate(send);
 
     try {
-      const agent = await this.getAgent();
+      const agent = await this.getSystemAgent();
 
       const unsubscribe = agent.subscribe((event: any) => {
         if (event.type === "message_start" || event.type === "message_update") {
@@ -1778,8 +1771,7 @@ export class GatewaySession {
         | "benchmark"
         | "versions"
         | "data"
-        | "agent"
-        | "playground";
+        | "agent";
       this.sendEvolutionLabUpdate(send);
     } else if (action === "evo_data_subtab_change" && payload?.tab) {
       this.evolutionDataSubTab = payload.tab as "traces" | "evaluations" | "suggestions";
@@ -1834,69 +1826,14 @@ export class GatewaySession {
         send
       );
     }
-    // Playground actions
-    else if (action === "pg_start_cycle") {
-      this.pgStartCycle((payload?.profile as string) || "quick", send);
-    } else if (action === "pg_advance") {
-      this.pgAdvanceStep((payload?.nextStep as string) || "", send);
-    } else if (action === "pg_approve") {
-      this.pgHandleApproval(
-        payload?.approved as boolean,
-        payload?.reason as string | undefined,
+    // Playground actions (simplified — SystemAgent drives the flow)
+    else if (action === "pg_send_message" && payload?.value) {
+      await this.handleEvolutionMessage(payload.value as string, send);
+    } else if (action === "pg_start_auto") {
+      await this.handleEvolutionMessage(
+        "Start a full evolution cycle: benchmark, diagnose, propose improvements, and wait for my approval before applying.",
         send
       );
-    } else if (action === "pg_complete") {
-      this.pgHandleComplete((payload?.action as string) || "merge", send);
-    } else if (action === "pg_reset") {
-      this.pgReset(send);
-    } else if (action === "pg_retry_step") {
-      this.pgRetryCurrentStep(send);
-    } else if (action === "pg_pause") {
-      this.playgroundState.paused = true;
-      this.pgAddLog(this.playgroundState.step, "Cycle paused", "warning");
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "pg_continue") {
-      this.playgroundState.paused = false;
-      this.pgAddLog(this.playgroundState.step, "Cycle resumed", "info");
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "pg_view_step" && payload?.stepId) {
-      this.playgroundState.viewingStep = payload.stepId as any;
-      this.playgroundState.viewingCycle =
-        payload.cycleNumber != null ? Number(payload.cycleNumber) : undefined;
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "pg_validate_radar_mode" && payload?.mode) {
-      this.playgroundState.validateRadarMode = payload.mode as "categories" | "criteria";
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "pg_file_select" && payload?.path) {
-      const filePath = payload.path as string;
-      const branch = this.playgroundState.applyResult?.branch;
-      if (branch) {
-        const afterContent = readFileFromBranch(branch, filePath) || "";
-        const beforeContent = readFileFromBranch("main", filePath) || "";
-        // Compute unified diff via git
-        let unifiedDiff = "";
-        try {
-          const { execSync: execSyncDiff } = await import("child_process");
-          const { getProjectRoot } = await import("../evolution/version-manager.js");
-          unifiedDiff = execSyncDiff(`git diff main..${branch} -- "${filePath}"`, {
-            cwd: getProjectRoot(),
-            encoding: "utf-8",
-            timeout: 10000,
-            stdio: ["pipe", "pipe", "pipe"],
-          });
-        } catch {
-          /* diff may fail for new files */
-        }
-        this.evolutionLabDiffContent = {
-          before: beforeContent,
-          after: afterContent,
-          path: filePath,
-          unifiedDiff: unifiedDiff || undefined,
-        };
-      }
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "pg_send_message" && payload?.value) {
-      await this.handleEvolutionMessage(payload.value as string, send);
     }
     // Evolution actions (legacy)
     else if (action === "tab_change" && payload?.tab) {
@@ -1970,8 +1907,7 @@ export class GatewaySession {
           | "benchmark"
           | "versions"
           | "data"
-          | "agent"
-          | "playground";
+          | "agent";
         this.sendEvolutionLabUpdate(send);
       } else {
         type EvolutionTab =
@@ -2953,8 +2889,6 @@ export class GatewaySession {
       currentPipelineStep: this.evolutionPipelineStep || undefined,
       pipelineSteps: getDefaultPipelineSteps(this.evolutionPipelineStep || undefined),
       agentContextData,
-      // Playground
-      playgroundState: this.playgroundState,
     };
   }
 
@@ -2962,7 +2896,6 @@ export class GatewaySession {
    * Send an Evolution Lab page update to the client.
    */
   private sendEvolutionLabUpdate(send: (msg: unknown) => void): void {
-    savePlaygroundState(this.playgroundState);
     if (this.currentView === "evolution") {
       const labData = this.buildEvolutionLabData();
       const labPage = generateEvolutionLab(labData);
@@ -3481,1273 +3414,6 @@ export class GatewaySession {
         root_id: toast.root_id,
       });
     }
-  }
-
-  // ============================================================================
-  // Playground State Management
-  // ============================================================================
-
-  private pgAddLog(
-    step: string,
-    message: string,
-    type: "info" | "success" | "error" | "warning" = "info"
-  ) {
-    this.playgroundState.log.push({ timestamp: Date.now(), step, message, type });
-  }
-
-  private pgStartCycle(profile: string, send: (msg: unknown) => void) {
-    this.playgroundState = {
-      cycleId: crypto.randomUUID().slice(0, 8),
-      step: "benchmark",
-      startedAt: Date.now(),
-      log: [{ timestamp: Date.now(), step: "benchmark", message: "Cycle started", type: "info" }],
-    };
-    this.evolutionActiveTab = "playground";
-    this.sendEvolutionLabUpdate(send);
-
-    // Run benchmark async
-    this.pgRunBenchmarkAsync(profile, send).catch((err) => {
-      this.pgAddLog(
-        "benchmark",
-        `Benchmark failed: ${err instanceof Error ? err.message : String(err)}`,
-        "error"
-      );
-      this.sendEvolutionLabUpdate(send);
-    });
-  }
-
-  private async pgRunBenchmarkAsync(profile: string, send: (msg: unknown) => void) {
-    const AGENT_TIMEOUT_MS = 120_000;
-
-    // Generate tracking ID for progress visibility in Overview tab
-    const trackingId = `pg_${crypto.randomUUID()}`;
-    this.runningBenchmarks.set(trackingId, {
-      modelId: "playground",
-      presetName: "Playground",
-      startedAt: Date.now(),
-    });
-
-    // Write initial progress file so Overview can show running state
-    writeBenchmarkProgressForRun(trackingId, {
-      running: true,
-      source: "ui",
-      profile,
-      current: 0,
-      total: 0,
-      category: "",
-      startedAt: Date.now(),
-      modelId: undefined,
-      presetName: "Playground",
-      trackingId,
-      pid: process.pid,
-    });
-
-    try {
-      const agent = await this.getAgent();
-
-      const judgeConfig = getJudgeModel();
-      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
-      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
-      const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
-      const judgeAgent = await createPHAAgent({
-        apiKey: judgeApiKey,
-        provider: judgeConfig.provider as any,
-        modelId: judgeConfig.modelId,
-        baseUrl: judgeBaseUrl,
-        dataSource: new JudgeMockDS(),
-      });
-
-      const runner = new BenchmarkRunner({
-        agentCall: async (query: string) => {
-          if (typeof agent.reset === "function") agent.reset();
-          return await Promise.race([
-            agent.chatAndWait(query).then((response: string) => ({ response })),
-            new Promise<{ response: string }>((_, reject) =>
-              setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-        },
-        llmCall: async (prompt: string) => {
-          if (typeof judgeAgent.reset === "function") judgeAgent.reset();
-          return await Promise.race([
-            judgeAgent.chatAndWait(prompt),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-        },
-        onProgress: (current, total, testCase) => {
-          // Update playground progress
-          this.playgroundState.benchmarkProgress = { current, total };
-          // Update external progress file for Overview tab
-          writeBenchmarkProgressForRun(trackingId, {
-            running: true,
-            source: "ui",
-            profile,
-            current,
-            total,
-            category: testCase?.category || "",
-            startedAt: Date.now(),
-            modelId: undefined,
-            presetName: "Playground",
-            trackingId,
-            pid: process.pid,
-          });
-          this.sendEvolutionLabUpdateThrottled(send);
-        },
-        concurrency: getBenchmarkConcurrency(),
-      });
-
-      await runner.seedTestCases();
-      const result = await runner.run({ profile: profile as "quick" | "full" });
-
-      // Parse category scores with re-aggregation
-      const categoryScores = this.parseRunCategoryScores(result.run.id);
-
-      this.playgroundState.benchmarkResult = {
-        runId: result.run.id,
-        overallScore:
-          result.run.overallScore <= 1.0 ? result.run.overallScore : result.run.overallScore / 100,
-        categoryScores,
-        passedCount: result.run.passedCount,
-        totalCount: result.run.totalTestCases,
-        durationMs: result.run.durationMs,
-        profile,
-        versionTag: result.run.versionTag,
-        modelId: (result.run.metadata?.modelId as string) || undefined,
-      };
-      this.playgroundState.benchmarkProgress = undefined;
-      this.pgAddLog(
-        "benchmark",
-        `Benchmark complete: score=${this.playgroundState.benchmarkResult.overallScore.toFixed(2)}`,
-        "success"
-      );
-      this.sendEvolutionLabUpdate(send);
-    } catch (error) {
-      this.pgAddLog(
-        "benchmark",
-        `Benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
-        "error"
-      );
-      this.sendEvolutionLabUpdate(send);
-      throw error;
-    } finally {
-      // Clean up tracking
-      this.runningBenchmarks.delete(trackingId);
-      clearBenchmarkProgressForRun(trackingId);
-      this.sendEvolutionLabUpdate(send);
-    }
-  }
-
-  private parseRunCategoryScores(runId: string) {
-    try {
-      const scores = listCategoryScores(runId);
-      return parseAndReAggregateScores(scores);
-    } catch {
-      return [];
-    }
-  }
-
-  private pgAdvanceStep(nextStep: string, send: (msg: unknown) => void) {
-    const validSteps: PlaygroundStep[] = [
-      "benchmark",
-      "diagnose",
-      "propose",
-      "approve",
-      "apply",
-      "validate",
-      "analyse",
-      "complete",
-    ];
-    if (!validSteps.includes(nextStep as PlaygroundStep)) return;
-
-    this.playgroundState.step = nextStep as PlaygroundStep;
-    this.playgroundState.viewingStep = undefined; // follow current step
-    this.playgroundState.viewingCycle = undefined;
-    this.pgAddLog(nextStep, `Advanced to step: ${nextStep}`, "info");
-
-    // Auto-processing for certain transitions
-    if (nextStep === "diagnose" && this.playgroundState.benchmarkResult) {
-      this.pgRunDiagnose(send);
-    } else if (nextStep === "propose" && this.playgroundState.diagnoseResult) {
-      this.pgRunPropose(send);
-    } else if (nextStep === "apply" && this.playgroundState.proposal) {
-      this.pgRunApply(send);
-    } else if (nextStep === "validate") {
-      this.pgRunValidation(send);
-    } else if (nextStep === "analyse" && this.playgroundState.validateResult) {
-      this.pgRunAnalyse(send);
-    } else {
-      this.sendEvolutionLabUpdate(send);
-    }
-  }
-
-  private pgRetryCurrentStep(send: (msg: unknown) => void) {
-    const step = this.playgroundState.step;
-    this.pgAddLog(step, `Retrying step: ${step}`, "info");
-
-    switch (step) {
-      case "benchmark": {
-        // Clear result and re-run
-        const retryProfile = this.playgroundState.benchmarkResult?.profile || "quick";
-        this.playgroundState.benchmarkResult = undefined;
-        this.playgroundState.benchmarkProgress = undefined;
-        this.pgRunBenchmarkAsync(retryProfile, send).catch((err) => {
-          this.pgAddLog(
-            "benchmark",
-            `Benchmark failed: ${err instanceof Error ? err.message : String(err)}`,
-            "error"
-          );
-          this.sendEvolutionLabUpdate(send);
-        });
-        this.sendEvolutionLabUpdate(send);
-        break;
-      }
-      case "diagnose":
-        this.playgroundState.diagnoseResult = undefined;
-        this.playgroundState.diagnoseProgress = undefined;
-        this.pgRunDiagnose(send);
-        break;
-      case "propose":
-        this.playgroundState.proposal = undefined;
-        this.playgroundState.proposeProgress = undefined;
-        this.pgRunPropose(send);
-        break;
-      case "validate":
-        this.playgroundState.validateResult = undefined;
-        this.playgroundState.validateProgress = undefined;
-        this.playgroundState.validateError = undefined;
-        this.pgRunValidation(send);
-        break;
-      case "apply":
-        this.playgroundState.applyResult = undefined;
-        this.playgroundState.applyProgress = undefined;
-        this.playgroundState.applyError = undefined;
-        this.playgroundState.applyPrompt = undefined;
-        this.pgRunApply(send);
-        break;
-      case "analyse":
-        this.playgroundState.analyseResult = undefined;
-        this.playgroundState.analyseProgress = undefined;
-        this.playgroundState.analyseError = undefined;
-        this.pgRunAnalyse(send);
-        break;
-      default:
-        this.sendEvolutionLabUpdate(send);
-        break;
-    }
-  }
-
-  private async pgRunDiagnose(send: (msg: unknown) => void) {
-    this.sendEvolutionLabUpdate(send);
-    try {
-      const { diagnose } = await import("../evolution/diagnose.js");
-      const { getBenchmarkRun, listBenchmarkResults, listCategoryScores } =
-        await import("../memory/db.js");
-
-      const runId = this.playgroundState.benchmarkResult?.runId;
-      if (!runId) {
-        throw new Error("No benchmark result available — run benchmark first");
-      }
-
-      // Load existing benchmark data from DB instead of re-running
-      const runRow = getBenchmarkRun(runId);
-      if (!runRow) {
-        throw new Error(`Benchmark run ${runId} not found in database`);
-      }
-
-      const resultRows = listBenchmarkResults({ runId });
-      const categoryRows = listCategoryScores(runId);
-
-      // Convert DB rows → domain types
-      const run: import("../evolution/types.js").BenchmarkRun = {
-        id: runRow.id,
-        timestamp: runRow.timestamp,
-        versionTag: runRow.version_tag ?? undefined,
-        promptVersions: runRow.prompt_versions ? JSON.parse(runRow.prompt_versions) : {},
-        skillVersions: runRow.skill_versions ? JSON.parse(runRow.skill_versions) : {},
-        totalTestCases: runRow.total_test_cases,
-        passedCount: runRow.passed_count,
-        failedCount: runRow.failed_count,
-        overallScore: runRow.overall_score,
-        durationMs: runRow.duration_ms ?? 0,
-        profile: runRow.profile as "quick" | "full",
-        metadata: runRow.metadata ? JSON.parse(runRow.metadata) : undefined,
-      };
-
-      const results: import("../evolution/types.js").BenchmarkResult[] = resultRows.map((r) => ({
-        id: r.id,
-        runId: r.run_id,
-        testCaseId: r.test_case_id,
-        timestamp: r.timestamp,
-        agentResponse: r.agent_response ?? "",
-        toolCalls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
-        scores: r.scores ? JSON.parse(r.scores) : [],
-        overallScore: r.overall_score,
-        passed: r.passed === 1,
-        feedback: r.feedback ?? "",
-        issues: r.issues ? JSON.parse(r.issues) : undefined,
-        durationMs: r.duration_ms ?? 0,
-      }));
-
-      type BenchmarkCategory = import("../evolution/types.js").BenchmarkCategory;
-      type CategoryScore = import("../evolution/types.js").CategoryScore;
-      const categoryScores = new Map<BenchmarkCategory, CategoryScore>();
-      for (const row of categoryRows) {
-        // Only use top-level category scores (no subcategory)
-        if (!row.subcategory) {
-          categoryScores.set(row.category as BenchmarkCategory, {
-            id: row.id,
-            runId: row.run_id,
-            category: row.category as BenchmarkCategory,
-            score: row.score,
-            testCount: row.test_count,
-            passedCount: row.passed_count,
-            details: row.details ? JSON.parse(row.details) : undefined,
-          });
-        }
-      }
-
-      // Create judge LLM for analysis
-      const djConfig = getJudgeModel();
-      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
-      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
-      const { MockDataSource: DiagMockDS } = await import("../data-sources/mock.js");
-      const diagnoseJudge = await createPHAAgent({
-        apiKey: djApiKey,
-        provider: djConfig.provider as any,
-        modelId: djConfig.modelId,
-        baseUrl: djBaseUrl,
-        dataSource: new DiagMockDS(),
-      });
-      const AGENT_TIMEOUT_MS = 120_000;
-
-      const result = await diagnose({
-        profile: (this.playgroundState.benchmarkResult?.profile || "quick") as "quick" | "full",
-        existingBenchmark: { run, results, categoryScores },
-        llmCall: async (prompt: string) => {
-          if (typeof diagnoseJudge.reset === "function") diagnoseJudge.reset();
-          return await Promise.race([
-            diagnoseJudge.chatAndWait(prompt),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-        },
-        onProgress: (msg: string) => {
-          this.playgroundState.diagnoseProgress = msg;
-          this.sendEvolutionLabUpdateThrottled(send);
-        },
-      });
-
-      this.playgroundState.diagnoseProgress = undefined;
-      this.playgroundState.diagnoseResult = {
-        weaknesses: result.weaknesses.map((w) => ({
-          category: w.category,
-          label: w.label,
-          score: w.score,
-          gap: w.gap,
-          failingCount: w.failingTests.length,
-          patterns: w.commonPatterns,
-          weakSubComponents: w.weakSubComponents,
-        })),
-        suggestions: result.suggestions.map((s) => ({
-          category: s.category,
-          description: s.description,
-          targetFiles: s.targetFiles,
-          priority: s.priority,
-        })),
-      };
-      this.pgAddLog(
-        "diagnose",
-        `Diagnose complete: ${result.weaknesses.length} weak categories`,
-        "success"
-      );
-      this.sendEvolutionLabUpdate(send);
-    } catch (error) {
-      this.playgroundState.diagnoseProgress = undefined;
-      this.pgAddLog(
-        "diagnose",
-        `Diagnose failed: ${error instanceof Error ? error.message : String(error)}`,
-        "error"
-      );
-      // Still allow user to advance manually
-      this.playgroundState.diagnoseResult = { weaknesses: [], suggestions: [] };
-      this.sendEvolutionLabUpdate(send);
-    }
-  }
-
-  private async pgRunPropose(send: (msg: unknown) => void) {
-    this.sendEvolutionLabUpdate(send);
-    const diagnoseResult = this.playgroundState.diagnoseResult;
-    const cycleHistory = this.playgroundState.cycleHistory;
-
-    // When iterating without diagnose, check if we have history to guide proposals
-    if (!diagnoseResult || diagnoseResult.weaknesses.length === 0) {
-      if (cycleHistory && cycleHistory.length > 0) {
-        // Iterate path: skip diagnose, use history improvement plan as guidance
-        // Fall through to LLM proposal with history context
-      } else {
-        // No weaknesses found — auto-fill an empty proposal
-        this.playgroundState.proposal = {
-          description: "No weaknesses detected — all SHARP dimensions above threshold.",
-          changes: [],
-          expectedImprovement: "N/A",
-        };
-        this.pgAddLog("propose", "No weaknesses to address", "warning");
-        this.sendEvolutionLabUpdate(send);
-        return;
-      }
-    }
-
-    try {
-      const progress = (msg: string) => {
-        this.playgroundState.proposeProgress = msg;
-        this.sendEvolutionLabUpdateThrottled(send);
-      };
-
-      progress("Reading target files...");
-
-      // Collect unique target files from diagnose suggestions
-      const targetPaths = new Set<string>();
-      if (diagnoseResult) {
-        for (const s of diagnoseResult.suggestions) {
-          for (const f of s.targetFiles) {
-            targetPaths.add(f);
-          }
-        }
-      }
-      // Also include SOUL.md as primary target
-      targetPaths.add("src/prompts/SOUL.md");
-
-      // Read target file contents
-      const { existsSync, readFileSync } = await import("fs");
-      const { join } = await import("path");
-      const { getProjectRoot } = await import("../evolution/version-manager.js");
-      const root = getProjectRoot();
-
-      const fileContents: Record<string, string> = {};
-      for (const fp of targetPaths) {
-        try {
-          const fullPath = join(root, fp);
-          if (existsSync(fullPath)) {
-            const content = readFileSync(fullPath, "utf-8");
-            // Truncate to 2000 chars to avoid token overflow
-            fileContents[fp] =
-              content.length > 2000 ? content.slice(0, 2000) + "\n... (truncated)" : content;
-          }
-        } catch {
-          // skip unreadable files
-        }
-      }
-
-      progress("Generating proposal with LLM...");
-
-      // Build LLM prompt sections
-      const weakSummary = diagnoseResult
-        ? diagnoseResult.weaknesses
-            .map((w) => {
-              const subs = w.weakSubComponents
-                ? w.weakSubComponents.map((sc) => `${sc.name}(${sc.score.toFixed(2)})`).join(", ")
-                : "";
-              return `- **${w.label}** (${w.score.toFixed(3)}): ${subs}`;
-            })
-            .join("\n")
-        : "（跳过诊断 — 基于迭代历史改进建议生成提案）";
-
-      const suggestionSummary = diagnoseResult
-        ? diagnoseResult.suggestions
-            .map((s, i) => `${i + 1}. [${s.priority}] ${s.description}`)
-            .join("\n")
-        : "";
-
-      const patternSummary = diagnoseResult
-        ? diagnoseResult.weaknesses
-            .filter((w) => w.patterns.length > 0)
-            .map((w) => `- ${w.label}: ${w.patterns.join("; ")}`)
-            .join("\n")
-        : "";
-
-      const fileContentSection = Object.entries(fileContents)
-        .map(([path, content]) => `### ${path}\n\`\`\`\n${content}\n\`\`\``)
-        .join("\n\n");
-
-      // Build iteration history section
-      let historySection = "";
-      if (cycleHistory && cycleHistory.length > 0) {
-        historySection = `\n## 迭代历史\n\n以下是之前进化循环的尝试，请避免重复已失败的方案，在上一轮改进建议基础上推进：\n\n`;
-        for (const h of cycleHistory) {
-          historySection += `### 第 ${h.cycleNumber} 轮\n`;
-          historySection += `- 提案: ${h.proposal}\n`;
-          historySection += `- 结果: ${h.benchmarkScore.toFixed(3)} → ${h.validateScore.toFixed(3)} (${h.delta >= 0 ? "+" : ""}${h.delta.toFixed(3)})\n`;
-          historySection += `- 分析: ${h.analysisSummary}\n`;
-          if (h.improvementPlan.length > 0) {
-            historySection += `- 建议改进: ${h.improvementPlan.join("; ")}\n`;
-          }
-          historySection += "\n";
-        }
-      }
-
-      const prompt = `你是 PHA (Personal Health Agent) 的进化架构师。请根据诊断结果和当前文件内容，生成具体的优化提案。
-
-## 诊断结果
-
-### 薄弱 SHARP 维度
-${weakSummary}
-
-### 共性问题
-${patternSummary || "（无 LLM 分析结果）"}
-
-### 改进建议
-${suggestionSummary || "（参考迭代历史中的改进计划）"}
-${historySection}
-## 当前文件内容
-
-${fileContentSection}
-
-## 要求
-
-请为每个需要修改的文件生成具体的修改方案。每条修改必须包含：
-1. 要修改的文件路径
-2. 具体修改内容描述（应该添加什么、修改什么、删除什么）
-3. 修改理由（对应哪个薄弱维度）
-${cycleHistory && cycleHistory.length > 0 ? "\n**重要：必须基于上一轮的改进计划推进，避免重复已尝试过的方案。**\n" : ""}
-## 输出 JSON（不要 markdown 包裹）
-
-{
-  "description": "提案总体描述（中文，2-3句话概述修改方向和预期效果）",
-  "changes": [
-    {
-      "path": "src/prompts/SOUL.md",
-      "description": "在回复规则中添加数据引用要求：Agent 回复时必须引用具体的健康数据来源和数值，禁止凭空编造数据"
-    }
-  ],
-  "expectedImprovement": "Accuracy 从 0.64 提升至 0.75+，Usefulness 从 0.65 提升至 0.72+"
-}`;
-
-      // Create judge LLM for proposal generation
-      const djConfig = getJudgeModel();
-      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
-      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
-      const { MockDataSource: ProposeMockDS } = await import("../data-sources/mock.js");
-      const proposeAgent = await createPHAAgent({
-        apiKey: djApiKey,
-        provider: djConfig.provider as any,
-        modelId: djConfig.modelId,
-        baseUrl: djBaseUrl,
-        dataSource: new ProposeMockDS(),
-      });
-
-      const AGENT_TIMEOUT_MS = 120_000;
-      const response = await Promise.race([
-        proposeAgent.chatAndWait(prompt),
-        new Promise<string>((_, reject) =>
-          setTimeout(() => reject(new Error("Propose LLM call timed out")), AGENT_TIMEOUT_MS)
-        ),
-      ]);
-
-      // Parse LLM response
-      const parsed = this.parseProposalJSON(response);
-
-      if (parsed && parsed.changes && Array.isArray(parsed.changes)) {
-        this.playgroundState.proposal = {
-          description: parsed.description || "LLM-generated optimization proposal",
-          changes: parsed.changes.map((c: { path?: string; description?: string }) => ({
-            path: c.path || "src/prompts/SOUL.md",
-            description: c.description || "",
-          })),
-          expectedImprovement: parsed.expectedImprovement || "",
-        };
-        this.pgAddLog("propose", "Proposal generated successfully", "success");
-      } else {
-        // Fallback: generate from diagnose suggestions
-        console.error("[propose] LLM response parsing failed. Response:", response?.slice(0, 500));
-        this.pgGenerateFallbackProposal();
-        this.pgAddLog("propose", "Generated fallback proposal from diagnose results", "warning");
-      }
-
-      this.playgroundState.proposeProgress = undefined;
-      this.sendEvolutionLabUpdate(send);
-    } catch (error) {
-      console.error("[propose] Proposal generation failed:", error);
-      this.playgroundState.proposeProgress = undefined;
-      // Fallback to diagnose-based proposal
-      this.pgGenerateFallbackProposal();
-      this.pgAddLog(
-        "propose",
-        `LLM proposal failed, using fallback: ${error instanceof Error ? error.message : String(error)}`,
-        "warning"
-      );
-      this.sendEvolutionLabUpdate(send);
-    }
-  }
-
-  private parseProposalJSON(text: string): any {
-    if (!text || typeof text !== "string") return null;
-    try {
-      return JSON.parse(text.trim());
-    } catch {
-      /* noop */
-    }
-    const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) {
-      try {
-        return JSON.parse(fenceMatch[1].trim());
-      } catch {
-        /* noop */
-      }
-    }
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        /* noop */
-      }
-    }
-    return null;
-  }
-
-  private pgGenerateFallbackProposal() {
-    const diagnoseResult = this.playgroundState.diagnoseResult;
-    if (!diagnoseResult) return;
-
-    const changes: Array<{ path: string; description: string }> = [];
-    const seenPaths = new Set<string>();
-
-    for (const s of diagnoseResult.suggestions) {
-      for (const file of s.targetFiles) {
-        if (!seenPaths.has(file)) {
-          seenPaths.add(file);
-          changes.push({ path: file, description: s.description });
-        }
-      }
-    }
-
-    const weakSummary = diagnoseResult.weaknesses
-      .map((w) => `${w.label}(${w.score.toFixed(2)})`)
-      .join(", ");
-
-    this.playgroundState.proposal = {
-      description: diagnoseResult.suggestions.map((s) => s.description).join("\n\n"),
-      changes,
-      expectedImprovement: `Improve weak dimensions: ${weakSummary}`,
-    };
-  }
-
-  private async pgRunApply(send: (msg: unknown) => void) {
-    this.playgroundState.applyProgress = "Creating evolution branch...";
-    this.sendEvolutionLabUpdate(send);
-
-    try {
-      const proposal = this.playgroundState.proposal;
-      if (!proposal || !proposal.changes.length) {
-        this.pgAddLog("apply", "No changes to apply", "warning");
-        this.playgroundState.applyResult = { branch: "", commits: [], filesChanged: [] };
-        this.playgroundState.applyProgress = undefined;
-        this.sendEvolutionLabUpdate(send);
-        return;
-      }
-
-      // 1. Create evolution branch (worktree) — handles stale cleanup internally
-      const { createNextVersion, getGitStatusPorcelain } =
-        await import("../evolution/version-manager.js");
-      const version = createNextVersion({
-        triggerMode: "playground",
-        triggerRef: this.playgroundState.cycleId || "",
-      });
-      const branch = version.branchName;
-      const worktreePath = version.worktreePath;
-
-      this.playgroundState.applyProgress = `Branch: ${branch}`;
-      this.sendEvolutionLabUpdate(send);
-
-      // 2. Build prompt from proposal changes
-      const changesDesc = proposal.changes
-        .map((c, i) => `${i + 1}. File: ${c.path}\n   Change: ${c.description}`)
-        .join("\n\n");
-
-      const prompt = `You are a coding agent working in a PHA (Personal Health Agent) project.
-Your task is to apply the following changes to the codebase.
-
-## Changes to apply:
-
-${changesDesc}
-
-## Rules:
-- Read the target file first to understand its structure, style, and language
-- Match the existing code style, language, and conventions exactly
-- If a file is in English, your additions must be in English. If in Chinese, use Chinese.
-- Use Edit tool (not Write) for modifications to existing files
-- Do NOT add unrelated changes
-- Do NOT add meta-comments like "Added by evolution" or "Modified for improvement"`;
-
-      this.playgroundState.applyPrompt = prompt;
-      this.sendEvolutionLabUpdate(send);
-
-      // 3. Execute via configured apply engine
-      const config = loadConfig();
-      const engine = config.applyEngine || "claude-code";
-      if (engine === "pi-coding-agent") {
-        await this.pgApplyViaPiCodingAgent(prompt, worktreePath, send);
-      } else {
-        await this.pgApplyViaClaudeCode(prompt, worktreePath, send);
-      }
-
-      // 4. Detect changed files via git status and commit
-      const statusOutput = getGitStatusPorcelain(worktreePath);
-      const changedFiles: Array<{ path: string; status: string }> = statusOutput
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          // porcelain format: XY<space>path — XY is 2 chars (may have leading space)
-          // Also handle trimmed lines where leading space was lost (e.g. "M path")
-          const m = line.match(/^(.{1,2})\s+(.+)$/);
-          if (!m) return null;
-          const xy = m[1];
-          const filePath = m[2];
-          return {
-            path: filePath,
-            status: xy.includes("A") ? "added" : xy.includes("D") ? "deleted" : "modified",
-          };
-        })
-        .filter((f): f is { path: string; status: string } => f !== null);
-
-      const commits: string[] = [];
-      if (changedFiles.length > 0) {
-        // Use git add -A to stage all changes (handles staged, unstaged, and untracked)
-        const { execSync } = await import("child_process");
-        try {
-          execSync("git add -A", { cwd: worktreePath, timeout: 10000, stdio: "pipe" });
-          execSync(`git commit -m "evo: apply proposal (${changedFiles.length} files)"`, {
-            cwd: worktreePath,
-            timeout: 15000,
-            stdio: "pipe",
-          });
-          const hash = execSync("git rev-parse --short HEAD", {
-            cwd: worktreePath,
-            timeout: 5000,
-            encoding: "utf-8",
-          }).trim();
-          commits.push(hash);
-        } catch (commitErr) {
-          this.pgAddLog(
-            "apply",
-            `Commit warning: ${commitErr instanceof Error ? commitErr.message : String(commitErr)}`,
-            "warning"
-          );
-        }
-      }
-
-      // 5. Switch agent to use this version
-      this.switchAgentVersion(branch);
-
-      this.playgroundState.applyResult = { branch, commits, filesChanged: changedFiles };
-      this.playgroundState.applyProgress = undefined;
-      this.pgAddLog(
-        "apply",
-        `Applied (${engine}): ${changedFiles.length} files, ${commits.length} commits`,
-        "success"
-      );
-      this.sendEvolutionLabUpdate(send);
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error("[Playground Apply]", errMsg);
-      this.playgroundState.applyProgress = undefined;
-      this.playgroundState.applyError = errMsg;
-      this.pgAddLog("apply", `Apply failed: ${errMsg}`, "error");
-      this.sendEvolutionLabUpdate(send);
-    }
-  }
-
-  /** Apply engine: Claude Code CLI (default) */
-  private async pgApplyViaClaudeCode(
-    prompt: string,
-    worktreePath: string,
-    send: (msg: unknown) => void
-  ) {
-    this.playgroundState.applyProgress = "Claude Code editing files...";
-    this.sendEvolutionLabUpdate(send);
-
-    const proc = Bun.spawn(
-      [
-        "claude",
-        "-p",
-        "--output-format",
-        "json",
-        "--dangerously-skip-permissions",
-        "--allowedTools",
-        "Read",
-        "Edit",
-        "Write",
-        "Glob",
-        "Grep",
-        "--model",
-        "sonnet",
-        "--max-turns",
-        "20",
-        prompt,
-      ],
-      { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
-    );
-
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
-
-    let ccResult: { result?: string; error?: string } = {};
-    try {
-      ccResult = JSON.parse(stdout);
-    } catch {
-      /* non-JSON output is ok */
-    }
-    if (ccResult.error) {
-      this.pgAddLog("apply", `Claude Code warning: ${ccResult.error}`, "warning");
-    }
-  }
-
-  /** Apply engine: pi-coding-agent (in-process) */
-  private async pgApplyViaPiCodingAgent(
-    prompt: string,
-    worktreePath: string,
-    send: (msg: unknown) => void
-  ) {
-    const { createCodingTools } = await import("@mariozechner/pi-coding-agent");
-    const codingTools = createCodingTools(
-      worktreePath
-    ) as import("@mariozechner/pi-agent-core").AgentTool<any>[];
-
-    this.playgroundState.applyProgress = "Agent exploring codebase...";
-    this.sendEvolutionLabUpdate(send);
-
-    const djConfig = getJudgeModel();
-    const djApiKey = resolveBenchmarkModelApiKey(djConfig);
-    const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
-    const editAgent = await createPHAAgent({
-      apiKey: djApiKey,
-      provider: djConfig.provider as import("../agent/pha-agent.js").LLMProvider,
-      modelId: djConfig.modelId,
-      baseUrl: djBaseUrl,
-      tools: codingTools,
-    });
-
-    const toolLabels: Record<string, string> = {
-      read: "Reading",
-      edit: "Editing",
-      write: "Writing",
-      grep: "Searching",
-      find: "Finding",
-      ls: "Listing",
-      bash: "Running",
-    };
-    const unsubscribe = editAgent.subscribe((event) => {
-      if (event.type === "tool_execution_start") {
-        const label = toolLabels[event.toolName] || event.toolName;
-        const filePath = event.args?.path || event.args?.pattern || "";
-        const display = typeof filePath === "string" ? filePath.split("/").pop() || filePath : "";
-        this.playgroundState.applyProgress = `${label} ${display}...`;
-        this.sendEvolutionLabUpdate(send);
-      }
-    });
-
-    const AGENT_TIMEOUT_MS = 180_000;
-    try {
-      await Promise.race([
-        editAgent.chatAndWait(prompt),
-        new Promise<string>((_, reject) =>
-          setTimeout(() => reject(new Error("Apply agent timeout")), AGENT_TIMEOUT_MS)
-        ),
-      ]);
-    } catch (agentErr) {
-      this.pgAddLog(
-        "apply",
-        `Agent warning: ${agentErr instanceof Error ? agentErr.message : String(agentErr)}`,
-        "warning"
-      );
-    } finally {
-      unsubscribe();
-    }
-  }
-
-  private pgHandleApproval(
-    approved: boolean,
-    reason: string | undefined,
-    send: (msg: unknown) => void
-  ) {
-    this.playgroundState.approval = { approved, reason, timestamp: Date.now() };
-    this.playgroundState.viewingStep = undefined; // follow current step
-    this.playgroundState.viewingCycle = undefined;
-    if (approved) {
-      this.playgroundState.step = "apply";
-      this.pgAddLog("approve", "Proposal approved", "success");
-      // Auto-trigger apply
-      this.pgRunApply(send);
-    } else {
-      this.playgroundState.step = "propose";
-      this.playgroundState.proposal = undefined;
-      this.playgroundState.proposeProgress = undefined;
-      this.pgAddLog("approve", `Rejected: ${reason || "No reason"}`, "warning");
-      // Re-generate proposal
-      this.pgRunPropose(send);
-    }
-  }
-
-  private pgHandleComplete(action: string, send: (msg: unknown) => void) {
-    if (action === "merge" && this.playgroundState.applyResult?.branch) {
-      try {
-        mergeVersion(this.playgroundState.applyResult.branch);
-        this.switchAgentVersion(null);
-        this.pgAddLog("complete", "Changes merged to main", "success");
-      } catch (error) {
-        this.pgAddLog(
-          "complete",
-          `Merge failed: ${error instanceof Error ? error.message : String(error)}`,
-          "error"
-        );
-      }
-    } else if (action === "revert" && this.playgroundState.applyResult?.branch) {
-      try {
-        abandonVersion(this.playgroundState.applyResult.branch);
-        this.switchAgentVersion(null);
-        this.pgAddLog("complete", "Changes reverted", "warning");
-      } catch (error) {
-        this.pgAddLog(
-          "complete",
-          `Revert failed: ${error instanceof Error ? error.message : String(error)}`,
-          "error"
-        );
-      }
-    } else if (action === "iterate") {
-      // Record current cycle to history
-      const history = this.playgroundState.cycleHistory || [];
-      history.push({
-        cycleNumber: history.length + 1,
-        benchmarkScore: this.playgroundState.benchmarkResult?.overallScore || 0,
-        validateScore: this.playgroundState.validateResult?.afterScore || 0,
-        delta: this.playgroundState.validateResult?.delta || 0,
-        proposal: this.playgroundState.proposal?.description || "",
-        analysisSummary: this.playgroundState.analyseResult?.summary || "",
-        improvementPlan: this.playgroundState.analyseResult?.improvementPlan || [],
-        recommendation: this.playgroundState.analyseResult?.recommendation || "",
-        timestamp: Date.now(),
-        stepResults: {
-          benchmarkResult: this.playgroundState.benchmarkResult,
-          diagnoseResult: this.playgroundState.diagnoseResult,
-          proposal: this.playgroundState.proposal,
-          applyResult: this.playgroundState.applyResult,
-          validateResult: this.playgroundState.validateResult,
-          analyseResult: this.playgroundState.analyseResult,
-        },
-      });
-
-      // Revert current branch (code goes back, next cycle re-applies)
-      if (this.playgroundState.applyResult?.branch) {
-        try {
-          abandonVersion(this.playgroundState.applyResult.branch);
-          this.switchAgentVersion(null);
-        } catch {
-          // ignore revert errors
-        }
-      }
-
-      // Preserve baseline benchmark + history, clear intermediate steps, jump to propose
-      const benchmarkResult = this.playgroundState.benchmarkResult;
-      const log = this.playgroundState.log;
-      this.playgroundState = {
-        cycleId: this.playgroundState.cycleId,
-        step: "propose",
-        startedAt: this.playgroundState.startedAt,
-        benchmarkResult,
-        cycleHistory: history,
-        log,
-      };
-      this.pgAddLog("propose", `Iteration ${history.length + 1} — generating new proposal`, "info");
-
-      // Auto-trigger propose (pgRunPropose will detect cycleHistory for enhanced path)
-      this.pgRunPropose(send);
-      return;
-    } else if (action === "new_cycle") {
-      this.pgReset(send);
-      return;
-    }
-    this.playgroundState.step = "complete";
-    this.sendEvolutionLabUpdate(send);
-  }
-
-  private pgReset(send: (msg: unknown) => void) {
-    this.playgroundState = { step: "idle", log: [], cycleId: null };
-    this.sendEvolutionLabUpdate(send);
-  }
-
-  private async pgRunValidation(send: (msg: unknown) => void) {
-    this.playgroundState.validateProgress = "Preparing validation benchmark...";
-    this.sendEvolutionLabUpdate(send);
-    try {
-      const profile = (this.playgroundState.benchmarkResult?.profile || "quick") as
-        | "quick"
-        | "full";
-      const AGENT_TIMEOUT_MS = 120_000;
-      const agent = await this.getAgent();
-
-      this.playgroundState.validateProgress = "Creating judge agent...";
-      this.sendEvolutionLabUpdate(send);
-
-      const judgeConfig = getJudgeModel();
-      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
-      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
-      const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
-      const judgeAgent = await createPHAAgent({
-        apiKey: judgeApiKey,
-        provider: judgeConfig.provider as any,
-        modelId: judgeConfig.modelId,
-        baseUrl: judgeBaseUrl,
-        dataSource: new JudgeMockDS(),
-      });
-
-      let testsDone = 0;
-      const runner = new BenchmarkRunner({
-        agentCall: async (query: string) => {
-          if (typeof agent.reset === "function") agent.reset();
-          return await Promise.race([
-            agent.chatAndWait(query).then((response: string) => ({ response })),
-            new Promise<{ response: string }>((_, reject) =>
-              setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-        },
-        llmCall: async (prompt: string) => {
-          if (typeof judgeAgent.reset === "function") judgeAgent.reset();
-          return await Promise.race([
-            judgeAgent.chatAndWait(prompt),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-        },
-        concurrency: getBenchmarkConcurrency(),
-        onProgress: (current: number, total: number, _testCase: any) => {
-          testsDone = current;
-          this.playgroundState.validateProgress = `Running tests: ${current}/${total}`;
-          this.sendEvolutionLabUpdateThrottled(send);
-        },
-      });
-
-      this.playgroundState.validateProgress = "Seeding test cases...";
-      this.sendEvolutionLabUpdate(send);
-      await runner.seedTestCases();
-
-      this.playgroundState.validateProgress = "Running validation benchmark...";
-      this.sendEvolutionLabUpdate(send);
-      const result = await runner.run({ profile });
-
-      const afterScore =
-        result.run.overallScore <= 1.0 ? result.run.overallScore : result.run.overallScore / 100;
-      const beforeScore = this.playgroundState.benchmarkResult?.overallScore || 0;
-      const afterCatScores = this.parseRunCategoryScores(result.run.id);
-      const beforeCatScores = this.playgroundState.benchmarkResult?.categoryScores || [];
-
-      const categoryDeltas = afterCatScores.map((acs) => {
-        const bcs = beforeCatScores.find((b) => b.category === acs.category);
-        const before = bcs ? (bcs.score <= 1.0 ? bcs.score : bcs.score / 100) : 0;
-        const after = acs.score <= 1.0 ? acs.score : acs.score / 100;
-        return { category: acs.category, before, after };
-      });
-
-      const delta = afterScore - beforeScore;
-      let recommendation: "merge" | "revert" | "iterate" = "iterate";
-      if (delta >= 0.02) recommendation = "merge";
-      else if (delta < -0.05) recommendation = "revert";
-
-      this.playgroundState.validateProgress = undefined;
-      this.playgroundState.validateResult = {
-        beforeScore,
-        afterScore,
-        delta,
-        categoryDeltas,
-        recommendation,
-        validationRunId: result.run.id,
-        beforeCategoryScores: beforeCatScores,
-        afterCategoryScores: afterCatScores,
-      };
-      this.pgAddLog(
-        "validate",
-        `Validation complete: ${beforeScore.toFixed(2)} → ${afterScore.toFixed(2)} (${delta >= 0 ? "+" : ""}${delta.toFixed(2)})`,
-        "success"
-      );
-      this.sendEvolutionLabUpdate(send);
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error("[Playground Validate]", errMsg);
-      this.playgroundState.validateProgress = undefined;
-      this.playgroundState.validateError = errMsg;
-      this.pgAddLog("validate", `Validation failed: ${errMsg}`, "error");
-      this.sendEvolutionLabUpdate(send);
-    }
-  }
-
-  private async pgRunAnalyse(send: (msg: unknown) => void) {
-    this.playgroundState.analyseProgress = "Preparing analysis...";
-    this.sendEvolutionLabUpdate(send);
-    try {
-      const vr = this.playgroundState.validateResult;
-      if (!vr) throw new Error("No validation result");
-
-      const beforeData = vr.beforeCategoryScores || [];
-      const afterData = vr.afterCategoryScores || [];
-      const proposal = this.playgroundState.proposal;
-
-      const subComponentLines = beforeData
-        .map((bc) => {
-          const ac = afterData.find((a) => a.category === bc.category);
-          return (bc.subComponents || [])
-            .map((bsub) => {
-              const asub = ac?.subComponents?.find((s) => s.name === bsub.name);
-              const bScore = bsub.score;
-              const aScore = asub?.score || 0;
-              return `- ${bc.category}/${bsub.name}: ${bScore.toFixed(3)} → ${aScore.toFixed(3)}`;
-            })
-            .join("\n");
-        })
-        .join("\n");
-
-      // Build iteration history section if available
-      const cycleHistory = this.playgroundState.cycleHistory;
-      let historySection = "";
-      if (cycleHistory && cycleHistory.length > 0) {
-        historySection = `\n## 迭代历史\n\n以下是之前进化循环的尝试记录：\n\n`;
-        for (const h of cycleHistory) {
-          historySection += `### 第 ${h.cycleNumber} 轮\n`;
-          historySection += `- 提案: ${h.proposal}\n`;
-          historySection += `- 结果: ${h.benchmarkScore.toFixed(3)} → ${h.validateScore.toFixed(3)} (${h.delta >= 0 ? "+" : ""}${h.delta.toFixed(3)})\n`;
-          historySection += `- 分析: ${h.analysisSummary}\n`;
-          if (h.improvementPlan.length > 0) {
-            historySection += `- 建议改进: ${h.improvementPlan.join("; ")}\n`;
-          }
-          historySection += `- 决策: ${h.recommendation}\n\n`;
-        }
-      }
-
-      const prompt = `你是 PHA 进化系统的分析专家。请对本轮进化结果进行深度分析。
-
-## 总体分数变化
-Before: ${vr.beforeScore.toFixed(3)} → After: ${vr.afterScore.toFixed(3)} (${vr.delta >= 0 ? "+" : ""}${vr.delta.toFixed(3)})
-
-## SHARP 维度对比 (Before → After)
-${vr.categoryDeltas
-  .map((d) => {
-    const delta = d.after - d.before;
-    return `- ${d.category}: ${d.before.toFixed(3)} → ${d.after.toFixed(3)} (${delta >= 0 ? "+" : ""}${delta.toFixed(3)})`;
-  })
-  .join("\n")}
-
-## 子维度明细 (Before → After)
-${subComponentLines}
-
-## 本轮提案内容
-${proposal?.description || "N/A"}
-${proposal?.changes?.map((c) => `- ${c.path}: ${c.description}`).join("\n") || ""}
-${historySection}
-## 分析要求
-
-请用中文输出以下内容：
-1. **归因分析**（3-5 句）：哪些维度变好/变差，是什么具体修改导致的
-2. **关键发现**（3-5 条）：最显著的变化点
-3. **风险与副作用**：是否有维度因改善 A 而恶化 B
-4. **改进计划**（3-5 条）：下一轮迭代应该具体改什么（精确到文件和方向）
-5. **决策建议**：merge（显著提升）/ revert（明显退步）/ iterate（有提升空间但需继续优化） + 置信度 0-100
-
-## 输出 JSON（不要 markdown 包裹）
-
-{"summary":"...(中文，3-5 句归因分析)","keyFindings":["..."],"improvementPlan":["1. 修改 SOUL.md 增加...", "2. ..."],"recommendation":"merge|revert|iterate","confidence":N}`;
-
-      this.playgroundState.analyseProgress = "Running LLM analysis...";
-      this.sendEvolutionLabUpdate(send);
-
-      const judgeConfig = getJudgeModel();
-      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
-      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
-      const judgeAgent = await createPHAAgent({
-        apiKey: judgeApiKey,
-        provider: judgeConfig.provider as any,
-        modelId: judgeConfig.modelId,
-        baseUrl: judgeBaseUrl,
-      });
-      const responseText = await Promise.race([
-        judgeAgent.chatAndWait(prompt),
-        new Promise<string>((_, reject) =>
-          setTimeout(() => reject(new Error("Analysis timed out")), 120_000)
-        ),
-      ]);
-
-      // Parse JSON from response (extract from possible markdown code block)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
-
-      this.playgroundState.analyseProgress = undefined;
-      this.playgroundState.analyseResult = {
-        summary: parsed?.summary || responseText,
-        recommendation: parsed?.recommendation || vr.recommendation,
-        confidence: (parsed?.confidence || 50) / 100,
-        keyFindings: parsed?.keyFindings || [],
-        improvementPlan: parsed?.improvementPlan || [],
-      };
-      this.pgAddLog(
-        "analyse",
-        `Analysis complete: ${this.playgroundState.analyseResult.recommendation}`,
-        "success"
-      );
-      this.sendEvolutionLabUpdate(send);
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      console.error("[Playground Analyse]", errMsg);
-      this.playgroundState.analyseProgress = undefined;
-      this.playgroundState.analyseError = errMsg;
-      this.pgAddLog("analyse", `Analysis failed: ${errMsg}`, "error");
-      this.sendEvolutionLabUpdate(send);
-    }
-  }
-
-  private setupPlaygroundCallbacks() {
-    setPlaygroundCallbacks({
-      getState: () => this.playgroundState,
-      startCycle: async () => {
-        // MCP-driven start - state is set but no send (UI refreshes on next interaction)
-        this.playgroundState = {
-          cycleId: crypto.randomUUID().slice(0, 8),
-          step: "benchmark",
-          startedAt: Date.now(),
-          log: [
-            {
-              timestamp: Date.now(),
-              step: "benchmark",
-              message: "Cycle started (MCP)",
-              type: "info",
-            },
-          ],
-        };
-      },
-      submitProposal: (proposal) => {
-        this.playgroundState.proposal = proposal;
-        this.playgroundState.step = "propose";
-        this.pgAddLog("propose", "Proposal submitted (MCP)", "info");
-      },
-      applyChanges: async (opts) => {
-        const branch = opts.branch || `evo/pg-${this.playgroundState.cycleId}`;
-        this.playgroundState.applyResult = {
-          branch,
-          commits: [],
-          filesChanged: [],
-        };
-        this.playgroundState.step = "apply";
-        this.pgAddLog("apply", `Changes applied to branch: ${branch}`, "success");
-        return this.playgroundState.applyResult;
-      },
-      runValidation: async () => {
-        this.playgroundState.step = "validate";
-      },
-      reset: () => {
-        this.playgroundState = { step: "idle", log: [], cycleId: null };
-      },
-    });
   }
 
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {

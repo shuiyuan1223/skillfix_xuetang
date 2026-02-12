@@ -365,6 +365,7 @@ export const en: LocaleMessages = {
     tabVersions: "Versions",
     tabData: "Data",
     tabAgent: "Agent",
+    startEvolutionCycle: "Start Evolution Cycle",
     // Overview
     currentVersion: "Current Version",
     scoreTrend: "Score Trend",

@@ -381,6 +381,7 @@ export interface LocaleMessages {
     tabVersions: string;
     tabData: string;
     tabAgent: string;
+    startEvolutionCycle: string;
     // Overview
     currentVersion: string;
     scoreTrend: string;

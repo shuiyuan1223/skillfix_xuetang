@@ -7,7 +7,6 @@
 import { healthTools } from "../tools/health-data.js";
 import { gitTools } from "../tools/git-tools.js";
 import { evolutionTools } from "../tools/evolution-tools.js";
-import { playgroundTools } from "../tools/playground-tools.js";
 
 // MCP Tool Definition
 export interface MCPTool {
@@ -54,14 +53,10 @@ export class MCPHandler {
     for (const tool of evolutionTools) {
       this.tools.set(tool.name, tool);
     }
-    // Register playground tools
-    for (const tool of playgroundTools) {
-      this.tools.set(tool.name, tool);
-    }
   }
 
   private get allTools() {
-    return [...healthTools, ...gitTools, ...evolutionTools, ...playgroundTools];
+    return [...healthTools, ...gitTools, ...evolutionTools];
   }
 
   /**

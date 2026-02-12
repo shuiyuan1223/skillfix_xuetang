@@ -358,6 +358,7 @@ export const zhCN: LocaleMessages = {
     tabVersions: "版本",
     tabData: "数据",
     tabAgent: "Agent",
+    startEvolutionCycle: "启动进化循环",
     // Overview
     currentVersion: "当前版本",
     scoreTrend: "分数趋势",
