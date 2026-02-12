@@ -300,6 +300,12 @@ class A2UIRenderer {
   private components: Map<string, A2UIComponent> = new Map();
   private sendAction: (action: string, payload?: Record<string, unknown>) => void;
   private sendNavigate: (view: string) => void;
+  pendingPlotlyCharts: Array<{
+    elementId: string;
+    traces: unknown[];
+    layout: unknown;
+    config: unknown;
+  }> = [];
 
   constructor(
     sendAction: (action: string, payload?: Record<string, unknown>) => void,
@@ -412,6 +418,10 @@ class A2UIRenderer {
         return this.renderArenaScoreTable(c);
       case "arena_category_card":
         return this.renderArenaCategoryCard(c);
+      case "plotly_radar":
+        return this.renderPlotlyRadar(c);
+      case "arena_run_picker":
+        return this.renderArenaRunPicker(c);
       default:
         return html`<div class="text-text-muted text-xs p-2">[Unknown: ${c.type}]</div>`;
     }
@@ -1616,6 +1626,70 @@ class A2UIRenderer {
               </div>
             `
           )}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderPlotlyRadar(c: A2UIComponent): TemplateResult {
+    const elementId = `plotly-${c.id}`;
+    this.pendingPlotlyCharts.push({
+      elementId,
+      traces: c.traces as unknown[],
+      layout: c.layout as unknown,
+      config: c.config as unknown,
+    });
+    return html`<div id="${elementId}" style="width:100%; height:500px;"></div>`;
+  }
+
+  private renderArenaRunPicker(c: A2UIComponent): TemplateResult {
+    const runs =
+      (c.runs as Array<{
+        id: string;
+        label: string;
+        selected: boolean;
+        color?: string;
+        date?: string;
+        score?: number;
+      }>) || [];
+    const action = c.action as string;
+    const clearAction = c.clearAction as string | undefined;
+    const selectedCount = runs.filter((r) => r.selected).length;
+
+    return html`
+      <div class="arena-run-picker">
+        <button
+          class="arena-run-picker-btn"
+          @click=${(e: Event) => {
+            const panel = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement;
+            panel.classList.toggle("open");
+          }}
+        >
+          Runs (${selectedCount}) ▾
+        </button>
+        <div class="arena-run-picker-panel">
+          ${runs.map(
+            (r) => html`
+              <label
+                class="arena-run-picker-item ${r.selected ? "selected" : ""}"
+                @click=${() => this.sendAction(action, { runId: r.id })}
+              >
+                <span class="arena-run-picker-dot" style="background: ${r.color || "#555"}"></span>
+                <span class="arena-run-picker-label">${r.label}</span>
+                ${r.score != null
+                  ? html`<span class="arena-run-picker-score">${r.score.toFixed(2)}</span>`
+                  : nothing}
+                <input type="checkbox" .checked=${r.selected} style="pointer-events:none" />
+              </label>
+            `
+          )}
+          ${clearAction
+            ? html`
+                <div class="arena-run-picker-footer" @click=${() => this.sendAction(clearAction)}>
+                  Clear All
+                </div>
+              `
+            : nothing}
         </div>
       </div>
     `;
@@ -3168,6 +3242,23 @@ class PHAApp extends LitElement {
     // Ensure user UUID cookie exists before connecting (so WebSocket can read it)
     this.userUuid = this.getUserUuid();
     this.connect();
+  }
+
+  updated(changedProperties: Map<string, unknown>) {
+    super.updated(changedProperties);
+    // Process pending Plotly chart renders after DOM update
+    if (this.renderer?.pendingPlotlyCharts?.length) {
+      const charts = [...this.renderer.pendingPlotlyCharts];
+      this.renderer.pendingPlotlyCharts = [];
+      requestAnimationFrame(() => {
+        for (const chart of charts) {
+          const el = document.getElementById(chart.elementId);
+          if (el && (window as any).Plotly) {
+            (window as any).Plotly.newPlot(el, chart.traces, chart.layout, chart.config);
+          }
+        }
+      });
+    }
   }
 
   render() {

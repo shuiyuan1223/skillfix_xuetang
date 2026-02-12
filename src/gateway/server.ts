@@ -2345,6 +2345,16 @@ export class GatewaySession {
         };
       });
 
+      // Auto-select most recent 3 completed runs if user hasn't manually selected any
+      if (this.benchmarkSelectedRunIds.size === 0) {
+        const completedRuns = benchmarkRunsList
+          .filter((r) => r.status === "completed" && r.overall_score > 0)
+          .slice(0, 3);
+        for (const r of completedRuns) {
+          this.benchmarkSelectedRunIds.add(r.id);
+        }
+      }
+
       const bestScores = getBestCategoryScores();
       if (bestScores.length > 0) {
         latestCategoryScores = bestScores.map((s) => ({

@@ -537,6 +537,115 @@
     border-radius: 50%;
   }
 
+  /* Run picker dropdown */
+  .arena-run-picker {
+    position: relative;
+  }
+
+  .arena-run-picker-btn {
+    padding: 6px 14px;
+    background: rgba(var(--color-bg-secondary), 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    color: rgb(var(--color-text-secondary));
+    font-family: inherit;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .arena-run-picker-btn:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    color: rgb(var(--color-text));
+  }
+
+  .arena-run-picker-panel {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 6px;
+    min-width: 260px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--color-surface-card);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 6px;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  }
+
+  .arena-run-picker-panel.open {
+    display: block;
+  }
+
+  .arena-run-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    color: rgb(var(--color-text-secondary));
+    transition: background 0.15s ease;
+  }
+
+  .arena-run-picker-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .arena-run-picker-item.selected {
+    color: rgb(var(--color-text));
+  }
+
+  .arena-run-picker-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .arena-run-picker-label {
+    flex: 1;
+  }
+
+  .arena-run-picker-score {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: rgb(var(--color-text-muted));
+  }
+
+  .arena-run-picker-footer {
+    padding: 8px 12px;
+    text-align: center;
+    font-size: 0.78rem;
+    color: rgb(var(--color-text-muted));
+    cursor: pointer;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    margin-top: 4px;
+  }
+
+  .arena-run-picker-footer:hover {
+    color: rgb(var(--color-text-secondary));
+  }
+
+  .light .arena-run-picker-btn {
+    background: rgba(238, 241, 245, 0.8);
+    border-color: rgba(0, 0, 0, 0.06);
+  }
+
+  .light .arena-run-picker-panel {
+    border-color: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
+  }
+
+  .light .arena-run-picker-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+
   /* Radar chart: improved multi-series */
   .arena-radar-container {
     display: flex;

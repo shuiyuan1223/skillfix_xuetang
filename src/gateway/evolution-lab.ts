@@ -285,6 +285,85 @@ function buildMultiSeriesRadarData(
   }));
 }
 
+/**
+ * Build Plotly scatterpolar traces from comparison runs.
+ */
+function buildPlotlyRadarTraces(
+  runs: ComparisonRun[],
+  mode: "categories" | "criteria"
+): Array<Record<string, unknown>> {
+  return runs.map((run) => {
+    const dataPoints =
+      mode === "criteria"
+        ? run.categoryScores.flatMap(
+            (cs) =>
+              cs.subComponents?.map((sub) => ({
+                name: sub.name,
+                score: sub.score <= 1 ? sub.score : sub.score / 100,
+              })) || []
+          )
+        : run.categoryScores.map((cs) => ({
+            name: getCategoryLabel(cs.category),
+            score: cs.score <= 1 ? cs.score : cs.score / 100,
+          }));
+
+    const r = dataPoints.map((d) => d.score);
+    const theta = dataPoints.map((d) => d.name);
+    // Close the polygon
+    if (r.length > 0) {
+      r.push(r[0]);
+      theta.push(theta[0]);
+    }
+
+    return {
+      type: "scatterpolar",
+      r,
+      theta,
+      fill: "toself",
+      fillcolor: run.color.replace("rgb", "rgba").replace(")", ", 0.15)"),
+      line: { color: run.color, width: mode === "criteria" ? 2 : 3 },
+      name: run.label,
+      hovertemplate: "%{theta}<br>Score: %{r:.2f}<extra></extra>",
+    };
+  });
+}
+
+const PLOTLY_LAYOUT = {
+  polar: {
+    radialaxis: {
+      visible: true,
+      range: [0, 1],
+      tickvals: [0.25, 0.5, 0.75, 1.0],
+      ticktext: ["0.25", "0.50", "0.75", "1.00"],
+      tickfont: { size: 10, color: "#55556a", family: "JetBrains Mono" },
+      gridcolor: "rgba(255, 255, 255, 0.06)",
+      linecolor: "rgba(255, 255, 255, 0.1)",
+    },
+    angularaxis: {
+      tickfont: { size: 10, color: "#8888a0", family: "Outfit" },
+      gridcolor: "rgba(255, 255, 255, 0.06)",
+      linecolor: "rgba(255, 255, 255, 0.1)",
+      rotation: 90,
+      direction: "clockwise",
+    },
+    bgcolor: "rgba(0, 0, 0, 0)",
+  },
+  paper_bgcolor: "rgba(0, 0, 0, 0)",
+  plot_bgcolor: "rgba(0, 0, 0, 0)",
+  font: { color: "#f0f0f5", family: "Outfit" },
+  showlegend: true,
+  legend: {
+    x: 0.5,
+    y: -0.15,
+    xanchor: "center",
+    orientation: "h",
+    font: { size: 12 },
+    bgcolor: "rgba(0,0,0,0)",
+  },
+  margin: { t: 60, b: 80, l: 80, r: 80 },
+  dragmode: false,
+};
+
 function getCategoryLabel(category: string): string {
   const labelMap: Record<string, string> = {
     "health-data-analysis": t("evolution.healthDataAnalysis"),
@@ -502,7 +581,24 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
   children.push(ui.grid(statCards, { columns: 4, gap: 16 }));
 
-  // Row 2: Arena Comparison Area
+  // Row 2: Score Trend (moved above Arena)
+  if (data.scoreTrend && data.scoreTrend.length > 0) {
+    const trendLabel = ui.text(t("evolution.scoreTrend"), "label");
+    const trendChart = ui.chart({
+      chartType: "bar",
+      data: data.scoreTrend.map((p) => {
+        const displayScore = p.score <= 1.0 ? Math.round(p.score * 100) : Math.round(p.score);
+        return { version: p.version, score: displayScore };
+      }),
+      xKey: "version",
+      yKey: "score",
+      height: 200,
+      color: "#667eea",
+    });
+    children.push(ui.card([trendLabel, trendChart], { padding: 16 }));
+  }
+
+  // Row 3: Arena Comparison Area (includes radar, scores, category cards, and recent runs)
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const arenaChildren: string[] = [];
     const radarMode = data.radarMode || "categories";
@@ -510,7 +606,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     const selectedOrder = data.selectedRunIds || [];
     const recentRuns = data.benchmarkRuns.slice(0, 10);
 
-    // Header row: title + mode toggle buttons
+    // Header row: title + mode toggle + run picker
     const arenaTitle = ui.text(t("evolution.selectRunsForComparison"), "label");
     const catBtn = ui.button(t("evolution.categoriesMode"), "set_radar_mode", {
       variant: radarMode === "categories" ? "primary" : "outline",
@@ -522,42 +618,47 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       size: "sm",
       payload: { mode: "criteria" },
     });
-    arenaChildren.push(
-      ui.row([arenaTitle, catBtn, critBtn], { gap: 8, align: "center", justify: "between" })
-    );
 
-    // Arena Pills (custom component)
-    const pillsId = `arena_pills_${Date.now()}`;
-    ui.addComponent(pillsId, {
-      id: pillsId,
-      type: "arena_pills",
-      pills: recentRuns.map((r) => ({
+    // Run picker dropdown (replaces pills)
+    const pickerId = `arena_picker_${Date.now()}`;
+    ui.addComponent(pickerId, {
+      id: pickerId,
+      type: "arena_run_picker",
+      runs: recentRuns.map((r) => ({
+        id: r.id,
         label: r.presetName || r.modelId?.split("/").pop() || r.version_tag || r.id.slice(0, 8),
+        selected: selectedIds.has(r.id),
         color: selectedIds.has(r.id)
           ? RUN_COLORS[selectedOrder.indexOf(r.id) % RUN_COLORS.length]
-          : "#555",
-        active: selectedIds.has(r.id),
-        action: "toggle_benchmark_run",
-        payload: { runId: r.id },
+          : undefined,
+        date: undefined,
+        score: r.overall_score > 0 ? r.overall_score : undefined,
       })),
-      clearAction: selectedIds.size > 0 ? "clear_run_selection" : undefined,
+      action: "toggle_benchmark_run",
+      clearAction: "clear_run_selection",
     });
-    arenaChildren.push(pillsId);
+
+    const toggleRow = ui.row([catBtn, critBtn], { gap: 8, align: "center" });
+    arenaChildren.push(
+      ui.row([arenaTitle, toggleRow, pickerId], {
+        gap: 8,
+        align: "center",
+        justify: "between",
+      })
+    );
 
     // Comparison content
     if (data.comparisonRuns && data.comparisonRuns.length > 0) {
-      const multiSeries = buildMultiSeriesRadarData(data.comparisonRuns, radarMode);
-
-      // Radar card
-      const radarTitleId = ui.text(
-        radarMode === "criteria" ? "16 Criteria Radar" : "5 Categories Radar",
-        "label"
-      );
-      const radar = ui.radarChart([], { multiSeries, size: 500, showLabels: true });
-      const radarCardId = ui.column([radarTitleId, radar], {
-        gap: 8,
-        className: "arena-card",
-      } as any);
+      // Plotly radar chart
+      const plotlyId = `plotly_radar_${Date.now()}`;
+      const traces = buildPlotlyRadarTraces(data.comparisonRuns, radarMode);
+      ui.addComponent(plotlyId, {
+        id: plotlyId,
+        type: "plotly_radar",
+        traces,
+        layout: PLOTLY_LAYOUT,
+        config: { responsive: true, displayModeBar: false },
+      });
 
       // Score table card (custom component)
       const scoreTitleId = ui.text(t("evolution.overallScores"), "label");
@@ -576,7 +677,11 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         className: "arena-card",
       } as any);
 
-      // Dashboard grid (radar + scores)
+      // Dashboard grid (plotly radar + scores)
+      const radarCardId = ui.column([plotlyId], {
+        gap: 8,
+        className: "arena-card",
+      } as any);
       const dashGridId = ui.column([radarCardId, scoreCardId], {
         gap: 20,
         className: "arena-dashboard-grid",
@@ -630,28 +735,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       arenaChildren.push(ui.text(t("evolution.noRunsSelected"), "caption"));
     }
 
-    children.push(ui.card(arenaChildren, { padding: 16, className: "arena-section" } as any));
-  }
-
-  // Row 3: Score Trend
-  if (data.scoreTrend && data.scoreTrend.length > 0) {
-    const trendLabel = ui.text(t("evolution.scoreTrend"), "label");
-    const trendChart = ui.chart({
-      chartType: "bar",
-      data: data.scoreTrend.map((p) => {
-        const displayScore = p.score <= 1.0 ? Math.round(p.score * 100) : Math.round(p.score);
-        return { version: p.version, score: displayScore };
-      }),
-      xKey: "version",
-      yKey: "score",
-      height: 200,
-      color: "#667eea",
-    });
-    children.push(ui.card([trendLabel, trendChart], { padding: 16 }));
-  }
-
-  // Row 4: Recent Benchmark Runs
-  if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
+    // Recent Benchmark Runs table (merged into Arena section)
     const runsLabel = ui.text(t("evolution.recentRuns"), "label");
     const runRows = data.benchmarkRuns.slice(0, 5).map((r) => {
       const scoreDisplay = r.overall_score > 0 ? `${Math.round(r.overall_score * 100)}%` : "-";
@@ -692,9 +776,9 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       payload: { profile: "full" },
     });
     const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "end" });
+    arenaChildren.push(runsLabel, runsTable, btnRow);
 
-    const cardContent = ui.column([runsLabel, runsTable, btnRow], { gap: 16 });
-    children.push(ui.card([cardContent], { padding: 16 }));
+    children.push(ui.card(arenaChildren, { padding: 16, className: "arena-section" } as any));
   } else {
     const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
     const runBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
@@ -705,7 +789,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     children.push(ui.card([emptyText, runBtn], { padding: 24 }));
   }
 
-  // Row 5: Active evolution branch (if any)
+  // Row 4: Active evolution branch (if any)
   if (data.activeVersionBranch && data.activeVersionBranch !== "main") {
     const branchBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
     const branchLabel = ui.text(t("evolution.activeVersion"), "label");

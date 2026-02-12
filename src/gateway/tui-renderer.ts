@@ -141,6 +141,10 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderArenaScoreTable(comp, ctx);
     case "arena_category_card":
       return renderArenaCategoryCard(comp, ctx);
+    case "plotly_radar":
+      return renderPlotlyRadarTUI(comp, ctx);
+    case "arena_run_picker":
+      return renderArenaRunPickerTUI(comp, ctx);
     case "collapsible":
       return renderCollapsible(comp, ctx);
     case "activity_rings":
@@ -954,6 +958,79 @@ function renderArenaCategoryCard(comp: A2UIComponent, ctx: RenderContext): strin
   for (const cr of criteria) {
     const scores = cr.scores.map((s) => s.value.toFixed(2)).join(" / ");
     lines.push(indent(ctx, `  ${padRight(cr.name, 22)} ${scores}`));
+  }
+
+  return lines;
+}
+
+function renderPlotlyRadarTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const traces = (comp.traces as Array<{ name?: string; r?: number[]; theta?: string[] }>) || [];
+  const lines: string[] = [];
+  lines.push(indent(ctx, ansi.dim("[Radar Chart — Plotly]")));
+
+  if (traces.length === 0) {
+    lines.push(indent(ctx, ansi.dim("  No data")));
+    return lines;
+  }
+
+  // Build comparison table from trace data
+  const ref = traces[0];
+  const axisLabels = ref.theta?.slice(0, -1) || []; // Remove closing duplicate
+  const seriesNames = traces.map((t) => t.name || "?");
+  const colWidth = 10;
+  const headerLine =
+    "  " +
+    padRight("Dimension", 18) +
+    seriesNames.map((n) => padRight(n.slice(0, colWidth), colWidth)).join(" ");
+  lines.push(indent(ctx, ansi.bold(headerLine)));
+  lines.push(indent(ctx, "  " + "─".repeat(18 + seriesNames.length * (colWidth + 1))));
+
+  for (let i = 0; i < axisLabels.length; i++) {
+    const label = axisLabels[i];
+    const vals = traces.map((t) => {
+      const val = t.r?.[i] ?? 0;
+      const pct = Math.round(val * 100);
+      return padRight(`${pct}%`, colWidth);
+    });
+    lines.push(indent(ctx, `  ${padRight(label, 18)}${vals.join(" ")}`));
+  }
+  return lines;
+}
+
+function renderArenaRunPickerTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const runs =
+    (comp.runs as Array<{
+      id: string;
+      label: string;
+      selected: boolean;
+      score?: number;
+    }>) || [];
+  const action = comp.action as string;
+  const clearAction = comp.clearAction as string | undefined;
+  const lines: string[] = [];
+
+  for (const r of runs) {
+    ctx.actionCounter++;
+    const marker = r.selected ? ansi.cyan("●") : ansi.dim("○");
+    const label = r.selected ? ansi.bold(r.label) : r.label;
+    const scoreStr = r.score != null ? ansi.dim(` (${r.score.toFixed(2)})`) : "";
+    ctx.actions.push({
+      number: ctx.actionCounter,
+      label: r.label,
+      action,
+      payload: { runId: r.id },
+    });
+    lines.push(indent(ctx, `${ansi.cyan(`[${ctx.actionCounter}]`)} ${marker} ${label}${scoreStr}`));
+  }
+
+  if (clearAction) {
+    ctx.actionCounter++;
+    ctx.actions.push({
+      number: ctx.actionCounter,
+      label: "Clear",
+      action: clearAction,
+    });
+    lines.push(indent(ctx, `${ansi.cyan(`[${ctx.actionCounter}]`)} ${ansi.dim("✕ Clear All")}`));
   }
 
   return lines;
