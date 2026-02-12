@@ -422,8 +422,8 @@ class A2UIRenderer {
         return this.renderPlotlyRadar(c);
       case "arena_run_picker":
         return this.renderArenaRunPicker(c);
-      case "arena_category_legend":
-        return this.renderArenaCategoryLegend(c);
+      case "arena_mode_toggle":
+        return this.renderArenaModeToggle(c);
       default:
         return html`<div class="text-text-muted text-xs p-2">[Unknown: ${c.type}]</div>`;
     }
@@ -1643,28 +1643,49 @@ class A2UIRenderer {
       layout: c.layout as unknown,
       config: c.config as unknown,
     });
-    return html`<div id="${elementId}" style="width:100%; height:500px;"></div>`;
+    const legend = (c.categoryLegend as Array<{ name: string; color: string }>) || [];
+    return html`
+      <div id="${elementId}" style="width:100%; height:500px;"></div>
+      ${legend.length > 0
+        ? html`
+            <div
+              style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;
+                     padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.06);"
+            >
+              ${legend.map(
+                (cat) => html`
+                  <div
+                    style="display: flex; align-items: center; gap: 8px;
+                           font-size: 0.8rem; color: rgb(var(--color-text-secondary));"
+                  >
+                    <span
+                      style="width: 10px; height: 10px; border-radius: 50%;
+                             background: ${cat.color}; display: inline-block;"
+                    ></span>
+                    <span>${cat.name}</span>
+                  </div>
+                `
+              )}
+            </div>
+          `
+        : nothing}
+    `;
   }
 
-  private renderArenaCategoryLegend(c: A2UIComponent): TemplateResult {
-    const categories = (c.categories as Array<{ name: string; color: string }>) || [];
+  private renderArenaModeToggle(c: A2UIComponent): TemplateResult {
+    const options = (c.options as Array<{ label: string; value: string }>) || [];
+    const active = c.active as string;
+    const action = c.action as string;
     return html`
-      <div
-        style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;
-               padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.06);"
-      >
-        ${categories.map(
-          (cat) => html`
-            <div
-              style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem;
-                        color: rgb(var(--color-text-secondary));"
+      <div class="arena-toggle">
+        ${options.map(
+          (opt) => html`
+            <button
+              class="arena-toggle-btn ${opt.value === active ? "active" : ""}"
+              @click=${() => this.sendAction(action, { mode: opt.value })}
             >
-              <span
-                style="width: 10px; height: 10px; border-radius: 50%;
-                       background: ${cat.color}; display: inline-block;"
-              ></span>
-              <span>${cat.name}</span>
-            </div>
+              ${opt.label}
+            </button>
           `
         )}
       </div>
@@ -1686,20 +1707,12 @@ class A2UIRenderer {
     const selectedCount = runs.filter((r) => r.selected).length;
 
     return html`
-      <div class="arena-run-picker">
-        <button
-          class="arena-run-picker-btn"
-          @click=${(e: Event) => {
-            const panel = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement;
-            panel.classList.toggle("open");
-          }}
-        >
-          Runs (${selectedCount}) ▾
-        </button>
+      <details class="arena-run-picker">
+        <summary class="arena-run-picker-btn">Runs (${selectedCount}) ▾</summary>
         <div class="arena-run-picker-panel">
           ${runs.map(
             (r) => html`
-              <label
+              <div
                 class="arena-run-picker-item ${r.selected ? "selected" : ""}"
                 @click=${() => this.sendAction(action, { runId: r.id })}
               >
@@ -1708,8 +1721,8 @@ class A2UIRenderer {
                 ${r.score != null
                   ? html`<span class="arena-run-picker-score">${r.score.toFixed(2)}</span>`
                   : nothing}
-                <input type="checkbox" .checked=${r.selected} style="pointer-events:none" />
-              </label>
+                <span class="arena-run-picker-check">${r.selected ? "✓" : ""}</span>
+              </div>
             `
           )}
           ${clearAction
@@ -1720,7 +1733,7 @@ class A2UIRenderer {
               `
             : nothing}
         </div>
-      </div>
+      </details>
     `;
   }
 

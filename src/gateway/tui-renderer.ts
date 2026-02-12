@@ -145,8 +145,8 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderPlotlyRadarTUI(comp, ctx);
     case "arena_run_picker":
       return renderArenaRunPickerTUI(comp, ctx);
-    case "arena_category_legend":
-      return renderArenaCategoryLegendTUI(comp, ctx);
+    case "arena_mode_toggle":
+      return renderArenaModeToggleTUI(comp, ctx);
     case "collapsible":
       return renderCollapsible(comp, ctx);
     case "activity_rings":
@@ -1038,10 +1038,24 @@ function renderArenaRunPickerTUI(comp: A2UIComponent, ctx: RenderContext): strin
   return lines;
 }
 
-function renderArenaCategoryLegendTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const categories = (comp.categories as Array<{ name: string; color: string }>) || [];
-  const items = categories.map((c) => `● ${c.name}`).join("  ");
-  return [indent(ctx, ansi.dim(items))];
+function renderArenaModeToggleTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const options = (comp.options as Array<{ label: string; value: string }>) || [];
+  const active = comp.active as string;
+  const action = comp.action as string;
+  const lines: string[] = [];
+  for (const opt of options) {
+    ctx.actionCounter++;
+    const isActive = opt.value === active;
+    const label = isActive ? ansi.cyan(`[${opt.label}]`) : opt.label;
+    ctx.actions.push({
+      number: ctx.actionCounter,
+      label: opt.label,
+      action,
+      payload: { mode: opt.value },
+    });
+    lines.push(indent(ctx, `${ansi.cyan(`[${ctx.actionCounter}]`)} ${label}`));
+  }
+  return lines;
 }
 
 function renderCollapsible(comp: A2UIComponent, ctx: RenderContext): string[] {

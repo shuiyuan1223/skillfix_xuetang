@@ -220,6 +220,12 @@ const SHARP_CATEGORY_COLORS: Record<string, string> = {
   accuracy: "#ffe66d",
   relevance: "#95e1d3",
   personalization: "#dda0dd",
+  // Legacy category names → same color mapping
+  "safety-boundaries": "#ff6b6b",
+  "health-coaching": "#4ecdc4",
+  "health-data-analysis": "#ffe66d",
+  "communication-quality": "#95e1d3",
+  "personalization-memory": "#dda0dd",
 };
 
 export const RUN_COLORS = [
@@ -374,11 +380,11 @@ const PLOTLY_LAYOUT = {
 
 function getCategoryLabel(category: string): string {
   const labelMap: Record<string, string> = {
-    "health-data-analysis": t("evolution.healthDataAnalysis"),
-    "health-coaching": t("evolution.healthCoaching"),
-    "safety-boundaries": t("evolution.safetyBoundaries"),
-    "personalization-memory": t("evolution.personalization"),
-    "communication-quality": t("evolution.communicationQuality"),
+    "health-data-analysis": "Health Data Analysis",
+    "health-coaching": "Health Coaching",
+    "safety-boundaries": "Safety & Boundaries",
+    "personalization-memory": "Personalization & Memory",
+    "communication-quality": "Communication Quality",
     // SHARP 2.0 categories
     safety: "Safety",
     usefulness: "Usefulness",
@@ -396,6 +402,11 @@ function getCategoryIcon(category: string): string {
     accuracy: "target",
     relevance: "link",
     personalization: "user",
+    "safety-boundaries": "shield",
+    "health-coaching": "lightbulb",
+    "health-data-analysis": "target",
+    "communication-quality": "link",
+    "personalization-memory": "user",
   };
   return iconMap[category] || "star";
 }
@@ -616,15 +627,16 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
     // Header row: title + mode toggle + run picker
     const arenaTitle = ui.text(t("evolution.selectRunsForComparison"), "label");
-    const catBtn = ui.button(t("evolution.categoriesMode"), "set_radar_mode", {
-      variant: radarMode === "categories" ? "primary" : "outline",
-      size: "sm",
-      payload: { mode: "categories" },
-    });
-    const critBtn = ui.button(t("evolution.criteriaMode"), "set_radar_mode", {
-      variant: radarMode === "criteria" ? "primary" : "outline",
-      size: "sm",
-      payload: { mode: "criteria" },
+    const toggleId = `arena_toggle_${Date.now()}`;
+    ui.addComponent(toggleId, {
+      id: toggleId,
+      type: "arena_mode_toggle",
+      options: [
+        { label: t("evolution.categoriesMode"), value: "categories" },
+        { label: t("evolution.criteriaMode"), value: "criteria" },
+      ],
+      active: radarMode,
+      action: "set_radar_mode",
     });
 
     // Run picker dropdown (replaces pills)
@@ -646,9 +658,8 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       clearAction: "clear_run_selection",
     });
 
-    const toggleRow = ui.row([catBtn, critBtn], { gap: 8, align: "center" });
     arenaChildren.push(
-      ui.row([arenaTitle, toggleRow, pickerId], {
+      ui.row([arenaTitle, toggleId, pickerId], {
         gap: 8,
         align: "center",
         justify: "between",
@@ -657,7 +668,15 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
     // Comparison content
     if (data.comparisonRuns && data.comparisonRuns.length > 0) {
-      // Plotly radar chart
+      const refRun = data.comparisonRuns[0];
+
+      // Build category legend from actual data
+      const legendCategories = refRun.categoryScores.map((cs) => ({
+        name: getCategoryLabel(cs.category),
+        color: SHARP_CATEGORY_COLORS[cs.category] || "#818cf8",
+      }));
+
+      // Plotly radar chart (with embedded legend data)
       const plotlyId = `plotly_radar_${Date.now()}`;
       const traces = buildPlotlyRadarTraces(data.comparisonRuns, radarMode);
       ui.addComponent(plotlyId, {
@@ -666,6 +685,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         traces,
         layout: PLOTLY_LAYOUT,
         config: { responsive: true, displayModeBar: false },
+        categoryLegend: legendCategories,
       });
 
       // Score table card (custom component)
@@ -685,23 +705,8 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         className: "arena-card",
       } as any);
 
-      // Category legend (below radar)
-      const legendId = `arena_legend_${Date.now()}`;
-      const categories = [
-        { name: "Safety", color: "#ff6b6b" },
-        { name: "Helpfulness", color: "#4ecdc4" },
-        { name: "Accuracy", color: "#ffe66d" },
-        { name: "Relevance", color: "#95e1d3" },
-        { name: "Personalization", color: "#dda0dd" },
-      ];
-      ui.addComponent(legendId, {
-        id: legendId,
-        type: "arena_category_legend",
-        categories,
-      });
-
       // Dashboard grid (plotly radar + scores side by side)
-      const radarCardId = ui.column([plotlyId, legendId], {
+      const radarCardId = ui.column([plotlyId], {
         gap: 8,
         className: "arena-card",
       } as any);
@@ -711,13 +716,12 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       } as any);
       arenaChildren.push(dashGridId);
 
-      // Category Breakdown cards (criteria mode)
-      if (radarMode === "criteria" && data.comparisonRuns.length > 0) {
+      // Category Breakdown cards (always show in both modes)
+      if (data.comparisonRuns.length > 0) {
         const breakdownTitle = ui.text(t("evolution.categoryBreakdown"), "label");
         arenaChildren.push(breakdownTitle);
 
         const breakdownCards: string[] = [];
-        const refRun = data.comparisonRuns[0];
         for (const cs of refRun.categoryScores) {
           if (!cs.subComponents || cs.subComponents.length === 0) continue;
           const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;

@@ -577,8 +577,17 @@
     box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
   }
 
-  .arena-run-picker-panel.open {
+  .arena-run-picker[open] > .arena-run-picker-panel {
     display: block;
+  }
+
+  .arena-run-picker-btn::marker,
+  .arena-run-picker-btn::-webkit-details-marker {
+    display: none;
+  }
+
+  .arena-run-picker-btn {
+    list-style: none;
   }
 
   .arena-run-picker-item {
@@ -616,6 +625,25 @@
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 0.78rem;
     color: rgb(var(--color-text-muted));
+  }
+
+  .arena-run-picker-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    color: transparent;
+  }
+
+  .arena-run-picker-item.selected .arena-run-picker-check {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: rgb(99, 102, 241);
+    color: #fff;
   }
 
   .arena-run-picker-footer {
