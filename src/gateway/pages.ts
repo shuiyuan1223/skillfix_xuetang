@@ -141,7 +141,7 @@ export function generateSystemAgentPage(state: {
     children.push(ui.stepIndicator(state.pipelineSteps, { orientation: "horizontal" }));
   }
 
-  // Chat messages (noWelcome: suppress the main Chat welcome screen)
+  // Chat messages with System Agent welcome screen
   const msgsId = `sa_msgs_${Date.now()}`;
   ui.addComponent(msgsId, {
     id: msgsId,
@@ -149,7 +149,29 @@ export function generateSystemAgentPage(state: {
     messages: state.chatMessages,
     streaming: state.streaming,
     streamingContent: state.streamingContent,
-    noWelcome: true,
+    welcomeTitle: t("systemAgent.title"),
+    welcomeSubtitle: t("systemAgent.subtitle"),
+    welcomeIcon: "bot",
+    welcomeActions: [
+      {
+        label: "Run Benchmark",
+        icon: "test-tube",
+        action: "sa_send_message",
+        content: "Run a quick benchmark",
+      },
+      {
+        label: "Start Evolution",
+        icon: "zap",
+        action: "sa_send_message",
+        content: "Start a full evolution cycle",
+      },
+      {
+        label: "Git Status",
+        icon: "git-branch",
+        action: "sa_send_message",
+        content: "Show git status",
+      },
+    ],
   });
   children.push(msgsId);
 

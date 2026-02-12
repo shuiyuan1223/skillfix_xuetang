@@ -934,6 +934,54 @@ class A2UIRenderer {
     const streaming = c.streaming as boolean;
     const streamingContent = c.streamingContent as string;
 
+    // Custom welcome screen (server-driven via welcomeTitle/welcomeSubtitle)
+    const welcomeTitle = c.welcomeTitle as string | undefined;
+    const welcomeSubtitle = c.welcomeSubtitle as string | undefined;
+    const welcomeIcon = (c.welcomeIcon as string) || "bot";
+    const welcomeActions = c.welcomeActions as
+      | Array<{ label: string; icon?: string; action: string; content: string }>
+      | undefined;
+    if (messages.length === 0 && !streaming && welcomeTitle) {
+      const sugBtn =
+        "flex items-center gap-2 px-4 py-3 rounded-2xl bg-surface border border-border text-text-secondary text-sm cursor-pointer transition-all duration-fast hover:border-primary/30 hover:bg-surface-hover hover:text-text hover:shadow-[0_4px_12px_rgba(102,126,234,0.15)]";
+      return html`
+        <div class="flex-1 flex flex-col items-center justify-center p-8 gap-6 text-center">
+          <div
+            class="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-primary"
+          >
+            ${unsafeHTML(ICONS[welcomeIcon] || ICONS["bot"])}
+          </div>
+          <div class="text-2xl font-bold text-text">${welcomeTitle}</div>
+          ${welcomeSubtitle
+            ? html`<div class="text-sm text-text-muted max-w-[400px]">${welcomeSubtitle}</div>`
+            : nothing}
+          ${welcomeActions && welcomeActions.length > 0
+            ? html`
+                <div class="flex flex-wrap gap-3 mt-4 justify-center">
+                  ${welcomeActions.map(
+                    (a) => html`
+                      <button
+                        class="${sugBtn}"
+                        @click=${() => {
+                          const actionName = (c.action as string) || a.action || "send_message";
+                          this.sendAction(actionName, {
+                            content: a.content,
+                            value: a.content,
+                          });
+                        }}
+                      >
+                        ${a.icon ? html`<span>${unsafeHTML(ICONS[a.icon] || "")}</span>` : nothing}
+                        ${a.label}
+                      </button>
+                    `
+                  )}
+                </div>
+              `
+            : nothing}
+        </div>
+      `;
+    }
+
     const noWelcome = c.noWelcome as boolean;
     if (messages.length === 0 && !streaming && noWelcome) {
       return html`
