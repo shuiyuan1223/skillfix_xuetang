@@ -1603,7 +1603,7 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
         detailContent = generatePgApprove(ui, state);
         break;
       case "apply":
-        detailContent = generatePgApply(ui, state);
+        detailContent = generatePgApply(ui, state, data);
         break;
       case "validate":
         detailContent = generatePgValidate(ui, state);
@@ -2048,7 +2048,11 @@ function generatePgApprove(ui: A2UIGenerator, state: PlaygroundState): string {
   return ui.card(children, { padding: 16 });
 }
 
-function generatePgApply(ui: A2UIGenerator, state: PlaygroundState): string {
+function generatePgApply(
+  ui: A2UIGenerator,
+  state: PlaygroundState,
+  data: EvolutionLabData
+): string {
   const children: string[] = [];
   children.push(ui.text(t("evolution.pipelineApply"), "h3"));
 
@@ -2073,9 +2077,18 @@ function generatePgApply(ui: A2UIGenerator, state: PlaygroundState): string {
           additions: 0,
           deletions: 0,
         })),
-        { onFileSelect: "pg_file_select" }
+        { onFileSelect: "pg_file_select", selectedPath: data.diffContent?.path }
       );
       children.push(fileTree);
+    }
+
+    // ── Diff view (when a file is selected) ──
+    if (data.diffContent) {
+      children.push(
+        ui.diffView(data.diffContent.before, data.diffContent.after, {
+          title: data.diffContent.path,
+        })
+      );
     }
   } else {
     // Loading state with progress

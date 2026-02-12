@@ -1857,6 +1857,19 @@ export class GatewaySession {
     } else if (action === "pg_view_step" && payload?.stepId) {
       this.playgroundState.viewingStep = payload.stepId as any;
       this.sendEvolutionLabUpdate(send);
+    } else if (action === "pg_file_select" && payload?.path) {
+      const filePath = payload.path as string;
+      const branch = this.playgroundState.applyResult?.branch;
+      if (branch) {
+        const afterContent = readFileFromBranch(branch, filePath) || "";
+        const beforeContent = readFileFromBranch("main", filePath) || "";
+        this.evolutionLabDiffContent = {
+          before: beforeContent,
+          after: afterContent,
+          path: filePath,
+        };
+      }
+      this.sendEvolutionLabUpdate(send);
     } else if (action === "pg_send_message" && payload?.value) {
       await this.handleEvolutionMessage(payload.value as string, send);
     }
@@ -4065,8 +4078,8 @@ ${fileContentSection}
         return;
       }
 
-      // 1. Create evolution branch
-      const { createNextVersion, gitCommitFiles, getWorktreePath } =
+      // 1. Create evolution branch (worktree)
+      const { createNextVersion, gitCommitFiles, getGitStatusPorcelain } =
         await import("../evolution/version-manager.js");
       const version = createNextVersion({
         triggerMode: "playground",
@@ -4078,105 +4091,99 @@ ${fileContentSection}
       this.playgroundState.applyProgress = `Branch: ${branch}`;
       this.sendEvolutionLabUpdate(send);
 
-      // 2. For each proposed change, use LLM to generate actual file edits
+      // 2. Build Claude Code prompt from proposal changes
+      const changesDesc = proposal.changes
+        .map((c, i) => `${i + 1}. File: ${c.path}\n   Change: ${c.description}`)
+        .join("\n\n");
+
+      const prompt = `You are editing files for PHA (Personal Health Agent) evolution.
+Apply the following changes precisely. Use the Edit tool for each modification.
+
+## Changes to apply:
+
+${changesDesc}
+
+## Rules:
+- Use Edit tool (not Write) to make precise changes
+- Do NOT add unrelated changes
+- Do NOT add comments like "// Added by evolution"
+- Keep the existing code style`;
+
+      this.playgroundState.applyProgress = "Claude Code editing files...";
+      this.sendEvolutionLabUpdate(send);
+
+      // 3. Call Claude Code CLI
+      const proc = Bun.spawn(
+        [
+          "claude",
+          "-p",
+          "--output-format",
+          "json",
+          "--dangerously-skip-permissions",
+          "--allowedTools",
+          "Read",
+          "Edit",
+          "Write",
+          "Glob",
+          "Grep",
+          "--model",
+          "sonnet",
+          "--max-turns",
+          "20",
+          prompt,
+        ],
+        { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
+      );
+
+      const stdout = await new Response(proc.stdout).text();
+      await proc.exited;
+
+      // 4. Parse result (log for debugging)
+      let ccResult: { result?: string; error?: string } = {};
+      try {
+        ccResult = JSON.parse(stdout);
+      } catch {
+        /* non-JSON output is ok */
+      }
+      if (ccResult.error) {
+        this.pgAddLog("apply", `Claude Code warning: ${ccResult.error}`, "warning");
+      }
+
+      // 5. Detect changed files via git status and commit
+      const statusOutput = getGitStatusPorcelain(worktreePath);
+      const changedFiles: Array<{ path: string; status: string }> = statusOutput
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const status = line.slice(0, 2).trim();
+          const path = line.slice(3);
+          return {
+            path,
+            status: status === "A" ? "added" : status === "D" ? "deleted" : "modified",
+          };
+        });
+
       const commits: string[] = [];
-      const filesChanged: Array<{ path: string; status: string }> = [];
-
-      const djConfig = getJudgeModel();
-      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
-      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
-      const { MockDataSource: ApplyMockDS } = await import("../data-sources/mock.js");
-      const editAgent = await createPHAAgent({
-        apiKey: djApiKey,
-        provider: djConfig.provider as "anthropic" | "openrouter" | "openai",
-        modelId: djConfig.modelId,
-        baseUrl: djBaseUrl,
-        dataSource: new ApplyMockDS(),
-      });
-
-      const AGENT_TIMEOUT_MS = 120_000;
-
-      for (const change of proposal.changes) {
-        this.playgroundState.applyProgress = `Editing: ${change.path}`;
-        this.sendEvolutionLabUpdate(send);
-
-        // Read current file from worktree
-        const filePath = join(worktreePath, change.path);
-        let currentContent = "";
-        let fileExists = false;
-        try {
-          currentContent = readFileSync(filePath, "utf-8");
-          fileExists = true;
-        } catch {
-          // File might not exist yet — try from project root
-          try {
-            const { getProjectRoot } = await import("../evolution/version-manager.js");
-            currentContent = readFileSync(join(getProjectRoot(), change.path), "utf-8");
-          } catch {
-            /* file doesn't exist anywhere */
-          }
-        }
-
-        const editPrompt = `You are editing a file for PHA (Personal Health Agent). Output ONLY the complete new file content. No markdown fences, no explanation, no preamble.
-
-## File: ${change.path}
-
-### Current content:
-${currentContent.slice(0, 6000)}
-
-### Required change:
-${change.description}
-
-Output the complete updated file content now:`;
-
-        try {
-          if (typeof editAgent.reset === "function") editAgent.reset();
-          let newContent = await Promise.race([
-            editAgent.chatAndWait(editPrompt),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error("Edit LLM timeout")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-
-          // Strip markdown fences if present
-          const fenceMatch = newContent.match(/^```[\w]*\n([\s\S]*?)```\s*$/);
-          if (fenceMatch) newContent = fenceMatch[1];
-
-          // Ensure parent directory exists
-          const parentDir = filePath.substring(0, filePath.lastIndexOf("/"));
-          if (parentDir) mkdirSync(parentDir, { recursive: true });
-
-          writeFileSync(filePath, newContent, "utf-8");
-
-          const result = gitCommitFiles(
-            change.path,
-            `evo: ${change.description.slice(0, 60)}`,
-            worktreePath
-          );
-          if (result.success && result.commitHash) {
-            commits.push(result.commitHash);
-          }
-          filesChanged.push({
-            path: change.path,
-            status: fileExists ? "modified" : "added",
-          });
-        } catch (err) {
-          this.pgAddLog(
-            "apply",
-            `Failed to edit ${change.path}: ${err instanceof Error ? err.message : String(err)}`,
-            "error"
-          );
+      if (changedFiles.length > 0) {
+        const allPaths = changedFiles.map((f) => f.path);
+        const result = gitCommitFiles(
+          allPaths,
+          `evo: apply proposal (${changedFiles.length} files)`,
+          worktreePath
+        );
+        if (result.success && result.commitHash) {
+          commits.push(result.commitHash);
         }
       }
 
-      // 3. Switch agent to use this version
+      // 6. Switch agent to use this version
       this.switchAgentVersion(branch);
 
-      this.playgroundState.applyResult = { branch, commits, filesChanged };
+      this.playgroundState.applyResult = { branch, commits, filesChanged: changedFiles };
       this.playgroundState.applyProgress = undefined;
       this.pgAddLog(
         "apply",
-        `Changes applied to branch: ${branch} (${commits.length} commits)`,
+        `Applied via Claude Code: ${changedFiles.length} files, ${commits.length} commits`,
         "success"
       );
       this.sendEvolutionLabUpdate(send);
