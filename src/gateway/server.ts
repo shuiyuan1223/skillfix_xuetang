@@ -1844,6 +1844,8 @@ export class GatewaySession {
       this.pgHandleComplete((payload?.action as string) || "merge", send);
     } else if (action === "pg_reset") {
       this.pgReset(send);
+    } else if (action === "pg_retry_step") {
+      this.pgRetryCurrentStep(send);
     } else if (action === "pg_pause") {
       this.playgroundState.paused = true;
       this.pgAddLog(this.playgroundState.step, "Cycle paused", "warning");
@@ -3586,6 +3588,43 @@ export class GatewaySession {
       this.pgRunValidation(send);
     } else {
       this.sendEvolutionLabUpdate(send);
+    }
+  }
+
+  private pgRetryCurrentStep(send: (msg: unknown) => void) {
+    const step = this.playgroundState.step;
+    this.pgAddLog(step, `Retrying step: ${step}`, "info");
+
+    switch (step) {
+      case "benchmark": {
+        // Clear result and re-run
+        const retryProfile = this.playgroundState.benchmarkResult?.profile || "quick";
+        this.playgroundState.benchmarkResult = undefined;
+        this.playgroundState.benchmarkProgress = undefined;
+        this.pgRunBenchmarkAsync(retryProfile, send).catch((err) => {
+          this.pgAddLog(
+            "benchmark",
+            `Benchmark failed: ${err instanceof Error ? err.message : String(err)}`,
+            "error"
+          );
+          this.sendEvolutionLabUpdate(send);
+        });
+        this.sendEvolutionLabUpdate(send);
+        break;
+      }
+      case "diagnose":
+        this.playgroundState.diagnoseResult = undefined;
+        this.playgroundState.diagnoseProgress = undefined;
+        this.pgRunDiagnose(send);
+        break;
+      case "validate":
+        this.playgroundState.validateResult = undefined;
+        this.pgRunValidation(send);
+        break;
+      default:
+        // For propose/approve/apply — just reset and let user re-trigger
+        this.sendEvolutionLabUpdate(send);
+        break;
     }
   }
 

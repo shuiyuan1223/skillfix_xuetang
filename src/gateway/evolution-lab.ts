@@ -1709,7 +1709,13 @@ function generatePgFab(ui: A2UIGenerator, state: PlaygroundState): string {
       );
     }
   } else {
+    // Running: show pause + retry
     primary = { icon: "pause", action: "pg_pause" };
+    actions.push({
+      icon: "refresh-cw",
+      action: "pg_retry_step",
+      tooltip: "Retry",
+    });
   }
 
   const fabId = `pg_fab_${Date.now()}`;
