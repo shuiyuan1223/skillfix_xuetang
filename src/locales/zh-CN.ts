@@ -399,6 +399,7 @@ export const zhCN: LocaleMessages = {
     proposalHint: "请在下方聊天中让 Agent 生成优化提案，或手动填写提案内容",
     agentDriven: "Agent 驱动",
     evolutionConsole: "进化控制台",
+    taskFlowControl: "任务流控制",
   },
 
   memory: {

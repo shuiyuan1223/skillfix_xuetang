@@ -2662,6 +2662,7 @@ ${value || ""}</textarea
   private renderStepIndicator(c: A2UIComponent): TemplateResult {
     const steps = (c.steps as any[]) || [];
     const orientation = (c.orientation as string) || "horizontal";
+    const className = (c.className as string) || "";
 
     const statusStyles: Record<string, { bg: string; border: string; text: string }> = {
       pending: {
@@ -2693,14 +2694,15 @@ ${value || ""}</textarea
 
     const isHorizontal = orientation === "horizontal";
     return html`
-      <div class="flex ${isHorizontal ? "flex-row items-center" : "flex-col"} gap-0">
+      <div class="flex ${isHorizontal ? "flex-row items-center" : "flex-col"} gap-0 ${className}">
         ${steps.map((step, i) => {
           const style = statusStyles[step.status as string] || statusStyles.pending;
           const connectorFilled = step.status === "completed" || step.status === "active";
+          const statusClass = `step-${step.status || "pending"}`;
           return html`
             ${i > 0
               ? html`<div
-                  class="${isHorizontal
+                  class="step-connector ${isHorizontal
                     ? "h-0.5 flex-1 min-w-[20px]"
                     : "w-0.5 h-8 ml-[17px]"} ${connectorFilled
                     ? "bg-primary"
@@ -2708,12 +2710,12 @@ ${value || ""}</textarea
                 ></div>`
               : nothing}
             <div
-              class="flex ${isHorizontal ? "flex-col" : "flex-row"} items-center ${isHorizontal
-                ? "gap-2"
-                : "gap-3"}"
+              class="step-item flex ${isHorizontal
+                ? "flex-col"
+                : "flex-row"} items-center ${isHorizontal ? "gap-2" : "gap-3"}"
             >
               <div
-                class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border-2 shrink-0 transition-all"
+                class="step-circle ${statusClass} w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium border-2 shrink-0 transition-all"
                 style="background: ${style.bg}; border-color: ${style.border}; color: ${style.text}"
               >
                 ${step.status === "completed"
@@ -2723,7 +2725,7 @@ ${value || ""}</textarea
                     : html`<span>${i + 1}</span>`}
               </div>
               <span
-                class="text-xs whitespace-nowrap ${step.status === "active"
+                class="step-label text-xs whitespace-nowrap ${step.status === "active"
                   ? "font-semibold"
                   : "font-medium"}"
                 style="color: ${step.status === "active"

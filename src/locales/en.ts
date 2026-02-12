@@ -405,6 +405,7 @@ export const en: LocaleMessages = {
       "Ask the agent to generate proposals via chat below, or submit proposals manually",
     agentDriven: "Agent Driven",
     evolutionConsole: "Evolution Console",
+    taskFlowControl: "Task & Flow Control",
   },
 
   memory: {

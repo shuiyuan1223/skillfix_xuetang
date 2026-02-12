@@ -421,6 +421,7 @@ export interface LocaleMessages {
     proposalHint: string;
     agentDriven: string;
     evolutionConsole: string;
+    taskFlowControl: string;
   };
 
   // Memory page
