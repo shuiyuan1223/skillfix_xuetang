@@ -305,19 +305,27 @@ function buildPlotlyRadarTraces(
   mode: "categories" | "criteria"
 ): Array<Record<string, unknown>> {
   return runs.map((run) => {
-    const dataPoints =
-      mode === "criteria"
-        ? run.categoryScores.flatMap(
-            (cs) =>
-              cs.subComponents?.map((sub) => ({
-                name: sub.name,
-                score: sub.score <= 1 ? sub.score : sub.score / 100,
-              })) || []
-          )
-        : run.categoryScores.map((cs) => ({
-            name: getCategoryLabel(cs.category),
-            score: cs.score <= 1 ? cs.score : cs.score / 100,
-          }));
+    let dataPoints: Array<{ name: string; score: number }>;
+    if (mode === "criteria") {
+      // Average each criterion across all categories to get 16 unique points
+      const criteriaMap = new Map<string, number[]>();
+      for (const cs of run.categoryScores) {
+        for (const sub of cs.subComponents || []) {
+          const score = sub.score <= 1 ? sub.score : sub.score / 100;
+          if (!criteriaMap.has(sub.name)) criteriaMap.set(sub.name, []);
+          criteriaMap.get(sub.name)!.push(score);
+        }
+      }
+      dataPoints = Array.from(criteriaMap.entries()).map(([name, scores]) => ({
+        name,
+        score: scores.reduce((a, b) => a + b, 0) / scores.length,
+      }));
+    } else {
+      dataPoints = run.categoryScores.map((cs) => ({
+        name: getCategoryLabel(cs.category),
+        score: cs.score <= 1 ? cs.score : cs.score / 100,
+      }));
+    }
 
     const r = dataPoints.map((d) => d.score);
     const theta = dataPoints.map((d) => d.name);
