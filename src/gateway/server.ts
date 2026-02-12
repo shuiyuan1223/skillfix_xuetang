@@ -6,7 +6,7 @@
  */
 
 import { join } from "path";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mcpHandler } from "./mcp.js";
@@ -3623,6 +3623,7 @@ export class GatewaySession {
     if (!validSteps.includes(nextStep as PlaygroundStep)) return;
 
     this.playgroundState.step = nextStep as PlaygroundStep;
+    this.playgroundState.viewingStep = undefined; // follow current step
     this.pgAddLog(nextStep, `Advanced to step: ${nextStep}`, "info");
 
     // Auto-processing for certain transitions
@@ -3630,6 +3631,8 @@ export class GatewaySession {
       this.pgRunDiagnose(send);
     } else if (nextStep === "propose" && this.playgroundState.diagnoseResult) {
       this.pgRunPropose(send);
+    } else if (nextStep === "apply" && this.playgroundState.proposal) {
+      this.pgRunApply(send);
     } else if (nextStep === "validate") {
       this.pgRunValidation(send);
     } else {
@@ -3672,8 +3675,12 @@ export class GatewaySession {
         this.playgroundState.validateResult = undefined;
         this.pgRunValidation(send);
         break;
+      case "apply":
+        this.playgroundState.applyResult = undefined;
+        this.playgroundState.applyProgress = undefined;
+        this.pgRunApply(send);
+        break;
       default:
-        // For approve/apply — just reset and let user re-trigger
         this.sendEvolutionLabUpdate(send);
         break;
     }
@@ -4044,20 +4051,166 @@ ${fileContentSection}
     };
   }
 
+  private async pgRunApply(send: (msg: unknown) => void) {
+    this.playgroundState.applyProgress = "Creating evolution branch...";
+    this.sendEvolutionLabUpdate(send);
+
+    try {
+      const proposal = this.playgroundState.proposal;
+      if (!proposal || !proposal.changes.length) {
+        this.pgAddLog("apply", "No changes to apply", "warning");
+        this.playgroundState.applyResult = { branch: "", commits: [], filesChanged: [] };
+        this.playgroundState.applyProgress = undefined;
+        this.sendEvolutionLabUpdate(send);
+        return;
+      }
+
+      // 1. Create evolution branch
+      const { createNextVersion, gitCommitFiles, getWorktreePath } =
+        await import("../evolution/version-manager.js");
+      const version = createNextVersion({
+        triggerMode: "playground",
+        triggerRef: this.playgroundState.cycleId || "",
+      });
+      const branch = version.branchName;
+      const worktreePath = version.worktreePath;
+
+      this.playgroundState.applyProgress = `Branch: ${branch}`;
+      this.sendEvolutionLabUpdate(send);
+
+      // 2. For each proposed change, use LLM to generate actual file edits
+      const commits: string[] = [];
+      const filesChanged: Array<{ path: string; status: string }> = [];
+
+      const djConfig = getJudgeModel();
+      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
+      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
+      const { MockDataSource: ApplyMockDS } = await import("../data-sources/mock.js");
+      const editAgent = await createPHAAgent({
+        apiKey: djApiKey,
+        provider: djConfig.provider as "anthropic" | "openrouter" | "openai",
+        modelId: djConfig.modelId,
+        baseUrl: djBaseUrl,
+        dataSource: new ApplyMockDS(),
+      });
+
+      const AGENT_TIMEOUT_MS = 120_000;
+
+      for (const change of proposal.changes) {
+        this.playgroundState.applyProgress = `Editing: ${change.path}`;
+        this.sendEvolutionLabUpdate(send);
+
+        // Read current file from worktree
+        const filePath = join(worktreePath, change.path);
+        let currentContent = "";
+        let fileExists = false;
+        try {
+          currentContent = readFileSync(filePath, "utf-8");
+          fileExists = true;
+        } catch {
+          // File might not exist yet — try from project root
+          try {
+            const { getProjectRoot } = await import("../evolution/version-manager.js");
+            currentContent = readFileSync(join(getProjectRoot(), change.path), "utf-8");
+          } catch {
+            /* file doesn't exist anywhere */
+          }
+        }
+
+        const editPrompt = `You are editing a file for PHA (Personal Health Agent). Output ONLY the complete new file content. No markdown fences, no explanation, no preamble.
+
+## File: ${change.path}
+
+### Current content:
+${currentContent.slice(0, 6000)}
+
+### Required change:
+${change.description}
+
+Output the complete updated file content now:`;
+
+        try {
+          if (typeof editAgent.reset === "function") editAgent.reset();
+          let newContent = await Promise.race([
+            editAgent.chatAndWait(editPrompt),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error("Edit LLM timeout")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+
+          // Strip markdown fences if present
+          const fenceMatch = newContent.match(/^```[\w]*\n([\s\S]*?)```\s*$/);
+          if (fenceMatch) newContent = fenceMatch[1];
+
+          // Ensure parent directory exists
+          const parentDir = filePath.substring(0, filePath.lastIndexOf("/"));
+          if (parentDir) mkdirSync(parentDir, { recursive: true });
+
+          writeFileSync(filePath, newContent, "utf-8");
+
+          const result = gitCommitFiles(
+            change.path,
+            `evo: ${change.description.slice(0, 60)}`,
+            worktreePath
+          );
+          if (result.success && result.commitHash) {
+            commits.push(result.commitHash);
+          }
+          filesChanged.push({
+            path: change.path,
+            status: fileExists ? "modified" : "added",
+          });
+        } catch (err) {
+          this.pgAddLog(
+            "apply",
+            `Failed to edit ${change.path}: ${err instanceof Error ? err.message : String(err)}`,
+            "error"
+          );
+        }
+      }
+
+      // 3. Switch agent to use this version
+      this.switchAgentVersion(branch);
+
+      this.playgroundState.applyResult = { branch, commits, filesChanged };
+      this.playgroundState.applyProgress = undefined;
+      this.pgAddLog(
+        "apply",
+        `Changes applied to branch: ${branch} (${commits.length} commits)`,
+        "success"
+      );
+      this.sendEvolutionLabUpdate(send);
+    } catch (error) {
+      this.playgroundState.applyProgress = undefined;
+      this.pgAddLog(
+        "apply",
+        `Apply failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
+      this.sendEvolutionLabUpdate(send);
+    }
+  }
+
   private pgHandleApproval(
     approved: boolean,
     reason: string | undefined,
     send: (msg: unknown) => void
   ) {
     this.playgroundState.approval = { approved, reason, timestamp: Date.now() };
+    this.playgroundState.viewingStep = undefined; // follow current step
     if (approved) {
       this.playgroundState.step = "apply";
       this.pgAddLog("approve", "Proposal approved", "success");
+      // Auto-trigger apply
+      this.pgRunApply(send);
     } else {
       this.playgroundState.step = "propose";
+      this.playgroundState.proposal = undefined;
+      this.playgroundState.proposeProgress = undefined;
       this.pgAddLog("approve", `Rejected: ${reason || "No reason"}`, "warning");
+      // Re-generate proposal
+      this.pgRunPropose(send);
     }
-    this.sendEvolutionLabUpdate(send);
   }
 
   private pgHandleComplete(action: string, send: (msg: unknown) => void) {

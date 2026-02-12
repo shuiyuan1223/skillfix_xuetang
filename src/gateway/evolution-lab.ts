@@ -227,6 +227,7 @@ export interface PlaygroundState {
   benchmarkProgress?: { current: number; total: number };
   diagnoseProgress?: string;
   proposeProgress?: string;
+  applyProgress?: string;
 }
 
 export interface EvolutionLabData {
@@ -2053,10 +2054,17 @@ function generatePgApply(ui: A2UIGenerator, state: PlaygroundState): string {
 
   if (state.applyResult) {
     const { branch, commits, filesChanged } = state.applyResult;
-    children.push(ui.text(`Branch: ${branch}`, "body"));
-    for (const c of commits) {
-      children.push(ui.badge(`Commit: ${c.slice(0, 8)}`, { variant: "success" }));
+    // ── Summary stats ──
+    const stats: string[] = [];
+    stats.push(
+      ui.statCard({ title: t("evolution.versionBranch"), value: branch, icon: "git-branch" })
+    );
+    if (commits.length > 0) {
+      stats.push(ui.statCard({ title: "Commits", value: commits.length, icon: "git-commit" }));
     }
+    children.push(ui.row(stats, { gap: 12 }));
+
+    // ── File tree ──
     if (filesChanged.length > 0) {
       const fileTree = ui.fileTree(
         filesChanged.map((f) => ({
@@ -2070,6 +2078,10 @@ function generatePgApply(ui: A2UIGenerator, state: PlaygroundState): string {
       children.push(fileTree);
     }
   } else {
+    // Loading state with progress
+    if (state.applyProgress) {
+      children.push(ui.badge(state.applyProgress, { variant: "info" }));
+    }
     children.push(ui.text(t("evolution.applying"), "body"));
     children.push(ui.skeleton({ variant: "rectangular", height: 100 }));
   }
