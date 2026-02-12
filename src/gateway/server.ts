@@ -4128,19 +4128,16 @@ ${fileContentSection}
       this.playgroundState.applyProgress = `Branch: ${branch}`;
       this.sendEvolutionLabUpdate(send);
 
-      // 3. Create file editing tools scoped to worktree
-      const { createEditTool, createReadTool, createWriteTool } =
-        await import("@mariozechner/pi-coding-agent");
-      const fileTools = [
-        createReadTool(worktreePath),
-        createEditTool(worktreePath),
-        createWriteTool(worktreePath),
-      ] as import("@mariozechner/pi-agent-core").AgentTool<any>[];
+      // 3. Create coding tools scoped to worktree (read, edit, write, grep, find, ls)
+      const { createCodingTools } = await import("@mariozechner/pi-coding-agent");
+      const codingTools = createCodingTools(
+        worktreePath
+      ) as import("@mariozechner/pi-agent-core").AgentTool<any>[];
 
-      this.playgroundState.applyProgress = "Agent editing files...";
+      this.playgroundState.applyProgress = "Agent exploring codebase...";
       this.sendEvolutionLabUpdate(send);
 
-      // 4. Create lightweight sub-agent with file tools only
+      // 4. Create coding sub-agent with full tool set
       const djConfig = getJudgeModel();
       const djApiKey = resolveBenchmarkModelApiKey(djConfig);
       const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
@@ -4149,7 +4146,7 @@ ${fileContentSection}
         provider: djConfig.provider as import("../agent/pha-agent.js").LLMProvider,
         modelId: djConfig.modelId,
         baseUrl: djBaseUrl,
-        tools: fileTools,
+        tools: codingTools,
       });
 
       // 5. Subscribe to agent events for real-time progress
@@ -4157,13 +4154,17 @@ ${fileContentSection}
         read: "Reading",
         edit: "Editing",
         write: "Writing",
+        grep: "Searching",
+        find: "Finding",
+        ls: "Listing",
+        bash: "Running",
       };
       const unsubscribe = editAgent.subscribe((event) => {
         if (event.type === "tool_execution_start") {
           const label = toolLabels[event.toolName] || event.toolName;
-          const filePath = event.args?.path || "";
-          const fileName = filePath.split("/").pop() || filePath;
-          this.playgroundState.applyProgress = `${label} ${fileName}...`;
+          const filePath = event.args?.path || event.args?.pattern || "";
+          const display = typeof filePath === "string" ? filePath.split("/").pop() || filePath : "";
+          this.playgroundState.applyProgress = `${label} ${display}...`;
           this.sendEvolutionLabUpdate(send);
         }
       });
@@ -4173,19 +4174,26 @@ ${fileContentSection}
         .map((c, i) => `${i + 1}. File: ${c.path}\n   Change: ${c.description}`)
         .join("\n\n");
 
-      const prompt = `You are editing files in a PHA evolution branch.
-Apply the following changes precisely.
-Use the read tool first to see the current file content, then use the edit tool (oldText → newText) for each modification.
+      const prompt = `You are a coding agent working in a PHA (Personal Health Agent) project.
+Your task is to apply the following changes to the codebase.
+
+## Workflow
+1. First, use ls and find to understand the project structure
+2. For each change, read the target file fully to understand its content, style, and language
+3. Use grep to find related code if you need more context
+4. Apply changes using the edit tool (oldText → newText) — match the existing file's language, style, and conventions exactly
+5. If a file is in English, your additions must be in English. If in Chinese, use Chinese.
 
 ## Changes to apply:
 
 ${changesDesc}
 
 ## Rules:
-- Read the file first, then use edit for precise replacements
+- ALWAYS read the full file before editing — understand its structure first
+- Match the existing code style, language, and conventions exactly
+- Use edit (not write) for modifications to existing files
 - Do NOT add unrelated changes
-- Do NOT add comments like "// Added by evolution"
-- Keep the existing code style`;
+- Do NOT add meta-comments like "Added by evolution" or "Modified for improvement"`;
 
       const AGENT_TIMEOUT_MS = 180_000;
       try {
