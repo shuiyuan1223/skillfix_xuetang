@@ -1626,6 +1626,18 @@ class A2UIRenderer {
             (cr) => html`
               <div class="arena-criterion-row">
                 <span class="arena-criterion-name">${cr.name}</span>
+                <div class="arena-criterion-bar">
+                  ${cr.scores.map(
+                    (s) => html`
+                      <div class="arena-criterion-bar-track" title="${s.value.toFixed(3)}">
+                        <div
+                          class="arena-criterion-bar-fill"
+                          style="width: ${Math.min(100, s.value * 100)}%; background: ${s.color}"
+                        ></div>
+                      </div>
+                    `
+                  )}
+                </div>
                 <div class="arena-criterion-scores">
                   ${cr.scores.map(
                     (s) => html`

@@ -495,9 +495,35 @@
   }
 
   .arena-criterion-name {
-    flex: 1;
+    flex-shrink: 0;
+    width: 140px;
     font-size: 0.82rem;
     color: rgb(var(--color-text-secondary));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .arena-criterion-bar {
+    flex: 1;
+    display: flex;
+    gap: 4px;
+    margin: 0 12px;
+    min-width: 60px;
+  }
+
+  .arena-criterion-bar-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+  }
+
+  .arena-criterion-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.4s ease;
   }
 
   .arena-criterion-scores {
