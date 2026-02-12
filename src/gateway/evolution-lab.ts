@@ -1649,8 +1649,16 @@ function generatePgIdle(ui: A2UIGenerator): string {
     payload: { profile: "full" },
   });
   const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "center" });
-  return ui.card([title, desc, stepsRow, btnRow], {
-    padding: 32,
+
+  // Inner content centered
+  const inner = ui.column([title, desc, stepsRow, btnRow], {
+    gap: 20,
+    style: "align-items: center; text-align: center;",
+    className: "pg-idle-inner",
+  } as any);
+
+  return ui.card([inner], {
+    padding: 40,
     className: "pg-idle-card",
   } as any);
 }
@@ -2064,17 +2072,18 @@ function generateEvolutionConsole(
 ): string {
   const children: string[] = [];
 
-  // Header: "Evolution Console" title + status badge
+  // Header: "Evolution Console" title + status indicator
+  const statusDot = state.step === "idle" ? "pg-status-idle" : "pg-status-active";
   const headerRow = ui.row(
     [
-      ui.text(t("evolution.evolutionConsole"), "h3"),
+      ui.text(t("evolution.evolutionConsole"), "label"),
       ui.badge(state.step, { variant: state.step === "idle" ? "default" : "info" }),
     ],
-    { gap: 8, align: "center" }
+    { gap: 8, align: "center", className: `pg-console-header ${statusDot}` } as any
   );
   children.push(headerRow);
 
-  // Event Log (terminal-style — last 10 entries)
+  // Event Log (terminal-style — last 10 entries, wrapped in a div with class)
   if (state.log.length > 0) {
     const logLines = state.log
       .slice(-10)
@@ -2091,7 +2100,11 @@ function generateEvolutionConsole(
         return `[${time}] ${prefix} ${e.message}`;
       })
       .join("\n");
-    children.push(ui.text(logLines, "body"));
+    const logContainer = ui.column([ui.text(logLines, "body")], {
+      gap: 0,
+      className: "pg-event-log",
+    } as any);
+    children.push(logContainer);
   }
 
   // Agent Chat (with noWelcome flag — no PHA welcome page)

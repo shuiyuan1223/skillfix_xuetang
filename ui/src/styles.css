@@ -756,11 +756,13 @@
 /* Container */
 .pg-container {
   position: relative;
+  min-height: calc(100vh - 200px);
 }
 
 /* Left-right split layout */
 .pg-main-layout {
   align-items: stretch !important;
+  min-height: calc(100vh - 260px);
 }
 .pg-main-layout > :first-child { flex: 55; min-width: 0; }
 .pg-main-layout > :last-child { flex: 45; min-width: 0; }
@@ -772,48 +774,25 @@
   .pg-main-layout > :last-child { flex: none; }
 }
 
-/* Evolution Console right panel */
-.pg-console-card {
-  background: rgba(15, 23, 42, 0.95) !important;
-  border: 1px solid rgba(99, 102, 241, 0.2) !important;
-  border-radius: 16px !important;
+/* Left panel: center content vertically when idle */
+.pg-left-panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 500px;
-  overflow: hidden;
-  position: relative;
+  justify-content: center;
 }
 
-.pg-console-card > * { padding: 12px 16px; }
-.pg-console-card > :first-child {
-  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
-  background: rgba(99, 102, 241, 0.05);
+/* ---- Idle card ---- */
+.pg-idle-card {
+  border: 1px solid rgba(99, 102, 241, 0.15) !important;
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95)) !important;
 }
 
-/* Event log area — terminal style */
-.pg-console-card > :nth-child(2) {
-  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
-  font-size: 11px;
-  line-height: 1.6;
-  color: rgba(148, 163, 184, 0.8);
-  white-space: pre-wrap;
-  max-height: 120px;
-  overflow-y: auto;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
-  background: rgba(0, 0, 0, 0.2);
+.pg-idle-inner {
+  gap: 20px;
 }
 
-/* Compact chat: smaller avatars and bubbles inside console */
-.pg-console-card .w-9 { width: 28px !important; height: 28px !important; }
-.pg-console-card .max-w-\[70\%\] { max-width: 85% !important; }
-.pg-console-card .px-5 { padding-left: 12px !important; padding-right: 12px !important; }
-.pg-console-card .py-4 { padding-top: 8px !important; padding-bottom: 8px !important; }
-.pg-console-card .text-sm { font-size: 13px !important; }
-
-/* Idle title glow effect */
-.pg-idle-card h1,
-.pg-idle-card [class*="text-2xl"] {
+/* Idle title — gradient glow (A2UI renders h1 as span.text-\[2rem\]) */
+.pg-idle-card .text-\[2rem\] {
   background: linear-gradient(135deg, #818cf8, #a78bfa, #c084fc);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -821,10 +800,101 @@
   animation: pg-glow 3s ease-in-out infinite alternate;
 }
 
+.pg-idle-card .text-sm {
+  color: rgb(var(--color-text-secondary));
+  max-width: 480px;
+  line-height: 1.7;
+}
+
 @keyframes pg-glow {
   from { filter: brightness(1); }
   to   { filter: brightness(1.3); }
 }
+
+/* ---- Evolution Console (right panel) ---- */
+.pg-console-card {
+  background: rgba(10, 15, 30, 0.97) !important;
+  border: 1px solid rgba(99, 102, 241, 0.2) !important;
+  border-radius: 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100%;
+  min-height: 500px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* All direct children get base padding */
+.pg-console-card > * {
+  padding: 12px 16px;
+  position: relative;
+  z-index: 2;
+}
+
+/* Console header */
+.pg-console-header {
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  background: rgba(99, 102, 241, 0.06);
+  padding: 14px 20px !important;
+}
+
+.pg-console-header .text-xs {
+  letter-spacing: 0.15em;
+  color: rgba(129, 140, 248, 0.9);
+}
+
+/* Status indicator dot */
+.pg-status-active::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #818cf8;
+  box-shadow: 0 0 8px #818cf8;
+  display: inline-block;
+  margin-right: 8px;
+  animation: pg-pulse 2s ease-in-out infinite;
+}
+
+/* Event log — terminal style (class-based, not nth-child) */
+.pg-event-log {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace !important;
+  font-size: 11px !important;
+  line-height: 1.6;
+  color: rgba(148, 163, 184, 0.8);
+  white-space: pre-wrap;
+  max-height: 140px;
+  overflow-y: auto;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 10px 16px !important;
+}
+
+.pg-event-log .text-sm {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  color: inherit;
+}
+
+/* Chat area — expand to fill remaining space */
+.pg-console-card > :nth-last-child(2) {
+  flex: 1 1 0% !important;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Chat input area */
+.pg-console-card > :last-child {
+  border-top: 1px solid rgba(99, 102, 241, 0.1);
+  background: rgba(0, 0, 0, 0.15);
+  padding: 10px 12px !important;
+}
+
+/* Compact chat: smaller avatars and bubbles inside console */
+.pg-console-card .w-9 { width: 28px !important; height: 28px !important; }
+.pg-console-card .max-w-\[70\%\] { max-width: 85% !important; }
+.pg-console-card .px-5 { padding-left: 12px !important; padding-right: 12px !important; }
+.pg-console-card .py-4 { padding-top: 8px !important; padding-bottom: 8px !important; }
 
 /* Step content cards hover glow */
 .pg-left-panel > div {
@@ -837,7 +907,7 @@
 /* Pulse animation — for in-progress states */
 @keyframes pg-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  50% { opacity: 0.5; }
 }
 .pg-pulse { animation: pg-pulse 2s ease-in-out infinite; }
 
@@ -850,12 +920,24 @@
     0deg,
     transparent,
     transparent 2px,
-    rgba(99, 102, 241, 0.015) 2px,
-    rgba(99, 102, 241, 0.015) 4px
+    rgba(99, 102, 241, 0.03) 2px,
+    rgba(99, 102, 241, 0.03) 4px
   );
   pointer-events: none;
   z-index: 1;
   border-radius: inherit;
+}
+
+/* Top glow line on console */
+.pg-console-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.5), transparent);
+  z-index: 3;
 }
 
 /* Light mode overrides */
@@ -863,12 +945,14 @@
   background: rgba(248, 250, 252, 0.98) !important;
   border-color: rgba(99, 102, 241, 0.15) !important;
 }
-.light .pg-console-card > :nth-child(2) {
+.light .pg-event-log {
   color: rgba(51, 65, 85, 0.7);
   background: rgba(0, 0, 0, 0.03);
 }
-.light .pg-idle-card h1,
-.light .pg-idle-card [class*="text-2xl"] {
+.light .pg-idle-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.98)) !important;
+}
+.light .pg-idle-card .text-\[2rem\] {
   background: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
