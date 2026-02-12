@@ -1705,8 +1705,14 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
   // When viewing a historical cycle's step, overlay that cycle's results onto a temporary state
   let viewState = state;
   const currentCycleNum = (state.cycleHistory?.length || 0) + 1;
-  if (state.viewingCycle != null && state.viewingCycle < currentCycleNum && state.cycleHistory) {
-    const historyCycle = state.cycleHistory.find((h) => h.cycleNumber === state.viewingCycle);
+  const isViewingHistory =
+    state.viewingCycle != null &&
+    state.viewingCycle < currentCycleNum &&
+    state.cycleHistory != null;
+  let historyCycle: NonNullable<PlaygroundState["cycleHistory"]>[number] | undefined;
+
+  if (isViewingHistory) {
+    historyCycle = state.cycleHistory!.find((h) => h.cycleNumber === state.viewingCycle);
     if (historyCycle?.stepResults) {
       viewState = {
         ...state,
@@ -1721,36 +1727,41 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
   }
 
   if (viewing !== "idle") {
-    let detailContent: string;
-    switch (viewing) {
-      case "benchmark":
-        detailContent = generatePgBenchmark(ui, viewState, data);
-        break;
-      case "diagnose":
-        detailContent = generatePgDiagnose(ui, viewState);
-        break;
-      case "propose":
-        detailContent = generatePgPropose(ui, viewState);
-        break;
-      case "approve":
-        detailContent = generatePgApprove(ui, viewState);
-        break;
-      case "apply":
-        detailContent = generatePgApply(ui, viewState, data);
-        break;
-      case "validate":
-        detailContent = generatePgValidate(ui, viewState);
-        break;
-      case "analyse":
-        detailContent = generatePgAnalyse(ui, viewState);
-        break;
-      case "complete":
-        detailContent = generatePgComplete(ui, viewState);
-        break;
-      default:
-        detailContent = "";
+    // If viewing a historical cycle without stepResults, show a summary fallback
+    if (isViewingHistory && historyCycle && !historyCycle.stepResults) {
+      children.push(generatePgHistorySummaryFallback(ui, historyCycle, viewing));
+    } else {
+      let detailContent: string;
+      switch (viewing) {
+        case "benchmark":
+          detailContent = generatePgBenchmark(ui, viewState, data);
+          break;
+        case "diagnose":
+          detailContent = generatePgDiagnose(ui, viewState);
+          break;
+        case "propose":
+          detailContent = generatePgPropose(ui, viewState);
+          break;
+        case "approve":
+          detailContent = generatePgApprove(ui, viewState);
+          break;
+        case "apply":
+          detailContent = generatePgApply(ui, viewState, data);
+          break;
+        case "validate":
+          detailContent = generatePgValidate(ui, viewState);
+          break;
+        case "analyse":
+          detailContent = generatePgAnalyse(ui, viewState);
+          break;
+        case "complete":
+          detailContent = generatePgComplete(ui, viewState);
+          break;
+        default:
+          detailContent = "";
+      }
+      if (detailContent) children.push(detailContent);
     }
-    if (detailContent) children.push(detailContent);
   }
 
   // ─── Bottom-right: FAB ───
@@ -1761,6 +1772,57 @@ function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): strin
     padding: 16,
     style: "min-height: calc(100vh - 220px); position: relative;",
   } as any);
+}
+
+// ─── History Summary Fallback (for cycles without stepResults) ───
+
+function generatePgHistorySummaryFallback(
+  ui: A2UIGenerator,
+  cycle: NonNullable<PlaygroundState["cycleHistory"]>[number],
+  _viewing: string
+): string {
+  const deltaSign = cycle.delta >= 0 ? "+" : "";
+  const scoreText = `${cycle.benchmarkScore.toFixed(3)} → ${cycle.validateScore.toFixed(3)} (${deltaSign}${cycle.delta.toFixed(3)})`;
+
+  const items: string[] = [
+    ui.text(`Cycle ${cycle.cycleNumber} ${t("evolution.cycleSummary")}`, "label"),
+  ];
+
+  // Score
+  items.push(ui.text(scoreText, "body"));
+
+  // Recommendation badge
+  items.push(
+    ui.badge(cycle.recommendation, {
+      variant:
+        cycle.recommendation === "merge"
+          ? "success"
+          : cycle.recommendation === "revert"
+            ? "error"
+            : "warning",
+    })
+  );
+
+  const details: string[] = [];
+
+  // Proposal
+  if (cycle.proposal) {
+    details.push(ui.text(`${t("evolution.pipelinePropose")}: ${cycle.proposal}`, "body"));
+  }
+
+  // Analysis
+  if (cycle.analysisSummary) {
+    details.push(ui.text(`${t("evolution.pipelineAnalyse")}: ${cycle.analysisSummary}`, "body"));
+  }
+
+  // Improvement plan
+  if (cycle.improvementPlan.length > 0) {
+    details.push(
+      ui.text(`${t("evolution.improvementPlan")}: ${cycle.improvementPlan.join("; ")}`, "caption")
+    );
+  }
+
+  return ui.card([ui.row(items, { gap: 8, align: "center" }), ...details], { padding: 16 });
 }
 
 // ─── FAB helpers ───

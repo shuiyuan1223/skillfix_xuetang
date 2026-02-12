@@ -432,6 +432,7 @@ export const zhCN: LocaleMessages = {
     iterateCycle: "下一轮迭代",
     improvementPlan: "改进计划",
     iterationHistory: "迭代历史",
+    cycleSummary: "摘要",
   },
 
   memory: {

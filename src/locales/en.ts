@@ -440,6 +440,7 @@ export const en: LocaleMessages = {
     iterateCycle: "Next Iteration",
     improvementPlan: "Improvement Plan",
     iterationHistory: "Iteration History",
+    cycleSummary: "Summary",
   },
 
   memory: {
