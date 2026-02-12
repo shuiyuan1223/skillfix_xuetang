@@ -1744,6 +1744,16 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
       style: "display: grid; grid-template-columns: repeat(2, 1fr);",
     } as any);
 
+    const quickBtn = ui.button(t("evolution.runQuickBenchmark"), "pg_start_cycle", {
+      variant: "secondary",
+      size: "sm",
+      payload: { profile: "quick" },
+    });
+    const fullBtn = ui.button(t("evolution.runFullBenchmark"), "pg_start_cycle", {
+      variant: "secondary",
+      size: "sm",
+      payload: { profile: "full" },
+    });
     const continueBtn = ui.button(t("evolution.continueToDiagnose"), "pg_advance", {
       variant: "primary",
       size: "sm",
@@ -1760,7 +1770,7 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
           { padding: 20 }
         ),
         catGrid,
-        ui.row([continueBtn], { justify: "end" }),
+        ui.row([quickBtn, fullBtn, continueBtn], { gap: 8, justify: "end" }),
       ],
       { gap: 16 }
     );
