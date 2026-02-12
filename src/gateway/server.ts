@@ -4111,62 +4111,63 @@ ${fileContentSection}
       this.playgroundState.applyProgress = `Branch: ${branch}`;
       this.sendEvolutionLabUpdate(send);
 
-      // 2. Build Claude Code prompt from proposal changes
+      // 2. Create file editing tools scoped to worktree
+      const { createEditTool, createReadTool, createWriteTool } =
+        await import("@mariozechner/pi-coding-agent");
+      const fileTools = [
+        createReadTool(worktreePath),
+        createEditTool(worktreePath),
+        createWriteTool(worktreePath),
+      ] as import("@mariozechner/pi-agent-core").AgentTool<any>[];
+
+      this.playgroundState.applyProgress = "Agent editing files...";
+      this.sendEvolutionLabUpdate(send);
+
+      // 3. Create lightweight sub-agent with file tools only
+      const djConfig = getJudgeModel();
+      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
+      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
+      const editAgent = await createPHAAgent({
+        apiKey: djApiKey,
+        provider: djConfig.provider as import("../agent/pha-agent.js").LLMProvider,
+        modelId: djConfig.modelId,
+        baseUrl: djBaseUrl,
+        tools: fileTools,
+      });
+
+      // 4. Build prompt and let the agent apply changes
       const changesDesc = proposal.changes
         .map((c, i) => `${i + 1}. File: ${c.path}\n   Change: ${c.description}`)
         .join("\n\n");
 
-      const prompt = `You are editing files for PHA (Personal Health Agent) evolution.
-Apply the following changes precisely. Use the Edit tool for each modification.
+      const prompt = `You are editing files in a PHA evolution branch.
+Apply the following changes precisely.
+Use the read tool first to see the current file content, then use the edit tool (oldText → newText) for each modification.
 
 ## Changes to apply:
 
 ${changesDesc}
 
 ## Rules:
-- Use Edit tool (not Write) to make precise changes
+- Read the file first, then use edit for precise replacements
 - Do NOT add unrelated changes
 - Do NOT add comments like "// Added by evolution"
 - Keep the existing code style`;
 
-      this.playgroundState.applyProgress = "Claude Code editing files...";
-      this.sendEvolutionLabUpdate(send);
-
-      // 3. Call Claude Code CLI
-      const proc = Bun.spawn(
-        [
-          "claude",
-          "-p",
-          "--output-format",
-          "json",
-          "--dangerously-skip-permissions",
-          "--allowedTools",
-          "Read",
-          "Edit",
-          "Write",
-          "Glob",
-          "Grep",
-          "--model",
-          "sonnet",
-          "--max-turns",
-          "20",
-          prompt,
-        ],
-        { cwd: worktreePath, stdout: "pipe", stderr: "pipe" }
-      );
-
-      const stdout = await new Response(proc.stdout).text();
-      await proc.exited;
-
-      // 4. Parse result (log for debugging)
-      let ccResult: { result?: string; error?: string } = {};
+      const AGENT_TIMEOUT_MS = 180_000;
       try {
-        ccResult = JSON.parse(stdout);
-      } catch {
-        /* non-JSON output is ok */
-      }
-      if (ccResult.error) {
-        this.pgAddLog("apply", `Claude Code warning: ${ccResult.error}`, "warning");
+        await Promise.race([
+          editAgent.chatAndWait(prompt),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error("Apply agent timeout")), AGENT_TIMEOUT_MS)
+          ),
+        ]);
+      } catch (agentErr) {
+        this.pgAddLog(
+          "apply",
+          `Agent warning: ${agentErr instanceof Error ? agentErr.message : String(agentErr)}`,
+          "warning"
+        );
       }
 
       // 5. Detect changed files via git status and commit

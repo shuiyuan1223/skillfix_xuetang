@@ -44,6 +44,7 @@
     "@clack/prompts": "^1.0.0",
     "@mariozechner/pi-agent-core": "^0.51.0",
     "@mariozechner/pi-ai": "^0.51.0",
+    "@mariozechner/pi-coding-agent": "^0.51.0",
     "@mariozechner/pi-tui": "^0.51.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@sinclair/typebox": "^0.34.0",

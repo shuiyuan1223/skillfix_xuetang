@@ -44,6 +44,8 @@ export interface PHAAgentConfig {
   sessionId?: string;
   /** User-specific health data source (for per-session isolation) */
   dataSource?: import("../data-sources/interface.js").HealthDataSource;
+  /** Custom tools (overrides default health tools when provided) */
+  tools?: import("@mariozechner/pi-agent-core").AgentTool<any>[];
   /** Additional agent options */
   agentOptions?: Partial<AgentOptions>;
 }
@@ -179,7 +181,9 @@ export class PHAAgent {
     );
 
     // Use per-session tools when a user-specific data source is provided
-    const tools = config.dataSource ? createHealthAgentTools(config.dataSource) : healthAgentTools;
+    const tools =
+      config.tools ||
+      (config.dataSource ? createHealthAgentTools(config.dataSource) : healthAgentTools);
 
     this.agent = new Agent({
       initialState: {
