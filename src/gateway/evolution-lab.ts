@@ -189,6 +189,7 @@ export interface PlaygroundState {
       gap: number;
       failingCount: number;
       patterns: string[];
+      weakSubComponents?: Array<{ name: string; score: number }>;
     }>;
     suggestions: Array<{
       category: string;
@@ -1903,9 +1904,18 @@ function generatePgDiagnose(ui: A2UIGenerator, state: PlaygroundState): string {
     const gap = ui.badge(`gap: ${w.gap.toFixed(2)}`, { variant: "warning" });
     const failing = ui.text(`${w.failingCount} ${t("evolution.diagnoseFailingTests")}`, "body");
     const cardChildren = [ui.row([scoreText, gap], { gap: 8, align: "center" }), failing];
+
+    // Sub-component breakdown
+    if (w.weakSubComponents && w.weakSubComponents.length > 0) {
+      const subCompText = w.weakSubComponents
+        .map((sc) => `${sc.name}: ${sc.score.toFixed(2)}`)
+        .join(" | ");
+      cardChildren.push(ui.text(`${t("evolution.weakSubComponents")}: ${subCompText}`, "caption"));
+    }
+
     if (w.patterns.length > 0) {
       cardChildren.push(
-        ui.text(`${t("evolution.diagnosePatterns")}: ${w.patterns.join(", ")}`, "caption")
+        ui.text(`${t("evolution.diagnosePatterns")}: ${w.patterns.join(", ")}`, "body")
       );
     }
     children.push(ui.card(cardChildren, { padding: 12 }));

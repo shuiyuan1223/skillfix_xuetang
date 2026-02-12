@@ -3739,6 +3739,7 @@ export class GatewaySession {
           gap: w.gap,
           failingCount: w.failingTests.length,
           patterns: w.commonPatterns,
+          weakSubComponents: w.weakSubComponents,
         })),
         suggestions: result.suggestions.map((s) => ({
           category: s.category,

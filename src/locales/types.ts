@@ -311,6 +311,7 @@ export interface LocaleMessages {
     diagnoseFailingTests: string;
     diagnoseSuggestionImprove: string;
     diagnoseSuggestionSkill: string;
+    weakSubComponents: string;
     diagnoseUsingExisting: string;
     diagnoseFoundWeak: string;
     diagnoseGenerated: string;

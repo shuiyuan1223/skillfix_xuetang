@@ -288,6 +288,7 @@ export const zhCN: LocaleMessages = {
     diagnoseFailingTests: "个测试未通过",
     diagnoseSuggestionImprove: "优化「{{label}}」— {{count}} 个测试未通过，低于阈值 {{gap}} 分",
     diagnoseSuggestionSkill: "创建或更新「{{label}}」技能",
+    weakSubComponents: "薄弱子维度",
     diagnoseUsingExisting: "使用已有基准结果：{{score}}（{{passed}}/{{total}} 通过）",
     diagnoseFoundWeak: "发现 {{count}} 个薄弱分类",
     diagnoseGenerated: "生成 {{count}} 条优化建议",

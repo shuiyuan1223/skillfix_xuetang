@@ -872,6 +872,7 @@ export const runDiagnoseTool = {
         gap: w.gap,
         failingTestCount: w.failingTests.length,
         commonPatterns: w.commonPatterns,
+        weakSubComponents: w.weakSubComponents,
       })),
       suggestions: result.suggestions.map((s) => ({
         category: s.category,

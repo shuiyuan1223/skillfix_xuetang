@@ -295,6 +295,7 @@ export const en: LocaleMessages = {
     diagnoseSuggestionImprove:
       "Improve {{label}} — {{count}} tests failing, {{gap}} points below threshold",
     diagnoseSuggestionSkill: "Create or update skill for {{label}}",
+    weakSubComponents: "Weak sub-components",
     diagnoseUsingExisting: "Using existing benchmark: {{score}} ({{passed}}/{{total}} passed)",
     diagnoseFoundWeak: "Found {{count}} weak categories",
     diagnoseGenerated: "Generated {{count}} optimization suggestions",
