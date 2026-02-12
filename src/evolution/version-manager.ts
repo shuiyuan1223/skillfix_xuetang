@@ -114,6 +114,42 @@ export function createWorktree(
     mkdirSync(worktreeParent, { recursive: true });
   }
 
+  // Clean up stale worktree if directory already exists (e.g. from a previous failed run)
+  if (existsSync(worktreePath)) {
+    try {
+      execSync(`git worktree remove "${worktreePath}" --force`, {
+        cwd: root,
+        timeout: 15000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch {
+      /* directory may not be a registered worktree — remove manually */
+      const { rmSync } = require("fs");
+      try {
+        rmSync(worktreePath, { recursive: true, force: true });
+      } catch {
+        /* best effort */
+      }
+    }
+    // Prune any stale worktree references
+    try {
+      execSync("git worktree prune", { cwd: root, timeout: 10000, stdio: "pipe" });
+    } catch {
+      /* best effort */
+    }
+  }
+
+  // Delete stale branch if it exists (so -b can recreate it from current HEAD)
+  try {
+    execSync(`git branch -D "${branchName}"`, {
+      cwd: root,
+      timeout: 10000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    /* branch doesn't exist — fine */
+  }
+
   // Create worktree with new branch
   try {
     execSync(`git worktree add "${worktreePath}" -b "${branchName}"`, {
@@ -123,19 +159,9 @@ export function createWorktree(
       stdio: ["pipe", "pipe", "pipe"],
     });
   } catch (error) {
-    // Branch might already exist — try attaching to existing branch
-    try {
-      execSync(`git worktree add "${worktreePath}" "${branchName}"`, {
-        cwd: root,
-        encoding: "utf-8",
-        timeout: 30000,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-    } catch (innerError) {
-      throw new Error(
-        `Failed to create worktree for ${branchName}: ${innerError instanceof Error ? innerError.message : String(innerError)}`
-      );
-    }
+    throw new Error(
+      `Failed to create worktree for ${branchName}: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 
   // Create DB record

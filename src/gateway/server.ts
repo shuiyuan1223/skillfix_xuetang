@@ -4100,26 +4100,9 @@ ${fileContentSection}
         return;
       }
 
-      // 1. Clean up previous worktree/branch if retrying
-      const { createNextVersion, gitCommitFiles, getGitStatusPorcelain, removeWorktree } =
+      // 1. Create evolution branch (worktree) — handles stale cleanup internally
+      const { createNextVersion, getGitStatusPorcelain } =
         await import("../evolution/version-manager.js");
-      const prevBranch = this.playgroundState.applyResult?.branch;
-      if (prevBranch) {
-        try {
-          removeWorktree(prevBranch);
-          const { execSync } = await import("child_process");
-          execSync(`git branch -D "${prevBranch}"`, {
-            cwd: (await import("../evolution/version-manager.js")).getProjectRoot(),
-            timeout: 10000,
-            stdio: "pipe",
-          });
-        } catch {
-          /* best-effort cleanup */
-        }
-        this.playgroundState.applyResult = undefined;
-      }
-
-      // 2. Create evolution branch (worktree)
       const version = createNextVersion({
         triggerMode: "playground",
         triggerRef: this.playgroundState.cycleId || "",
@@ -4130,7 +4113,7 @@ ${fileContentSection}
       this.playgroundState.applyProgress = `Branch: ${branch}`;
       this.sendEvolutionLabUpdate(send);
 
-      // 3. Create coding tools scoped to worktree (read, edit, write, grep, find, ls)
+      // 2. Create coding tools scoped to worktree (read, edit, write, grep, find, ls)
       const { createCodingTools } = await import("@mariozechner/pi-coding-agent");
       const codingTools = createCodingTools(
         worktreePath
@@ -4139,7 +4122,7 @@ ${fileContentSection}
       this.playgroundState.applyProgress = "Agent exploring codebase...";
       this.sendEvolutionLabUpdate(send);
 
-      // 4. Create coding sub-agent with full tool set
+      // 3. Create coding sub-agent with full tool set
       const djConfig = getJudgeModel();
       const djApiKey = resolveBenchmarkModelApiKey(djConfig);
       const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
@@ -4151,7 +4134,7 @@ ${fileContentSection}
         tools: codingTools,
       });
 
-      // 5. Subscribe to agent events for real-time progress
+      // 4. Subscribe to agent events for real-time progress
       const toolLabels: Record<string, string> = {
         read: "Reading",
         edit: "Editing",
@@ -4171,7 +4154,7 @@ ${fileContentSection}
         }
       });
 
-      // 6. Build prompt and let the agent apply changes
+      // 5. Build prompt and let the agent apply changes
       const changesDesc = proposal.changes
         .map((c, i) => `${i + 1}. File: ${c.path}\n   Change: ${c.description}`)
         .join("\n\n");
@@ -4218,7 +4201,7 @@ ${changesDesc}
         unsubscribe();
       }
 
-      // 7. Detect changed files via git status and commit
+      // 6. Detect changed files via git status and commit
       const statusOutput = getGitStatusPorcelain(worktreePath);
       const changedFiles: Array<{ path: string; status: string }> = statusOutput
         .split("\n")
@@ -4262,7 +4245,7 @@ ${changesDesc}
         }
       }
 
-      // 8. Switch agent to use this version
+      // 7. Switch agent to use this version
       this.switchAgentVersion(branch);
 
       this.playgroundState.applyResult = { branch, commits, filesChanged: changedFiles };
