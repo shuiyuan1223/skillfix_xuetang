@@ -1714,15 +1714,22 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
       { gap: 12 }
     );
 
-    const radarData = result.categoryScores.map((cs) => ({
-      label: getCategoryLabel(cs.category),
-      value: cs.score <= 1.0 ? cs.score : cs.score / 100,
-      maxValue: 1.0,
-    }));
-    const radar = ui.radarChart(radarData, {
-      size: 220,
-      showLabels: true,
-      color: "#818cf8",
+    // Build plotly radar (same style as overview page)
+    const pgRun: ComparisonRun = {
+      id: result.runId,
+      label: result.profile === "full" ? "Full" : "Quick",
+      color: RUN_COLORS[0],
+      overallScore: result.overallScore,
+      categoryScores: result.categoryScores,
+    };
+    const traces = buildPlotlyRadarTraces([pgRun], "categories");
+    const radarId = `pg_radar_${Date.now()}`;
+    ui.addComponent(radarId, {
+      id: radarId,
+      type: "plotly_radar",
+      traces,
+      layout: { ...PLOTLY_LAYOUT, showlegend: false, margin: { t: 40, b: 40, l: 60, r: 60 } },
+      config: { responsive: true, displayModeBar: false },
     });
 
     const catCards: string[] = [];
@@ -1745,22 +1752,27 @@ function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string 
     }
     const catGrid = ui.column(catCards, {
       gap: 16,
-      style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));",
+      style: "display: grid; grid-template-columns: repeat(2, 1fr);",
     } as any);
 
     const continueBtn = ui.button(t("evolution.continueToDiagnose"), "pg_advance", {
       variant: "primary",
-      size: "md",
+      size: "sm",
       payload: { nextStep: "diagnose" },
     });
 
     return ui.column(
       [
-        ui.card([ui.text(t("evolution.benchmarkComplete"), "h3"), gauge, statsRow], {
-          padding: 16,
-        }),
-        ui.row([radar, catGrid], { gap: 16 }),
-        ui.row([continueBtn], { justify: "center" }),
+        ui.card(
+          [
+            ui.text(t("evolution.benchmarkComplete"), "h3"),
+            ui.row([gauge, radarId], { gap: 16 }),
+            statsRow,
+          ],
+          { padding: 16 }
+        ),
+        catGrid,
+        ui.row([continueBtn], { justify: "end" }),
       ],
       { gap: 16 }
     );
@@ -1961,25 +1973,47 @@ function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
     );
     children.push(scoreSummary);
 
-    // Dual radar chart
-    const beforeData = categoryDeltas.map((d) => ({
-      label: getCategoryLabel(d.category),
-      value: d.before,
-      maxValue: 1.0,
+    // Dual plotly radar (before vs after)
+    const beforeCategories: CategoryScoreInfo[] = categoryDeltas.map((d) => ({
+      category: d.category,
+      score: d.before,
+      test_count: 0,
+      passed_count: 0,
     }));
-    const afterData = categoryDeltas.map((d) => ({
-      label: getCategoryLabel(d.category),
-      value: d.after,
-      maxValue: 1.0,
+    const afterCategories: CategoryScoreInfo[] = categoryDeltas.map((d) => ({
+      category: d.category,
+      score: d.after,
+      test_count: 0,
+      passed_count: 0,
     }));
-    const radar = ui.radarChart(beforeData, {
-      size: 240,
-      showLabels: true,
-      color: "#94a3b8",
-      compare: afterData,
-      compareColor: "#818cf8",
+    const validateTraces = buildPlotlyRadarTraces(
+      [
+        {
+          id: "before",
+          label: "Before",
+          color: "rgb(148, 163, 184)",
+          overallScore: beforeScore,
+          categoryScores: beforeCategories,
+        },
+        {
+          id: "after",
+          label: "After",
+          color: RUN_COLORS[0],
+          overallScore: afterScore,
+          categoryScores: afterCategories,
+        },
+      ],
+      "categories"
+    );
+    const validateRadarId = `pg_validate_radar_${Date.now()}`;
+    ui.addComponent(validateRadarId, {
+      id: validateRadarId,
+      type: "plotly_radar",
+      traces: validateTraces,
+      layout: { ...PLOTLY_LAYOUT, margin: { t: 40, b: 60, l: 60, r: 60 } },
+      config: { responsive: true, displayModeBar: false },
     });
-    children.push(radar);
+    children.push(validateRadarId);
 
     // Category delta table
     const deltaRows = categoryDeltas.map((d) => ({
