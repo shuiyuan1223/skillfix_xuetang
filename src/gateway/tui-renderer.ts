@@ -145,6 +145,8 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderPlotlyRadarTUI(comp, ctx);
     case "arena_run_picker":
       return renderArenaRunPickerTUI(comp, ctx);
+    case "arena_category_legend":
+      return renderArenaCategoryLegendTUI(comp, ctx);
     case "collapsible":
       return renderCollapsible(comp, ctx);
     case "activity_rings":
@@ -1034,6 +1036,12 @@ function renderArenaRunPickerTUI(comp: A2UIComponent, ctx: RenderContext): strin
   }
 
   return lines;
+}
+
+function renderArenaCategoryLegendTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const categories = (comp.categories as Array<{ name: string; color: string }>) || [];
+  const items = categories.map((c) => `● ${c.name}`).join("  ");
+  return [indent(ctx, ansi.dim(items))];
 }
 
 function renderCollapsible(comp: A2UIComponent, ctx: RenderContext): string[] {

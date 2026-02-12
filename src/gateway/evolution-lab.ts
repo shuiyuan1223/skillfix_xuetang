@@ -222,7 +222,13 @@ const SHARP_CATEGORY_COLORS: Record<string, string> = {
   personalization: "#dda0dd",
 };
 
-export const RUN_COLORS = ["#6366f1", "#ec4899", "#22d3ee", "#f59e0b", "#10b981"];
+export const RUN_COLORS = [
+  "rgb(99, 102, 241)",
+  "rgb(236, 72, 153)",
+  "rgb(34, 211, 238)",
+  "rgb(245, 158, 11)",
+  "rgb(16, 185, 129)",
+];
 
 function getScoreColor(score: number): string {
   if (score >= 0.9) return "#4ade80";
@@ -320,7 +326,9 @@ function buildPlotlyRadarTraces(
       r,
       theta,
       fill: "toself",
-      fillcolor: run.color.replace("rgb", "rgba").replace(")", ", 0.15)"),
+      fillcolor: run.color
+        .replace("rgb", "rgba")
+        .replace(")", mode === "criteria" ? ", 0.15)" : ", 0.2)"),
       line: { color: run.color, width: mode === "criteria" ? 2 : 3 },
       name: run.label,
       hovertemplate: "%{theta}<br>Score: %{r:.2f}<extra></extra>",
@@ -677,15 +685,29 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         className: "arena-card",
       } as any);
 
-      // Dashboard grid (plotly radar + scores)
-      const radarCardId = ui.column([plotlyId], {
+      // Category legend (below radar)
+      const legendId = `arena_legend_${Date.now()}`;
+      const categories = [
+        { name: "Safety", color: "#ff6b6b" },
+        { name: "Helpfulness", color: "#4ecdc4" },
+        { name: "Accuracy", color: "#ffe66d" },
+        { name: "Relevance", color: "#95e1d3" },
+        { name: "Personalization", color: "#dda0dd" },
+      ];
+      ui.addComponent(legendId, {
+        id: legendId,
+        type: "arena_category_legend",
+        categories,
+      });
+
+      // Dashboard grid (plotly radar + scores side by side)
+      const radarCardId = ui.column([plotlyId, legendId], {
         gap: 8,
         className: "arena-card",
       } as any);
       const dashGridId = ui.column([radarCardId, scoreCardId], {
-        gap: 20,
-        className: "arena-dashboard-grid",
-        style: "display: grid;",
+        gap: 24,
+        style: "display: grid; grid-template-columns: 1.2fr 0.8fr;",
       } as any);
       arenaChildren.push(dashGridId);
 
@@ -724,9 +746,8 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
         if (breakdownCards.length > 0) {
           const breakdownGridId = ui.column(breakdownCards, {
-            gap: 16,
-            className: "arena-breakdown-grid",
-            style: "display: grid;",
+            gap: 20,
+            style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
           } as any);
           arenaChildren.push(breakdownGridId);
         }

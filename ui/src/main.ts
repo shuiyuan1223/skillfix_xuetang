@@ -422,6 +422,8 @@ class A2UIRenderer {
         return this.renderPlotlyRadar(c);
       case "arena_run_picker":
         return this.renderArenaRunPicker(c);
+      case "arena_category_legend":
+        return this.renderArenaCategoryLegend(c);
       default:
         return html`<div class="text-text-muted text-xs p-2">[Unknown: ${c.type}]</div>`;
     }
@@ -439,9 +441,11 @@ class A2UIRenderer {
     const align = (c.align as string) || "stretch";
     const extraStyle = (c.style as string) || "";
     const className = (c.className as string) || "";
+    const isGrid = extraStyle.includes("display: grid");
+    const baseClass = isGrid ? className : `flex flex-col ${className}`;
     return html`
       <div
-        class="flex flex-col ${className}"
+        class="${baseClass}"
         style="gap: ${gap}px; padding: ${padding}px; align-items: ${align}; ${extraStyle}"
       >
         ${this.renderChildren(c.children)}
@@ -1640,6 +1644,31 @@ class A2UIRenderer {
       config: c.config as unknown,
     });
     return html`<div id="${elementId}" style="width:100%; height:500px;"></div>`;
+  }
+
+  private renderArenaCategoryLegend(c: A2UIComponent): TemplateResult {
+    const categories = (c.categories as Array<{ name: string; color: string }>) || [];
+    return html`
+      <div
+        style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;
+               padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.06);"
+      >
+        ${categories.map(
+          (cat) => html`
+            <div
+              style="display: flex; align-items: center; gap: 8px; font-size: 0.8rem;
+                        color: rgb(var(--color-text-secondary));"
+            >
+              <span
+                style="width: 10px; height: 10px; border-radius: 50%;
+                       background: ${cat.color}; display: inline-block;"
+              ></span>
+              <span>${cat.name}</span>
+            </div>
+          `
+        )}
+      </div>
+    `;
   }
 
   private renderArenaRunPicker(c: A2UIComponent): TemplateResult {

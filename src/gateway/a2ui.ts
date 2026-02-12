@@ -51,7 +51,8 @@ export type A2UIComponentType =
   | "arena_score_table"
   | "arena_category_card"
   | "plotly_radar"
-  | "arena_run_picker";
+  | "arena_run_picker"
+  | "arena_category_legend";
 
 // Base component interface
 export interface A2UIComponent {
