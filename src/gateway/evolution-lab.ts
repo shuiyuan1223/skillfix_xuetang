@@ -1808,10 +1808,16 @@ function generatePgBenchmark(
         ui.card(
           [
             ui.text(t("evolution.benchmarkComplete"), "h3"),
-            ui.row([statsCol, ui.column([toggleId, radarId], { gap: 8 })], {
-              gap: 24,
-              align: "center",
-            }),
+            ui.row(
+              [
+                statsCol,
+                ui.column([toggleId, radarId], {
+                  gap: 8,
+                  style: "flex: 1; min-width: 0;",
+                } as any),
+              ],
+              { gap: 24, align: "center" }
+            ),
           ],
           { padding: 20 }
         ),
