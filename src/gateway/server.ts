@@ -27,6 +27,7 @@ import {
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
+import { appendToSession, loadLatestSession, type SessionEntry } from "../memory/session-store.js";
 
 // Install fetch interceptor to log raw LLM API requests/responses
 installFetchInterceptor();
@@ -922,6 +923,62 @@ export class GatewaySession {
     } else {
       this.dataSource = getDataSource();
     }
+
+    // Load persisted chat history from JSONL
+    this.loadPersistedMessages();
+  }
+
+  // Maximum session age before starting a new one (24 hours)
+  private static readonly MAX_SESSION_AGE_MS = 24 * 60 * 60 * 1000;
+
+  /**
+   * Persist a single message to the JSONL session file.
+   * Two channels: "chat" → {sessionId}.jsonl, "system-agent" → sa-{sessionId}.jsonl
+   */
+  private persistMessage(channel: "chat" | "system-agent", entry: SessionEntry): void {
+    if (!this.userUuid) return;
+    const sid = channel === "chat" ? this.sessionId : `sa-${this.sessionId}`;
+    try {
+      appendToSession(this.userUuid, sid, [entry]);
+    } catch (err) {
+      console.warn("[Session] Failed to persist message:", err);
+    }
+  }
+
+  /**
+   * Load persisted messages from the most recent session.
+   * Reuses the session ID if the last message is within 24 hours.
+   */
+  private loadPersistedMessages(): void {
+    if (!this.userUuid) return;
+    try {
+      // Load main chat
+      const chatSession = loadLatestSession(this.userUuid);
+      if (chatSession && chatSession.entries.length > 0) {
+        const lastTs = chatSession.entries[chatSession.entries.length - 1].timestamp;
+        if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
+          this.sessionId = chatSession.sessionId;
+          this.chatMessages = chatSession.entries.map((e) => ({
+            role: e.role,
+            content: e.content,
+          }));
+        }
+      }
+
+      // Load system agent chat (sa- prefix)
+      const saSession = loadLatestSession(this.userUuid, { prefix: "sa-" });
+      if (saSession && saSession.entries.length > 0) {
+        const lastTs = saSession.entries[saSession.entries.length - 1].timestamp;
+        if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
+          this.systemAgentChatMessages = saSession.entries.map((e) => ({
+            role: e.role,
+            content: e.content,
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn("[Session] Failed to load persisted messages:", err);
+    }
   }
 
   /**
@@ -1379,6 +1436,7 @@ export class GatewaySession {
   private async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
     // Add user message to chat history
     this.chatMessages.push({ role: "user", content });
+    this.persistMessage("chat", { timestamp: Date.now(), role: "user", content });
     this.isStreaming = true;
     this.streamingContent = "";
 
@@ -1389,7 +1447,13 @@ export class GatewaySession {
         const extracted = mm.extractAndUpdateProfile(this.userUuid, content);
         if (Object.keys(extracted).length > 0) {
           const fields = Object.keys(extracted).join(", ");
-          this.chatMessages.push({ role: "tool", content: `💾 已提取档案: ${fields}` });
+          const toolContent = `💾 已提取档案: ${fields}`;
+          this.chatMessages.push({ role: "tool", content: toolContent });
+          this.persistMessage("chat", {
+            timestamp: Date.now(),
+            role: "tool",
+            content: toolContent,
+          });
           this.sendChatUpdate(send);
         }
       } catch {
@@ -1416,9 +1480,12 @@ export class GatewaySession {
       }
     } catch (error) {
       this.isStreaming = false;
-      this.chatMessages.push({
+      const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      this.chatMessages.push({ role: "assistant", content: errorContent });
+      this.persistMessage("chat", {
+        timestamp: Date.now(),
         role: "assistant",
-        content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        content: errorContent,
       });
       this.sendChatUpdate(send);
 
@@ -1458,6 +1525,7 @@ export class GatewaySession {
     send: (msg: unknown) => void
   ): Promise<void> {
     this.systemAgentChatMessages.push({ role: "user", content });
+    this.persistMessage("system-agent", { timestamp: Date.now(), role: "user", content });
     this.systemAgentStreaming = true;
     this.systemAgentStreamingContent = "";
 
@@ -1512,6 +1580,11 @@ export class GatewaySession {
                 role: "assistant",
                 content: text,
               });
+              this.persistMessage("system-agent", {
+                timestamp: Date.now(),
+                role: "assistant",
+                content: text,
+              });
 
               // Final content-based step detection
               this.detectPipelineStepFromContent(text);
@@ -1526,9 +1599,16 @@ export class GatewaySession {
           // Detect pipeline step from tool usage
           this.detectPipelineStepFromTool(toolName);
 
+          const toolContent = `Using ${toolName}...`;
           this.systemAgentChatMessages.push({
             role: "tool",
-            content: `Using ${toolName}...`,
+            content: toolContent,
+          });
+          this.persistMessage("system-agent", {
+            timestamp: Date.now(),
+            role: "tool",
+            content: toolContent,
+            toolName,
           });
           this.sendEvolutionLabUpdate(send);
         } else if (event.type === "agent_end") {
@@ -1546,9 +1626,12 @@ export class GatewaySession {
       }
     } catch (error) {
       this.systemAgentStreaming = false;
-      this.systemAgentChatMessages.push({
+      const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      this.systemAgentChatMessages.push({ role: "assistant", content: errorContent });
+      this.persistMessage("system-agent", {
+        timestamp: Date.now(),
         role: "assistant",
-        content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        content: errorContent,
       });
       this.sendEvolutionLabUpdate(send);
     }
@@ -3483,9 +3566,12 @@ export class GatewaySession {
           // Check for error responses (API errors, region blocks, etc.)
           if (!text.trim() && event.message.stopReason === "error") {
             const errorMsg = event.message.errorMessage || "Unknown error occurred";
-            this.chatMessages.push({
+            const errContent = `⚠️ ${errorMsg}`;
+            this.chatMessages.push({ role: "assistant", content: errContent });
+            this.persistMessage("chat", {
+              timestamp: Date.now(),
               role: "assistant",
-              content: `⚠️ ${errorMsg}`,
+              content: errContent,
             });
             this.isStreaming = false;
             this.streamingContent = "";
@@ -3506,6 +3592,11 @@ export class GatewaySession {
               content: text,
               ...(cards ? { cards } : {}),
             });
+            this.persistMessage("chat", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: text,
+            });
             this.isStreaming = false;
             this.streamingContent = "";
             this.sendChatUpdate(send);
@@ -3522,6 +3613,12 @@ export class GatewaySession {
         };
         const toolMsg = memoryToolLabels[event.toolName] || `Using ${event.toolName}...`;
         this.chatMessages.push({ role: "tool", content: toolMsg });
+        this.persistMessage("chat", {
+          timestamp: Date.now(),
+          role: "tool",
+          content: toolMsg,
+          toolName: event.toolName,
+        });
         this.sendChatUpdate(send);
         activeSend({ type: "tool_call", tool: event.toolName });
         break;

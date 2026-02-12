@@ -4,7 +4,7 @@
  * Each session is a separate .jsonl file under .pha/users/{uuid}/sessions/
  */
 
-import { existsSync, appendFileSync, readdirSync, statSync } from "fs";
+import { existsSync, appendFileSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { UserMessage, AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
@@ -146,4 +146,45 @@ export function listSessions(uuid: string, options?: { limit?: number }): Sessio
     return files.slice(0, options.limit);
   }
   return files;
+}
+
+/**
+ * Load a session from its JSONL file.
+ * Parses each line as JSON, skipping malformed lines.
+ */
+export function loadSession(uuid: string, sessionId: string): SessionEntry[] {
+  const filePath = join(getSessionsDir(uuid), `${sessionId}.jsonl`);
+  if (!existsSync(filePath)) return [];
+
+  const content = readFileSync(filePath, "utf-8");
+  const entries: SessionEntry[] = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      entries.push(JSON.parse(line));
+    } catch {
+      // Skip malformed lines
+    }
+  }
+  return entries;
+}
+
+/**
+ * Load the most recent session for a user.
+ * Filters out system-agent sessions (sa- prefix).
+ * Returns null if no session exists.
+ */
+export function loadLatestSession(
+  uuid: string,
+  options?: { prefix?: string }
+): { sessionId: string; entries: SessionEntry[] } | null {
+  const sessions = listSessions(uuid);
+  const prefix = options?.prefix;
+  const match = prefix
+    ? sessions.find((s) => s.sessionId.startsWith(prefix))
+    : sessions.find((s) => !s.sessionId.startsWith("sa-"));
+  if (!match) return null;
+
+  const entries = loadSession(uuid, match.sessionId);
+  return entries.length > 0 ? { sessionId: match.sessionId, entries } : null;
 }
