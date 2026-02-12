@@ -401,6 +401,25 @@ export interface LocaleMessages {
     noRunsSelected: string;
     criteria: string;
     scoringType: string;
+    // Playground
+    tabPlayground: string;
+    playgroundWelcome: string;
+    playgroundWelcomeDesc: string;
+    playgroundLog: string;
+    playgroundChatPlaceholder: string;
+    startQuickCycle: string;
+    startFullCycle: string;
+    startNewCycle: string;
+    continueToDiagnose: string;
+    continueToPropose: string;
+    submitForApproval: string;
+    continueToValidate: string;
+    humanReviewRequired: string;
+    applying: string;
+    validating: string;
+    cycleComplete: string;
+    proposalHint: string;
+    agentDriven: string;
   };
 
   // Memory page

@@ -378,6 +378,26 @@ export const zhCN: LocaleMessages = {
     noRunsSelected: "点击运行记录以添加到对比",
     criteria: "准则",
     scoringType: "评分类型",
+    // Playground
+    tabPlayground: "Playground",
+    playgroundWelcome: "进化 Playground",
+    playgroundWelcomeDesc:
+      "通过 6 步引导式流程优化你的 Agent：基准测试 → 诊断 → 提案 → 批准 → 执行 → 验证",
+    playgroundLog: "流程日志",
+    playgroundChatPlaceholder: "让 Agent 驱动进化流程...",
+    startQuickCycle: "快速周期",
+    startFullCycle: "完整周期",
+    startNewCycle: "开始新周期",
+    continueToDiagnose: "继续诊断 →",
+    continueToPropose: "生成提案 →",
+    submitForApproval: "提交审批 →",
+    continueToValidate: "运行验证 →",
+    humanReviewRequired: "需要人工审批",
+    applying: "正在应用变更...",
+    validating: "正在验证...",
+    cycleComplete: "进化周期完成",
+    proposalHint: "请在下方聊天中让 Agent 生成优化提案，或手动填写提案内容",
+    agentDriven: "Agent 驱动",
   },
 
   memory: {

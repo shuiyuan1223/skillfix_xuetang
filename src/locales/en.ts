@@ -383,6 +383,27 @@ export const en: LocaleMessages = {
     noRunsSelected: "Click a run to add to comparison",
     criteria: "Criteria",
     scoringType: "Scoring",
+    // Playground
+    tabPlayground: "Playground",
+    playgroundWelcome: "Evolution Playground",
+    playgroundWelcomeDesc:
+      "Optimize your agent through a guided 6-step process: Benchmark → Diagnose → Propose → Approve → Apply → Validate",
+    playgroundLog: "Process Log",
+    playgroundChatPlaceholder: "Let the agent drive the evolution...",
+    startQuickCycle: "Quick Cycle",
+    startFullCycle: "Full Cycle",
+    startNewCycle: "Start New Cycle",
+    continueToDiagnose: "Continue to Diagnose →",
+    continueToPropose: "Generate Proposal →",
+    submitForApproval: "Submit for Approval →",
+    continueToValidate: "Run Validation →",
+    humanReviewRequired: "Human Review Required",
+    applying: "Applying changes...",
+    validating: "Validating...",
+    cycleComplete: "Evolution Cycle Complete",
+    proposalHint:
+      "Ask the agent to generate proposals via chat below, or submit proposals manually",
+    agentDriven: "Agent Driven",
   },
 
   memory: {

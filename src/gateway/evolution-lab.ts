@@ -143,8 +143,87 @@ export interface ComparisonRun {
   categoryScores: CategoryScoreInfo[];
 }
 
+// ============================================================================
+// Playground Types
+// ============================================================================
+
+export type PlaygroundStep =
+  | "idle"
+  | "benchmark"
+  | "diagnose"
+  | "propose"
+  | "approve"
+  | "apply"
+  | "validate"
+  | "complete";
+
+export interface PlaygroundLogEntry {
+  timestamp: number;
+  step: string;
+  message: string;
+  type: "info" | "success" | "error" | "warning";
+}
+
+export interface PlaygroundState {
+  cycleId: string | null;
+  step: PlaygroundStep;
+  startedAt?: number;
+
+  benchmarkResult?: {
+    runId: string;
+    overallScore: number;
+    categoryScores: CategoryScoreInfo[];
+    passedCount: number;
+    totalCount: number;
+    durationMs: number;
+    profile: string;
+  };
+  diagnoseResult?: {
+    weaknesses: Array<{
+      category: string;
+      label: string;
+      score: number;
+      gap: number;
+      failingCount: number;
+      patterns: string[];
+    }>;
+    suggestions: Array<{
+      category: string;
+      description: string;
+      targetFiles: string[];
+      priority: "high" | "medium" | "low";
+    }>;
+  };
+  proposal?: {
+    description: string;
+    changes: Array<{ path: string; description: string }>;
+    expectedImprovement: string;
+  };
+  approval?: {
+    approved: boolean;
+    reason?: string;
+    timestamp: number;
+  };
+  applyResult?: {
+    branch: string;
+    commits: string[];
+    filesChanged: Array<{ path: string; status: string }>;
+  };
+  validateResult?: {
+    beforeScore: number;
+    afterScore: number;
+    delta: number;
+    categoryDeltas: Array<{ category: string; before: number; after: number }>;
+    recommendation: "merge" | "revert" | "iterate";
+    validationRunId: string;
+  };
+
+  log: PlaygroundLogEntry[];
+  benchmarkProgress?: { current: number; total: number };
+}
+
 export interface EvolutionLabData {
-  activeTab: "overview" | "benchmark" | "versions" | "data" | "agent";
+  activeTab: "overview" | "benchmark" | "versions" | "data" | "agent" | "playground";
   // Overview
   stats?: EvaluationStats;
   latestCategoryScores?: CategoryScoreInfo[];
@@ -183,6 +262,8 @@ export interface EvolutionLabData {
   pipelineSteps: PipelineStep[];
   agentContextData?: { radarScores?: CategoryScoreInfo[]; changedFiles?: ChangedFile[] };
   loading?: boolean;
+  // Playground
+  playgroundState?: PlaygroundState;
 }
 
 // Default pipeline steps
@@ -468,12 +549,16 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
   if (data.activeTab === "agent") {
     tabContentIds["agent"] = generateAgentTab(ui, data);
   }
+  if (data.activeTab === "playground") {
+    tabContentIds["playground"] = generatePlaygroundTab(ui, data);
+  }
 
   // ---- Tabs ----
   const tabs = ui.tabs(
     [
       { id: "overview", label: t("evolution.tabOverview"), icon: "bar-chart" },
       { id: "benchmark", label: t("evolution.tabBenchmark"), icon: "test-tube" },
+      { id: "playground", label: t("evolution.tabPlayground"), icon: "zap" },
       { id: "versions", label: t("evolution.tabVersions"), icon: "git-branch" },
       { id: "data", label: t("evolution.tabData"), icon: "file-text" },
       { id: "agent", label: t("evolution.tabAgent"), icon: "sparkles" },
@@ -853,12 +938,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     size: "sm",
     payload: { profile: "full" },
   });
-  const diagnoseBtn = ui.button(t("evolution.runDiagnose"), "run_diagnose", {
-    variant: "outline",
-    size: "sm",
-    icon: "search",
-  });
-  children.push(ui.card([ui.row([quickBtn, fullBtn, diagnoseBtn], { gap: 8 })], { padding: 12 }));
+  children.push(ui.card([ui.row([quickBtn, fullBtn], { gap: 8 })], { padding: 12 }));
 
   // SHARP Category Breakdown Cards (using arena_category_card style)
   if (data.latestRunCategoryScores && data.latestRunCategoryScores.length > 0) {
@@ -1443,4 +1523,543 @@ function generateAgentTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   }
 
   return ui.column(children, { gap: 12, padding: 16 });
+}
+
+// ============================================================================
+// Tab 6: Playground
+// ============================================================================
+
+function buildPlaygroundPipelineSteps(state: PlaygroundState): PipelineStep[] {
+  const stepIds: PlaygroundStep[] = [
+    "benchmark",
+    "diagnose",
+    "propose",
+    "approve",
+    "apply",
+    "validate",
+  ];
+  const stepLabels: Record<string, { label: string; icon: string }> = {
+    benchmark: { label: t("evolution.pipelineBenchmark"), icon: "test-tube" },
+    diagnose: { label: t("evolution.pipelineDiagnose"), icon: "search" },
+    propose: { label: t("evolution.pipelinePropose"), icon: "lightbulb" },
+    approve: { label: t("evolution.pipelineApprove"), icon: "check" },
+    apply: { label: t("evolution.pipelineApply"), icon: "zap" },
+    validate: { label: t("evolution.pipelineValidate"), icon: "shield" },
+  };
+
+  const currentIdx = stepIds.indexOf(state.step as PlaygroundStep);
+  const isComplete = state.step === "complete";
+
+  return stepIds.map((id, idx) => {
+    const cfg = stepLabels[id];
+    let status: PipelineStep["status"] = "pending";
+    if (isComplete) {
+      status = "completed";
+    } else if (idx < currentIdx) {
+      status = "completed";
+    } else if (idx === currentIdx) {
+      status = "active";
+    }
+    return { id, label: cfg.label, icon: cfg.icon, status };
+  });
+}
+
+function generatePlaygroundTab(ui: A2UIGenerator, data: EvolutionLabData): string {
+  const state = data.playgroundState || { step: "idle" as const, log: [], cycleId: null };
+  const children: string[] = [];
+
+  // 1. Pipeline step indicator
+  if (state.step !== "idle") {
+    const steps = buildPlaygroundPipelineSteps(state);
+    children.push(ui.stepIndicator(steps, { orientation: "horizontal" }));
+  }
+
+  // 2. Step-specific content area
+  switch (state.step) {
+    case "idle":
+      children.push(generatePgIdle(ui));
+      break;
+    case "benchmark":
+      children.push(generatePgBenchmark(ui, state));
+      break;
+    case "diagnose":
+      children.push(generatePgDiagnose(ui, state));
+      break;
+    case "propose":
+      children.push(generatePgPropose(ui, state));
+      break;
+    case "approve":
+      children.push(generatePgApprove(ui, state));
+      break;
+    case "apply":
+      children.push(generatePgApply(ui, state));
+      break;
+    case "validate":
+      children.push(generatePgValidate(ui, state));
+      break;
+    case "complete":
+      children.push(generatePgComplete(ui, state));
+      break;
+  }
+
+  // 3. Event Log
+  if (state.log.length > 0) {
+    const logItems = state.log
+      .slice(-20)
+      .reverse()
+      .map((e) => `[${new Date(e.timestamp).toLocaleTimeString()}] ${e.message}`)
+      .join("\n");
+    const logText = ui.text(logItems, "body");
+    children.push(
+      ui.card([ui.text(t("evolution.playgroundLog"), "label"), logText], { padding: 12 })
+    );
+  }
+
+  // 4. Agent chat panel (bottom)
+  children.push(generatePlaygroundChat(ui, data));
+
+  return ui.column(children, { gap: 16, padding: 16 });
+}
+
+function generatePgIdle(ui: A2UIGenerator): string {
+  const title = ui.text(t("evolution.playgroundWelcome"), "h2");
+  const desc = ui.text(t("evolution.playgroundWelcomeDesc"), "body");
+  const quickBtn = ui.button(t("evolution.startQuickCycle"), "pg_start_cycle", {
+    variant: "primary",
+    size: "md",
+    payload: { profile: "quick" },
+  });
+  const fullBtn = ui.button(t("evolution.startFullCycle"), "pg_start_cycle", {
+    variant: "secondary",
+    size: "md",
+    payload: { profile: "full" },
+  });
+  const btnRow = ui.row([quickBtn, fullBtn], { gap: 12, justify: "center" });
+  return ui.card([title, desc, btnRow], { padding: 24 });
+}
+
+function generatePgBenchmark(ui: A2UIGenerator, state: PlaygroundState): string {
+  // Running: progress bar
+  if (state.benchmarkProgress && !state.benchmarkResult) {
+    const pct = Math.round(
+      (state.benchmarkProgress.current / Math.max(state.benchmarkProgress.total, 1)) * 100
+    );
+    const progressText = ui.text(
+      `${state.benchmarkProgress.current}/${state.benchmarkProgress.total} test cases`,
+      "body"
+    );
+    const progressBar = ui.progress(pct, { variant: "info" });
+    return ui.card([ui.text(t("evolution.benchmarkRunning"), "h3"), progressBar, progressText], {
+      padding: 16,
+    });
+  }
+
+  // Complete: score gauge + radar + category cards
+  if (state.benchmarkResult) {
+    const result = state.benchmarkResult;
+    const gauge = ui.scoreGauge(result.overallScore, { max: 1.0 });
+    const statsRow = ui.row(
+      [
+        ui.statCard({
+          title: t("evolution.score"),
+          value: result.overallScore.toFixed(2),
+          icon: "target",
+        }),
+        ui.statCard({
+          title: t("evolution.passed"),
+          value: `${result.passedCount}/${result.totalCount}`,
+          icon: "check",
+        }),
+        ui.statCard({
+          title: t("evolution.duration"),
+          value: `${(result.durationMs / 1000).toFixed(1)}s`,
+          icon: "timer",
+        }),
+      ],
+      { gap: 12 }
+    );
+
+    const radarData = result.categoryScores.map((cs) => ({
+      label: getCategoryLabel(cs.category),
+      value: cs.score <= 1.0 ? cs.score : cs.score / 100,
+      maxValue: 1.0,
+    }));
+    const radar = ui.radarChart(radarData, {
+      size: 220,
+      showLabels: true,
+      color: "#818cf8",
+    });
+
+    const catCards: string[] = [];
+    for (const cs of result.categoryScores) {
+      const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
+      const catCardId = `pg_bench_cat_${cs.category}_${Date.now()}`;
+      ui.addComponent(catCardId, {
+        id: catCardId,
+        type: "arena_category_card",
+        categoryName: getCategoryLabel(cs.category),
+        categoryColor: catColor,
+        categoryIcon: getCategoryIcon(cs.category),
+        avgScore: cs.score <= 1.0 ? cs.score : cs.score / 100,
+        criteria: (cs.subComponents || []).map((sub) => ({
+          name: sub.name,
+          scores: [{ value: sub.score <= 1 ? sub.score : sub.score / 100, color: catColor }],
+        })),
+      });
+      catCards.push(catCardId);
+    }
+    const catGrid = ui.column(catCards, {
+      gap: 16,
+      style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));",
+    } as any);
+
+    const continueBtn = ui.button(t("evolution.continueToDiagnose"), "pg_advance", {
+      variant: "primary",
+      size: "md",
+      payload: { nextStep: "diagnose" },
+    });
+
+    return ui.column(
+      [
+        ui.card([ui.text(t("evolution.benchmarkComplete"), "h3"), gauge, statsRow], {
+          padding: 16,
+        }),
+        ui.row([radar, catGrid], { gap: 16 }),
+        ui.row([continueBtn], { justify: "center" }),
+      ],
+      { gap: 16 }
+    );
+  }
+
+  return ui.card(
+    [
+      ui.text(t("evolution.benchmarkRunning"), "h3"),
+      ui.skeleton({ variant: "rectangular", height: 200 }),
+    ],
+    { padding: 16 }
+  );
+}
+
+function generatePgDiagnose(ui: A2UIGenerator, state: PlaygroundState): string {
+  if (!state.diagnoseResult) {
+    return ui.card(
+      [
+        ui.text(t("evolution.diagnosing"), "h3"),
+        ui.skeleton({ variant: "rectangular", height: 150 }),
+      ],
+      { padding: 16 }
+    );
+  }
+
+  const { weaknesses, suggestions } = state.diagnoseResult;
+  const children: string[] = [];
+
+  const weakTitle = ui.text(`${t("evolution.weakCategories")}: ${weaknesses.length}`, "h3");
+  children.push(weakTitle);
+
+  for (const w of weaknesses) {
+    const catColor = SHARP_CATEGORY_COLORS[w.category] || "#f87171";
+    const scoreText = ui.text(`${w.label}: ${w.score.toFixed(2)}`, "h3");
+    const gap = ui.badge(`gap: ${w.gap.toFixed(2)}`, { variant: "warning" });
+    const failing = ui.text(`${w.failingCount} ${t("evolution.failed")} tests`, "body");
+    const cardChildren = [ui.row([scoreText, gap], { gap: 8, align: "center" }), failing];
+    if (w.patterns.length > 0) {
+      cardChildren.push(ui.text(`Patterns: ${w.patterns.join(", ")}`, "caption"));
+    }
+    children.push(ui.card(cardChildren, { padding: 12 }));
+  }
+
+  if (suggestions.length > 0) {
+    const sugTitle = ui.text(t("evolution.suggestions"), "h3");
+    const sugRows = suggestions.map((s, i) => ({
+      index: i + 1,
+      category: s.category,
+      description: s.description,
+      files: s.targetFiles.join(", "),
+      priority: s.priority,
+    }));
+    const sugTable = ui.dataTable(
+      [
+        { key: "category", label: t("evolution.category"), render: "badge" },
+        { key: "description", label: t("evolution.rationale") },
+        { key: "files", label: t("evolution.filesChanged") },
+        { key: "priority", label: "Priority", render: "badge" },
+      ],
+      sugRows
+    );
+    children.push(sugTitle, sugTable);
+  }
+
+  if (weaknesses.length === 0) {
+    children.push(ui.card([ui.text(t("evolution.noWeaknesses"), "body")], { padding: 16 }));
+  }
+
+  const continueBtn = ui.button(t("evolution.continueToPropose"), "pg_advance", {
+    variant: "primary",
+    size: "md",
+    payload: { nextStep: "propose" },
+  });
+  children.push(ui.row([continueBtn], { justify: "center" }));
+
+  return ui.column(children, { gap: 12 });
+}
+
+function generatePgPropose(ui: A2UIGenerator, state: PlaygroundState): string {
+  const children: string[] = [];
+
+  if (!state.proposal) {
+    const hint = ui.text(t("evolution.proposalHint"), "body");
+    children.push(ui.card([ui.text(t("evolution.pipelinePropose"), "h3"), hint], { padding: 16 }));
+  } else {
+    const { description, changes, expectedImprovement } = state.proposal;
+    children.push(ui.text(t("evolution.pipelinePropose"), "h3"));
+    children.push(ui.text(description, "body"));
+
+    if (changes.length > 0) {
+      const fileRows = changes.map((f) => ({
+        path: f.path,
+        change: f.description,
+      }));
+      const fileTable = ui.dataTable(
+        [
+          { key: "path", label: t("evolution.target") },
+          { key: "change", label: t("evolution.rationale") },
+        ],
+        fileRows
+      );
+      children.push(fileTable);
+    }
+
+    if (expectedImprovement) {
+      children.push(ui.badge(`Expected: ${expectedImprovement}`, { variant: "info" }));
+    }
+
+    const submitBtn = ui.button(t("evolution.submitForApproval"), "pg_advance", {
+      variant: "primary",
+      size: "md",
+      payload: { nextStep: "approve" },
+    });
+    children.push(ui.row([submitBtn], { justify: "center" }));
+  }
+
+  return ui.card(children, { padding: 16 });
+}
+
+function generatePgApprove(ui: A2UIGenerator, state: PlaygroundState): string {
+  const children: string[] = [];
+  children.push(ui.text(t("evolution.pipelineApprove"), "h3"));
+  children.push(ui.badge(t("evolution.humanReviewRequired"), { variant: "warning" }));
+
+  if (state.proposal) {
+    children.push(ui.text(state.proposal.description, "body"));
+    if (state.proposal.changes.length > 0) {
+      const files = state.proposal.changes.map((c) => `- ${c.path}: ${c.description}`).join("\n");
+      children.push(ui.text(files, "body"));
+    }
+    if (state.proposal.expectedImprovement) {
+      children.push(ui.text(`Expected: ${state.proposal.expectedImprovement}`, "caption"));
+    }
+  }
+
+  const approveBtn = ui.button(t("evolution.approveProposal"), "pg_approve", {
+    variant: "primary",
+    size: "md",
+    payload: { approved: true },
+  });
+  const rejectBtn = ui.button(t("evolution.rejectProposal"), "pg_approve", {
+    variant: "ghost",
+    size: "md",
+    payload: { approved: false },
+  });
+  children.push(ui.row([approveBtn, rejectBtn], { gap: 12, justify: "center" }));
+
+  return ui.card(children, { padding: 16 });
+}
+
+function generatePgApply(ui: A2UIGenerator, state: PlaygroundState): string {
+  const children: string[] = [];
+  children.push(ui.text(t("evolution.pipelineApply"), "h3"));
+
+  if (state.applyResult) {
+    const { branch, commits, filesChanged } = state.applyResult;
+    children.push(ui.text(`Branch: ${branch}`, "body"));
+    for (const c of commits) {
+      children.push(ui.badge(`Commit: ${c.slice(0, 8)}`, { variant: "success" }));
+    }
+    if (filesChanged.length > 0) {
+      const fileTree = ui.fileTree(
+        filesChanged.map((f) => ({
+          path: f.path,
+          status: f.status as "added" | "modified" | "deleted" | "renamed",
+          additions: 0,
+          deletions: 0,
+        })),
+        { onFileSelect: "pg_file_select" }
+      );
+      children.push(fileTree);
+    }
+    const continueBtn = ui.button(t("evolution.continueToValidate"), "pg_advance", {
+      variant: "primary",
+      size: "md",
+      payload: { nextStep: "validate" },
+    });
+    children.push(ui.row([continueBtn], { justify: "center" }));
+  } else {
+    children.push(ui.text(t("evolution.applying"), "body"));
+    children.push(ui.skeleton({ variant: "rectangular", height: 100 }));
+  }
+
+  return ui.card(children, { padding: 16 });
+}
+
+function generatePgValidate(ui: A2UIGenerator, state: PlaygroundState): string {
+  const children: string[] = [];
+  children.push(ui.text(t("evolution.pipelineValidate"), "h3"));
+
+  if (state.validateResult) {
+    const { beforeScore, afterScore, delta, categoryDeltas, recommendation } = state.validateResult;
+
+    const deltaSign = delta >= 0 ? "+" : "";
+    const scoreSummary = ui.text(
+      `${beforeScore.toFixed(2)} → ${afterScore.toFixed(2)} (${deltaSign}${delta.toFixed(2)})`,
+      "h2"
+    );
+    children.push(scoreSummary);
+
+    // Dual radar chart
+    const beforeData = categoryDeltas.map((d) => ({
+      label: getCategoryLabel(d.category),
+      value: d.before,
+      maxValue: 1.0,
+    }));
+    const afterData = categoryDeltas.map((d) => ({
+      label: getCategoryLabel(d.category),
+      value: d.after,
+      maxValue: 1.0,
+    }));
+    const radar = ui.radarChart(beforeData, {
+      size: 240,
+      showLabels: true,
+      color: "#94a3b8",
+      compare: afterData,
+      compareColor: "#818cf8",
+    });
+    children.push(radar);
+
+    // Category delta table
+    const deltaRows = categoryDeltas.map((d) => ({
+      category: d.category,
+      before: d.before.toFixed(2),
+      after: d.after.toFixed(2),
+      delta: `${d.after - d.before >= 0 ? "+" : ""}${(d.after - d.before).toFixed(2)}`,
+    }));
+    children.push(
+      ui.dataTable(
+        [
+          { key: "category", label: t("evolution.category"), render: "badge" },
+          { key: "before", label: "Before" },
+          { key: "after", label: "After" },
+          { key: "delta", label: "Delta" },
+        ],
+        deltaRows
+      )
+    );
+
+    const recBadge = ui.badge(
+      recommendation === "merge"
+        ? "Merge Recommended"
+        : recommendation === "revert"
+          ? "Revert Recommended"
+          : "Iterate",
+      {
+        variant:
+          recommendation === "merge"
+            ? "success"
+            : recommendation === "revert"
+              ? "error"
+              : "warning",
+      }
+    );
+    children.push(recBadge);
+
+    const mergeBtn = ui.button(t("evolution.mergeVersion"), "pg_complete", {
+      variant: "primary",
+      size: "md",
+      payload: { action: "merge" },
+    });
+    const revertBtn = ui.button(t("evolution.abandonVersion"), "pg_complete", {
+      variant: "ghost",
+      size: "md",
+      payload: { action: "revert" },
+    });
+    const newCycleBtn = ui.button(t("evolution.startNewCycle"), "pg_complete", {
+      variant: "secondary",
+      size: "md",
+      payload: { action: "new_cycle" },
+    });
+    children.push(ui.row([mergeBtn, revertBtn, newCycleBtn], { gap: 12, justify: "center" }));
+  } else {
+    children.push(ui.text(t("evolution.validating"), "body"));
+    children.push(ui.skeleton({ variant: "rectangular", height: 200 }));
+  }
+
+  return ui.card(children, { padding: 16 });
+}
+
+function generatePgComplete(ui: A2UIGenerator, state: PlaygroundState): string {
+  const children: string[] = [];
+  children.push(ui.text(t("evolution.cycleComplete"), "h2"));
+
+  if (state.benchmarkResult && state.validateResult) {
+    const before = state.benchmarkResult.overallScore;
+    const after = state.validateResult.afterScore;
+    const delta = after - before;
+    const deltaSign = delta >= 0 ? "+" : "";
+    children.push(
+      ui.text(
+        `Score: ${before.toFixed(2)} → ${after.toFixed(2)} (${deltaSign}${delta.toFixed(2)})`,
+        "h3"
+      )
+    );
+  }
+
+  if (state.applyResult?.branch) {
+    const branchStatus = state.validateResult?.recommendation === "merge" ? "merged" : "reverted";
+    children.push(ui.text(`Branch: ${state.applyResult.branch} (${branchStatus})`, "body"));
+  }
+
+  const duration = state.startedAt ? `${((Date.now() - state.startedAt) / 1000).toFixed(0)}s` : "-";
+  children.push(ui.text(`Duration: ${duration}`, "caption"));
+
+  const newCycleBtn = ui.button(t("evolution.startNewCycle"), "pg_reset", {
+    variant: "primary",
+    size: "md",
+  });
+  children.push(ui.row([newCycleBtn], { justify: "center" }));
+
+  return ui.card(children, { padding: 24 });
+}
+
+function generatePlaygroundChat(ui: A2UIGenerator, data: EvolutionLabData): string {
+  const chatMsgsId = `pg_chat_msgs_${Date.now()}`;
+  ui.addComponent(chatMsgsId, {
+    id: chatMsgsId,
+    type: "chat_messages",
+    messages: data.chatMessages,
+    streaming: data.streaming,
+    streamingContent: data.streamingContent,
+  });
+
+  const chatInputId = `pg_chat_input_${Date.now()}`;
+  ui.addComponent(chatInputId, {
+    id: chatInputId,
+    type: "chat_input",
+    disabled: data.streaming,
+    placeholder: t("evolution.playgroundChatPlaceholder"),
+    action: "pg_send_message",
+  });
+
+  return ui.card([ui.text(t("evolution.agentDriven"), "label"), chatMsgsId, chatInputId], {
+    padding: 12,
+  });
 }

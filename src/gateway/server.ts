@@ -119,6 +119,8 @@ import {
   type EvolutionLabData,
 } from "./evolution-lab.js";
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
+import { setPlaygroundCallbacks } from "../tools/playground-tools.js";
+import type { PlaygroundState, PlaygroundStep } from "./evolution-lab.js";
 
 // ============================================================================
 // SHARP Category Re-aggregation
@@ -874,7 +876,13 @@ export class GatewaySession {
   private activeVersionBranch: string | null = null;
 
   // Evolution Lab state (5-Tab Dashboard)
-  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" | "agent" = "overview";
+  private evolutionActiveTab:
+    | "overview"
+    | "benchmark"
+    | "versions"
+    | "data"
+    | "agent"
+    | "playground" = "overview";
   private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
   private evolutionSelectedVersion: string | null = null;
   private evolutionChatMessages: Array<{
@@ -887,6 +895,9 @@ export class GatewaySession {
   private evolutionPipelineStep: string | null = null;
   private evolutionInspectedBranch: string | null = null;
   private evolutionLabDiffContent: { before: string; after: string; path: string } | null = null;
+
+  // Playground state
+  private playgroundState: PlaygroundState = { step: "idle", log: [], cycleId: null };
 
   // Arena comparison state
   private benchmarkSelectedRunIds: Set<string> = new Set();
@@ -955,6 +966,9 @@ export class GatewaySession {
           return result;
         },
       });
+
+      // Configure playground callbacks
+      this.setupPlaygroundCallbacks();
     }
     return this.agent;
   }
@@ -1725,7 +1739,8 @@ export class GatewaySession {
         | "benchmark"
         | "versions"
         | "data"
-        | "agent";
+        | "agent"
+        | "playground";
       this.sendEvolutionLabUpdate(send);
     } else if (action === "evo_data_subtab_change" && payload?.tab) {
       this.evolutionDataSubTab = payload.tab as "traces" | "evaluations" | "suggestions";
@@ -1779,6 +1794,24 @@ export class GatewaySession {
         "I reject this proposal. Please revise the plan and propose again.",
         send
       );
+    }
+    // Playground actions
+    else if (action === "pg_start_cycle") {
+      this.pgStartCycle((payload?.profile as string) || "quick", send);
+    } else if (action === "pg_advance") {
+      this.pgAdvanceStep((payload?.nextStep as string) || "", send);
+    } else if (action === "pg_approve") {
+      this.pgHandleApproval(
+        payload?.approved as boolean,
+        payload?.reason as string | undefined,
+        send
+      );
+    } else if (action === "pg_complete") {
+      this.pgHandleComplete((payload?.action as string) || "merge", send);
+    } else if (action === "pg_reset") {
+      this.pgReset(send);
+    } else if (action === "pg_send_message" && payload?.value) {
+      await this.handleEvolutionMessage(payload.value as string, send);
     }
     // Evolution actions (legacy)
     else if (action === "tab_change" && payload?.tab) {
@@ -1852,7 +1885,8 @@ export class GatewaySession {
           | "benchmark"
           | "versions"
           | "data"
-          | "agent";
+          | "agent"
+          | "playground";
         this.sendEvolutionLabUpdate(send);
       } else {
         type EvolutionTab =
@@ -2834,6 +2868,8 @@ export class GatewaySession {
       currentPipelineStep: this.evolutionPipelineStep || undefined,
       pipelineSteps: getDefaultPipelineSteps(this.evolutionPipelineStep || undefined),
       agentContextData,
+      // Playground
+      playgroundState: this.playgroundState,
     };
   }
 
@@ -3358,6 +3394,411 @@ export class GatewaySession {
         root_id: toast.root_id,
       });
     }
+  }
+
+  // ============================================================================
+  // Playground State Management
+  // ============================================================================
+
+  private pgAddLog(
+    step: string,
+    message: string,
+    type: "info" | "success" | "error" | "warning" = "info"
+  ) {
+    this.playgroundState.log.push({ timestamp: Date.now(), step, message, type });
+  }
+
+  private pgStartCycle(profile: string, send: (msg: unknown) => void) {
+    this.playgroundState = {
+      cycleId: crypto.randomUUID().slice(0, 8),
+      step: "benchmark",
+      startedAt: Date.now(),
+      log: [{ timestamp: Date.now(), step: "benchmark", message: "Cycle started", type: "info" }],
+    };
+    this.evolutionActiveTab = "playground";
+    this.sendEvolutionLabUpdate(send);
+
+    // Run benchmark async
+    this.pgRunBenchmarkAsync(profile, send).catch((err) => {
+      this.pgAddLog(
+        "benchmark",
+        `Benchmark failed: ${err instanceof Error ? err.message : String(err)}`,
+        "error"
+      );
+      this.sendEvolutionLabUpdate(send);
+    });
+  }
+
+  private async pgRunBenchmarkAsync(profile: string, send: (msg: unknown) => void) {
+    const AGENT_TIMEOUT_MS = 120_000;
+    try {
+      const agent = await this.getAgent();
+
+      const judgeConfig = getJudgeModel();
+      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
+      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
+      const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+      const judgeAgent = await createPHAAgent({
+        apiKey: judgeApiKey,
+        provider: judgeConfig.provider as any,
+        modelId: judgeConfig.modelId,
+        baseUrl: judgeBaseUrl,
+        dataSource: new JudgeMockDS(),
+      });
+
+      const runner = new BenchmarkRunner({
+        agentCall: async (query: string) => {
+          if (typeof agent.reset === "function") agent.reset();
+          return await Promise.race([
+            agent.chatAndWait(query).then((response: string) => ({ response })),
+            new Promise<{ response: string }>((_, reject) =>
+              setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+        },
+        llmCall: async (prompt: string) => {
+          if (typeof judgeAgent.reset === "function") judgeAgent.reset();
+          return await Promise.race([
+            judgeAgent.chatAndWait(prompt),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+        },
+        onProgress: (current, total) => {
+          this.playgroundState.benchmarkProgress = { current, total };
+          this.sendEvolutionLabUpdateThrottled(send);
+        },
+      });
+
+      await runner.seedTestCases();
+      const result = await runner.run({ profile: profile as "quick" | "full" });
+
+      // Parse category scores with re-aggregation
+      const categoryScores = this.parseRunCategoryScores(result.run.id);
+
+      this.playgroundState.benchmarkResult = {
+        runId: result.run.id,
+        overallScore:
+          result.run.overallScore <= 1.0 ? result.run.overallScore : result.run.overallScore / 100,
+        categoryScores,
+        passedCount: result.run.passedCount,
+        totalCount: result.run.totalTestCases,
+        durationMs: result.run.durationMs,
+        profile,
+      };
+      this.playgroundState.benchmarkProgress = undefined;
+      this.pgAddLog(
+        "benchmark",
+        `Benchmark complete: score=${this.playgroundState.benchmarkResult.overallScore.toFixed(2)}`,
+        "success"
+      );
+      this.sendEvolutionLabUpdate(send);
+    } catch (error) {
+      this.pgAddLog(
+        "benchmark",
+        `Benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
+      this.sendEvolutionLabUpdate(send);
+      throw error;
+    }
+  }
+
+  private parseRunCategoryScores(runId: string) {
+    try {
+      const scores = listCategoryScores(runId);
+      return parseAndReAggregateScores(scores);
+    } catch {
+      return [];
+    }
+  }
+
+  private pgAdvanceStep(nextStep: string, send: (msg: unknown) => void) {
+    const validSteps: PlaygroundStep[] = [
+      "benchmark",
+      "diagnose",
+      "propose",
+      "approve",
+      "apply",
+      "validate",
+      "complete",
+    ];
+    if (!validSteps.includes(nextStep as PlaygroundStep)) return;
+
+    this.playgroundState.step = nextStep as PlaygroundStep;
+    this.pgAddLog(nextStep, `Advanced to step: ${nextStep}`, "info");
+
+    // Auto-processing for certain transitions
+    if (nextStep === "diagnose" && this.playgroundState.benchmarkResult) {
+      this.pgRunDiagnose(send);
+    } else if (nextStep === "validate") {
+      this.pgRunValidation(send);
+    } else {
+      this.sendEvolutionLabUpdate(send);
+    }
+  }
+
+  private async pgRunDiagnose(send: (msg: unknown) => void) {
+    this.sendEvolutionLabUpdate(send);
+    try {
+      const { diagnose } = await import("../evolution/diagnose.js");
+      const agent = await this.getAgent();
+      const AGENT_TIMEOUT_MS = 120_000;
+
+      const djConfig = getJudgeModel();
+      const djApiKey = resolveBenchmarkModelApiKey(djConfig);
+      const djBaseUrl = resolveBenchmarkModelBaseUrl(djConfig);
+      const { MockDataSource: DiagMockDS } = await import("../data-sources/mock.js");
+      const diagnoseJudge = await createPHAAgent({
+        apiKey: djApiKey,
+        provider: djConfig.provider as any,
+        modelId: djConfig.modelId,
+        baseUrl: djBaseUrl,
+        dataSource: new DiagMockDS(),
+      });
+
+      const result = await diagnose({
+        profile: (this.playgroundState.benchmarkResult?.profile || "quick") as "quick" | "full",
+        runnerConfig: {
+          agentCall: async (query: string) => {
+            if (typeof agent.reset === "function") agent.reset();
+            return await Promise.race([
+              agent.chatAndWait(query).then((response: string) => ({ response })),
+              new Promise<{ response: string }>((_, reject) =>
+                setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
+              ),
+            ]);
+          },
+          llmCall: async (prompt: string) => {
+            if (typeof diagnoseJudge.reset === "function") diagnoseJudge.reset();
+            return await Promise.race([
+              diagnoseJudge.chatAndWait(prompt),
+              new Promise<string>((_, reject) =>
+                setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
+              ),
+            ]);
+          },
+        },
+      });
+
+      this.playgroundState.diagnoseResult = {
+        weaknesses: result.weaknesses.map((w) => ({
+          category: w.category,
+          label: w.label,
+          score: w.score,
+          gap: w.gap,
+          failingCount: w.failingTests.length,
+          patterns: w.commonPatterns,
+        })),
+        suggestions: result.suggestions.map((s) => ({
+          category: s.category,
+          description: s.description,
+          targetFiles: s.targetFiles,
+          priority: s.priority,
+        })),
+      };
+      this.pgAddLog(
+        "diagnose",
+        `Diagnose complete: ${result.weaknesses.length} weak categories`,
+        "success"
+      );
+      this.sendEvolutionLabUpdate(send);
+    } catch (error) {
+      this.pgAddLog(
+        "diagnose",
+        `Diagnose failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
+      // Still allow user to advance manually
+      this.playgroundState.diagnoseResult = { weaknesses: [], suggestions: [] };
+      this.sendEvolutionLabUpdate(send);
+    }
+  }
+
+  private pgHandleApproval(
+    approved: boolean,
+    reason: string | undefined,
+    send: (msg: unknown) => void
+  ) {
+    this.playgroundState.approval = { approved, reason, timestamp: Date.now() };
+    if (approved) {
+      this.playgroundState.step = "apply";
+      this.pgAddLog("approve", "Proposal approved", "success");
+    } else {
+      this.playgroundState.step = "propose";
+      this.pgAddLog("approve", `Rejected: ${reason || "No reason"}`, "warning");
+    }
+    this.sendEvolutionLabUpdate(send);
+  }
+
+  private pgHandleComplete(action: string, send: (msg: unknown) => void) {
+    if (action === "merge" && this.playgroundState.applyResult?.branch) {
+      try {
+        mergeVersion(this.playgroundState.applyResult.branch);
+        this.switchAgentVersion(null);
+        this.pgAddLog("complete", "Changes merged to main", "success");
+      } catch (error) {
+        this.pgAddLog(
+          "complete",
+          `Merge failed: ${error instanceof Error ? error.message : String(error)}`,
+          "error"
+        );
+      }
+    } else if (action === "revert" && this.playgroundState.applyResult?.branch) {
+      try {
+        abandonVersion(this.playgroundState.applyResult.branch);
+        this.switchAgentVersion(null);
+        this.pgAddLog("complete", "Changes reverted", "warning");
+      } catch (error) {
+        this.pgAddLog(
+          "complete",
+          `Revert failed: ${error instanceof Error ? error.message : String(error)}`,
+          "error"
+        );
+      }
+    } else if (action === "new_cycle") {
+      this.pgReset(send);
+      return;
+    }
+    this.playgroundState.step = "complete";
+    this.sendEvolutionLabUpdate(send);
+  }
+
+  private pgReset(send: (msg: unknown) => void) {
+    this.playgroundState = { step: "idle", log: [], cycleId: null };
+    this.sendEvolutionLabUpdate(send);
+  }
+
+  private async pgRunValidation(send: (msg: unknown) => void) {
+    this.sendEvolutionLabUpdate(send);
+    try {
+      const profile = (this.playgroundState.benchmarkResult?.profile || "quick") as
+        | "quick"
+        | "full";
+      const AGENT_TIMEOUT_MS = 120_000;
+      const agent = await this.getAgent();
+
+      const judgeConfig = getJudgeModel();
+      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
+      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
+      const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+      const judgeAgent = await createPHAAgent({
+        apiKey: judgeApiKey,
+        provider: judgeConfig.provider as any,
+        modelId: judgeConfig.modelId,
+        baseUrl: judgeBaseUrl,
+        dataSource: new JudgeMockDS(),
+      });
+
+      const runner = new BenchmarkRunner({
+        agentCall: async (query: string) => {
+          if (typeof agent.reset === "function") agent.reset();
+          return await Promise.race([
+            agent.chatAndWait(query).then((response: string) => ({ response })),
+            new Promise<{ response: string }>((_, reject) =>
+              setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+        },
+        llmCall: async (prompt: string) => {
+          if (typeof judgeAgent.reset === "function") judgeAgent.reset();
+          return await Promise.race([
+            judgeAgent.chatAndWait(prompt),
+            new Promise<string>((_, reject) =>
+              setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
+            ),
+          ]);
+        },
+      });
+
+      await runner.seedTestCases();
+      const result = await runner.run({ profile });
+
+      const afterScore =
+        result.run.overallScore <= 1.0 ? result.run.overallScore : result.run.overallScore / 100;
+      const beforeScore = this.playgroundState.benchmarkResult?.overallScore || 0;
+      const afterCatScores = this.parseRunCategoryScores(result.run.id);
+      const beforeCatScores = this.playgroundState.benchmarkResult?.categoryScores || [];
+
+      const categoryDeltas = afterCatScores.map((acs) => {
+        const bcs = beforeCatScores.find((b) => b.category === acs.category);
+        const before = bcs ? (bcs.score <= 1.0 ? bcs.score : bcs.score / 100) : 0;
+        const after = acs.score <= 1.0 ? acs.score : acs.score / 100;
+        return { category: acs.category, before, after };
+      });
+
+      const delta = afterScore - beforeScore;
+      let recommendation: "merge" | "revert" | "iterate" = "iterate";
+      if (delta >= 0.02) recommendation = "merge";
+      else if (delta < -0.05) recommendation = "revert";
+
+      this.playgroundState.validateResult = {
+        beforeScore,
+        afterScore,
+        delta,
+        categoryDeltas,
+        recommendation,
+        validationRunId: result.run.id,
+      };
+      this.pgAddLog(
+        "validate",
+        `Validation complete: ${beforeScore.toFixed(2)} → ${afterScore.toFixed(2)} (${delta >= 0 ? "+" : ""}${delta.toFixed(2)})`,
+        "success"
+      );
+      this.sendEvolutionLabUpdate(send);
+    } catch (error) {
+      this.pgAddLog(
+        "validate",
+        `Validation failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error"
+      );
+      this.sendEvolutionLabUpdate(send);
+    }
+  }
+
+  private setupPlaygroundCallbacks() {
+    setPlaygroundCallbacks({
+      getState: () => this.playgroundState,
+      startCycle: async () => {
+        // MCP-driven start - state is set but no send (UI refreshes on next interaction)
+        this.playgroundState = {
+          cycleId: crypto.randomUUID().slice(0, 8),
+          step: "benchmark",
+          startedAt: Date.now(),
+          log: [
+            {
+              timestamp: Date.now(),
+              step: "benchmark",
+              message: "Cycle started (MCP)",
+              type: "info",
+            },
+          ],
+        };
+      },
+      submitProposal: (proposal) => {
+        this.playgroundState.proposal = proposal;
+        this.playgroundState.step = "propose";
+        this.pgAddLog("propose", "Proposal submitted (MCP)", "info");
+      },
+      applyChanges: async (opts) => {
+        const branch = opts.branch || `evo/pg-${this.playgroundState.cycleId}`;
+        this.playgroundState.applyResult = {
+          branch,
+          commits: [],
+          filesChanged: [],
+        };
+        this.playgroundState.step = "apply";
+        this.pgAddLog("apply", `Changes applied to branch: ${branch}`, "success");
+        return this.playgroundState.applyResult;
+      },
+      runValidation: async () => {
+        this.playgroundState.step = "validate";
+      },
+      reset: () => {
+        this.playgroundState = { step: "idle", log: [], cycleId: null };
+      },
+    });
   }
 
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
