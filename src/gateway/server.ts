@@ -11,7 +11,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mcpHandler } from "./mcp.js";
 import { createPHAAgent, type PHAAgent } from "../agent/pha-agent.js";
-import { createSystemAgent } from "../agent/system-agent.js";
+import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
 import { getDataSource } from "../tools/health-data.js";
 import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
@@ -806,7 +806,7 @@ function generateOAuthErrorPage(message: string): string {
  */
 export class GatewaySession {
   private agent: PHAAgent | null = null;
-  private systemAgent: PHAAgent | null = null;
+  private systemAgent: SystemAgent | null = null;
   private config: GatewayConfig;
   private sessionId: string;
   private dataSource: HealthDataSource;
@@ -968,9 +968,9 @@ export class GatewaySession {
     return this.agent;
   }
 
-  private async getSystemAgent(): Promise<PHAAgent> {
+  private async getSystemAgent(): Promise<SystemAgent> {
     if (!this.systemAgent) {
-      this.systemAgent = await createSystemAgent({
+      this.systemAgent = createSystemAgent({
         apiKey: this.config.apiKey,
         provider: this.config.provider,
         modelId: this.config.modelId,
@@ -2828,26 +2828,6 @@ export class GatewaySession {
       }
     }
 
-    // Agent context data
-    let agentContextData: EvolutionLabData["agentContextData"];
-    if (activeTab === "agent") {
-      agentContextData = {
-        radarScores: latestCategoryScores,
-      };
-      // If there's an inspected branch, include its changed files
-      if (this.evolutionInspectedBranch) {
-        try {
-          const filePaths = getChangedFilesOnBranch(this.evolutionInspectedBranch);
-          agentContextData.changedFiles = filePaths.map((p) => ({
-            path: p,
-            status: "modified" as const,
-          }));
-        } catch {
-          // ok
-        }
-      }
-    }
-
     return {
       activeTab,
       // Overview
@@ -2888,7 +2868,6 @@ export class GatewaySession {
       streamingContent: this.evolutionStreamingContent,
       currentPipelineStep: this.evolutionPipelineStep || undefined,
       pipelineSteps: getDefaultPipelineSteps(this.evolutionPipelineStep || undefined),
-      agentContextData,
     };
   }
 

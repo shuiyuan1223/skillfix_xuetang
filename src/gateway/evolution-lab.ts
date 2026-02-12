@@ -181,7 +181,6 @@ export interface EvolutionLabData {
   streamingContent: string;
   currentPipelineStep?: string;
   pipelineSteps: PipelineStep[];
-  agentContextData?: { radarScores?: CategoryScoreInfo[]; changedFiles?: ChangedFile[] };
   loading?: boolean;
 }
 
@@ -1421,41 +1420,6 @@ function generateAgentTab(ui: A2UIGenerator, data: EvolutionLabData): string {
     action: "pg_send_message",
   });
   children.push(chatInputId);
-
-  // Collapsible context section
-  if (data.agentContextData) {
-    const ctxChildren: string[] = [];
-    const ctxLabel = ui.text(t("evolution.agentContext"), "label");
-    ctxChildren.push(ctxLabel);
-
-    if (data.agentContextData.radarScores && data.agentContextData.radarScores.length > 0) {
-      const radarData = data.agentContextData.radarScores.map((cs) => {
-        const displayScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
-        return {
-          label: getCategoryLabel(cs.category),
-          value: parseFloat(displayScore.toFixed(3)),
-          maxValue: 1.0,
-        };
-      });
-      const radar = ui.radarChart(radarData, {
-        size: 200,
-        showLabels: true,
-        color: "#818cf8",
-      });
-      ctxChildren.push(radar);
-    }
-
-    if (data.agentContextData.changedFiles && data.agentContextData.changedFiles.length > 0) {
-      const fileTreeId = ui.fileTree(data.agentContextData.changedFiles, {
-        onFileSelect: "evo_file_select",
-      });
-      ctxChildren.push(fileTreeId);
-    }
-
-    if (ctxChildren.length > 1) {
-      children.push(ui.card(ctxChildren, { padding: 12 }));
-    }
-  }
 
   return ui.column(children, { gap: 12, padding: 16 });
 }

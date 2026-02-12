@@ -371,7 +371,7 @@ export const en: LocaleMessages = {
     scoreTrend: "Score Trend",
     // Agent tab
     agentSubtitle: "Agent-driven auto-evolution",
-    agentContext: "Context",
+
     startEvolution: "Start Evolution",
     // Version detail
     versionDetail: "Version Detail",

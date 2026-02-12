@@ -387,7 +387,7 @@ export interface LocaleMessages {
     scoreTrend: string;
     // Agent tab
     agentSubtitle: string;
-    agentContext: string;
+
     startEvolution: string;
     // Version detail
     versionDetail: string;

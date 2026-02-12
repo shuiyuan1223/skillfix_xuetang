@@ -364,7 +364,7 @@ export const zhCN: LocaleMessages = {
     scoreTrend: "分数趋势",
     // Agent tab
     agentSubtitle: "Agent 驱动的自动进化",
-    agentContext: "上下文",
+
     startEvolution: "开始进化",
     // Version detail
     versionDetail: "版本详情",
