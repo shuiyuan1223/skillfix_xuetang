@@ -141,7 +141,7 @@ export function generateSystemAgentPage(state: {
     children.push(ui.stepIndicator(state.pipelineSteps, { orientation: "horizontal" }));
   }
 
-  // Chat messages
+  // Chat messages (noWelcome: suppress the main Chat welcome screen)
   const msgsId = `sa_msgs_${Date.now()}`;
   ui.addComponent(msgsId, {
     id: msgsId,
@@ -149,6 +149,7 @@ export function generateSystemAgentPage(state: {
     messages: state.chatMessages,
     streaming: state.streaming,
     streamingContent: state.streamingContent,
+    noWelcome: true,
   });
   children.push(msgsId);
 
