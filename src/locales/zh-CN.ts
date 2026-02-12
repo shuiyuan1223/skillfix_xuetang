@@ -15,6 +15,13 @@ export const zhCN: LocaleMessages = {
     skills: "技能",
     evolution: "进化",
     integrations: "集成",
+    systemAgent: "系统 Agent",
+  },
+
+  systemAgent: {
+    title: "系统 Agent",
+    subtitle: "AI 驱动的系统管理",
+    placeholder: "向系统 Agent 提问...",
   },
 
   common: {

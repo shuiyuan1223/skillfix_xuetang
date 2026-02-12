@@ -1,8 +1,8 @@
 /**
  * Evolution Lab Page Generator
  *
- * 5-Tab Dashboard layout: Overview | Benchmark | Versions | Data | Agent
- * Dashboard/GUI-centric with Agent mode as a dedicated tab.
+ * 4-Tab Dashboard layout: Overview | Benchmark | Versions | Data
+ * Dashboard/GUI-centric. Agent mode moved to standalone System Agent page.
  */
 
 import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
@@ -18,7 +18,7 @@ interface EvoChatMessage {
   cards?: { components: unknown[]; root_id: string };
 }
 
-interface PipelineStep {
+export interface PipelineStep {
   id: string;
   label: string;
   icon: string;
@@ -144,7 +144,7 @@ export interface ComparisonRun {
 }
 
 export interface EvolutionLabData {
-  activeTab: "overview" | "benchmark" | "versions" | "data" | "agent";
+  activeTab: "overview" | "benchmark" | "versions" | "data";
   // Overview
   stats?: EvaluationStats;
   latestCategoryScores?: CategoryScoreInfo[];
@@ -175,12 +175,6 @@ export interface EvolutionLabData {
   tracesTotal?: number;
   evaluations?: EvaluationInfo[];
   suggestions?: SuggestionInfo[];
-  // Agent
-  chatMessages: EvoChatMessage[];
-  streaming: boolean;
-  streamingContent: string;
-  currentPipelineStep?: string;
-  pipelineSteps: PipelineStep[];
   loading?: boolean;
 }
 
@@ -471,16 +465,11 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
   if (data.activeTab === "data") {
     tabContentIds["data"] = generateDataTab(ui, data);
   }
-  if (data.activeTab === "agent") {
-    tabContentIds["agent"] = generateAgentTab(ui, data);
-  }
-
   // ---- Tabs ----
   const tabs = ui.tabs(
     [
       { id: "overview", label: t("evolution.tabOverview"), icon: "bar-chart" },
       { id: "benchmark", label: t("evolution.tabBenchmark"), icon: "test-tube" },
-      { id: "agent", label: t("evolution.tabAgent"), icon: "bot" },
       { id: "versions", label: t("evolution.tabVersions"), icon: "git-branch" },
       { id: "data", label: t("evolution.tabData"), icon: "file-text" },
     ],
@@ -1362,64 +1351,4 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   return ui.column(children, { gap: 16, padding: 16 });
 }
 
-// ============================================================================
-// Tab 5: Agent
-// ============================================================================
-
-function generateAgentTab(ui: A2UIGenerator, data: EvolutionLabData): string {
-  const children: string[] = [];
-
-  // Pipeline step indicator (visible when steps are active)
-  if (data.pipelineSteps?.some((s) => s.status !== "pending")) {
-    const stepsId = ui.stepIndicator(data.pipelineSteps, { orientation: "horizontal" });
-    children.push(stepsId);
-  }
-
-  // Chat area
-  const chatMsgsId = `evo_chat_msgs_${Date.now()}`;
-  ui.addComponent(chatMsgsId, {
-    id: chatMsgsId,
-    type: "chat_messages",
-    messages: data.chatMessages,
-    streaming: data.streaming,
-    streamingContent: data.streamingContent,
-  });
-  children.push(chatMsgsId);
-
-  // Approval buttons (visible when pipeline is at "propose" step)
-  if (data.currentPipelineStep === "propose" && !data.streaming) {
-    const approveBtn = ui.button(t("evolution.approveProposal"), "evo_approve", {
-      variant: "primary",
-      size: "md",
-    });
-    const rejectBtn = ui.button(t("evolution.rejectProposal"), "evo_reject", {
-      variant: "secondary",
-      size: "md",
-    });
-    const approvalRow = ui.row([approveBtn, rejectBtn], { gap: 12, justify: "center" });
-    children.push(ui.card([approvalRow], { padding: 12 }));
-  }
-
-  // Quick start button (visible when idle — no messages and not streaming)
-  if (!data.streaming && data.chatMessages.length === 0) {
-    const startBtn = ui.button(t("evolution.startEvolutionCycle"), "pg_start_auto", {
-      variant: "primary",
-      size: "lg",
-    });
-    const startRow = ui.row([startBtn], { gap: 12, justify: "center" });
-    children.push(ui.card([startRow], { padding: 24 }));
-  }
-
-  // Chat input
-  const chatInputId = `evo_chat_input_${Date.now()}`;
-  ui.addComponent(chatInputId, {
-    id: chatInputId,
-    type: "chat_input",
-    disabled: data.streaming,
-    placeholder: t("evolution.evoChatPlaceholder"),
-    action: "pg_send_message",
-  });
-  children.push(chatInputId);
-
-  return ui.column(children, { gap: 12, padding: 16 });
-}
+// (Agent Tab removed — now a standalone System Agent page)

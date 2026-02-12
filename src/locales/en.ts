@@ -15,6 +15,13 @@ export const en: LocaleMessages = {
     skills: "Skills",
     evolution: "Evolution",
     integrations: "Integrations",
+    systemAgent: "System Agent",
+  },
+
+  systemAgent: {
+    title: "System Agent",
+    subtitle: "AI-powered system management",
+    placeholder: "Ask the System Agent...",
   },
 
   common: {

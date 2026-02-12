@@ -15,6 +15,14 @@ export interface LocaleMessages {
     skills: string;
     evolution: string;
     integrations: string;
+    systemAgent: string;
+  };
+
+  // System Agent
+  systemAgent: {
+    title: string;
+    subtitle: string;
+    placeholder: string;
   };
 
   // Common

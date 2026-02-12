@@ -15,6 +15,7 @@ import {
   getCategoryLabel,
   getCategoryIcon,
   type ComparisonRun,
+  type PipelineStep,
 } from "./evolution-lab.js";
 
 // Types for page data
@@ -60,6 +61,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
       { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
       { id: "memory", label: t("nav.memory"), icon: "brain" },
       { id: "evolution", label: t("nav.evolution"), icon: "flask" },
+      { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
     ],
     { activeId: activeView }
   );
@@ -116,6 +118,55 @@ export function generateChatPage(state: ChatState): A2UIMessage {
   if (rootComponent) {
     rootComponent["style"] = "height: 100%;";
   }
+
+  return ui.build(root);
+}
+
+// ============================================================================
+// System Agent Page Generator
+// ============================================================================
+
+export function generateSystemAgentPage(state: {
+  chatMessages: Array<{ role: string; content: string; cards?: any }>;
+  streaming: boolean;
+  streamingContent: string;
+  pipelineSteps?: PipelineStep[];
+  currentPipelineStep?: string;
+}): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+  const children: string[] = [];
+
+  // Pipeline indicator (visible when evolution steps active)
+  if (state.pipelineSteps?.some((s) => s.status !== "pending")) {
+    children.push(ui.stepIndicator(state.pipelineSteps, { orientation: "horizontal" }));
+  }
+
+  // Chat messages
+  const msgsId = `sa_msgs_${Date.now()}`;
+  ui.addComponent(msgsId, {
+    id: msgsId,
+    type: "chat_messages",
+    messages: state.chatMessages,
+    streaming: state.streaming,
+    streamingContent: state.streamingContent,
+  });
+  children.push(msgsId);
+
+  // Chat input (fixed at bottom via flexbox)
+  const inputId = `sa_input_${Date.now()}`;
+  ui.addComponent(inputId, {
+    id: inputId,
+    type: "chat_input",
+    disabled: state.streaming,
+    placeholder: t("systemAgent.placeholder"),
+    action: "sa_send_message",
+  });
+  children.push(inputId);
+
+  const root = ui.column(children, { gap: 0 });
+  // Fill height for sticky input pattern
+  const rootComp = ui["components"].get(root);
+  if (rootComp) rootComp["style"] = "height: 100%;";
 
   return ui.build(root);
 }

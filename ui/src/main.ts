@@ -1078,7 +1078,11 @@ class A2UIRenderer {
               e.preventDefault();
               const input = e.target as HTMLInputElement;
               if (input.value.trim()) {
-                this.sendAction("send_message", { content: input.value.trim() });
+                const actionName = (c.action as string) || "send_message";
+                this.sendAction(actionName, {
+                  content: input.value.trim(),
+                  value: input.value.trim(),
+                });
                 input.value = "";
               }
             }
@@ -1091,7 +1095,11 @@ class A2UIRenderer {
             const container = (e.target as HTMLElement).parentElement;
             const input = container?.querySelector("input") as HTMLInputElement;
             if (input?.value.trim()) {
-              this.sendAction("send_message", { content: input.value.trim() });
+              const actionName = (c.action as string) || "send_message";
+              this.sendAction(actionName, {
+                content: input.value.trim(),
+                value: input.value.trim(),
+              });
               input.value = "";
             }
           }}

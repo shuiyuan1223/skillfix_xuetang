@@ -54,6 +54,7 @@ import {
   generateToolCards,
   mergePendingCards,
   generateIntegrationsPage,
+  generateSystemAgentPage,
 } from "./pages.js";
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
@@ -878,17 +879,17 @@ export class GatewaySession {
   private activeVersionBranch: string | null = null;
 
   // Evolution Lab state (5-Tab Dashboard)
-  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" | "agent" = "overview";
+  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" = "overview";
   private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
   private evolutionSelectedVersion: string | null = null;
-  private evolutionChatMessages: Array<{
+  private systemAgentChatMessages: Array<{
     role: "user" | "assistant" | "tool";
     content: string;
     cards?: { components: unknown[]; root_id: string };
   }> = [];
-  private evolutionStreaming = false;
-  private evolutionStreamingContent = "";
-  private evolutionPipelineStep: string | null = null;
+  private systemAgentStreaming = false;
+  private systemAgentStreamingContent = "";
+  private systemAgentPipelineStep: string | null = null;
   private evolutionInspectedBranch: string | null = null;
   private evolutionLabDiffContent: {
     before: string;
@@ -1091,6 +1092,16 @@ export class GatewaySession {
           messages: this.chatMessages,
           streaming: this.isStreaming,
           streamingContent: this.streamingContent,
+        });
+        break;
+
+      case "system-agent":
+        mainPage = generateSystemAgentPage({
+          chatMessages: this.systemAgentChatMessages,
+          streaming: this.systemAgentStreaming,
+          streamingContent: this.systemAgentStreamingContent,
+          pipelineSteps: getDefaultPipelineSteps(this.systemAgentPipelineStep || undefined),
+          currentPipelineStep: this.systemAgentPipelineStep || undefined,
         });
         break;
 
@@ -1418,27 +1429,27 @@ export class GatewaySession {
    * Handle messages in the Evolution Lab chat.
    * Forces evolution-driver skill injection and tracks pipeline steps.
    */
-  private async handleEvolutionMessage(
+  private async handleSystemAgentMessage(
     content: string,
     send: (msg: unknown) => void
   ): Promise<void> {
-    this.evolutionChatMessages.push({ role: "user", content });
-    this.evolutionStreaming = true;
-    this.evolutionStreamingContent = "";
+    this.systemAgentChatMessages.push({ role: "user", content });
+    this.systemAgentStreaming = true;
+    this.systemAgentStreamingContent = "";
 
     // Check for user approval/rejection responses
     const lowerContent = content.toLowerCase();
     if (
-      this.evolutionPipelineStep === "propose" &&
+      this.systemAgentPipelineStep === "propose" &&
       (lowerContent.includes("approve") ||
         lowerContent.includes("批准") ||
         lowerContent.includes("同意") ||
         lowerContent.includes("可以") ||
         lowerContent.includes("好的"))
     ) {
-      this.evolutionPipelineStep = "approve";
+      this.systemAgentPipelineStep = "approve";
     } else if (
-      this.evolutionPipelineStep === "propose" &&
+      this.systemAgentPipelineStep === "propose" &&
       (lowerContent.includes("reject") ||
         lowerContent.includes("拒绝") ||
         lowerContent.includes("不行") ||
@@ -1459,7 +1470,7 @@ export class GatewaySession {
             for (const block of event.message.content || []) {
               if (block.type === "text") text += block.text;
             }
-            this.evolutionStreamingContent = text;
+            this.systemAgentStreamingContent = text;
 
             // Detect pipeline steps from assistant content
             this.detectPipelineStepFromContent(text);
@@ -1473,7 +1484,7 @@ export class GatewaySession {
               if (block.type === "text") text += block.text;
             }
             if (text.trim()) {
-              this.evolutionChatMessages.push({
+              this.systemAgentChatMessages.push({
                 role: "assistant",
                 content: text,
               });
@@ -1481,8 +1492,8 @@ export class GatewaySession {
               // Final content-based step detection
               this.detectPipelineStepFromContent(text);
             }
-            this.evolutionStreaming = false;
-            this.evolutionStreamingContent = "";
+            this.systemAgentStreaming = false;
+            this.systemAgentStreamingContent = "";
             this.sendEvolutionLabUpdate(send);
           }
         } else if (event.type === "tool_execution_start") {
@@ -1491,13 +1502,13 @@ export class GatewaySession {
           // Detect pipeline step from tool usage
           this.detectPipelineStepFromTool(toolName);
 
-          this.evolutionChatMessages.push({
+          this.systemAgentChatMessages.push({
             role: "tool",
             content: `Using ${toolName}...`,
           });
           this.sendEvolutionLabUpdate(send);
         } else if (event.type === "agent_end") {
-          this.evolutionStreaming = false;
+          this.systemAgentStreaming = false;
           this.sendEvolutionLabUpdate(send);
         }
       });
@@ -1510,8 +1521,8 @@ export class GatewaySession {
         unsubscribe();
       }
     } catch (error) {
-      this.evolutionStreaming = false;
-      this.evolutionChatMessages.push({
+      this.systemAgentStreaming = false;
+      this.systemAgentChatMessages.push({
         role: "assistant",
         content: `Error: ${error instanceof Error ? error.message : String(error)}`,
       });
@@ -1524,8 +1535,8 @@ export class GatewaySession {
    */
   private detectPipelineStepFromTool(toolName: string): void {
     const STEP_ORDER = ["benchmark", "diagnose", "propose", "approve", "apply", "validate"];
-    const currentIdx = this.evolutionPipelineStep
-      ? STEP_ORDER.indexOf(this.evolutionPipelineStep)
+    const currentIdx = this.systemAgentPipelineStep
+      ? STEP_ORDER.indexOf(this.systemAgentPipelineStep)
       : -1;
 
     let newStep: string | null = null;
@@ -1562,7 +1573,7 @@ export class GatewaySession {
     if (newStep) {
       const newIdx = STEP_ORDER.indexOf(newStep);
       if (newIdx > currentIdx) {
-        this.evolutionPipelineStep = newStep;
+        this.systemAgentPipelineStep = newStep;
       }
     }
   }
@@ -1572,8 +1583,8 @@ export class GatewaySession {
    */
   private detectPipelineStepFromContent(text: string): void {
     const STEP_ORDER = ["benchmark", "diagnose", "propose", "approve", "apply", "validate"];
-    const currentIdx = this.evolutionPipelineStep
-      ? STEP_ORDER.indexOf(this.evolutionPipelineStep)
+    const currentIdx = this.systemAgentPipelineStep
+      ? STEP_ORDER.indexOf(this.systemAgentPipelineStep)
       : -1;
 
     const lower = text.toLowerCase();
@@ -1587,7 +1598,7 @@ export class GatewaySession {
         lower.includes("诊断"))
     ) {
       if (currentIdx >= STEP_ORDER.indexOf("benchmark")) {
-        this.evolutionPipelineStep = "diagnose";
+        this.systemAgentPipelineStep = "diagnose";
       }
     } else if (
       currentIdx < STEP_ORDER.indexOf("propose") &&
@@ -1600,7 +1611,7 @@ export class GatewaySession {
         lower.includes("改进方案"))
     ) {
       if (currentIdx >= STEP_ORDER.indexOf("diagnose")) {
-        this.evolutionPipelineStep = "propose";
+        this.systemAgentPipelineStep = "propose";
       }
     }
   }
@@ -1762,16 +1773,16 @@ export class GatewaySession {
       send({ type: "clear_surface", surface_id: "modal" });
       await this.handleNavigate("settings/skills", send);
     }
+    // System Agent action
+    else if (action === "sa_send_message" && (payload?.content || payload?.value)) {
+      const content = (payload.content || payload.value) as string;
+      await this.handleSystemAgentMessage(content, send);
+    }
     // Evolution Lab actions
     else if (action === "evo_send_message" && payload?.value) {
-      await this.handleEvolutionMessage(payload.value as string, send);
+      await this.handleSystemAgentMessage(payload.value as string, send);
     } else if (action === "evo_tab_change" && payload?.tab) {
-      this.evolutionActiveTab = payload.tab as
-        | "overview"
-        | "benchmark"
-        | "versions"
-        | "data"
-        | "agent";
+      this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
       this.sendEvolutionLabUpdate(send);
     } else if (action === "evo_data_subtab_change" && payload?.tab) {
       this.evolutionDataSubTab = payload.tab as "traces" | "evaluations" | "suggestions";
@@ -1815,22 +1826,22 @@ export class GatewaySession {
     }
     // Evolution Lab: Approve/Reject proposal
     else if (action === "evo_approve") {
-      this.evolutionPipelineStep = "approve";
-      await this.handleEvolutionMessage(
+      this.systemAgentPipelineStep = "approve";
+      await this.handleSystemAgentMessage(
         "I approve this proposal. Please proceed with applying the changes.",
         send
       );
     } else if (action === "evo_reject") {
-      await this.handleEvolutionMessage(
+      await this.handleSystemAgentMessage(
         "I reject this proposal. Please revise the plan and propose again.",
         send
       );
     }
     // Playground actions (simplified — SystemAgent drives the flow)
     else if (action === "pg_send_message" && payload?.value) {
-      await this.handleEvolutionMessage(payload.value as string, send);
+      await this.handleSystemAgentMessage(payload.value as string, send);
     } else if (action === "pg_start_auto") {
-      await this.handleEvolutionMessage(
+      await this.handleSystemAgentMessage(
         "Start a full evolution cycle: benchmark, diagnose, propose improvements, and wait for my approval before applying.",
         send
       );
@@ -1902,12 +1913,7 @@ export class GatewaySession {
           );
         }
       } else if (this.currentView === "evolution") {
-        this.evolutionActiveTab = payload.tab as
-          | "overview"
-          | "benchmark"
-          | "versions"
-          | "data"
-          | "agent";
+        this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
         this.sendEvolutionLabUpdate(send);
       } else {
         type EvolutionTab =
@@ -2862,12 +2868,6 @@ export class GatewaySession {
       tracesTotal,
       evaluations,
       suggestions,
-      // Agent
-      chatMessages: this.evolutionChatMessages,
-      streaming: this.evolutionStreaming,
-      streamingContent: this.evolutionStreamingContent,
-      currentPipelineStep: this.evolutionPipelineStep || undefined,
-      pipelineSteps: getDefaultPipelineSteps(this.evolutionPipelineStep || undefined),
     };
   }
 
@@ -2875,7 +2875,9 @@ export class GatewaySession {
    * Send an Evolution Lab page update to the client.
    */
   private sendEvolutionLabUpdate(send: (msg: unknown) => void): void {
-    if (this.currentView === "evolution") {
+    if (this.currentView === "system-agent") {
+      this.sendSystemAgentUpdate(send);
+    } else if (this.currentView === "evolution") {
       const labData = this.buildEvolutionLabData();
       const labPage = generateEvolutionLab(labData);
       send({
@@ -2883,6 +2885,27 @@ export class GatewaySession {
         surface_id: "main",
         components: labPage.components,
         root_id: labPage.root_id,
+      });
+    }
+  }
+
+  /**
+   * Send a System Agent page update to the client.
+   */
+  private sendSystemAgentUpdate(send: (msg: unknown) => void): void {
+    if (this.currentView === "system-agent") {
+      const page = generateSystemAgentPage({
+        chatMessages: this.systemAgentChatMessages,
+        streaming: this.systemAgentStreaming,
+        streamingContent: this.systemAgentStreamingContent,
+        pipelineSteps: getDefaultPipelineSteps(this.systemAgentPipelineStep || undefined),
+        currentPipelineStep: this.systemAgentPipelineStep || undefined,
+      });
+      send({
+        type: "a2ui",
+        surface_id: "main",
+        components: page.components,
+        root_id: page.root_id,
       });
     }
   }
