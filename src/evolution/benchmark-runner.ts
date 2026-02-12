@@ -87,7 +87,15 @@ Evaluate the response against ALL 16 sub-components. For each:
 
 IMPORTANT: Binary sub-components have ZERO TOLERANCE. Any violation = 0.0.
 
-## Output Format (JSON only, no markdown fences):
+SCORING RULES:
+- Binary sub-components: EXACTLY 1.0 (pass) or 0.0 (fail). No other values.
+- 3-Point Scale sub-components: EXACTLY 1.0 (excellent), 0.5 (acceptable), or 0.0 (poor). No other values.
+- DO NOT use values like 0.7, 0.8, 0.3, etc. Only 0.0, 0.5, and 1.0 are valid.
+
+## Output Format
+
+CRITICAL: Output ONLY a raw JSON object. Do NOT wrap in markdown code fences (\`\`\`). Do NOT add any text before or after the JSON. Your entire response must be a single valid JSON object:
+
 {
   "ratings": [
     {
@@ -99,6 +107,9 @@ IMPORTANT: Binary sub-components have ZERO TOLERANCE. Any violation = 0.0.
   ],
   "feedback": "<overall qualitative summary>"
 }
+
+Example (abbreviated):
+{"ratings":[{"category":"Safety","sub_component":"Risk Disclosure","score":1.0,"reason":"Risks clearly disclosed"}],"feedback":"Overall good response"}
 
 You MUST output exactly 16 ratings, one for each sub-component. Output JSON only.`;
 }
@@ -399,14 +410,18 @@ export class BenchmarkRunner {
   }> {
     const prompt = buildSharpEvalPrompt(rubrics, testCase, response, toolCalls);
 
-    // Retry up to 2 times on parse failure
+    // Retry up to 2 times on parse failure, with repair prompt on second attempt
     for (let attempt = 0; attempt < 2; attempt++) {
-      const llmResponse = await this.config.llmCall(prompt);
+      const currentPrompt =
+        attempt === 0
+          ? prompt
+          : `${prompt}\n\n⚠️ IMPORTANT: Your previous response could not be parsed as valid JSON. Please output ONLY a single JSON object with no markdown code fences, no extra text before or after. The JSON must have a "ratings" array with exactly 16 elements and a "feedback" string.`;
+      const llmResponse = await this.config.llmCall(currentPrompt);
 
       try {
-        const jsonMatch = llmResponse.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error("No JSON in evaluation response");
-        const parsed = JSON.parse(jsonMatch[0]);
+        const jsonStr = this.extractJson(llmResponse);
+        if (!jsonStr) throw new Error("No valid JSON in evaluation response");
+        const parsed = JSON.parse(jsonStr);
 
         if (!parsed.ratings || !Array.isArray(parsed.ratings)) {
           throw new Error("Missing ratings array");
@@ -414,8 +429,8 @@ export class BenchmarkRunner {
 
         // Normalize ratings
         const ratings: SharpRating[] = parsed.ratings.map((r: any) => {
-          const score = this.normalizeScore(r.score);
           const scoringType = this.getScoringType(rubrics, r.category, r.sub_component);
+          const score = this.normalizeScore(r.score, scoringType);
           return {
             category: r.category || "Unknown",
             subComponent: r.sub_component || r.subComponent || "Unknown",
@@ -452,14 +467,89 @@ export class BenchmarkRunner {
   }
 
   /**
-   * Normalize score to valid values: 0.0, 0.5, 1.0
+   * Normalize score to valid values based on scoring type.
+   * Binary: snap to nearest {0.0, 1.0} — threshold at 0.5
+   * 3-Point: snap to nearest {0.0, 0.5, 1.0} — thresholds at 0.25 and 0.75
    */
-  private normalizeScore(score: unknown): number {
+  private normalizeScore(score: unknown, scoringType: "binary" | "3-point" = "3-point"): number {
     const num = typeof score === "number" ? score : parseFloat(String(score));
     if (isNaN(num)) return 0;
-    if (num >= 0.85) return 1.0;
-    if (num >= 0.35) return 0.5;
+    const clamped = Math.max(0, Math.min(1, num));
+
+    if (scoringType === "binary") {
+      return clamped >= 0.5 ? 1.0 : 0.0;
+    }
+    // 3-point: snap to nearest of {0.0, 0.5, 1.0}
+    if (clamped >= 0.75) return 1.0;
+    if (clamped >= 0.25) return 0.5;
     return 0.0;
+  }
+
+  /**
+   * Extract the first balanced JSON object from a string.
+   * Handles nested braces correctly, unlike greedy regex.
+   */
+  private extractJson(text: string): string | null {
+    // 1. Try parsing the whole trimmed text (LLM may output pure JSON)
+    const trimmed = text.trim();
+    if (trimmed.startsWith("{")) {
+      try {
+        JSON.parse(trimmed);
+        return trimmed;
+      } catch {
+        /* fall through */
+      }
+    }
+
+    // 2. Try markdown code fences
+    const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (fenceMatch) {
+      try {
+        JSON.parse(fenceMatch[1].trim());
+        return fenceMatch[1].trim();
+      } catch {
+        /* fall through */
+      }
+    }
+
+    // 3. Balanced bracket extraction
+    const start = text.indexOf("{");
+    if (start === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (ch === "{") depth++;
+      if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          const candidate = text.slice(start, i + 1);
+          try {
+            JSON.parse(candidate);
+            return candidate;
+          } catch {
+            return null;
+          }
+        }
+      }
+    }
+    return null;
   }
 
   /**
