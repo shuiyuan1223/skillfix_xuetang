@@ -458,10 +458,11 @@ class A2UIRenderer {
     const justify = (c.justify as string) || "start";
     const align = (c.align as string) || "center";
     const className = (c.className as string) || "";
+    const extraStyle = (c.style as string) || "";
     return html`
       <div
         class="flex flex-row ${className}"
-        style="gap: ${gap}px; justify-content: ${justify}; align-items: ${align}"
+        style="gap: ${gap}px; justify-content: ${justify}; align-items: ${align}; ${extraStyle}"
       >
         ${this.renderChildren(c.children)}
       </div>
