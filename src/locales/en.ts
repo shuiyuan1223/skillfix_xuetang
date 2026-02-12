@@ -437,6 +437,9 @@ export const en: LocaleMessages = {
     agentDriven: "Agent Driven",
     evolutionConsole: "Evolution Console",
     taskFlowControl: "Task & Flow Control",
+    iterateCycle: "Next Iteration",
+    improvementPlan: "Improvement Plan",
+    iterationHistory: "Iteration History",
   },
 
   memory: {

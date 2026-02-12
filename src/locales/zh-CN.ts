@@ -429,6 +429,9 @@ export const zhCN: LocaleMessages = {
     agentDriven: "Agent 驱动",
     evolutionConsole: "进化控制台",
     taskFlowControl: "任务流控制",
+    iterateCycle: "下一轮迭代",
+    improvementPlan: "改进计划",
+    iterationHistory: "迭代历史",
   },
 
   memory: {

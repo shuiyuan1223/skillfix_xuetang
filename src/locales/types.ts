@@ -451,6 +451,9 @@ export interface LocaleMessages {
     agentDriven: string;
     evolutionConsole: string;
     taskFlowControl: string;
+    iterateCycle: string;
+    improvementPlan: string;
+    iterationHistory: string;
   };
 
   // Memory page

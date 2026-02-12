@@ -3877,16 +3877,24 @@ export class GatewaySession {
   private async pgRunPropose(send: (msg: unknown) => void) {
     this.sendEvolutionLabUpdate(send);
     const diagnoseResult = this.playgroundState.diagnoseResult;
+    const cycleHistory = this.playgroundState.cycleHistory;
+
+    // When iterating without diagnose, check if we have history to guide proposals
     if (!diagnoseResult || diagnoseResult.weaknesses.length === 0) {
-      // No weaknesses found — auto-fill an empty proposal
-      this.playgroundState.proposal = {
-        description: "No weaknesses detected — all SHARP dimensions above threshold.",
-        changes: [],
-        expectedImprovement: "N/A",
-      };
-      this.pgAddLog("propose", "No weaknesses to address", "warning");
-      this.sendEvolutionLabUpdate(send);
-      return;
+      if (cycleHistory && cycleHistory.length > 0) {
+        // Iterate path: skip diagnose, use history improvement plan as guidance
+        // Fall through to LLM proposal with history context
+      } else {
+        // No weaknesses found — auto-fill an empty proposal
+        this.playgroundState.proposal = {
+          description: "No weaknesses detected — all SHARP dimensions above threshold.",
+          changes: [],
+          expectedImprovement: "N/A",
+        };
+        this.pgAddLog("propose", "No weaknesses to address", "warning");
+        this.sendEvolutionLabUpdate(send);
+        return;
+      }
     }
 
     try {
@@ -3899,9 +3907,11 @@ export class GatewaySession {
 
       // Collect unique target files from diagnose suggestions
       const targetPaths = new Set<string>();
-      for (const s of diagnoseResult.suggestions) {
-        for (const f of s.targetFiles) {
-          targetPaths.add(f);
+      if (diagnoseResult) {
+        for (const s of diagnoseResult.suggestions) {
+          for (const f of s.targetFiles) {
+            targetPaths.add(f);
+          }
         }
       }
       // Also include SOUL.md as primary target
@@ -3930,28 +3940,50 @@ export class GatewaySession {
 
       progress("Generating proposal with LLM...");
 
-      // Build LLM prompt
-      const weakSummary = diagnoseResult.weaknesses
-        .map((w) => {
-          const subs = w.weakSubComponents
-            ? w.weakSubComponents.map((sc) => `${sc.name}(${sc.score.toFixed(2)})`).join(", ")
-            : "";
-          return `- **${w.label}** (${w.score.toFixed(3)}): ${subs}`;
-        })
-        .join("\n");
+      // Build LLM prompt sections
+      const weakSummary = diagnoseResult
+        ? diagnoseResult.weaknesses
+            .map((w) => {
+              const subs = w.weakSubComponents
+                ? w.weakSubComponents.map((sc) => `${sc.name}(${sc.score.toFixed(2)})`).join(", ")
+                : "";
+              return `- **${w.label}** (${w.score.toFixed(3)}): ${subs}`;
+            })
+            .join("\n")
+        : "（跳过诊断 — 基于迭代历史改进建议生成提案）";
 
-      const suggestionSummary = diagnoseResult.suggestions
-        .map((s, i) => `${i + 1}. [${s.priority}] ${s.description}`)
-        .join("\n");
+      const suggestionSummary = diagnoseResult
+        ? diagnoseResult.suggestions
+            .map((s, i) => `${i + 1}. [${s.priority}] ${s.description}`)
+            .join("\n")
+        : "";
 
-      const patternSummary = diagnoseResult.weaknesses
-        .filter((w) => w.patterns.length > 0)
-        .map((w) => `- ${w.label}: ${w.patterns.join("; ")}`)
-        .join("\n");
+      const patternSummary = diagnoseResult
+        ? diagnoseResult.weaknesses
+            .filter((w) => w.patterns.length > 0)
+            .map((w) => `- ${w.label}: ${w.patterns.join("; ")}`)
+            .join("\n")
+        : "";
 
       const fileContentSection = Object.entries(fileContents)
         .map(([path, content]) => `### ${path}\n\`\`\`\n${content}\n\`\`\``)
         .join("\n\n");
+
+      // Build iteration history section
+      let historySection = "";
+      if (cycleHistory && cycleHistory.length > 0) {
+        historySection = `\n## 迭代历史\n\n以下是之前进化循环的尝试，请避免重复已失败的方案，在上一轮改进建议基础上推进：\n\n`;
+        for (const h of cycleHistory) {
+          historySection += `### 第 ${h.cycleNumber} 轮\n`;
+          historySection += `- 提案: ${h.proposal}\n`;
+          historySection += `- 结果: ${h.benchmarkScore.toFixed(3)} → ${h.validateScore.toFixed(3)} (${h.delta >= 0 ? "+" : ""}${h.delta.toFixed(3)})\n`;
+          historySection += `- 分析: ${h.analysisSummary}\n`;
+          if (h.improvementPlan.length > 0) {
+            historySection += `- 建议改进: ${h.improvementPlan.join("; ")}\n`;
+          }
+          historySection += "\n";
+        }
+      }
 
       const prompt = `你是 PHA (Personal Health Agent) 的进化架构师。请根据诊断结果和当前文件内容，生成具体的优化提案。
 
@@ -3964,8 +3996,8 @@ ${weakSummary}
 ${patternSummary || "（无 LLM 分析结果）"}
 
 ### 改进建议
-${suggestionSummary}
-
+${suggestionSummary || "（参考迭代历史中的改进计划）"}
+${historySection}
 ## 当前文件内容
 
 ${fileContentSection}
@@ -3976,7 +4008,7 @@ ${fileContentSection}
 1. 要修改的文件路径
 2. 具体修改内容描述（应该添加什么、修改什么、删除什么）
 3. 修改理由（对应哪个薄弱维度）
-
+${cycleHistory && cycleHistory.length > 0 ? "\n**重要：必须基于上一轮的改进计划推进，避免重复已尝试过的方案。**\n" : ""}
 ## 输出 JSON（不要 markdown 包裹）
 
 {
@@ -4379,6 +4411,47 @@ ${changesDesc}
           "error"
         );
       }
+    } else if (action === "iterate") {
+      // Record current cycle to history
+      const history = this.playgroundState.cycleHistory || [];
+      history.push({
+        cycleNumber: history.length + 1,
+        benchmarkScore: this.playgroundState.benchmarkResult?.overallScore || 0,
+        validateScore: this.playgroundState.validateResult?.afterScore || 0,
+        delta: this.playgroundState.validateResult?.delta || 0,
+        proposal: this.playgroundState.proposal?.description || "",
+        analysisSummary: this.playgroundState.analyseResult?.summary || "",
+        improvementPlan: this.playgroundState.analyseResult?.improvementPlan || [],
+        recommendation: this.playgroundState.analyseResult?.recommendation || "",
+        timestamp: Date.now(),
+      });
+
+      // Revert current branch (code goes back, next cycle re-applies)
+      if (this.playgroundState.applyResult?.branch) {
+        try {
+          abandonVersion(this.playgroundState.applyResult.branch);
+          this.switchAgentVersion(null);
+        } catch {
+          // ignore revert errors
+        }
+      }
+
+      // Preserve baseline benchmark + history, clear intermediate steps, jump to propose
+      const benchmarkResult = this.playgroundState.benchmarkResult;
+      const log = this.playgroundState.log;
+      this.playgroundState = {
+        cycleId: this.playgroundState.cycleId,
+        step: "propose",
+        startedAt: this.playgroundState.startedAt,
+        benchmarkResult,
+        cycleHistory: history,
+        log,
+      };
+      this.pgAddLog("propose", `Iteration ${history.length + 1} — generating new proposal`, "info");
+
+      // Auto-trigger propose (pgRunPropose will detect cycleHistory for enhanced path)
+      this.pgRunPropose(send);
+      return;
     } else if (action === "new_cycle") {
       this.pgReset(send);
       return;
@@ -4523,15 +4596,29 @@ ${changesDesc}
         })
         .join("\n");
 
-      const prompt = `You are analyzing the results of a PHA agent evolution cycle.
-Compare the benchmark results before and after code changes.
+      // Build iteration history section if available
+      const cycleHistory = this.playgroundState.cycleHistory;
+      let historySection = "";
+      if (cycleHistory && cycleHistory.length > 0) {
+        historySection = `\n## 迭代历史\n\n以下是之前进化循环的尝试记录：\n\n`;
+        for (const h of cycleHistory) {
+          historySection += `### 第 ${h.cycleNumber} 轮\n`;
+          historySection += `- 提案: ${h.proposal}\n`;
+          historySection += `- 结果: ${h.benchmarkScore.toFixed(3)} → ${h.validateScore.toFixed(3)} (${h.delta >= 0 ? "+" : ""}${h.delta.toFixed(3)})\n`;
+          historySection += `- 分析: ${h.analysisSummary}\n`;
+          if (h.improvementPlan.length > 0) {
+            historySection += `- 建议改进: ${h.improvementPlan.join("; ")}\n`;
+          }
+          historySection += `- 决策: ${h.recommendation}\n\n`;
+        }
+      }
 
-## Overall Score
-Before: ${vr.beforeScore.toFixed(3)}
-After: ${vr.afterScore.toFixed(3)}
-Delta: ${vr.delta >= 0 ? "+" : ""}${vr.delta.toFixed(3)}
+      const prompt = `你是 PHA 进化系统的分析专家。请对本轮进化结果进行深度分析。
 
-## Category Breakdown (Before → After)
+## 总体分数变化
+Before: ${vr.beforeScore.toFixed(3)} → After: ${vr.afterScore.toFixed(3)} (${vr.delta >= 0 ? "+" : ""}${vr.delta.toFixed(3)})
+
+## SHARP 维度对比 (Before → After)
 ${vr.categoryDeltas
   .map((d) => {
     const delta = d.after - d.before;
@@ -4539,20 +4626,25 @@ ${vr.categoryDeltas
   })
   .join("\n")}
 
-## Sub-Component Details (Before → After)
+## 子维度明细 (Before → After)
 ${subComponentLines}
 
-## Applied Changes
+## 本轮提案内容
 ${proposal?.description || "N/A"}
+${proposal?.changes?.map((c) => `- ${c.path}: ${c.description}`).join("\n") || ""}
+${historySection}
+## 分析要求
 
-## Task
-1. Provide a concise analysis (3-5 sentences) of the changes' impact
-2. List 3-5 key findings as bullet points
-3. Recommend: "merge" (improved), "revert" (degraded), or "iterate" (mixed/marginal)
-4. Rate your confidence 0-100
+请用中文输出以下内容：
+1. **归因分析**（3-5 句）：哪些维度变好/变差，是什么具体修改导致的
+2. **关键发现**（3-5 条）：最显著的变化点
+3. **风险与副作用**：是否有维度因改善 A 而恶化 B
+4. **改进计划**（3-5 条）：下一轮迭代应该具体改什么（精确到文件和方向）
+5. **决策建议**：merge（显著提升）/ revert（明显退步）/ iterate（有提升空间但需继续优化） + 置信度 0-100
 
-Respond in this JSON format:
-{"summary":"...","keyFindings":["..."],"recommendation":"merge|revert|iterate","confidence":N}`;
+## 输出 JSON（不要 markdown 包裹）
+
+{"summary":"...(中文，3-5 句归因分析)","keyFindings":["..."],"improvementPlan":["1. 修改 SOUL.md 增加...", "2. ..."],"recommendation":"merge|revert|iterate","confidence":N}`;
 
       this.playgroundState.analyseProgress = "Running LLM analysis...";
       this.sendEvolutionLabUpdate(send);
@@ -4583,6 +4675,7 @@ Respond in this JSON format:
         recommendation: parsed?.recommendation || vr.recommendation,
         confidence: (parsed?.confidence || 50) / 100,
         keyFindings: parsed?.keyFindings || [],
+        improvementPlan: parsed?.improvementPlan || [],
       };
       this.pgAddLog(
         "analyse",

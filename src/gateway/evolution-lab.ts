@@ -232,9 +232,22 @@ export interface PlaygroundState {
     recommendation: "merge" | "revert" | "iterate";
     confidence: number;
     keyFindings: string[];
+    improvementPlan: string[];
   };
   analyseProgress?: string;
   analyseError?: string;
+
+  cycleHistory?: Array<{
+    cycleNumber: number;
+    benchmarkScore: number;
+    validateScore: number;
+    delta: number;
+    proposal: string;
+    analysisSummary: string;
+    improvementPlan: string[];
+    recommendation: string;
+    timestamp: number;
+  }>;
 
   paused?: boolean;
   log: PlaygroundLogEntry[];
@@ -1581,6 +1594,7 @@ function buildPlaygroundPipelineSteps(state: PlaygroundState): PipelineStep[] {
 
   const currentIdx = stepIds.indexOf(state.step as PlaygroundStep);
   const isComplete = state.step === "complete";
+  const isIterating = (state.cycleHistory?.length || 0) > 0;
 
   return stepIds.map((id, idx) => {
     const cfg = stepLabels[id];
@@ -1588,7 +1602,12 @@ function buildPlaygroundPipelineSteps(state: PlaygroundState): PipelineStep[] {
     if (isComplete) {
       status = "completed";
     } else if (idx < currentIdx) {
-      status = "completed";
+      // When iterating, diagnose is skipped (no diagnoseResult)
+      if (isIterating && id === "diagnose" && !state.diagnoseResult) {
+        status = "skipped";
+      } else {
+        status = "completed";
+      }
     } else if (idx === currentIdx) {
       status = "active";
     }
@@ -2324,7 +2343,8 @@ function generatePgAnalyse(ui: A2UIGenerator, state: PlaygroundState): string {
   children.push(ui.text(t("evolution.pipelineAnalyse"), "h3"));
 
   if (state.analyseResult) {
-    const { summary, recommendation, confidence, keyFindings } = state.analyseResult;
+    const { summary, recommendation, confidence, keyFindings, improvementPlan } =
+      state.analyseResult;
 
     // Stat cards: recommendation + confidence
     const recCard = ui.statCard({
@@ -2334,13 +2354,13 @@ function generatePgAnalyse(ui: A2UIGenerator, state: PlaygroundState): string {
           ? t("evolution.mergeVersion")
           : recommendation === "revert"
             ? t("evolution.abandonVersion")
-            : t("evolution.startNewCycle"),
+            : t("evolution.iterateCycle"),
       icon:
         recommendation === "merge"
           ? "git-merge"
           : recommendation === "revert"
             ? "alert-triangle"
-            : "refresh-cw",
+            : "trending-up",
       color:
         recommendation === "merge"
           ? "#4ade80"
@@ -2356,6 +2376,16 @@ function generatePgAnalyse(ui: A2UIGenerator, state: PlaygroundState): string {
     });
     children.push(ui.grid([recCard, confCard], { columns: 2, gap: 16 }));
 
+    // Detailed analysis (default expanded — Chinese deep report should be directly readable)
+    if (summary) {
+      children.push(
+        ui.collapsible(t("evolution.analyseReport"), [ui.text(summary, "body")], {
+          expanded: true,
+          icon: "brain",
+        })
+      );
+    }
+
     // Key findings
     if (keyFindings.length > 0) {
       children.push(ui.text(t("evolution.keyFindings"), "label"));
@@ -2363,17 +2393,35 @@ function generatePgAnalyse(ui: A2UIGenerator, state: PlaygroundState): string {
       children.push(ui.column(findingItems, { gap: 4 }));
     }
 
-    // Detailed analysis (collapsible)
-    if (summary) {
+    // Improvement plan
+    if (improvementPlan && improvementPlan.length > 0) {
       children.push(
-        ui.collapsible(t("evolution.analyseReport"), [ui.text(summary, "body")], {
+        ui.collapsible(
+          t("evolution.improvementPlan"),
+          improvementPlan.map((item, i) => ui.text(`${i + 1}. ${item}`, "body")),
+          { expanded: true, icon: "trending-up" }
+        )
+      );
+    }
+
+    // Iteration history (if cycleHistory exists)
+    if (state.cycleHistory && state.cycleHistory.length > 0) {
+      const historyItems = state.cycleHistory.map((h) => {
+        const deltaSign = h.delta >= 0 ? "+" : "";
+        return ui.text(
+          `#${h.cycleNumber}: ${h.benchmarkScore.toFixed(3)} → ${h.validateScore.toFixed(3)} (${deltaSign}${h.delta.toFixed(3)}) — ${h.proposal.slice(0, 60)}${h.proposal.length > 60 ? "..." : ""}`,
+          "body"
+        );
+      });
+      children.push(
+        ui.collapsible(t("evolution.iterationHistory"), historyItems, {
           expanded: false,
-          icon: "brain",
+          icon: "bar-chart",
         })
       );
     }
 
-    // Decision buttons (moved from validate)
+    // Decision buttons: merge / abandon / iterate
     const mergeBtn = ui.button(t("evolution.mergeVersion"), "pg_complete", {
       variant: "primary",
       size: "md",
@@ -2384,12 +2432,12 @@ function generatePgAnalyse(ui: A2UIGenerator, state: PlaygroundState): string {
       size: "md",
       payload: { action: "revert" },
     });
-    const newCycleBtn = ui.button(t("evolution.startNewCycle"), "pg_complete", {
+    const iterateBtn = ui.button(t("evolution.iterateCycle"), "pg_complete", {
       variant: "secondary",
       size: "md",
-      payload: { action: "new_cycle" },
+      payload: { action: "iterate" },
     });
-    children.push(ui.row([mergeBtn, revertBtn, newCycleBtn], { gap: 12, justify: "center" }));
+    children.push(ui.row([mergeBtn, revertBtn, iterateBtn], { gap: 12, justify: "center" }));
   } else if (state.analyseError) {
     children.push(ui.badge("Failed", { variant: "error" }));
     children.push(ui.text(state.analyseError, "body"));
