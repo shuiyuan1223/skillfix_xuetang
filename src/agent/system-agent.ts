@@ -32,7 +32,8 @@ import {
 } from "../tools/system-memory-tools.js";
 import { suggestToolImprovementTool, listToolWishlistTool } from "../tools/tool-feedback.js";
 import { sessionToAgentMessages } from "../memory/session-store.js";
-import { createSimpleCompactionFlush } from "../memory/compaction.js";
+import { createSACompactionFlush } from "../memory/compaction.js";
+import { readMemoryFile, appendMemoryFile } from "../tools/system-memory-tools.js";
 import type { LLMProvider } from "./pha-agent.js";
 
 export interface SystemAgentConfig {
@@ -95,6 +96,62 @@ function loadSystemAgentPrompt(): string {
   }
   console.warn("[SystemAgent] SOUL.md not found, using fallback prompt");
   return FALLBACK_PROMPT;
+}
+
+/** Memory budget: max characters per memory file */
+const SA_MEMORY_BUDGET = {
+  memory: 3000,
+  evolutionLog: 3000,
+  experience: 2000,
+  total: 8000,
+};
+
+/**
+ * Build SystemAgent system prompt with memory injection.
+ * Loads SOUL.md + recent memory.md / evolution-log.md / experience.md.
+ */
+function buildSASystemPrompt(): string {
+  const soul = loadSystemAgentPrompt();
+
+  // Load memory files (tail to get most recent content)
+  const memoryRaw = readMemoryFile("memory.md");
+  const evolutionRaw = readMemoryFile("evolution-log.md");
+  const experienceRaw = readMemoryFile("experience.md");
+
+  const tailSlice = (text: string, maxChars: number): string => {
+    if (!text || text.length <= maxChars) return text;
+    return "...\n" + text.slice(-maxChars);
+  };
+
+  const memory = tailSlice(memoryRaw, SA_MEMORY_BUDGET.memory);
+  const evolution = tailSlice(evolutionRaw, SA_MEMORY_BUDGET.evolutionLog);
+  const experience = tailSlice(experienceRaw, SA_MEMORY_BUDGET.experience);
+
+  const hasMemory = memory || evolution || experience;
+  if (!hasMemory) return soul;
+
+  const today = new Date().toISOString().split("T")[0];
+  const sections: string[] = [soul, "\n---\n", `## Session Context\n\n- **Date**: ${today}\n`];
+
+  if (memory) {
+    sections.push(`## System Memory\n\n${memory}\n`);
+  }
+  if (evolution) {
+    sections.push(`## Evolution Log (recent)\n\n${evolution}\n`);
+  }
+  if (experience) {
+    sections.push(`## Recent Experience\n\n${experience}\n`);
+  }
+
+  const prompt = sections.join("\n");
+
+  // Token distribution report (debug)
+  const est = (s: string) => Math.ceil(s.length / 4);
+  console.log(
+    `[SA-SystemPrompt] Token distribution: soul=${est(soul)} memory=${est(memory)} evolution=${est(evolution)} experience=${est(experience)} total≈${est(prompt)}`
+  );
+
+  return prompt;
 }
 
 // ========================================================================
@@ -242,8 +299,8 @@ export class SystemAgent {
 
     const model = this.resolveModel(provider, modelId, config.baseUrl);
 
-    // Load system prompt from file
-    const systemPrompt = loadSystemAgentPrompt();
+    // Load system prompt from file + inject memory context
+    const systemPrompt = buildSASystemPrompt();
 
     // Assemble all tools
     const tools: AgentTool<any>[] = [
@@ -258,11 +315,22 @@ export class SystemAgent {
     // Convert persisted session messages to AgentMessage[] for context recovery
     const messages = config.sessionMessages ? sessionToAgentMessages(config.sessionMessages) : [];
 
-    // Simple compaction: truncate only, no LLM summarization
-    const compactionFlush = createSimpleCompactionFlush({
+    // SA compaction: save summary + transcript to memory files before truncation
+    const compactionFlush = createSACompactionFlush({
       contextWindow: model.contextWindow || 128000,
       reserveTokens: 20000,
       flushThreshold: 4000,
+      onFlush: (summary, transcript) => {
+        const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+        appendMemoryFile(
+          "memory.md",
+          `\n## ${timestamp} (auto-saved before compaction)\n\n${summary}\n`
+        );
+        appendMemoryFile(
+          "experience.md",
+          `\n## ${timestamp} (conversation transcript)\n\n${transcript}\n`
+        );
+      },
     });
 
     this.agent = new Agent({

@@ -13,6 +13,7 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { UserMessage, AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
 import type { MemoryManager } from "./memory-manager.js";
 import { saveSessionTranscript, serializeMessages } from "./session-store.js";
+import { pruneContextMessages } from "./context-pruning.js";
 
 const CHARS_PER_TOKEN = 4;
 
@@ -46,7 +47,7 @@ function estimateTokens(messages: AgentMessage[]): number {
  * Serialize AgentMessage[] into readable text for LLM summarization.
  * Includes user messages, assistant responses, and tool results.
  */
-function serializeMessagesForLLM(messages: AgentMessage[], maxChars = 50000): string {
+export function serializeMessagesForLLM(messages: AgentMessage[], maxChars = 50000): string {
   const parts: string[] = [];
   let totalLength = 0;
 
@@ -217,6 +218,208 @@ async function summarizeWithLLM(
 }
 
 /**
+ * Estimate token count for a single message.
+ */
+function estimateMessageTokens(msg: AgentMessage): number {
+  if (!("content" in msg)) return 0;
+  const text = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+  return Math.ceil(text.length / CHARS_PER_TOKEN);
+}
+
+/**
+ * Check if a single message is oversized (>50% of context window).
+ */
+export function isOversizedForSummary(msg: AgentMessage, contextWindow: number): boolean {
+  return estimateMessageTokens(msg) > contextWindow * 0.5;
+}
+
+/**
+ * Split messages into roughly equal parts by token share.
+ */
+export function splitMessagesByTokenShare(
+  messages: AgentMessage[],
+  parts: number
+): AgentMessage[][] {
+  if (parts <= 1 || messages.length <= 1) return [messages];
+
+  const totalTokens = estimateTokens(messages);
+  const targetPerPart = Math.ceil(totalTokens / parts);
+  const result: AgentMessage[][] = [];
+  let current: AgentMessage[] = [];
+  let currentTokens = 0;
+
+  for (const msg of messages) {
+    const msgTokens = estimateMessageTokens(msg);
+    if (currentTokens + msgTokens > targetPerPart && current.length > 0) {
+      result.push(current);
+      current = [];
+      currentTokens = 0;
+    }
+    current.push(msg);
+    currentTokens += msgTokens;
+  }
+  if (current.length > 0) result.push(current);
+
+  return result;
+}
+
+/**
+ * Summarize a single chunk of messages with optional previous summary for continuity.
+ */
+async function summarizeChunk(
+  messages: AgentMessage[],
+  config: LLMSummarizationConfig,
+  previousSummary?: string
+): Promise<string | null> {
+  const serialized = serializeMessagesForLLM(messages);
+  if (!serialized || serialized.length < 50) return null;
+
+  const prompt = previousSummary
+    ? `Previous conversation summary:\n${previousSummary}\n\nContinuing conversation:\n${serialized}`
+    : serialized;
+
+  // Reuse the existing summarizeWithLLM logic but with our combined prompt
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    let response: Response;
+
+    if (config.api === "anthropic-messages") {
+      const url = config.baseUrl
+        ? `${config.baseUrl}/v1/messages`
+        : "https://api.anthropic.com/v1/messages";
+
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": config.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: config.modelId,
+          max_tokens: 1024,
+          system: SUMMARIZATION_PROMPT,
+          messages: [{ role: "user", content: prompt }],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) return null;
+
+      const data = (await response.json()) as {
+        content: Array<{ type: string; text?: string }>;
+      };
+      return (
+        data.content
+          ?.filter((b) => b.type === "text")
+          .map((b) => b.text)
+          .join("\n") || null
+      );
+    } else {
+      const url = config.baseUrl
+        ? `${config.baseUrl}/v1/chat/completions`
+        : "https://api.openai.com/v1/chat/completions";
+
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.modelId,
+          max_tokens: 1024,
+          messages: [
+            { role: "system", content: SUMMARIZATION_PROMPT },
+            { role: "user", content: prompt },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) return null;
+
+      const data = (await response.json()) as {
+        choices: Array<{ message: { content: string } }>;
+      };
+      return data.choices?.[0]?.message?.content || null;
+    }
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * 3-level fallback summarization:
+ * 1. Full summary of all messages
+ * 2. Exclude oversized messages, then summarize
+ * 3. Return null (caller falls back to crude extraction)
+ */
+async function summarizeWithFallback(
+  messages: AgentMessage[],
+  config: LLMSummarizationConfig,
+  contextWindow: number
+): Promise<string | null> {
+  // Level 1: Try full summary
+  const full = await summarizeWithLLM(messages, config);
+  if (full) return full;
+
+  // Level 2: Exclude oversized messages
+  const filtered = messages.filter((m) => !isOversizedForSummary(m, contextWindow));
+  if (filtered.length >= 4 && filtered.length < messages.length) {
+    console.log(
+      `[Compaction] Retrying summary after excluding ${messages.length - filtered.length} oversized messages`
+    );
+    const partial = await summarizeWithLLM(filtered, config);
+    if (partial) return partial;
+  }
+
+  // Level 3: Give up, return null for crude fallback
+  return null;
+}
+
+/**
+ * Multi-stage summarization for long conversations.
+ * Splits messages into chunks, summarizes each, then merges.
+ */
+async function summarizeMultiStage(
+  messages: AgentMessage[],
+  config: LLMSummarizationConfig,
+  contextWindow: number
+): Promise<string | null> {
+  const totalTokens = estimateTokens(messages);
+  const maxTokensPerChunk = Math.floor(contextWindow * 0.3);
+
+  // If conversation fits in one chunk, use fallback strategy directly
+  if (totalTokens <= maxTokensPerChunk) {
+    return summarizeWithFallback(messages, config, contextWindow);
+  }
+
+  // Split into multiple chunks
+  const numParts = Math.ceil(totalTokens / maxTokensPerChunk);
+  const chunks = splitMessagesByTokenShare(messages, numParts);
+
+  console.log(
+    `[Compaction] Multi-stage summarization: ${chunks.length} chunks from ${messages.length} messages`
+  );
+
+  // Summarize each chunk sequentially (pass previous summary for continuity)
+  let combinedSummary = "";
+  for (let i = 0; i < chunks.length; i++) {
+    const chunkSummary = await summarizeChunk(chunks[i], config, combinedSummary || undefined);
+    if (chunkSummary) {
+      combinedSummary = chunkSummary;
+    }
+  }
+
+  return combinedSummary || null;
+}
+
+/**
  * Fallback: crude summarization from user messages only.
  * Used when LLM summarization fails or is not configured.
  */
@@ -312,6 +515,53 @@ export function createSimpleCompactionFlush(config: CompactionConfig) {
   };
 }
 
+export interface SACompactionFlushConfig extends CompactionConfig {
+  /** Called before truncation to save context. Receives the crude summary and recent transcript. */
+  onFlush?: (summary: string, transcript: string) => void;
+}
+
+/**
+ * Create a compaction flush for SystemAgent.
+ * Before truncation, saves a summary to memory.md and recent conversation to experience.md
+ * via the onFlush callback.
+ */
+export function createSACompactionFlush(config: SACompactionFlushConfig) {
+  let flushed = false;
+
+  return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+    // Real-time context pruning before compaction check
+    messages = pruneContextMessages(messages, { contextWindow: config.contextWindow });
+
+    const tokens = estimateTokens(messages);
+    const limit = config.contextWindow - config.reserveTokens;
+
+    // Pre-compaction flush: save context before truncation
+    if (!flushed && tokens >= limit - config.flushThreshold && config.onFlush) {
+      flushed = true;
+      try {
+        // Generate summary from old messages (no LLM, always succeeds)
+        const summary =
+          summarizeOldMessages(messages) || "Conversation continued (no extractable summary)";
+
+        // Serialize recent conversation as transcript (last ~5000 chars)
+        const transcript = serializeMessagesForLLM(messages, 5000);
+
+        config.onFlush(summary, transcript);
+        console.log("[SA-Compaction] Pre-compaction flush completed");
+      } catch (err) {
+        console.warn("[SA-Compaction] Flush failed:", err);
+      }
+    }
+
+    // Compact if over limit
+    if (tokens > limit) {
+      return compactMessages(messages, limit);
+    }
+
+    return messages;
+  };
+}
+
 /**
  * Create a compaction flush function for use as transformContext hook.
  */
@@ -325,6 +575,9 @@ export function createCompactionFlush(
   let flushed = false;
 
   return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+    // Real-time context pruning before compaction check
+    messages = pruneContextMessages(messages, { contextWindow: config.contextWindow });
+
     const tokens = estimateTokens(messages);
     const limit = config.contextWindow - config.reserveTokens;
 
@@ -349,11 +602,11 @@ export function createCompactionFlush(
         }
       }
 
-      // 2. LLM summarization (with fallback)
+      // 2. Multi-stage LLM summarization (with 3-level fallback)
       let summary: string | null = null;
       if (llmConfig && oldMessages.length >= 4) {
         try {
-          summary = await summarizeWithLLM(oldMessages, llmConfig);
+          summary = await summarizeMultiStage(oldMessages, llmConfig, config.contextWindow);
           if (summary) {
             console.log("[Compaction] LLM summary generated successfully");
           }

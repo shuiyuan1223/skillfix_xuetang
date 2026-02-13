@@ -85,9 +85,16 @@ export function saveProfileToFile(uuid: string, profile: UserProfile): void {
 }
 
 /**
- * Load user's MEMORY.md summary
+ * Load user's MEMORY.md summary with structure-aware truncation.
+ *
+ * Strategy:
+ * - Split by ## headings into sections
+ * - Always keep the first section (title/header)
+ * - Fill from the tail (most recent) backward until budget exhausted
+ * - Show truncation marker with count of omitted sections
+ * - Append recent daily log summaries (last 3 days)
  */
-export function loadMemorySummary(uuid: string, maxChars = 6000): string | null {
+export function loadMemorySummary(uuid: string, maxChars = 12000): string | null {
   const memoryPath = getMemoryPath(uuid);
 
   if (!existsSync(memoryPath)) {
@@ -95,8 +102,90 @@ export function loadMemorySummary(uuid: string, maxChars = 6000): string | null 
   }
 
   const full = readFileSync(memoryPath, "utf-8");
-  if (full.length <= maxChars) return full;
-  return "[Earlier memories truncated]\n\n" + full.slice(-maxChars);
+  if (!full.trim()) return null;
+
+  // Append recent daily log summaries
+  const recentLogs = getRecentDailyLogs(uuid, 3);
+  let dailyLogSection = "";
+  if (recentLogs.length > 0) {
+    dailyLogSection =
+      "\n\n## Recent Daily Logs\n\n" +
+      recentLogs.map((l) => `- **${l.date}**: ${l.preview}`).join("\n");
+  }
+
+  // If everything fits, return as-is
+  if (full.length + dailyLogSection.length <= maxChars) {
+    return full + dailyLogSection;
+  }
+
+  // Structure-aware truncation: split by ## headings
+  const sections = splitBySections(full);
+
+  if (sections.length <= 1) {
+    // No sections to split — fall back to tail truncation
+    const budget = maxChars - dailyLogSection.length;
+    return "[Earlier memories truncated]\n\n" + full.slice(-budget) + dailyLogSection;
+  }
+
+  // Always keep first section (title/header)
+  const firstSection = sections[0];
+  let budget = maxChars - firstSection.length - dailyLogSection.length - 50; // 50 chars for marker
+
+  // Fill from tail (most recent) backward
+  const kept: string[] = [];
+  let truncatedCount = 0;
+
+  for (let i = sections.length - 1; i >= 1; i--) {
+    if (sections[i].length <= budget) {
+      kept.unshift(sections[i]);
+      budget -= sections[i].length;
+    } else if (budget > 200) {
+      // Partial section: keep the beginning with marker
+      kept.unshift(sections[i].slice(0, budget) + "\n...");
+      budget = 0;
+      truncatedCount += i; // all remaining sections are truncated
+      break;
+    } else {
+      truncatedCount++;
+    }
+  }
+
+  // Count sections we skipped entirely
+  if (truncatedCount === 0) {
+    truncatedCount = sections.length - 1 - kept.length;
+  }
+
+  const parts: string[] = [firstSection];
+  if (truncatedCount > 0) {
+    parts.push(`\n[${truncatedCount} earlier entries truncated]\n`);
+  }
+  parts.push(...kept);
+  parts.push(dailyLogSection);
+
+  return parts.join("\n");
+}
+
+/**
+ * Split markdown content by ## headings into sections.
+ * Each section includes the heading line and all content until the next heading.
+ */
+function splitBySections(content: string): string[] {
+  const lines = content.split("\n");
+  const sections: string[] = [];
+  let current: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("## ") && current.length > 0) {
+      sections.push(current.join("\n"));
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) {
+    sections.push(current.join("\n"));
+  }
+
+  return sections;
 }
 
 /**

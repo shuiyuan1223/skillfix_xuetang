@@ -25,7 +25,7 @@ function getMemoryFile(name: string): string {
   return join(getMemoryDir(), name);
 }
 
-function readMemoryFile(name: string): string {
+export function readMemoryFile(name: string): string {
   const path = getMemoryFile(name);
   if (!existsSync(path)) return "";
   return readFileSync(path, "utf-8");
@@ -36,7 +36,7 @@ function writeMemoryFile(name: string, content: string): void {
   writeFileSync(path, content, "utf-8");
 }
 
-function appendMemoryFile(name: string, content: string): void {
+export function appendMemoryFile(name: string, content: string): void {
   const path = getMemoryFile(name);
   appendFileSync(path, content, "utf-8");
 }
