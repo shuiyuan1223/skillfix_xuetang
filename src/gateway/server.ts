@@ -1321,10 +1321,10 @@ export class GatewaySession {
           )
         );
 
-        // Switch prompts dir based on scope
-        if (this.promptsScope === "system") {
-          setPromptsDir("src/prompts/system-agent");
-        }
+        // Always set prompts dir based on scope
+        setPromptsDir(
+          this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
+        );
 
         // Fetch data async
         try {
@@ -1371,10 +1371,8 @@ export class GatewaySession {
         } catch (e) {
           console.error("[Prompts] Load error:", e);
         } finally {
-          // Always restore to default dir
-          if (this.promptsScope === "system") {
-            setPromptsDir("src/prompts");
-          }
+          // Always restore to default PHA dir
+          setPromptsDir("src/prompts/pha");
         }
         return;
       }
@@ -1874,7 +1872,9 @@ export class GatewaySession {
     } else if (action === "prompt_content_change" && payload?.value) {
       this.editBuffer = payload.value as string;
     } else if (action === "save_prompt" && this.selectedPrompt && this.editBuffer) {
-      if (this.promptsScope === "system") setPromptsDir("src/prompts/system-agent");
+      setPromptsDir(
+        this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
+      );
       try {
         await updatePromptTool.execute({
           name: this.selectedPrompt,
@@ -1882,7 +1882,7 @@ export class GatewaySession {
           commitMessage: `Update ${this.promptsScope === "system" ? "system-agent " : ""}prompt: ${this.selectedPrompt} via UI`,
         });
       } finally {
-        if (this.promptsScope === "system") setPromptsDir("src/prompts");
+        setPromptsDir("src/prompts/pha");
       }
       this.editingPrompt = false;
       this.editBuffer = null;
@@ -2349,7 +2349,9 @@ export class GatewaySession {
       send({ type: "clear_surface", surface_id: "modal" });
     } else if (action === "revert_prompt" && this.selectedPrompt) {
       // Show revert modal with commit history
-      if (this.promptsScope === "system") setPromptsDir("src/prompts/system-agent");
+      setPromptsDir(
+        this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
+      );
       try {
         const historyResult = await getPromptHistoryTool.execute({
           name: this.selectedPrompt,
@@ -2365,15 +2367,17 @@ export class GatewaySession {
           });
         }
       } finally {
-        if (this.promptsScope === "system") setPromptsDir("src/prompts");
+        setPromptsDir("src/prompts/pha");
       }
     } else if (action === "select_revert_commit" && payload?.commit && this.selectedPrompt) {
       const commit = payload.commit as { hash: string };
-      if (this.promptsScope === "system") setPromptsDir("src/prompts/system-agent");
+      setPromptsDir(
+        this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
+      );
       try {
         await revertPromptTool.execute({ name: this.selectedPrompt, commitHash: commit.hash });
       } finally {
-        if (this.promptsScope === "system") setPromptsDir("src/prompts");
+        setPromptsDir("src/prompts/pha");
       }
       send({ type: "clear_surface", surface_id: "modal" });
       await this.handleNavigate("settings/prompts", send);
