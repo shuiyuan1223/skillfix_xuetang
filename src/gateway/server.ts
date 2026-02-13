@@ -122,6 +122,44 @@ import { generateEvolutionLab, RUN_COLORS, type EvolutionLabData } from "./evolu
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
 
 // ============================================================================
+// Quick Reply Detection
+// ============================================================================
+
+interface QuickReply {
+  label: string;
+  content: string;
+  icon?: string;
+  variant?: "primary" | "danger";
+}
+
+function detectQuickReplies(
+  messages: Array<{ role: string; content: string }>
+): QuickReply[] | undefined {
+  if (messages.length === 0) return undefined;
+  const last = messages[messages.length - 1];
+  if (last.role !== "assistant") return undefined;
+  const text = last.content;
+
+  // Detect approval/confirmation patterns
+  if (/批准|approve|确认.*方案|是否.*执行|proceed/i.test(text)) {
+    return [
+      { label: "批准", content: "批准，请执行", icon: "check", variant: "primary" },
+      { label: "拒绝", content: "拒绝，请重新修改方案", icon: "x", variant: "danger" },
+    ];
+  }
+
+  // Detect yes/no questions
+  if (/是否|要不要|好吗|可以吗|需要吗/i.test(text)) {
+    return [
+      { label: "好的", content: "好的", variant: "primary" },
+      { label: "不了", content: "不了" },
+    ];
+  }
+
+  return undefined;
+}
+
+// ============================================================================
 // SHARP Category Re-aggregation
 // ============================================================================
 
@@ -822,6 +860,8 @@ export class GatewaySession {
     role: "user" | "assistant" | "tool";
     content: string;
     cards?: { components: unknown[]; root_id: string };
+    toolName?: string;
+    toolStatus?: "running" | "completed" | "error";
   }> = [];
   private pendingCards: Array<{ components: unknown[]; root_id: string }> = [];
   private isStreaming = false;
@@ -896,15 +936,12 @@ export class GatewaySession {
     role: "user" | "assistant" | "tool";
     content: string;
     cards?: { components: unknown[]; root_id: string };
+    toolName?: string;
+    toolStatus?: "running" | "completed" | "error";
+    progressData?: { current: number; total: number; category: string };
   }> = [];
   private systemAgentStreaming = false;
   private systemAgentStreamingContent = "";
-  private systemAgentActivities: Array<{
-    id: string;
-    label: string;
-    icon: string;
-    status: "active" | "completed";
-  }> = [];
   private evolutionInspectedBranch: string | null = null;
   private evolutionLabDiffContent: {
     before: string;
@@ -1059,6 +1096,7 @@ export class GatewaySession {
           ]);
           return result;
         },
+        concurrency: getBenchmarkConcurrency(),
       });
     }
     return this.agent;
@@ -1073,14 +1111,32 @@ export class GatewaySession {
         baseUrl: this.config.baseUrl,
       });
 
-      // Configure evolution tools with system agent capabilities
+      // Configure evolution tools: use dedicated PHA agents for benchmark test cases
+      // and judge evaluation (NOT the system agent — otherwise responses leak into system agent chat)
       const AGENT_TIMEOUT_MS = 120_000;
-      const agentRef = this.systemAgent;
+      const { MockDataSource } = await import("../data-sources/mock.js");
+      const benchmarkAgent = await createPHAAgent({
+        apiKey: this.config.apiKey,
+        provider: this.config.provider,
+        modelId: this.config.modelId,
+        baseUrl: this.config.baseUrl,
+        dataSource: new MockDataSource(),
+      });
+      const judgeAgent = await createPHAAgent({
+        apiKey: this.config.apiKey,
+        provider: this.config.provider,
+        modelId: this.config.modelId,
+        baseUrl: this.config.baseUrl,
+        dataSource: new MockDataSource(),
+      });
+      // Capture session reference for onProgress callback
+
+      const session = this;
       setEvolutionRunnerConfig({
         agentCall: async (query: string) => {
-          agentRef.reset();
+          benchmarkAgent.reset();
           const result = await Promise.race([
-            agentRef.chatAndWait(query).then((response: string) => ({ response })),
+            benchmarkAgent.chatAndWait(query).then((response: string) => ({ response })),
             new Promise<{ response: string }>((_, reject) =>
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
@@ -1088,13 +1144,32 @@ export class GatewaySession {
           return result;
         },
         llmCall: async (prompt: string) => {
+          judgeAgent.reset();
           const result = await Promise.race([
-            agentRef.chatAndWait(prompt),
+            judgeAgent.chatAndWait(prompt),
             new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error("LLM call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
           return result;
+        },
+        concurrency: getBenchmarkConcurrency(),
+        onProgress: (current, total, testCase) => {
+          // Update the last running run_benchmark tool message with progress
+          for (let i = session.systemAgentChatMessages.length - 1; i >= 0; i--) {
+            const msg = session.systemAgentChatMessages[i];
+            if (
+              msg.role === "tool" &&
+              msg.toolName === "run_benchmark" &&
+              msg.toolStatus === "running"
+            ) {
+              msg.content = `Running benchmark... ${current}/${total}`;
+              msg.progressData = { current, total, category: testCase.category };
+              break;
+            }
+          }
+          const send = session._activeSend;
+          if (send) session.sendEvolutionLabUpdateThrottled(send);
         },
       });
     }
@@ -1181,6 +1256,7 @@ export class GatewaySession {
           messages: this.chatMessages,
           streaming: this.isStreaming,
           streamingContent: this.streamingContent,
+          quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
         });
         break;
 
@@ -1189,7 +1265,9 @@ export class GatewaySession {
           chatMessages: this.systemAgentChatMessages,
           streaming: this.systemAgentStreaming,
           streamingContent: this.systemAgentStreamingContent,
-          activities: this.systemAgentActivities,
+          quickReplies: this.systemAgentStreaming
+            ? undefined
+            : detectQuickReplies(this.systemAgentChatMessages),
         });
         break;
 
@@ -1497,6 +1575,7 @@ export class GatewaySession {
           messages: this.chatMessages,
           streaming: this.isStreaming,
           streamingContent: this.streamingContent,
+          quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
         });
     }
 
@@ -1576,6 +1655,7 @@ export class GatewaySession {
         messages: this.chatMessages,
         streaming: this.isStreaming,
         streamingContent: this.streamingContent,
+        quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
       });
       activeSend({
         type: "a2ui",
@@ -1638,14 +1718,12 @@ export class GatewaySession {
           }
         } else if (event.type === "tool_execution_start") {
           const toolName = event.toolName as string;
-
-          // Track activity from tool usage
-          this.trackActivityFromTool(toolName);
-
           const toolContent = `Using ${toolName}...`;
           this.systemAgentChatMessages.push({
             role: "tool",
             content: toolContent,
+            toolName,
+            toolStatus: "running",
           });
           this.persistMessage("system-agent", {
             timestamp: Date.now(),
@@ -1653,6 +1731,27 @@ export class GatewaySession {
             content: toolContent,
             toolName,
           });
+          this.sendEvolutionLabUpdate(send);
+        } else if (event.type === "tool_execution_end") {
+          const toolName = event.toolName as string;
+          const isError = event.isError;
+
+          // Find the last matching running tool message and update its status
+          for (let i = this.systemAgentChatMessages.length - 1; i >= 0; i--) {
+            const msg = this.systemAgentChatMessages[i];
+            if (msg.role === "tool" && msg.toolName === toolName && msg.toolStatus === "running") {
+              msg.toolStatus = isError ? "error" : "completed";
+              if (!isError) {
+                try {
+                  const cards = generateToolCards(toolName, event.result);
+                  if (cards) msg.cards = cards;
+                } catch (err) {
+                  console.error(`[System Agent] Card generation error:`, err);
+                }
+              }
+              break;
+            }
+          }
           this.sendEvolutionLabUpdate(send);
         } else if (event.type === "agent_end") {
           this.systemAgentStreaming = false;
@@ -1677,46 +1776,6 @@ export class GatewaySession {
         content: errorContent,
       });
       this.sendEvolutionLabUpdate(send);
-    }
-  }
-
-  /**
-   * Track an activity in the system agent timeline.
-   * Marks previous active activities as completed and adds new one.
-   */
-  private trackActivity(id: string, label: string, icon: string): void {
-    const existing = this.systemAgentActivities.find((a) => a.id === id);
-    if (existing && existing.status === "active") return;
-
-    // Mark all current active activities as completed
-    for (const a of this.systemAgentActivities) {
-      if (a.status === "active") a.status = "completed";
-    }
-
-    // Don't re-add already completed activities
-    if (existing && existing.status === "completed") return;
-
-    this.systemAgentActivities.push({ id, label, icon, status: "active" });
-  }
-
-  /**
-   * Track activity from tool usage.
-   * Activities are determined by what tools the agent actually calls.
-   */
-  private trackActivityFromTool(toolName: string): void {
-    const TOOL_ACTIVITY_MAP: Record<string, { id: string; label: string; icon: string }> = {
-      run_benchmark: { id: "benchmark", label: "Benchmark", icon: "test-tube" },
-      run_diagnose: { id: "diagnose", label: "Diagnose", icon: "search" },
-      git_branch_create: { id: "apply", label: "Apply", icon: "zap" },
-      git_commit: { id: "apply", label: "Apply", icon: "zap" },
-      update_prompt: { id: "apply", label: "Apply", icon: "zap" },
-      update_skill: { id: "apply", label: "Apply", icon: "zap" },
-      git_merge: { id: "validate", label: "Validate", icon: "shield" },
-    };
-
-    const activity = TOOL_ACTIVITY_MAP[toolName];
-    if (activity) {
-      this.trackActivity(activity.id, activity.label, activity.icon);
     }
   }
 
@@ -3078,7 +3137,9 @@ export class GatewaySession {
         chatMessages: this.systemAgentChatMessages,
         streaming: this.systemAgentStreaming,
         streamingContent: this.systemAgentStreamingContent,
-        activities: this.systemAgentActivities,
+        quickReplies: this.systemAgentStreaming
+          ? undefined
+          : detectQuickReplies(this.systemAgentChatMessages),
       });
       activeSend({
         type: "a2ui",
@@ -3682,7 +3743,12 @@ export class GatewaySession {
           daily_log: "📝 记录到今日日志...",
         };
         const toolMsg = memoryToolLabels[event.toolName] || `Using ${event.toolName}...`;
-        this.chatMessages.push({ role: "tool", content: toolMsg });
+        this.chatMessages.push({
+          role: "tool",
+          content: toolMsg,
+          toolName: event.toolName,
+          toolStatus: "running",
+        });
         this.persistMessage("chat", {
           timestamp: Date.now(),
           role: "tool",
@@ -3695,6 +3761,18 @@ export class GatewaySession {
       }
 
       case "tool_execution_end": {
+        // Update the last matching running tool message's status
+        for (let i = this.chatMessages.length - 1; i >= 0; i--) {
+          const msg = this.chatMessages[i] as any;
+          if (
+            msg.role === "tool" &&
+            msg.toolName === event.toolName &&
+            msg.toolStatus === "running"
+          ) {
+            msg.toolStatus = event.isError ? "error" : "completed";
+            break;
+          }
+        }
         if (!event.isError) {
           try {
             const cards = generateToolCards(event.toolName, event.result);
@@ -3705,6 +3783,7 @@ export class GatewaySession {
             console.error(`[ToolCards] Failed to generate cards for ${event.toolName}:`, err);
           }
         }
+        this.sendChatUpdate(send);
         break;
       }
 

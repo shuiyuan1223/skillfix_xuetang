@@ -27,10 +27,18 @@ interface Message {
   };
 }
 
+interface QuickReply {
+  label: string;
+  content: string;
+  icon?: string;
+  variant?: "primary" | "danger";
+}
+
 interface ChatState {
   messages: Message[];
   streaming: boolean;
   streamingContent: string;
+  quickReplies?: QuickReply[];
 }
 
 interface HealthMetric {
@@ -99,6 +107,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
     messages: state.messages,
     streaming: state.streaming,
     streamingContent: state.streamingContent,
+    ...(state.quickReplies?.length ? { quickReplies: state.quickReplies } : {}),
   });
 
   // Chat input component
@@ -129,21 +138,10 @@ export function generateSystemAgentPage(state: {
   chatMessages: Array<{ role: string; content: string; cards?: any }>;
   streaming: boolean;
   streamingContent: string;
-  activities?: Array<{ id: string; label: string; icon: string; status: "active" | "completed" }>;
+  quickReplies?: QuickReply[];
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
   const children: string[] = [];
-
-  // Activity timeline (only shows completed + active activities, no pending)
-  if (state.activities?.length) {
-    const steps = state.activities.map((a) => ({
-      id: a.id,
-      label: a.label,
-      icon: a.icon,
-      status: a.status as "active" | "completed",
-    }));
-    children.push(ui.stepIndicator(steps, { orientation: "horizontal" }));
-  }
 
   // Chat messages with System Agent welcome screen
   const msgsId = `sa_msgs_${Date.now()}`;
@@ -153,6 +151,7 @@ export function generateSystemAgentPage(state: {
     messages: state.chatMessages,
     streaming: state.streaming,
     streamingContent: state.streamingContent,
+    ...(state.quickReplies?.length ? { quickReplies: state.quickReplies } : {}),
     welcomeTitle: t("systemAgent.title"),
     welcomeSubtitle: t("systemAgent.subtitle"),
     welcomeIcon: "bot",

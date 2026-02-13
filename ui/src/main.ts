@@ -1048,9 +1048,132 @@ class A2UIRenderer {
 
     const avatarBase = "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-white";
     const msgContent = "max-w-[70%] px-5 py-4 rounded-[20px] leading-relaxed text-sm";
+
+    // Group consecutive messages: tool messages are grouped together
+    const groups: Array<
+      | { type: "message"; msg: (typeof messages)[0] }
+      | { type: "tools"; msgs: (typeof messages)[0][] }
+    > = [];
+    for (const msg of messages) {
+      if (msg.role === "tool") {
+        const last = groups[groups.length - 1];
+        if (last && last.type === "tools") {
+          last.msgs.push(msg);
+        } else {
+          groups.push({ type: "tools", msgs: [msg] });
+        }
+      } else {
+        groups.push({ type: "message", msg });
+      }
+    }
+
     return html`
-      <div class="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-6">
-        ${messages.map((msg) => {
+      <div
+        class="chat-scroll-container flex-1 min-h-0 overflow-y-auto scroll-smooth p-6 flex flex-col gap-6"
+        @scroll=${(e: Event) => {
+          const el = e.target as HTMLElement;
+          this.chatAutoScroll = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
+        }}
+      >
+        ${groups.map((group) => {
+          if (group.type === "tools") {
+            // Render tool group as inline timeline
+            return html`
+              <div
+                class="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal"
+              >
+                <div class="flex flex-col max-w-[70%] ml-13">
+                  ${group.msgs.map((msg, idx) => {
+                    const toolName = (msg as any).toolName || "";
+                    const status = (msg as any).toolStatus || "completed";
+                    const hasCards = !!(msg as any).cards;
+                    const isLast = idx === group.msgs.length - 1;
+
+                    const statusIcon =
+                      status === "running"
+                        ? html`<span class="tool-spinner"></span>`
+                        : status === "error"
+                          ? html`<span class="text-error">${unsafeHTML(ICONS["x"])}</span>`
+                          : html`<span class="text-success">${unsafeHTML(ICONS["check"])}</span>`;
+
+                    const dotClass =
+                      status === "running"
+                        ? "bg-primary motion-safe:animate-pulse"
+                        : status === "error"
+                          ? "bg-error"
+                          : "bg-success";
+
+                    return html`
+                      <div class="flex">
+                        <!-- Timeline track -->
+                        <div class="flex flex-col items-center mr-3 relative">
+                          <div
+                            class="w-2.5 h-2.5 rounded-full ${dotClass} z-10 mt-1.5 shrink-0"
+                          ></div>
+                          ${!isLast ? html`<div class="w-0.5 flex-1 bg-border"></div>` : nothing}
+                        </div>
+                        <!-- Content -->
+                        <div class="flex-1 pb-3 min-w-0 ${hasCards ? "collapsible-group" : ""}">
+                          <div
+                            class="flex items-center gap-2 text-xs text-text-muted py-1 ${hasCards
+                              ? "cursor-pointer select-none"
+                              : ""}"
+                            @click=${hasCards
+                              ? (e: Event) => {
+                                  (e.currentTarget as HTMLElement).parentElement?.classList.toggle(
+                                    "is-open"
+                                  );
+                                }
+                              : nothing}
+                          >
+                            <span class="flex-1 truncate"
+                              >${msg.content || `Using ${toolName}...`}</span
+                            >
+                            ${statusIcon}
+                            ${hasCards
+                              ? html`<span
+                                  class="text-text-muted transition-transform duration-200 [.is-open>&]:rotate-90 text-xs"
+                                  >&#9654;</span
+                                >`
+                              : nothing}
+                          </div>
+                          ${(msg as any).progressData && status === "running"
+                            ? html`
+                                <div class="flex items-center gap-2 mt-1">
+                                  <div class="flex-1 h-1.5 rounded-full bg-border overflow-hidden">
+                                    <div
+                                      class="h-full rounded-full bg-primary transition-all duration-300"
+                                      style="width: ${Math.round(
+                                        ((msg as any).progressData.current /
+                                          (msg as any).progressData.total) *
+                                          100
+                                      )}%"
+                                    ></div>
+                                  </div>
+                                  <span class="text-[10px] text-text-muted shrink-0">
+                                    ${(msg as any).progressData.category}
+                                  </span>
+                                </div>
+                              `
+                            : nothing}
+                          ${hasCards
+                            ? html`
+                                <div class="collapsible-grid">
+                                  <div>${this.renderInline((msg as any).cards)}</div>
+                                </div>
+                              `
+                            : nothing}
+                        </div>
+                      </div>
+                    `;
+                  })}
+                </div>
+              </div>
+            `;
+          }
+
+          // Non-tool message
+          const msg = group.msg;
           const isUser = msg.role === "user";
           return html`
             <div
@@ -1058,17 +1181,13 @@ class A2UIRenderer {
                 ? "flex-row-reverse motion-safe:slide-in-from-right-4"
                 : "motion-safe:slide-in-from-left-4"}"
             >
-              ${msg.role !== "tool"
-                ? html`
-                    <div
-                      class="${avatarBase} ${isUser
-                        ? "bg-bg-tertiary"
-                        : "bg-gradient-to-br from-primary to-accent"}"
-                    >
-                      ${unsafeHTML(ICONS[msg.role === "assistant" ? "bot" : "user"])}
-                    </div>
-                  `
-                : nothing}
+              <div
+                class="${avatarBase} ${isUser
+                  ? "bg-bg-tertiary"
+                  : "bg-gradient-to-br from-primary to-accent"}"
+              >
+                ${unsafeHTML(ICONS[msg.role === "assistant" ? "bot" : "user"])}
+              </div>
               ${msg.role === "assistant" && msg.cards
                 ? html`
                     <div class="flex flex-col gap-3 max-w-[70%]">
@@ -1119,6 +1238,52 @@ class A2UIRenderer {
                         ></div>
                       </div>
                     `}
+              </div>
+            `
+          : nothing}
+        ${!streaming &&
+        (
+          c.quickReplies as Array<{
+            label: string;
+            content: string;
+            icon?: string;
+            variant?: string;
+          }>
+        )?.length
+          ? html`
+              <div
+                class="flex gap-2 pl-13 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal"
+              >
+                ${(
+                  c.quickReplies as Array<{
+                    label: string;
+                    content: string;
+                    icon?: string;
+                    variant?: string;
+                  }>
+                ).map(
+                  (qr) => html`
+                    <button
+                      class="flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${qr.variant ===
+                      "danger"
+                        ? "border-error/30 text-error bg-error/10 hover:bg-error/20 hover:border-error/50"
+                        : qr.variant === "primary"
+                          ? "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50"
+                          : "border-border text-text-secondary bg-surface hover:bg-surface-hover hover:border-border-hover"}"
+                      @click=${() => {
+                        const actionName = (c.action as string) || "send_message";
+                        this.sendAction(actionName, { content: qr.content, value: qr.content });
+                      }}
+                    >
+                      ${qr.icon
+                        ? html`<span class="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4"
+                            >${unsafeHTML(ICONS[qr.icon] || "")}</span
+                          >`
+                        : nothing}
+                      ${qr.label}
+                    </button>
+                  `
+                )}
               </div>
             `
           : nothing}
@@ -3204,6 +3369,7 @@ class PHAApp extends LitElement {
   private ws: WebSocket | null = null;
   private renderer: A2UIRenderer;
   private userUuid: string | null = null; // User identifier for multi-user support
+  private chatAutoScroll = true; // Auto-scroll chat to bottom on new messages
 
   constructor() {
     super();
@@ -3312,6 +3478,16 @@ class PHAApp extends LitElement {
       this.ws?.send(JSON.stringify({ type: "action", action, payload }));
       this.startHuaweiAuth();
       return;
+    }
+
+    // Reset auto-scroll when user sends a message
+    if (
+      action === "send_message" ||
+      action === "sa_send_message" ||
+      action === "evo_send_message" ||
+      action === "pg_send_message"
+    ) {
+      this.chatAutoScroll = true;
     }
 
     this.ws?.send(JSON.stringify({ type: "action", action, payload }));
@@ -3713,6 +3889,13 @@ class PHAApp extends LitElement {
             (window as any).Plotly.newPlot(el, chart.traces, chart.layout, chart.config);
           }
         }
+      });
+    }
+    // Auto-scroll chat to bottom on new content
+    if (changedProperties.has("mainData") && this.chatAutoScroll) {
+      requestAnimationFrame(() => {
+        const el = this.renderRoot.querySelector(".chat-scroll-container");
+        if (el) el.scrollTop = el.scrollHeight;
       });
     }
   }
