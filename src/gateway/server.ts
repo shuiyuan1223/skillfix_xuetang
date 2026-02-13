@@ -118,12 +118,7 @@ import {
 } from "../evolution/version-manager.js";
 import { setSkillsDir } from "../tools/skill-tools.js";
 import { resetSkillCache } from "../agent/skill-trigger.js";
-import {
-  generateEvolutionLab,
-  getDefaultPipelineSteps,
-  RUN_COLORS,
-  type EvolutionLabData,
-} from "./evolution-lab.js";
+import { generateEvolutionLab, RUN_COLORS, type EvolutionLabData } from "./evolution-lab.js";
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
 
 // ============================================================================
@@ -904,7 +899,12 @@ export class GatewaySession {
   }> = [];
   private systemAgentStreaming = false;
   private systemAgentStreamingContent = "";
-  private systemAgentPipelineStep: string | null = null;
+  private systemAgentActivities: Array<{
+    id: string;
+    label: string;
+    icon: string;
+    status: "active" | "completed";
+  }> = [];
   private evolutionInspectedBranch: string | null = null;
   private evolutionLabDiffContent: {
     before: string;
@@ -1189,8 +1189,7 @@ export class GatewaySession {
           chatMessages: this.systemAgentChatMessages,
           streaming: this.systemAgentStreaming,
           streamingContent: this.systemAgentStreamingContent,
-          pipelineSteps: getDefaultPipelineSteps(this.systemAgentPipelineStep || undefined),
-          currentPipelineStep: this.systemAgentPipelineStep || undefined,
+          activities: this.systemAgentActivities,
         });
         break;
 
@@ -1600,27 +1599,6 @@ export class GatewaySession {
     this.systemAgentStreaming = true;
     this.systemAgentStreamingContent = "";
 
-    // Check for user approval/rejection responses
-    const lowerContent = content.toLowerCase();
-    if (
-      this.systemAgentPipelineStep === "propose" &&
-      (lowerContent.includes("approve") ||
-        lowerContent.includes("批准") ||
-        lowerContent.includes("同意") ||
-        lowerContent.includes("可以") ||
-        lowerContent.includes("好的"))
-    ) {
-      this.systemAgentPipelineStep = "approve";
-    } else if (
-      this.systemAgentPipelineStep === "propose" &&
-      (lowerContent.includes("reject") ||
-        lowerContent.includes("拒绝") ||
-        lowerContent.includes("不行") ||
-        lowerContent.includes("修改"))
-    ) {
-      // Stay at propose, agent will revise
-    }
-
     this.sendEvolutionLabUpdate(send);
 
     try {
@@ -1634,9 +1612,6 @@ export class GatewaySession {
               if (block.type === "text") text += block.text;
             }
             this.systemAgentStreamingContent = text;
-
-            // Detect pipeline steps from assistant content
-            this.detectPipelineStepFromContent(text);
 
             this.sendEvolutionLabUpdate(send);
           }
@@ -1656,9 +1631,6 @@ export class GatewaySession {
                 role: "assistant",
                 content: text,
               });
-
-              // Final content-based step detection
-              this.detectPipelineStepFromContent(text);
             }
             this.systemAgentStreaming = false;
             this.systemAgentStreamingContent = "";
@@ -1667,8 +1639,8 @@ export class GatewaySession {
         } else if (event.type === "tool_execution_start") {
           const toolName = event.toolName as string;
 
-          // Detect pipeline step from tool usage
-          this.detectPipelineStepFromTool(toolName);
+          // Track activity from tool usage
+          this.trackActivityFromTool(toolName);
 
           const toolContent = `Using ${toolName}...`;
           this.systemAgentChatMessages.push({
@@ -1709,88 +1681,42 @@ export class GatewaySession {
   }
 
   /**
-   * Detect pipeline step from tool name (Task #9).
+   * Track an activity in the system agent timeline.
+   * Marks previous active activities as completed and adds new one.
    */
-  private detectPipelineStepFromTool(toolName: string): void {
-    const STEP_ORDER = ["benchmark", "diagnose", "propose", "approve", "apply", "validate"];
-    const currentIdx = this.systemAgentPipelineStep
-      ? STEP_ORDER.indexOf(this.systemAgentPipelineStep)
-      : -1;
+  private trackActivity(id: string, label: string, icon: string): void {
+    const existing = this.systemAgentActivities.find((a) => a.id === id);
+    if (existing && existing.status === "active") return;
 
-    let newStep: string | null = null;
-
-    if (toolName === "run_benchmark") {
-      // First benchmark = step 1, second benchmark (after apply) = validate
-      if (currentIdx >= STEP_ORDER.indexOf("apply")) {
-        newStep = "validate";
-      } else if (currentIdx < STEP_ORDER.indexOf("benchmark")) {
-        newStep = "benchmark";
-      }
-    } else if (toolName === "run_diagnose") {
-      if (currentIdx <= STEP_ORDER.indexOf("diagnose")) {
-        newStep = "diagnose";
-      }
-    } else if (toolName === "git_branch_create") {
-      newStep = "apply";
-    } else if (
-      toolName === "git_commit" ||
-      toolName === "update_prompt" ||
-      toolName === "update_skill"
-    ) {
-      if (currentIdx < STEP_ORDER.indexOf("apply")) {
-        newStep = "apply";
-      }
-    } else if (
-      toolName === "git_merge" ||
-      toolName === "git_revert" ||
-      toolName === "git_branch_delete"
-    ) {
-      // Post-validate actions
+    // Mark all current active activities as completed
+    for (const a of this.systemAgentActivities) {
+      if (a.status === "active") a.status = "completed";
     }
 
-    if (newStep) {
-      const newIdx = STEP_ORDER.indexOf(newStep);
-      if (newIdx > currentIdx) {
-        this.systemAgentPipelineStep = newStep;
-      }
-    }
+    // Don't re-add already completed activities
+    if (existing && existing.status === "completed") return;
+
+    this.systemAgentActivities.push({ id, label, icon, status: "active" });
   }
 
   /**
-   * Detect pipeline step from assistant message content (Task #9).
+   * Track activity from tool usage.
+   * Activities are determined by what tools the agent actually calls.
    */
-  private detectPipelineStepFromContent(text: string): void {
-    const STEP_ORDER = ["benchmark", "diagnose", "propose", "approve", "apply", "validate"];
-    const currentIdx = this.systemAgentPipelineStep
-      ? STEP_ORDER.indexOf(this.systemAgentPipelineStep)
-      : -1;
+  private trackActivityFromTool(toolName: string): void {
+    const TOOL_ACTIVITY_MAP: Record<string, { id: string; label: string; icon: string }> = {
+      run_benchmark: { id: "benchmark", label: "Benchmark", icon: "test-tube" },
+      run_diagnose: { id: "diagnose", label: "Diagnose", icon: "search" },
+      git_branch_create: { id: "apply", label: "Apply", icon: "zap" },
+      git_commit: { id: "apply", label: "Apply", icon: "zap" },
+      update_prompt: { id: "apply", label: "Apply", icon: "zap" },
+      update_skill: { id: "apply", label: "Apply", icon: "zap" },
+      git_merge: { id: "validate", label: "Validate", icon: "shield" },
+    };
 
-    const lower = text.toLowerCase();
-
-    // Only advance forward, never go backwards
-    if (
-      currentIdx < STEP_ORDER.indexOf("diagnose") &&
-      (lower.includes("analyzing") ||
-        lower.includes("diagnosing") ||
-        lower.includes("分析结果") ||
-        lower.includes("诊断"))
-    ) {
-      if (currentIdx >= STEP_ORDER.indexOf("benchmark")) {
-        this.systemAgentPipelineStep = "diagnose";
-      }
-    } else if (
-      currentIdx < STEP_ORDER.indexOf("propose") &&
-      (lower.includes("i recommend") ||
-        lower.includes("i suggest") ||
-        lower.includes("i propose") ||
-        lower.includes("建议修改") ||
-        lower.includes("提案") ||
-        lower.includes("方案如下") ||
-        lower.includes("改进方案"))
-    ) {
-      if (currentIdx >= STEP_ORDER.indexOf("diagnose")) {
-        this.systemAgentPipelineStep = "propose";
-      }
+    const activity = TOOL_ACTIVITY_MAP[toolName];
+    if (activity) {
+      this.trackActivity(activity.id, activity.label, activity.icon);
     }
   }
 
@@ -2039,7 +1965,6 @@ export class GatewaySession {
     }
     // Evolution Lab: Approve/Reject proposal
     else if (action === "evo_approve") {
-      this.systemAgentPipelineStep = "approve";
       await this.handleSystemAgentMessage(
         "I approve this proposal. Please proceed with applying the changes.",
         send
@@ -3153,8 +3078,7 @@ export class GatewaySession {
         chatMessages: this.systemAgentChatMessages,
         streaming: this.systemAgentStreaming,
         streamingContent: this.systemAgentStreamingContent,
-        pipelineSteps: getDefaultPipelineSteps(this.systemAgentPipelineStep || undefined),
-        currentPipelineStep: this.systemAgentPipelineStep || undefined,
+        activities: this.systemAgentActivities,
       });
       activeSend({
         type: "a2ui",

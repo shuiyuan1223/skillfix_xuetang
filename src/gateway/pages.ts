@@ -15,7 +15,6 @@ import {
   getCategoryLabel,
   getCategoryIcon,
   type ComparisonRun,
-  type PipelineStep,
 } from "./evolution-lab.js";
 
 // Types for page data
@@ -130,15 +129,20 @@ export function generateSystemAgentPage(state: {
   chatMessages: Array<{ role: string; content: string; cards?: any }>;
   streaming: boolean;
   streamingContent: string;
-  pipelineSteps?: PipelineStep[];
-  currentPipelineStep?: string;
+  activities?: Array<{ id: string; label: string; icon: string; status: "active" | "completed" }>;
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
   const children: string[] = [];
 
-  // Pipeline indicator (visible when evolution steps active)
-  if (state.pipelineSteps?.some((s) => s.status !== "pending")) {
-    children.push(ui.stepIndicator(state.pipelineSteps, { orientation: "horizontal" }));
+  // Activity timeline (only shows completed + active activities, no pending)
+  if (state.activities?.length) {
+    const steps = state.activities.map((a) => ({
+      id: a.id,
+      label: a.label,
+      icon: a.icon,
+      status: a.status as "active" | "completed",
+    }));
+    children.push(ui.stepIndicator(steps, { orientation: "horizontal" }));
   }
 
   // Chat messages with System Agent welcome screen
