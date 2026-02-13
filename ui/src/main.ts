@@ -150,6 +150,7 @@ const ICONS: Record<string, string> = {
   pause: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>`,
   "skip-forward": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/></svg>`,
   "refresh-cw": `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>`,
+  square: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`,
 };
 
 // Emoji to icon mapping (backward compat - prefer icon names in new code)
@@ -1069,7 +1070,7 @@ class A2UIRenderer {
 
     return html`
       <div
-        class="chat-scroll-container flex-1 min-h-0 overflow-y-auto scroll-smooth p-6 flex flex-col gap-6"
+        class="chat-scroll-container flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-6"
         @scroll=${(e: Event) => {
           if (this._isAutoScrolling) return; // Ignore scroll events from programmatic scroll
           const el = e.target as HTMLElement;
@@ -1293,8 +1294,11 @@ class A2UIRenderer {
   }
 
   private renderChatInput(c: A2UIComponent): TemplateResult {
+    const streaming = c.streaming as boolean;
     const disabled = c.disabled as boolean;
     const placeholder = (c.placeholder as string) || "Ask me anything...";
+    const actionName = (c.action as string) || "send_message";
+    const stopAction = actionName.startsWith("sa_") ? "sa_stop_generation" : "stop_generation";
     return html`
       <div class="flex shrink-0 gap-3 p-6 border-t border-border bg-surface backdrop-blur-[12px]">
         <input
@@ -1307,7 +1311,6 @@ class A2UIRenderer {
               e.preventDefault();
               const input = e.target as HTMLInputElement;
               if (input.value.trim()) {
-                const actionName = (c.action as string) || "send_message";
                 this.sendAction(actionName, {
                   content: input.value.trim(),
                   value: input.value.trim(),
@@ -1318,13 +1321,18 @@ class A2UIRenderer {
           }}
         />
         <button
-          class="w-[54px] h-[54px] rounded-2xl border-none bg-gradient-to-br from-primary to-accent text-white cursor-pointer flex items-center justify-center shrink-0 transition-all duration-fast hover:shadow-[0_4px_16px_rgba(102,126,234,0.4)] hover:-translate-y-px disabled:opacity-50"
-          ?disabled=${disabled}
+          class="w-[54px] h-[54px] rounded-2xl border-none ${streaming
+            ? "bg-red-500/90 hover:bg-red-600"
+            : "bg-gradient-to-br from-primary to-accent"} text-white cursor-pointer flex items-center justify-center shrink-0 transition-all duration-fast hover:shadow-[0_4px_16px_rgba(102,126,234,0.4)] hover:-translate-y-px"
+          title="${streaming ? "Stop generating" : "Send"}"
           @click=${(e: Event) => {
+            if (streaming) {
+              this.sendAction(stopAction, {});
+              return;
+            }
             const container = (e.target as HTMLElement).parentElement;
             const input = container?.querySelector("input") as HTMLInputElement;
             if (input?.value.trim()) {
-              const actionName = (c.action as string) || "send_message";
               this.sendAction(actionName, {
                 content: input.value.trim(),
                 value: input.value.trim(),
@@ -1333,7 +1341,7 @@ class A2UIRenderer {
             }
           }}
         >
-          ${unsafeHTML(ICONS["send"])}
+          ${unsafeHTML(streaming ? ICONS["square"] : ICONS["send"])}
         </button>
       </div>
     `;
@@ -3898,7 +3906,7 @@ class PHAApp extends LitElement {
       this._isAutoScrolling = true;
       requestAnimationFrame(() => {
         const el = this.renderRoot.querySelector(".chat-scroll-container");
-        if (el) el.scrollTop = el.scrollHeight;
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
         // Release guard after scroll settles (covers smooth-scroll animation)
         setTimeout(() => {
           this._isAutoScrolling = false;

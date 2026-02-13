@@ -51,6 +51,7 @@ export const en: LocaleMessages = {
     sleepQuestion: "How was my sleep last night?",
     activityQuestion: "Show my activity summary",
     heartRateQuestion: "What's my heart rate trend?",
+    stopGeneration: "Stop generating",
   },
 
   health: {
@@ -461,7 +462,6 @@ export const en: LocaleMessages = {
     title: "Memory & Profile",
     subtitle: "Personal health context",
     completeness: "Completeness",
-    totalChunks: "Memory Chunks",
     missingFields: "Missing Fields",
     profile: "Profile",
     field: "Field",

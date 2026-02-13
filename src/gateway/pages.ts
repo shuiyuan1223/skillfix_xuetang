@@ -118,6 +118,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
     type: "chat_input",
     action: "send_message",
     disabled: state.streaming,
+    streaming: state.streaming,
     placeholder: t("chat.placeholder"),
   });
 
@@ -187,6 +188,7 @@ export function generateSystemAgentPage(state: {
     id: inputId,
     type: "chat_input",
     disabled: state.streaming,
+    streaming: state.streaming,
     placeholder: t("systemAgent.placeholder"),
     action: "sa_send_message",
   });
@@ -576,7 +578,6 @@ export function generateMemoryPage(data: {
   profileCompleteness: number;
   profile: UserProfile;
   missingFields: string[];
-  memoryStats: { totalChunks: number; lastUpdated: number };
   memorySummary: string;
   dailyLogs: Array<{ date: string; preview: string }>;
   searchQuery?: string;
@@ -624,13 +625,6 @@ export function generateMemoryPage(data: {
             : "#ef4444",
     });
 
-    const chunksCard = ui.statCard({
-      title: t("memory.totalChunks"),
-      value: data.memoryStats.totalChunks,
-      icon: "brain",
-      color: "#8b5cf6",
-    });
-
     const missingCard = ui.statCard({
       title: t("memory.missingFields"),
       value: data.missingFields.length,
@@ -642,7 +636,7 @@ export function generateMemoryPage(data: {
       color: data.missingFields.length === 0 ? "#10b981" : "#f97316",
     });
 
-    const statsGrid = ui.grid([completenessCard, chunksCard, missingCard], { columns: 3, gap: 16 });
+    const statsGrid = ui.grid([completenessCard, missingCard], { columns: 2, gap: 16 });
 
     const profileRows = getProfileRows(data.profile);
     const profileTable = ui.dataTable(

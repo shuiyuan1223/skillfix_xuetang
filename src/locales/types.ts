@@ -54,6 +54,7 @@ export interface LocaleMessages {
     sleepQuestion: string;
     activityQuestion: string;
     heartRateQuestion: string;
+    stopGeneration: string;
   };
 
   // Health page
@@ -476,7 +477,6 @@ export interface LocaleMessages {
     title: string;
     subtitle: string;
     completeness: string;
-    totalChunks: string;
     missingFields: string;
     profile: string;
     field: string;

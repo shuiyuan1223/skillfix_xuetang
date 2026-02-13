@@ -51,6 +51,7 @@ export const zhCN: LocaleMessages = {
     sleepQuestion: "昨晚睡眠怎么样？",
     activityQuestion: "显示我的运动概况",
     heartRateQuestion: "我的心率趋势如何？",
+    stopGeneration: "停止生成",
   },
 
   health: {
@@ -452,7 +453,6 @@ export const zhCN: LocaleMessages = {
     title: "记忆与档案",
     subtitle: "个人健康上下文",
     completeness: "完整度",
-    totalChunks: "记忆条数",
     missingFields: "缺失项",
     profile: "个人档案",
     field: "字段",
