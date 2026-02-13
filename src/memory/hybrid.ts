@@ -53,9 +53,9 @@ export function buildFtsQuery(raw: string): string | null {
     return null;
   }
 
-  // Quote each token and join with OR for broader matching
+  // Quote each token and join with AND for precise matching (OpenClaw pattern)
   const quoted = tokens.map((t) => `"${t.replaceAll('"', "")}"`);
-  return quoted.join(" OR ");
+  return quoted.join(" AND ");
 }
 
 /**

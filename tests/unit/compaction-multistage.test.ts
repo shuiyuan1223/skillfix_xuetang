@@ -69,7 +69,7 @@ describe("splitMessagesByTokenShare", () => {
 
   test("handles empty array", () => {
     const result = splitMessagesByTokenShare([], 3);
-    expect(result).toEqual([[]]);
+    expect(result).toEqual([]);
   });
 
   test("splits into more parts for larger conversations", () => {
@@ -95,15 +95,19 @@ describe("isOversizedForSummary", () => {
     expect(isOversizedForSummary(normalMessage, 128000)).toBe(false);
   });
 
-  test("boundary: exactly at 50%", () => {
-    // 4000 chars = 1000 tokens, contextWindow=2000 → 50% = 1000
+  test("boundary: exactly at 50% (with SAFETY_MARGIN 1.2x)", () => {
+    // 4000 chars = 1000 tokens * SAFETY_MARGIN(1.2) = 1200
+    // contextWindow=2400 → 50% = 1200
+    // 1200 <= 1200 → false (not greater)
     const message = makeUserMessage("x".repeat(4000));
-    expect(isOversizedForSummary(message, 2000)).toBe(false); // equal, not greater
+    expect(isOversizedForSummary(message, 2400)).toBe(false);
   });
 
-  test("boundary: just over 50%", () => {
-    // 4004 chars = 1001 tokens, contextWindow=2000 → 50% = 1000
+  test("boundary: just over 50% (with SAFETY_MARGIN 1.2x)", () => {
+    // 4004 chars = ceil(4004/4)=1001 tokens * SAFETY_MARGIN(1.2) = 1201.2
+    // contextWindow=2400 → 50% = 1200
+    // 1201.2 > 1200 → true
     const message = makeUserMessage("x".repeat(4004));
-    expect(isOversizedForSummary(message, 2000)).toBe(true);
+    expect(isOversizedForSummary(message, 2400)).toBe(true);
   });
 });

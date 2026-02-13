@@ -1,155 +1,342 @@
 /**
- * Context Pruning
- * Real-time trimming of tool results to prevent context window bloat.
+ * Context Pruning — ported from OpenClaw (src/agents/pi-extensions/context-pruning/)
  *
- * Two-phase approach:
- * - Phase 1 (softTrim): context > 30% window → trim old toolResult to head+tail
- * - Phase 2 (hardClear): context > 50% window → replace old toolResult with placeholder
+ * Two-phase approach to trim tool results and prevent context window bloat:
+ * - Phase 1 (softTrim): context > softTrimRatio → trim old toolResult (head + tail)
+ * - Phase 2 (hardClear): context > hardClearRatio → replace old toolResult with placeholder
  *
  * Protected:
- * - Last 3 assistant turns (recent context is important)
- * - First user message (bootstrap/system context)
+ * - Last N assistant turns (keepLastAssistants)
+ * - Everything before first user message (bootstrap/identity context)
  * - ToolResults containing images
+ *
+ * Key differences from naive approach:
+ * - Proper head/tail extraction across multi-block content
+ * - Hard-clear only fires when prunable tool chars exceed minPrunableToolChars
+ * - Hard-clear stops as soon as ratio drops below threshold (incremental)
+ * - Soft-trim only applies to blocks exceeding softTrim.maxChars
+ * - Image blocks are estimated at 8000 chars for accurate budget tracking
  */
 
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { ToolResultMessage } from "@mariozechner/pi-ai";
+import type { ImageContent, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
 
-const CHARS_PER_TOKEN = 4;
+// ── Constants (from OpenClaw) ──────────────────────────────────────────
+
+const CHARS_PER_TOKEN_ESTIMATE = 4;
+const IMAGE_CHAR_ESTIMATE = 8_000;
+
+// ── Settings (from OpenClaw settings.ts) ───────────────────────────────
+
+export interface ContextPruningSettings {
+  keepLastAssistants: number;
+  softTrimRatio: number;
+  hardClearRatio: number;
+  minPrunableToolChars: number;
+  softTrim: {
+    maxChars: number;
+    headChars: number;
+    tailChars: number;
+  };
+  hardClear: {
+    enabled: boolean;
+    placeholder: string;
+  };
+}
+
+export const DEFAULT_CONTEXT_PRUNING_SETTINGS: ContextPruningSettings = {
+  keepLastAssistants: 3,
+  softTrimRatio: 0.3,
+  hardClearRatio: 0.5,
+  minPrunableToolChars: 50_000,
+  softTrim: {
+    maxChars: 4_000,
+    headChars: 1_500,
+    tailChars: 1_500,
+  },
+  hardClear: {
+    enabled: true,
+    placeholder: "[Old tool result content cleared]",
+  },
+};
+
+// ── PHA-simplified config (maps to full settings) ──────────────────────
 
 export interface PruningConfig {
-  /** Total context window size in tokens */
   contextWindow: number;
-  /** Trigger soft trim when context exceeds this fraction of window (default 0.3) */
   softTrimThreshold?: number;
-  /** Trigger hard clear when context exceeds this fraction of window (default 0.5) */
   hardClearThreshold?: number;
-  /** Max chars to keep per side in soft trim (default 1500) */
   softTrimChars?: number;
-  /** Number of recent assistant turns to protect (default 3) */
   protectedTurns?: number;
 }
 
-function estimateContextTokens(messages: AgentMessage[]): number {
-  return messages.reduce((sum, m) => {
-    if (!("content" in m)) return sum;
-    const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content);
-    return sum + Math.ceil(text.length / CHARS_PER_TOKEN);
-  }, 0);
+function configToSettings(config: PruningConfig): ContextPruningSettings {
+  return {
+    keepLastAssistants:
+      config.protectedTurns ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.keepLastAssistants,
+    softTrimRatio: config.softTrimThreshold ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.softTrimRatio,
+    hardClearRatio: config.hardClearThreshold ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.hardClearRatio,
+    minPrunableToolChars: DEFAULT_CONTEXT_PRUNING_SETTINGS.minPrunableToolChars,
+    softTrim: {
+      maxChars: DEFAULT_CONTEXT_PRUNING_SETTINGS.softTrim.maxChars,
+      headChars: config.softTrimChars ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.softTrim.headChars,
+      tailChars: config.softTrimChars ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.softTrim.tailChars,
+    },
+    hardClear: DEFAULT_CONTEXT_PRUNING_SETTINGS.hardClear,
+  };
 }
 
-function hasImageContent(msg: ToolResultMessage): boolean {
-  return msg.content.some((block) => block.type === "image");
+// ── Helpers (ported 1:1 from OpenClaw pruner.ts) ───────────────────────
+
+function asText(text: string): TextContent {
+  return { type: "text", text };
 }
 
-/**
- * Find indices of the last N assistant messages (for protection).
- */
-function findProtectedIndices(messages: AgentMessage[], protectedTurns: number): Set<number> {
-  const protected_ = new Set<number>();
-  let assistantCount = 0;
-
-  for (let i = messages.length - 1; i >= 0 && assistantCount < protectedTurns; i--) {
-    if (messages[i].role === "assistant") {
-      assistantCount++;
-    }
-    // Protect all messages in the recent turns (assistant + following toolResults)
-    if (assistantCount > 0 && assistantCount <= protectedTurns) {
-      protected_.add(i);
+function collectTextSegments(content: ReadonlyArray<TextContent | ImageContent>): string[] {
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block.type === "text") {
+      parts.push(block.text);
     }
   }
-
-  return protected_;
+  return parts;
 }
 
-/**
- * Find index of the first user message (bootstrap protection).
- */
-function findFirstUserIndex(messages: AgentMessage[]): number {
-  return messages.findIndex((m) => m.role === "user");
+function estimateJoinedTextLength(parts: string[]): number {
+  if (parts.length === 0) return 0;
+  let len = 0;
+  for (const p of parts) {
+    len += p.length;
+  }
+  len += Math.max(0, parts.length - 1);
+  return len;
 }
 
-/**
- * Soft-trim a tool result: keep head + tail, replace middle with truncation marker.
- */
-function softTrimToolResult(msg: ToolResultMessage, maxCharsPerSide: number): AgentMessage {
-  const trimmedContent = msg.content.map((block) => {
-    if (block.type === "text") {
-      const text = (block as { type: "text"; text: string }).text;
-      const totalKeep = maxCharsPerSide * 2;
-      if (text.length > totalKeep + 100) {
-        const head = text.slice(0, maxCharsPerSide);
-        const tail = text.slice(-maxCharsPerSide);
-        return {
-          type: "text" as const,
-          text: `${head}\n\n[...${text.length - totalKeep} chars trimmed...]\n\n${tail}`,
-        };
+function takeHeadFromJoinedText(parts: string[], maxChars: number): string {
+  if (maxChars <= 0 || parts.length === 0) return "";
+  let remaining = maxChars;
+  let out = "";
+  for (let i = 0; i < parts.length && remaining > 0; i++) {
+    if (i > 0) {
+      out += "\n";
+      remaining -= 1;
+      if (remaining <= 0) break;
+    }
+    const p = parts[i];
+    if (p.length <= remaining) {
+      out += p;
+      remaining -= p.length;
+    } else {
+      out += p.slice(0, remaining);
+      remaining = 0;
+    }
+  }
+  return out;
+}
+
+function takeTailFromJoinedText(parts: string[], maxChars: number): string {
+  if (maxChars <= 0 || parts.length === 0) return "";
+  let remaining = maxChars;
+  const out: string[] = [];
+  for (let i = parts.length - 1; i >= 0 && remaining > 0; i--) {
+    const p = parts[i];
+    if (p.length <= remaining) {
+      out.push(p);
+      remaining -= p.length;
+    } else {
+      out.push(p.slice(p.length - remaining));
+      remaining = 0;
+      break;
+    }
+    if (remaining > 0 && i > 0) {
+      out.push("\n");
+      remaining -= 1;
+    }
+  }
+  out.reverse();
+  return out.join("");
+}
+
+function hasImageBlocks(content: ReadonlyArray<TextContent | ImageContent>): boolean {
+  for (const block of content) {
+    if (block.type === "image") return true;
+  }
+  return false;
+}
+
+function estimateMessageChars(message: AgentMessage): number {
+  if (message.role === "user") {
+    const content = message.content;
+    if (typeof content === "string") return content.length;
+    let chars = 0;
+    for (const b of content) {
+      if (b.type === "text") chars += b.text.length;
+      if (b.type === "image") chars += IMAGE_CHAR_ESTIMATE;
+    }
+    return chars;
+  }
+
+  if (message.role === "assistant") {
+    let chars = 0;
+    for (const b of message.content) {
+      if (b.type === "text") chars += b.text.length;
+      if (b.type === "thinking") chars += (b as { thinking: string }).thinking.length;
+      if (b.type === "toolCall") {
+        try {
+          chars += JSON.stringify((b as { arguments?: unknown }).arguments ?? {}).length;
+        } catch {
+          chars += 128;
+        }
       }
     }
-    return block;
-  });
-  return { ...msg, content: trimmedContent } as AgentMessage;
+    return chars;
+  }
+
+  if (message.role === "toolResult") {
+    let chars = 0;
+    for (const b of message.content) {
+      if (b.type === "text") chars += (b as TextContent).text.length;
+      if (b.type === "image") chars += IMAGE_CHAR_ESTIMATE;
+    }
+    return chars;
+  }
+
+  return 256;
 }
 
-/**
- * Hard-clear a tool result: replace with a brief placeholder.
- */
-function hardClearToolResult(msg: ToolResultMessage): AgentMessage {
-  const toolName = msg.toolName || "unknown";
-  return {
-    ...msg,
-    content: [
-      { type: "text" as const, text: `[Tool result from ${toolName} cleared to save context]` },
-    ],
-  } as AgentMessage;
+function estimateContextChars(messages: AgentMessage[]): number {
+  return messages.reduce((sum, m) => sum + estimateMessageChars(m), 0);
 }
+
+function findAssistantCutoffIndex(
+  messages: AgentMessage[],
+  keepLastAssistants: number
+): number | null {
+  if (keepLastAssistants <= 0) return messages.length;
+
+  let remaining = keepLastAssistants;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role !== "assistant") continue;
+    remaining--;
+    if (remaining === 0) return i;
+  }
+  return null;
+}
+
+function findFirstUserIndex(messages: AgentMessage[]): number | null {
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i]?.role === "user") return i;
+  }
+  return null;
+}
+
+function softTrimToolResultMessage(
+  msg: ToolResultMessage,
+  settings: ContextPruningSettings
+): ToolResultMessage | null {
+  if (hasImageBlocks(msg.content as ReadonlyArray<TextContent | ImageContent>)) return null;
+
+  const parts = collectTextSegments(msg.content as ReadonlyArray<TextContent | ImageContent>);
+  const rawLen = estimateJoinedTextLength(parts);
+  if (rawLen <= settings.softTrim.maxChars) return null;
+
+  const headChars = Math.max(0, settings.softTrim.headChars);
+  const tailChars = Math.max(0, settings.softTrim.tailChars);
+  if (headChars + tailChars >= rawLen) return null;
+
+  const head = takeHeadFromJoinedText(parts, headChars);
+  const tail = takeTailFromJoinedText(parts, tailChars);
+  const trimmed = `${head}\n...\n${tail}`;
+  const note = `\n\n[Tool result trimmed: kept first ${headChars} chars and last ${tailChars} chars of ${rawLen} chars.]`;
+
+  return { ...msg, content: [asText(trimmed + note)] };
+}
+
+// ── Main pruning function (ported 1:1 from OpenClaw pruner.ts) ─────────
 
 /**
  * Prune context messages to prevent tool result bloat.
- * Pure function — returns new array, does not mutate input.
+ * Ported from OpenClaw pruneContextMessages.
+ *
+ * Accepts either full ContextPruningSettings or simplified PruningConfig.
  */
 export function pruneContextMessages(
   messages: AgentMessage[],
-  config: PruningConfig
+  config: PruningConfig,
+  settingsOverride?: ContextPruningSettings
 ): AgentMessage[] {
-  const softThreshold = config.softTrimThreshold ?? 0.3;
-  const hardThreshold = config.hardClearThreshold ?? 0.5;
-  const softTrimChars = config.softTrimChars ?? 1500;
-  const protectedTurns = config.protectedTurns ?? 3;
+  const settings = settingsOverride ?? configToSettings(config);
+  const contextWindowTokens = config.contextWindow;
 
-  const totalTokens = estimateContextTokens(messages);
-  const softLimit = config.contextWindow * softThreshold;
-  const hardLimit = config.contextWindow * hardThreshold;
+  if (!contextWindowTokens || contextWindowTokens <= 0) return messages;
 
-  // No pruning needed
-  if (totalTokens <= softLimit) return messages;
+  const charWindow = contextWindowTokens * CHARS_PER_TOKEN_ESTIMATE;
+  if (charWindow <= 0) return messages;
 
-  const protectedIndices = findProtectedIndices(messages, protectedTurns);
-  const firstUserIdx = findFirstUserIndex(messages);
+  const cutoffIndex = findAssistantCutoffIndex(messages, settings.keepLastAssistants);
+  if (cutoffIndex === null) return messages;
 
-  const result = messages.map((msg, idx) => {
-    // Skip non-toolResult messages
-    if (msg.role !== "toolResult") return msg;
+  // Bootstrap safety: never prune anything before the first user message
+  const firstUserIndex = findFirstUserIndex(messages);
+  const pruneStartIndex = firstUserIndex === null ? messages.length : firstUserIndex;
 
-    // Protect first user message's preceding context
-    if (idx <= firstUserIdx) return msg;
+  const totalCharsBefore = estimateContextChars(messages);
+  let totalChars = totalCharsBefore;
+  let ratio = totalChars / charWindow;
+  if (ratio < settings.softTrimRatio) return messages;
 
-    // Protect recent turns
-    if (protectedIndices.has(idx)) return msg;
+  const prunableToolIndexes: number[] = [];
+  let next: AgentMessage[] | null = null;
 
-    const toolMsg = msg as ToolResultMessage;
+  // Phase 1: Soft-trim eligible tool results
+  for (let i = pruneStartIndex; i < cutoffIndex; i++) {
+    const msg = messages[i];
+    if (!msg || msg.role !== "toolResult") continue;
+    if (hasImageBlocks(msg.content as ReadonlyArray<TextContent | ImageContent>)) continue;
 
-    // Don't prune image results
-    if (hasImageContent(toolMsg)) return msg;
+    prunableToolIndexes.push(i);
 
-    // Phase 2: hard clear for high pressure
-    if (totalTokens > hardLimit) {
-      return hardClearToolResult(toolMsg);
-    }
+    const updated = softTrimToolResultMessage(msg as unknown as ToolResultMessage, settings);
+    if (!updated) continue;
 
-    // Phase 1: soft trim for moderate pressure
-    return softTrimToolResult(toolMsg, softTrimChars);
-  });
+    const beforeChars = estimateMessageChars(msg);
+    const afterChars = estimateMessageChars(updated as unknown as AgentMessage);
+    totalChars += afterChars - beforeChars;
+    if (!next) next = messages.slice();
+    next[i] = updated as unknown as AgentMessage;
+  }
 
-  return result;
+  const outputAfterSoftTrim = next ?? messages;
+  ratio = totalChars / charWindow;
+  if (ratio < settings.hardClearRatio) return outputAfterSoftTrim;
+  if (!settings.hardClear.enabled) return outputAfterSoftTrim;
+
+  // Phase 2: Hard-clear if still over threshold and enough prunable chars
+  let prunableToolChars = 0;
+  for (const i of prunableToolIndexes) {
+    const msg = outputAfterSoftTrim[i];
+    if (!msg || msg.role !== "toolResult") continue;
+    prunableToolChars += estimateMessageChars(msg);
+  }
+  if (prunableToolChars < settings.minPrunableToolChars) return outputAfterSoftTrim;
+
+  for (const i of prunableToolIndexes) {
+    if (ratio < settings.hardClearRatio) break;
+
+    const msg = (next ?? messages)[i];
+    if (!msg || msg.role !== "toolResult") continue;
+
+    const beforeChars = estimateMessageChars(msg);
+    const cleared: ToolResultMessage = {
+      ...msg,
+      content: [asText(settings.hardClear.placeholder)],
+    };
+    if (!next) next = messages.slice();
+    next[i] = cleared as unknown as AgentMessage;
+    const afterChars = estimateMessageChars(cleared as unknown as AgentMessage);
+    totalChars += afterChars - beforeChars;
+    ratio = totalChars / charWindow;
+  }
+
+  return next ?? messages;
 }
