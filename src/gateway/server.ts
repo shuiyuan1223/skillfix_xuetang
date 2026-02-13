@@ -56,7 +56,6 @@ import {
   mergePendingCards,
   generateIntegrationsPage,
   generateSystemAgentPage,
-  generateSystemAgentSettingsPage,
 } from "./pages.js";
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
@@ -842,13 +841,11 @@ export class GatewaySession {
   private editingSkill = false;
   private editBuffer: string | null = null;
 
-  // System Agent Settings state
-  private saSettingsTab: "prompts" | "skills" | "memory" = "prompts";
-  private saSelectedPrompt: string | null = null;
-  private saEditingPrompt = false;
-  private saSelectedSkill: string | null = null;
-  private saSelectedSkillFile: string = "SKILL.md";
-  private saEditingSkill = false;
+  // Scope state for Prompts and Skills pages (PHA ↔ System Agent)
+  private promptsScope: "pha" | "system" = "pha";
+  private skillsScope: "pha" | "system" = "pha";
+
+  // Memory system-agent sub-state
   private saSelectedMemoryFile: string | null = null;
   private saEditingMemory = false;
   private evolutionTab:
@@ -889,7 +886,7 @@ export class GatewaySession {
   } | null = null;
 
   // Memory page state
-  private memoryTab: "profile" | "summary" | "logs" | "search" = "profile";
+  private memoryTab: "profile" | "summary" | "logs" | "search" | "system-agent" = "profile";
   private memorySearchQuery: string | undefined;
   private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
 
@@ -1250,6 +1247,44 @@ export class GatewaySession {
         const mm = getMemoryManager();
         const uuid = this.userUuid || getUserUuid();
         try {
+          // Load system-agent memory files if on that tab
+          let saMemoryFiles:
+            | Array<{ name: string; displayName: string; lines: number; preview: string }>
+            | undefined;
+          let saMemoryContent: string | undefined;
+
+          if (this.memoryTab === "system-agent") {
+            const SA_MEMORY_FILES = [
+              { name: "memory", displayName: "memory.md" },
+              { name: "evolution-log", displayName: "evolution-log.md" },
+              { name: "tool-wishlist", displayName: "tool-wishlist.md" },
+              { name: "experience", displayName: "experience.md" },
+            ];
+
+            saMemoryFiles = await Promise.all(
+              SA_MEMORY_FILES.map(async (f) => {
+                const result = await systemMemoryReadTool.execute({ file: f.name });
+                const fileContent = result.content === "(empty)" ? "" : result.content;
+                return {
+                  name: f.name,
+                  displayName: f.displayName,
+                  lines: result.lines || 0,
+                  preview: fileContent
+                    ? fileContent.split("\n").slice(0, 2).join(" ").slice(0, 80)
+                    : "",
+                };
+              })
+            );
+
+            if (this.saSelectedMemoryFile) {
+              const result = await systemMemoryReadTool.execute({
+                file: this.saSelectedMemoryFile,
+              });
+              const raw = result.content === "(empty)" ? "" : result.content;
+              saMemoryContent = this.editBuffer ?? raw;
+            }
+          }
+
           const memoryPage = generateMemoryPage({
             activeTab: this.memoryTab,
             profileCompleteness: mm.getProfileCompleteness(uuid),
@@ -1260,6 +1295,10 @@ export class GatewaySession {
             dailyLogs: getRecentDailyLogs(uuid, 7),
             searchQuery: this.memorySearchQuery,
             searchResults: this.memorySearchResults,
+            saMemoryFiles,
+            saSelectedMemoryFile: this.saSelectedMemoryFile || undefined,
+            saMemoryContent,
+            saEditingMemory: this.saEditingMemory,
           });
           send(generatePage(view, memoryPage));
         } catch (e) {
@@ -1277,9 +1316,15 @@ export class GatewaySession {
               prompts: [],
               editing: false,
               loading: true,
+              scope: this.promptsScope,
             })
           )
         );
+
+        // Switch prompts dir based on scope
+        if (this.promptsScope === "system") {
+          setPromptsDir("src/prompts/system-agent");
+        }
 
         // Fetch data async
         try {
@@ -1319,11 +1364,17 @@ export class GatewaySession {
                 content,
                 commits,
                 editing: this.editingPrompt,
+                scope: this.promptsScope,
               })
             )
           );
         } catch (e) {
           console.error("[Prompts] Load error:", e);
+        } finally {
+          // Always restore to default dir
+          if (this.promptsScope === "system") {
+            setPromptsDir("src/prompts");
+          }
         }
         return;
       }
@@ -1337,6 +1388,7 @@ export class GatewaySession {
               skills: [],
               editing: false,
               loading: true,
+              scope: this.skillsScope,
             })
           )
         );
@@ -1379,6 +1431,7 @@ export class GatewaySession {
                 content,
                 language,
                 editing: this.editingSkill,
+                scope: this.skillsScope,
               })
             )
           );
@@ -1389,161 +1442,10 @@ export class GatewaySession {
       }
 
       case "settings/system-agent": {
-        // Send loading page immediately
-        send(
-          generatePage(
-            view,
-            generateSystemAgentSettingsPage({
-              tab: this.saSettingsTab,
-              loading: true,
-            })
-          )
-        );
-
-        try {
-          if (this.saSettingsTab === "prompts") {
-            // Temporarily switch promptsDir to system-agent prompts
-            setPromptsDir("src/prompts/system-agent");
-            try {
-              const promptsResult = await listPromptsTool.execute({});
-              let promptContent: string | undefined;
-              let promptCommits:
-                | Array<{
-                    hash: string;
-                    shortHash: string;
-                    message: string;
-                    date: string;
-                    author: string;
-                  }>
-                | undefined;
-
-              if (this.saSelectedPrompt) {
-                const promptResult = await getPromptTool.execute({
-                  name: this.saSelectedPrompt,
-                });
-                if (promptResult.success) {
-                  promptContent = this.editBuffer ?? promptResult.content;
-                }
-
-                const historyResult = await getPromptHistoryTool.execute({
-                  name: this.saSelectedPrompt,
-                  limit: 10,
-                });
-                if (historyResult.success && historyResult.commits) {
-                  promptCommits = historyResult.commits;
-                }
-              }
-
-              send(
-                generatePage(
-                  view,
-                  generateSystemAgentSettingsPage({
-                    tab: "prompts",
-                    prompts: promptsResult.prompts || [],
-                    selectedPrompt: this.saSelectedPrompt || undefined,
-                    promptContent,
-                    promptCommits,
-                    editingPrompt: this.saEditingPrompt,
-                  })
-                )
-              );
-            } finally {
-              setPromptsDir("src/prompts");
-            }
-          } else if (this.saSettingsTab === "skills") {
-            const skillsResult = await listSkillsTool.execute({});
-            const systemSkills = (skillsResult.skills || []).filter(
-              (s: { type?: string }) => s.type === "system"
-            );
-
-            let skillContent: string | undefined;
-            let skillLanguage: string | undefined;
-
-            if (this.saSelectedSkill) {
-              const skillResult = await getSkillTool.execute({
-                name: this.saSelectedSkill,
-                filePath: this.saSelectedSkillFile,
-              });
-              if (skillResult.success && "content" in skillResult) {
-                skillContent = this.editBuffer ?? skillResult.content;
-                skillLanguage = skillResult.language as string | undefined;
-              }
-            }
-
-            // Enrich selected skill with structure info
-            const enrichedSkills = await Promise.all(
-              systemSkills.map(async (s: any) => {
-                if (s.name === this.saSelectedSkill) {
-                  const info = await getSkillTool.execute({ name: s.name });
-                  return {
-                    ...s,
-                    structure: info.success ? (info as any).structure : undefined,
-                  };
-                }
-                return s;
-              })
-            );
-
-            send(
-              generatePage(
-                view,
-                generateSystemAgentSettingsPage({
-                  tab: "skills",
-                  skills: enrichedSkills,
-                  selectedSkill: this.saSelectedSkill || undefined,
-                  selectedSkillFile: this.saSelectedSkillFile,
-                  skillContent,
-                  skillLanguage,
-                  editingSkill: this.saEditingSkill,
-                })
-              )
-            );
-          } else if (this.saSettingsTab === "memory") {
-            const MEMORY_FILES = [
-              { name: "memory", displayName: "memory.md" },
-              { name: "evolution-log", displayName: "evolution-log.md" },
-              { name: "tool-wishlist", displayName: "tool-wishlist.md" },
-              { name: "experience", displayName: "experience.md" },
-            ];
-
-            const memoryFiles = await Promise.all(
-              MEMORY_FILES.map(async (f) => {
-                const result = await systemMemoryReadTool.execute({ file: f.name });
-                const content = result.content === "(empty)" ? "" : result.content;
-                return {
-                  name: f.name,
-                  displayName: f.displayName,
-                  lines: result.lines || 0,
-                  preview: content ? content.split("\n").slice(0, 2).join(" ").slice(0, 80) : "",
-                };
-              })
-            );
-
-            let memoryContent: string | undefined;
-            if (this.saSelectedMemoryFile) {
-              const result = await systemMemoryReadTool.execute({
-                file: this.saSelectedMemoryFile,
-              });
-              const raw = result.content === "(empty)" ? "" : result.content;
-              memoryContent = this.editBuffer ?? raw;
-            }
-
-            send(
-              generatePage(
-                view,
-                generateSystemAgentSettingsPage({
-                  tab: "memory",
-                  memoryFiles,
-                  selectedMemoryFile: this.saSelectedMemoryFile || undefined,
-                  memoryContent,
-                  editingMemory: this.saEditingMemory,
-                })
-              )
-            );
-          }
-        } catch (e) {
-          console.error("[SystemAgentSettings] Load error:", e);
-        }
+        // Redirect old route to prompts page with system scope
+        this.promptsScope = "system";
+        this.currentView = "settings/prompts";
+        await this.handleNavigate("settings/prompts", send);
         return;
       }
 
@@ -1972,11 +1874,16 @@ export class GatewaySession {
     } else if (action === "prompt_content_change" && payload?.value) {
       this.editBuffer = payload.value as string;
     } else if (action === "save_prompt" && this.selectedPrompt && this.editBuffer) {
-      await updatePromptTool.execute({
-        name: this.selectedPrompt,
-        content: this.editBuffer,
-        commitMessage: `Update ${this.selectedPrompt} via UI`,
-      });
+      if (this.promptsScope === "system") setPromptsDir("src/prompts/system-agent");
+      try {
+        await updatePromptTool.execute({
+          name: this.selectedPrompt,
+          content: this.editBuffer,
+          commitMessage: `Update ${this.promptsScope === "system" ? "system-agent " : ""}prompt: ${this.selectedPrompt} via UI`,
+        });
+      } finally {
+        if (this.promptsScope === "system") setPromptsDir("src/prompts");
+      }
       this.editingPrompt = false;
       this.editBuffer = null;
       await this.handleNavigate("settings/prompts", send);
@@ -2052,141 +1959,32 @@ export class GatewaySession {
       await this.handleNavigate("settings/skills", send);
     }
     // ================================================================
-    // System Agent Settings actions
+    // System Agent Memory actions (Memory page → system-agent tab)
     // ================================================================
-    // --- Prompts ---
-    else if (action === "sa_settings_select_prompt" && payload?.row) {
+    else if (action === "sa_memory_select" && payload?.row) {
       const row = payload.row as { name: string };
-      this.saSelectedPrompt = row.name;
-      this.saEditingPrompt = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_edit_prompt") {
-      this.saEditingPrompt = true;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_prompt_content_change" && payload?.value) {
-      this.editBuffer = payload.value as string;
-    } else if (action === "sa_settings_save_prompt" && this.saSelectedPrompt && this.editBuffer) {
-      setPromptsDir("src/prompts/system-agent");
-      try {
-        await updatePromptTool.execute({
-          name: this.saSelectedPrompt,
-          content: this.editBuffer,
-          commitMessage: `Update system-agent prompt: ${this.saSelectedPrompt} via UI`,
-        });
-      } finally {
-        setPromptsDir("src/prompts");
-      }
-      this.saEditingPrompt = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_revert_prompt" && this.saSelectedPrompt) {
-      setPromptsDir("src/prompts/system-agent");
-      try {
-        const historyResult = await getPromptHistoryTool.execute({
-          name: this.saSelectedPrompt,
-          limit: 20,
-        });
-        if (historyResult.success && historyResult.commits) {
-          const modal = generatePromptRevertModal(this.saSelectedPrompt, historyResult.commits);
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
-        }
-      } finally {
-        setPromptsDir("src/prompts");
-      }
-    } else if (action === "sa_settings_select_commit" && payload?.hash && this.saSelectedPrompt) {
-      setPromptsDir("src/prompts/system-agent");
-      try {
-        await revertPromptTool.execute({
-          name: this.saSelectedPrompt,
-          commitHash: payload.hash as string,
-        });
-      } finally {
-        setPromptsDir("src/prompts");
-      }
-      send({ type: "clear_surface", surface_id: "modal" });
-      await this.handleNavigate("settings/system-agent", send);
-    }
-    // --- Skills ---
-    else if (action === "sa_settings_select_skill" && payload?.row) {
-      const row = payload.row as { name: string };
-      const name = row.name.replace(/^[^\s]+\s+/, "");
-      this.saSelectedSkill = name;
-      this.saSelectedSkillFile = "SKILL.md";
-      this.saEditingSkill = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_select_skill_file" && payload?.value) {
-      this.saSelectedSkillFile = payload.value as string;
-      this.saEditingSkill = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_edit_skill") {
-      this.saEditingSkill = true;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_skill_content_change" && payload?.value) {
-      this.editBuffer = payload.value as string;
-    } else if (action === "sa_settings_save_skill" && this.saSelectedSkill && this.editBuffer) {
-      await updateSkillTool.execute({
-        name: this.saSelectedSkill,
-        content: this.editBuffer,
-        filePath: this.saSelectedSkillFile,
-      });
-      this.saEditingSkill = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_toggle_skill" && this.saSelectedSkill) {
-      const skillsResult = await listSkillsTool.execute({});
-      const skill = skillsResult.skills?.find(
-        (s: { name: string }) => s.name === this.saSelectedSkill
-      );
-      if (skill) {
-        await toggleSkillTool.execute({
-          name: this.saSelectedSkill,
-          enabled: !skill.enabled,
-        });
-        await this.handleNavigate("settings/system-agent", send);
-      }
-    }
-    // --- Memory ---
-    else if (action === "sa_settings_select_memory" && payload?.row) {
-      const row = payload.row as { name: string };
-      // displayName is like "memory.md", extract base name
       const name = row.name.replace(/\.md$/, "");
       this.saSelectedMemoryFile = name;
       this.saEditingMemory = false;
       this.editBuffer = null;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_edit_memory") {
+      await this.handleNavigate("memory", send);
+    } else if (action === "sa_memory_edit") {
       this.saEditingMemory = true;
-      await this.handleNavigate("settings/system-agent", send);
-    } else if (action === "sa_settings_memory_content_change" && payload?.value) {
+      await this.handleNavigate("memory", send);
+    } else if (action === "sa_memory_content_change" && payload?.value) {
       this.editBuffer = payload.value as string;
-    } else if (
-      action === "sa_settings_save_memory" &&
-      this.saSelectedMemoryFile &&
-      this.editBuffer
-    ) {
+    } else if (action === "sa_memory_save" && this.saSelectedMemoryFile && this.editBuffer) {
       await systemMemoryWriteTool.execute({
         file: this.saSelectedMemoryFile,
         content: this.editBuffer,
       });
       this.saEditingMemory = false;
       this.editBuffer = null;
-      await this.handleNavigate("settings/system-agent", send);
-    }
-    // --- Cancel edit (SA settings) ---
-    else if (action === "sa_settings_cancel_edit") {
-      this.saEditingPrompt = false;
-      this.saEditingSkill = false;
+      await this.handleNavigate("memory", send);
+    } else if (action === "sa_memory_cancel") {
       this.saEditingMemory = false;
       this.editBuffer = null;
-      await this.handleNavigate("settings/system-agent", send);
+      await this.handleNavigate("memory", send);
     }
     // System Agent action
     else if (action === "sa_send_message" && (payload?.content || payload?.value)) {
@@ -2294,8 +2092,34 @@ export class GatewaySession {
           await this.handleNavigate("dashboard", send);
         }
       } else if (this.currentView === "memory") {
-        this.memoryTab = payload.tab as "profile" | "summary" | "logs" | "search";
+        const tab = payload.tab as string;
+        if (tab === "system-agent") {
+          // Reset SA memory state when switching to system-agent tab
+          this.saSelectedMemoryFile = null;
+          this.saEditingMemory = false;
+          this.editBuffer = null;
+        }
+        this.memoryTab = tab as "profile" | "summary" | "logs" | "search" | "system-agent";
         await this.handleNavigate("memory", send);
+      } else if (this.currentView === "settings/prompts") {
+        const tab = payload.tab as string;
+        if (tab === "pha" || tab === "system") {
+          this.promptsScope = tab;
+          this.selectedPrompt = null;
+          this.editingPrompt = false;
+          this.editBuffer = null;
+          await this.handleNavigate("settings/prompts", send);
+        }
+      } else if (this.currentView === "settings/skills") {
+        const tab = payload.tab as string;
+        if (tab === "pha" || tab === "system") {
+          this.skillsScope = tab;
+          this.selectedSkill = null;
+          this.selectedSkillFile = "SKILL.md";
+          this.editingSkill = false;
+          this.editBuffer = null;
+          await this.handleNavigate("settings/skills", send);
+        }
       } else if (this.currentView === "settings/integrations") {
         this.integrationsTab = payload.tab as "overview" | "issues" | "prs" | "branches";
         if (this.integrationsCache) {
@@ -2327,17 +2151,6 @@ export class GatewaySession {
             )
           );
         }
-      } else if (this.currentView === "settings/system-agent") {
-        this.saSettingsTab = payload.tab as "prompts" | "skills" | "memory";
-        // Clear selection state when switching tabs
-        this.saSelectedPrompt = null;
-        this.saSelectedSkill = null;
-        this.saSelectedMemoryFile = null;
-        this.saEditingPrompt = false;
-        this.saEditingSkill = false;
-        this.saEditingMemory = false;
-        this.editBuffer = null;
-        await this.handleNavigate("settings/system-agent", send);
       } else if (this.currentView === "evolution") {
         this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
         this.sendEvolutionLabUpdate(send);
@@ -2536,22 +2349,32 @@ export class GatewaySession {
       send({ type: "clear_surface", surface_id: "modal" });
     } else if (action === "revert_prompt" && this.selectedPrompt) {
       // Show revert modal with commit history
-      const historyResult = await getPromptHistoryTool.execute({
-        name: this.selectedPrompt,
-        limit: 20,
-      });
-      if (historyResult.success && historyResult.commits) {
-        const modal = generatePromptRevertModal(this.selectedPrompt, historyResult.commits);
-        send({
-          type: "a2ui",
-          surface_id: "modal",
-          components: modal.components,
-          root_id: modal.root_id,
+      if (this.promptsScope === "system") setPromptsDir("src/prompts/system-agent");
+      try {
+        const historyResult = await getPromptHistoryTool.execute({
+          name: this.selectedPrompt,
+          limit: 20,
         });
+        if (historyResult.success && historyResult.commits) {
+          const modal = generatePromptRevertModal(this.selectedPrompt, historyResult.commits);
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
+        }
+      } finally {
+        if (this.promptsScope === "system") setPromptsDir("src/prompts");
       }
     } else if (action === "select_revert_commit" && payload?.commit && this.selectedPrompt) {
       const commit = payload.commit as { hash: string };
-      await revertPromptTool.execute({ name: this.selectedPrompt, commitHash: commit.hash });
+      if (this.promptsScope === "system") setPromptsDir("src/prompts/system-agent");
+      try {
+        await revertPromptTool.execute({ name: this.selectedPrompt, commitHash: commit.hash });
+      } finally {
+        if (this.promptsScope === "system") setPromptsDir("src/prompts");
+      }
       send({ type: "clear_surface", surface_id: "modal" });
       await this.handleNavigate("settings/prompts", send);
     } else if (action === "run_benchmark" || action === "open_benchmark_modal") {

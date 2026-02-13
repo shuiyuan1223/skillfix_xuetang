@@ -75,7 +75,6 @@ export function generateSidebar(activeView: string): A2UIMessage {
     [
       { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
       { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
-      { id: "settings/system-agent", label: t("nav.systemAgentSettings"), icon: "bot" },
       { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
     ],
     { activeId: activeView }
@@ -567,7 +566,7 @@ function getProfileRows(profile: UserProfile): Array<{ field: string; value: str
 }
 
 export function generateMemoryPage(data: {
-  activeTab: "profile" | "summary" | "logs" | "search";
+  activeTab: "profile" | "summary" | "logs" | "search" | "system-agent";
   profileCompleteness: number;
   profile: UserProfile;
   missingFields: string[];
@@ -577,6 +576,11 @@ export function generateMemoryPage(data: {
   searchQuery?: string;
   searchResults?: MemorySearchResult[];
   loading?: boolean;
+  // System Agent memory tab
+  saMemoryFiles?: SAMemoryFileInfo[];
+  saSelectedMemoryFile?: string;
+  saMemoryContent?: string;
+  saEditingMemory?: boolean;
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
 
@@ -718,6 +722,60 @@ export function generateMemoryPage(data: {
     tabContentIds["search"] = ui.column(searchChildren, { padding: 16, gap: 12 });
   }
 
+  // Tab 5: System Agent — memory files
+  if (data.activeTab === "system-agent") {
+    const saChildren: string[] = [];
+
+    const memoryRows = (data.saMemoryFiles || []).map((f) => ({
+      name: f.displayName,
+      lines: f.lines,
+      preview: f.preview || t("memory.memoryEmptyFile"),
+    }));
+
+    const memoryTable = ui.dataTable(
+      [
+        { key: "name", label: t("memory.memoryFileName"), sortable: true },
+        { key: "lines", label: t("memory.memoryFileLines") },
+        { key: "preview", label: t("memory.memoryFilePreview") },
+      ],
+      memoryRows,
+      { onRowClick: "sa_memory_select" }
+    );
+
+    saChildren.push(memoryTable);
+
+    // Selected memory file editor
+    if (data.saSelectedMemoryFile && data.saMemoryContent !== undefined) {
+      const editor = ui.codeEditor(data.saMemoryContent, {
+        language: "markdown",
+        readonly: !data.saEditingMemory,
+        lineNumbers: true,
+        height: 400,
+        onChange: "sa_memory_content_change",
+      });
+
+      const editBtn = data.saEditingMemory
+        ? ui.button(t("common.save"), "sa_memory_save", { variant: "primary" })
+        : ui.button(t("common.edit"), "sa_memory_edit", { variant: "outline" });
+
+      const cancelBtn = data.saEditingMemory
+        ? ui.button(t("common.cancel"), "sa_memory_cancel", { variant: "ghost" })
+        : null;
+
+      const editorBtns = cancelBtn ? [editBtn, cancelBtn] : [editBtn];
+      const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
+
+      saChildren.push(
+        ui.card([editorHeader, editor], {
+          title: data.saSelectedMemoryFile,
+          padding: 20,
+        })
+      );
+    }
+
+    tabContentIds["system-agent"] = ui.column(saChildren, { padding: 16, gap: 16 });
+  }
+
   // Assemble tabs
   const tabs = ui.tabs(
     [
@@ -725,6 +783,7 @@ export function generateMemoryPage(data: {
       { id: "summary", label: t("memory.tabSummary"), icon: "brain" },
       { id: "logs", label: t("memory.tabLogs"), icon: "calendar" },
       { id: "search", label: t("memory.tabSearch"), icon: "search" },
+      { id: "system-agent", label: t("memory.tabSystemAgent"), icon: "bot" },
     ],
     data.activeTab,
     tabContentIds
@@ -763,19 +822,33 @@ export function generatePromptsPage(data: {
   commits?: CommitInfo[];
   editing?: boolean;
   loading?: boolean;
+  scope?: "pha" | "system";
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
+  const scope = data.scope || "pha";
 
   // Header
   const title = ui.text(t("prompts.title"), "h2");
   const subtitle = ui.text(t("prompts.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
+  // Scope tab bar
+  const scopeTabContentIds: Record<string, string> = {};
+  scopeTabContentIds[scope] = `prompts_scope_${scope}`;
+  const scopeTabs = ui.tabs(
+    [
+      { id: "pha", label: t("prompts.tabPha"), icon: "heart" },
+      { id: "system", label: t("prompts.tabSystem"), icon: "bot" },
+    ],
+    scope,
+    scopeTabContentIds
+  );
+
   // Loading skeleton
   if (data.loading) {
     const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
     const loadingContent = ui.column([s1], { gap: 16, padding: 24 });
-    const root = ui.column([header, loadingContent], { gap: 0 });
+    const root = ui.column([header, scopeTabs, loadingContent], { gap: 0 });
     return ui.build(root);
   }
 
@@ -856,7 +929,7 @@ export function generatePromptsPage(data: {
 
   // Content container
   const content = ui.column(children, { gap: 24, padding: 24 });
-  const root = ui.column([header, content], { gap: 0 });
+  const root = ui.column([header, scopeTabs, content], { gap: 0 });
 
   return ui.build(root);
 }
@@ -883,83 +956,78 @@ export function generateSkillsPage(data: {
   language?: string;
   editing?: boolean;
   loading?: boolean;
+  scope?: "pha" | "system";
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
+  const scope = data.scope || "pha";
 
   // Header
   const title = ui.text(t("skills.title"), "h2");
   const subtitle = ui.text(t("skills.subtitle"), "caption");
 
-  const createBtn = ui.button(t("skills.newSkill"), "create_skill", {
-    variant: "primary",
-    size: "sm",
-  });
-  const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), createBtn], {
+  const headerChildren = [ui.column([title, subtitle], { gap: 4 })];
+  // Only show create button for PHA scope
+  if (scope === "pha") {
+    const createBtn = ui.button(t("skills.newSkill"), "create_skill", {
+      variant: "primary",
+      size: "sm",
+    });
+    headerChildren.push(createBtn);
+  }
+  const headerRow = ui.row(headerChildren, {
     justify: "between",
     align: "start",
   });
   const header = ui.column([headerRow], { padding: 24 });
 
+  // Scope tab bar
+  const scopeTabContentIds: Record<string, string> = {};
+  scopeTabContentIds[scope] = `skills_scope_${scope}`;
+  const scopeTabs = ui.tabs(
+    [
+      { id: "pha", label: t("skills.tabPha"), icon: "heart" },
+      { id: "system", label: t("skills.tabSystem"), icon: "bot" },
+    ],
+    scope,
+    scopeTabContentIds
+  );
+
   // Loading skeleton
   if (data.loading) {
     const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
     const loadingContent = ui.column([s1], { gap: 16, padding: 24 });
-    const root = ui.column([header, loadingContent], { gap: 0 });
+    const root = ui.column([header, scopeTabs, loadingContent], { gap: 0 });
     return ui.build(root);
   }
 
-  // Categorize skills: system vs PHA (using metadata type field)
-  const phaSkills = data.skills.filter((s) => s.type !== "system");
-  const systemSkills = data.skills.filter((s) => s.type === "system");
+  // Filter skills by current scope
+  const filteredSkills =
+    scope === "system"
+      ? data.skills.filter((s) => s.type === "system")
+      : data.skills.filter((s) => s.type !== "system");
 
   const children: string[] = [];
 
-  // PHA Skills section
-  if (phaSkills.length > 0) {
-    const phaLabel = ui.text(t("skills.phaSkills"), "label");
-    const phaRows = phaSkills.map((s) => ({
+  // Skills list for current scope
+  if (filteredSkills.length > 0) {
+    const skillRows = filteredSkills.map((s) => ({
       name: `${s.emoji || "🧩"} ${s.name}`,
       description: s.description || "-",
       status: s.enabled ? "enabled" : "disabled",
       triggers: s.triggers?.join(", ") || "-",
     }));
-    const phaTable = ui.dataTable(
+    const skillsTable = ui.dataTable(
       [
         { key: "name", label: t("skills.skill"), sortable: true },
         { key: "description", label: t("skills.description") },
         { key: "status", label: t("skills.status"), render: "badge" },
         { key: "triggers", label: t("skills.triggers") },
       ],
-      phaRows,
+      skillRows,
       { onRowClick: "select_skill" }
     );
-    children.push(ui.card([phaLabel, phaTable], { padding: 20 }));
-  }
-
-  // System Skills section
-  if (systemSkills.length > 0) {
-    const sysLabel = ui.text(t("skills.systemSkills"), "label");
-    const sysRows = systemSkills.map((s) => ({
-      name: `${s.emoji || "🧩"} ${s.name}`,
-      description: s.description || "-",
-      status: s.enabled ? "enabled" : "disabled",
-      triggers: s.triggers?.join(", ") || "-",
-    }));
-    const sysTable = ui.dataTable(
-      [
-        { key: "name", label: t("skills.skill"), sortable: true },
-        { key: "description", label: t("skills.description") },
-        { key: "status", label: t("skills.status"), render: "badge" },
-        { key: "triggers", label: t("skills.triggers") },
-      ],
-      sysRows,
-      { onRowClick: "select_skill" }
-    );
-    children.push(ui.card([sysLabel, sysTable], { padding: 20 }));
-  }
-
-  // Fallback: show all if both categories empty
-  if (phaSkills.length === 0 && systemSkills.length === 0) {
+    children.push(ui.card([skillsTable], { title: t("skills.cardTitle"), padding: 20 }));
+  } else {
     const emptyText = ui.text("No skills installed", "caption");
     children.push(emptyText);
   }
@@ -1030,13 +1098,13 @@ export function generateSkillsPage(data: {
 
   // Content container
   const content = ui.column(children, { gap: 24, padding: 24 });
-  const root = ui.column([header, content], { gap: 0 });
+  const root = ui.column([header, scopeTabs, content], { gap: 0 });
 
   return ui.build(root);
 }
 
 // ============================================================================
-// System Agent Settings Page
+// System Agent Memory File Info (used by Memory page's system-agent tab)
 // ============================================================================
 
 interface SAMemoryFileInfo {
@@ -1046,270 +1114,7 @@ interface SAMemoryFileInfo {
   preview: string;
 }
 
-export function generateSystemAgentSettingsPage(data: {
-  tab: "prompts" | "skills" | "memory";
-  // Prompts tab
-  prompts?: Array<{ name: string; title: string; lines: number }>;
-  selectedPrompt?: string;
-  promptContent?: string;
-  promptCommits?: Array<{
-    hash: string;
-    shortHash: string;
-    message: string;
-    date: string;
-    author: string;
-  }>;
-  editingPrompt?: boolean;
-  // Skills tab
-  skills?: SkillInfo[];
-  selectedSkill?: string;
-  selectedSkillFile?: string;
-  skillContent?: string;
-  skillLanguage?: string;
-  editingSkill?: boolean;
-  // Memory tab
-  memoryFiles?: SAMemoryFileInfo[];
-  selectedMemoryFile?: string;
-  memoryContent?: string;
-  editingMemory?: boolean;
-  // General
-  loading?: boolean;
-}): A2UIMessage {
-  const ui = new A2UIGenerator("main");
-  const sa = (key: string) => t(`systemAgentSettings.${key}`);
-
-  // Header
-  const title = ui.text(sa("title"), "h2");
-  const subtitle = ui.text(sa("subtitle"), "caption");
-  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
-
-  // Tabs
-  const tabContentIds = {
-    prompts: "sa_tab_prompts",
-    skills: "sa_tab_skills",
-    memory: "sa_tab_memory",
-  };
-  const tabs = ui.tabs(
-    [
-      { id: "prompts", label: sa("tabPrompts"), icon: "file-text" },
-      { id: "skills", label: sa("tabSkills"), icon: "puzzle" },
-      { id: "memory", label: sa("tabMemory"), icon: "brain" },
-    ],
-    data.tab,
-    tabContentIds
-  );
-
-  // Loading skeleton
-  if (data.loading) {
-    const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
-    const loadingContent = ui.column([s1], { gap: 16, padding: 24 });
-    const root = ui.column([header, tabs, loadingContent], { gap: 0 });
-    return ui.build(root);
-  }
-
-  const children: string[] = [];
-
-  // ---- Prompts Tab ----
-  if (data.tab === "prompts") {
-    const promptRows = (data.prompts || []).map((p) => ({
-      name: p.name,
-      title: p.title,
-      lines: p.lines,
-    }));
-
-    const promptsTable = ui.dataTable(
-      [
-        { key: "name", label: sa("promptName"), sortable: true },
-        { key: "title", label: sa("promptTitle") },
-        { key: "lines", label: sa("promptLines") },
-      ],
-      promptRows,
-      { onRowClick: "sa_settings_select_prompt" }
-    );
-
-    children.push(ui.card([promptsTable], { title: sa("promptsCardTitle"), padding: 20 }));
-
-    // Selected prompt editor
-    if (data.selectedPrompt && data.promptContent !== undefined) {
-      const editor = ui.codeEditor(data.promptContent, {
-        language: "markdown",
-        readonly: !data.editingPrompt,
-        lineNumbers: true,
-        height: 400,
-        onChange: "sa_settings_prompt_content_change",
-      });
-
-      const editBtn = data.editingPrompt
-        ? ui.button(t("common.save"), "sa_settings_save_prompt", { variant: "primary" })
-        : ui.button(t("common.edit"), "sa_settings_edit_prompt", { variant: "outline" });
-
-      const cancelBtn = data.editingPrompt
-        ? ui.button(t("common.cancel"), "sa_settings_cancel_edit", { variant: "ghost" })
-        : null;
-
-      const revertBtn =
-        !data.editingPrompt && data.promptCommits && data.promptCommits.length > 1
-          ? ui.button(t("common.revert"), "sa_settings_revert_prompt", { variant: "ghost" })
-          : null;
-
-      const editorBtns = [editBtn];
-      if (cancelBtn) editorBtns.push(cancelBtn);
-      if (revertBtn) editorBtns.push(revertBtn);
-
-      const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
-      children.push(
-        ui.card([editorHeader, editor], { title: `${data.selectedPrompt}.md`, padding: 20 })
-      );
-
-      // Version history
-      if (data.promptCommits && data.promptCommits.length > 0) {
-        const commitList = ui.commitList(data.promptCommits, {
-          onSelect: "sa_settings_select_commit",
-        });
-        children.push(ui.card([commitList], { title: sa("versionHistory"), padding: 20 }));
-      }
-    }
-  }
-
-  // ---- Skills Tab ----
-  if (data.tab === "skills") {
-    const skillRows = (data.skills || []).map((s) => ({
-      name: `${s.emoji || "puzzle"} ${s.name}`,
-      description: s.description || "-",
-      status: s.enabled ? "enabled" : "disabled",
-      triggers: s.triggers?.join(", ") || "-",
-    }));
-
-    const skillsTable = ui.dataTable(
-      [
-        { key: "name", label: sa("skill"), sortable: true },
-        { key: "description", label: sa("description") },
-        { key: "status", label: sa("status"), render: "badge" },
-        { key: "triggers", label: sa("triggers") },
-      ],
-      skillRows,
-      { onRowClick: "sa_settings_select_skill" }
-    );
-
-    children.push(ui.card([skillsTable], { title: sa("skillsCardTitle"), padding: 20 }));
-
-    // Selected skill editor
-    if (data.selectedSkill && data.skillContent !== undefined) {
-      const selectedInfo = (data.skills || []).find((s) => s.name === data.selectedSkill);
-      const currentFile = data.selectedSkillFile || "SKILL.md";
-      const editorLanguage = (data.skillLanguage || "markdown") as
-        | "markdown"
-        | "json"
-        | "yaml"
-        | "typescript"
-        | "javascript";
-
-      const editorChildren: string[] = [];
-
-      // File selector (when skill has multiple files)
-      const skillFiles = selectedInfo?.structure?.files;
-      if (skillFiles && skillFiles.length > 1) {
-        const fileButtons = skillFiles.map((f) =>
-          ui.button(f, "sa_settings_select_skill_file", {
-            variant: f === currentFile ? "primary" : "outline",
-            size: "sm",
-            payload: { file: f },
-          })
-        );
-        editorChildren.push(ui.row(fileButtons));
-      }
-
-      const editor = ui.codeEditor(data.skillContent, {
-        language: editorLanguage,
-        readonly: !data.editingSkill,
-        lineNumbers: true,
-        height: 400,
-        onChange: "sa_settings_skill_content_change",
-      });
-
-      const editBtn = data.editingSkill
-        ? ui.button(t("common.save"), "sa_settings_save_skill", { variant: "primary" })
-        : ui.button(t("common.edit"), "sa_settings_edit_skill", { variant: "outline" });
-
-      const toggleBtn = ui.button(
-        selectedInfo?.enabled ? t("common.disable") : t("common.enable"),
-        "sa_settings_toggle_skill",
-        { variant: selectedInfo?.enabled ? "ghost" : "secondary" }
-      );
-
-      const cancelBtn = data.editingSkill
-        ? ui.button(t("common.cancel"), "sa_settings_cancel_edit", { variant: "ghost" })
-        : null;
-
-      const editorActions = cancelBtn ? [editBtn, cancelBtn, toggleBtn] : [editBtn, toggleBtn];
-
-      editorChildren.push(ui.row(editorActions, { gap: 8, justify: "end" }));
-      editorChildren.push(editor);
-
-      children.push(
-        ui.card(editorChildren, {
-          title: `${data.selectedSkill}/${currentFile}`,
-          padding: 20,
-        })
-      );
-    }
-  }
-
-  // ---- Memory Tab ----
-  if (data.tab === "memory") {
-    const memoryRows = (data.memoryFiles || []).map((f) => ({
-      name: f.displayName,
-      lines: f.lines,
-      preview: f.preview || sa("emptyFile"),
-    }));
-
-    const memoryTable = ui.dataTable(
-      [
-        { key: "name", label: sa("fileName"), sortable: true },
-        { key: "lines", label: sa("fileLines") },
-        { key: "preview", label: sa("filePreview") },
-      ],
-      memoryRows,
-      { onRowClick: "sa_settings_select_memory" }
-    );
-
-    children.push(ui.card([memoryTable], { title: sa("memoryCardTitle"), padding: 20 }));
-
-    // Selected memory file editor
-    if (data.selectedMemoryFile && data.memoryContent !== undefined) {
-      const editor = ui.codeEditor(data.memoryContent, {
-        language: "markdown",
-        readonly: !data.editingMemory,
-        lineNumbers: true,
-        height: 400,
-        onChange: "sa_settings_memory_content_change",
-      });
-
-      const editBtn = data.editingMemory
-        ? ui.button(t("common.save"), "sa_settings_save_memory", { variant: "primary" })
-        : ui.button(t("common.edit"), "sa_settings_edit_memory", { variant: "outline" });
-
-      const cancelBtn = data.editingMemory
-        ? ui.button(t("common.cancel"), "sa_settings_cancel_edit", { variant: "ghost" })
-        : null;
-
-      const editorBtns = cancelBtn ? [editBtn, cancelBtn] : [editBtn];
-      const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
-
-      children.push(
-        ui.card([editorHeader, editor], {
-          title: data.selectedMemoryFile,
-          padding: 20,
-        })
-      );
-    }
-  }
-
-  const content = ui.column(children, { gap: 24, padding: 24 });
-  const root = ui.column([header, tabs, content], { gap: 0 });
-
-  return ui.build(root);
-}
+// generateSystemAgentSettingsPage removed — content merged into Prompts/Skills/Memory pages
 
 // ============================================================================
 // (Evolution Page Generator removed — now in evolution-lab.ts as 5-Tab Dashboard)

@@ -16,7 +16,6 @@ export const zhCN: LocaleMessages = {
     evolution: "进化",
     integrations: "集成",
     systemAgent: "系统 Agent",
-    systemAgentSettings: "系统 Agent 设置",
   },
 
   systemAgent: {
@@ -183,6 +182,8 @@ export const zhCN: LocaleMessages = {
     promptTitle: "标题",
     lines: "行数",
     versionHistory: "版本历史",
+    tabPha: "PHA 提示词",
+    tabSystem: "系统 Agent 提示词",
   },
 
   skills: {
@@ -196,6 +197,8 @@ export const zhCN: LocaleMessages = {
     triggers: "触发词",
     phaSkills: "PHA 技能",
     systemSkills: "系统技能",
+    tabPha: "PHA 技能",
+    tabSystem: "系统 Agent 技能",
   },
 
   evolution: {
@@ -464,6 +467,11 @@ export const zhCN: LocaleMessages = {
     tabSummary: "记忆摘要",
     tabLogs: "每日日志",
     tabSearch: "记忆搜索",
+    tabSystemAgent: "系统 Agent",
+    memoryFileName: "文件名",
+    memoryFileLines: "行数",
+    memoryFilePreview: "预览",
+    memoryEmptyFile: "（空文件）",
   },
 
   integrations: {
@@ -509,28 +517,5 @@ export const zhCN: LocaleMessages = {
     failed: "授权失败",
     closingWindow: "正在关闭窗口...",
     closeWindow: "关闭",
-  },
-
-  systemAgentSettings: {
-    title: "系统 Agent 设置",
-    subtitle: "管理系统 Agent 的提示词、技能和记忆",
-    tabPrompts: "提示词",
-    tabSkills: "技能",
-    tabMemory: "记忆",
-    promptsCardTitle: "提示词文件",
-    promptName: "名称",
-    promptTitle: "标题",
-    promptLines: "行数",
-    versionHistory: "版本历史",
-    skillsCardTitle: "系统技能",
-    skill: "技能",
-    description: "描述",
-    status: "状态",
-    triggers: "触发词",
-    memoryCardTitle: "记忆文件",
-    fileName: "文件名",
-    fileLines: "行数",
-    filePreview: "预览",
-    emptyFile: "（空文件）",
   },
 };

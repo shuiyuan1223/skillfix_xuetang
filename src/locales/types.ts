@@ -16,7 +16,6 @@ export interface LocaleMessages {
     evolution: string;
     integrations: string;
     systemAgent: string;
-    systemAgentSettings: string;
   };
 
   // System Agent
@@ -204,6 +203,8 @@ export interface LocaleMessages {
     promptTitle: string;
     lines: string;
     versionHistory: string;
+    tabPha: string;
+    tabSystem: string;
   };
 
   // Skills page
@@ -218,6 +219,8 @@ export interface LocaleMessages {
     triggers: string;
     phaSkills: string;
     systemSkills: string;
+    tabPha: string;
+    tabSystem: string;
   };
 
   // Evolution page
@@ -488,6 +491,11 @@ export interface LocaleMessages {
     tabSummary: string;
     tabLogs: string;
     tabSearch: string;
+    tabSystemAgent: string;
+    memoryFileName: string;
+    memoryFileLines: string;
+    memoryFilePreview: string;
+    memoryEmptyFile: string;
   };
 
   // Integrations page
@@ -535,30 +543,6 @@ export interface LocaleMessages {
     failed: string;
     closingWindow: string;
     closeWindow: string;
-  };
-
-  // System Agent Settings page
-  systemAgentSettings: {
-    title: string;
-    subtitle: string;
-    tabPrompts: string;
-    tabSkills: string;
-    tabMemory: string;
-    promptsCardTitle: string;
-    promptName: string;
-    promptTitle: string;
-    promptLines: string;
-    versionHistory: string;
-    skillsCardTitle: string;
-    skill: string;
-    description: string;
-    status: string;
-    triggers: string;
-    memoryCardTitle: string;
-    fileName: string;
-    fileLines: string;
-    filePreview: string;
-    emptyFile: string;
   };
 }
 

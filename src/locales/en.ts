@@ -16,7 +16,6 @@ export const en: LocaleMessages = {
     evolution: "Evolution",
     integrations: "Integrations",
     systemAgent: "System Agent",
-    systemAgentSettings: "System Agent Settings",
   },
 
   systemAgent: {
@@ -184,6 +183,8 @@ export const en: LocaleMessages = {
     promptTitle: "Title",
     lines: "Lines",
     versionHistory: "Version History",
+    tabPha: "PHA Prompts",
+    tabSystem: "System Agent Prompts",
   },
 
   skills: {
@@ -197,6 +198,8 @@ export const en: LocaleMessages = {
     triggers: "Triggers",
     phaSkills: "PHA Skills",
     systemSkills: "System Skills",
+    tabPha: "PHA Skills",
+    tabSystem: "System Agent Skills",
   },
 
   evolution: {
@@ -473,6 +476,11 @@ export const en: LocaleMessages = {
     tabSummary: "Summary",
     tabLogs: "Daily Logs",
     tabSearch: "Search",
+    tabSystemAgent: "System Agent",
+    memoryFileName: "File",
+    memoryFileLines: "Lines",
+    memoryFilePreview: "Preview",
+    memoryEmptyFile: "(empty)",
   },
 
   integrations: {
@@ -518,28 +526,5 @@ export const en: LocaleMessages = {
     failed: "Authorization Failed",
     closingWindow: "Closing this window...",
     closeWindow: "Close",
-  },
-
-  systemAgentSettings: {
-    title: "System Agent Settings",
-    subtitle: "Manage System Agent prompts, skills, and memory",
-    tabPrompts: "Prompts",
-    tabSkills: "Skills",
-    tabMemory: "Memory",
-    promptsCardTitle: "Prompt Files",
-    promptName: "Name",
-    promptTitle: "Title",
-    promptLines: "Lines",
-    versionHistory: "Version History",
-    skillsCardTitle: "System Skills",
-    skill: "Skill",
-    description: "Description",
-    status: "Status",
-    triggers: "Triggers",
-    memoryCardTitle: "Memory Files",
-    fileName: "File",
-    fileLines: "Lines",
-    filePreview: "Preview",
-    emptyFile: "(empty)",
   },
 };
