@@ -1,5 +1,10 @@
 /**
  * Memory Manager - Main entry point for memory operations
+ *
+ * Thin wrapper combining:
+ * - OpenClaw's MemoryIndexManager (search, sync, indexing)
+ * - PHA's user management, health profiles, info extraction
+ *
  * SQLite is a search index; files are the source of truth.
  */
 
@@ -29,28 +34,12 @@ import {
   formatQuestion,
   type AskContext,
 } from "./info-collector.js";
-import { VectorStore, type VectorDocument } from "./vector-store.js";
-import {
-  mergeHybridResults,
-  buildFtsQuery,
-  bm25RankToScore,
-  DEFAULT_HYBRID_CONFIG,
-  type HybridConfig,
-  type HybridVectorResult,
-  type HybridKeywordResult,
-} from "./hybrid.js";
-import type { EmbeddingConfig } from "./embeddings.js";
-import type { UserProfile, MemorySearchResult, MemoryChunk } from "./types.js";
-
-const CHUNK_MAX_TOKENS = 400;
-const CHUNK_OVERLAP_TOKENS = 80;
-const APPROX_CHARS_PER_TOKEN = 4;
+import { MemoryIndexManager } from "./memory-index.js";
+import { emitSessionTranscriptUpdate } from "./compat.js";
+import type { UserProfile, MemorySearchResult } from "./types.js";
 
 export interface MemoryManagerConfig {
-  /** Embedding configuration */
-  embeddingConfig?: EmbeddingConfig;
-  /** Hybrid search configuration */
-  hybridConfig?: Partial<HybridConfig>;
+  /** Reserved for future configuration */
 }
 
 export class MemoryManager {
@@ -58,7 +47,8 @@ export class MemoryManager {
   private userStore: UserStore;
   private ftsAvailable: boolean;
   private vecAvailable: boolean;
-  private vectorStore: VectorStore;
+  private indexManagers = new Map<string, MemoryIndexManager | null>();
+  private indexInitPromises = new Map<string, Promise<MemoryIndexManager | null>>();
 
   constructor(private config: MemoryManagerConfig = {}) {
     const dbPath = join(getStateDir(), "memory.db");
@@ -67,41 +57,59 @@ export class MemoryManager {
     this.ftsAvailable = schemaResult.ftsAvailable;
     this.vecAvailable = schemaResult.vecAvailable;
     this.userStore = new UserStore(this.db);
+  }
 
-    // VectorStore uses the same DB — no async init needed
-    this.vectorStore = new VectorStore(this.db, this.vecAvailable, config.embeddingConfig);
+  // ============ Index Manager (OpenClaw Engine) ============
 
-    if (this.vectorStore.isAvailable()) {
-      console.log("[MemoryManager] Vector search enabled (sqlite-vec)");
+  /**
+   * Get or create a MemoryIndexManager for a user.
+   * This is the OpenClaw-powered search/indexing engine.
+   */
+  async getIndex(uuid: string): Promise<MemoryIndexManager | null> {
+    // Return cached instance
+    if (this.indexManagers.has(uuid)) {
+      return this.indexManagers.get(uuid) ?? null;
     }
+
+    // Check for in-flight init
+    const existing = this.indexInitPromises.get(uuid);
+    if (existing) {
+      return existing;
+    }
+
+    // Create new instance
+    const promise = MemoryIndexManager.get({ agentId: uuid })
+      .then((manager) => {
+        this.indexManagers.set(uuid, manager);
+        this.indexInitPromises.delete(uuid);
+        return manager;
+      })
+      .catch((err) => {
+        console.warn(`[MemoryManager] Failed to create index for ${uuid}:`, err);
+        this.indexManagers.set(uuid, null);
+        this.indexInitPromises.delete(uuid);
+        return null;
+      });
+
+    this.indexInitPromises.set(uuid, promise);
+    return promise;
   }
 
   // ============ User Management ============
 
-  /**
-   * Ensure user exists in database
-   */
   ensureUser(uuid: string): void {
     this.userStore.ensureUser(uuid);
     ensureUserDir(uuid);
   }
 
-  /**
-   * Get user profile (file is source of truth)
-   */
   getProfile(uuid: string): UserProfile {
     return loadProfileFromFile(uuid);
   }
 
-  /**
-   * Update user profile (saves to file only)
-   */
   updateProfile(uuid: string, updates: Partial<UserProfile>): void {
     this.ensureUser(uuid);
 
     const current = this.getProfile(uuid);
-
-    // Deep merge
     const merged: UserProfile = { ...current };
 
     if (updates.nickname !== undefined) merged.nickname = updates.nickname;
@@ -126,12 +134,8 @@ export class MemoryManager {
     saveProfileToFile(uuid, merged);
   }
 
-  /**
-   * Delete user and all their data
-   */
   deleteUser(uuid: string): void {
     this.userStore.deleteUser(uuid);
-    this.vectorStore.deleteUserDocuments(uuid);
   }
 
   // ============ Profile Info Collection ============
@@ -188,10 +192,11 @@ export class MemoryManager {
     };
   }
 
-  // ============ Memory Search ============
+  // ============ Memory Search (OpenClaw Engine) ============
 
   /**
-   * Hybrid search - combines vector search and keyword search
+   * Hybrid search using OpenClaw's MemoryIndexManager.
+   * Falls back to simple FTS if index not available.
    */
   async searchAsync(
     uuid: string,
@@ -199,113 +204,31 @@ export class MemoryManager {
     options?: { maxResults?: number; minScore?: number }
   ): Promise<MemorySearchResult[]> {
     const maxResults = options?.maxResults ?? 5;
-    const minScore = options?.minScore ?? 0.3;
-    const hybridConfig = { ...DEFAULT_HYBRID_CONFIG, ...this.config.hybridConfig };
+    const minScore = options?.minScore ?? 0.2;
 
-    const candidates = Math.max(maxResults * hybridConfig.candidateMultiplier, 10);
-
-    const [vectorResults, keywordResults] = await Promise.all([
-      this.vectorSearchInternal(uuid, query, candidates),
-      Promise.resolve(this.keywordSearchInternal(uuid, query, candidates)),
-    ]);
-
-    if (vectorResults.length === 0 && keywordResults.length === 0) {
-      return this.simpleSearch(uuid, query, maxResults);
+    // Try OpenClaw engine first
+    const index = await this.getIndex(uuid);
+    if (index) {
+      try {
+        const results = await index.search(query, { maxResults, minScore });
+        return results.map((r) => ({
+          path: r.path,
+          startLine: r.startLine,
+          endLine: r.endLine,
+          score: r.score,
+          snippet: r.snippet,
+        }));
+      } catch (err) {
+        console.warn("[MemoryManager] Index search failed, falling back:", err);
+      }
     }
 
-    const merged = mergeHybridResults({
-      vector: vectorResults,
-      keyword: keywordResults,
-      vectorWeight: hybridConfig.vectorWeight,
-      textWeight: hybridConfig.textWeight,
-    });
-
-    return merged
-      .filter((r) => r.score >= minScore)
-      .slice(0, maxResults)
-      .map((r) => ({
-        path: r.path,
-        startLine: r.startLine,
-        endLine: r.endLine,
-        score: r.score,
-        snippet: r.snippet,
-      }));
-  }
-
-  private async vectorSearchInternal(
-    uuid: string,
-    query: string,
-    limit: number
-  ): Promise<HybridVectorResult[]> {
-    if (!this.vectorStore.isAvailable()) {
-      return [];
-    }
-
-    try {
-      const results = await this.vectorStore.search(uuid, query, {
-        maxResults: limit,
-        minScore: 0,
-      });
-
-      return results.map((r) => ({
-        id: this.hashText(`${uuid}:${r.path}:${r.startLine}:${r.endLine}`),
-        path: r.path,
-        startLine: r.startLine,
-        endLine: r.endLine,
-        snippet: r.snippet,
-        vectorScore: r.score,
-      }));
-    } catch (error) {
-      console.warn("[MemoryManager] Vector search failed:", error);
-      return [];
-    }
-  }
-
-  private keywordSearchInternal(uuid: string, query: string, limit: number): HybridKeywordResult[] {
-    if (!this.ftsAvailable) {
-      return [];
-    }
-
-    const ftsQuery = buildFtsQuery(query);
-    if (!ftsQuery) return [];
-
-    try {
-      const rows = this.db
-        .query<
-          {
-            id: string;
-            path: string;
-            start_line: number;
-            end_line: number;
-            text: string;
-            rank: number;
-          },
-          [string, string, number]
-        >(
-          `SELECT id, path, start_line, end_line, text, rank
-           FROM chunks_fts
-           WHERE uuid = ? AND chunks_fts MATCH ?
-           ORDER BY rank
-           LIMIT ?`
-        )
-        .all(uuid, ftsQuery, limit);
-
-      return rows.map((row) => ({
-        id: row.id,
-        path: row.path,
-        startLine: row.start_line,
-        endLine: row.end_line,
-        snippet: row.text.slice(0, 200),
-        textScore: bm25RankToScore(row.rank),
-      }));
-    } catch (error) {
-      console.warn("[MemoryManager] FTS search failed:", error);
-      return [];
-    }
+    // Fallback to simple search on PHA's legacy DB
+    return this.simpleSearch(uuid, query, maxResults);
   }
 
   /**
-   * Search user's memory (sync version, FTS or simple)
+   * Sync version - simple keyword search on PHA's legacy DB
    */
   search(
     uuid: string,
@@ -313,59 +236,11 @@ export class MemoryManager {
     options?: { maxResults?: number; minScore?: number }
   ): MemorySearchResult[] {
     const maxResults = options?.maxResults ?? 5;
-    const minScore = options?.minScore ?? 0.3;
-
-    if (!this.ftsAvailable) {
-      return this.simpleSearch(uuid, query, maxResults);
-    }
-
-    return this.ftsSearch(uuid, query, maxResults, minScore);
-  }
-
-  private ftsSearch(
-    uuid: string,
-    query: string,
-    maxResults: number,
-    _minScore: number
-  ): MemorySearchResult[] {
-    const ftsQuery = query
-      .split(/\s+/)
-      .filter((word) => word.length > 0)
-      .map((word) => `"${word}"`)
-      .join(" OR ");
-
-    if (!ftsQuery) return [];
-
-    try {
-      const rows = this.db
-        .query<
-          { id: string; path: string; start_line: number; end_line: number; text: string },
-          [string, string, number]
-        >(
-          `SELECT id, path, start_line, end_line, text
-           FROM chunks_fts
-           WHERE uuid = ? AND chunks_fts MATCH ?
-           ORDER BY rank
-           LIMIT ?`
-        )
-        .all(uuid, ftsQuery, maxResults);
-
-      return rows.map((row) => ({
-        path: row.path,
-        startLine: row.start_line,
-        endLine: row.end_line,
-        score: 1.0,
-        snippet: row.text.slice(0, 200),
-      }));
-    } catch (err) {
-      console.warn("FTS search error:", err);
-      return this.simpleSearch(uuid, query, maxResults);
-    }
+    return this.simpleSearch(uuid, query, maxResults);
   }
 
   private simpleSearch(uuid: string, query: string, maxResults: number): MemorySearchResult[] {
     const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
-
     if (keywords.length === 0) return [];
 
     const rows = this.db
@@ -406,7 +281,18 @@ export class MemoryManager {
   appendMemory(uuid: string, content: string): void {
     this.ensureUser(uuid);
     appendToMemory(uuid, content);
+
+    // Index in legacy PHA DB (for simpleSearch fallback)
     this.indexContent(uuid, "MEMORY.md", content);
+
+    // Trigger OpenClaw index sync (fire-and-forget)
+    this.getIndex(uuid).then((index) => {
+      if (index) {
+        void index.sync({ reason: "memory-write" }).catch((err) => {
+          console.warn("[MemoryManager] Sync after memory write failed:", err);
+        });
+      }
+    });
   }
 
   appendDailyLog(uuid: string, content: string): void {
@@ -415,30 +301,39 @@ export class MemoryManager {
 
     const date = new Date().toISOString().split("T")[0];
     this.indexContent(uuid, `memory/${date}.md`, content);
+
+    // Trigger OpenClaw index sync
+    this.getIndex(uuid).then((index) => {
+      if (index) {
+        void index.sync({ reason: "daily-log" }).catch((err) => {
+          console.warn("[MemoryManager] Sync after daily log failed:", err);
+        });
+      }
+    });
   }
 
   appendSessionTranscript(uuid: string, sessionId: string, content: string): void {
     this.ensureUser(uuid);
     this.indexContent(uuid, `sessions/${sessionId}.jsonl`, content);
+
+    // Notify OpenClaw session listener
+    const sessionFile = join(getStateDir(), "users", uuid, "sessions", `${sessionId}.jsonl`);
+    emitSessionTranscriptUpdate(sessionFile);
   }
 
   private indexContent(uuid: string, path: string, content: string): void {
     const chunks = this.chunkText(content);
     const now = Date.now();
 
-    const vectorDocs: VectorDocument[] = [];
-
     for (const chunk of chunks) {
       const id = this.hashText(`${uuid}:${path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}`);
 
-      // Insert into chunks table
       this.db.run(
         `INSERT OR REPLACE INTO chunks (id, uuid, path, start_line, end_line, hash, model, text, embedding, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [id, uuid, path, chunk.startLine, chunk.endLine, chunk.hash, "none", chunk.text, "[]", now]
       );
 
-      // Insert into FTS if available
       if (this.ftsAvailable) {
         try {
           this.db.run(
@@ -450,31 +345,18 @@ export class MemoryManager {
           // FTS insert might fail on conflict, ignore
         }
       }
-
-      vectorDocs.push({
-        id,
-        text: chunk.text,
-        metadata: {
-          uuid,
-          path,
-          startLine: chunk.startLine,
-          endLine: chunk.endLine,
-          source: "memory",
-        },
-      });
-    }
-
-    // Index to vector store asynchronously
-    if (vectorDocs.length > 0 && this.vectorStore.isAvailable()) {
-      this.vectorStore.addDocuments(vectorDocs).catch((err) => {
-        console.warn("[MemoryManager] Vector indexing failed:", err);
-      });
     }
   }
 
-  private chunkText(text: string): MemoryChunk[] {
+  private chunkText(
+    text: string
+  ): Array<{ text: string; startLine: number; endLine: number; hash: string }> {
+    const CHUNK_MAX_TOKENS = 400;
+    const CHUNK_OVERLAP_TOKENS = 80;
+    const APPROX_CHARS_PER_TOKEN = 4;
+
     const lines = text.split("\n");
-    const chunks: MemoryChunk[] = [];
+    const chunks: Array<{ text: string; startLine: number; endLine: number; hash: string }> = [];
 
     const maxChars = CHUNK_MAX_TOKENS * APPROX_CHARS_PER_TOKEN;
     const overlapChars = CHUNK_OVERLAP_TOKENS * APPROX_CHARS_PER_TOKEN;
@@ -569,7 +451,6 @@ ${skillRegistry}
 
 Based on the information above, provide personalized health services.`;
 
-    // Token distribution report (debug)
     const est = (s: string) => Math.ceil(s.length / 4);
     console.log(
       `[SystemPrompt] Token distribution: soul=${est(soul)} profile=${est(profileSection)} memory=${est(memorySection)} health=${est(healthContext || "")} skills=${est(skillRegistry)} total≈${est(prompt)}`
@@ -582,6 +463,14 @@ Based on the information above, provide personalized health services.`;
 
   close(): void {
     this.db.close();
+    // Close all index managers
+    for (const [, manager] of this.indexManagers) {
+      if (manager) {
+        void manager.close();
+      }
+    }
+    this.indexManagers.clear();
+    this.indexInitPromises.clear();
   }
 }
 

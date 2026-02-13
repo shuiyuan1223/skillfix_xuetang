@@ -1,141 +1,75 @@
 /**
- * Embedding Provider
- * Uses OpenRouter API for embeddings (OpenAI-compatible)
+ * Embedding Provider (from OpenClaw, simplified for PHA)
  *
- * Reads config from:
- * 1. Explicit EmbeddingConfig parameter
- * 2. PHAConfig (.pha/config.json) - uses llm.apiKey if provider is openrouter
- * 3. OPENROUTER_API_KEY environment variable
+ * PHA only uses OpenAI-compatible embeddings (via OpenRouter).
+ * No local/Gemini/Voyage support needed.
  */
 
 import { loadConfig } from "../utils/config.js";
+import { formatErrorMessage } from "./compat.js";
+import { createOpenAiEmbeddingProvider, type OpenAiEmbeddingClient } from "./embeddings-openai.js";
 
+export type { OpenAiEmbeddingClient } from "./embeddings-openai.js";
+
+export type EmbeddingProvider = {
+  id: string;
+  model: string;
+  maxInputTokens?: number;
+  embedQuery: (text: string) => Promise<number[]>;
+  embedBatch: (texts: string[]) => Promise<number[][]>;
+};
+
+export type EmbeddingProviderResult = {
+  provider: EmbeddingProvider;
+  requestedProvider: "openai" | "auto";
+  fallbackFrom?: string;
+  fallbackReason?: string;
+  openAi?: OpenAiEmbeddingClient;
+};
+
+export type EmbeddingProviderOptions = {
+  config?: unknown;
+  agentDir?: string;
+  provider: string;
+  remote?: {
+    baseUrl?: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+  };
+  model: string;
+  fallback: string;
+  local?: unknown;
+  /** PHA-specific: direct API key */
+  apiKey?: string;
+};
+
+/** PHA-specific: legacy config interface for backward compatibility */
 export interface EmbeddingConfig {
-  /** OpenRouter API key */
   apiKey: string;
-  /** Embedding model (default: openai/text-embedding-3-small) */
   model?: string;
-  /** Base URL (default: https://openrouter.ai/api/v1) */
   baseUrl?: string;
 }
 
-const DEFAULT_MODEL = "openai/text-embedding-3-small";
-const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
-
-export class EmbeddingProvider {
-  private apiKey: string;
-  private model: string;
-  private baseUrl: string;
-
-  constructor(config: EmbeddingConfig) {
-    this.apiKey = config.apiKey;
-    this.model = config.model || DEFAULT_MODEL;
-    this.baseUrl = config.baseUrl || DEFAULT_BASE_URL;
-  }
-
-  /**
-   * Get embedding for a single text
-   */
-  async embed(text: string): Promise<number[]> {
-    const embeddings = await this.embedBatch([text]);
-    return embeddings[0];
-  }
-
-  /**
-   * Get embeddings for multiple texts
-   */
-  async embedBatch(texts: string[]): Promise<number[][]> {
-    if (texts.length === 0) return [];
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const response = await fetch(`${this.baseUrl}/embeddings`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${this.apiKey}`,
-            "HTTP-Referer": "https://github.com/anthropics/pha",
-            "X-Title": "PHA Health Agent",
-          },
-          body: JSON.stringify({
-            model: this.model,
-            input: texts,
-          }),
-        });
-
-        if (!response.ok) {
-          const error = await response.text();
-          throw new Error(`Embedding API error: ${response.status} - ${error}`);
-        }
-
-        const data = (await response.json()) as {
-          data: Array<{ embedding: number[]; index: number }>;
-        };
-
-        // Sort by index to ensure correct order
-        const sorted = data.data.sort((a, b) => a.index - b.index);
-        return sorted.map((item) => item.embedding);
-      } catch (err) {
-        if (attempt === 0) {
-          console.warn("[Embedding] Attempt 1 failed, retrying in 1s:", (err as Error).message);
-          await new Promise((r) => setTimeout(r, 1000));
-          continue;
-        }
-        console.warn("[Embedding] All attempts failed, returning empty:", (err as Error).message);
-        return []; // Graceful fallback — FTS still works
-      }
-    }
-    return [];
-  }
-
-  /**
-   * Get the embedding dimension for the current model
-   */
-  getDimension(): number {
-    // text-embedding-3-small: 1536
-    // text-embedding-ada-002: 1536
-    // text-embedding-3-large: 3072
-    if (this.model.includes("3-large")) return 3072;
-    return 1536;
-  }
-}
-
-// Singleton instance
-let embeddingProvider: EmbeddingProvider | null = null;
-
 /**
- * Get API key from config or environment
+ * Create embedding provider (PHA simplified version).
+ * Always uses OpenAI-compatible API (works with OpenRouter).
  */
-function getApiKeyFromConfig(): string | undefined {
-  // First check environment
-  if (process.env.OPENROUTER_API_KEY) {
-    return process.env.OPENROUTER_API_KEY;
-  }
-
-  // Then check PHAConfig
+export async function createEmbeddingProvider(
+  options: EmbeddingProviderOptions
+): Promise<EmbeddingProviderResult> {
   try {
-    const phaConfig = loadConfig();
-    if (phaConfig.llm.provider === "openrouter" && phaConfig.llm.apiKey) {
-      return phaConfig.llm.apiKey;
-    }
-  } catch {
-    // Config not available, continue
+    const { provider, client } = await createOpenAiEmbeddingProvider(options);
+    return {
+      provider,
+      requestedProvider: (options.provider as "openai" | "auto") || "openai",
+      openAi: client,
+    };
+  } catch (err) {
+    throw new Error(formatErrorMessage(err), { cause: err });
   }
-
-  return undefined;
 }
 
-/**
- * Get embedding model from config
- */
-function getModelFromConfig(): string | undefined {
-  try {
-    const phaConfig = loadConfig();
-    return phaConfig.embedding?.model;
-  } catch {
-    return undefined;
-  }
-}
+// ============ PHA Backward Compatibility ============
 
 /**
  * Check if embedding is enabled in config
@@ -143,7 +77,6 @@ function getModelFromConfig(): string | undefined {
 export function isEmbeddingEnabled(): boolean {
   try {
     const phaConfig = loadConfig();
-    // Enabled by default if not explicitly disabled
     return phaConfig.embedding?.enabled !== false;
   } catch {
     return true;
@@ -151,22 +84,45 @@ export function isEmbeddingEnabled(): boolean {
 }
 
 /**
- * Get or create embedding provider
+ * Get API key from PHA config or environment
  */
-export function getEmbeddingProvider(config?: EmbeddingConfig): EmbeddingProvider {
-  if (!embeddingProvider) {
-    const apiKey = config?.apiKey || getApiKeyFromConfig();
-    if (!apiKey) {
-      throw new Error(
-        "OpenRouter API key is required for embeddings. Configure via 'pha onboard' or set OPENROUTER_API_KEY"
-      );
-    }
-    const model = config?.model || getModelFromConfig();
-    embeddingProvider = new EmbeddingProvider({
-      apiKey,
-      model,
-      baseUrl: config?.baseUrl,
-    });
+export function resolveEmbeddingApiKey(): string | undefined {
+  if (process.env.OPENROUTER_API_KEY) {
+    return process.env.OPENROUTER_API_KEY;
   }
-  return embeddingProvider;
+  if (process.env.OPENAI_API_KEY) {
+    return process.env.OPENAI_API_KEY;
+  }
+  try {
+    const phaConfig = loadConfig();
+    if (phaConfig.llm.apiKey) {
+      return phaConfig.llm.apiKey;
+    }
+  } catch {}
+  return undefined;
+}
+
+/**
+ * Get embedding model from PHA config
+ */
+export function resolveEmbeddingModel(): string {
+  try {
+    const phaConfig = loadConfig();
+    return phaConfig.embedding?.model || "text-embedding-3-small";
+  } catch {
+    return "text-embedding-3-small";
+  }
+}
+
+/**
+ * Get embedding base URL from PHA config
+ */
+export function resolveEmbeddingBaseUrl(): string {
+  try {
+    const phaConfig = loadConfig();
+    if (phaConfig.llm.provider === "openrouter" && phaConfig.llm.baseUrl) {
+      return phaConfig.llm.baseUrl;
+    }
+  } catch {}
+  return "https://openrouter.ai/api/v1";
 }
