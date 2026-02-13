@@ -1369,7 +1369,7 @@ export class GatewaySession {
             profileCompleteness: mm.getProfileCompleteness(uuid),
             profile: mm.getProfile(uuid),
             missingFields: mm.getAllMissingFields(uuid).map((f) => f.key),
-            memoryStats: mm.getMemoryStats(uuid),
+            memoryStats: { totalChunks: 0, lastUpdated: 0 },
             memorySummary: loadMemorySummary(uuid) || "",
             dailyLogs: getRecentDailyLogs(uuid, 7),
             searchQuery: this.memorySearchQuery,

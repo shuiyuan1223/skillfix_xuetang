@@ -109,13 +109,16 @@ describe("MemoryManager", () => {
     expect(profile.gender).toBe("male");
   });
 
-  test("should append to memory", () => {
+  test("should append to memory without error", () => {
     manager.appendMemory(testUuid, "## 发现\n用户喜欢跑步");
+    // Memory is written to file; indexing is async via OpenClaw engine
+  });
 
-    // Search should find the content
-    const results = manager.search(testUuid, "跑步");
-    // Results may or may not be found depending on FTS availability
+  test("should search async (returns empty when index not available)", async () => {
+    const results = await manager.searchAsync(testUuid, "跑步");
+    // In test environment without embedding config, returns empty
     expect(results).toBeDefined();
+    expect(Array.isArray(results)).toBe(true);
   });
 
   test("should build system prompt", () => {

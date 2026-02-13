@@ -5,11 +5,10 @@
  * - OpenClaw's MemoryIndexManager (search, sync, indexing)
  * - PHA's user management, health profiles, info extraction
  *
- * SQLite is a search index; files are the source of truth.
+ * Files are the source of truth; OpenClaw's per-user index handles all search.
  */
 
 import { Database } from "bun:sqlite";
-import { createHash } from "crypto";
 import { join } from "path";
 import { getStateDir } from "../utils/config.js";
 import { ensureMemorySchema, openMemoryDatabase } from "./schema.js";
@@ -45,17 +44,13 @@ export interface MemoryManagerConfig {
 export class MemoryManager {
   private db: Database;
   private userStore: UserStore;
-  private ftsAvailable: boolean;
-  private vecAvailable: boolean;
   private indexManagers = new Map<string, MemoryIndexManager | null>();
   private indexInitPromises = new Map<string, Promise<MemoryIndexManager | null>>();
 
   constructor(private config: MemoryManagerConfig = {}) {
     const dbPath = join(getStateDir(), "memory.db");
     this.db = openMemoryDatabase(dbPath);
-    const schemaResult = ensureMemorySchema(this.db);
-    this.ftsAvailable = schemaResult.ftsAvailable;
-    this.vecAvailable = schemaResult.vecAvailable;
+    ensureMemorySchema(this.db);
     this.userStore = new UserStore(this.db);
   }
 
@@ -136,6 +131,12 @@ export class MemoryManager {
 
   deleteUser(uuid: string): void {
     this.userStore.deleteUser(uuid);
+    // Also close and remove the user's index manager
+    const manager = this.indexManagers.get(uuid);
+    if (manager) {
+      void manager.close();
+      this.indexManagers.delete(uuid);
+    }
   }
 
   // ============ Profile Info Collection ============
@@ -176,27 +177,10 @@ export class MemoryManager {
     return formatQuestion(field);
   }
 
-  // ============ Memory Stats ============
-
-  getMemoryStats(uuid: string): { totalChunks: number; lastUpdated: number } {
-    const row = this.db
-      .query<
-        { count: number; last: number | null },
-        [string]
-      >(`SELECT COUNT(*) as count, MAX(updated_at) as last FROM chunks WHERE uuid = ?`)
-      .get(uuid);
-
-    return {
-      totalChunks: row?.count ?? 0,
-      lastUpdated: row?.last ?? 0,
-    };
-  }
-
   // ============ Memory Search (OpenClaw Engine) ============
 
   /**
-   * Hybrid search using OpenClaw's MemoryIndexManager.
-   * Falls back to simple FTS if index not available.
+   * Search memory using OpenClaw's hybrid vector + keyword search.
    */
   async searchAsync(
     uuid: string,
@@ -206,7 +190,6 @@ export class MemoryManager {
     const maxResults = options?.maxResults ?? 5;
     const minScore = options?.minScore ?? 0.2;
 
-    // Try OpenClaw engine first
     const index = await this.getIndex(uuid);
     if (index) {
       try {
@@ -219,61 +202,11 @@ export class MemoryManager {
           snippet: r.snippet,
         }));
       } catch (err) {
-        console.warn("[MemoryManager] Index search failed, falling back:", err);
+        console.warn("[MemoryManager] Index search failed:", err);
       }
     }
 
-    // Fallback to simple search on PHA's legacy DB
-    return this.simpleSearch(uuid, query, maxResults);
-  }
-
-  /**
-   * Sync version - simple keyword search on PHA's legacy DB
-   */
-  search(
-    uuid: string,
-    query: string,
-    options?: { maxResults?: number; minScore?: number }
-  ): MemorySearchResult[] {
-    const maxResults = options?.maxResults ?? 5;
-    return this.simpleSearch(uuid, query, maxResults);
-  }
-
-  private simpleSearch(uuid: string, query: string, maxResults: number): MemorySearchResult[] {
-    const keywords = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (keywords.length === 0) return [];
-
-    const rows = this.db
-      .query<
-        { path: string; start_line: number; end_line: number; text: string },
-        [string, number]
-      >("SELECT path, start_line, end_line, text FROM chunks WHERE uuid = ? LIMIT ?")
-      .all(uuid, maxResults * 10);
-
-    const results: MemorySearchResult[] = [];
-
-    for (const row of rows) {
-      const textLower = row.text.toLowerCase();
-      let matchCount = 0;
-
-      for (const keyword of keywords) {
-        if (textLower.includes(keyword)) {
-          matchCount++;
-        }
-      }
-
-      if (matchCount > 0) {
-        results.push({
-          path: row.path,
-          startLine: row.start_line,
-          endLine: row.end_line,
-          score: matchCount / keywords.length,
-          snippet: row.text.slice(0, 200),
-        });
-      }
-    }
-
-    return results.sort((a, b) => b.score - a.score).slice(0, maxResults);
+    return [];
   }
 
   // ============ Memory Writing ============
@@ -281,9 +214,6 @@ export class MemoryManager {
   appendMemory(uuid: string, content: string): void {
     this.ensureUser(uuid);
     appendToMemory(uuid, content);
-
-    // Index in legacy PHA DB (for simpleSearch fallback)
-    this.indexContent(uuid, "MEMORY.md", content);
 
     // Trigger OpenClaw index sync (fire-and-forget)
     this.getIndex(uuid).then((index) => {
@@ -299,9 +229,6 @@ export class MemoryManager {
     this.ensureUser(uuid);
     appendToDailyLog(uuid, content);
 
-    const date = new Date().toISOString().split("T")[0];
-    this.indexContent(uuid, `memory/${date}.md`, content);
-
     // Trigger OpenClaw index sync
     this.getIndex(uuid).then((index) => {
       if (index) {
@@ -312,103 +239,12 @@ export class MemoryManager {
     });
   }
 
-  appendSessionTranscript(uuid: string, sessionId: string, content: string): void {
+  appendSessionTranscript(uuid: string, sessionId: string, _content: string): void {
     this.ensureUser(uuid);
-    this.indexContent(uuid, `sessions/${sessionId}.jsonl`, content);
 
-    // Notify OpenClaw session listener
+    // Notify OpenClaw session listener (triggers async index sync)
     const sessionFile = join(getStateDir(), "users", uuid, "sessions", `${sessionId}.jsonl`);
     emitSessionTranscriptUpdate(sessionFile);
-  }
-
-  private indexContent(uuid: string, path: string, content: string): void {
-    const chunks = this.chunkText(content);
-    const now = Date.now();
-
-    for (const chunk of chunks) {
-      const id = this.hashText(`${uuid}:${path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}`);
-
-      this.db.run(
-        `INSERT OR REPLACE INTO chunks (id, uuid, path, start_line, end_line, hash, model, text, embedding, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, uuid, path, chunk.startLine, chunk.endLine, chunk.hash, "none", chunk.text, "[]", now]
-      );
-
-      if (this.ftsAvailable) {
-        try {
-          this.db.run(
-            `INSERT INTO chunks_fts (text, id, uuid, path, model, start_line, end_line)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [chunk.text, id, uuid, path, "none", chunk.startLine, chunk.endLine]
-          );
-        } catch {
-          // FTS insert might fail on conflict, ignore
-        }
-      }
-    }
-  }
-
-  private chunkText(
-    text: string
-  ): Array<{ text: string; startLine: number; endLine: number; hash: string }> {
-    const CHUNK_MAX_TOKENS = 400;
-    const CHUNK_OVERLAP_TOKENS = 80;
-    const APPROX_CHARS_PER_TOKEN = 4;
-
-    const lines = text.split("\n");
-    const chunks: Array<{ text: string; startLine: number; endLine: number; hash: string }> = [];
-
-    const maxChars = CHUNK_MAX_TOKENS * APPROX_CHARS_PER_TOKEN;
-    const overlapChars = CHUNK_OVERLAP_TOKENS * APPROX_CHARS_PER_TOKEN;
-
-    let currentChunk: string[] = [];
-    let currentLength = 0;
-    let startLine = 1;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineLength = line.length + 1;
-
-      if (currentLength + lineLength > maxChars && currentChunk.length > 0) {
-        const text = currentChunk.join("\n");
-        chunks.push({
-          text,
-          startLine,
-          endLine: startLine + currentChunk.length - 1,
-          hash: this.hashText(text),
-        });
-
-        let overlapLength = 0;
-        let overlapStart = currentChunk.length - 1;
-        while (overlapStart > 0 && overlapLength < overlapChars) {
-          overlapLength += currentChunk[overlapStart].length + 1;
-          overlapStart--;
-        }
-
-        currentChunk = currentChunk.slice(overlapStart + 1);
-        startLine = startLine + overlapStart + 1;
-        currentLength = currentChunk.reduce((sum, l) => sum + l.length + 1, 0);
-      }
-
-      currentChunk.push(line);
-      currentLength += lineLength;
-    }
-
-    if (currentChunk.length > 0) {
-      const text = currentChunk.join("\n");
-      chunks.push({
-        text,
-        startLine,
-        endLine: startLine + currentChunk.length - 1,
-        hash: this.hashText(text),
-      });
-    }
-
-    return chunks;
-  }
-
-  private hashText(text: string): string {
-    return createHash("sha256").update(text).digest("hex").slice(0, 16);
   }
 
   // ============ SOUL ============

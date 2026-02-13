@@ -61,15 +61,7 @@ export class UserStore {
    * Delete user and all their data
    */
   deleteUser(uuid: string): void {
-    this.db.run("DELETE FROM chunks WHERE uuid = ?", [uuid]);
-    this.db.run("DELETE FROM files WHERE uuid = ?", [uuid]);
     this.db.run("DELETE FROM users WHERE uuid = ?", [uuid]);
-    // Also clean vec_chunks if the table exists
-    try {
-      this.db.run("DELETE FROM vec_chunks WHERE uuid = ?", [uuid]);
-    } catch {
-      // vec_chunks may not exist if sqlite-vec is not available
-    }
   }
 
   /**
