@@ -16,6 +16,7 @@ export interface LocaleMessages {
     evolution: string;
     integrations: string;
     systemAgent: string;
+    systemAgentSettings: string;
   };
 
   // System Agent
@@ -534,6 +535,30 @@ export interface LocaleMessages {
     failed: string;
     closingWindow: string;
     closeWindow: string;
+  };
+
+  // System Agent Settings page
+  systemAgentSettings: {
+    title: string;
+    subtitle: string;
+    tabPrompts: string;
+    tabSkills: string;
+    tabMemory: string;
+    promptsCardTitle: string;
+    promptName: string;
+    promptTitle: string;
+    promptLines: string;
+    versionHistory: string;
+    skillsCardTitle: string;
+    skill: string;
+    description: string;
+    status: string;
+    triggers: string;
+    memoryCardTitle: string;
+    fileName: string;
+    fileLines: string;
+    filePreview: string;
+    emptyFile: string;
   };
 }
 

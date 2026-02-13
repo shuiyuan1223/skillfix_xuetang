@@ -245,6 +245,7 @@ export const listSkillsTool = {
       path: string;
       emoji?: string;
       triggers?: string[];
+      type?: string;
     }> = [];
 
     const entries = readdirSync(dir, { withFileTypes: true });
@@ -266,6 +267,7 @@ export const listSkillsTool = {
         path: info.path,
         emoji: pha?.emoji as string | undefined,
         triggers: pha?.triggers as string[] | undefined,
+        type: (pha?.type as string) || "pha",
       });
     }
 

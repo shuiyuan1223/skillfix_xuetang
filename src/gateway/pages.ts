@@ -75,6 +75,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
     [
       { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
       { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
+      { id: "settings/system-agent", label: t("nav.systemAgentSettings"), icon: "bot" },
       { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
     ],
     { activeId: activeView }
@@ -870,6 +871,7 @@ interface SkillInfo {
   enabled: boolean;
   emoji?: string;
   triggers?: string[];
+  type?: string;
   structure?: { files: string[]; hasReference: boolean; hasScripts: boolean };
 }
 
@@ -906,10 +908,9 @@ export function generateSkillsPage(data: {
     return ui.build(root);
   }
 
-  // Categorize skills: system vs PHA
-  const SYSTEM_SKILLS = new Set(["benchmark-evaluator", "evolution-driver"]);
-  const phaSkills = data.skills.filter((s) => !SYSTEM_SKILLS.has(s.name));
-  const systemSkills = data.skills.filter((s) => SYSTEM_SKILLS.has(s.name));
+  // Categorize skills: system vs PHA (using metadata type field)
+  const phaSkills = data.skills.filter((s) => s.type !== "system");
+  const systemSkills = data.skills.filter((s) => s.type === "system");
 
   const children: string[] = [];
 
@@ -1030,6 +1031,282 @@ export function generateSkillsPage(data: {
   // Content container
   const content = ui.column(children, { gap: 24, padding: 24 });
   const root = ui.column([header, content], { gap: 0 });
+
+  return ui.build(root);
+}
+
+// ============================================================================
+// System Agent Settings Page
+// ============================================================================
+
+interface SAMemoryFileInfo {
+  name: string;
+  displayName: string;
+  lines: number;
+  preview: string;
+}
+
+export function generateSystemAgentSettingsPage(data: {
+  tab: "prompts" | "skills" | "memory";
+  // Prompts tab
+  prompts?: Array<{ name: string; title: string; lines: number }>;
+  selectedPrompt?: string;
+  promptContent?: string;
+  promptCommits?: Array<{
+    hash: string;
+    shortHash: string;
+    message: string;
+    date: string;
+    author: string;
+  }>;
+  editingPrompt?: boolean;
+  // Skills tab
+  skills?: SkillInfo[];
+  selectedSkill?: string;
+  selectedSkillFile?: string;
+  skillContent?: string;
+  skillLanguage?: string;
+  editingSkill?: boolean;
+  // Memory tab
+  memoryFiles?: SAMemoryFileInfo[];
+  selectedMemoryFile?: string;
+  memoryContent?: string;
+  editingMemory?: boolean;
+  // General
+  loading?: boolean;
+}): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+  const sa = (key: string) => t(`systemAgentSettings.${key}`);
+
+  // Header
+  const title = ui.text(sa("title"), "h2");
+  const subtitle = ui.text(sa("subtitle"), "caption");
+  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+
+  // Tabs
+  const tabContentIds = {
+    prompts: "sa_tab_prompts",
+    skills: "sa_tab_skills",
+    memory: "sa_tab_memory",
+  };
+  const tabs = ui.tabs(
+    [
+      { id: "prompts", label: sa("tabPrompts"), icon: "file-text" },
+      { id: "skills", label: sa("tabSkills"), icon: "puzzle" },
+      { id: "memory", label: sa("tabMemory"), icon: "brain" },
+    ],
+    data.tab,
+    tabContentIds
+  );
+
+  // Loading skeleton
+  if (data.loading) {
+    const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
+    const loadingContent = ui.column([s1], { gap: 16, padding: 24 });
+    const root = ui.column([header, tabs, loadingContent], { gap: 0 });
+    return ui.build(root);
+  }
+
+  const children: string[] = [];
+
+  // ---- Prompts Tab ----
+  if (data.tab === "prompts") {
+    const promptRows = (data.prompts || []).map((p) => ({
+      name: p.name,
+      title: p.title,
+      lines: p.lines,
+    }));
+
+    const promptsTable = ui.dataTable(
+      [
+        { key: "name", label: sa("promptName"), sortable: true },
+        { key: "title", label: sa("promptTitle") },
+        { key: "lines", label: sa("promptLines") },
+      ],
+      promptRows,
+      { onRowClick: "sa_settings_select_prompt" }
+    );
+
+    children.push(ui.card([promptsTable], { title: sa("promptsCardTitle"), padding: 20 }));
+
+    // Selected prompt editor
+    if (data.selectedPrompt && data.promptContent !== undefined) {
+      const editor = ui.codeEditor(data.promptContent, {
+        language: "markdown",
+        readonly: !data.editingPrompt,
+        lineNumbers: true,
+        height: 400,
+        onChange: "sa_settings_prompt_content_change",
+      });
+
+      const editBtn = data.editingPrompt
+        ? ui.button(t("common.save"), "sa_settings_save_prompt", { variant: "primary" })
+        : ui.button(t("common.edit"), "sa_settings_edit_prompt", { variant: "outline" });
+
+      const cancelBtn = data.editingPrompt
+        ? ui.button(t("common.cancel"), "sa_settings_cancel_edit", { variant: "ghost" })
+        : null;
+
+      const revertBtn =
+        !data.editingPrompt && data.promptCommits && data.promptCommits.length > 1
+          ? ui.button(t("common.revert"), "sa_settings_revert_prompt", { variant: "ghost" })
+          : null;
+
+      const editorBtns = [editBtn];
+      if (cancelBtn) editorBtns.push(cancelBtn);
+      if (revertBtn) editorBtns.push(revertBtn);
+
+      const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
+      children.push(
+        ui.card([editorHeader, editor], { title: `${data.selectedPrompt}.md`, padding: 20 })
+      );
+
+      // Version history
+      if (data.promptCommits && data.promptCommits.length > 0) {
+        const commitList = ui.commitList(data.promptCommits, {
+          onSelect: "sa_settings_select_commit",
+        });
+        children.push(ui.card([commitList], { title: sa("versionHistory"), padding: 20 }));
+      }
+    }
+  }
+
+  // ---- Skills Tab ----
+  if (data.tab === "skills") {
+    const skillRows = (data.skills || []).map((s) => ({
+      name: `${s.emoji || "puzzle"} ${s.name}`,
+      description: s.description || "-",
+      status: s.enabled ? "enabled" : "disabled",
+      triggers: s.triggers?.join(", ") || "-",
+    }));
+
+    const skillsTable = ui.dataTable(
+      [
+        { key: "name", label: sa("skill"), sortable: true },
+        { key: "description", label: sa("description") },
+        { key: "status", label: sa("status"), render: "badge" },
+        { key: "triggers", label: sa("triggers") },
+      ],
+      skillRows,
+      { onRowClick: "sa_settings_select_skill" }
+    );
+
+    children.push(ui.card([skillsTable], { title: sa("skillsCardTitle"), padding: 20 }));
+
+    // Selected skill editor
+    if (data.selectedSkill && data.skillContent !== undefined) {
+      const selectedInfo = (data.skills || []).find((s) => s.name === data.selectedSkill);
+      const currentFile = data.selectedSkillFile || "SKILL.md";
+      const editorLanguage = (data.skillLanguage || "markdown") as
+        | "markdown"
+        | "json"
+        | "yaml"
+        | "typescript"
+        | "javascript";
+
+      const editorChildren: string[] = [];
+
+      // File selector (when skill has multiple files)
+      const skillFiles = selectedInfo?.structure?.files;
+      if (skillFiles && skillFiles.length > 1) {
+        const fileButtons = skillFiles.map((f) =>
+          ui.button(f, "sa_settings_select_skill_file", {
+            variant: f === currentFile ? "primary" : "outline",
+            size: "sm",
+            payload: { file: f },
+          })
+        );
+        editorChildren.push(ui.row(fileButtons));
+      }
+
+      const editor = ui.codeEditor(data.skillContent, {
+        language: editorLanguage,
+        readonly: !data.editingSkill,
+        lineNumbers: true,
+        height: 400,
+        onChange: "sa_settings_skill_content_change",
+      });
+
+      const editBtn = data.editingSkill
+        ? ui.button(t("common.save"), "sa_settings_save_skill", { variant: "primary" })
+        : ui.button(t("common.edit"), "sa_settings_edit_skill", { variant: "outline" });
+
+      const toggleBtn = ui.button(
+        selectedInfo?.enabled ? t("common.disable") : t("common.enable"),
+        "sa_settings_toggle_skill",
+        { variant: selectedInfo?.enabled ? "ghost" : "secondary" }
+      );
+
+      const cancelBtn = data.editingSkill
+        ? ui.button(t("common.cancel"), "sa_settings_cancel_edit", { variant: "ghost" })
+        : null;
+
+      const editorActions = cancelBtn ? [editBtn, cancelBtn, toggleBtn] : [editBtn, toggleBtn];
+
+      editorChildren.push(ui.row(editorActions, { gap: 8, justify: "end" }));
+      editorChildren.push(editor);
+
+      children.push(
+        ui.card(editorChildren, {
+          title: `${data.selectedSkill}/${currentFile}`,
+          padding: 20,
+        })
+      );
+    }
+  }
+
+  // ---- Memory Tab ----
+  if (data.tab === "memory") {
+    const memoryRows = (data.memoryFiles || []).map((f) => ({
+      name: f.displayName,
+      lines: f.lines,
+      preview: f.preview || sa("emptyFile"),
+    }));
+
+    const memoryTable = ui.dataTable(
+      [
+        { key: "name", label: sa("fileName"), sortable: true },
+        { key: "lines", label: sa("fileLines") },
+        { key: "preview", label: sa("filePreview") },
+      ],
+      memoryRows,
+      { onRowClick: "sa_settings_select_memory" }
+    );
+
+    children.push(ui.card([memoryTable], { title: sa("memoryCardTitle"), padding: 20 }));
+
+    // Selected memory file editor
+    if (data.selectedMemoryFile && data.memoryContent !== undefined) {
+      const editor = ui.codeEditor(data.memoryContent, {
+        language: "markdown",
+        readonly: !data.editingMemory,
+        lineNumbers: true,
+        height: 400,
+        onChange: "sa_settings_memory_content_change",
+      });
+
+      const editBtn = data.editingMemory
+        ? ui.button(t("common.save"), "sa_settings_save_memory", { variant: "primary" })
+        : ui.button(t("common.edit"), "sa_settings_edit_memory", { variant: "outline" });
+
+      const cancelBtn = data.editingMemory
+        ? ui.button(t("common.cancel"), "sa_settings_cancel_edit", { variant: "ghost" })
+        : null;
+
+      const editorBtns = cancelBtn ? [editBtn, cancelBtn] : [editBtn];
+      const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
+
+      children.push(
+        ui.card([editorHeader, editor], {
+          title: data.selectedMemoryFile,
+          padding: 20,
+        })
+      );
+    }
+  }
+
+  const content = ui.column(children, { gap: 24, padding: 24 });
+  const root = ui.column([header, tabs, content], { gap: 0 });
 
   return ui.build(root);
 }

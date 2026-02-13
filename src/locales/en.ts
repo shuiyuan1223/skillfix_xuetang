@@ -16,6 +16,7 @@ export const en: LocaleMessages = {
     evolution: "Evolution",
     integrations: "Integrations",
     systemAgent: "System Agent",
+    systemAgentSettings: "System Agent Settings",
   },
 
   systemAgent: {
@@ -517,5 +518,28 @@ export const en: LocaleMessages = {
     failed: "Authorization Failed",
     closingWindow: "Closing this window...",
     closeWindow: "Close",
+  },
+
+  systemAgentSettings: {
+    title: "System Agent Settings",
+    subtitle: "Manage System Agent prompts, skills, and memory",
+    tabPrompts: "Prompts",
+    tabSkills: "Skills",
+    tabMemory: "Memory",
+    promptsCardTitle: "Prompt Files",
+    promptName: "Name",
+    promptTitle: "Title",
+    promptLines: "Lines",
+    versionHistory: "Version History",
+    skillsCardTitle: "System Skills",
+    skill: "Skill",
+    description: "Description",
+    status: "Status",
+    triggers: "Triggers",
+    memoryCardTitle: "Memory Files",
+    fileName: "File",
+    fileLines: "Lines",
+    filePreview: "Preview",
+    emptyFile: "(empty)",
   },
 };
