@@ -21,6 +21,7 @@ import type { UserMessage, AssistantMessage, ToolResultMessage } from "@mariozec
 import type { MemoryManager } from "./memory-manager.js";
 import { saveSessionTranscript, serializeMessages } from "./session-store.js";
 import { pruneContextMessages } from "./context-pruning.js";
+import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 
 // ── Constants (from OpenClaw) ──────────────────────────────────────────
 
@@ -681,6 +682,16 @@ export function createCompactionFlush(
       flushed = true;
       const oldMessages = messages.slice(0, -20);
 
+      // Trigger before_compaction hook
+      const hr = getGlobalHookRunner();
+      if (hr) {
+        try {
+          await hr.runBeforeCompaction({ messageCount: messages.length, tokenCount: tokens }, {});
+        } catch {
+          /* best-effort */
+        }
+      }
+
       // 1. Save raw transcript (no LLM, always succeeds)
       if (sessionId && oldMessages.length > 0) {
         try {
@@ -721,12 +732,43 @@ export function createCompactionFlush(
     }
 
     // Phase 2: Prune — real-time context pruning (after flush)
+    const beforePruneCount = messages.length;
     messages = pruneContextMessages(messages, { contextWindow: config.contextWindow });
 
     // Phase 3: Compact — truncate if still over limit
     const tokensAfterPrune = estimateTokens(messages);
     if (tokensAfterPrune > limit) {
-      return compactMessages(messages, limit);
+      const compacted = compactMessages(messages, limit);
+
+      // Trigger after_compaction hook
+      const hr = getGlobalHookRunner();
+      if (hr) {
+        hr.runAfterCompaction(
+          {
+            messageCount: compacted.length,
+            tokenCount: estimateTokens(compacted),
+            compactedCount: beforePruneCount - compacted.length,
+          },
+          {}
+        ).catch(() => {});
+      }
+
+      return compacted;
+    }
+
+    // Trigger after_compaction hook if pruning removed messages
+    if (beforePruneCount > messages.length) {
+      const hr = getGlobalHookRunner();
+      if (hr) {
+        hr.runAfterCompaction(
+          {
+            messageCount: messages.length,
+            tokenCount: tokensAfterPrune,
+            compactedCount: beforePruneCount - messages.length,
+          },
+          {}
+        ).catch(() => {});
+      }
     }
 
     return messages;

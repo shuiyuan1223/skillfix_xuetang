@@ -159,7 +159,7 @@ export function registerStartCommand(program: Command): void {
           setTimeout(() => openBrowser(`http://localhost:${port}`), 500);
         }
 
-        startGateway({
+        await startGateway({
           port,
           provider: config.llm.provider as any,
           modelId: config.llm.modelId,

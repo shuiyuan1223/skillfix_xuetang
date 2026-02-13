@@ -95,6 +95,21 @@ export interface PHAConfig {
   };
   /** Evolution apply engine: "claude-code" (default, requires global claude CLI) or "pi-coding-agent" (in-process) */
   applyEngine?: "claude-code" | "pi-coding-agent";
+  /** Plugin system configuration */
+  plugins?: {
+    /** Global enable/disable (default: true) */
+    enabled?: boolean;
+    /** Extra directories to scan for plugins */
+    paths?: string[];
+    /** Per-plugin settings keyed by plugin id */
+    entries?: Record<
+      string,
+      {
+        enabled?: boolean;
+        config?: unknown;
+      }
+    >;
+  };
 }
 
 // Provider configurations

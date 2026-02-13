@@ -19,6 +19,7 @@ import type { HealthDataSource } from "../data-sources/interface.js";
 import {
   loadConfig,
   getUserUuid,
+  getStateDir,
   getBenchmarkModels,
   resolveBenchmarkModelApiKey,
   resolveBenchmarkModelBaseUrl,
@@ -120,6 +121,12 @@ import { setSkillsDir } from "../tools/skill-tools.js";
 import { resetSkillCache } from "../agent/skill-trigger.js";
 import { generateEvolutionLab, RUN_COLORS, type EvolutionLabData } from "./evolution-lab.js";
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
+import {
+  loadPlugins,
+  getGlobalHookRunner,
+  getGlobalPluginRegistry,
+  type PluginRegistry,
+} from "../plugins/index.js";
 
 // ============================================================================
 // Quick Reply Detection
@@ -1063,6 +1070,10 @@ export class GatewaySession {
 
   private async getAgent(): Promise<PHAAgent> {
     if (!this.agent) {
+      // Collect plugin tools
+      const pluginReg = getGlobalPluginRegistry();
+      const extraTools = pluginReg?.tools.map((r) => r.tool) || [];
+
       this.agent = await createPHAAgent({
         apiKey: this.config.apiKey,
         provider: this.config.provider,
@@ -1072,6 +1083,7 @@ export class GatewaySession {
         sessionId: this.sessionId,
         dataSource: this.dataSource,
         sessionMessages: this.chatMessages,
+        extraTools,
       });
 
       // Configure evolution tools with agent capabilities
@@ -1588,6 +1600,15 @@ export class GatewaySession {
     // Add user message to chat history
     this.chatMessages.push({ role: "user", content });
     this.persistMessage("chat", { timestamp: Date.now(), role: "user", content });
+
+    // Trigger message_received hook
+    const hr = getGlobalHookRunner();
+    if (hr) {
+      hr.runMessageReceived(
+        { from: this.userUuid || "unknown", content, timestamp: Date.now() },
+        { channelId: "websocket", conversationId: this.sessionId }
+      ).catch((err) => console.warn("[hooks] message_received error:", err));
+    }
     this.isStreaming = true;
     this.streamingContent = "";
 
@@ -3901,11 +3922,34 @@ function getContentType(filePath: string): string {
 /**
  * Start the Gateway server with Bun
  */
-export function startGateway(config: GatewayConfig & { webDir?: string } = {}): void {
+export async function startGateway(
+  config: GatewayConfig & { webDir?: string } = {}
+): Promise<void> {
   const port = config.port || 8000;
   const app = createGatewayApp();
   const sessions = new Map<string, GatewaySession>();
   const webDir = config.webDir;
+
+  // Load plugins
+  const phaConfig = loadConfig();
+  let pluginRegistry: PluginRegistry | undefined;
+  if (phaConfig.plugins?.enabled !== false) {
+    try {
+      pluginRegistry = await loadPlugins({
+        workspaceDir: getStateDir(),
+        extraPaths: phaConfig.plugins?.paths,
+        pluginConfigs: phaConfig.plugins?.entries,
+      });
+      const loaded = pluginRegistry.plugins.filter((p) => p.status === "loaded");
+      if (loaded.length > 0) {
+        console.log(
+          `[Gateway] ${loaded.length} plugin(s) loaded: ${loaded.map((p) => p.id).join(", ")}`
+        );
+      }
+    } catch (err) {
+      console.warn("[Gateway] Plugin loading failed:", err);
+    }
+  }
 
   // Clean up interrupted benchmark runs from previous process (deletes incomplete runs with no data)
   const interrupted = markInterruptedBenchmarkRuns();
@@ -4002,6 +4046,14 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
             // WebSocket may have closed between check and send
           }
         });
+
+        // Trigger session_start hook
+        const hookRunner = getGlobalHookRunner();
+        if (hookRunner) {
+          hookRunner
+            .runSessionStart({ sessionId }, { sessionId })
+            .catch((err) => console.warn("[hooks] session_start error:", err));
+        }
       },
       async message(ws, message) {
         const session = sessions.get(ws.data.sessionKey);
@@ -4028,12 +4080,41 @@ export function startGateway(config: GatewayConfig & { webDir?: string } = {}): 
         const session = sessions.get(ws.data.sessionKey);
         if (session) session.clearSend();
         console.log(`WebSocket disconnected: ${ws.data.sessionId}`);
+
+        // Trigger session_end hook
+        const hookRunner = getGlobalHookRunner();
+        if (hookRunner) {
+          hookRunner
+            .runSessionEnd(
+              { sessionId: ws.data.sessionId, messageCount: 0 },
+              { sessionId: ws.data.sessionId }
+            )
+            .catch((err) => console.warn("[hooks] session_end error:", err));
+        }
       },
     },
   });
 
   console.log(`PHA Gateway running at http://localhost:${port}`);
   console.log(`WebSocket available at ws://localhost:${port}/ws`);
+
+  // Trigger gateway_start hook
+  const hr = getGlobalHookRunner();
+  if (hr) {
+    hr.runGatewayStart({ port }, { port }).catch((err) =>
+      console.warn("[Gateway] gateway_start hook error:", err)
+    );
+  }
+
+  // Trigger gateway_stop hook on process exit
+  const handleExit = () => {
+    const runner = getGlobalHookRunner();
+    if (runner) {
+      runner.runGatewayStop({ reason: "process_exit" }, { port }).catch(() => {});
+    }
+  };
+  process.on("SIGINT", handleExit);
+  process.on("SIGTERM", handleExit);
 }
 
 // Legacy export for compatibility

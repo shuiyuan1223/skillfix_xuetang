@@ -47,6 +47,8 @@ export interface PHAAgentConfig {
   dataSource?: import("../data-sources/interface.js").HealthDataSource;
   /** Custom tools (overrides default health tools when provided) */
   tools?: import("@mariozechner/pi-agent-core").AgentTool<any>[];
+  /** Extra tools to append (e.g. from plugins), merged with default tools */
+  extraTools?: import("@mariozechner/pi-agent-core").AgentTool<any>[];
   /** Additional agent options */
   agentOptions?: Partial<AgentOptions>;
   /** Prior chat messages to restore context after restart */
@@ -184,9 +186,13 @@ export class PHAAgent {
     );
 
     // Use per-session tools when a user-specific data source is provided
-    const tools =
+    const baseTools =
       config.tools ||
       (config.dataSource ? createHealthAgentTools(config.dataSource) : healthAgentTools);
+    const tools =
+      config.extraTools && config.extraTools.length > 0
+        ? [...baseTools, ...config.extraTools]
+        : baseTools;
 
     // Convert persisted session messages to AgentMessage[] for context recovery
     const messages = config.sessionMessages ? sessionToAgentMessages(config.sessionMessages) : [];
