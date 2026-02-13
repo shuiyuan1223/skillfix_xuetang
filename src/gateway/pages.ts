@@ -832,23 +832,20 @@ export function generatePromptsPage(data: {
   const subtitle = ui.text(t("prompts.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
-  // Scope tab bar
-  const scopeTabContentIds: Record<string, string> = {};
-  scopeTabContentIds[scope] = `prompts_scope_${scope}`;
-  const scopeTabs = ui.tabs(
-    [
-      { id: "pha", label: t("prompts.tabPha"), icon: "heart" },
-      { id: "system", label: t("prompts.tabSystem"), icon: "bot" },
-    ],
-    scope,
-    scopeTabContentIds
-  );
-
-  // Loading skeleton
+  // Loading skeleton — need early return before building tabs
   if (data.loading) {
+    const scopeTabContentIds: Record<string, string> = {};
     const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
-    const loadingContent = ui.column([s1], { gap: 16, padding: 24 });
-    const root = ui.column([header, scopeTabs, loadingContent], { gap: 0 });
+    scopeTabContentIds[scope] = ui.column([s1], { gap: 16, padding: 24 });
+    const scopeTabs = ui.tabs(
+      [
+        { id: "pha", label: t("prompts.tabPha"), icon: "heart" },
+        { id: "system", label: t("prompts.tabSystem"), icon: "bot" },
+      ],
+      scope,
+      scopeTabContentIds
+    );
+    const root = ui.column([header, scopeTabs], { gap: 0 });
     return ui.build(root);
   }
 
@@ -927,9 +924,19 @@ export function generatePromptsPage(data: {
     }
   }
 
-  // Content container
-  const content = ui.column(children, { gap: 24, padding: 24 });
-  const root = ui.column([header, scopeTabs, content], { gap: 0 });
+  // Wrap content as tab content so tabs component renders it
+  const scopeTabContentIds: Record<string, string> = {};
+  scopeTabContentIds[scope] = ui.column(children, { gap: 24, padding: 24 });
+  const scopeTabs = ui.tabs(
+    [
+      { id: "pha", label: t("prompts.tabPha"), icon: "heart" },
+      { id: "system", label: t("prompts.tabSystem"), icon: "bot" },
+    ],
+    scope,
+    scopeTabContentIds
+  );
+
+  const root = ui.column([header, scopeTabs], { gap: 0 });
 
   return ui.build(root);
 }
@@ -980,23 +987,20 @@ export function generateSkillsPage(data: {
   });
   const header = ui.column([headerRow], { padding: 24 });
 
-  // Scope tab bar
-  const scopeTabContentIds: Record<string, string> = {};
-  scopeTabContentIds[scope] = `skills_scope_${scope}`;
-  const scopeTabs = ui.tabs(
-    [
-      { id: "pha", label: t("skills.tabPha"), icon: "heart" },
-      { id: "system", label: t("skills.tabSystem"), icon: "bot" },
-    ],
-    scope,
-    scopeTabContentIds
-  );
-
-  // Loading skeleton
+  // Loading skeleton — early return before building tabs
   if (data.loading) {
+    const scopeTabContentIds: Record<string, string> = {};
     const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
-    const loadingContent = ui.column([s1], { gap: 16, padding: 24 });
-    const root = ui.column([header, scopeTabs, loadingContent], { gap: 0 });
+    scopeTabContentIds[scope] = ui.column([s1], { gap: 16, padding: 24 });
+    const scopeTabs = ui.tabs(
+      [
+        { id: "pha", label: t("skills.tabPha"), icon: "heart" },
+        { id: "system", label: t("skills.tabSystem"), icon: "bot" },
+      ],
+      scope,
+      scopeTabContentIds
+    );
+    const root = ui.column([header, scopeTabs], { gap: 0 });
     return ui.build(root);
   }
 
@@ -1096,9 +1100,19 @@ export function generateSkillsPage(data: {
     children.push(editorCard);
   }
 
-  // Content container
-  const content = ui.column(children, { gap: 24, padding: 24 });
-  const root = ui.column([header, scopeTabs, content], { gap: 0 });
+  // Wrap content as tab content so tabs component renders it
+  const scopeTabContentIds: Record<string, string> = {};
+  scopeTabContentIds[scope] = ui.column(children, { gap: 24, padding: 24 });
+  const scopeTabs = ui.tabs(
+    [
+      { id: "pha", label: t("skills.tabPha"), icon: "heart" },
+      { id: "system", label: t("skills.tabSystem"), icon: "bot" },
+    ],
+    scope,
+    scopeTabContentIds
+  );
+
+  const root = ui.column([header, scopeTabs], { gap: 0 });
 
   return ui.build(root);
 }
