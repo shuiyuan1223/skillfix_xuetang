@@ -32,6 +32,7 @@ import {
 } from "../tools/system-memory-tools.js";
 import { suggestToolImprovementTool, listToolWishlistTool } from "../tools/tool-feedback.js";
 import { sessionToAgentMessages } from "../memory/session-store.js";
+import { createSimpleCompactionFlush } from "../memory/compaction.js";
 import type { LLMProvider } from "./pha-agent.js";
 
 export interface SystemAgentConfig {
@@ -257,6 +258,13 @@ export class SystemAgent {
     // Convert persisted session messages to AgentMessage[] for context recovery
     const messages = config.sessionMessages ? sessionToAgentMessages(config.sessionMessages) : [];
 
+    // Simple compaction: truncate only, no LLM summarization
+    const compactionFlush = createSimpleCompactionFlush({
+      contextWindow: model.contextWindow || 128000,
+      reserveTokens: 20000,
+      flushThreshold: 4000,
+    });
+
     this.agent = new Agent({
       initialState: {
         systemPrompt,
@@ -265,6 +273,7 @@ export class SystemAgent {
         ...(messages.length > 0 ? { messages } : {}),
       },
       getApiKey: () => apiKey,
+      transformContext: compactionFlush,
     });
   }
 

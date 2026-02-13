@@ -87,14 +87,16 @@ export function saveProfileToFile(uuid: string, profile: UserProfile): void {
 /**
  * Load user's MEMORY.md summary
  */
-export function loadMemorySummary(uuid: string): string | null {
+export function loadMemorySummary(uuid: string, maxChars = 6000): string | null {
   const memoryPath = getMemoryPath(uuid);
 
   if (!existsSync(memoryPath)) {
     return null;
   }
 
-  return readFileSync(memoryPath, "utf-8");
+  const full = readFileSync(memoryPath, "utf-8");
+  if (full.length <= maxChars) return full;
+  return "[Earlier memories truncated]\n\n" + full.slice(-maxChars);
 }
 
 /**

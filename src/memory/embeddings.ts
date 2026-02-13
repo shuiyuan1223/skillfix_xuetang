@@ -47,32 +47,45 @@ export class EmbeddingProvider {
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
 
-    const response = await fetch(`${this.baseUrl}/embeddings`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-        "HTTP-Referer": "https://github.com/anthropics/pha",
-        "X-Title": "PHA Health Agent",
-      },
-      body: JSON.stringify({
-        model: this.model,
-        input: texts,
-      }),
-    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await fetch(`${this.baseUrl}/embeddings`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.apiKey}`,
+            "HTTP-Referer": "https://github.com/anthropics/pha",
+            "X-Title": "PHA Health Agent",
+          },
+          body: JSON.stringify({
+            model: this.model,
+            input: texts,
+          }),
+        });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Embedding API error: ${response.status} - ${error}`);
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(`Embedding API error: ${response.status} - ${error}`);
+        }
+
+        const data = (await response.json()) as {
+          data: Array<{ embedding: number[]; index: number }>;
+        };
+
+        // Sort by index to ensure correct order
+        const sorted = data.data.sort((a, b) => a.index - b.index);
+        return sorted.map((item) => item.embedding);
+      } catch (err) {
+        if (attempt === 0) {
+          console.warn("[Embedding] Attempt 1 failed, retrying in 1s:", (err as Error).message);
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+        console.warn("[Embedding] All attempts failed, returning empty:", (err as Error).message);
+        return []; // Graceful fallback — FTS still works
+      }
     }
-
-    const data = (await response.json()) as {
-      data: Array<{ embedding: number[]; index: number }>;
-    };
-
-    // Sort by index to ensure correct order
-    const sorted = data.data.sort((a, b) => a.index - b.index);
-    return sorted.map((item) => item.embedding);
+    return [];
   }
 
   /**

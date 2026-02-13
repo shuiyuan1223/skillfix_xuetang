@@ -1626,11 +1626,36 @@ export class GatewaySession {
       try {
         await agent.chat(content);
         await agent.getAgent().waitForIdle();
+
+        // Index this exchange for memory search
+        if (this.userUuid) {
+          try {
+            const mm = getMemoryManager();
+            const lastAssistant = this.chatMessages.filter((m) => m.role === "assistant").pop();
+            if (lastAssistant) {
+              const exchangeText = `User: ${content}\nAssistant: ${lastAssistant.content}`;
+              mm.appendSessionTranscript(this.userUuid, this.sessionId, exchangeText);
+            }
+          } catch {
+            // Indexing is best-effort
+          }
+        }
       } finally {
         unsubscribe();
       }
     } catch (error) {
+      // If already handled by stop_generation (streaming flag cleared), skip error handling
+      if (!this.isStreaming) return;
       this.isStreaming = false;
+
+      // Abort errors are expected when user clicks stop — not an actual error
+      const isAbort =
+        error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
+      if (isAbort) {
+        this.sendChatUpdate(send);
+        return;
+      }
+
       const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
       this.chatMessages.push({ role: "assistant", content: errorContent });
       this.persistMessage("chat", {
@@ -1769,7 +1794,18 @@ export class GatewaySession {
         unsubscribe();
       }
     } catch (error) {
+      // If already handled by sa_stop_generation (streaming flag cleared), skip error handling
+      if (!this.systemAgentStreaming) return;
       this.systemAgentStreaming = false;
+
+      // Abort errors are expected when user clicks stop
+      const isAbort =
+        error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
+      if (isAbort) {
+        this.sendEvolutionLabUpdate(send);
+        return;
+      }
+
       const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
       this.systemAgentChatMessages.push({ role: "assistant", content: errorContent });
       this.persistMessage("system-agent", {
@@ -1790,6 +1826,43 @@ export class GatewaySession {
     if (action === "send_message" && payload?.content) {
       // Chat message from UI
       await this.handleUserMessage(payload.content as string, send);
+    } else if (action === "stop_generation") {
+      // Stop PHA Agent streaming
+      if (this.isStreaming && this.agent) {
+        this.agent.abort();
+        // Save partial response if any
+        if (this.streamingContent.trim()) {
+          this.chatMessages.push({ role: "assistant", content: this.streamingContent });
+          this.persistMessage("chat", {
+            timestamp: Date.now(),
+            role: "assistant",
+            content: this.streamingContent,
+          });
+        }
+        this.isStreaming = false;
+        this.streamingContent = "";
+        this.sendChatUpdate(send);
+      }
+    } else if (action === "sa_stop_generation") {
+      // Stop System Agent streaming
+      if (this.systemAgentStreaming && this.systemAgent) {
+        this.systemAgent.abort();
+        // Save partial response if any
+        if (this.systemAgentStreamingContent.trim()) {
+          this.systemAgentChatMessages.push({
+            role: "assistant",
+            content: this.systemAgentStreamingContent,
+          });
+          this.persistMessage("system-agent", {
+            timestamp: Date.now(),
+            role: "assistant",
+            content: this.systemAgentStreamingContent,
+          });
+        }
+        this.systemAgentStreaming = false;
+        this.systemAgentStreamingContent = "";
+        this.sendEvolutionLabUpdate(send);
+      }
     } else if (action.startsWith("navigate:")) {
       const view = action.replace("navigate:", "");
       await this.handleNavigate(view, send);

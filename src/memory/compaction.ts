@@ -250,21 +250,66 @@ function summarizeOldMessages(messages: AgentMessage[]): string | null {
   return parts.join("\n");
 }
 
-function compactMessages(messages: AgentMessage[], tokenLimit: number): AgentMessage[] {
-  const recent = messages.slice(-20);
-  const recentTokens = estimateTokens(recent);
+function softTrimToolResult(msg: AgentMessage, maxChars: number): AgentMessage {
+  if (msg.role !== "toolResult") return msg;
+  const toolMsg = msg as ToolResultMessage;
+  const trimmedContent = toolMsg.content.map((block) => {
+    if (block.type === "text") {
+      const text = (block as { type: "text"; text: string }).text;
+      if (text.length > maxChars) {
+        return { type: "text" as const, text: text.slice(0, maxChars) + "\n[...truncated]" };
+      }
+    }
+    return block;
+  });
+  return { ...toolMsg, content: trimmedContent } as AgentMessage;
+}
 
-  if (recentTokens <= tokenLimit) {
-    const marker: UserMessage = {
-      role: "user",
-      content: "[Earlier conversation has been summarized and saved to memory.]",
-      timestamp: Date.now(),
-    };
-    return [marker, ...recent];
+function compactMessages(messages: AgentMessage[], tokenLimit: number): AgentMessage[] {
+  // Soft-trim tool results first
+  const trimmed = messages.map((m) => {
+    if (m.role === "toolResult") {
+      return softTrimToolResult(m, 800);
+    }
+    return m;
+  });
+
+  // Find first user message for context anchoring
+  const firstUser = trimmed.find((m) => m.role === "user");
+
+  // Try keeping last 20, then fall back to 10
+  for (const keepCount of [20, 10]) {
+    const recent = trimmed.slice(-keepCount);
+    if (estimateTokens(recent) <= tokenLimit) {
+      const marker: UserMessage = {
+        role: "user",
+        content: "[Earlier conversation has been summarized and saved to memory.]",
+        timestamp: Date.now(),
+      };
+      // Anchor first user message if not already in recent slice
+      if (firstUser && !recent.includes(firstUser)) {
+        return [firstUser, marker, ...recent];
+      }
+      return [marker, ...recent];
+    }
   }
 
-  // If even recent messages exceed limit, keep fewer
-  return messages.slice(-10);
+  return trimmed.slice(-10);
+}
+
+/**
+ * Create a simple compaction flush (no LLM summarization, no daily log).
+ * Suitable for SystemAgent and other lightweight agents.
+ */
+export function createSimpleCompactionFlush(config: CompactionConfig) {
+  return async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+    const tokens = estimateTokens(messages);
+    const limit = config.contextWindow - config.reserveTokens;
+    if (tokens > limit) {
+      return compactMessages(messages, limit);
+    }
+    return messages;
+  };
 }
 
 /**

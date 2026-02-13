@@ -548,7 +548,7 @@ export class MemoryManager {
 
     const today = new Date().toISOString().split("T")[0];
 
-    return `${soul}
+    const prompt = `${soul}
 
 ---
 
@@ -568,6 +568,14 @@ ${skillRegistry}
 ---
 
 Based on the information above, provide personalized health services.`;
+
+    // Token distribution report (debug)
+    const est = (s: string) => Math.ceil(s.length / 4);
+    console.log(
+      `[SystemPrompt] Token distribution: soul=${est(soul)} profile=${est(profileSection)} memory=${est(memorySection)} health=${est(healthContext || "")} skills=${est(skillRegistry)} total≈${est(prompt)}`
+    );
+
+    return prompt;
   }
 
   // ============ Lifecycle ============
