@@ -31,6 +31,7 @@ import {
   systemMemorySearchTool,
 } from "../tools/system-memory-tools.js";
 import { suggestToolImprovementTool, listToolWishlistTool } from "../tools/tool-feedback.js";
+import { sessionToAgentMessages } from "../memory/session-store.js";
 import type { LLMProvider } from "./pha-agent.js";
 
 export interface SystemAgentConfig {
@@ -38,6 +39,8 @@ export interface SystemAgentConfig {
   provider?: LLMProvider;
   modelId?: string;
   baseUrl?: string;
+  /** Prior chat messages to restore context after restart */
+  sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>;
 }
 
 const DEFAULT_MODELS: Record<LLMProvider, string> = {
@@ -251,11 +254,15 @@ export class SystemAgent {
       ...toolFeedbackAgentTools,
     ];
 
+    // Convert persisted session messages to AgentMessage[] for context recovery
+    const messages = config.sessionMessages ? sessionToAgentMessages(config.sessionMessages) : [];
+
     this.agent = new Agent({
       initialState: {
         systemPrompt,
         model,
         tools,
+        ...(messages.length > 0 ? { messages } : {}),
       },
       getApiKey: () => apiKey,
     });
@@ -345,15 +352,12 @@ export class SystemAgent {
    * Send a message and wait for the complete response.
    */
   async chatAndWait(message: string): Promise<string> {
-    let finalContent = "";
+    // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
+    let lastAssistantMessage: AgentMessage | null = null;
 
     const unsubscribe = this.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
-        for (const block of event.message.content) {
-          if (block.type === "text") {
-            finalContent += block.text;
-          }
-        }
+        lastAssistantMessage = event.message;
       }
     });
 
@@ -363,6 +367,15 @@ export class SystemAgent {
       await this.agent.waitForIdle();
     } finally {
       unsubscribe();
+    }
+
+    let finalContent = "";
+    if (lastAssistantMessage) {
+      for (const block of (lastAssistantMessage as any).content) {
+        if (block.type === "text") {
+          finalContent += block.text;
+        }
+      }
     }
 
     return finalContent;

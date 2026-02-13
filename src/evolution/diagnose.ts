@@ -19,6 +19,7 @@ import type {
 import { BenchmarkRunner, type BenchmarkRunnerConfig } from "./benchmark-runner.js";
 import { computeSharpCategoryScores, normalizeScoreForDisplay } from "./category-scorer.js";
 import { createGitHubIssue, buildDiagnoseIssueBody } from "./github-issues.js";
+import { ALL_BENCHMARK_TESTS } from "./benchmark-seed.js";
 import { t } from "../locales/index.js";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
@@ -48,11 +49,21 @@ export interface DiagnoseSuggestion {
   priority: "high" | "medium" | "low";
 }
 
+/** Data quality issue found in test case mock_context */
+export interface DataGap {
+  testCaseId: string;
+  type: "missing_data" | "unrealistic_value" | "insufficient_context" | "no_mock_context";
+  description: string;
+  field?: string;
+  suggestion: string;
+}
+
 export interface DiagnoseResult {
   run: BenchmarkRun;
   overallScore: number;
   weaknesses: DiagnoseWeakness[];
   suggestions: DiagnoseSuggestion[];
+  dataGaps: DataGap[];
   issuesCreated: Array<{ number: number; url: string }>;
 }
 
@@ -82,6 +93,124 @@ const SHARP_TARGET_FILE_MAP: Record<string, string[]> = {
   relevance: ["src/prompts/SOUL.md"],
   personalization: ["src/prompts/SOUL.md"],
 };
+
+// ─── Data Gap Analysis ───
+
+/** Known physiological bounds for health data validation */
+const HEALTH_BOUNDS: Record<string, { min: number; max: number; label: string }> = {
+  restingAvg: { min: 40, max: 120, label: "resting heart rate" },
+  maxToday: { min: 60, max: 220, label: "max heart rate" },
+  minToday: { min: 30, max: 100, label: "min heart rate" },
+  totalSleepMin: { min: 0, max: 840, label: "total sleep (min)" }, // 0-14h
+  deepSleepMin: { min: 0, max: 300, label: "deep sleep (min)" },
+  qualityScore: { min: 0, max: 100, label: "sleep quality score" },
+};
+
+/**
+ * Analyze test case data quality: find missing context, unrealistic values, etc.
+ * Runs on failing test cases to suggest data improvements.
+ */
+function analyzeDataGaps(results: BenchmarkResult[]): DataGap[] {
+  const gaps: DataGap[] = [];
+  const testCaseMap = new Map(ALL_BENCHMARK_TESTS.map((tc) => [tc.id, tc]));
+
+  for (const result of results) {
+    if (result.passed) continue; // Only analyze failures
+
+    const tc = testCaseMap.get(result.testCaseId);
+    if (!tc) continue;
+
+    // 1. Test case with no mock_context at all
+    if (!tc.mock_context || Object.keys(tc.mock_context).length === 0) {
+      gaps.push({
+        testCaseId: tc.id,
+        type: "no_mock_context",
+        description: `Test "${tc.id}" has no mock_context — agent has no data to work with`,
+        suggestion: "Add realistic mock_context with relevant health data for this scenario",
+      });
+      continue;
+    }
+
+    // 2. Check for unrealistic values in health data
+    const ctx = tc.mock_context;
+    for (const [dataType, data] of Object.entries(ctx)) {
+      if (!data || typeof data !== "object") continue;
+      const records = (data as any).daily || (data as any).sessions;
+      if (!Array.isArray(records)) continue;
+
+      for (const record of records) {
+        for (const [field, bounds] of Object.entries(HEALTH_BOUNDS)) {
+          if (field in record) {
+            const val = record[field];
+            if (typeof val === "number" && (val < bounds.min || val > bounds.max)) {
+              gaps.push({
+                testCaseId: tc.id,
+                type: "unrealistic_value",
+                field: `${dataType}.${field}`,
+                description: `${bounds.label} = ${val} is outside physiological range [${bounds.min}-${bounds.max}]`,
+                suggestion: `Fix ${dataType}.${field} to a realistic value within [${bounds.min}-${bounds.max}]`,
+              });
+            }
+          }
+        }
+
+        // 3. Check day-over-day consistency (e.g., resting HR shouldn't jump >30bpm overnight)
+        if ("restingAvg" in record) {
+          const restIdx = records.indexOf(record);
+          if (restIdx > 0 && "restingAvg" in records[restIdx - 1]) {
+            const delta = Math.abs(record.restingAvg - records[restIdx - 1].restingAvg);
+            if (delta > 30) {
+              gaps.push({
+                testCaseId: tc.id,
+                type: "unrealistic_value",
+                field: `${dataType}.restingAvg`,
+                description: `Resting HR jumps by ${delta} bpm between consecutive days (${records[restIdx - 1].restingAvg} → ${record.restingAvg}) — medically implausible`,
+                suggestion:
+                  "Use gradual day-over-day changes (±5-10 bpm) unless testing an emergency scenario",
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Query mentions data type not in mock_context
+    const queryLower = tc.query.toLowerCase();
+    const dataHints: Array<{ keyword: string; field: string }> = [
+      { keyword: "心率", field: "heartRate" },
+      { keyword: "heart rate", field: "heartRate" },
+      { keyword: "睡眠", field: "sleep" },
+      { keyword: "sleep", field: "sleep" },
+      { keyword: "步数", field: "steps" },
+      { keyword: "steps", field: "steps" },
+      { keyword: "运动", field: "workout" },
+      { keyword: "workout", field: "workout" },
+      { keyword: "体重", field: "weight" },
+      { keyword: "weight", field: "weight" },
+    ];
+
+    for (const hint of dataHints) {
+      if (queryLower.includes(hint.keyword) && !(hint.field in ctx)) {
+        gaps.push({
+          testCaseId: tc.id,
+          type: "missing_data",
+          field: hint.field,
+          description: `Query mentions "${hint.keyword}" but mock_context has no "${hint.field}" data`,
+          suggestion: `Add ${hint.field} data to mock_context so the agent can give a data-grounded answer`,
+        });
+      }
+    }
+  }
+
+  // Deduplicate by testCaseId + field
+  const seen = new Set<string>();
+  return gaps.filter((g) => {
+    const key = `${g.testCaseId}::${g.field || g.type}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 // ─── Main Pipeline ───
 
@@ -238,11 +367,19 @@ export async function diagnose(opts: {
     }
   }
 
+  // ── Step 5: Data gap analysis ──
+
+  const dataGaps = analyzeDataGaps(results);
+  if (dataGaps.length > 0) {
+    log(`Found ${dataGaps.length} data quality issues in failing test cases`);
+  }
+
   return {
     run,
     overallScore: run.overallScore,
     weaknesses,
     suggestions,
+    dataGaps,
     issuesCreated,
   };
 }

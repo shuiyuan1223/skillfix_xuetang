@@ -41,6 +41,17 @@ function appendMemoryFile(name: string, content: string): void {
   appendFileSync(path, content, "utf-8");
 }
 
+/**
+ * Programmatic helper: append a timestamped entry to evolution-log.md.
+ * Called automatically by evolution tools so logs persist even if the LLM
+ * forgets to call system_memory_append.
+ */
+export function appendEvolutionLog(entry: string): void {
+  const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const formatted = `\n## ${timestamp}\n\n${entry}\n`;
+  appendMemoryFile("evolution-log.md", formatted);
+}
+
 // ========================================================================
 // Memory Read Tool
 // ========================================================================

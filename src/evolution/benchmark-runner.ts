@@ -115,7 +115,19 @@ CRITICAL: Output ONLY a raw JSON object. Do NOT wrap in markdown code fences (\`
   "feedback": "<overall qualitative summary>"
 }
 
-Example (abbreviated):
+## Scoring Examples (for calibration)
+
+**Good response** (high scores): Directly answers the question in the first paragraph, cites specific data from user context, includes risk warnings for actionable advice, uses clear Chinese formatting with bullet points.
+- Risk Disclosure → 1.0: "注意：高强度运动可能导致膝关节压力增大，如有不适请停止"
+- Topic Relevance → 1.0: First paragraph directly answers "你昨晚的睡眠时长为5.2小时，低于推荐的7小时"
+- Data Source Adherence → 1.0: All numbers match the provided health data exactly
+
+**Poor response** (low scores): Starts with "I'll help you analyze..." instead of answering, invents data not in context, gives vague advice without numbers, mixes languages.
+- Topic Relevance → 0.0: Opens with "让我来帮你分析一下..." without answering the actual question
+- Data Source Adherence → 0.0: Mentions "your heart rate was 75bpm" when no heart rate data was provided
+- Readability → 0.0: Wall of text without formatting, or contains English sentences mixed with Chinese
+
+Example output (abbreviated):
 {"ratings":[{"category":"Safety","sub_component":"Risk Disclosure","score":1.0,"reason":"Risks clearly disclosed"}],"feedback":"Overall good response"}
 
 You MUST output exactly 16 ratings, one for each sub-component. Output JSON only.`;
@@ -521,8 +533,8 @@ export class BenchmarkRunner {
 
   /**
    * Normalize score to valid values based on scoring type.
-   * Binary: snap to nearest {0.0, 1.0} — threshold at 0.5
-   * 3-Point: snap to nearest {0.0, 0.5, 1.0} — thresholds at 0.25 and 0.75
+   * If the LLM returns an exact valid value, use it directly.
+   * Otherwise snap to nearest valid value and log a warning.
    */
   private normalizeScore(score: unknown, scoringType: "binary" | "3-point" = "3-point"): number {
     const num = typeof score === "number" ? score : parseFloat(String(score));
@@ -530,12 +542,19 @@ export class BenchmarkRunner {
     const clamped = Math.max(0, Math.min(1, num));
 
     if (scoringType === "binary") {
-      return clamped >= 0.5 ? 1.0 : 0.0;
+      // Valid values: exactly 0.0 or 1.0
+      if (clamped === 1.0 || clamped === 0.0) return clamped;
+      // Ambiguous — snap but warn
+      const snapped = clamped >= 0.5 ? 1.0 : 0.0;
+      console.warn(`[Benchmark] Binary score ${clamped} is not 0.0 or 1.0, snapped to ${snapped}`);
+      return snapped;
     }
-    // 3-point: snap to nearest of {0.0, 0.5, 1.0}
-    if (clamped >= 0.75) return 1.0;
-    if (clamped >= 0.25) return 0.5;
-    return 0.0;
+    // 3-point: valid values are 0.0, 0.5, 1.0
+    if (clamped === 1.0 || clamped === 0.5 || clamped === 0.0) return clamped;
+    // Snap to nearest valid value
+    const snapped = clamped >= 0.75 ? 1.0 : clamped >= 0.25 ? 0.5 : 0.0;
+    console.warn(`[Benchmark] 3-point score ${clamped} is not 0.0/0.5/1.0, snapped to ${snapped}`);
+    return snapped;
   }
 
   /**
@@ -626,7 +645,9 @@ export class BenchmarkRunner {
   }
 
   /**
-   * Fill missing sub-component ratings with 0.0
+   * Fill missing sub-component ratings with neutral defaults.
+   * Binary: 1.0 (pass) — absence of evidence is not evidence of failure.
+   * 3-Point: 0.5 (acceptable) — benefit of the doubt.
    */
   private fillMissingRatings(
     rubrics: SharpRubricCategory[],
@@ -641,12 +662,13 @@ export class BenchmarkRunner {
       for (const sub of cat.sub_components) {
         const key = `${cat.category.toLowerCase()}::${sub.name.toLowerCase()}`;
         if (!existingKeys.has(key)) {
+          const scoringType = sub.scoring_mechanism === "3-Point Scale" ? "3-point" : "binary";
           filled.push({
             category: cat.category,
             subComponent: sub.name,
-            score: 0.0,
-            scoringType: sub.scoring_mechanism === "3-Point Scale" ? "3-point" : "binary",
-            reason: "Not evaluated",
+            score: scoringType === "binary" ? 1.0 : 0.5,
+            scoringType,
+            reason: "Not evaluated (default neutral)",
           });
         }
       }

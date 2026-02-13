@@ -1071,6 +1071,7 @@ class A2UIRenderer {
       <div
         class="chat-scroll-container flex-1 min-h-0 overflow-y-auto scroll-smooth p-6 flex flex-col gap-6"
         @scroll=${(e: Event) => {
+          if (this._isAutoScrolling) return; // Ignore scroll events from programmatic scroll
           const el = e.target as HTMLElement;
           this.chatAutoScroll = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
         }}
@@ -1302,7 +1303,7 @@ class A2UIRenderer {
           placeholder="${placeholder}"
           ?disabled=${disabled}
           @keydown=${(e: KeyboardEvent) => {
-            if (e.key === "Enter" && !e.shiftKey) {
+            if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
               e.preventDefault();
               const input = e.target as HTMLInputElement;
               if (input.value.trim()) {
@@ -3370,6 +3371,7 @@ class PHAApp extends LitElement {
   private renderer: A2UIRenderer;
   private userUuid: string | null = null; // User identifier for multi-user support
   private chatAutoScroll = true; // Auto-scroll chat to bottom on new messages
+  private _isAutoScrolling = false; // Guard: true during programmatic scroll to ignore scroll events
 
   constructor() {
     super();
@@ -3893,9 +3895,14 @@ class PHAApp extends LitElement {
     }
     // Auto-scroll chat to bottom on new content
     if (changedProperties.has("mainData") && this.chatAutoScroll) {
+      this._isAutoScrolling = true;
       requestAnimationFrame(() => {
         const el = this.renderRoot.querySelector(".chat-scroll-container");
         if (el) el.scrollTop = el.scrollHeight;
+        // Release guard after scroll settles (covers smooth-scroll animation)
+        setTimeout(() => {
+          this._isAutoScrolling = false;
+        }, 100);
       });
     }
   }

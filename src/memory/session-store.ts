@@ -4,7 +4,7 @@
  * Each session is a separate .jsonl file under .pha/users/{uuid}/sessions/
  */
 
-import { existsSync, appendFileSync, readFileSync, readdirSync, statSync } from "fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { UserMessage, AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
@@ -87,6 +87,55 @@ export function serializeMessages(messages: AgentMessage[]): SessionEntry[] {
 }
 
 /**
+ * Maximum number of user+assistant messages to inject into agent context on restart.
+ * Prevents excessively long context after many conversation turns.
+ */
+const MAX_INJECTED_MESSAGES = 50;
+
+/**
+ * Convert chat history (SessionEntry[] or simple {role, content} objects) back to AgentMessage[]
+ * for injection into Agent initialState.messages on restart.
+ *
+ * Only keeps user + assistant messages (tool messages require tool_use_id pairing
+ * which is not stored in JSONL). Limits to the most recent MAX_INJECTED_MESSAGES entries.
+ */
+export function sessionToAgentMessages(
+  entries: Array<{ role: string; content: string; timestamp?: number }>
+): AgentMessage[] {
+  const filtered = entries.filter((e) => e.role === "user" || e.role === "assistant");
+  const recent = filtered.slice(-MAX_INJECTED_MESSAGES);
+
+  return recent.map((e) => {
+    const ts = e.timestamp || Date.now();
+    if (e.role === "user") {
+      return {
+        role: "user" as const,
+        content: e.content,
+        timestamp: ts,
+      };
+    }
+    // Assistant: create a minimal AssistantMessage with required fields
+    return {
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: e.content }],
+      api: "openai-completions" as const,
+      provider: "unknown",
+      model: "unknown",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop" as const,
+      timestamp: ts,
+    };
+  });
+}
+
+/**
  * Get the sessions directory for a user
  */
 function getSessionsDir(uuid: string): string {
@@ -100,6 +149,9 @@ function getSessionsDir(uuid: string): string {
 export function appendToSession(uuid: string, sessionId: string, entries: SessionEntry[]): void {
   ensureUserDir(uuid);
   const sessionsDir = getSessionsDir(uuid);
+  if (!existsSync(sessionsDir)) {
+    mkdirSync(sessionsDir, { recursive: true });
+  }
   const filePath = join(sessionsDir, `${sessionId}.jsonl`);
 
   const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";

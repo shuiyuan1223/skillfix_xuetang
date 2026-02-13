@@ -17,6 +17,7 @@ import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/co
 import { getUserUuid } from "../utils/config.js";
 import { preComputeHealthContext } from "./health-context.js";
 import { enrichWithSkills, enrichWithForcedSkill } from "./skill-trigger.js";
+import { sessionToAgentMessages } from "../memory/session-store.js";
 
 export type LLMProvider =
   | "anthropic"
@@ -48,6 +49,8 @@ export interface PHAAgentConfig {
   tools?: import("@mariozechner/pi-agent-core").AgentTool<any>[];
   /** Additional agent options */
   agentOptions?: Partial<AgentOptions>;
+  /** Prior chat messages to restore context after restart */
+  sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>;
 }
 
 const DEFAULT_MODELS: Record<LLMProvider, string> = {
@@ -185,11 +188,15 @@ export class PHAAgent {
       config.tools ||
       (config.dataSource ? createHealthAgentTools(config.dataSource) : healthAgentTools);
 
+    // Convert persisted session messages to AgentMessage[] for context recovery
+    const messages = config.sessionMessages ? sessionToAgentMessages(config.sessionMessages) : [];
+
     this.agent = new Agent({
       initialState: {
         systemPrompt,
         model,
         tools,
+        ...(messages.length > 0 ? { messages } : {}),
       },
       getApiKey: () => apiKey,
       transformContext: compactionFlush,
@@ -242,17 +249,13 @@ export class PHAAgent {
    * Returns the final assistant message content.
    */
   async chatAndWait(message: string): Promise<string> {
-    let finalContent = "";
     let hasError = false;
+    // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
+    let lastAssistantMessage: AgentMessage | null = null;
 
     const unsubscribe = this.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
-        const content = event.message.content;
-        for (const block of content) {
-          if (block.type === "text") {
-            finalContent += block.text;
-          }
-        }
+        lastAssistantMessage = event.message;
       }
       // Capture errors for diagnostics
       if ((event as any).type === "error" || (event as any).error) {
@@ -272,6 +275,16 @@ export class PHAAgent {
       unsubscribe();
     }
 
+    // Extract text from the last assistant message only
+    let finalContent = "";
+    if (lastAssistantMessage) {
+      for (const block of (lastAssistantMessage as any).content) {
+        if (block.type === "text") {
+          finalContent += block.text;
+        }
+      }
+    }
+
     if (!finalContent && hasError) {
       console.warn("[PHAAgent] chatAndWait completed with empty response and errors");
     }
@@ -287,18 +300,15 @@ export class PHAAgent {
     response: string;
     toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
   }> {
-    let finalContent = "";
+    // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
+    let lastAssistantMessage: AgentMessage | null = null;
     const toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }> = [];
     let pendingToolName = "";
     let pendingToolArgs: unknown = undefined;
 
     const unsubscribe = this.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
-        for (const block of event.message.content) {
-          if (block.type === "text") {
-            finalContent += block.text;
-          }
-        }
+        lastAssistantMessage = event.message;
       }
       if (event.type === "tool_execution_start") {
         pendingToolName = (event as any).toolName || "";
@@ -319,6 +329,16 @@ export class PHAAgent {
       await this.agent.waitForIdle();
     } finally {
       unsubscribe();
+    }
+
+    // Extract text from the last assistant message only
+    let finalContent = "";
+    if (lastAssistantMessage) {
+      for (const block of (lastAssistantMessage as any).content) {
+        if (block.type === "text") {
+          finalContent += block.text;
+        }
+      }
     }
 
     return { response: finalContent, toolCalls };

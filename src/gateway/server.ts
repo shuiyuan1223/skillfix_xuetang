@@ -1071,6 +1071,7 @@ export class GatewaySession {
         userUuid: this.userUuid || undefined,
         sessionId: this.sessionId,
         dataSource: this.dataSource,
+        sessionMessages: this.chatMessages,
       });
 
       // Configure evolution tools with agent capabilities
@@ -1109,6 +1110,7 @@ export class GatewaySession {
         provider: this.config.provider,
         modelId: this.config.modelId,
         baseUrl: this.config.baseUrl,
+        sessionMessages: this.systemAgentChatMessages,
       });
 
       // Configure evolution tools: use dedicated PHA agents for benchmark test cases

@@ -27,6 +27,7 @@ import {
 import { BenchmarkRunner, type BenchmarkRunnerConfig } from "../evolution/benchmark-runner.js";
 import { diagnose, type DiagnoseResult } from "../evolution/diagnose.js";
 import type { BenchmarkProfile, BenchmarkCategory } from "../evolution/types.js";
+import { appendEvolutionLog } from "./system-memory-tools.js";
 
 // ============================================================================
 // Runtime config for benchmark/diagnose (injected by server.ts)
@@ -731,6 +732,20 @@ export const runBenchmarkTool = {
       });
     }
 
+    // Auto-log benchmark result to evolution-log.md
+    try {
+      const catSummary = categories
+        .map((c) => `  - ${c.category}: ${c.score} (${c.passed}/${c.total})`)
+        .join("\n");
+      appendEvolutionLog(
+        `**Benchmark Run** (${profile})\n` +
+          `Overall: ${run.overallScore.toFixed(3)} | Passed: ${run.passedCount}/${run.totalTestCases} | Duration: ${run.durationMs}ms\n` +
+          `Categories:\n${catSummary}`
+      );
+    } catch {
+      /* best-effort logging */
+    }
+
     return {
       success: true,
       runId: run.id,
@@ -859,6 +874,31 @@ export const runDiagnoseTool = {
       createIssues: args?.createIssues || false,
     });
 
+    // Auto-log diagnose result to evolution-log.md
+    try {
+      const weakSummary = result.weaknesses
+        .map(
+          (w) =>
+            `  - ${w.label}: ${w.score.toFixed(2)} (gap: ${w.gap.toFixed(2)}, ${w.failingTests.length} failing)`
+        )
+        .join("\n");
+      const sugSummary = result.suggestions
+        .slice(0, 5)
+        .map((s) => `  - [${s.priority}] ${s.category}: ${s.description.slice(0, 80)}`)
+        .join("\n");
+      const gapSummary =
+        result.dataGaps.length > 0 ? `Data Gaps: ${result.dataGaps.length} issues found` : "";
+      appendEvolutionLog(
+        `**Diagnose Result**\n` +
+          `Overall: ${result.overallScore.toFixed(3)} | ${result.run.passedCount}/${result.run.totalTestCases} passed\n` +
+          (weakSummary ? `Weaknesses:\n${weakSummary}\n` : "") +
+          (sugSummary ? `Top Suggestions:\n${sugSummary}\n` : "") +
+          (gapSummary ? `${gapSummary}\n` : "")
+      );
+    } catch {
+      /* best-effort logging */
+    }
+
     return {
       success: true,
       overallScore: result.overallScore,
@@ -879,6 +919,13 @@ export const runDiagnoseTool = {
         description: s.description,
         targetFiles: s.targetFiles,
         priority: s.priority,
+      })),
+      dataGaps: result.dataGaps.map((g) => ({
+        testCaseId: g.testCaseId,
+        type: g.type,
+        description: g.description,
+        field: g.field,
+        suggestion: g.suggestion,
       })),
       issuesCreated: result.issuesCreated,
     };

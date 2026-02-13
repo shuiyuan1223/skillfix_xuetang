@@ -25,6 +25,8 @@ metadata:
 
 **关键**：每次进化循环开始前，先用 `system_memory_read` 读取上次的进化记录，避免重复踩坑。
 
+**必须记录**：Benchmark 完成后，立即用 `system_memory_append` 写入 `evolution-log`，记录本次基准分数和关键发现。这是防止重启丢失上下文的关键操作。
+
 ### 第二步：诊断分析（Diagnose）
 
 使用 `run_diagnose` 分析基准测试结果（传入 `runId` 复用已有数据，无需重跑）：
@@ -84,6 +86,8 @@ metadata:
 
 所有修改在 worktree 中进行 — main 分支在 merge 前不受影响。
 
+**必须记录**：Apply 完成后，立即用 `system_memory_append` 写入 `evolution-log`，记录本次改动内容和修改的文件列表。
+
 ### 第六步：验证效果（Validate）
 
 在进化分支上重新运行基准测试，对比前后分数：
@@ -92,7 +96,7 @@ metadata:
 
 向用户展示对比结果，由用户做最终决定。
 
-**验证后必须记录**：用 `system_memory_append` 记录本次进化结果到 `evolution-log`。
+**验证后必须记录**：用 `system_memory_append` 记录本次进化最终结果到 `evolution-log`，包括前后分数对比、是否合并、成败原因。同时用 `system_memory_append` 将本轮经验教训写入 `experience`。
 
 ## 失败处理策略
 
@@ -153,8 +157,11 @@ metadata:
 | `tool-wishlist` | 工具改进建议（自动由 suggest_tool_improvement 写入） |
 | `memory` | 通用记忆（系统状态、配置备注、重要发现） |
 
-**进化开始时**：`system_memory_read` 读取 `evolution-log` 和 `experience`
-**进化结束后**：`system_memory_append` 追加新记录到 `evolution-log`
+**进化开始时**：`system_memory_read` 读取 `evolution-log` 和 `experience`，并用 `system_memory_append` 写入 `memory` 记录当前任务上下文（用户想做什么、当前状态）
+**每步完成后**：`system_memory_append` 追加当步结果到 `evolution-log`（benchmark 分数、apply 改动、validate 结果）
+**进化结束后**：`system_memory_append` 追加经验教训到 `experience`
+
+> **重要**：记忆写入是防止系统重启丢失上下文的唯一保障。每个关键步骤完成后必须立即写入，不要等到最后才一次性记录。
 
 ## Git 工作流
 
