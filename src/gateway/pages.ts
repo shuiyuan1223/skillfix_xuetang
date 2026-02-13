@@ -104,6 +104,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
   ui.addComponent(messagesId, {
     id: messagesId,
     type: "chat_messages",
+    action: "send_message",
     messages: state.messages,
     streaming: state.streaming,
     streamingContent: state.streamingContent,
@@ -115,6 +116,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
   ui.addComponent(inputId, {
     id: inputId,
     type: "chat_input",
+    action: "send_message",
     disabled: state.streaming,
     placeholder: t("chat.placeholder"),
   });
@@ -148,6 +150,7 @@ export function generateSystemAgentPage(state: {
   ui.addComponent(msgsId, {
     id: msgsId,
     type: "chat_messages",
+    action: "sa_send_message",
     messages: state.chatMessages,
     streaming: state.streaming,
     streamingContent: state.streamingContent,
