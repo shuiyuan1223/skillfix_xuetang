@@ -710,6 +710,38 @@ export function insertBenchmarkRun(run: {
   );
 }
 
+/**
+ * Find a matching successful benchmark run by version, model, profile, and prompt/skill versions.
+ * Used for cache hit detection — if an identical run exists, we can skip re-running.
+ */
+export function findMatchingBenchmarkRun(criteria: {
+  versionTag: string;
+  modelId: string;
+  profile: string;
+  promptVersions: string;
+  skillVersions: string;
+}): BenchmarkRunRow | null {
+  const database = getDatabase();
+  const stmt = database.prepare(`
+    SELECT * FROM benchmark_runs
+    WHERE version_tag = ?
+      AND json_extract(metadata, '$.modelId') = ?
+      AND profile = ?
+      AND prompt_versions = ?
+      AND skill_versions = ?
+      AND overall_score > 0
+    ORDER BY timestamp DESC
+    LIMIT 1
+  `);
+  return stmt.get(
+    criteria.versionTag,
+    criteria.modelId,
+    criteria.profile,
+    criteria.promptVersions,
+    criteria.skillVersions
+  ) as BenchmarkRunRow | null;
+}
+
 export function getBenchmarkRun(id: string): BenchmarkRunRow | null {
   const database = getDatabase();
   const stmt = database.prepare("SELECT * FROM benchmark_runs WHERE id = ?");

@@ -24,7 +24,11 @@ import {
   updateBenchmarkRun,
   insertTestCase,
   listBenchmarkRuns,
+  findMatchingBenchmarkRun,
+  listBenchmarkResults,
+  listCategoryScores,
 } from "../memory/db.js";
+import type { BenchmarkRunRow, BenchmarkResultRow, CategoryScoreRow } from "../memory/db.js";
 import { getBenchmarkTests, ALL_BENCHMARK_TESTS, loadSharpRubrics } from "./benchmark-seed.js";
 import { loadConfig } from "../utils/config.js";
 import { aggregateByCategory, computeOverallScore } from "./category-scorer.js";
@@ -209,8 +213,30 @@ export class BenchmarkRunner {
       /* ignore */
     }
 
-    // Generate semantic ID: version_model_N
+    // Capture prompt/skill versions for cache key
     const versionTag = options.versionTag || gitVersion;
+    const promptVersions = await this.getPromptVersions();
+    const skillVersions = await this.getSkillVersions();
+    const promptVersionsJson = JSON.stringify(promptVersions);
+    const skillVersionsJson = JSON.stringify(skillVersions);
+
+    // Cache hit check: reuse existing successful run with identical conditions
+    const cachedRun = findMatchingBenchmarkRun({
+      versionTag,
+      modelId,
+      profile,
+      promptVersions: promptVersionsJson,
+      skillVersions: skillVersionsJson,
+    });
+
+    if (cachedRun) {
+      console.log(
+        `[Benchmark] Cache hit: reusing run ${cachedRun.id} (version=${versionTag}, model=${modelId}, profile=${profile})`
+      );
+      return this.rebuildFromCache(cachedRun, options.category);
+    }
+
+    // Generate semantic ID: version_model_N
     const modelShort =
       modelId
         .split("/")
@@ -230,8 +256,8 @@ export class BenchmarkRunner {
       id: runId,
       timestamp: startTime,
       versionTag,
-      promptVersions: await this.getPromptVersions(),
-      skillVersions: await this.getSkillVersions(),
+      promptVersions,
+      skillVersions,
       totalTestCases: testCases.length,
       passedCount: 0,
       failedCount: 0,
@@ -730,5 +756,71 @@ export class BenchmarkRunner {
     } catch {
       return { "src/skills": "unknown" };
     }
+  }
+
+  /**
+   * Rebuild a benchmark result from a cached DB row.
+   * Converts DB rows (snake_case) back to domain objects (camelCase).
+   */
+  private rebuildFromCache(
+    cachedRow: BenchmarkRunRow,
+    categoryFilter?: BenchmarkCategory
+  ): {
+    run: BenchmarkRun;
+    results: BenchmarkResult[];
+    categoryScores: Map<BenchmarkCategory, CategoryScore>;
+  } {
+    // BenchmarkRunRow → BenchmarkRun
+    const run: BenchmarkRun = {
+      id: cachedRow.id,
+      timestamp: cachedRow.timestamp,
+      versionTag: cachedRow.version_tag ?? undefined,
+      promptVersions: cachedRow.prompt_versions ? JSON.parse(cachedRow.prompt_versions) : {},
+      skillVersions: cachedRow.skill_versions ? JSON.parse(cachedRow.skill_versions) : {},
+      totalTestCases: cachedRow.total_test_cases,
+      passedCount: cachedRow.passed_count,
+      failedCount: cachedRow.failed_count,
+      overallScore: cachedRow.overall_score,
+      durationMs: cachedRow.duration_ms ?? 0,
+      profile: cachedRow.profile as BenchmarkProfile,
+      metadata: cachedRow.metadata ? JSON.parse(cachedRow.metadata) : undefined,
+    };
+
+    // BenchmarkResultRow[] → BenchmarkResult[]
+    const resultRows = listBenchmarkResults({ runId: cachedRow.id });
+    const results: BenchmarkResult[] = resultRows.map((r: BenchmarkResultRow) => ({
+      id: r.id,
+      runId: r.run_id,
+      testCaseId: r.test_case_id,
+      timestamp: r.timestamp,
+      agentResponse: r.agent_response ?? "",
+      toolCalls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
+      scores: r.scores ? JSON.parse(r.scores) : [],
+      overallScore: r.overall_score,
+      passed: r.passed === 1,
+      feedback: r.feedback ?? "",
+      issues: r.issues ? JSON.parse(r.issues) : undefined,
+      durationMs: r.duration_ms ?? 0,
+    }));
+
+    // CategoryScoreRow[] → Map<BenchmarkCategory, CategoryScore>
+    const scoreRows = listCategoryScores(cachedRow.id);
+    const categoryScores = new Map<BenchmarkCategory, CategoryScore>();
+    for (const s of scoreRows) {
+      // If category filter is specified, skip non-matching categories
+      if (categoryFilter && s.category !== categoryFilter) continue;
+      categoryScores.set(s.category as BenchmarkCategory, {
+        id: s.id,
+        runId: s.run_id,
+        category: s.category as BenchmarkCategory,
+        subcategory: s.subcategory ?? undefined,
+        score: s.score,
+        testCount: s.test_count,
+        passedCount: s.passed_count,
+        details: s.details ? JSON.parse(s.details) : undefined,
+      });
+    }
+
+    return { run, results, categoryScores };
   }
 }
