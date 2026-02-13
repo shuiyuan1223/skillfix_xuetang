@@ -1901,8 +1901,8 @@ export class GatewaySession {
       this.editingSkill = false;
       this.editBuffer = null;
       await this.handleNavigate("settings/skills", send);
-    } else if (action === "select_skill_file" && payload?.value) {
-      this.selectedSkillFile = payload.value as string;
+    } else if (action === "select_skill_file" && payload?.file) {
+      this.selectedSkillFile = payload.file as string;
       this.editingSkill = false;
       this.editBuffer = null;
       await this.handleNavigate("settings/skills", send);

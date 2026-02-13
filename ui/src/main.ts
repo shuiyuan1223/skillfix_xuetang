@@ -10,6 +10,21 @@ import { html, LitElement, TemplateResult, nothing, svg } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 
+import hljs from "highlight.js/lib/core";
+import hljsMarkdown from "highlight.js/lib/languages/markdown";
+import hljsJson from "highlight.js/lib/languages/json";
+import hljsYaml from "highlight.js/lib/languages/yaml";
+import hljsTypescript from "highlight.js/lib/languages/typescript";
+import hljsJavascript from "highlight.js/lib/languages/javascript";
+import hljsXml from "highlight.js/lib/languages/xml";
+
+hljs.registerLanguage("markdown", hljsMarkdown);
+hljs.registerLanguage("json", hljsJson);
+hljs.registerLanguage("yaml", hljsYaml);
+hljs.registerLanguage("typescript", hljsTypescript);
+hljs.registerLanguage("javascript", hljsJavascript);
+hljs.registerLanguage("xml", hljsXml);
+
 // ============================================================================
 // UUID Generation - with fallback for non-secure contexts
 // ============================================================================
@@ -1171,31 +1186,73 @@ class A2UIRenderer {
 
     const lines = value.split("\n");
 
+    // Syntax-highlighted HTML for readonly mode
+    let highlightedHtml = "";
+    if (readonly) {
+      try {
+        const lang = hljs.getLanguage(language) ? language : "markdown";
+        highlightedHtml = hljs.highlight(value, { language: lang }).value;
+      } catch {
+        highlightedHtml = value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+    }
+
+    const lineNumbersEl = lineNumbers
+      ? html`
+          <div class="code-line-numbers" id="code-ln-${c.id || "default"}">
+            ${lines.map((_, i) => html`<div>${i + 1}</div>`)}
+          </div>
+        `
+      : nothing;
+
+    if (readonly) {
+      return html`
+        <div
+          class="code-editor-container"
+          style="height: ${typeof height === "number" ? height + "px" : height}"
+        >
+          ${lineNumbersEl}
+          <pre
+            class="code-highlight"
+            @scroll=${lineNumbers
+              ? (e: Event) => {
+                  const pre = e.target as HTMLElement;
+                  const ln = pre
+                    .closest(".code-editor-container")
+                    ?.querySelector(".code-line-numbers") as HTMLElement | null;
+                  if (ln) ln.scrollTop = pre.scrollTop;
+                }
+              : nothing}
+          ><code class="hljs">${unsafeHTML(highlightedHtml)}</code></pre>
+        </div>
+      `;
+    }
+
     return html`
       <div
-        class="flex bg-surface-code rounded-xl border border-border overflow-hidden font-mono text-[13px]"
+        class="code-editor-container"
         style="height: ${typeof height === "number" ? height + "px" : height}"
       >
-        ${lineNumbers
-          ? html`
-              <div
-                class="py-4 px-3 text-right text-text-muted select-none border-r border-border leading-[1.6]"
-              >
-                ${lines.map((_, i) => html`<div class="text-[11px]">${i + 1}</div>`)}
-              </div>
-            `
-          : nothing}
+        ${lineNumbersEl}
         <textarea
-          class="flex-1 bg-transparent border-none text-text p-4 resize-none outline-none font-mono text-[13px] leading-[1.6]"
+          class="code-textarea"
           spellcheck="false"
-          ?readonly=${readonly}
           .value=${value}
           @input=${(e: Event) => {
-            if (!readonly && c.onChange) {
+            if (c.onChange) {
               const textarea = e.target as HTMLTextAreaElement;
               this.sendAction(c.onChange as string, { value: textarea.value });
             }
           }}
+          @scroll=${lineNumbers
+            ? (e: Event) => {
+                const ta = e.target as HTMLElement;
+                const ln = ta
+                  .closest(".code-editor-container")
+                  ?.querySelector(".code-line-numbers") as HTMLElement | null;
+                if (ln) ln.scrollTop = ta.scrollTop;
+              }
+            : nothing}
         ></textarea>
       </div>
     `;
