@@ -8,6 +8,9 @@ import { healthTools } from "../tools/health-data.js";
 import { gitTools } from "../tools/git-tools.js";
 import { evolutionTools } from "../tools/evolution-tools.js";
 import { getRemoteMCPToolDefinitions } from "../services/remote-mcp-client.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("MCP");
 
 // MCP Tool Definition
 export interface MCPTool {
@@ -109,10 +112,10 @@ export class MCPHandler {
       }));
 
       if (defs.length > 0) {
-        console.log(`[MCPHandler] Registered ${defs.length} remote MCP tools`);
+        log.info(`Registered ${defs.length} remote MCP tools`);
       }
     } catch (err) {
-      console.error("[MCPHandler] Failed to load remote MCP tools:", err);
+      log.error("Failed to load remote MCP tools", { error: err });
     }
   }
 

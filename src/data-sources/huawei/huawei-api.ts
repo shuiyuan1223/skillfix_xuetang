@@ -14,6 +14,9 @@ import {
 import { loadConfig } from "../../utils/config.js";
 import { saveToFileCache, getFromMemoryCache, saveToMemoryCache } from "./api-cache.js";
 import { getUserStore } from "./user-store.js";
+import { createLogger } from "../../utils/logger.js";
+
+const log = createLogger("Huawei/API");
 
 // Huawei Health Kit API base URL (default, can be overridden in config)
 const DEFAULT_API_BASE = "https://health-api.cloud.huawei.com";
@@ -189,7 +192,7 @@ export class HuaweiHealthApi {
         if (summary.distance > 0 && aggregated.distance === 0)
           aggregated.distance = summary.distance;
       } catch (e) {
-        console.warn("Failed to get dailyActivitySummary:", e);
+        log.warn("Failed to get dailyActivitySummary", e);
       }
     }
 
@@ -233,7 +236,7 @@ export class HuaweiHealthApi {
     });
 
     if (!response.ok) {
-      console.warn(`dailyActivitySummary failed: ${response.status}`);
+      log.warn("dailyActivitySummary failed", { status: response.status });
       return { calories: 0, activeMinutes: 0, steps: 0, distance: 0 };
     }
 
@@ -339,7 +342,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Heart rate polymerize failed: ${response.status}`, errorText);
+      log.warn("Heart rate polymerize failed", { status: response.status, errorText });
       return { readings: [], avg: 0, max: 0, min: 0 };
     }
 
@@ -422,7 +425,7 @@ export class HuaweiHealthApi {
     });
 
     if (!response.ok) {
-      console.warn(`Resting heart rate failed: ${response.status}`);
+      log.warn("Resting heart rate failed", { status: response.status });
       return null;
     }
 
@@ -498,7 +501,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Stress data failed: ${response.status}`, errorText);
+      log.warn("Stress data failed", { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -591,7 +594,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`SpO2 data failed: ${response.status}`, errorText);
+      log.warn("SpO2 data failed", { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -707,7 +710,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`ECG healthRecords failed: ${response.status}`, errorText);
+      log.warn("ECG healthRecords failed", { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -837,7 +840,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Sleep healthRecords failed: ${response.status}`, errorText);
+      log.warn("Sleep healthRecords failed", { status: response.status, errorText });
       saveToFileCache("sleep-error", { date, startTime, endTime }, null, errorText);
       return null;
     }
@@ -887,9 +890,14 @@ export class HuaweiHealthApi {
     // If no exact match for target date, use the most recent sleep
     if (!mainRecord) {
       mainRecord = normalSleepRecords[0];
-      console.log(
-        `No sleep data for ${date}, using most recent sleep from ${new Date(mainRecord.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue).toISOString().split("T")[0]}`
-      );
+      log.info("No sleep data for requested date, using most recent", {
+        requestedDate: date,
+        fallbackDate: new Date(
+          mainRecord.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue
+        )
+          .toISOString()
+          .split("T")[0],
+      });
     }
 
     // Extract sleep record values
@@ -999,7 +1007,7 @@ export class HuaweiHealthApi {
     });
 
     if (!response.ok) {
-      console.warn(`Weekly sleep healthRecords failed: ${response.status}`);
+      log.warn("Weekly sleep healthRecords failed", { status: response.status });
       return [];
     }
 
@@ -1100,7 +1108,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Blood pressure data failed: ${response.status}`, errorText);
+      log.warn("Blood pressure data failed", { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -1210,7 +1218,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Blood glucose data failed: ${response.status}`, errorText);
+      log.warn("Blood glucose data failed", { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -1465,7 +1473,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Body temperature data failed: ${response.status}`, errorText);
+      log.warn("Body temperature data failed", { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -1563,7 +1571,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Nutrition data failed: ${response.status}`, errorText);
+      log.warn("Nutrition data failed", { status: response.status, errorText });
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
     }
@@ -1789,7 +1797,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`VO2Max data failed: ${response.status}`, errorText);
+      log.warn("VO2Max data failed", { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -1975,7 +1983,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn(`Emotion data failed: ${response.status}`, errorText);
+      log.warn("Emotion data failed", { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -2081,7 +2089,7 @@ export class HuaweiHealthApi {
         });
 
         if (!response.ok) {
-          console.warn(`Range polymerize failed for ${dataTypeName}: ${response.status}`);
+          log.warn("Range polymerize failed", { dataTypeName, status: response.status });
           chunkStart.setDate(chunkStart.getDate() + CHUNK_DAYS);
           continue;
         }
@@ -2117,7 +2125,7 @@ export class HuaweiHealthApi {
           }
         }
       } catch (error) {
-        console.warn(`Range polymerize error for ${dataTypeName}:`, error);
+        log.warn("Range polymerize error", { dataTypeName, error });
       }
 
       chunkStart.setDate(chunkStart.getDate() + CHUNK_DAYS);
@@ -2329,7 +2337,7 @@ export class HuaweiHealthApi {
    * Debug method: List all available data types by trying common ones
    */
   async debugExploreDataTypes(date: string): Promise<void> {
-    console.log("Exploring available data types...\n");
+    log.info("Exploring available data types...");
 
     // Common dataTypeName patterns to try
     const dataTypeNames = [
@@ -2368,12 +2376,11 @@ export class HuaweiHealthApi {
       const info = result.success
         ? JSON.stringify(result.data).slice(0, 100)
         : result.error?.slice(0, 60);
-      console.log(`${status} ${name}`);
-      console.log(`  ${info}\n`);
+      log.debug(`${status} ${name}`, { info });
     }
 
     // Try healthRecordController for sleep
-    console.log("\n--- Trying healthRecordController for sleep ---\n");
+    log.debug("Trying healthRecordController for sleep");
     const sleepTypes = ["com.huawei.health.record.sleep", "com.huawei.sleep.record", "sleep"];
     for (const type of sleepTypes) {
       const result = await this.debugHealthRecordController(type, date);
@@ -2381,15 +2388,14 @@ export class HuaweiHealthApi {
       const info = result.success
         ? JSON.stringify(result.data).slice(0, 100)
         : result.error?.slice(0, 60);
-      console.log(`${status} ${type} (healthRecordController)`);
-      console.log(`  ${info}\n`);
+      log.debug(`${status} ${type} (healthRecordController)`, { info });
     }
 
     // Try various API paths for sleep
-    console.log("\n--- Trying various API paths ---\n");
+    log.debug("Trying various API paths");
     await this.debugTryVariousEndpoints(date);
 
-    console.log("\nResults saved to .pha/api-cache/");
+    log.info("Results saved to .pha/api-cache/");
   }
 
   /**
@@ -2411,7 +2417,7 @@ export class HuaweiHealthApi {
     ];
 
     // Try polymerize with derived dataCollectorId for sleep
-    console.log("--- Trying polymerize with dataCollectorId ---\n");
+    log.debug("Trying polymerize with dataCollectorId");
 
     // Construct derived dataCollectorId patterns for sleep
     // Format: derived:<type>:com.huawei.hwid:<hash> but we can try without the hash
@@ -2456,17 +2462,15 @@ export class HuaweiHealthApi {
         const info = response.ok
           ? JSON.stringify(data).slice(0, 80)
           : `${response.status}: ${text.slice(0, 50)}`;
-        console.log(`${status} polymerize with collector (${collectorId})`);
-        console.log(`  ${info}\n`);
+        log.debug(`${status} polymerize with collector`, { collectorId, info });
 
         saveToFileCache(`polymerize-collector/${collectorId}`, { collectorId }, data);
       } catch (err) {
-        console.log(`✗ polymerize with collector (${collectorId})`);
-        console.log(`  Error: ${err}\n`);
+        log.debug("polymerize with collector failed", { collectorId, error: err });
       }
     }
 
-    console.log("--- Trying other endpoints ---\n");
+    log.debug("Trying other endpoints");
 
     for (const ep of endpoints) {
       const separator = ep.path.includes("?") ? "&" : "?";
@@ -2500,13 +2504,11 @@ export class HuaweiHealthApi {
         const info = response.ok
           ? JSON.stringify(data).slice(0, 80)
           : `${response.status}: ${text.slice(0, 50)}`;
-        console.log(`${status} ${ep.method} ${ep.path}`);
-        console.log(`  ${info}\n`);
+        log.debug(`${status} ${ep.method} ${ep.path}`, { info });
 
         saveToFileCache(`endpoint${ep.path.replace(/\//g, "_")}`, { method: ep.method }, data);
       } catch (err) {
-        console.log(`✗ ${ep.method} ${ep.path}`);
-        console.log(`  Error: ${err}\n`);
+        log.debug(`Endpoint failed: ${ep.method} ${ep.path}`, { error: err });
       }
     }
   }
@@ -2555,10 +2557,12 @@ export class HuaweiHealthApi {
     if (!response.ok) {
       // Try to continue with other data types
       const errorText = await response.text();
-      console.warn(
-        `Failed to fetch ${dataTypeName}: ${response.status} ${response.statusText}`,
-        errorText
-      );
+      log.warn("Failed to fetch polymerize data", {
+        dataTypeName,
+        status: response.status,
+        statusText: response.statusText,
+        errorText,
+      });
       return { data: [] };
     }
 
@@ -2594,7 +2598,7 @@ export class HuaweiHealthApi {
       return json as unknown as HuaweiPolymerizeResponse;
     }
     // Unknown format, return empty
-    console.warn(`Unknown response format for ${dataTypeName}:`, json);
+    log.warn("Unknown response format", { dataTypeName, response: json });
     return { data: [] };
   }
 

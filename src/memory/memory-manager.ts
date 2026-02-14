@@ -36,6 +36,9 @@ import {
 import { MemoryIndexManager } from "./memory-index.js";
 import { emitSessionTranscriptUpdate } from "./compat.js";
 import type { UserProfile, MemorySearchResult } from "./types.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Memory");
 
 export interface MemoryManagerConfig {
   /** Reserved for future configuration */
@@ -80,7 +83,7 @@ export class MemoryManager {
         return manager;
       })
       .catch((err) => {
-        console.warn(`[MemoryManager] Failed to create index for ${uuid}:`, err);
+        log.warn(`Failed to create index for ${uuid}`, err);
         this.indexManagers.set(uuid, null);
         this.indexInitPromises.delete(uuid);
         return null;
@@ -202,7 +205,7 @@ export class MemoryManager {
           snippet: r.snippet,
         }));
       } catch (err) {
-        console.warn("[MemoryManager] Index search failed:", err);
+        log.warn("Index search failed", err);
       }
     }
 
@@ -219,7 +222,7 @@ export class MemoryManager {
     this.getIndex(uuid).then((index) => {
       if (index) {
         void index.sync({ reason: "memory-write" }).catch((err) => {
-          console.warn("[MemoryManager] Sync after memory write failed:", err);
+          log.warn("Sync after memory write failed", err);
         });
       }
     });
@@ -233,7 +236,7 @@ export class MemoryManager {
     this.getIndex(uuid).then((index) => {
       if (index) {
         void index.sync({ reason: "daily-log" }).catch((err) => {
-          console.warn("[MemoryManager] Sync after daily log failed:", err);
+          log.warn("Sync after daily log failed", err);
         });
       }
     });
@@ -288,8 +291,8 @@ ${skillRegistry}
 Based on the information above, provide personalized health services.`;
 
     const est = (s: string) => Math.ceil(s.length / 4);
-    console.log(
-      `[SystemPrompt] Token distribution: soul=${est(soul)} profile=${est(profileSection)} memory=${est(memorySection)} health=${est(healthContext || "")} skills=${est(skillRegistry)} total≈${est(prompt)}`
+    log.debug(
+      `Token distribution: soul=${est(soul)} profile=${est(profileSection)} memory=${est(memorySection)} health=${est(healthContext || "")} skills=${est(skillRegistry)} total≈${est(prompt)}`
     );
 
     return prompt;

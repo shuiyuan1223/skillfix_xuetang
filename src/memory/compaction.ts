@@ -22,6 +22,9 @@ import type { MemoryManager } from "./memory-manager.js";
 import { saveSessionTranscript, serializeMessages } from "./session-store.js";
 import { pruneContextMessages } from "./context-pruning.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Memory/Compaction");
 
 // ── Constants (from OpenClaw) ──────────────────────────────────────────
 
@@ -164,7 +167,7 @@ async function callLLMForSummary(
       });
 
       if (!response.ok) {
-        console.warn(`[Compaction] Anthropic API error: ${response.status}`);
+        log.warn(`Anthropic API error: ${response.status}`);
         return null;
       }
 
@@ -200,7 +203,7 @@ async function callLLMForSummary(
       });
 
       if (!response.ok) {
-        console.warn(`[Compaction] OpenAI API error: ${response.status}`);
+        log.warn(`OpenAI API error: ${response.status}`);
         return null;
       }
 
@@ -211,9 +214,9 @@ async function callLLMForSummary(
     }
   } catch (err) {
     if ((err as Error).name === "AbortError") {
-      console.warn("[Compaction] LLM summarization timed out (30s)");
+      log.warn("LLM summarization timed out (30s)");
     } else {
-      console.warn("[Compaction] LLM summarization failed:", err);
+      log.warn("LLM summarization failed", err);
     }
     return null;
   } finally {
@@ -390,13 +393,11 @@ async function summarizeWithFallback(
       previousSummary
     );
     if (full) {
-      console.log("[Compaction] Level 1: Full LLM summary succeeded");
+      log.info("Level 1: Full LLM summary succeeded");
       return full;
     }
   } catch (err) {
-    console.warn(
-      `[Compaction] Level 1 failed, trying partial: ${err instanceof Error ? err.message : String(err)}`
-    );
+    log.warn(`Level 1 failed, trying partial: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // Level 2: Exclude oversized messages, note them
@@ -426,20 +427,18 @@ async function summarizeWithFallback(
       );
       if (partial) {
         const notes = oversizedNotes.length > 0 ? `\n\n${oversizedNotes.join("\n")}` : "";
-        console.log(
-          `[Compaction] Level 2: Partial summary succeeded (excluded ${oversizedNotes.length} oversized messages)`
+        log.info(
+          `Level 2: Partial summary succeeded (excluded ${oversizedNotes.length} oversized messages)`
         );
         return partial + notes;
       }
     } catch (err) {
-      console.warn(
-        `[Compaction] Level 2 also failed: ${err instanceof Error ? err.message : String(err)}`
-      );
+      log.warn(`Level 2 also failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   // Level 3: Return description
-  console.warn("[Compaction] Level 3: All LLM summarization failed, using description only");
+  log.warn("Level 3: All LLM summarization failed, using description only");
   return (
     `Context contained ${messages.length} messages (${oversizedNotes.length} oversized). ` +
     `Summary unavailable due to size limits.`
@@ -501,8 +500,8 @@ async function summarizeMultiStage(
     );
   }
 
-  console.log(
-    `[Compaction] Multi-stage summarization: ${splits.length} parts from ${messages.length} messages (chunkRatio=${chunkRatio.toFixed(2)})`
+  log.info(
+    `Multi-stage summarization: ${splits.length} parts from ${messages.length} messages (chunkRatio=${chunkRatio.toFixed(2)})`
   );
 
   const partialSummaries: string[] = [];
@@ -645,9 +644,9 @@ export function createSACompactionFlush(config: SACompactionFlushConfig) {
           summarizeOldMessages(messages) || "Conversation continued (no extractable summary)";
         const transcript = serializeMessagesForLLM(messages, 5000);
         config.onFlush(summary, transcript);
-        console.log("[SA-Compaction] Pre-compaction flush completed");
+        log.info("SA pre-compaction flush completed");
       } catch (err) {
-        console.warn("[SA-Compaction] Flush failed:", err);
+        log.warn("SA flush failed", err);
       }
     }
 
@@ -702,7 +701,7 @@ export function createCompactionFlush(
             memoryManager.appendSessionTranscript(userUuid, sessionId, textContent);
           }
         } catch (err) {
-          console.warn("[Compaction] Failed to save session transcript:", err);
+          log.warn("Failed to save session transcript", err);
         }
       }
 
@@ -712,16 +711,16 @@ export function createCompactionFlush(
         try {
           summary = await summarizeMultiStage(oldMessages, llmConfig, config.contextWindow);
           if (summary) {
-            console.log("[Compaction] LLM summary generated successfully");
+            log.info("LLM summary generated successfully");
           }
         } catch (err) {
-          console.warn(
-            `[Compaction] LLM summarization failed completely: ${err instanceof Error ? err.message : String(err)}`
+          log.warn(
+            `LLM summarization failed completely: ${err instanceof Error ? err.message : String(err)}`
           );
         }
       }
       if (!summary) {
-        console.log("[Compaction] Using crude fallback summarization (no LLM)");
+        log.info("Using crude fallback summarization (no LLM)");
         summary = summarizeOldMessages(messages);
       }
 

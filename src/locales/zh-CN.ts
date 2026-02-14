@@ -16,6 +16,7 @@ export const zhCN: LocaleMessages = {
     evolution: "进化",
     integrations: "集成",
     systemAgent: "系统 Agent",
+    logs: "日志",
   },
 
   systemAgent: {
@@ -509,6 +510,19 @@ export const zhCN: LocaleMessages = {
     closed: "已关闭",
     merged: "已合并",
     feedbackIssues: "反馈 Issues",
+  },
+
+  logs: {
+    title: "系统日志",
+    subtitle: "查看 Gateway 运行日志",
+    level: "级别",
+    subsystem: "子系统",
+    message: "消息",
+    time: "时间",
+    allLevels: "全部级别",
+    allSubsystems: "全部子系统",
+    noLogs: "暂无日志记录",
+    refresh: "刷新",
   },
 
   auth: {

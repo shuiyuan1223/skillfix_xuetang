@@ -19,37 +19,8 @@ export type { Database as DatabaseSyncType };
 
 // ============ Logger Adapter ============
 
-export interface SubsystemLogger {
-  subsystem: string;
-  trace: (msg: string, data?: unknown) => void;
-  debug: (msg: string, data?: unknown) => void;
-  info: (msg: string, data?: unknown) => void;
-  warn: (msg: string, data?: unknown) => void;
-  error: (msg: string, data?: unknown) => void;
-  fatal: (msg: string, data?: unknown) => void;
-  raw: (...args: unknown[]) => void;
-  child: (name: string) => SubsystemLogger;
-}
-
-export function createSubsystemLogger(subsystem: string): SubsystemLogger {
-  const fmt = (level: string, msg: string, data?: unknown) => {
-    const str = data ? `[${subsystem}] ${msg} ${JSON.stringify(data)}` : `[${subsystem}] ${msg}`;
-    if (level === "warn") return console.warn(str);
-    if (level === "error" || level === "fatal") return console.error(str);
-    console.log(str);
-  };
-  return {
-    subsystem,
-    trace: (msg, data?) => fmt("trace", msg, data),
-    debug: (msg, data?) => fmt("debug", msg, data),
-    info: (msg, data?) => fmt("info", msg, data),
-    warn: (msg, data?) => fmt("warn", msg, data),
-    error: (msg, data?) => fmt("error", msg, data),
-    fatal: (msg, data?) => fmt("fatal", msg, data),
-    raw: console.log,
-    child: (name: string) => createSubsystemLogger(`${subsystem}/${name}`),
-  };
-}
+export { createLogger as createSubsystemLogger } from "../utils/logger.js";
+export type { SubsystemLogger } from "../utils/logger.js";
 
 // ============ Path Adapter ============
 

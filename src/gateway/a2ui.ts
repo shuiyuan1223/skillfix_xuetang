@@ -54,7 +54,8 @@ export type A2UIComponentType =
   | "arena_run_picker"
   | "arena_mode_toggle"
   | "playground_fab"
-  | "evolution_pipeline";
+  | "evolution_pipeline"
+  | "log_viewer";
 
 // Base component interface
 export interface A2UIComponent {
@@ -409,6 +410,22 @@ export interface FormComponent extends A2UIComponent {
   onCancel?: string; // Action name
 }
 
+// Log Viewer Component
+export interface LogViewerComponent extends A2UIComponent {
+  type: "log_viewer";
+  entries: Array<{
+    time: string;
+    level: string;
+    subsystem: string;
+    message: string;
+    data?: unknown;
+  }>;
+  levels: string[];
+  subsystems: string[];
+  activeLevel?: string;
+  activeSubsystem?: string;
+}
+
 // A2UI Message format
 export interface A2UIMessage {
   type: "a2ui";
@@ -649,6 +666,15 @@ export class A2UIGenerator {
   fileTree(files: FileTreeComponent["files"], opts: Partial<FileTreeComponent> = {}): string {
     const id = this.nextId("ftree");
     this.components.set(id, { id, type: "file_tree", files, ...opts });
+    return id;
+  }
+
+  logViewer(
+    entries: LogViewerComponent["entries"],
+    opts: Partial<LogViewerComponent> = {}
+  ): string {
+    const id = this.nextId("logviewer");
+    this.components.set(id, { id, type: "log_viewer", entries, ...opts });
     return id;
   }
 

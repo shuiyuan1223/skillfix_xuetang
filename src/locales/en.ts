@@ -16,6 +16,7 @@ export const en: LocaleMessages = {
     evolution: "Evolution",
     integrations: "Integrations",
     systemAgent: "System Agent",
+    logs: "Logs",
   },
 
   systemAgent: {
@@ -518,6 +519,19 @@ export const en: LocaleMessages = {
     closed: "Closed",
     merged: "Merged",
     feedbackIssues: "Feedback Issues",
+  },
+
+  logs: {
+    title: "System Logs",
+    subtitle: "View Gateway runtime logs",
+    level: "Level",
+    subsystem: "Subsystem",
+    message: "Message",
+    time: "Time",
+    allLevels: "All Levels",
+    allSubsystems: "All Subsystems",
+    noLogs: "No log entries yet",
+    refresh: "Refresh",
   },
 
   auth: {

@@ -16,6 +16,7 @@ export interface LocaleMessages {
     evolution: string;
     integrations: string;
     systemAgent: string;
+    logs: string;
   };
 
   // System Agent
@@ -534,6 +535,20 @@ export interface LocaleMessages {
     closed: string;
     merged: string;
     feedbackIssues: string;
+  };
+
+  // Logs page
+  logs: {
+    title: string;
+    subtitle: string;
+    level: string;
+    subsystem: string;
+    message: string;
+    time: string;
+    allLevels: string;
+    allSubsystems: string;
+    noLogs: string;
+    refresh: string;
   };
 
   // OAuth / Authorization

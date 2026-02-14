@@ -35,6 +35,9 @@ import { sessionToAgentMessages } from "../memory/session-store.js";
 import { createSACompactionFlush } from "../memory/compaction.js";
 import { readMemoryFile, appendMemoryFile } from "../tools/system-memory-tools.js";
 import type { LLMProvider } from "./pha-agent.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Agent/System");
 
 export interface SystemAgentConfig {
   apiKey?: string;
@@ -94,7 +97,7 @@ function loadSystemAgentPrompt(): string {
   } catch {
     // Fall through to fallback
   }
-  console.warn("[SystemAgent] SOUL.md not found, using fallback prompt");
+  log.warn("SOUL.md not found, using fallback prompt");
   return FALLBACK_PROMPT;
 }
 
@@ -147,8 +150,8 @@ function buildSASystemPrompt(): string {
 
   // Token distribution report (debug)
   const est = (s: string) => Math.ceil(s.length / 4);
-  console.log(
-    `[SA-SystemPrompt] Token distribution: soul=${est(soul)} memory=${est(memory)} evolution=${est(evolution)} experience=${est(experience)} total≈${est(prompt)}`
+  log.debug(
+    `Token distribution: soul=${est(soul)} memory=${est(memory)} evolution=${est(evolution)} experience=${est(experience)} total≈${est(prompt)}`
   );
 
   return prompt;

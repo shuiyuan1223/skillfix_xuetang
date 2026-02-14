@@ -28,6 +28,9 @@ import { HuaweiHealthApi, huaweiHealthApi, createHuaweiHealthApiForUser } from "
 import { HuaweiAuth, huaweiAuth } from "./huawei-auth.js";
 import { mapActivityType } from "./huawei-types.js";
 import { getUserStore } from "./user-store.js";
+import { createLogger } from "../../utils/logger.js";
+
+const log = createLogger("Huawei/DataSource");
 
 /** Get date string in local timezone (YYYY-MM-DD) */
 function toLocalDateStr(d: Date): string {
@@ -88,7 +91,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         activeMinutes: data.activeMinutes,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei metrics:", error);
+      log.warn("Failed to fetch metrics", error);
       // Return zeros instead of mock data
       return { date, steps: 0, distance: 0, calories: 0, activeMinutes: 0 };
     }
@@ -109,7 +112,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         readings: result.readings,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei heart rate:", error);
+      log.warn("Failed to fetch heart rate", error);
       return { date, restingAvg: 0, maxToday: 0, minToday: 0, readings: [] };
     }
   }
@@ -179,7 +182,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         stages,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei sleep:", error);
+      log.warn("Failed to fetch sleep", error);
       return null;
     }
   }
@@ -202,7 +205,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         avgHeartRate: record.avgHeartRate,
       }));
     } catch (error) {
-      console.warn("Failed to fetch Huawei workouts:", error);
+      log.warn("Failed to fetch workouts", error);
       return [];
     }
   }
@@ -234,7 +237,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       const data = await this.api.getWeeklySleepData(endDate);
       return data.map((d) => ({ date: d.date, hours: d.hours }));
     } catch (error) {
-      console.warn("Failed to fetch Huawei weekly sleep:", error);
+      log.warn("Failed to fetch weekly sleep", error);
       // Return empty array for each day
       const result: Array<{ date: string; hours: number }> = [];
       const end = new Date(endDate);
@@ -254,7 +257,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     try {
       await this.ensureToken();
     } catch {
-      console.warn("Huawei not authenticated, no stress data available");
+      log.warn("Not authenticated, no stress data available");
       return null;
     }
 
@@ -272,7 +275,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         readings: result.readings,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei stress data:", error);
+      log.warn("Failed to fetch stress data", error);
       return null;
     }
   }
@@ -284,7 +287,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     try {
       await this.ensureToken();
     } catch {
-      console.warn("Huawei not authenticated, no SpO2 data available");
+      log.warn("Not authenticated, no SpO2 data available");
       return null;
     }
 
@@ -302,7 +305,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         readings: result.readings,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei SpO2 data:", error);
+      log.warn("Failed to fetch SpO2 data", error);
       return null;
     }
   }
@@ -314,14 +317,14 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     try {
       await this.ensureToken();
     } catch {
-      console.warn("Huawei not authenticated, no resting heart rate available");
+      log.warn("Not authenticated, no resting heart rate available");
       return null;
     }
 
     try {
       return await this.api.getRestingHeartRateData(date);
     } catch (error) {
-      console.warn("Failed to fetch Huawei resting heart rate:", error);
+      log.warn("Failed to fetch resting heart rate", error);
       return null;
     }
   }
@@ -333,7 +336,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     try {
       await this.ensureToken();
     } catch {
-      console.warn("Huawei not authenticated, no ECG data available");
+      log.warn("Not authenticated, no ECG data available");
       return null;
     }
 
@@ -354,7 +357,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         hasArrhythmia: result.hasArrhythmia,
       };
     } catch (error) {
-      console.warn("Failed to fetch Huawei ECG data:", error);
+      log.warn("Failed to fetch ECG data", error);
       return null;
     }
   }
@@ -375,7 +378,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch blood pressure:", error);
+      log.warn("Failed to fetch blood pressure", error);
       return null;
     }
   }
@@ -394,7 +397,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch blood glucose:", error);
+      log.warn("Failed to fetch blood glucose", error);
       return null;
     }
   }
@@ -413,7 +416,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch body composition:", error);
+      log.warn("Failed to fetch body composition", error);
       return null;
     }
   }
@@ -432,7 +435,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch body temperature:", error);
+      log.warn("Failed to fetch body temperature", error);
       return null;
     }
   }
@@ -451,7 +454,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch nutrition:", error);
+      log.warn("Failed to fetch nutrition", error);
       return null;
     }
   }
@@ -470,7 +473,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch menstrual cycle:", error);
+      log.warn("Failed to fetch menstrual cycle", error);
       return null;
     }
   }
@@ -489,7 +492,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch VO2Max:", error);
+      log.warn("Failed to fetch VO2Max", error);
       return null;
     }
   }
@@ -508,7 +511,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch emotion:", error);
+      log.warn("Failed to fetch emotion", error);
       return null;
     }
   }
@@ -527,7 +530,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      console.warn("Failed to fetch HRV:", error);
+      log.warn("Failed to fetch HRV", error);
       return null;
     }
   }
@@ -592,7 +595,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
 
       return result;
     } catch (error) {
-      console.warn("Failed to fetch metrics range with groupByTime:", error);
+      log.warn("Failed to fetch metrics range with groupByTime", error);
       return [];
     }
   }
@@ -638,7 +641,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
 
       return result.sort((a, b) => a.date.localeCompare(b.date));
     } catch (error) {
-      console.warn("Failed to fetch sleep range:", error);
+      log.warn("Failed to fetch sleep range", error);
       return [];
     }
   }
@@ -671,7 +674,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         min: Math.round(d.values["min"] || d.values["value"] || 0),
       }));
     } catch (error) {
-      console.warn("Failed to fetch heart rate range with groupByTime:", error);
+      log.warn("Failed to fetch heart rate range with groupByTime", error);
       return [];
     }
   }
@@ -703,7 +706,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         min: Math.round(d.values["min"] || d.values["value"] || 0),
       }));
     } catch (error) {
-      console.warn("Failed to fetch stress range:", error);
+      log.warn("Failed to fetch stress range", error);
       return [];
     }
   }
@@ -735,7 +738,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         min: Math.round(d.values["min"] || Math.max(0, (d.values["value"] || 0) - 2)),
       }));
     } catch (error) {
-      console.warn("Failed to fetch SpO2 range:", error);
+      log.warn("Failed to fetch SpO2 range", error);
       return [];
     }
   }
@@ -768,7 +771,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         }))
         .filter((d) => d.avgSystolic > 0);
     } catch (error) {
-      console.warn("Failed to fetch blood pressure range:", error);
+      log.warn("Failed to fetch blood pressure range", error);
       return [];
     }
   }
@@ -808,7 +811,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         }))
         .filter((d) => d.weight != null);
     } catch (error) {
-      console.warn("Failed to fetch body composition range:", error);
+      log.warn("Failed to fetch body composition range", error);
       return [];
     }
   }
@@ -830,7 +833,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         avgHeartRate: record.avgHeartRate,
       }));
     } catch (error) {
-      console.warn("Failed to fetch workouts range:", error);
+      log.warn("Failed to fetch workouts range", error);
       return [];
     }
   }

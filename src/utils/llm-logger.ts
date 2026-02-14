@@ -8,6 +8,9 @@
 import { existsSync, mkdirSync, appendFileSync } from "fs";
 import { join } from "path";
 import { getStateDir } from "./config.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger("LLM/Logger");
 
 const LOG_DIR = join(getStateDir(), "llm-logs");
 
@@ -57,7 +60,7 @@ function logEntry(entry: Record<string, unknown>): void {
     };
     appendFileSync(getLogFile(), JSON.stringify(fullEntry) + "\n");
   } catch (e) {
-    console.warn("Failed to log LLM interaction:", e);
+    log.warn("Failed to log LLM interaction", e);
   }
 }
 
@@ -410,5 +413,5 @@ export function installFetchInterceptor(): void {
   // @ts-expect-error - Bun's fetch type is slightly different
   globalThis.fetch = interceptedFetch;
 
-  console.log("[LLM Logger] Fetch interceptor installed");
+  log.info("Fetch interceptor installed");
 }

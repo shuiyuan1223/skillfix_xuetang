@@ -83,6 +83,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
       { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
       { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
       { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
+      { id: "settings/logs", label: t("nav.logs"), icon: "activity" },
     ],
     { activeId: activeView }
   );
@@ -1520,6 +1521,82 @@ function generateIntegrationsBranches(
   }
 
   return ui.column(sections, { gap: 16 });
+}
+
+// ============================================================================
+// Logs Page Generator
+// ============================================================================
+
+interface LogsPageData {
+  entries: Array<{
+    time: string;
+    level: string;
+    subsystem: string;
+    message: string;
+    data?: unknown;
+  }>;
+  levels: string[];
+  subsystems: string[];
+  activeLevel?: string;
+  activeSubsystem?: string;
+}
+
+export function generateLogsPage(data: LogsPageData): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+
+  // Header
+  const title = ui.text(t("logs.title"), "h1");
+  const subtitle = ui.text(t("logs.subtitle"), "caption");
+  const refreshBtn = ui.button(t("logs.refresh"), "logs_refresh", {
+    variant: "outline",
+    size: "sm",
+  });
+  const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), refreshBtn], {
+    justify: "between",
+    align: "center",
+  });
+
+  // Filter row
+  const levelOptions = [
+    { value: "", label: t("logs.allLevels") },
+    ...data.levels.map((l) => ({ value: l, label: l.toUpperCase() })),
+  ];
+  const subsystemOptions = [
+    { value: "", label: t("logs.allSubsystems") },
+    ...data.subsystems.map((s) => ({ value: s, label: s })),
+  ];
+
+  const levelSelect = ui.formInput("level", "select", {
+    label: t("logs.level"),
+    options: levelOptions,
+    value: data.activeLevel || "",
+    onChange: "logs_filter_level",
+  });
+  const subsystemSelect = ui.formInput("subsystem", "select", {
+    label: t("logs.subsystem"),
+    options: subsystemOptions,
+    value: data.activeSubsystem || "",
+    onChange: "logs_filter_subsystem",
+  });
+  const filterRow = ui.row([levelSelect, subsystemSelect], { gap: 12 });
+
+  // Log viewer component
+  const logViewer = ui.logViewer(data.entries, {
+    levels: data.levels,
+    subsystems: data.subsystems,
+    activeLevel: data.activeLevel,
+    activeSubsystem: data.activeSubsystem,
+  });
+
+  // No logs message
+  if (data.entries.length === 0) {
+    const noLogs = ui.text(t("logs.noLogs"), "caption");
+    const root = ui.column([headerRow, filterRow, noLogs], { gap: 16, padding: 24 });
+    return ui.build(root);
+  }
+
+  const root = ui.column([headerRow, filterRow, logViewer], { gap: 16, padding: 24 });
+  return ui.build(root);
 }
 
 // ============================================================================

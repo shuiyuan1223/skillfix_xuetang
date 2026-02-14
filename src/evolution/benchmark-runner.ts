@@ -33,6 +33,9 @@ import { getBenchmarkTests, ALL_BENCHMARK_TESTS, loadSharpRubrics } from "./benc
 import { loadConfig } from "../utils/config.js";
 import { aggregateByCategory, computeOverallScore } from "./category-scorer.js";
 import { Semaphore } from "../utils/semaphore.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Evolution/Benchmark");
 
 export interface BenchmarkRunnerConfig {
   /** Function to send a query to the agent and get response */
@@ -242,8 +245,8 @@ export class BenchmarkRunner {
     });
 
     if (cachedRun) {
-      console.log(
-        `[Benchmark] Cache hit: reusing run ${cachedRun.id} (version=${versionTag}, model=${modelId}, profile=${profile})`
+      log.info(
+        `Cache hit: reusing run ${cachedRun.id} (version=${versionTag}, model=${modelId}, profile=${profile})`
       );
       return this.rebuildFromCache(cachedRun, options.category);
     }
@@ -546,14 +549,14 @@ export class BenchmarkRunner {
       if (clamped === 1.0 || clamped === 0.0) return clamped;
       // Ambiguous — snap but warn
       const snapped = clamped >= 0.5 ? 1.0 : 0.0;
-      console.warn(`[Benchmark] Binary score ${clamped} is not 0.0 or 1.0, snapped to ${snapped}`);
+      log.warn(`Binary score ${clamped} is not 0.0 or 1.0, snapped to ${snapped}`);
       return snapped;
     }
     // 3-point: valid values are 0.0, 0.5, 1.0
     if (clamped === 1.0 || clamped === 0.5 || clamped === 0.0) return clamped;
     // Snap to nearest valid value
     const snapped = clamped >= 0.75 ? 1.0 : clamped >= 0.25 ? 0.5 : 0.0;
-    console.warn(`[Benchmark] 3-point score ${clamped} is not 0.0/0.5/1.0, snapped to ${snapped}`);
+    log.warn(`3-point score ${clamped} is not 0.0/0.5/1.0, snapped to ${snapped}`);
     return snapped;
   }
 

@@ -441,6 +441,26 @@ export function App() {
               break;
           }
           break;
+
+        case "log_entry": {
+          // Append new log entry to current main surface log_viewer component
+          setMainData((prev) => {
+            if (!prev) return prev;
+            const updated = { ...prev, components: prev.components.map((c) => {
+              if (c.type === "log_viewer") {
+                return { ...c, entries: [...((c as any).entries || []), (msg as any).entry] };
+              }
+              return c;
+            })};
+            return updated;
+          });
+          // Auto-scroll to bottom
+          requestAnimationFrame(() => {
+            const el = document.getElementById("log-viewer-scroll");
+            if (el) el.scrollTop = el.scrollHeight;
+          });
+          break;
+        }
       }
     },
     [closeModal],

@@ -893,6 +893,52 @@ export function renderPlaygroundFab(c: A2UIComponent, ctx: RenderContext) {
   );
 }
 
+// ---- Log Viewer ----
+export function renderLogViewer(c: A2UIComponent, _ctx: RenderContext) {
+  const entries = (c.entries as Array<{time: string; level: string; subsystem: string; message: string; data?: unknown}>) || [];
+  const levelColors: Record<string, string> = {
+    trace: "text-text-muted bg-text-muted/10",
+    debug: "text-text-muted bg-text-muted/10",
+    info: "text-blue-400 bg-blue-500/10",
+    warn: "text-amber-400 bg-amber-500/10",
+    error: "text-red-400 bg-red-500/10",
+    fatal: "text-red-400 bg-red-500/10",
+  };
+
+  return (
+    <div id="log-viewer-scroll" className="overflow-y-auto max-h-[600px] font-mono text-xs">
+      <table className="w-full border-collapse">
+        <thead className="sticky top-0 z-10 bg-surface">
+          <tr>
+            <th className="p-1.5 text-left text-[10px] font-medium uppercase text-text-muted border-b border-border w-[140px]">Time</th>
+            <th className="p-1.5 text-left text-[10px] font-medium uppercase text-text-muted border-b border-border w-[70px]">Level</th>
+            <th className="p-1.5 text-left text-[10px] font-medium uppercase text-text-muted border-b border-border w-[100px]">Subsystem</th>
+            <th className="p-1.5 text-left text-[10px] font-medium uppercase text-text-muted border-b border-border">Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry, i) => {
+            const colorCls = levelColors[entry.level] || levelColors.info;
+            return (
+              <tr key={i} className="border-b border-border/50 hover:bg-surface-hover transition-colors">
+                <td className="p-1.5 text-text-muted whitespace-nowrap">{entry.time}</td>
+                <td className="p-1.5">
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium uppercase ${colorCls}`}>{entry.level}</span>
+                </td>
+                <td className="p-1.5 text-text-secondary">{entry.subsystem}</td>
+                <td className="p-1.5 text-text break-all">{entry.message}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {entries.length === 0 && (
+        <div className="flex items-center justify-center p-8 text-text-muted text-sm">No log entries</div>
+      )}
+    </div>
+  );
+}
+
 // ---- Evolution Pipeline ----
 export function renderEvolutionPipeline(c: A2UIComponent, ctx: RenderContext) {
   const cycles = (c.cycles as any[]) || [];

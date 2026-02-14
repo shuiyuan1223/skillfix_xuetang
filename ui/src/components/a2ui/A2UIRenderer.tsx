@@ -10,7 +10,7 @@ import {
   renderGitTimeline, renderStepIndicator, renderFileTree,
   renderArenaPills, renderArenaScoreTable, renderArenaCategoryCard,
   renderPlotlyRadar, renderArenaRunPicker, renderArenaModeToggle,
-  renderPlaygroundFab, renderEvolutionPipeline,
+  renderPlaygroundFab, renderEvolutionPipeline, renderLogViewer,
 } from "./AdvancedRenderers";
 
 export interface RenderContext {
@@ -87,6 +87,7 @@ export function A2UIRenderer({
       case "arena_mode_toggle": return renderArenaModeToggle(c, ctx);
       case "playground_fab": return renderPlaygroundFab(c, ctx);
       case "evolution_pipeline": return renderEvolutionPipeline(c, ctx);
+      case "log_viewer": return renderLogViewer(c, ctx);
       default:
         return <div className="text-text-muted text-xs p-2">[Unknown: {c.type}]</div>;
     }

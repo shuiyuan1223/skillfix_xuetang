@@ -12,6 +12,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { loadConfig } from "../utils/config.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Service/ChromeMCP");
 
 export interface ChromePage {
   id: number;
@@ -45,13 +48,13 @@ export class ChromeMCPClient {
    */
   async connect(): Promise<void> {
     if (this.connected) {
-      console.log("[ChromeMCP] Already connected");
+      log.info("Already connected");
       return;
     }
 
     const mcpConfig = this.getMCPConfig();
-    console.log("[ChromeMCP] Starting chrome-devtools-mcp server...");
-    console.log("[ChromeMCP] Config:", JSON.stringify(mcpConfig, null, 2));
+    log.info("Starting chrome-devtools-mcp server...");
+    log.debug("Config", mcpConfig);
 
     // Build args with optional browserUrl/wsEndpoint
     const args = [...mcpConfig.args];
@@ -75,7 +78,7 @@ export class ChromeMCPClient {
       stderrStream.on("data", (data: Buffer) => {
         const msg = data.toString().trim();
         if (msg) {
-          console.log("[ChromeMCP stderr]", msg);
+          log.debug("stderr: " + msg);
         }
       });
     }
@@ -85,9 +88,9 @@ export class ChromeMCPClient {
     try {
       await this.client.connect(this.transport);
       this.connected = true;
-      console.log("[ChromeMCP] Connected to MCP server");
+      log.info("Connected to MCP server");
     } catch (error) {
-      console.error("[ChromeMCP] Failed to connect:", error);
+      log.error("Failed to connect", error);
       throw error;
     }
   }
@@ -100,7 +103,7 @@ export class ChromeMCPClient {
       try {
         await this.client.close();
       } catch (e) {
-        console.log("[ChromeMCP] Error closing client:", e);
+        log.warn("Error closing client", e);
       }
       this.client = null;
     }
@@ -108,12 +111,12 @@ export class ChromeMCPClient {
       try {
         await this.transport.close();
       } catch (e) {
-        console.log("[ChromeMCP] Error closing transport:", e);
+        log.warn("Error closing transport", e);
       }
       this.transport = null;
     }
     this.connected = false;
-    console.log("[ChromeMCP] Disconnected");
+    log.info("Disconnected");
   }
 
   /**
@@ -131,9 +134,9 @@ export class ChromeMCPClient {
       throw new Error("Not connected to MCP server");
     }
 
-    console.log(`[ChromeMCP] Calling tool: ${name}`, JSON.stringify(args).slice(0, 100));
+    log.debug(`Calling tool: ${name}`, JSON.stringify(args).slice(0, 100));
     const result = await this.client.callTool({ name, arguments: args });
-    console.log(`[ChromeMCP] Tool result:`, JSON.stringify(result).slice(0, 200));
+    log.debug(`Tool result`, JSON.stringify(result).slice(0, 200));
 
     // Parse the result content
     if (result.content && Array.isArray(result.content)) {
@@ -338,26 +341,26 @@ export class ChromeMCPClient {
     const startTime = Date.now();
     const codePattern = /[?&]code=([^&]+)/;
 
-    console.log(`[ChromeMCP] Waiting for OAuth code in URL or network...`);
+    log.info("Waiting for OAuth code in URL or network...");
 
     // Install redirect observer
     try {
       await this.installRedirectObserver();
     } catch (e) {
-      console.log(`[ChromeMCP] Could not install redirect observer:`, e);
+      log.warn("Could not install redirect observer", e);
     }
 
     while (Date.now() - startTime < timeout) {
       try {
         // Check current URL
         const url = await this.getCurrentUrl();
-        console.log(`[ChromeMCP] Current URL: ${url.slice(0, 80)}...`);
+        log.debug(`Current URL: ${url.slice(0, 80)}...`);
 
         // Check if URL contains code (for hms:// redirect)
         const urlMatch = url.match(codePattern);
         if (urlMatch) {
           const code = decodeURIComponent(urlMatch[1]);
-          console.log(`[ChromeMCP] Found code in URL!`);
+          log.info("Found code in URL!");
           return code;
         }
 
@@ -368,7 +371,7 @@ export class ChromeMCPClient {
             const hmsMatch = hmsUrl.match(codePattern);
             if (hmsMatch) {
               const code = decodeURIComponent(hmsMatch[1]);
-              console.log(`[ChromeMCP] Found code in hms:// redirect: ${hmsUrl.slice(0, 50)}...`);
+              log.info(`Found code in hms:// redirect: ${hmsUrl.slice(0, 50)}...`);
               return code;
             }
           }
@@ -379,17 +382,17 @@ export class ChromeMCPClient {
         // Check Chrome DevTools network requests for code
         try {
           const networkData = await this.listNetworkRequests();
-          console.log(`[ChromeMCP] Network requests: ${networkData.slice(0, 200)}...`);
+          log.debug(`Network requests: ${networkData.slice(0, 200)}...`);
 
           // Search for code in network data
           const networkMatch = networkData.match(codePattern);
           if (networkMatch) {
             const code = decodeURIComponent(networkMatch[1]);
-            console.log(`[ChromeMCP] Found code in network requests!`);
+            log.info("Found code in network requests!");
             return code;
           }
         } catch (e) {
-          console.log(`[ChromeMCP] Error getting network requests:`, e);
+          log.warn("Error getting network requests", e);
         }
 
         // Also check Performance API entries as fallback
@@ -399,9 +402,7 @@ export class ChromeMCPClient {
             const entryMatch = entry.name.match(codePattern);
             if (entryMatch) {
               const code = decodeURIComponent(entryMatch[1]);
-              console.log(
-                `[ChromeMCP] Found code in performance entry: ${entry.name.slice(0, 50)}...`
-              );
+              log.info(`Found code in performance entry: ${entry.name.slice(0, 50)}...`);
               return code;
             }
           }
@@ -410,7 +411,7 @@ export class ChromeMCPClient {
         }
       } catch (e) {
         // Page might be navigating, ignore errors
-        console.log(`[ChromeMCP] Error checking:`, e);
+        log.warn("Error checking", e);
       }
       await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
@@ -450,17 +451,17 @@ export async function runOAuthFlowWithChrome(
     await client.connect();
 
     // Open auth URL in new page
-    console.log(`[OAuth] Opening auth URL: ${authUrl.slice(0, 100)}...`);
+    log.info(`Opening auth URL: ${authUrl.slice(0, 100)}...`);
     await client.newPage(authUrl);
 
     // Wait for code in URL or network
     const code = await client.waitForCodeInUrlOrNetwork({ timeout, pollInterval: 1000 });
 
-    console.log(`[OAuth] Got authorization code: ${code.slice(0, 10)}...`);
+    log.info(`Got authorization code: ${code.slice(0, 10)}...`);
     return { code };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[OAuth] Error:`, message);
+    log.error("OAuth error", message);
     return { error: message };
   }
   // Note: Don't disconnect here to allow reuse
