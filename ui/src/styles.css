@@ -252,21 +252,6 @@
     r: 6;
   }
 
-  /* Sidebar collapsed state: hide labels with transition */
-  .nav-label,
-  .status-text {
-    opacity: 1;
-    max-width: 200px;
-    overflow: hidden;
-    white-space: nowrap;
-    transition: opacity 200ms ease, max-width 300ms ease;
-  }
-
-  .sidebar-collapsed .nav-label,
-  .sidebar-collapsed .status-text {
-    opacity: 0;
-    max-width: 0;
-  }
 
   /* Collapsible: CSS Grid rows technique for smooth height */
   .collapsible-grid {
@@ -792,7 +777,7 @@
 /* ========== Grid Shell Layout (OpenClaw-inspired) ========== */
 .shell {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
   grid-template-rows: 48px minmax(0, 1fr);
   height: 100dvh;
   overflow: hidden;
@@ -803,9 +788,6 @@
   letter-spacing: -0.02em;
 }
 
-.shell.sidebar-off {
-  grid-template-columns: 72px minmax(0, 1fr);
-}
 
 /* Decorative background grid */
 .shell-grid-bg {
@@ -889,18 +871,6 @@
   letter-spacing: -0.04em;
 }
 
-.topbar-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgb(var(--color-bg-secondary));
-  font-size: 11px;
-  font-weight: 500;
-  color: rgb(var(--color-text-secondary));
-}
-
 .status-dot {
   width: 6px;
   height: 6px;
@@ -952,39 +922,47 @@
   grid-column: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px;
+  padding: 8px 4px;
   background: var(--color-surface);
   border-right: 1px solid rgb(var(--color-border));
   z-index: 10;
-  transition: padding 200ms ease;
   display: flex;
   flex-direction: column;
 }
 
-/* Sidebar collapse button — pinned to bottom */
-.sidebar-collapse-btn {
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 36px;
-  margin-top: 4px;
-  background: transparent;
-  border: none;
-  border-top: 1px solid rgb(var(--color-border));
-  color: rgb(var(--color-text-muted));
-  cursor: pointer;
-  font-size: 16px;
-  transition: color 150ms ease, background 150ms ease;
+/* Sidebar bottom section — theme toggle + status dot */
+.sidebar-bottom {
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid rgb(var(--color-border));
 }
 
-.sidebar-collapse-btn:hover {
+.sidebar-bottom-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgb(var(--color-text-secondary));
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.sidebar-bottom-btn:hover {
   color: rgb(var(--color-text));
   background: var(--color-surface-hover);
 }
 
-.shell.sidebar-off > .sidebar {
-  padding: 8px 4px;
+.sidebar-bottom-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .light .shell > .sidebar {
@@ -1022,8 +1000,7 @@
 
 /* ---- Mobile Responsive ---- */
 @media (max-width: 767px) {
-  .shell,
-  .shell.sidebar-off {
+  .shell {
     grid-template-columns: minmax(0, 1fr);
   }
   .shell > .sidebar {
@@ -1031,8 +1008,8 @@
     top: 48px;
     bottom: 0;
     left: 0;
-    width: 280px;
-    padding: 8px;
+    width: 64px;
+    padding: 8px 4px;
     transform: translateX(-100%);
     transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 40;

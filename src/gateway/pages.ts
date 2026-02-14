@@ -83,7 +83,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
       { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
       { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
       { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
-      { id: "settings/logs", label: t("nav.logs"), icon: "activity" },
+      { id: "settings/logs", label: t("nav.logs"), icon: "file-text" },
     ],
     { activeId: activeView }
   );

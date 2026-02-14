@@ -51,7 +51,6 @@ export function App() {
   const [toastData, setToastData] = useState<A2UISurfaceData | null>(null);
   const [toastExiting, setToastExiting] = useState(false);
   const [progressData, setProgressData] = useState<A2UISurfaceData | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [mobileSidebarVisible, setMobileSidebarVisible] = useState(false);
   const [pageKey, setPageKey] = useState(0);
@@ -356,13 +355,6 @@ export function App() {
     });
   }, []);
 
-  const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed((prev) => {
-      const next = !prev;
-      localStorage.setItem("pha-sidebar-collapsed", String(next));
-      return next;
-    });
-  }, []);
 
   const toggleMobileSidebar = useCallback(() => {
     setMobileSidebarOpen((open) => {
@@ -506,12 +498,6 @@ export function App() {
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    // Restore sidebar state from localStorage
-    const saved = localStorage.getItem("pha-sidebar-collapsed");
-    if (saved === "true") {
-      setSidebarCollapsed(true);
-    }
-
     // Restore theme state (default to LIGHT, check localStorage first, then system preference)
     const savedTheme = localStorage.getItem("pha-dark-mode");
     let isDark = false;
@@ -597,7 +583,7 @@ export function App() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className={`shell ${sidebarCollapsed ? "sidebar-off" : ""}`}>
+    <div className="shell">
       {/* Decorative grid */}
       <div className="shell-grid-bg" />
 
@@ -614,18 +600,7 @@ export function App() {
             <span className="topbar-title">PHA</span>
           </div>
         </div>
-        <div className="topbar-right">
-          <div className="topbar-status">
-            <span className={`status-dot ${connected ? "online" : "offline"}`} />
-            <span>{connected ? i18n.common.connected : i18n.common.reconnecting}</span>
-          </div>
-          <button
-            className="topbar-btn"
-            onClick={() => toggleTheme()}
-            title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
-            dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
-          />
-        </div>
+        <div className="topbar-right" />
       </header>
 
       {/* Mobile sidebar overlay */}
@@ -640,11 +615,11 @@ export function App() {
 
       {/* ===== Sidebar ===== */}
       <aside
-        className={`sidebar ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
+        className={`sidebar ${
           mobileSidebarOpen && mobileSidebarVisible ? "mobile-open" : ""
         }`}
       >
-        <div className={`flex-1 ${sidebarCollapsed ? "flex flex-col items-center" : ""}`}>
+        <div className="flex-1 flex flex-col items-center">
           {sidebarData ? (
             <A2UIRenderer
               data={sidebarData}
@@ -658,13 +633,18 @@ export function App() {
             renderSkeleton()
           )}
         </div>
-        <button
-          className="sidebar-collapse-btn hidden md:flex"
-          onClick={() => toggleSidebar()}
-          title={sidebarCollapsed ? "Expand sidebar" : i18n.common.collapseSidebar}
-        >
-          {sidebarCollapsed ? "\u00BB" : "\u00AB"}
-        </button>
+        <div className="sidebar-bottom">
+          <button
+            className="sidebar-bottom-btn"
+            onClick={() => toggleTheme()}
+            title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
+            dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
+          />
+          <span
+            className={`status-dot ${connected ? "online" : "offline"}`}
+            title={connected ? i18n.common.connected : i18n.common.reconnecting}
+          />
+        </div>
       </aside>
 
       {/* ===== Main Content ===== */}

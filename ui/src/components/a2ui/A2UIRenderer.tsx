@@ -417,7 +417,8 @@ export function A2UIRenderer({
           return (
             <button
               key={item.id}
-              className={`flex items-center gap-3 py-2.5 px-3 rounded-lg cursor-pointer transition-all duration-150 border-none bg-transparent text-[13px] font-medium text-left w-full relative ${
+              title={item.label}
+              className={`flex items-center justify-center py-2.5 rounded-lg cursor-pointer transition-all duration-150 border-none bg-transparent w-full relative ${
                 isActive
                   ? "bg-primary/10 text-text-strong"
                   : "text-text-secondary hover:text-text hover:bg-surface-hover"
@@ -432,13 +433,12 @@ export function A2UIRenderer({
               )}
               {item.icon && (
                 <span
-                  className={`w-[18px] h-[18px] [&>svg]:w-[18px] [&>svg]:h-[18px] transition-colors ${
+                  className={`w-5 h-5 [&>svg]:w-5 [&>svg]:h-5 transition-colors ${
                     isActive ? "text-primary" : ""
                   }`}
                   dangerouslySetInnerHTML={{ __html: getIcon(item.icon) }}
                 />
               )}
-              <span className="nav-label">{item.label}</span>
             </button>
           );
         })}
