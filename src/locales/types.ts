@@ -17,6 +17,7 @@ export interface LocaleMessages {
     integrations: string;
     systemAgent: string;
     logs: string;
+    settings: string;
   };
 
   // System Agent
@@ -549,6 +550,52 @@ export interface LocaleMessages {
     allSubsystems: string;
     noLogs: string;
     refresh: string;
+  };
+
+  // Settings / General page
+  settings: {
+    title: string;
+    subtitle: string;
+    llmProvider: string;
+    llmProviderDesc: string;
+    apiKey: string;
+    apiKeyDesc: string;
+    apiKeyPlaceholder: string;
+    apiKeySet: string;
+    apiKeyNotSet: string;
+    modelId: string;
+    modelIdDesc: string;
+    baseUrl: string;
+    baseUrlDesc: string;
+    baseUrlPlaceholder: string;
+    gatewayPort: string;
+    gatewayPortDesc: string;
+    dataSource: string;
+    dataSourceDesc: string;
+    embedding: string;
+    embeddingDesc: string;
+    embeddingModel: string;
+    saved: string;
+    saveError: string;
+    saveButton: string;
+    sectionLlm: string;
+    sectionGateway: string;
+    sectionData: string;
+    sectionAdvanced: string;
+    sectionTui: string;
+    sectionHuawei: string;
+    gatewayAutoStart: string;
+    gatewayAutoStartDesc: string;
+    tuiTheme: string;
+    tuiShowToolCalls: string;
+    huaweiClientId: string;
+    huaweiClientSecret: string;
+    huaweiRedirectUri: string;
+    huaweiAuthUrl: string;
+    huaweiTokenUrl: string;
+    huaweiApiBaseUrl: string;
+    applyEngine: string;
+    applyEngineDesc: string;
   };
 
   // OAuth / Authorization

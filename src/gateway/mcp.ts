@@ -7,6 +7,7 @@
 import { healthTools } from "../tools/health-data.js";
 import { gitTools } from "../tools/git-tools.js";
 import { evolutionTools } from "../tools/evolution-tools.js";
+import { configTools } from "../tools/config-tools.js";
 import { getRemoteMCPToolDefinitions } from "../services/remote-mcp-client.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -64,10 +65,14 @@ export class MCPHandler {
     for (const tool of evolutionTools) {
       this.tools.set(tool.name, tool);
     }
+    // Register config tools
+    for (const tool of configTools) {
+      this.tools.set(tool.name, tool);
+    }
   }
 
   private get allTools() {
-    return [...healthTools, ...gitTools, ...evolutionTools];
+    return [...healthTools, ...gitTools, ...evolutionTools, ...configTools];
   }
 
   /**

@@ -83,7 +83,8 @@ export function generateSidebar(activeView: string): A2UIMessage {
       { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
       { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
       { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
-      { id: "settings/logs", label: t("nav.logs"), icon: "file-text" },
+      { id: "settings/logs", label: t("nav.logs"), icon: "bar-chart" },
+      { id: "settings/general", label: t("nav.settings"), icon: "settings" },
     ],
     { activeId: activeView }
   );
@@ -1596,6 +1597,211 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage {
   }
 
   const root = ui.column([headerRow, filterRow, logViewer], { gap: 16, padding: 24 });
+  return ui.build(root);
+}
+
+// ============================================================================
+// Settings (General) Page Generator
+// ============================================================================
+
+export interface SettingsPageData {
+  provider: string;
+  providers: Array<{ value: string; label: string; hint?: string }>;
+  apiKeySet: boolean;
+  modelId: string;
+  baseUrl: string;
+  gatewayPort: number;
+  gatewayAutoStart: boolean;
+  dataSourceType: string;
+  embeddingEnabled: boolean;
+  embeddingModel: string;
+  tuiTheme: string;
+  tuiShowToolCalls: boolean;
+  huaweiClientId: string;
+  huaweiClientSecret: string;
+  huaweiRedirectUri: string;
+  huaweiAuthUrl: string;
+  huaweiTokenUrl: string;
+  huaweiApiBaseUrl: string;
+  applyEngine: string;
+}
+
+export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+  const saveLabel = t("settings.saveButton");
+
+  // Header
+  const title = ui.text(t("settings.title"), "h2");
+  const subtitle = ui.text(t("settings.subtitle"), "caption");
+  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+
+  // ---- LLM Section ----
+  const providerSelect = ui.formInput("provider", "select", {
+    label: t("settings.llmProvider"),
+    options: data.providers.map((p) => ({
+      value: p.value,
+      label: `${p.label}${p.hint ? ` — ${p.hint}` : ""}`,
+    })),
+    value: data.provider,
+  });
+  const apiKeyInput = ui.formInput("apiKey", "text", {
+    label: t("settings.apiKey"),
+    placeholder: t("settings.apiKeyPlaceholder"),
+    value: data.apiKeySet ? "••••••••" : "",
+  });
+  const modelInput = ui.formInput("modelId", "text", {
+    label: t("settings.modelId"),
+    value: data.modelId,
+  });
+  const baseUrlInput = ui.formInput("baseUrl", "text", {
+    label: t("settings.baseUrl"),
+    placeholder: t("settings.baseUrlPlaceholder"),
+    value: data.baseUrl,
+  });
+  const llmForm = ui.form(
+    [providerSelect, apiKeyInput, modelInput, baseUrlInput],
+    "settings_save_llm",
+    { submitLabel: saveLabel }
+  );
+  const llmCard = ui.card([llmForm], { title: t("settings.sectionLlm"), padding: 20 });
+
+  // ---- Gateway Section ----
+  const portInput = ui.formInput("port", "text", {
+    label: t("settings.gatewayPort"),
+    value: String(data.gatewayPort),
+  });
+  const autoStartSelect = ui.formInput("autoStart", "select", {
+    label: t("settings.gatewayAutoStart"),
+    options: [
+      { value: "true", label: t("common.enable") },
+      { value: "false", label: t("common.disable") },
+    ],
+    value: String(data.gatewayAutoStart),
+  });
+  const gatewayForm = ui.form([portInput, autoStartSelect], "settings_save_gateway", {
+    submitLabel: saveLabel,
+  });
+  const gatewayCard = ui.card([gatewayForm], { title: t("settings.sectionGateway"), padding: 20 });
+
+  // ---- Data Source Section ----
+  const dsSelect = ui.formInput("dataSourceType", "select", {
+    label: t("settings.dataSource"),
+    options: [
+      { value: "mock", label: "Mock (Demo)" },
+      { value: "huawei", label: "Huawei Health" },
+      { value: "apple", label: "Apple Health" },
+    ],
+    value: data.dataSourceType,
+  });
+  const dsInputs: string[] = [dsSelect];
+
+  // Show Huawei config fields when huawei is selected
+  if (data.dataSourceType === "huawei") {
+    dsInputs.push(
+      ui.formInput("huaweiClientId", "text", {
+        label: t("settings.huaweiClientId"),
+        value: data.huaweiClientId,
+        placeholder: "your-client-id",
+      })
+    );
+    dsInputs.push(
+      ui.formInput("huaweiClientSecret", "text", {
+        label: t("settings.huaweiClientSecret"),
+        value: data.huaweiClientSecret,
+        placeholder: "your-client-secret",
+      })
+    );
+    dsInputs.push(
+      ui.formInput("huaweiRedirectUri", "text", {
+        label: t("settings.huaweiRedirectUri"),
+        value: data.huaweiRedirectUri,
+        placeholder: "http://localhost:8000/auth/callback",
+      })
+    );
+    dsInputs.push(
+      ui.formInput("huaweiAuthUrl", "text", {
+        label: t("settings.huaweiAuthUrl"),
+        value: data.huaweiAuthUrl,
+      })
+    );
+    dsInputs.push(
+      ui.formInput("huaweiTokenUrl", "text", {
+        label: t("settings.huaweiTokenUrl"),
+        value: data.huaweiTokenUrl,
+      })
+    );
+    dsInputs.push(
+      ui.formInput("huaweiApiBaseUrl", "text", {
+        label: t("settings.huaweiApiBaseUrl"),
+        value: data.huaweiApiBaseUrl,
+      })
+    );
+  }
+
+  const dsForm = ui.form(dsInputs, "settings_save_datasource", { submitLabel: saveLabel });
+  const dsCard = ui.card([dsForm], { title: t("settings.sectionData"), padding: 20 });
+
+  // ---- TUI Section ----
+  const tuiThemeSelect = ui.formInput("tuiTheme", "select", {
+    label: t("settings.tuiTheme"),
+    options: [
+      { value: "dark", label: "Dark" },
+      { value: "light", label: "Light" },
+    ],
+    value: data.tuiTheme,
+  });
+  const tuiToolCallsSelect = ui.formInput("tuiShowToolCalls", "select", {
+    label: t("settings.tuiShowToolCalls"),
+    options: [
+      { value: "true", label: t("common.enable") },
+      { value: "false", label: t("common.disable") },
+    ],
+    value: String(data.tuiShowToolCalls),
+  });
+  const tuiForm = ui.form([tuiThemeSelect, tuiToolCallsSelect], "settings_save_tui", {
+    submitLabel: saveLabel,
+  });
+  const tuiCard = ui.card([tuiForm], { title: t("settings.sectionTui"), padding: 20 });
+
+  // ---- Advanced Section ----
+  const embeddingToggle = ui.formInput("embeddingEnabled", "select", {
+    label: t("settings.embedding"),
+    options: [
+      { value: "true", label: t("common.enable") },
+      { value: "false", label: t("common.disable") },
+    ],
+    value: String(data.embeddingEnabled),
+  });
+  const embeddingModelInput = ui.formInput("embeddingModel", "text", {
+    label: t("settings.embeddingModel"),
+    value: data.embeddingModel,
+  });
+  const applyEngineSelect = ui.formInput("applyEngine", "select", {
+    label: t("settings.applyEngine"),
+    options: [
+      { value: "claude-code", label: "Claude Code (CLI)" },
+      { value: "pi-coding-agent", label: "Pi Coding Agent (In-process)" },
+    ],
+    value: data.applyEngine,
+  });
+  const advForm = ui.form(
+    [embeddingToggle, embeddingModelInput, applyEngineSelect],
+    "settings_save_advanced",
+    { submitLabel: saveLabel }
+  );
+  const advCard = ui.card([advForm], { title: t("settings.sectionAdvanced"), padding: 20 });
+
+  const root = ui.column([header, llmCard, gatewayCard, dsCard, tuiCard, advCard], {
+    gap: 16,
+    padding: 0,
+  });
+
+  // Add some bottom padding to avoid content being cut off
+  const rootComp = ui["components"].get(root);
+  if (rootComp) {
+    rootComp["style"] = "padding-bottom: 40px;";
+  }
+
   return ui.build(root);
 }
 

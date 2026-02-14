@@ -18,6 +18,7 @@ import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import {
   loadConfig,
+  saveConfig,
   getUserUuid,
   getStateDir,
   getBenchmarkModels,
@@ -25,6 +26,8 @@ import {
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
   getBenchmarkConcurrency,
+  PROVIDER_CONFIGS,
+  type LLMProvider,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -59,6 +62,8 @@ import {
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
+  generateSettingsPage,
+  type SettingsPageData,
 } from "./pages.js";
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
@@ -1670,6 +1675,38 @@ export class GatewaySession {
         break;
       }
 
+      case "settings/general": {
+        const config = loadConfig();
+        const providers = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
+          value: key,
+          label: cfg.name,
+          hint: cfg.hint,
+        }));
+        const huawei = config.dataSources?.huawei || {};
+        mainPage = generateSettingsPage({
+          provider: config.llm.provider,
+          providers,
+          apiKeySet: !!config.llm.apiKey,
+          modelId: config.llm.modelId || PROVIDER_CONFIGS[config.llm.provider]?.defaultModel || "",
+          baseUrl: config.llm.baseUrl || PROVIDER_CONFIGS[config.llm.provider]?.baseUrl || "",
+          gatewayPort: config.gateway?.port || 8000,
+          gatewayAutoStart: config.gateway?.autoStart ?? false,
+          dataSourceType: config.dataSources?.type || "mock",
+          embeddingEnabled: config.embedding?.enabled ?? false,
+          embeddingModel: config.embedding?.model || "openai/text-embedding-3-small",
+          tuiTheme: config.tui?.theme || "dark",
+          tuiShowToolCalls: config.tui?.showToolCalls ?? true,
+          huaweiClientId: huawei.clientId || "",
+          huaweiClientSecret: huawei.clientSecret || "",
+          huaweiRedirectUri: huawei.redirectUri || "",
+          huaweiAuthUrl: huawei.authUrl || "",
+          huaweiTokenUrl: huawei.tokenUrl || "",
+          huaweiApiBaseUrl: huawei.apiBaseUrl || "",
+          applyEngine: config.applyEngine || "claude-code",
+        });
+        break;
+      }
+
       default:
         mainPage = generateChatPage({
           messages: this.chatMessages,
@@ -2811,6 +2848,70 @@ export class GatewaySession {
       await this.handleNavigate("settings/logs", send);
     } else if (action === "logs_refresh") {
       await this.handleNavigate("settings/logs", send);
+    }
+    // Settings actions
+    else if (
+      action === "settings_save_llm" ||
+      action === "settings_save_gateway" ||
+      action === "settings_save_datasource" ||
+      action === "settings_save_advanced" ||
+      action === "settings_save_tui"
+    ) {
+      try {
+        const config = loadConfig();
+        const formData = payload as Record<string, unknown>;
+
+        if (action === "settings_save_llm") {
+          if (formData.provider) config.llm.provider = formData.provider as LLMProvider;
+          if (formData.apiKey && formData.apiKey !== "••••••••")
+            config.llm.apiKey = String(formData.apiKey);
+          if (formData.modelId) config.llm.modelId = String(formData.modelId);
+          if (formData.baseUrl !== undefined)
+            config.llm.baseUrl = String(formData.baseUrl) || undefined;
+        } else if (action === "settings_save_gateway") {
+          if (formData.port) config.gateway.port = Number(formData.port) || 8000;
+          if (formData.autoStart !== undefined)
+            config.gateway.autoStart = formData.autoStart === "true";
+        } else if (action === "settings_save_datasource") {
+          if (formData.dataSourceType)
+            config.dataSources.type = formData.dataSourceType as "mock" | "huawei" | "apple";
+          // Huawei HealthKit config
+          if (config.dataSources.type === "huawei") {
+            if (!config.dataSources.huawei) config.dataSources.huawei = {};
+            const hw = config.dataSources.huawei;
+            if (formData.huaweiClientId !== undefined)
+              hw.clientId = String(formData.huaweiClientId) || undefined;
+            if (formData.huaweiClientSecret !== undefined)
+              hw.clientSecret = String(formData.huaweiClientSecret) || undefined;
+            if (formData.huaweiRedirectUri !== undefined)
+              hw.redirectUri = String(formData.huaweiRedirectUri) || undefined;
+            if (formData.huaweiAuthUrl !== undefined)
+              hw.authUrl = String(formData.huaweiAuthUrl) || undefined;
+            if (formData.huaweiTokenUrl !== undefined)
+              hw.tokenUrl = String(formData.huaweiTokenUrl) || undefined;
+            if (formData.huaweiApiBaseUrl !== undefined)
+              hw.apiBaseUrl = String(formData.huaweiApiBaseUrl) || undefined;
+          }
+        } else if (action === "settings_save_tui") {
+          if (!config.tui) config.tui = { theme: "dark", showToolCalls: true };
+          if (formData.tuiTheme) config.tui.theme = formData.tuiTheme as "dark" | "light";
+          if (formData.tuiShowToolCalls !== undefined)
+            config.tui.showToolCalls = formData.tuiShowToolCalls === "true";
+        } else if (action === "settings_save_advanced") {
+          if (!config.embedding) config.embedding = {};
+          if (formData.embeddingEnabled !== undefined)
+            config.embedding.enabled = formData.embeddingEnabled === "true";
+          if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+        }
+
+        saveConfig(config);
+        send(generateToast(t("settings.saved"), "success"));
+        await this.handleNavigate("settings/general", send);
+      } catch (e) {
+        send(generateToast(t("settings.saveError"), "error"));
+      }
     }
     // Default - pass to agent
     else {
