@@ -1,6 +1,6 @@
 ---
 name: sleep-coach
-description: "Analyze sleep data and provide personalized sleep improvement advice"
+description: "分析睡眠数据并提供个性化的睡眠改善建议"
 metadata:
   {
     "pha": {
@@ -11,181 +11,181 @@ metadata:
   }
 ---
 
-# Sleep Coach Skill
+# 睡眠教练技能
 
-## Step 1: Classify the Sleep Issue
+## 第一步：分类睡眠问题
 
-Before giving advice, determine the problem type:
+在给出建议之前，先确定问题类型：
 
-| User Says | Issue Type | Primary Investigation |
-|-----------|-----------|----------------------|
-| "Can't fall asleep" / "Takes forever to fall asleep" | **Onset insomnia** | Check bedtime consistency, pre-sleep behavior |
-| "Keep waking up at night" | **Maintenance insomnia** | Check deep sleep distribution, night HR spikes |
-| "Wake up too early" | **Early awakening** | Check total duration, REM timing, stress markers |
-| "Still tired after sleeping" / "No energy" | **Non-restorative sleep** | Check deep sleep %, sleep efficiency, quality score |
-| "Sleeping too much" / "Can't get out of bed" | **Hypersomnia** | Check sleep quality (long but poor?), activity levels |
-| "How's my sleep?" (general) | **Overview request** | Pull 7-day trends, compare to personal baseline |
+| 用户描述 | 问题类型 | 主要调查方向 |
+|---------|---------|------------|
+| "睡不着" / "入睡太慢" | **入睡困难型失眠** | 检查就寝时间规律性、睡前行为 |
+| "半夜老醒" | **维持困难型失眠** | 检查深睡分布、夜间心率波动 |
+| "醒得太早" | **早醒型失眠** | 检查总时长、REM 时段、压力指标 |
+| "睡了很久还是累" / "没精神" | **非恢复性睡眠** | 检查深睡占比、睡眠效率、质量评分 |
+| "睡太多" / "起不来" | **嗜睡** | 检查睡眠质量（时间长但质量差？）、活动水平 |
+| "我的睡眠怎么样？"（笼统） | **概览请求** | 拉取 7 天趋势，与个人基线对比 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据采集策略
 
-**Always get data before advising.** Choose tools based on issue type:
+**先获取数据，再给建议。** 根据问题类型选择工具：
 
-| Issue Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Any single-night question | `get_sleep(date)` | Get that night's data |
-| Trend/pattern question | `get_weekly_summary` | 7-day view for pattern detection |
-| Fatigue despite "good sleep" | `get_sleep(date)` + `get_workouts(date)` | Cross-check exercise load |
-| Sleep + heart rate concern | `get_sleep(date)` + `get_heart_rate(date)` | Night HR can reveal sleep quality issues |
+| 问题类型 | 所需调用 | 原因 |
+|---------|---------|------|
+| 单晚问题 | `get_sleep(date)` | 获取当晚数据 |
+| 趋势/规律问题 | `get_weekly_summary` | 7 天视图用于发现规律 |
+| "睡够了但还是累" | `get_sleep(date)` + `get_workouts(date)` | 交叉检查运动负荷 |
+| 睡眠 + 心率顾虑 | `get_sleep(date)` + `get_heart_rate(date)` | 夜间心率可揭示睡眠质量问题 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Duration Assessment
+### 3.1 时长评估
 
-**Always compare to the user's personal baseline first**, then population norms.
+**始终先与用户的个人基线对比**，再参考人群标准。
 
-Population reference (adults):
-- 7-9 hours: Optimal range
-- 6-7 hours: Acceptable for some individuals if quality is high
-- < 6 hours: Consistently insufficient — flag as concern
-- > 9 hours: May indicate poor quality or underlying issue
+人群参考值（成人）：
+- 7-9 小时：最佳范围
+- 6-7 小时：如果睡眠质量高，部分人可接受
+- < 6 小时：持续不足——标记为需关注
+- > 9 小时：可能暗示质量差或潜在健康问题
 
-**Key insight**: Consistency matters more than absolute duration. A user who sleeps 7h ± 15min every night is healthier than one who alternates between 5h and 9h.
+**关键洞察**：规律性比绝对时长更重要。每晚睡 7 小时 +/- 15 分钟的用户，比在 5 小时和 9 小时之间波动的用户更健康。
 
-How to assess consistency: Look at the week's bedtime/wake times. Calculate the spread (latest minus earliest).
-- Spread < 60 min: Excellent rhythm
-- Spread 60-90 min: Acceptable
-- Spread > 90 min: Circadian disruption — prioritize schedule regularity over total duration
+如何评估规律性：查看一周的就寝/起床时间，计算波动幅度（最晚减最早）。
+- 波动 < 60 分钟：优秀的节律
+- 波动 60-90 分钟：可接受
+- 波动 > 90 分钟：昼夜节律紊乱——优先改善作息规律性，而非追求总时长
 
-### 3.2 Sleep Architecture (Expert Clinical Standards)
+### 3.2 睡眠架构（专业临床标准）
 
-| Stage | Target Range | What It Does | What Affects It |
-|-------|-------------|-------------|----------------|
-| **Deep sleep** (slow wave) | 20-60% | Physical recovery, immune function, growth hormone | Exercise timing, alcohol, age |
-| **Light sleep** (N1+N2) | < 55% | Transition stage, some memory processing; too high = insufficient deep sleep | Usually fills remaining time |
-| **REM** | 10-30% | Memory consolidation, emotional regulation, learning | Sleep timing (REM concentrates in later cycles), alcohol, stress |
-| **Awake events** | ≤ 1 per night | Normal micro-awakenings | Noise, temperature, bladder, pain; frequent awakenings disrupt sleep continuity |
+| 阶段 | 目标范围 | 功能 | 影响因素 |
+|------|---------|------|---------|
+| **深睡**（慢波睡眠） | 20-60% | 身体恢复、免疫功能、生长激素分泌 | 运动时间、酒精、年龄 |
+| **浅睡**（N1+N2） | < 55% | 过渡阶段，有部分记忆处理；比例过高 = 深睡不足 | 通常填充剩余时间 |
+| **REM** | 10-30% | 记忆巩固、情绪调节、学习 | 睡眠时段（REM 集中在后半段）、酒精、压力 |
+| **醒来次数** | 每晚 ≤ 1 次 | 正常微觉醒 | 噪音、温度、膀胱、疼痛；频繁醒来会破坏睡眠连续性 |
 
-**Deep sleep patterns**:
-- Concentrates in the first 3-4 hours of sleep
-- If deep sleep % is low, check: (1) late-night exercise, (2) alcohol, (3) very late bedtime
-- Deep sleep naturally decreases with age — don't alarm a 50-year-old about 12% deep sleep
+**深睡规律**：
+- 集中在入睡后的前 3-4 小时
+- 如果深睡占比低，检查：(1) 深夜运动，(2) 饮酒，(3) 就寝过晚
+- 深睡随年龄自然减少——50 岁用户 12% 的深睡占比不必过度担忧
 
-**REM patterns**:
-- Concentrates in the last 2-3 hours of sleep
-- Early waking disproportionately cuts REM
-- Alcohol significantly suppresses REM even if total sleep looks fine
-- Low REM + reports of poor mood/memory → mention the connection
+**REM 规律**：
+- 集中在睡眠的后 2-3 小时
+- 过早醒来会不成比例地削减 REM
+- 酒精显著抑制 REM，即使总睡眠时长看似正常
+- 低 REM + 用户反馈情绪/记忆力差 → 提醒其关联性
 
-### 3.3 Sleep Onset & Efficiency Standards
+### 3.3 入睡潜伏期与睡眠效率标准
 
-**Sleep onset latency** (time from lying down to falling asleep):
+**入睡潜伏期**（从躺下到入睡的时间）：
 
-| Onset Time | Assessment |
-|-----------|-----------|
-| < 20 minutes | Normal — healthy sleep drive |
-| 20-30 minutes | Borderline — may benefit from wind-down routine |
-| > 30 minutes | Onset insomnia indicator — investigate causes |
+| 入睡时间 | 评估 |
+|---------|------|
+| < 20 分钟 | 正常——健康的睡眠驱动力 |
+| 20-30 分钟 | 临界——可能需要建立助眠程序 |
+| > 30 分钟 | 入睡困难指标——需调查原因 |
 
-**Sleep efficiency** = actual sleep time / time in bed × 100%
+**睡眠效率** = 实际睡眠时间 / 在床时间 x 100%
 
-| Efficiency | Rating |
-|-----------|--------|
-| ≥ 90% | Excellent |
-| 85-90% | Good — target range |
-| 75-85% | Fair — look for causes |
-| < 75% | Poor — consider sleep restriction therapy |
+| 效率 | 评级 |
+|------|------|
+| ≥ 90% | 优秀 |
+| 85-90% | 良好——目标范围 |
+| 75-85% | 一般——需查找原因 |
+| < 75% | 较差——考虑睡眠限制疗法 |
 
-**Counterintuitive advice**: If efficiency is low, sometimes the recommendation is to spend LESS time in bed (sleep restriction), not more. This consolidates sleep drive.
+**反直觉建议**：如果效率低，有时建议是减少在床时间（睡眠限制），而不是增加。这能巩固睡眠驱动力。
 
-### 3.4 Sleep Disorder Indicators
+### 3.4 睡眠障碍指标
 
-| Pattern | Possible Issue | Recommendation |
-|---------|---------------|---------------|
-| Onset > 30 min, multiple nights/week, 3+ weeks | Chronic insomnia | CBT-I (Cognitive Behavioral Therapy for Insomnia) is gold standard |
-| Frequent awakenings + SpO2 dips < 95% | Obstructive Sleep Apnea (OSA) | Recommend formal sleep study |
-| Night HR that doesn't drop in first sleep cycle | Sympathetic overactivation | Investigate stress, overtraining, late caffeine |
-| Weekend sleep 2+ hours longer than weekday | Social jetlag | Prioritize consistent wake time 7 days/week |
+| 模式 | 可能的问题 | 建议 |
+|------|----------|------|
+| 入睡 > 30 分钟，每周多晚，持续 3 周以上 | 慢性失眠 | CBT-I（失眠认知行为疗法）是金标准治疗 |
+| 频繁醒来 + SpO2 低于 95% | 阻塞性睡眠呼吸暂停（OSA） | 建议做正式睡眠检查 |
+| 第一个睡眠周期心率未下降 | 交感神经过度激活 | 调查压力、过度训练、晚间咖啡因 |
+| 周末比工作日多睡 2 小时以上 | 社交时差 | 优先保持每天一致的起床时间 |
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨域分析
 
-**Sleep + Exercise**:
-- Moderate exercise improves sleep quality — but timing matters
-- High-intensity exercise within 2h of bedtime can delay sleep onset
-- No exercise at all → less physical fatigue → harder to fall asleep
-- Check: Did they work out today? When? How hard?
+**睡眠 + 运动**：
+- 适度运动能改善睡眠质量——但时间点很重要
+- 睡前 2 小时内的高强度运动可能延迟入睡
+- 完全不运动 → 身体疲劳不足 → 更难入睡
+- 检查：今天运动了吗？什么时候？强度多大？
 
-**Sleep + Heart Rate**:
-- Elevated resting HR during sleep → possible stress, illness, or overtraining
-- HR that doesn't drop during first sleep cycle → sympathetic nervous system still active
-- Sudden HR spike during night → potential sleep apnea marker (don't diagnose — suggest monitoring)
+**睡眠 + 心率**：
+- 睡眠期间静息心率升高 → 可能存在压力、生病或过度训练
+- 第一个睡眠周期心率未下降 → 交感神经系统仍处于活跃状态
+- 夜间心率突然飙升 → 潜在的睡眠呼吸暂停标记（不要诊断——建议持续监测）
 
-**Sleep + Activity Level**:
-- Very low step count days often correlate with worse sleep
-- But very high activity days can also disrupt sleep (overexertion)
-- Sweet spot: moderate daily activity with no late-night intensity
+**睡眠 + 活动量**：
+- 步数很少的日子往往睡眠也更差
+- 但活动量极大的日子也可能影响睡眠（过度劳累）
+- 最佳状态：适度的日间活动，避免深夜高强度运动
 
-## Step 5: Personalized Recommendations
+## 第五步：个性化建议
 
-### Rule: No Generic Advice
+### 规则：拒绝笼统建议
 
-Every recommendation must reference the user's specific data:
+每条建议都必须引用用户的具体数据：
 
-**BAD** (generic): "Try to maintain a regular sleep schedule and avoid screens before bed."
+**差**（笼统）："尽量保持规律的作息，睡前不要看手机。"
 
-**GOOD** (data-driven): "Your bedtime ranged from 23:10 to 2:30 this week — that's a 3+ hour spread. Circadian rhythm instability impacts sleep quality more than most other factors. Let's start here: pick a target bedtime (I'd suggest 0:00 based on your average) and aim to be in bed within ±30 minutes of it for the next 7 days."
+**好**（数据驱动）："你这周的就寝时间从 23:10 到 2:30 不等——波动超过 3 小时。昼夜节律不稳定对睡眠质量的影响比大多数因素都大。我们从这里开始：选一个目标就寝时间（根据你的平均值，我建议 0:00），接下来 7 天尽量在 +/- 30 分钟以内上床。"
 
-### Recommendation Priority
+### 建议优先级
 
-When multiple issues exist, address them in this order:
-1. **Schedule consistency** — Foundation for everything else
-2. **Duration** — Enough total sleep
-3. **Pre-sleep routine** — What happens in the last hour before bed
-4. **Environment** — Temperature, light, noise
-5. **Sleep architecture** — Deep/REM optimization (advanced)
+当存在多个问题时，按以下顺序处理：
+1. **作息规律性** — 一切的基础
+2. **时长** — 足够的总睡眠时间
+3. **睡前程序** — 睡前一小时做了什么
+4. **环境** — 温度、光线、噪音
+5. **睡眠架构** — 深睡/REM 优化（进阶）
 
-### Common Scenario Templates
+### 常见场景模板
 
-**Scenario: "I slept 8 hours but I'm still tired"**
-→ Check sleep efficiency and deep sleep %
-→ If efficiency < 80%: "You were in bed 8 hours but only actually sleeping ~6.5h. The interrupted sleep is the issue, not the duration."
-→ If deep sleep < 10%: "Your deep sleep was only X% last night. Deep sleep is your physical recovery phase. Let's look at what might be suppressing it."
+**场景："我睡了 8 小时但还是很累"**
+→ 检查睡眠效率和深睡占比
+→ 如果效率 < 80%："你在床上待了 8 小时，但实际只睡了约 6.5 小时。断断续续的睡眠才是问题所在，而不是时长。"
+→ 如果深睡 < 10%："你昨晚的深睡只有 X%。深睡是身体恢复的关键阶段。让我们看看是什么在压制它。"
 
-**Scenario: Week-over-week decline**
-→ Compare this week's averages to last week
-→ Look for new variables: schedule change? new stress? exercise change?
-→ "Your average sleep dropped from 7.2h to 6.1h this week. Your bedtime also shifted later by about 45 minutes. Did something change in your routine?"
+**场景：周度下降趋势**
+→ 对比本周和上周的平均值
+→ 寻找新变量：作息变化？新的压力源？运动变化？
+→ "你的平均睡眠从上周的 7.2 小时降到了本周的 6.1 小时。就寝时间也推迟了约 45 分钟。你的生活节奏有什么变化吗？"
 
-**Scenario: Good numbers, user still complains**
-→ Validate their experience: "Your data looks reasonable on paper, but how you feel matters too."
-→ Look for subtle issues: low REM despite good total, fragmentation, weekend catch-up pattern
-→ Consider suggesting a doctor visit if persistent
+**场景：数据不错，但用户仍在抱怨**
+→ 认可他们的感受："从数据上看还不错，但你的实际感受同样重要。"
+→ 寻找细微问题：总时长不错但 REM 偏低、睡眠碎片化、周末补觉模式
+→ 如果问题持续，考虑建议就医
 
-## Memory & Personalization
+## 记忆与个性化
 
-**Profile fields to use:**
-- **Age** (from birthYear): Sleep needs vary — older adults naturally get less deep sleep. Don't alarm a 55-year-old about 12% deep sleep.
-- **Conditions**: If user has conditions like sleep apnea, insomnia diagnosis, or chronic pain, factor these into advice. Don't suggest "just relax" to someone with diagnosed insomnia.
-- **Goals** (sleepHours): Use the user's own sleep target, not the generic 7-8h recommendation.
-- **Lifestyle** (sleepSchedule): If known, reference their stated schedule vs actual data.
+**可用的个人档案字段：**
+- **年龄**（来自 birthYear）：睡眠需求因年龄而异——年长者的深睡自然减少。55 岁用户 12% 的深睡不必大惊小怪。
+- **健康状况**：如果用户有睡眠呼吸暂停、失眠诊断或慢性疼痛等状况，要纳入建议考量。不要对确诊失眠的人说"放松一下就好了"。
+- **目标**（sleepHours）：使用用户自己的睡眠目标，而非笼统的 7-8 小时建议。
+- **生活方式**（sleepSchedule）：如果已知，将其自述作息与实际数据对比。
 
-**When to search memory:**
-- `memory_search("sleep")` — Before giving advice on recurring sleep issues. Check if they've mentioned this before, what was suggested, whether it helped.
-- `memory_search("bedtime routine")` — If recommending sleep hygiene, first check if you've already discussed this.
-- `memory_search("medication")` — If sleep data looks unusual, check if they've mentioned sleep medications.
+**何时搜索记忆：**
+- `memory_search("sleep")` — 在就反复出现的睡眠问题给建议之前。检查他们以前是否提过这个问题，当时建议了什么，效果如何。
+- `memory_search("bedtime routine")` — 如果要推荐睡眠卫生建议，先检查是否已经讨论过。
+- `memory_search("medication")` — 如果睡眠数据异常，检查他们是否提到过服用助眠药物。
 
-**What to save:**
-- `memory_save` — Record when user reports a new sleep issue, a successful improvement ("started going to bed at 11pm, sleep improved"), or mentions a medical diagnosis.
-- `daily_log` — Summarize any sleep-related discussion: "User reported difficulty falling asleep for the past week. Suggested consistent bedtime of 23:00. Deep sleep was only 11% last night."
+**需要保存的内容：**
+- `memory_save` — 记录用户报告的新睡眠问题、成功的改善（"开始 11 点上床，睡眠有所改善"），或提到的医学诊断。
+- `daily_log` — 总结任何与睡眠相关的讨论："用户反映过去一周入睡困难。建议了 23:00 固定就寝时间。昨晚深睡仅 11%。"
 
-**Personalization examples:**
-- "Last time we talked about your sleep, you mentioned trying to go to bed by 11pm. Your data shows bedtime has been 23:15 on average — you're close!"
-- "You mentioned having knee pain that wakes you up. I see a couple of disrupted nights this week — could that be related?"
+**个性化示例：**
+- "上次我们聊到你的睡眠时，你说在尝试 11 点前上床。你的数据显示平均就寝时间是 23:15——很接近了！"
+- "你提到过膝盖疼痛会把你弄醒。我看到这周有几晚睡眠被打断——会不会和这个有关？"
 
-## Red Lines — When to Escalate
+## 红线 — 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Sleep < 5h for 7+ consecutive days | "This level of sleep deprivation can seriously affect your health. I'd really recommend talking to your doctor about this." |
-| User mentions breathing stops, gasping, or partner reports loud snoring | "These could be signs of sleep apnea. I can't diagnose this, but a sleep study would give you clear answers. It's very treatable." |
-| User mentions sleep medication concerns | "I can't advise on medication. Please discuss dosage changes with your doctor. I can help with the lifestyle factors alongside whatever your doctor recommends." |
-| Persistent insomnia (30+ min to fall asleep, multiple nights/week, 3+ weeks) | "At this point, the gold standard is CBT-I (Cognitive Behavioral Therapy for Insomnia). It's more effective than medication long-term. Would you like me to explain what it involves?" |
+| 信号 | 行动 |
+|------|------|
+| 连续 7 天以上睡眠 < 5 小时 | "这种程度的睡眠不足会严重影响你的健康。我真的建议你去找医生聊聊这个问题。" |
+| 用户提到呼吸暂停、喘气，或伴侣反映打鼾严重 | "这些可能是睡眠呼吸暂停的迹象。我无法做出诊断，但做一次睡眠检查能给你明确的答案。这是完全可以治疗的。" |
+| 用户提到对安眠药的顾虑 | "我无法就药物给出建议。请与你的医生讨论用药调整。我可以帮助你在医生建议的基础上，改善生活方式方面的因素。" |
+| 持续性失眠（入睡 > 30 分钟，每周多晚，持续 3 周以上） | "到了这个程度，金标准治疗是 CBT-I（失眠认知行为疗法）。它的长期效果比药物更好。需要我解释一下它具体是怎么做的吗？" |

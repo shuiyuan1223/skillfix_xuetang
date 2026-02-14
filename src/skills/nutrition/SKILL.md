@@ -1,6 +1,6 @@
 ---
 name: nutrition
-description: "Analyze dietary intake, assess macronutrient balance, and provide personalized nutrition optimization advice"
+description: "分析饮食摄入，评估宏量营养素平衡，提供个性化营养优化建议"
 metadata:
   {
     "pha": {
@@ -11,165 +11,165 @@ metadata:
   }
 ---
 
-# Nutrition Skill
+# 营养管理 Skill
 
-## Step 1: Classify the Question
+## 第一步：问题分类
 
-| User Says | Question Type | What to Investigate |
-|-----------|-------------|-------------------|
-| "How much did I eat today?" | **Intake summary** | Total calories + macros |
-| "Am I eating enough protein?" | **Nutrient check** | Protein vs target based on goals/weight |
-| "What should I eat before/after working out?" | **Meal timing** | Exercise context + nutrient timing |
-| "Is my diet balanced?" | **Macro balance** | Carb/protein/fat ratio vs goal |
-| "How many calories should I eat?" | **Calorie guidance** | TDEE calculation + goal adjustment |
+| 用户说 | 问题类型 | 需要调查什么 |
+|--------|---------|-------------|
+| "今天吃了多少？" | **摄入总结** | 总热量 + 宏量营养素 |
+| "蛋白质吃够了吗？" | **营养素检查** | 蛋白质摄入 vs 基于目标/体重的推荐量 |
+| "运动前/后该吃什么？" | **进餐时机** | 运动背景 + 营养时机 |
+| "我的饮食均衡吗？" | **宏量营养素平衡** | 碳水/蛋白质/脂肪比例 vs 目标 |
+| "我应该吃多少热量？" | **热量指导** | TDEE 计算 + 目标调整 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据收集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Daily summary | `get_nutrition(today)` | Today's intake |
-| Weekly pattern | `get_nutrition(7d)` | Adherence and consistency |
-| With body goals | `get_nutrition(7d)` + `get_body_composition(today)` | Intake vs body changes |
-| Exercise nutrition | `get_nutrition(today)` + `get_workouts(today)` | Intake around workouts |
-| Full assessment | `get_nutrition(7d)` + `get_body_composition(today)` + `get_workouts(7d)` | Complete picture |
+| 问题类型 | 需要调用 | 原因 |
+|---------|---------|------|
+| 每日总结 | `get_nutrition(today)` | 今日摄入 |
+| 每周模式 | `get_nutrition(7d)` | 依从性和一致性 |
+| 结合身体目标 | `get_nutrition(7d)` + `get_body_composition(today)` | 摄入 vs 身体变化 |
+| 运动营养 | `get_nutrition(today)` + `get_workouts(today)` | 运动前后的摄入 |
+| 全面评估 | `get_nutrition(7d)` + `get_body_composition(today)` + `get_workouts(7d)` | 完整全貌 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Daily Calorie Needs
+### 3.1 每日热量需求
 
-**TDEE** = BMR × Activity Factor
+**TDEE** = BMR x 活动系数
 
-| Activity Level | Factor | Description |
-|----------------|--------|------------|
-| Sedentary | 1.2 | Desk job, little exercise |
-| Lightly active | 1.375 | Light exercise 1-3 days/week |
-| Moderately active | 1.55 | Moderate exercise 3-5 days/week |
-| Very active | 1.725 | Hard exercise 6-7 days/week |
-| Extremely active | 1.9 | Physical job + hard exercise |
+| 活动水平 | 系数 | 描述 |
+|---------|------|------|
+| 久坐不动 | 1.2 | 办公室工作，很少运动 |
+| 轻度活跃 | 1.375 | 每周轻度运动 1-3 天 |
+| 中度活跃 | 1.55 | 每周中等强度运动 3-5 天 |
+| 非常活跃 | 1.725 | 每周高强度运动 6-7 天 |
+| 极度活跃 | 1.9 | 体力劳动 + 高强度运动 |
 
-**Goal adjustments:**
-- Fat loss: TDEE - 500 to -750 kcal
-- Muscle gain: TDEE + 200 to +400 kcal
-- Maintenance: TDEE ± 100 kcal
-- **Minimums**: Female ≥ 1200 kcal, Male ≥ 1500 kcal
+**目标调整：**
+- 减脂：TDEE - 500 至 -750 kcal
+- 增肌：TDEE + 200 至 +400 kcal
+- 维持：TDEE ± 100 kcal
+- **最低线**：女性 ≥ 1200 kcal，男性 ≥ 1500 kcal
 
-### 3.2 Macronutrient Targets by Goal
+### 3.2 按目标划分的宏量营养素比例
 
-| Goal | Carbs | Protein | Fat |
-|------|-------|---------|-----|
-| Fat loss | 35-45% | 30-35% | 25-30% |
-| Muscle gain | 45-55% | 25-30% | 20-25% |
-| Endurance sport | 55-65% | 15-20% | 20-25% |
-| Strength sport | 40-50% | 30-35% | 20-25% |
+| 目标 | 碳水 | 蛋白质 | 脂肪 |
+|------|------|--------|------|
+| 减脂 | 35-45% | 30-35% | 25-30% |
+| 增肌 | 45-55% | 25-30% | 20-25% |
+| 耐力运动 | 55-65% | 15-20% | 20-25% |
+| 力量运动 | 40-50% | 30-35% | 20-25% |
 
-### 3.3 Protein Requirements
+### 3.3 蛋白质需求
 
-| Population | Daily Protein (g/kg body weight) |
-|-----------|--------------------------------|
-| Sedentary adults | 0.8-1.0 |
-| General exercisers | 1.2-1.6 |
-| Muscle building | 1.6-2.2 |
-| Fat loss (muscle preservation) | 1.6-2.0 |
-| Older adults (65+) | 1.2-1.5 |
+| 人群 | 每日蛋白质 (g/kg 体重) |
+|------|----------------------|
+| 久坐成年人 | 0.8-1.0 |
+| 一般运动者 | 1.2-1.6 |
+| 增肌阶段 | 1.6-2.2 |
+| 减脂（保持肌肉） | 1.6-2.0 |
+| 老年人 (65+) | 1.2-1.5 |
 
-**Protein distribution**: Spread across meals (20-35g per meal) is more effective for muscle synthesis than concentrating in one meal.
+**蛋白质分配**：分散在各餐中（每餐 20-35g）比集中在一餐中更有利于肌肉合成。
 
-### 3.4 Meal Timing Principles
+### 3.4 进餐时机原则
 
-**Pre-workout** (1-2 hours before):
-- Moderate carbs + moderate protein + low fat
-- Example: banana + Greek yogurt, or oatmeal + eggs
+**运动前**（运动前 1-2 小时）：
+- 适量碳水 + 适量蛋白质 + 低脂肪
+- 示例：香蕉 + 希腊酸奶，或燕麦 + 鸡蛋
 
-**Post-workout** (within 30-60 minutes):
-- Protein (20-30g) + carbs for recovery
-- Example: protein shake + fruit, or chicken + rice
+**运动后**（运动后 30-60 分钟内）：
+- 蛋白质（20-30g）+ 碳水化合物用于恢复
+- 示例：蛋白粉 + 水果，或鸡胸肉 + 米饭
 
-**Evening meals:**
-- Complete dinner ≥ 2 hours before bed for better sleep
-- Late heavy meals impair sleep quality and glucose regulation
+**晚餐：**
+- 至少在睡前 2 小时完成正餐以改善睡眠
+- 深夜重餐会损害睡眠质量和血糖调节
 
-### 3.5 Food Quality Assessment
+### 3.5 食物质量评估
 
-**Prioritize:**
-- Whole, minimally processed foods
-- Diverse vegetables and fruits (aim for variety of colors)
-- Lean proteins from varied sources
-- Complex carbohydrates over refined
-- Healthy fats (olive oil, nuts, avocado, fatty fish)
+**优先选择：**
+- 完整的、最少加工的食物
+- 多样化的蔬菜和水果（追求颜色多样性）
+- 来源多样的优质蛋白质
+- 复合碳水化合物优于精制碳水
+- 健康脂肪（橄榄油、坚果、牛油果、富脂鱼类）
 
-**Limit:**
-- Ultra-processed foods
-- Added sugars (< 25g/day for women, < 36g/day for men)
-- Sodium (< 6g salt/day)
-- Alcohol
+**限制摄入：**
+- 超加工食品
+- 添加糖（女性 < 25g/天，男性 < 36g/天）
+- 钠（每日食盐 < 6g）
+- 酒精
 
-### 3.6 Micronutrient Awareness
+### 3.6 微量营养素关注
 
-Common deficiency risks:
-- **Iron**: Especially in menstruating women and vegetarians
-- **Vitamin D**: Low sun exposure populations
-- **Calcium**: Insufficient dairy intake
-- **Magnesium**: Highly active individuals
-- **Fiber**: Most people under-consume (target: 25-30g/day)
+常见缺乏风险：
+- **铁**：经期女性和素食者尤其需要关注
+- **维生素 D**：日照不足的人群
+- **钙**：乳制品摄入不足者
+- **镁**：高活动量个体
+- **膳食纤维**：大多数人摄入不足（目标：25-30g/天）
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨领域分析
 
-**Nutrition + Weight:**
-- Track energy balance: intake vs expenditure trend
-- Protein adequacy protects muscle during weight loss
-- Meal consistency matters more than perfection
+**营养 + 体重：**
+- 追踪能量平衡：摄入 vs 消耗趋势
+- 充足的蛋白质在减重期间保护肌肉
+- 饮食一致性比追求完美更重要
 
-**Nutrition + Exercise:**
-- Inadequate fuel → poor workout performance
-- Post-workout nutrition accelerates recovery
-- Endurance athletes need more carbs; strength athletes need more protein
+**营养 + 运动：**
+- 供能不足 → 运动表现下降
+- 运动后营养加速恢复
+- 耐力运动员需要更多碳水；力量运动员需要更多蛋白质
 
-**Nutrition + Sleep:**
-- Late heavy meals worsen sleep quality
-- Caffeine after 2pm disrupts sleep architecture
-- Alcohol near bedtime suppresses REM
-- Tryptophan-rich foods (turkey, milk, nuts) may support sleep
+**营养 + 睡眠：**
+- 深夜重餐恶化睡眠质量
+- 下午 2 点后摄入咖啡因干扰睡眠结构
+- 睡前饮酒抑制 REM 睡眠
+- 富含色氨酸的食物（火鸡肉、牛奶、坚果）可能有助于睡眠
 
-**Nutrition + Blood Sugar:**
-- Food order (veggies → protein → carbs) reduces glucose spikes
-- Fiber slows glucose absorption
-- Consistent meal timing stabilizes blood sugar
+**营养 + 血糖：**
+- 进食顺序（蔬菜 → 蛋白质 → 碳水）减少餐后血糖飙升
+- 膳食纤维减缓葡萄糖吸收
+- 规律的进餐时间稳定血糖
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Rule: Inform Without Judgment
+### 规则：告知而非评判
 
-**BAD**: "You ate too many calories today — 2,400 kcal is over your target."
+**错误示范**："你今天热量超标了 — 2,400 kcal 超过了你的目标。"
 
-**GOOD**: "Today's intake came to about 2,400 kcal — about 300 over your target. Your protein was actually good at 110g, but carbs were a bit high, mostly from the pasta at lunch. One simple swap: halving the pasta portion and adding a side salad would bring you right to target while keeping the meal satisfying."
+**正确示范**："今天的摄入大约 2,400 kcal — 比目标高了约 300。蛋白质摄入其实不错，达到了 110g，但碳水偏高，主要来自午餐的意面。一个简单的替换：将意面份量减半，加一份沙拉，就能刚好达到目标，同时保持这顿饭的饱足感。"
 
-### Acknowledge Dietary Challenges
+### 理解饮食挑战
 
-- Food tracking is hard — celebrate consistency over perfection
-- Social meals, holidays, and celebrations are part of life — don't guilt
-- Restrictive language ("you can't eat that") creates unhealthy relationships with food
-- Frame as choices and trade-offs, not rules
+- 饮食记录很难坚持 — 表扬一致性而非完美
+- 社交聚餐、节假日和庆典是生活的一部分 — 不要制造内疚感
+- 限制性语言（"你不能吃那个"）会造成不健康的食物关系
+- 以选择和权衡来表述，而非规则
 
-### Practical Over Perfect
+### 实用优先于完美
 
-**GOOD**: "You're averaging about 80g protein per day, but your target for muscle building at your weight is about 120g. Here are 3 easy additions: a Greek yogurt at breakfast (+15g), handful of almonds as a snack (+6g), an extra egg at lunch (+6g). That gets you to 107g without changing your main meals."
+**正确示范**："你每天平均摄入约 80g 蛋白质，但以你的体重来算，增肌目标大约需要 120g。这里有 3 个简单的补充：早餐加一杯希腊酸奶（+15g），零食时间吃一把杏仁（+6g），午餐多加一个鸡蛋（+6g）。这样就能到 107g，不需要改变你的主餐。"
 
-## Memory & Personalization
+## 记忆与个性化
 
-**When to search memory:**
-- `memory_search("diet")` or `memory_search("nutrition")` — Past dietary discussions and preferences
-- `memory_search("food allergy")` or `memory_search("vegetarian")` — Dietary restrictions
-- `memory_search("calorie target")` — Previously set nutrition goals
+**何时搜索记忆：**
+- `memory_search("diet")` 或 `memory_search("nutrition")` — 过去的饮食讨论和偏好
+- `memory_search("food allergy")` 或 `memory_search("vegetarian")` — 饮食限制
+- `memory_search("calorie target")` — 之前设定的营养目标
 
-**What to save:**
-- `memory_save` — Record: dietary preferences/restrictions, calorie targets, successful meal strategies
-- `daily_log` — Note nutrition discussions and advice given
+**需要保存的内容：**
+- `memory_save` — 记录：饮食偏好/限制、热量目标、成功的饮食策略
+- `daily_log` — 记录营养讨论和给出的建议
 
-## Red Lines — When to Escalate
+## 红线 — 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Calorie intake consistently < 1000 kcal/day | "Eating below 1000 calories consistently can harm your metabolism and health. Please consult a healthcare provider or registered dietitian for a safe plan." |
-| Signs of disordered eating patterns | Use warm, non-judgmental tone: "How you feel about food matters as much as what you eat. If eating feels stressful or out of control, a professional who specializes in eating behavior can help." |
-| User wants specific medical diet advice (renal diet, celiac, etc.) | "Medical dietary requirements should be guided by a registered dietitian who can account for your specific condition. I can help with general nutrition principles." |
-| Extreme elimination diets | "Cutting out entire food groups long-term can lead to nutritional deficiencies. If you're considering this, a dietitian can help ensure you're meeting all your needs." |
+| 信号 | 处理方式 |
+|------|---------|
+| 每日热量持续 < 1000 kcal | "持续低于 1000 卡路里的摄入会损害代谢和健康。请咨询医疗专业人员或注册营养师制定安全的方案。" |
+| 出现进食障碍迹象 | 使用温暖、不带评判的语气："你对食物的感受和你吃什么一样重要。如果饮食让你感到压力或失控，专业从事进食行为的咨询师可以提供帮助。" |
+| 用户需要特定医疗饮食建议（肾病饮食、乳糜泻等） | "医疗饮食需求应由注册营养师指导，他们能针对你的具体情况制定方案。我可以在一般营养原则方面提供帮助。" |
+| 极端排除性饮食 | "长期完全排除某一类食物可能导致营养缺乏。如果你正在考虑这样做，营养师可以帮助确保你满足所有营养需求。" |

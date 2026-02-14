@@ -1,187 +1,187 @@
 ---
 name: time-resolver
-description: "Resolve natural language time expressions into precise date ranges for health data queries"
+description: "将自然语言时间表述解析为精确的日期范围，用于健康数据查询"
 metadata:
   {
     "pha": {
       "emoji": "📅",
       "requires": { "tools": [] },
-      "triggers": []
+      "triggers": ["上周", "本周", "这周", "上个月", "本月", "这个月", "最近", "这几天", "这几周", "近几天", "前天", "昨晚", "今晚", "前天晚上", "上次", "最近几次", "前几次", "周前", "月前", "本季度", "这两周", "这三个月", "近几个月", "至今", "历史", "last week", "this week", "last month", "this month", "recently", "past few days"]
     }
   }
 ---
 
-# Health Query Time Resolver Skill
+# 健康查询时间解析 Skill
 
-This skill is an internal reference for the Agent. It is NOT auto-triggered by user messages. The Agent should consult this skill when interpreting time expressions in health data queries.
+当用户在健康查询中使用时间表述（如"上周"、"最近"、"前天晚上"等），本 Skill 自动注入，指导 Agent 将模糊时间表述解析为精确的日期范围参数。
 
-## Rule Priority
+## 规则优先级
 
-Apply rules in this order:
-1. **Sleep scenario** — if applicable, use sleep-specific rules
-2. **Menstrual/data-occurrence scenario** — if applicable, use special default ranges
-3. **General time parsing** — for all other cases
-
----
-
-## Section 1: General Time Parsing Rules
-
-### 1.1 No Time Expression
-
-When the query contains no time-related words, **do not provide a time range** — let the tool use its default behavior.
-
-> "What's my heart rate during sleep?" → no time parameter
-> "What's my weight?" → no time parameter
-
-### 1.2 Count-Based Expressions
-
-When the user says "last time", "recent N times", etc., output a count rather than a date range.
-
-**Explicit count:**
-- "last time" / "most recent" → last 1
-- "second to last" → last 2nd
-- "Nth time" → Nth from start
-
-**Fuzzy count:**
-- "recent few times" → last 7
-- "previous few times" → context-dependent (relative=last 7, absolute=first 7)
-
-### 1.3 This Week / This Month / This Quarter / This Year
-
-| Expression | Start | End |
-|-----------|-------|-----|
-| This week | This Monday | Today |
-| This month | 1st of current month | Today |
-| This quarter | First day of current quarter (1/1, 4/1, 7/1, 10/1) | Today |
-| This year | January 1st | Today |
-
-### 1.4 X Weeks Ago / X Months Ago (Complete Natural Period)
-
-Returns the **complete** past natural week or month, excluding the current one.
-
-**X weeks ago:**
-- Start = This Monday - X×7 days
-- End = Start + 6 days
-
-**X months ago:**
-- Start = 1st of that month
-- End = last day of that month
-
-| Expression | Example (today = Feb 3, Tuesday) |
-|-----------|--------------------------------|
-| Last week | Jan 26 (Mon) – Feb 1 (Sun) |
-| 2 weeks ago | Jan 19 (Mon) – Jan 25 (Sun) |
-| Last month | Jan 1 – Jan 31 |
-| 3 months ago | Nov 1 – Nov 30 |
-
-### 1.5 These X Weeks / These X Months (Including Current Period)
-
-From X periods ago to today, **including the current period**.
-
-**These X weeks:**
-- Start = This Monday - (X-1)×7 days
-- End = Today
-
-**These X months:**
-- Start = 1st of the month (X-1) months ago
-- End = Today
-
-| Expression | Example (today = Feb 3, Tuesday) |
-|-----------|--------------------------------|
-| These 2 weeks | Jan 26 (Mon) – Feb 3 |
-| These 3 weeks | Jan 19 (Mon) – Feb 3 |
-| These 2 months | Jan 1 – Feb 3 |
-| These 3 months | Dec 1 – Feb 3 |
-
-**Fuzzy defaults:**
-- "These few weeks" / "past few weeks" → same as "these 2 weeks"
-- "These few months" / "recent months" → same as "these 2 months"
-
-### 1.6 Last X Weeks / Last X Months (Rolling Days)
-
-End = Today, roll back by calendar days.
-
-**Last X weeks:**
-- Start = Today - X×7 + 1 day
-- End = Today
-
-**Last X months:**
-- Start = Current month minus X months, same day + 1
-- If that date doesn't exist, roll to the 1st of the next month
-- End = Today
-
-| Expression | Example (today = Feb 3) |
-|-----------|----------------------|
-| Last 2 weeks | Jan 21 – Feb 3 |
-| Last 3 weeks | Jan 14 – Feb 3 |
-| Last 2 months | Dec 4 – Feb 3 |
-| Last 3 months | Nov 4 – Feb 3 |
-
-**Special equivalences:**
-- "Last quarter" → same as "last 3 months"
-- "Last half year" → same as "last 6 months"
-
-### 1.7 "Recently" / "These Days" / "Usually"
-
-These fuzzy expressions all map to **last 7 days (including today)**.
-
-- Start = Today - 6 days
-- End = Today
-
-### 1.8 "Up to Now" / "Historical" / "Long-term"
-
-When the user queries long-term data without a clear start date, use **2 years ago from today** as the start.
-
-### 1.9 Multi-Period Split Queries
-
-When the user asks "for each period separately", split into independent ranges.
-
-> "Show me my activity calories for each of these 2 weeks" → Week 1 range, Week 2 range (separately)
-> "Monthly running distance for these 3 months" → Month 1, Month 2, Month 3 (separately)
+按以下顺序应用规则：
+1. **睡眠场景** -- 如适用，使用睡眠专用规则
+2. **月经/数据发生场景** -- 如适用，使用特殊默认范围
+3. **通用时间解析** -- 适用于所有其他情况
 
 ---
 
-## Section 2: Sleep Scenario Special Rules
+## 第一部分：通用时间解析规则
 
-### Why Sleep Needs Special Handling
+### 1.1 无时间表述
 
-Sleep data is recorded under the **wake-up date**. E.g., sleep starting Jan 5 night, waking Jan 6 morning → recorded as Jan 6.
+当查询中不包含时间相关词语时，**不提供时间范围** -- 让工具使用其默认行为。
 
-### Identifying Sleep Scenarios
+> "我睡眠时的心率怎么样？" → 不传时间参数
+> "我的体重是多少？" → 不传时间参数
 
-Enter sleep rules when query contains: sleep, slept, insomnia, sleep quality, sleep score, deep sleep, light sleep, REM, snoring, etc.
+### 1.2 次数类表述
 
-### Sleep Time Mapping
+当用户说"上次"、"最近 N 次"等，输出次数而非日期范围。
 
-| User Expression | Record Date | Explanation |
-|----------------|------------|------------|
-| "Day before yesterday's sleep" | Day before yesterday | Refers to waking up that day |
-| "Night before last's sleep" | Yesterday | Night before last → woke up yesterday |
-| "January 5th's sleep" | Jan 5 | Woke up Jan 5 |
-| "January 5th night's sleep" | Jan 6 | Fell asleep Jan 5, woke up Jan 6 |
-| "Yesterday/last night/today's sleep" | Today | Most recent wake-up (this morning) |
-| "Tonight's sleep" | No time param | Hasn't happened yet |
+**明确次数：**
+- "上次" / "最近一次" → 最后 1 次
+- "上上次" → 倒数第 2 次
+- "第 N 次" → 从头开始第 N 次
 
-**Core logic:**
-- Mentions "night" → date + 1 (fell asleep that night, woke up next day)
-- No "night" mention → use that date directly (woke up that day)
-- "Yesterday"/"last night"/"today" in sleep context → today's date
-- "Tonight" → hasn't occurred, no time parameter
+**模糊次数：**
+- "最近几次" → 最后 7 次
+- "前几次" → 视上下文而定（相对=最后 7 次，绝对=最前 7 次）
 
-### Multi-Turn Sleep Context
+### 1.3 本周 / 本月 / 本季度 / 今年
 
-If previous turn established a sleep context, follow-up questions maintain sleep rules.
+| 表述 | 开始日期 | 结束日期 |
+|------|---------|---------|
+| 本周 | 本周一 | 今天 |
+| 本月 | 当月 1 号 | 今天 |
+| 本季度 | 当季度第一天（1/1、4/1、7/1、10/1） | 今天 |
+| 今年 | 1 月 1 日 | 今天 |
+
+### 1.4 X 周前 / X 个月前（完整自然周期）
+
+返回**完整的**过去自然周或自然月，不包含当前周期。
+
+**X 周前：**
+- 开始 = 本周一 - X×7 天
+- 结束 = 开始 + 6 天
+
+**X 个月前：**
+- 开始 = 该月 1 号
+- 结束 = 该月最后一天
+
+| 表述 | 示例（今天 = 2 月 3 日，周二） |
+|------|---------------------------|
+| 上周 | 1 月 26 日（周一） – 2 月 1 日（周日） |
+| 两周前 | 1 月 19 日（周一） – 1 月 25 日（周日） |
+| 上个月 | 1 月 1 日 – 1 月 31 日 |
+| 三个月前 | 11 月 1 日 – 11 月 30 日 |
+
+### 1.5 这 X 周 / 这 X 个月（包含当前周期）
+
+从 X 个周期前到今天，**包含当前周期**。
+
+**这 X 周：**
+- 开始 = 本周一 - (X-1)×7 天
+- 结束 = 今天
+
+**这 X 个月：**
+- 开始 = (X-1) 个月前的月份 1 号
+- 结束 = 今天
+
+| 表述 | 示例（今天 = 2 月 3 日，周二） |
+|------|---------------------------|
+| 这两周 | 1 月 26 日（周一） – 2 月 3 日 |
+| 这三周 | 1 月 19 日（周一） – 2 月 3 日 |
+| 这两个月 | 1 月 1 日 – 2 月 3 日 |
+| 这三个月 | 12 月 1 日 – 2 月 3 日 |
+
+**模糊默认值：**
+- "这几周" / "最近几周" → 等同于"这两周"
+- "这几个月" / "近几个月" → 等同于"这两个月"
+
+### 1.6 最近 X 周 / 最近 X 个月（滚动天数）
+
+结束 = 今天，按日历天数向前推算。
+
+**最近 X 周：**
+- 开始 = 今天 - X×7 + 1 天
+- 结束 = 今天
+
+**最近 X 个月：**
+- 开始 = 当月减去 X 个月，同一天 + 1
+- 如果该日期不存在，顺延到下月 1 号
+- 结束 = 今天
+
+| 表述 | 示例（今天 = 2 月 3 日） |
+|------|----------------------|
+| 最近两周 | 1 月 21 日 – 2 月 3 日 |
+| 最近三周 | 1 月 14 日 – 2 月 3 日 |
+| 最近两个月 | 12 月 4 日 – 2 月 3 日 |
+| 最近三个月 | 11 月 4 日 – 2 月 3 日 |
+
+**特殊等价：**
+- "上一季度" → 等同于"最近三个月"
+- "上半年" → 等同于"最近六个月"
+
+### 1.7 "最近" / "这几天" / "平时"
+
+这些模糊表述统一映射为**最近 7 天（含今天）**。
+
+- 开始 = 今天 - 6 天
+- 结束 = 今天
+
+### 1.8 "至今" / "历史" / "长期"
+
+当用户查询长期数据但没有明确起始日期时，使用**两年前的今天**作为开始日期。
+
+### 1.9 多周期分拆查询
+
+当用户要求"按周期分别查看"时，拆分为独立的范围。
+
+> "这两周每周的运动卡路里分别是多少" → 第 1 周范围，第 2 周范围（分别查询）
+> "这三个月每月的跑步距离" → 第 1 个月，第 2 个月，第 3 个月（分别查询）
 
 ---
 
-## Section 3: Special Domain Defaults
+## 第二部分：睡眠场景特殊规则
 
-### Menstrual Cycle Queries
+### 睡眠数据为何需要特殊处理
 
-When query involves menstrual/period topics with fuzzy time words (like "recently"), default to **last 3 months** (not the general 7 days), because cycles are monthly.
+睡眠数据记录在**醒来日期**下。例如，1 月 5 日晚入睡、1 月 6 日早晨醒来 → 记录为 1 月 6 日。
 
-### Querying When Something Occurred
+### 识别睡眠场景
 
-When the user wants to know when a specific event happened ("When was the last time my BP was high?"):
-- **Physiological metrics** (weight, BP, SpO2, temperature, HR) → last 3 months
-- **Activity metrics** (workouts, steps) → last 1 month
+当查询包含以下内容时进入睡眠规则：睡眠、睡觉、失眠、睡眠质量、睡眠评分、深睡、浅睡、REM、打鼾等。
+
+### 睡眠时间映射
+
+| 用户表述 | 记录日期 | 说明 |
+|---------|---------|------|
+| "前天的睡眠" | 前天 | 指的是那天醒来 |
+| "前天晚上的睡眠" | 昨天 | 前天晚上入睡 → 昨天醒来 |
+| "1 月 5 日的睡眠" | 1 月 5 日 | 1 月 5 日醒来 |
+| "1 月 5 日晚上的睡眠" | 1 月 6 日 | 1 月 5 日入睡，1 月 6 日醒来 |
+| "昨天/昨晚/今天的睡眠" | 今天 | 最近一次醒来（今天早上） |
+| "今晚的睡眠" | 不传时间参数 | 还没发生 |
+
+**核心逻辑：**
+- 提到"晚上" → 日期 + 1（当晚入睡，次日醒来）
+- 未提到"晚上" → 直接使用该日期（当天醒来）
+- 睡眠语境下的"昨天"/"昨晚"/"今天" → 今天的日期
+- "今晚" → 尚未发生，不传时间参数
+
+### 多轮睡眠上下文
+
+如果上一轮对话已建立睡眠上下文，后续问题继续沿用睡眠规则。
+
+---
+
+## 第三部分：特殊领域默认值
+
+### 月经周期查询
+
+当查询涉及月经/经期话题且使用模糊时间词（如"最近"）时，默认为**最近 3 个月**（而非通用的 7 天），因为月经周期以月为单位。
+
+### 查询某事发生的时间
+
+当用户想知道某个特定事件何时发生（"我上次血压高是什么时候？"）：
+- **生理指标**（体重、血压、SpO2、体温、心率） → 最近 3 个月
+- **运动指标**（锻炼、步数） → 最近 1 个月

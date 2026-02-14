@@ -5,8 +5,7 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
+    "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "declaration": false,
     "noEmit": true

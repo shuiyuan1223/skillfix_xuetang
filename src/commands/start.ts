@@ -292,11 +292,15 @@ export function registerStartCommand(program: Command): void {
     .command("restart")
     .description("Restart PHA gateway server")
     .action(async () => {
+      const config = loadConfig();
+      const port = config.gateway.port;
       const pid = getPid();
-      if (pid && isRunning(pid)) {
-        const spinner = new Spinner("Restarting PHA...");
-        spinner.start();
 
+      const spinner = new Spinner("Restarting PHA...");
+      spinner.start();
+
+      // Step 1: Kill by PID if we have one
+      if (pid && isRunning(pid)) {
         try {
           process.kill(pid, "SIGTERM");
 
@@ -305,22 +309,52 @@ export function registerStartCommand(program: Command): void {
             let attempts = 0;
             const check = setInterval(() => {
               attempts++;
-              if (!isRunning(pid) || attempts >= 20) {
+              if (!isRunning(pid) || attempts >= 30) {
                 clearInterval(check);
-                if (fs.existsSync(getPidFile())) {
-                  fs.unlinkSync(getPidFile());
-                }
                 resolve();
               }
             }, 100);
           });
 
-          spinner.stop("success");
-        } catch (e) {
-          spinner.stop("error");
-          fatal("Failed to stop PHA", String(e));
-        }
+          // Force kill if still running
+          if (isRunning(pid)) {
+            try {
+              process.kill(pid, "SIGKILL");
+            } catch {}
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        } catch {}
       }
+
+      // Clean up PID file
+      if (fs.existsSync(getPidFile())) {
+        fs.unlinkSync(getPidFile());
+      }
+
+      // Step 2: Make sure port is actually free (kill any orphan process on the port)
+      try {
+        const { execSync } = await import("child_process");
+        const portPids = execSync(`lsof -ti:${port} 2>/dev/null`, { encoding: "utf-8" }).trim();
+        if (portPids) {
+          for (const p of portPids.split("\n")) {
+            const n = parseInt(p, 10);
+            if (n > 0) {
+              try {
+                process.kill(n, "SIGKILL");
+              } catch {}
+            }
+          }
+          // Wait for port release
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      } catch {
+        // lsof returns non-zero if no process found — that's fine
+      }
+
+      // Step 3: Wait briefly to ensure port is released by OS
+      await new Promise((r) => setTimeout(r, 300));
+
+      spinner.stop("success");
 
       // Now start (with --no-open since browser is already open)
       const { spawnSync } = await import("child_process");

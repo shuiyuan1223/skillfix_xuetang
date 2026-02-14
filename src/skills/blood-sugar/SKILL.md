@@ -1,6 +1,6 @@
 ---
 name: blood-sugar
-description: "Analyze blood glucose data, assess diabetes risk, and guide personalized diet and exercise strategies for glycemic control"
+description: "分析血糖数据，评估糖尿病风险，指导个性化饮食和运动策略以控制血糖"
 metadata:
   {
     "pha": {
@@ -11,152 +11,152 @@ metadata:
   }
 ---
 
-# Blood Sugar Monitor Skill
+# 血糖监测 Skill
 
-## Step 1: Classify the Question
+## 第一步：问题分类
 
-| User Says | Question Type | What to Investigate |
-|-----------|-------------|-------------------|
-| "Is my blood sugar normal?" | **Baseline check** | Fasting and postprandial values |
-| "What foods spike my blood sugar?" | **Food-glucose correlation** | Meal records + post-meal glucose |
-| "Am I at risk for diabetes?" | **Risk assessment** | Fasting glucose trend + BMI + lifestyle |
-| "My blood sugar is low / I feel shaky" | **Hypoglycemia concern** | Current reading + recent meals + activity |
-| "How does exercise affect my blood sugar?" | **Exercise-glucose correlation** | Pre/post exercise glucose + workout type |
+| 用户说 | 问题类型 | 需要调查什么 |
+|--------|---------|-------------|
+| "我的血糖正常吗？" | **基线检查** | 空腹和餐后血糖值 |
+| "什么食物让我血糖飙升？" | **食物-血糖关联** | 饮食记录 + 餐后血糖 |
+| "我有糖尿病风险吗？" | **风险评估** | 空腹血糖趋势 + BMI + 生活方式 |
+| "血糖低了 / 我感觉发抖" | **低血糖关注** | 当前读数 + 近期饮食 + 活动情况 |
+| "运动对血糖有什么影响？" | **运动-血糖关联** | 运动前后血糖 + 运动类型 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据收集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Baseline check | `get_blood_glucose(today)` | Current readings |
-| Trend analysis | `get_blood_glucose(7-30d)` | Fasting glucose trend |
-| Food correlation | `get_blood_glucose(date)` + `get_nutrition(date)` | Meal-to-glucose mapping |
-| Exercise effect | `get_blood_glucose(date)` + `get_workouts(date)` | Pre/post exercise readings |
-| Full assessment | `get_blood_glucose(30d)` + `get_nutrition(7d)` + `get_body_composition(today)` | Comprehensive picture |
+| 问题类型 | 需要调用 | 原因 |
+|---------|---------|------|
+| 基线检查 | `get_blood_glucose(today)` | 当前读数 |
+| 趋势分析 | `get_blood_glucose(7-30d)` | 空腹血糖趋势 |
+| 食物关联 | `get_blood_glucose(date)` + `get_nutrition(date)` | 饮食-血糖映射 |
+| 运动效果 | `get_blood_glucose(date)` + `get_workouts(date)` | 运动前后读数 |
+| 全面评估 | `get_blood_glucose(30d)` + `get_nutrition(7d)` + `get_body_composition(today)` | 综合全貌 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Blood Glucose Classification
+### 3.1 血糖分级
 
-| Metric | Normal | Pre-diabetes | Diabetes |
-|--------|--------|-------------|----------|
-| Fasting glucose (mmol/L) | 3.9-6.1 | 6.1-7.0 | ≥ 7.0 |
-| 2h postprandial (mmol/L) | < 7.8 | 7.8-11.1 | ≥ 11.1 |
+| 指标 | 正常 | 糖尿病前期 | 糖尿病 |
+|------|------|-----------|--------|
+| 空腹血糖 (mmol/L) | 3.9-6.1 | 6.1-7.0 | ≥ 7.0 |
+| 餐后 2 小时 (mmol/L) | < 7.8 | 7.8-11.1 | ≥ 11.1 |
 | HbA1c (%) | < 5.7% | 5.7-6.4% | ≥ 6.5% |
 
-**Key principle**: Pre-diabetes is **reversible** through lifestyle changes. This is the critical intervention window.
+**核心原则**：糖尿病前期通过生活方式改变是**可逆的**。这是关键的干预窗口期。
 
-### 3.2 Glycemic Index (GI) Reference
+### 3.2 升糖指数（GI）参考
 
-| GI Category | Range | Examples |
-|-------------|-------|---------|
-| Low GI | < 55 | Oats, brown rice, legumes, most vegetables, apples |
-| Medium GI | 55-70 | Whole wheat bread, sweet corn, bananas |
-| High GI | > 70 | White rice, white bread, mashed potatoes, watermelon, sugary drinks |
+| GI 类别 | 范围 | 示例 |
+|---------|------|------|
+| 低 GI | < 55 | 燕麦、糙米、豆类、大多数蔬菜、苹果 |
+| 中 GI | 55-70 | 全麦面包、甜玉米、香蕉 |
+| 高 GI | > 70 | 白米饭、白面包、土豆泥、西瓜、含糖饮料 |
 
-**Important**: GI is modified by:
-- Combining with protein/fat (lowers effective GI)
-- Cooking method (al dente pasta has lower GI than overcooked)
-- Portion size (glycemic load matters more than GI alone)
-- Individual variation (same food → different glucose response in different people)
+**重要提示**：GI 会受以下因素影响：
+- 与蛋白质/脂肪搭配食用（降低有效 GI）
+- 烹饪方式（偏硬的意面 GI 低于过度煮熟的）
+- 食用量（血糖负荷比单独的 GI 更重要）
+- 个体差异（同一种食物在不同人身上引起不同的血糖反应）
 
-### 3.3 Meal Strategies for Glucose Control
+### 3.3 控糖饮食策略
 
-**Eating order effect** (evidence-based):
-1. Vegetables first
-2. Protein and fat second
-3. Carbohydrates last
-→ This sequence can reduce postprandial glucose spike by 20-30%
+**进食顺序效应**（有循证依据）：
+1. 先吃蔬菜
+2. 再吃蛋白质和脂肪
+3. 最后吃碳水化合物
+→ 这个顺序可以减少餐后血糖飙升 20-30%
 
-**Meal timing:**
-- Regular meal times help stabilize glucose
-- Avoid skipping meals (causes compensatory overeating and larger spikes)
-- Late-night eating → higher glucose response (circadian insulin resistance)
+**进餐时间：**
+- 规律的进餐时间有助于稳定血糖
+- 避免跳餐（会导致代偿性暴食和更大的血糖波动）
+- 深夜进食 → 血糖反应更高（昼夜节律性胰岛素抵抗）
 
-### 3.4 Exercise and Glucose
+### 3.4 运动与血糖
 
-**Post-meal walking** (most effective single intervention):
-- 15-30 minutes of walking within 30 minutes after a meal
-- Can reduce postprandial glucose spike by 1-2 mmol/L
-- Even 10 minutes helps
+**餐后步行**（最有效的单一干预措施）：
+- 餐后 30 分钟内步行 15-30 分钟
+- 可以减少餐后血糖飙升 1-2 mmol/L
+- 即使 10 分钟也有帮助
 
-**Exercise types:**
-- Aerobic exercise → immediate glucose-lowering (glucose uptake by muscles)
-- Resistance training → improves long-term insulin sensitivity
-- Combination is optimal for glucose management
-- **Caution**: Fasting exercise in medication users may cause hypoglycemia
+**运动类型：**
+- 有氧运动 → 即时降糖（肌肉摄取葡萄糖）
+- 抗阻训练 → 改善长期胰岛素敏感性
+- 两者结合是血糖管理的最佳方案
+- **注意**：用药者空腹运动可能导致低血糖
 
-### 3.5 Hypoglycemia Recognition
+### 3.5 低血糖识别
 
-| Glucose Level | Severity | Symptoms |
-|--------------|----------|----------|
-| 3.9-3.3 mmol/L | Mild | Shakiness, sweating, hunger, anxiety |
-| 3.3-2.8 mmol/L | Moderate | Confusion, difficulty concentrating, blurred vision |
-| < 2.8 mmol/L | Severe | Loss of consciousness, seizures — emergency |
+| 血糖水平 | 严重程度 | 症状 |
+|----------|---------|------|
+| 3.9-3.3 mmol/L | 轻度 | 颤抖、出汗、饥饿感、焦虑 |
+| 3.3-2.8 mmol/L | 中度 | 意识混乱、注意力难以集中、视力模糊 |
+| < 2.8 mmol/L | 重度 | 意识丧失、癫痫发作 — 紧急情况 |
 
-**Rule of 15** (for mild-moderate hypoglycemia):
-1. Consume 15g fast carbs (juice, glucose tablets, candy)
-2. Wait 15 minutes
-3. Recheck — if still low, repeat
+**15 法则**（针对轻-中度低血糖）：
+1. 摄入 15g 快速碳水化合物（果汁、葡萄糖片、糖果）
+2. 等待 15 分钟
+3. 复查 — 如果仍然偏低，重复以上步骤
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨领域分析
 
-**Glucose + Nutrition:**
-- Map specific foods to glucose responses — personalized food diary
-- Identify problem foods (high spike) and safe foods (stable glucose)
-- Track improvement as dietary changes take effect
+**血糖 + 营养：**
+- 将特定食物与血糖反应对应 — 个性化饮食日记
+- 识别问题食物（血糖飙升明显）和安全食物（血糖平稳）
+- 跟踪饮食调整后的改善情况
 
-**Glucose + Exercise:**
-- Post-meal walking is the single most powerful tool for glucose control
-- Regular exercise improves fasting glucose over 2-4 weeks
-- Type matters: aerobic for immediate effect, resistance for long-term sensitivity
+**血糖 + 运动：**
+- 餐后步行是控制血糖最强大的单一工具
+- 规律运动在 2-4 周内改善空腹血糖
+- 类型很重要：有氧运动即时起效，抗阻训练改善长期敏感性
 
-**Glucose + Sleep:**
-- Sleep deprivation (< 6h) significantly increases insulin resistance
-- Even 1-2 nights of poor sleep can elevate fasting glucose
-- Prioritize sleep as a glucose management strategy
+**血糖 + 睡眠：**
+- 睡眠不足（< 6 小时）显著增加胰岛素抵抗
+- 即使 1-2 个晚上睡眠不佳也能升高空腹血糖
+- 将睡眠作为血糖管理策略的优先事项
 
-**Glucose + Stress:**
-- Chronic stress → cortisol → elevated fasting glucose
-- Stress reduction (meditation, exercise) can measurably improve glucose control
+**血糖 + 压力：**
+- 长期压力 → 皮质醇 → 空腹血糖升高
+- 减压措施（冥想、运动）可以可测量地改善血糖控制
 
-**Glucose + Weight:**
-- Visceral fat is the strongest predictor of insulin resistance
-- Even 5% body weight loss significantly improves glucose metrics
-- Focus on waist circumference as much as weight
+**血糖 + 体重：**
+- 内脏脂肪是胰岛素抵抗的最强预测因素
+- 即使减重 5% 也能显著改善血糖指标
+- 关注腰围与体重同样重要
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Rule: Empower, Don't Catastrophize
+### 规则：赋能而非危言耸听
 
-**BAD**: "Your fasting glucose of 6.3 is in the pre-diabetes range."
+**错误示范**："你的空腹血糖 6.3，属于糖尿病前期范围。"
 
-**GOOD**: "Your fasting glucose has averaged 6.3 mmol/L this week — this is in the pre-diabetes range, but here's the important part: pre-diabetes is very responsive to lifestyle changes. People who make diet and exercise adjustments at this stage often bring their numbers back to normal. Let's look at what's most likely to help you specifically."
+**正确示范**："这周你的空腹血糖平均 6.3 mmol/L — 属于糖尿病前期范围，但重要的是：糖尿病前期对生活方式改变的反应非常好。在这个阶段进行饮食和运动调整的人，往往能把指标恢复正常。让我们看看什么方法最可能对你有帮助。"
 
-### Food-Specific Feedback
+### 食物反馈
 
-**GOOD**: "I noticed your glucose hit 10.2 after white rice yesterday but only reached 7.6 after brown rice the day before. That's a significant difference. Swapping to brown rice — or even just reducing the white rice portion and adding more vegetables — could make a real impact."
+**正确示范**："我注意到昨天吃白米饭后血糖飙到了 10.2，但前天吃糙米后只到了 7.6。差异很明显。换成糙米 — 或者哪怕只是减少白米饭的量、多加些蔬菜 — 都能产生实际效果。"
 
-### Exercise Encouragement
+### 运动鼓励
 
-**GOOD**: "After your 20-minute walk after dinner yesterday, your glucose dropped from 8.1 to 6.4. Post-meal walking is your most effective blood sugar tool — and it's free and easy."
+**正确示范**："昨天晚饭后 20 分钟的散步，你的血糖从 8.1 降到了 6.4。餐后散步是你最有效的血糖控制工具 — 而且免费又方便。"
 
-## Memory & Personalization
+## 记忆与个性化
 
-**When to search memory:**
-- `memory_search("blood sugar")` or `memory_search("glucose")` — Check for established baseline and history
-- `memory_search("diabetes")` — Check for diagnosis status and medications
-- `memory_search("diet")` — Known food-glucose relationships for this user
+**何时搜索记忆：**
+- `memory_search("blood sugar")` 或 `memory_search("glucose")` — 检查是否已建立基线和历史记录
+- `memory_search("diabetes")` — 检查诊断状态和用药情况
+- `memory_search("diet")` — 已知的该用户食物-血糖关系
 
-**What to save:**
-- `memory_save` — Record: glucose baseline, foods that cause spikes, effective strategies, medication status
-- `daily_log` — Note significant glucose readings, food-glucose correlations
+**需要保存的内容：**
+- `memory_save` — 记录：血糖基线、导致血糖飙升的食物、有效的控糖策略、用药状态
+- `daily_log` — 记录重要的血糖读数、食物-血糖关联
 
-## Red Lines — When to Escalate
+## 红线 — 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Fasting glucose consistently ≥ 7.0 mmol/L | "Consistently elevated fasting glucose above 7.0 should be evaluated by your doctor for potential diabetes diagnosis and management." |
-| Postprandial glucose > 11.1 mmol/L | "Post-meal glucose above 11.1 is in the diabetic range. Please discuss this with your doctor." |
-| Hypoglycemia symptoms (shaking, confusion, sweating) | "If you're feeling shaky and confused, eat or drink something with fast sugar immediately (juice, candy). If symptoms don't improve in 15 minutes or worsen, seek medical help." |
-| User on diabetes medication asking about dose changes | "Medication adjustments must be decided by your doctor. I can help with lifestyle factors that work alongside your medication." |
-| Severe hypoglycemia (< 2.8 mmol/L or loss of consciousness) | "This is a medical emergency. If someone is unconscious from low blood sugar, call emergency services immediately." |
+| 信号 | 处理方式 |
+|------|---------|
+| 空腹血糖持续 ≥ 7.0 mmol/L | "空腹血糖持续高于 7.0 应由医生评估，以确定是否需要进行糖尿病诊断和管理。" |
+| 餐后血糖 > 11.1 mmol/L | "餐后血糖超过 11.1 属于糖尿病范围。请与医生沟通此情况。" |
+| 低血糖症状（颤抖、意识混乱、出汗） | "如果你感觉发抖和意识模糊，请立即吃或喝含快速糖分的食物（果汁、糖果）。如果 15 分钟内症状未改善或加重，请就医。" |
+| 糖尿病患者询问调整药物剂量 | "药物调整必须由医生决定。我可以在生活方式方面提供帮助，与你的药物治疗相辅相成。" |
+| 重度低血糖（< 2.8 mmol/L 或意识丧失） | "这是医疗紧急情况。如果有人因低血糖而失去意识，请立即拨打急救电话。" |

@@ -62,9 +62,9 @@ export function buildSkillRegistry(): string {
 
   const lines = [
     "",
-    "## Available Skills",
+    "## 可用技能",
     "",
-    "You have professional skill guides. Relevant guides are automatically injected when the user's message matches a skill topic. If you need a guide that wasn't auto-loaded, use the `get_skill` tool. When a skill guide is present, follow its assessment framework and recommendations.",
+    "你拥有专业技能指南。当用户的消息匹配某个技能主题时，相关指南会自动注入。如果你需要的指南未被自动加载，请使用 `get_skill` 工具。当技能指南存在时，请遵循其中的评估框架和建议。",
     "",
     "| Skill | Description | Triggers |",
     "|-------|-------------|----------|",

@@ -1,6 +1,6 @@
 ---
 name: heart-monitor
-description: "Analyze heart rate data and provide cardiovascular health advice"
+description: "分析心率数据并提供心血管健康建议"
 metadata:
   {
     "pha": {
@@ -11,175 +11,175 @@ metadata:
   }
 ---
 
-# Heart Rate Monitor Skill
+# 心率监测技能
 
-## Step 1: Classify the Question
+## 第一步：分类问题
 
-| User Says | Question Type | What to Investigate |
-|-----------|-------------|-------------------|
-| "Is my heart rate normal?" | **Baseline check** | Compare resting HR to their history and population norms |
-| "My heart rate is high/fast" | **Acute elevation** | Context: exercise? stress? illness? caffeine? |
-| "Heart rate during exercise" | **Exercise HR** | Assess intensity zones, recovery rate |
-| "Heart rate trend" / "How's my heart?" | **Trend analysis** | Pull weekly data, look for drift |
-| "Heart rate while sleeping" | **Nocturnal HR** | Cross-reference with sleep quality |
+| 用户描述 | 问题类型 | 调查方向 |
+|---------|---------|---------|
+| "我的心率正常吗？" | **基线检查** | 将静息心率与个人历史和人群标准对比 |
+| "我心率偏高/偏快" | **急性升高** | 上下文：运动？压力？生病？咖啡因？ |
+| "运动时的心率" | **运动心率** | 评估强度区间、恢复速率 |
+| "心率趋势" / "我的心脏怎么样？" | **趋势分析** | 拉取周数据，查看是否有漂移 |
+| "睡觉时的心率" | **夜间心率** | 与睡眠质量交叉参考 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据采集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Single day check | `get_heart_rate(date)` | Resting, min, max, hourly readings |
-| Exercise context | `get_heart_rate(date)` + `get_workouts(date)` | Correlate HR with workout intensity |
-| Sleep context | `get_heart_rate(date)` + `get_sleep(date)` | Night HR reveals sleep quality |
-| Trend question | `get_weekly_summary` + `get_heart_rate(today)` | Week trend + today's detail |
+| 问题类型 | 所需调用 | 原因 |
+|---------|---------|------|
+| 单日检查 | `get_heart_rate(date)` | 静息、最低、最高、每小时读数 |
+| 运动场景 | `get_heart_rate(date)` + `get_workouts(date)` | 将心率与运动强度关联 |
+| 睡眠场景 | `get_heart_rate(date)` + `get_sleep(date)` | 夜间心率反映睡眠质量 |
+| 趋势问题 | `get_weekly_summary` + `get_heart_rate(today)` | 周趋势 + 今日详情 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Resting Heart Rate
+### 3.1 静息心率
 
-**Personal baseline is king.** A resting HR of 72 means nothing in isolation — it matters whether this person's baseline is 65 or 80.
+**个人基线最重要。** 单独看静息心率 72 没有意义——重要的是这个人的基线是 65 还是 80。
 
-Population reference:
-| Category | Range | Notes |
-|----------|-------|-------|
-| Athletic | 40-55 bpm | Trained cardiovascular system |
-| Good fitness | 55-65 bpm | Regular exercisers |
-| Average | 65-75 bpm | Typical healthy adult |
-| Above average | 75-85 bpm | May benefit from more cardio |
-| Elevated | 85-100 bpm | Worth monitoring, investigate lifestyle factors |
-| Tachycardic | > 100 bpm | Recommend medical evaluation if persistent |
+人群参考值：
+| 分类 | 范围 | 备注 |
+|------|------|------|
+| 运动员级别 | 40-55 bpm | 训练有素的心血管系统 |
+| 体能良好 | 55-65 bpm | 规律锻炼者 |
+| 普通水平 | 65-75 bpm | 典型健康成年人 |
+| 偏高 | 75-85 bpm | 可能需要更多有氧运动 |
+| 升高 | 85-100 bpm | 值得监测，调查生活方式因素 |
+| 心动过速 | > 100 bpm | 如持续存在，建议医学评估 |
 
-**What drives resting HR changes:**
-- Fitness improvement → gradual decline over weeks/months (positive)
-- Stress, poor sleep, illness → acute increase (temporary)
-- Overtraining → paradoxical increase despite exercise (warning sign)
-- Caffeine, alcohol → temporary increase
-- Dehydration → increase (often overlooked)
-- Medication changes → consult doctor
+**影响静息心率变化的因素：**
+- 体能提升 → 数周/数月内逐渐下降（正面信号）
+- 压力、睡眠不足、生病 → 急性升高（暂时性）
+- 过度训练 → 尽管在运动但心率反常升高（警告信号）
+- 咖啡因、酒精 → 暂时性升高
+- 脱水 → 升高（常被忽视）
+- 药物变化 → 咨询医生
 
-### 3.2 Exercise Heart Rate Zones
+### 3.2 运动心率区间
 
-Calculate using: Max HR ≈ 220 - age (if age available from profile)
+计算公式：最大心率 ≈ 220 - 年龄（如果个人档案中有年龄信息）
 
-| Zone | % Max HR | Purpose | Feel |
-|------|----------|---------|------|
-| Zone 1 | 50-60% | Recovery, warm-up | Easy, conversational |
-| Zone 2 | 60-70% | Fat burning, base endurance | Comfortable, can talk |
-| Zone 3 | 70-80% | Aerobic fitness | Moderate effort, short sentences |
-| Zone 4 | 80-90% | Lactate threshold, speed | Hard, few words |
-| Zone 5 | 90-100% | Max effort, VO2max | All-out, unsustainable |
+| 区间 | 最大心率占比 | 目的 | 体感 |
+|------|------------|------|------|
+| Zone 1 | 50-60% | 恢复、热身 | 轻松，可以正常聊天 |
+| Zone 2 | 60-70% | 燃脂、基础耐力 | 舒适，能说话 |
+| Zone 3 | 70-80% | 有氧体能 | 中等强度，只能说短句 |
+| Zone 4 | 80-90% | 乳酸阈值、速度 | 较难，只能说几个词 |
+| Zone 5 | 90-100% | 最大强度、VO2max | 全力冲刺，无法维持 |
 
-**Practical guidance:**
-- Most training time (80%) should be in Zone 1-2
-- Only 20% should be high intensity (Zone 4-5)
-- Common mistake: exercising too hard on easy days and too easy on hard days
-- If workout avgHeartRate is consistently > 85% max HR, they may be overtraining
+**实用指导：**
+- 大部分训练时间（80%）应在 Zone 1-2
+- 仅 20% 应为高强度（Zone 4-5）
+- 常见错误：轻松日练太猛，高强度日又不够努力
+- 如果运动平均心率持续 > 最大心率的 85%，可能存在过度训练
 
-### 3.3 Recovery Heart Rate
+### 3.3 运动后心率恢复
 
-How fast HR drops after exercise indicates cardiovascular fitness:
+运动后心率下降速度反映心血管健康水平：
 
-| Recovery (1 min post-exercise) | Rating | Implication |
-|-------------------------------|--------|------------|
-| Drop ≥ 20 bpm | Excellent | Strong cardiovascular fitness, good autonomic function |
-| Drop 12-20 bpm | Normal/Good | Adequate recovery capacity |
-| Drop < 12 bpm | Below average | May indicate poor cardiovascular fitness or overtraining; recommend building aerobic base |
+| 恢复速度（运动后 1 分钟） | 评级 | 含义 |
+|------------------------|------|------|
+| 下降 ≥ 20 bpm | 优秀 | 心血管功能强，自主神经功能良好 |
+| 下降 12-20 bpm | 正常/良好 | 恢复能力足够 |
+| 下降 < 12 bpm | 偏低 | 可能心血管体能不足或过度训练，建议加强有氧基础 |
 
-**Tracking recovery over time**: Improving recovery HR at the same exercise intensity is one of the most reliable signs of cardiovascular fitness improvement — even more meaningful than resting HR.
+**追踪恢复变化**：在相同运动强度下，心率恢复速度的改善是心血管体能提升最可靠的标志之一——甚至比静息心率的变化更有意义。
 
-### 3.4 Heart Rate Variability (HRV)
+### 3.4 心率变异性（HRV）
 
-HRV is a key indicator of autonomic nervous system balance and recovery status. **Trend matters more than absolute value** — HRV varies greatly between individuals.
+HRV 是自主神经系统平衡和恢复状态的关键指标。**趋势比绝对值更重要**——HRV 在个体间差异很大。
 
-**How to interpret HRV trends:**
-- HRV above personal baseline → good recovery, parasympathetic dominance
-- HRV below baseline for 1-2 days → normal fluctuation (poor sleep, stress)
-- HRV below baseline for 5+ days → systemic stress signal (overtraining, illness, chronic stress)
-- Gradually increasing HRV over weeks → fitness improving, better stress resilience
+**如何解读 HRV 趋势：**
+- HRV 高于个人基线 → 恢复良好，副交感神经占优
+- HRV 低于基线 1-2 天 → 正常波动（睡眠不好、压力）
+- HRV 低于基线 5 天以上 → 系统性压力信号（过度训练、生病、慢性压力）
+- 数周内 HRV 逐渐上升 → 体能在改善，抗压能力增强
 
-**HRV + Resting HR combined assessment:**
+**HRV + 静息心率联合评估：**
 
-| HRV vs Baseline | Resting HR | Assessment |
-|----------------|-----------|-----------|
-| At or above | Normal | Good recovery — train as planned |
-| Low 5-15% | Slightly elevated | Mild fatigue — reduce training intensity |
-| Low > 15% | Elevated > 5 bpm | Significant fatigue — schedule recovery day |
-| Low > 25% | Persistently elevated | Overtraining risk — stop training 2-3 days |
+| HRV 对比基线 | 静息心率 | 评估 |
+|-------------|---------|------|
+| 达到或高于基线 | 正常 | 恢复良好——按计划训练 |
+| 偏低 5-15% | 略有升高 | 轻度疲劳——降低训练强度 |
+| 偏低 > 15% | 升高 > 5 bpm | 明显疲劳——安排恢复日 |
+| 偏低 > 25% | 持续升高 | 过度训练风险——停训 2-3 天 |
 
-### 3.5 Overtraining Detection (Four-Level Assessment)
+### 3.5 过度训练检测（四级评估）
 
-| Level | HRV Signal | Resting HR Signal | Recommendation |
-|-------|-----------|-------------------|---------------|
-| **Good recovery** | ≥ baseline | Normal | Proceed with planned training |
-| **Mild fatigue** | 5-15% below baseline | Slightly elevated | Lower intensity, shorter sessions |
-| **Significant fatigue** | > 15% below baseline | > 5 bpm above baseline | Recovery day — walking, yoga, stretching only |
-| **Overtraining** | > 25% below baseline | Persistently elevated 4+ days | Full rest 2-3 days, reduce weekly volume 30-40% |
+| 级别 | HRV 信号 | 静息心率信号 | 建议 |
+|------|---------|------------|------|
+| **恢复良好** | ≥ 基线 | 正常 | 按计划训练 |
+| **轻度疲劳** | 低于基线 5-15% | 略有升高 | 降低强度、缩短时间 |
+| **明显疲劳** | 低于基线 > 15% | 高于基线 > 5 bpm | 恢复日——仅散步、瑜伽、拉伸 |
+| **过度训练** | 低于基线 > 25% | 持续升高 4 天以上 | 完全休息 2-3 天，减少周训练量 30-40% |
 
-**Warning**: If resting HR has been trending upward for 4+ consecutive days AND HRV is consistently declining, recommend reducing training volume by 30-40% for the current week.
+**警告**：如果静息心率连续 4 天以上呈上升趋势，且 HRV 持续下降，建议本周减少训练量 30-40%。
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨域分析
 
-**HR + Sleep:**
-- Night resting HR elevated above baseline → poor sleep quality even if duration looks OK
-- HR not dropping in first 2 hours of sleep → body didn't enter recovery mode
-- Pattern: bad sleep night → elevated next-day resting HR → feels worse → sleeps badly → cycle
+**心率 + 睡眠：**
+- 夜间静息心率高于基线 → 即使睡眠时长看似正常，睡眠质量可能较差
+- 入睡后前 2 小时心率未下降 → 身体未进入恢复模式
+- 恶性循环：睡眠差 → 次日静息心率升高 → 感觉更差 → 睡眠更差 → 循环往复
 
-**HR + Exercise:**
-- Check if avgHeartRate during workout matches the intended intensity
-- Resting HR elevated the day after intense exercise → normal if returns to baseline in 24-48h
-- Resting HR elevated 48h+ post-exercise → possible overtraining
+**心率 + 运动：**
+- 检查运动期间的平均心率是否匹配目标强度
+- 高强度运动后次日静息心率升高 → 24-48 小时内恢复基线属正常
+- 运动后 48 小时以上仍升高 → 可能过度训练
 
-**HR + Activity:**
-- Sedentary day with elevated HR → stress, illness, or caffeine
-- Active day with normal HR → healthy response
-- Progressively lower HR at same exercise intensity over weeks → fitness improving
+**心率 + 活动量：**
+- 久坐日心率升高 → 压力、生病或咖啡因
+- 活动日心率正常 → 健康反应
+- 相同运动强度下心率逐周降低 → 体能在改善
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Rule: Context Before Numbers
+### 规则：先给上下文，再说数字
 
-**BAD**: "Your resting heart rate is 78 bpm, which is in the normal range."
+**差**："你的静息心率是 78 bpm，在正常范围内。"
 
-**GOOD**: "Your resting HR today is 78 bpm — that's about 6 bpm higher than your usual ~72. This kind of bump often shows up after a hard workout or a short night's sleep. I see you only got 5.5h of sleep last night, which is likely the cause. It should settle back down once you catch up on rest."
+**好**："你今天的静息心率是 78 bpm——比你平时的 ~72 高了大约 6 bpm。这种波动通常出现在高强度训练后或睡眠不足时。我看到你昨晚只睡了 5.5 小时，这很可能是原因。休息补上来后应该会恢复正常。"
 
-### Don't Alarm Unnecessarily
+### 不要过度警报
 
-- Normal daily HR variation is 5-10 bpm — don't flag every fluctuation
-- A single high reading doesn't mean anything — look at the trend
-- Post-exercise elevation is completely normal and expected
-- Caffeine, stress, even excitement causes temporary increases
+- 每日心率正常波动 5-10 bpm——不要对每次波动都发出警告
+- 单次偏高读数不说明问题——要看趋势
+- 运动后心率升高完全正常且在预期之中
+- 咖啡因、压力、甚至兴奋都会导致暂时性升高
 
-### Do Flag Meaningful Changes
+### 要标记有意义的变化
 
-- Resting HR trending upward over 5+ days without obvious cause
-- Resting HR consistently 15+ bpm above established baseline
-- HR not recovering to baseline within 48h after exercise
-- Any sudden change accompanied by symptoms the user reports
+- 静息心率连续 5 天以上呈上升趋势且无明显原因
+- 静息心率持续高于基线 15+ bpm
+- 运动后 48 小时内心率未恢复至基线
+- 任何伴随用户自述症状的突然变化
 
-## Memory & Personalization
+## 记忆与个性化
 
-**Profile fields to use:**
-- **Age** (from birthYear): Essential for max HR calculation (220 - age). Without age, you can't classify HR zones — ask for it or caveat your analysis.
-- **Conditions**: Heart-related conditions (hypertension, arrhythmia) change how you interpret HR data. Be more cautious and recommend medical consultation more readily.
-- **Medications**: Beta-blockers, stimulants, and other medications significantly affect heart rate. If user takes beta-blockers, a resting HR of 55 may be medication-induced, not athletic fitness.
+**可用的个人档案字段：**
+- **年龄**（来自 birthYear）：计算最大心率（220 - 年龄）的关键。没有年龄就无法划分心率区间——要么询问，要么在分析中注明局限性。
+- **健康状况**：心脏相关疾病（高血压、心律失常）会改变对心率数据的解读方式。要更加谨慎，更主动建议就医咨询。
+- **药物**：Beta 受体阻滞剂、兴奋剂等药物会显著影响心率。如果用户服用 Beta 受体阻滞剂，55 的静息心率可能是药物作用，而非运动员体质。
 
-**When to search memory:**
-- `memory_search("heart rate baseline")` — Check if a personal baseline has been established in past conversations.
-- `memory_search("palpitations")` or `memory_search("chest")` — Before interpreting elevated HR, check if user has reported cardiac symptoms before.
-- `memory_search("caffeine")` or `memory_search("coffee")` — Caffeine habits affect HR interpretation.
+**何时搜索记忆：**
+- `memory_search("heart rate baseline")` — 检查过去对话中是否已建立个人基线。
+- `memory_search("palpitations")` 或 `memory_search("chest")` — 在解读心率升高之前，检查用户是否曾报告过心脏症状。
+- `memory_search("caffeine")` 或 `memory_search("coffee")` — 咖啡因习惯会影响心率解读。
 
-**What to save:**
-- `memory_save` — Record established baselines: "User's typical resting HR is 68-72 bpm based on 2 weeks of data." Record any cardiac symptoms reported.
-- `daily_log` — Note significant HR events: "Resting HR elevated to 85 bpm, likely due to poor sleep (5h). User was reassured this is transient."
+**需要保存的内容：**
+- `memory_save` — 记录已确定的基线："根据两周数据，用户的典型静息心率为 68-72 bpm。"记录报告的任何心脏症状。
+- `daily_log` — 记录重要心率事件："静息心率升至 85 bpm，可能与睡眠不足（5 小时）有关。已向用户说明这是暂时性的。"
 
-**Personalization examples:**
-- "Your resting HR today is 78 — about 8 bpm above the baseline we established last month (~70). You mentioned having a stressful week, which likely explains it."
-- "Since you're on beta-blockers, your heart rate zones are shifted lower than the standard formula suggests. Your 'moderate effort' zone is probably around 100-115 bpm rather than 120-140."
+**个性化示例：**
+- "你今天的静息心率是 78——比我们上个月确定的基线（~70）高了约 8 bpm。你提到这周压力比较大，这很可能是原因。"
+- "由于你在服用 Beta 受体阻滞剂，你的心率区间比标准公式计算的偏低。你的'中等强度'区间大概在 100-115 bpm，而不是 120-140。"
 
-## Red Lines — When to Escalate
+## 红线 — 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Resting HR consistently > 100 bpm | "A resting heart rate consistently above 100 warrants a check-in with your doctor, especially if you're not feeling unwell otherwise." |
-| Resting HR < 50 bpm (non-athlete) | "A very low resting heart rate in someone who isn't a trained athlete can sometimes need evaluation. Worth mentioning at your next checkup." |
-| User reports palpitations, chest pain, dizziness with HR data | "Those symptoms combined with your heart rate data should definitely be discussed with a doctor. I can share a summary of your recent HR data if that would help." |
-| Sudden large HR change with no lifestyle explanation | Acknowledge, don't diagnose. "This is an unusual shift. If it persists for another day or two, I'd suggest checking in with your doctor." |
+| 信号 | 行动 |
+|------|------|
+| 静息心率持续 > 100 bpm | "静息心率持续超过 100，值得去找医生检查一下，尤其是如果你没有感到不适的话。" |
+| 静息心率 < 50 bpm（非运动员） | "非训练有素的运动员静息心率很低，有时候需要评估一下。下次体检时值得提一下。" |
+| 用户报告心悸、胸痛、头晕，伴随心率数据异常 | "这些症状加上你的心率数据，确实应该找医生聊聊。如果有帮助的话，我可以整理一份你最近的心率数据摘要。" |
+| 无生活方式解释的突然大幅心率变化 | 确认但不诊断。"这个变化不太寻常。如果再持续一两天，我建议去找医生看看。" |

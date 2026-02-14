@@ -1,6 +1,6 @@
 ---
 name: weight-management
-description: "Analyze body composition data, manage weight loss/gain goals, and optimize body fat reduction strategies"
+description: "分析身体成分数据，管理增重/减重目标，优化减脂策略"
 metadata:
   {
     "pha": {
@@ -11,134 +11,134 @@ metadata:
   }
 ---
 
-# Weight Management Skill
+# 体重管理 Skill
 
-## Step 1: Classify the Question
+## 第一步：问题分类
 
-| User Says | Question Type | What to Investigate |
-|-----------|-------------|-------------------|
-| "How's my weight?" / "Am I losing weight?" | **Progress check** | Weight/body fat trend over time |
-| "I've hit a plateau" | **Plateau diagnosis** | Energy balance, metabolic adaptation |
-| "How much should I eat to lose weight?" | **Calorie guidance** | Calculate TDEE, set deficit |
-| "My weight went up!" | **Fluctuation concern** | Check context: water retention, menstrual cycle, sodium |
-| "What's my body fat percentage?" | **Composition check** | Body fat, muscle mass, visceral fat analysis |
+| 用户说 | 问题类型 | 需要调查的内容 |
+|--------|---------|--------------|
+| "我的体重怎么样？" / "我瘦了吗？" | **进度检查** | 体重/体脂随时间变化趋势 |
+| "我遇到平台期了" | **平台期诊断** | 能量平衡、代谢适应 |
+| "减肥应该吃多少？" | **热量指导** | 计算 TDEE，设定热量缺口 |
+| "我体重涨了！" | **体重波动疑虑** | 检查背景：水分潴留、月经周期、钠摄入 |
+| "我的体脂率是多少？" | **身体成分检查** | 体脂率、肌肉量、内脏脂肪分析 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据采集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Progress check | `get_body_composition(date_range)` + `get_workouts(week)` | Weight + fat trend + activity context |
-| Plateau diagnosis | `get_body_composition(30d)` + `get_nutrition(7d)` + `get_workouts(7d)` | Full energy balance picture |
-| Calorie guidance | `get_body_composition(today)` + `get_workouts(week)` | BMR from composition + activity level |
-| Fluctuation | `get_body_composition(7d)` + `get_menstrual_cycle` (if female) | Short-term trend + cycle context |
+| 问题类型 | 需要调用的工具 | 原因 |
+|---------|--------------|------|
+| 进度检查 | `get_body_composition(date_range)` + `get_workouts(week)` | 体重 + 体脂趋势 + 运动背景 |
+| 平台期诊断 | `get_body_composition(30d)` + `get_nutrition(7d)` + `get_workouts(7d)` | 全面了解能量平衡 |
+| 热量指导 | `get_body_composition(today)` + `get_workouts(week)` | 通过身体成分计算 BMR + 活动水平 |
+| 体重波动 | `get_body_composition(7d)` + `get_menstrual_cycle`（女性用户） | 短期趋势 + 月经周期背景 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Body Composition Reference
+### 3.1 身体成分参考标准
 
-| Metric | Healthy Range |
-|--------|-------------|
-| Body fat % (female) | 20-30% (athletic: 18-24%) |
-| Body fat % (male) | 10-20% (athletic: 8-17%) |
-| Healthy weight loss rate | 0.5-1.0 kg/week (max 1% body weight) |
-| Energy deficit | 500-750 kcal/day (never exceed 1000 kcal) |
-| Minimum calorie intake | Female ≥ 1200 kcal, Male ≥ 1500 kcal |
-| Protein during fat loss | 1.6-2.2 g/kg body weight/day |
+| 指标 | 健康范围 |
+|------|---------|
+| 体脂率（女性） | 20-30%（运动员：18-24%） |
+| 体脂率（男性） | 10-20%（运动员：8-17%） |
+| 健康减重速率 | 0.5-1.0 kg/周（最多不超过体重的 1%） |
+| 热量缺口 | 500-750 kcal/天（绝不超过 1000 kcal） |
+| 最低热量摄入 | 女性 ≥ 1200 kcal，男性 ≥ 1500 kcal |
+| 减脂期蛋白质 | 1.6-2.2 g/kg 体重/天 |
 
-### 3.2 Energy Balance Analysis
+### 3.2 能量平衡分析
 
-**Total Daily Energy Expenditure (TDEE)** = BMR + NEAT + Exercise + TEF
+**每日总能量消耗（TDEE）** = BMR + NEAT + 运动消耗 + TEF
 
-- **BMR**: From body composition scale or Mifflin-St Jeor formula
-- **NEAT** (non-exercise activity thermogenesis): 15-50% of total expenditure
-- **Exercise**: Logged workout calories
-- **TEF** (thermic effect of food): ~10% of intake
+- **BMR**：来自体成分秤或 Mifflin-St Jeor 公式
+- **NEAT**（非运动性活动产热）：占总消耗的 15-50%
+- **运动消耗**：记录的运动卡路里
+- **TEF**（食物热效应）：约为摄入量的 10%
 
-**Weight change prediction**: 1 kg of fat ≈ 7,700 kcal deficit
+**体重变化预测**：1 kg 脂肪 ≈ 7,700 kcal 热量缺口
 
-### 3.3 Progress Assessment
+### 3.3 进度评估
 
-Focus on **body fat % and muscle mass trends**, not just weight:
+关注**体脂率和肌肉量的变化趋势**，而不仅仅是体重：
 
-| Scenario | What It Means |
-|----------|--------------|
-| Weight down, body fat % down, muscle maintained | Ideal fat loss — celebrate |
-| Weight stable, body fat % down, muscle up | Body recomposition — excellent |
-| Weight down fast (>1.5 kg/week) | Likely losing muscle — slow down |
-| Weight fluctuating ±1 kg daily | Normal water/sodium variation — ignore |
-| Weight stalled 10+ days | True plateau — investigate energy balance |
+| 场景 | 含义 |
+|------|------|
+| 体重下降，体脂率下降，肌肉维持 | 理想的减脂状态 -- 值得庆祝 |
+| 体重稳定，体脂率下降，肌肉增加 | 身体重塑 -- 非常好 |
+| 体重快速下降（>1.5 kg/周） | 可能在流失肌肉 -- 需要放慢节奏 |
+| 体重每日波动 ±1 kg | 正常的水分/钠盐波动 -- 可以忽略 |
+| 体重停滞 10 天以上 | 真正的平台期 -- 需要调查能量平衡 |
 
-### 3.4 Plateau Diagnosis
+### 3.4 平台期诊断
 
-When weight stalls for 10+ days:
-1. Check if calorie intake has crept up (diet fatigue)
-2. Check if NEAT has decreased (body adaptation)
-3. Check if BMR has dropped (metabolic adaptation signal)
-4. Recommend: 1-week maintenance eating to restore metabolism, then resume deficit
+当体重停滞 10 天以上时：
+1. 检查热量摄入是否悄悄增加了（饮食疲劳）
+2. 检查 NEAT 是否下降了（身体适应）
+3. 检查 BMR 是否下降了（代谢适应信号）
+4. 建议：进行 1 周的维持热量饮食以恢复代谢，然后再恢复热量缺口
 
-### 3.5 Female Menstrual Cycle Considerations
+### 3.5 女性月经周期注意事项
 
-- **Pre-menstrual weight gain of 0.5-2 kg is water retention, NOT fat gain**
-- Weight typically drops back after period starts
-- Best to compare weight at same cycle phase month-to-month
-- Luteal phase may increase appetite — this is hormonal, not lack of willpower
+- **经前体重增加 0.5-2 kg 是水分潴留，不是脂肪增长**
+- 月经来潮后体重通常会回落
+- 最好在同一月经周期阶段进行月度体重对比
+- 黄体期可能食欲增加 -- 这是激素作用，不是缺乏意志力
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨领域分析
 
-**Weight + Nutrition:**
-- Track energy balance: intake vs expenditure
-- Protein adequacy is critical during fat loss to preserve muscle
-- Meal timing matters less than total daily intake for most people
+**体重 + 营养：**
+- 跟踪能量平衡：摄入 vs 消耗
+- 减脂期间蛋白质充足至关重要，有助于保留肌肉
+- 对大多数人来说，进餐时间不如每日总摄入量重要
 
-**Weight + Exercise:**
-- Strength training preserves muscle during fat loss — more important than extra cardio
-- Excessive cardio without strength training → muscle loss risk
-- Post-exercise weight increase is often glycogen + water, not fat
+**体重 + 运动：**
+- 力量训练在减脂期间保留肌肉 -- 比额外的有氧运动更重要
+- 没有力量训练的过量有氧运动 → 肌肉流失风险
+- 运动后体重增加通常是糖原 + 水分，不是脂肪
 
-**Weight + Sleep:**
-- Sleep deprivation (< 6h) increases hunger hormones (ghrelin) and decreases satiety (leptin)
-- Poor sleep → higher cortisol → promotes visceral fat storage
-- Prioritize sleep as a weight management strategy
+**体重 + 睡眠：**
+- 睡眠不足（< 6 小时）会增加饥饿激素（ghrelin）、降低饱腹感激素（leptin）
+- 睡眠差 → 皮质醇升高 → 促进内脏脂肪堆积
+- 将优质睡眠作为体重管理策略的优先事项
 
-**Weight + Stress:**
-- Chronic stress → elevated cortisol → promotes abdominal fat storage
-- Stress eating patterns are common — acknowledge without judgment
+**体重 + 压力：**
+- 慢性压力 → 皮质醇升高 → 促进腹部脂肪堆积
+- 压力性进食是常见现象 -- 应理解而非评判
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Rule: Body Composition Over Weight
+### 原则：重身体成分，轻体重
 
-**BAD**: "You gained 0.5 kg this week."
+**不好的示范**："你这周涨了 0.5 kg。"
 
-**GOOD**: "Your weight is up 0.5 kg this week, but your body fat dropped from 28% to 27.2% and muscle mass increased slightly. This is actually ideal body recomposition — you're replacing fat with muscle. The scale doesn't tell the whole story."
+**好的示范**："你这周体重增加了 0.5 kg，但体脂率从 28% 降到了 27.2%，肌肉量也略有增加。这其实是理想的身体重塑状态 -- 你正在用肌肉替换脂肪。体重秤上的数字并不能说明全部。"
 
-### Handle Weight Anxiety Carefully
+### 谨慎处理体重焦虑
 
-- Never use judgmental language about weight or eating
-- Normalize fluctuations: "Weight can vary 1-2 kg day to day from water, sodium, and food volume"
-- For female users: always check cycle phase before interpreting weight changes
-- Focus on health markers (body fat %, energy levels, fitness) over scale weight
+- 不使用关于体重或饮食的评判性语言
+- 将波动正常化："体重每天可以因为水分、钠盐和食物体积波动 1-2 kg"
+- 对女性用户：在解读体重变化前，始终检查月经周期阶段
+- 关注健康指标（体脂率、精力水平、体能）而非秤上的数字
 
-### Plateau Encouragement
+### 平台期鼓励
 
-**GOOD**: "Plateaus are a normal part of the process — they mean your body has adapted, which is actually a sign of a healthy metabolism. Let's adjust your approach slightly to get things moving again."
+**好的示范**："平台期是正常过程的一部分 -- 它意味着你的身体已经适应了，这实际上是健康代谢的标志。让我们稍微调整一下方案，让事情重新动起来。"
 
-## Memory & Personalization
+## 记忆与个性化
 
-**When to search memory:**
-- `memory_search("weight goal")` — Check target weight or body fat goal
-- `memory_search("plateau")` — Has this happened before? What worked?
-- `memory_search("diet")` — Past dietary approaches, preferences, restrictions
+**何时搜索记忆：**
+- `memory_search("weight goal")` -- 查看目标体重或体脂率目标
+- `memory_search("plateau")` -- 之前是否发生过？什么方法有效？
+- `memory_search("diet")` -- 过去的饮食方式、偏好、限制
 
-**What to save:**
-- `memory_save` — Record: starting measurements, goal targets, plateau events, successful strategies
-- `daily_log` — Note significant body composition changes and context
+**需要保存的内容：**
+- `memory_save` -- 记录：起始测量值、目标值、平台期事件、成功的策略
+- `daily_log` -- 记录重要的身体成分变化及其背景
 
-## Red Lines — When to Escalate
+## 红线 -- 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Rapid weight loss > 2 kg/week consistently | "This rate of loss risks muscle wasting and metabolic damage. Please slow down and consider consulting a nutritionist." |
-| Calorie intake < 1000 kcal/day | "This is below safe minimums. Your body needs adequate fuel. Please talk to a healthcare provider about a sustainable approach." |
-| Signs of disordered eating (obsessive tracking, guilt about food, binge-restrict cycles) | Use warm, non-judgmental language. "Your relationship with food matters as much as the numbers. A professional who specializes in eating behavior could be really helpful." |
-| BMI < 18.5 with continued desire to lose weight | "At your current weight, further loss could affect your health. I'd recommend discussing your goals with a doctor." |
+| 信号 | 处理方式 |
+|------|---------|
+| 持续每周减重 > 2 kg | "这个减重速度有肌肉流失和代谢损伤的风险。请放慢节奏，并考虑咨询营养师。" |
+| 每日热量摄入 < 1000 kcal | "这低于安全最低限。你的身体需要充足的能量。请咨询医疗专业人士，制定可持续的方案。" |
+| 出现进食障碍迹象（强迫性记录、对食物的负罪感、暴食-节食循环） | 使用温暖、不带评判的语言。"你和食物的关系和数字一样重要。一位专注于饮食行为的专业人士可以提供很大的帮助。" |
+| BMI < 18.5 且仍想继续减重 | "以你目前的体重，继续减重可能会影响健康。建议和医生讨论一下你的目标。" |

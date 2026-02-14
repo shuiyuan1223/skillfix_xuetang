@@ -1,6 +1,6 @@
 ---
 name: reproductive-health
-description: "Analyze menstrual cycle data, track cycle regularity, and provide phase-specific health guidance for women"
+description: "分析月经周期数据，追踪周期规律性，为女性提供分阶段健康指导"
 metadata:
   {
     "pha": {
@@ -11,139 +11,139 @@ metadata:
   }
 ---
 
-# Reproductive Health Skill (Female)
+# 生殖健康 Skill（女性）
 
-## Step 1: Classify the Question
+## 第一步：问题分类
 
-| User Says | Question Type | What to Investigate |
-|-----------|-------------|-------------------|
-| "When is my next period?" | **Cycle prediction** | Calculate from recent cycle data |
-| "Is my cycle regular?" | **Regularity assessment** | Analyze 3-6 months of cycle data |
-| "I have cramps / PMS symptoms" | **Symptom management** | Current cycle phase + lifestyle factors |
-| "Am I ovulating?" | **Ovulation tracking** | BBT pattern + cycle day |
-| "My period is late / early" | **Irregularity concern** | Compare to personal pattern, check stressors |
-| "How should I exercise during my period?" | **Phase-specific guidance** | Current cycle phase + activity recommendations |
+| 用户说 | 问题类型 | 需要调查的内容 |
+|--------|---------|--------------|
+| "我下次月经什么时候来？" | **周期预测** | 根据近期周期数据计算 |
+| "我的周期规律吗？" | **规律性评估** | 分析 3-6 个月的周期数据 |
+| "我痛经 / 有经前症状" | **症状管理** | 当前周期阶段 + 生活方式因素 |
+| "我在排卵吗？" | **排卵追踪** | BBT 模式 + 周期天数 |
+| "我月经推迟/提前了" | **不规律关注** | 与个人模式对比，检查压力因素 |
+| "经期应该怎么运动？" | **分阶段指导** | 当前周期阶段 + 运动建议 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据采集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Cycle prediction | `get_menstrual_cycle` | Recent cycle history for prediction |
-| Regularity check | `get_menstrual_cycle` (3-6 months) | Statistical analysis of cycle length |
-| Symptom management | `get_menstrual_cycle` + `get_emotion` + `get_sleep(today)` | Phase context + symptom correlation |
-| Ovulation tracking | `get_menstrual_cycle` + `get_body_temperature(14d)` | BBT biphasic pattern confirmation |
-| Phase-specific guidance | `get_menstrual_cycle` + `get_workouts(today)` | Current phase + activity level |
+| 问题类型 | 需要调用的工具 | 原因 |
+|---------|--------------|------|
+| 周期预测 | `get_menstrual_cycle` | 近期周期历史用于预测 |
+| 规律性检查 | `get_menstrual_cycle`（3-6 个月） | 周期长度的统计分析 |
+| 症状管理 | `get_menstrual_cycle` + `get_emotion` + `get_sleep(today)` | 阶段背景 + 症状关联 |
+| 排卵追踪 | `get_menstrual_cycle` + `get_body_temperature(14d)` | BBT 双相模式确认 |
+| 分阶段指导 | `get_menstrual_cycle` + `get_workouts(today)` | 当前阶段 + 运动量 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Cycle Reference Standards
+### 3.1 周期参考标准
 
-| Metric | Normal Range |
-|--------|-------------|
-| Cycle length | 22-35 days |
-| Period duration | 3-7 days |
-| Post-ovulation temperature rise | ≥ 0.3°C |
-| Normal menstrual volume | 20-80 mL per cycle |
-| Pre-menstrual weight fluctuation | +0.5-2 kg (water retention, normal) |
+| 指标 | 正常范围 |
+|------|---------|
+| 周期长度 | 22-35 天 |
+| 经期持续时间 | 3-7 天 |
+| 排卵后体温升高 | ≥ 0.3°C |
+| 正常经量 | 每周期 20-80 mL |
+| 经前体重波动 | +0.5-2 kg（水分潴留，属正常） |
 
-### 3.2 Menstrual Cycle Four Phases
+### 3.2 月经周期四个阶段
 
-| Phase | Timing (28-day cycle) | Hormone Profile | Body State |
-|-------|----------------------|----------------|-----------|
-| **Menstrual** | Day 1-5 | Estrogen & progesterone both low | Lower energy, possible cramps |
-| **Follicular** | Day 6-13 | Estrogen gradually rising | Energy increasing, best time for high-intensity training |
-| **Ovulation** | ~Day 14 | Estrogen peak + LH surge | Peak physical performance; slightly higher ligament laxity risk |
-| **Luteal** | Day 15-28 | Progesterone rising | Fatigue-prone, mood fluctuations, temperature rises |
+| 阶段 | 时间（28 天周期） | 激素特征 | 身体状态 |
+|------|-----------------|---------|---------|
+| **月经期** | 第 1-5 天 | 雌激素和孕酮均处低位 | 精力偏低，可能痛经 |
+| **卵泡期** | 第 6-13 天 | 雌激素逐渐升高 | 精力增强，高强度训练的最佳时机 |
+| **排卵期** | 约第 14 天 | 雌激素峰值 + LH 激增 | 体能巅峰；韧带松弛度略微增加，受伤风险稍高 |
+| **黄体期** | 第 15-28 天 | 孕酮升高 | 容易疲劳，情绪波动，体温升高 |
 
-### 3.3 Regularity Assessment
+### 3.3 规律性评估
 
-Calculate from 3-6 months of data:
-- **Average cycle length** and **standard deviation**
-- Variation < 3 days: Very regular
-- Variation 3-7 days: Moderately regular
-- Variation > 7 days: Irregular — investigate causes
+基于 3-6 个月的数据计算：
+- **平均周期长度**和**标准差**
+- 变异 < 3 天：非常规律
+- 变异 3-7 天：中等规律
+- 变异 > 7 天：不规律 -- 需调查原因
 
-**Common causes of irregularity**: stress, significant weight change, excessive exercise, travel, illness, hormonal conditions
+**常见不规律原因**：压力、体重显著变化、过度运动、旅行、生病、激素相关疾病
 
-### 3.4 BBT (Basal Body Temperature) Analysis
+### 3.4 BBT（基础体温）分析
 
-- **Biphasic pattern** (lower pre-ovulation, higher post-ovulation): Indicates ovulation occurred
-- **Monophasic pattern** (no clear shift): May indicate anovulatory cycle
-- Temperature must be measured consistently (morning before rising) for accuracy
-- Post-ovulation temperature sustained 11+ days followed by drop → period imminent
+- **双相模式**（排卵前低、排卵后高）：表明已排卵
+- **单相模式**（无明显变化）：可能为无排卵周期
+- 体温需在一致条件下测量（早晨起床前）才能保证准确性
+- 排卵后体温持续 11 天以上后下降 → 月经即将来临
 
-### 3.5 PMS Symptom Management
+### 3.5 PMS（经前综合征）症状管理
 
-Common PMS symptoms (luteal phase, day 21-28):
-- **Mood changes**: Irritability, anxiety, sadness — linked to progesterone fluctuations
-- **Physical**: Bloating, breast tenderness, headaches, fatigue
-- **Cravings**: Increased appetite, carb cravings — hormonal, not lack of willpower
+常见 PMS 症状（黄体期，第 21-28 天）：
+- **情绪变化**：烦躁、焦虑、情绪低落 -- 与孕酮波动有关
+- **身体症状**：腹胀、乳房胀痛、头痛、疲劳
+- **食欲变化**：食欲增加、嗜碳水化合物 -- 是激素作用，不是缺乏意志力
 
-**Evidence-based relief:**
-- Reduce sodium and caffeine intake 5-7 days before expected period
-- Regular moderate exercise throughout the cycle reduces PMS severity
-- Magnesium-rich foods (dark chocolate, nuts, leafy greens) may help
-- Adequate sleep is especially important during luteal phase
+**循证缓解方法：**
+- 在预计月经前 5-7 天减少钠和咖啡因摄入
+- 整个周期保持规律的中等强度运动可减轻 PMS 严重程度
+- 富含镁的食物（黑巧克力、坚果、深绿色叶菜）可能有帮助
+- 黄体期充足的睡眠尤其重要
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨领域分析
 
-**Cycle + Exercise:**
-- Follicular phase: Best time for high-intensity training, strength PRs
-- Ovulation: Peak performance, but slightly higher injury risk (ligament laxity)
-- Luteal phase: Reduce intensity, focus on moderate activity
-- Menstrual phase: Listen to your body — light exercise is fine if it feels OK
+**周期 + 运动：**
+- 卵泡期：高强度训练的最佳时机，适合冲击力量 PR
+- 排卵期：体能巅峰，但受伤风险略高（韧带松弛）
+- 黄体期：降低运动强度，以中等活动为主
+- 月经期：倾听身体 -- 如果感觉 OK，轻量运动完全没问题
 
-**Cycle + Sleep:**
-- Luteal phase often brings sleep disruption (progesterone effect)
-- Pre-menstrual insomnia is common and temporary
-- If sleep worsens dramatically every luteal phase, worth tracking and addressing
+**周期 + 睡眠：**
+- 黄体期常出现睡眠中断（孕酮影响）
+- 经前失眠是常见且暂时性的
+- 如果每个黄体期睡眠都明显恶化，值得追踪并加以改善
 
-**Cycle + Mood/Stress:**
-- Mood dips in late luteal phase are hormonal and expected
-- Cross-reference with stress data: is the mood pattern cyclical?
-- Validate feelings while providing context: "This is real and it has a hormonal basis"
+**周期 + 情绪/压力：**
+- 黄体期后期情绪低落是激素性的，属于正常现象
+- 结合压力数据交叉分析：情绪模式是否具有周期性？
+- 认可感受的同时提供背景："这是真实的，而且有激素基础"
 
-**Cycle + Weight:**
-- Pre-menstrual weight gain is water retention, NOT fat
-- Compare weight at same cycle phase for accurate trend tracking
-- Weight typically returns to baseline after period starts
+**周期 + 体重：**
+- 经前体重增加是水分潴留，不是脂肪
+- 在同一周期阶段对比体重，才能准确追踪趋势
+- 月经来潮后体重通常会恢复到基线
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Rule: Respectful and Warm Tone
+### 原则：尊重且温暖的语气
 
-Reproductive health is deeply personal. Always maintain a respectful, warm, non-judgmental tone.
+生殖健康是非常私密的话题。始终保持尊重、温暖、不带评判的语气。
 
-**BAD**: "Your cycle is irregular, which could indicate a problem."
+**不好的示范**："你的周期不规律，这可能说明有问题。"
 
-**GOOD**: "Your cycle has varied between 25 and 33 days over the last 4 months. Some variation is normal, but since the range is wider than typical, it might be worth mentioning at your next gynecologist visit — especially if you've noticed other changes."
+**好的示范**："你过去 4 个月的周期在 25 到 33 天之间波动。一定程度的变化是正常的，但由于范围比典型情况稍宽，可能值得在下次看妇科医生时提一下 -- 尤其是如果你还注意到了其他变化。"
 
-### Cycle Phase Context
+### 周期阶段背景
 
-**GOOD**: "You're on day 8 of your cycle (follicular phase) — estrogen is rising, and this is typically when energy and motivation are highest. Great time for that strength workout you've been planning!"
+**好的示范**："你目前处于周期的第 8 天（卵泡期）-- 雌激素正在升高，这通常是精力和动力最充沛的阶段。做你一直计划的力量训练正是好时候！"
 
-### Weight Fluctuation Reassurance
+### 体重波动安慰
 
-**GOOD**: "Your weight is up 1.2 kg from last week, but you're 3 days before your expected period. Pre-menstrual water retention of 0.5-2 kg is completely normal and will resolve after your period starts. This has nothing to do with your fat loss progress."
+**好的示范**："你的体重比上周增加了 1.2 kg，但你距离预计月经还有 3 天。经前 0.5-2 kg 的水分潴留是完全正常的，月经来潮后会消退。这和你的减脂进度完全无关。"
 
-## Memory & Personalization
+## 记忆与个性化
 
-**When to search memory:**
-- `memory_search("menstrual cycle")` or `memory_search("period")` — Check cycle history and patterns
-- `memory_search("PMS")` or `memory_search("cramps")` — Past symptoms and what helped
-- `memory_search("cycle irregularity")` — Previous discussions about irregular cycles
+**何时搜索记忆：**
+- `memory_search("menstrual cycle")` 或 `memory_search("period")` -- 查看周期历史和模式
+- `memory_search("PMS")` 或 `memory_search("cramps")` -- 过去的症状及有效的缓解方法
+- `memory_search("cycle irregularity")` -- 之前关于周期不规律的讨论
 
-**What to save:**
-- `memory_save` — Record: average cycle length, regularity pattern, known PMS symptoms, effective remedies
-- `daily_log` — Note cycle-related discussions and symptom reports
+**需要保存的内容：**
+- `memory_save` -- 记录：平均周期长度、规律性模式、已知的 PMS 症状、有效的缓解方法
+- `daily_log` -- 记录与周期相关的讨论和症状报告
 
-## Red Lines — When to Escalate
+## 红线 -- 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Cycle consistently < 22 days or > 35 days | "A cycle consistently outside the 22-35 day range is worth discussing with your gynecologist to rule out hormonal issues." |
-| Period lasting > 7 days or very heavy bleeding | "Prolonged or very heavy periods should be evaluated by a doctor. This is common and very treatable." |
-| Amenorrhea (missed period 3+ months, not pregnant) | "Missing periods for 3+ months can have various causes. Please consult your gynecologist for evaluation." |
-| Severe cramping that interferes with daily life | "Pain that prevents normal activities deserves medical attention. There are effective treatments available." |
-| User asks about fertility or pregnancy planning | "I can share general cycle data, but fertility and pregnancy planning decisions should involve your gynecologist. I can't serve as a substitute for fertility assessment." |
-| Abnormal bleeding (between periods, post-menopausal) | "Unexpected bleeding outside your normal period should be evaluated by a doctor promptly." |
+| 信号 | 处理方式 |
+|------|---------|
+| 周期持续 < 22 天或 > 35 天 | "周期持续在 22-35 天范围之外，建议和妇科医生讨论，以排除激素问题。" |
+| 经期持续 > 7 天或经量过大 | "经期过长或经量过大应由医生评估。这很常见，而且有很好的治疗方法。" |
+| 闭经（非怀孕情况下停经 3 个月以上） | "停经超过 3 个月可能有多种原因。请咨询妇科医生进行评估。" |
+| 严重痛经影响日常生活 | "影响正常活动的疼痛值得就医关注。有很多有效的治疗方案。" |
+| 用户询问备孕或生育规划 | "我可以分享一般性的周期数据，但生育和备孕决策应由妇科医生参与。我无法替代专业的生育评估。" |
+| 异常出血（经期外出血、绝经后出血） | "正常经期之外的意外出血应及时就医评估。" |

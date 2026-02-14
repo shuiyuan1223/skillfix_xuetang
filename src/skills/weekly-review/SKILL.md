@@ -1,6 +1,6 @@
 ---
 name: weekly-review
-description: "Generate comprehensive weekly health reports with trend analysis and actionable insights"
+description: "生成全面的每周健康报告，包含趋势分析和可操作的建议"
 metadata:
   {
     "pha": {
@@ -11,183 +11,183 @@ metadata:
   }
 ---
 
-# Weekly Review Skill
+# 每周回顾
 
-## Step 1: Classify the Review Type
+## 第一步：分类回顾类型
 
-| User Says | Review Type | Data Strategy |
-|-----------|-----------|---------------|
-| "How was my week?" | **General review** | `get_weekly_summary` — full multi-dimension overview |
-| "Compare this week to last" | **Period comparison** | `get_weekly_summary` (contains 7 days), compare halves or reference memory |
-| "Am I improving?" | **Progress check** | `get_weekly_summary` + `memory_search("weekly review")` for past data |
-| "What should I focus on next week?" | **Forward planning** | Full review + identify weakest dimension |
-| "Give me my weekly report" | **Formal report** | All available data, structured output |
+| 用户说的话 | 回顾类型 | 数据策略 |
+|-----------|---------|---------|
+| "我这周怎么样？" | **综合回顾** | `get_weekly_summary` — 多维度全面概览 |
+| "这周和上周比怎么样" | **周期对比** | `get_weekly_summary`（包含 7 天数据），对比前后半段或参考记忆 |
+| "我有进步吗？" | **进度检查** | `get_weekly_summary` + `memory_search("weekly review")` 获取历史数据 |
+| "下周我该重点关注什么？" | **前瞻规划** | 全面回顾 + 找出最弱维度 |
+| "给我出个周报" | **正式报告** | 所有可用数据，结构化输出 |
 
-## Step 2: Data Collection
+## 第二步：数据收集
 
-**Always call `get_weekly_summary` first** — it provides the foundation.
+**首先调用 `get_weekly_summary`** — 它提供基础数据。
 
-For a comprehensive review, supplement with:
-- `get_heart_rate(today)` — adds cardiovascular context
-- `get_sleep(today)` — adds last night's detail
-- `memory_search("weekly review")` — recalls previous week's assessment for comparison
+进行全面回顾时，补充调用：
+- `get_heart_rate(today)` — 增加心血管维度
+- `get_sleep(today)` — 增加昨晚的详细睡眠数据
+- `memory_search("weekly review")` — 回顾上周的评估以进行对比
 
-## Step 3: Multi-Dimension Analysis Framework
+## 第三步：多维度分析框架
 
-### 3.1 Activity Dimension
+### 3.1 活动维度
 
-**Metrics to assess:**
-- Total steps and daily average
-- Days meeting step goal (8,000+ default)
-- Active vs sedentary days distribution
+**需要评估的指标：**
+- 总步数和日均步数
+- 达到步数目标的天数（默认 8,000+ 步）
+- 活跃日与久坐日的分布
 
-**Assessment:**
+**评估：**
 
-| Pattern | Rating | Commentary |
-|---------|--------|-----------|
-| Goal met 6-7/7 days | Excellent | "Outstanding consistency — you hit your step goal nearly every day." |
-| Goal met 4-5/7 days | Good | "Solid week. The off days might be worth looking at — were they intentional rest?" |
-| Goal met 2-3/7 days | Needs attention | "Activity was lower this week. Let's see what's going on and adjust." |
-| Goal met 0-1/7 days | Concern | "Very quiet week activity-wise. Everything OK? Sometimes life gets in the way." |
+| 模式 | 评级 | 评语 |
+|------|------|------|
+| 6-7/7 天达标 | 优秀 | "非常出色的一致性 — 你几乎每天都达到了步数目标。" |
+| 4-5/7 天达标 | 良好 | "稳健的一周。没达标的几天值得看看 — 是有意休息吗？" |
+| 2-3/7 天达标 | 需关注 | "这周活动量偏低。我们看看发生了什么，做些调整。" |
+| 0-1/7 天达标 | 令人担忧 | "这周活动方面非常安静。一切还好吗？有时候生活确实会干扰计划。" |
 
-**Trend commentary:**
-- Compare first half (Mon-Wed) vs second half (Thu-Sun) for within-week momentum
-- Note weekend vs weekday patterns — many people drop off on weekends
-- Highlight best day and acknowledge the effort
+**趋势评语：**
+- 对比前半周（周一至周三）与后半周（周四至周日）的活动趋势
+- 注意工作日 vs 周末的模式 — 很多人周末活动量会下降
+- 突出最好的一天并肯定努力
 
-### 3.2 Sleep Dimension
+### 3.2 睡眠维度
 
-**Metrics to assess:**
-- Average sleep duration
-- Consistency (spread between shortest and longest night)
-- Nights below 6 hours (red flag count)
+**需要评估的指标：**
+- 平均睡眠时长
+- 规律性（最短夜与最长夜之间的差距）
+- 低于 6 小时的夜晚数量（红线计数）
 
-**Assessment:**
+**评估：**
 
-| Average | Consistency | Verdict |
-|---------|------------|---------|
-| 7-8h | Low spread (< 1h) | "Sleep is your strong suit this week — consistent and adequate." |
-| 7-8h | High spread (> 2h) | "Your average looks fine, but the inconsistency might be affecting quality." |
-| 6-7h | Any | "Slightly below optimal. Even 30 more minutes could make a noticeable difference." |
-| < 6h | Any | "Sleep was significantly under target. This affects everything — energy, recovery, mood." |
+| 平均值 | 规律性 | 结论 |
+|--------|-------|------|
+| 7-8 小时 | 波动小（< 1 小时） | "睡眠是你这周的强项 — 稳定而充足。" |
+| 7-8 小时 | 波动大（> 2 小时） | "平均值看起来还好，但不稳定的作息可能影响睡眠质量。" |
+| 6-7 小时 | 任意 | "略低于最佳水平。每天多睡 30 分钟就能有明显改善。" |
+| < 6 小时 | 任意 | "睡眠明显不足。这会影响方方面面 — 精力、恢复、情绪。" |
 
-### 3.3 Heart Rate Dimension
+### 3.3 心率维度
 
-**If HR data available:**
-- Current resting HR vs expected baseline
-- Any concerning trends (upward drift = stress/overtraining)
+**如有心率数据：**
+- 当前静息心率与预期基线对比
+- 任何值得关注的趋势（持续上升 = 压力/过度训练信号）
 
-### 3.4 Cross-Dimension Synthesis
+### 3.4 跨维度综合分析
 
-This is the core value of a weekly review — connecting the dots:
+这是每周回顾的核心价值 — 将各维度关联起来：
 
-**Pattern: High activity + Poor sleep**
-→ "You were very active this week but sleep suffered. Check if late workouts are the cause — try finishing exercise 3+ hours before bed."
+**模式：高活动量 + 睡眠差**
+→ "这周你很活跃但睡眠受到了影响。检查一下是否是晚间运动导致的 — 尝试在睡前 3 小时以上完成运动。"
 
-**Pattern: Low activity + Good sleep**
-→ "Sleep was solid but activity was low. Sometimes the energy from good sleep isn't being channeled into movement."
+**模式：低活动量 + 睡眠好**
+→ "睡眠质量很好但活动量偏低。有时候良好睡眠带来的精力没有转化为运动。"
 
-**Pattern: Declining activity through the week**
-→ "You started the week strong but tapered off. This could be fatigue accumulation or just a busy schedule."
+**模式：活动量逐日下降**
+→ "你这周开头表现很好但逐渐放松了。可能是疲劳累积，也可能只是日程繁忙。"
 
-**Pattern: Weekend drop-off**
-→ "Your weekday activity is great, but weekends see a big drop. Even a weekend walk can maintain the habit."
+**模式：周末明显下降**
+→ "你工作日的活动量很棒，但周末下降明显。周末散个步也能帮你保持习惯。"
 
-**Pattern: Everything improving**
-→ "This is a genuinely strong week across the board. You should feel good about this trajectory."
+**模式：全面提升**
+→ "这确实是各方面都很好的一周。你应该为这样的趋势感到高兴。"
 
-## Step 4: Report Structure
+## 第四步：报告结构
 
-### For a "How was my week?" (casual)
+### 随意问"这周怎么样？"（简洁版）
 
-Keep it to 3-4 sentences:
-1. Overall verdict (one sentence)
-2. Strongest dimension
-3. Area for improvement
-4. One specific suggestion
+控制在 3-4 句话：
+1. 总体评价（一句话）
+2. 最强的维度
+3. 需要改进的方面
+4. 一个具体建议
 
-Example: "Solid week overall. Your activity was consistent with 5 days above your step goal. Sleep could use attention — you averaged 6.3h which is below your usual. Try setting a consistent bedtime this coming week."
+示例："总体来说不错的一周。你的活动很稳定，7 天中有 5 天达到了步数目标。睡眠需要关注 — 你平均 6.3 小时，低于你通常的水平。下周试试设定固定的就寝时间。"
 
-### For a "Give me my weekly report" (formal)
+### 正式"给我出个周报"（详细版）
 
-Structured format:
+结构化格式：
 
 ```
-This Week's Health Summary (Mon-Sun)
+本周健康总结（周一至周日）
 
-Activity: [rating] — Avg X steps/day, goal met X/7 days
-Sleep: [rating] — Avg Xh/night, consistency [good/mixed/poor]
-Heart Rate: Resting avg X bpm [normal/elevated/low]
+活动：[评级] — 日均 X 步，达标 X/7 天
+睡眠：[评级] — 平均每晚 X 小时，规律性 [好/一般/差]
+心率：静息心率均值 X bpm [正常/偏高/偏低]
 
-Highlights:
-- [Best achievement this week]
-- [Notable pattern or correlation]
+亮点：
+- [本周最佳成就]
+- [值得注意的模式或关联]
 
-Area to Watch:
-- [Weakest dimension + specific concern]
+需关注：
+- [最弱维度 + 具体问题]
 
-Suggestion for Next Week:
-- [One concrete, actionable recommendation]
+下周建议：
+- [一个具体、可操作的建议]
 ```
 
-### For a "Am I improving?" (progress)
+### 问"我有进步吗？"（进度版）
 
-Compare to previous data:
-- Reference `memory_search` for past week assessments
-- Quantify changes: "Steps up 12% from last week"
-- Highlight direction of travel, not just current numbers
-- If no prior data: "This is our first weekly review together. I'll use this as your baseline."
+与历史数据对比：
+- 参考 `memory_search` 获取以前的周回顾
+- 量化变化："步数比上周增长了 12%"
+- 强调趋势方向，而不仅是当前数字
+- 如果没有历史数据："这是我们第一次一起做周回顾。我会把这次作为你的基线。"
 
-## Step 5: Communication Guidelines
+## 第五步：沟通准则
 
-### Lead with the Narrative, Not the Numbers
+### 先讲故事，再说数字
 
-**BAD**: "Steps: 52,340 total, 7,477 avg. Sleep: 6.8h avg. HR: 72 bpm resting."
+**不好的做法**："步数：总计 52,340，日均 7,477。睡眠：平均 6.8 小时。心率：静息 72 bpm。"
 
-**GOOD**: "You had a well-balanced week. Activity was consistent with your step goal met 5 out of 7 days. Sleep averaged a healthy 6.8 hours, though Friday and Saturday nights dipped below 6 hours — probably worth watching. Your resting heart rate stayed steady at 72, which is right in your normal range."
+**好的做法**："你度过了平衡的一周。活动很稳定，7 天中有 5 天达到了步数目标。睡眠平均 6.8 小时挺健康的，不过周五和周六晚上低于 6 小时 — 可能值得留意。你的静息心率稳定在 72，在正常范围内。"
 
-### Be Honest About Bad Weeks
+### 对不好的周也要坦诚
 
-Don't sugarcoat, but be constructive:
+不要粉饰，但要有建设性：
 
-**BAD**: "This week wasn't great."
+**不好的做法**："这周不太好。"
 
-**GOOD**: "Tough week — activity was down and sleep was inconsistent. That happens. The good news is you're checking in, which means you're still engaged. Let's pick one thing to focus on next week."
+**好的做法**："这周有些挑战 — 活动量下降，睡眠不太规律。这种情况会有的。好消息是你在主动查看，说明你还在关注自己的健康。下周我们选一个重点来改善。"
 
-### Celebrate Consistency Over Peaks
+### 重视一致性胜过峰值
 
-- "You hit your step goal 6 out of 7 days" beats "You had a 15,000 step day"
-- Consistency signals habit formation, which matters more for health outcomes
+- "你一周 7 天中有 6 天达到了步数目标"比"你有一天走了 15,000 步"更值得强调
+- 一致性标志着习惯的形成，这对健康的影响更为深远
 
-### End With Forward Momentum
+### 以前瞻性结尾
 
-Every review should end with something forward-looking:
-- A specific goal for next week
-- A pattern to watch
-- A question to reflect on
+每次回顾都应该以前瞻性内容结束：
+- 下周的具体目标
+- 一个值得关注的模式
+- 一个值得思考的问题
 
-## Memory & Personalization
+## 记忆与个性化
 
-**Profile fields to use:**
-- **Goals** (all): Frame the entire review against the user's goals. "Your step goal is 8,000 — you hit it 5/7 days."
-- **Lifestyle** (exercisePreference): When suggesting improvements, stay within their preferences.
+**可用的用户画像字段：**
+- **目标**（所有）：将整个回顾围绕用户的目标展开。"你的步数目标是 8,000 — 你达到了 5/7 天。"
+- **生活方式**（运动偏好）：提改进建议时，贴合用户的偏好。
 
-**When to search memory:**
-- `memory_search("weekly review")` — **Essential for this skill.** Recall the previous week's assessment to show progress, regression, or consistency across weeks. Without this, you can only analyze the current week in isolation.
-- `memory_search("goal change")` — Check if goals were recently adjusted (avoid measuring against outdated targets).
+**何时搜索记忆：**
+- `memory_search("weekly review")` — **此技能的必备操作。** 回顾上周的评估以展示进步、退步或跨周的一致性。没有这个，你只能孤立地分析当前这一周。
+- `memory_search("goal change")` — 检查目标是否最近被调整过（避免用过时的目标来衡量）。
 
-**What to save:**
-- `memory_save` — Record the week's key stats as a baseline for future comparison: "Week of Jan 13-19: Avg steps 8,200, avg sleep 6.8h, 3 workouts. Trend: activity up, sleep stable."
-- `daily_log` — Summarize the review.
+**需要保存的内容：**
+- `memory_save` — 记录本周关键数据作为未来对比的基线："1 月 13-19 日这周：日均步数 8,200，平均睡眠 6.8 小时，运动 3 次。趋势：活动上升，睡眠稳定。"
+- `daily_log` — 总结本次回顾。
 
-**Personalization examples:**
-- "Compared to last week's review, your step average went from 6,800 to 8,200 — that's a 20% jump. The daily walks you added are clearly paying off."
-- "This is our third weekly review together. Your trajectory over these 3 weeks shows a clear upward trend in consistency."
+**个性化示例：**
+- "和上周的回顾相比，你的日均步数从 6,800 提升到了 8,200 — 涨了 20%。你新增的每日散步显然起了作用。"
+- "这是我们一起做的第三次周回顾。三周来你的趋势显示出一致性在明显提升。"
 
-## Red Lines
+## 红线
 
-| Signal | Action |
-|--------|--------|
-| Multiple dimensions declining for 2+ weeks | "I've noticed a downward trend across several metrics. Is everything alright? Sometimes external factors affect our health routines." |
-| User fixating on daily numbers obsessively | "The weekly view matters more than any single day. Let's focus on the trend." |
-| Data shows extreme patterns (no sleep, excessive exercise) | Gently flag, don't lecture. Refer to specific skill (sleep-coach, workout-tracker) for deeper guidance. |
+| 信号 | 应对措施 |
+|------|---------|
+| 多个维度连续 2 周以上下降 | "我注意到几个指标都在走低。一切还好吗？有时候外部因素会影响我们的健康习惯。" |
+| 用户过度执着于每日数据 | "周度视角比任何单独一天都更重要。让我们关注趋势。" |
+| 数据显示极端模式（不睡觉、过度运动） | 温和地提醒，不要说教。引导到相应的专项技能（sleep-coach、workout-tracker）获取更深入的指导。 |

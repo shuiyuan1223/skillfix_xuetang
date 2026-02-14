@@ -117,7 +117,7 @@ export function enrichWithSkills(message: string): string {
     .map((skill) => `<skill-guide name="${skill.name}">\n${skill.body}\n</skill-guide>`)
     .join("\n\n");
 
-  return `The following professional skill guide(s) are relevant to this conversation. Follow the guidance within when responding.
+  return `以下专业技能指南与本次对话相关。请在回复时遵循其中的指导。
 
 ${skillSections}
 
@@ -155,7 +155,7 @@ export function enrichWithForcedSkill(message: string, skillName: string): strin
     .map((skill) => `<skill-guide name="${skill.name}">\n${skill.body}\n</skill-guide>`)
     .join("\n\n");
 
-  return `The following professional skill guide(s) are relevant to this conversation. Follow the guidance within when responding.
+  return `以下专业技能指南与本次对话相关。请在回复时遵循其中的指导。
 
 ${skillSections}
 

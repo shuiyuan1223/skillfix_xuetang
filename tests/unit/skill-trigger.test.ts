@@ -147,7 +147,7 @@ describe("enrichWithSkills", () => {
       // Should end with the original message
       expect(result).toContain(message);
       // Should have the preamble
-      expect(result).toContain("professional skill guide");
+      expect(result).toContain("专业技能指南");
       // Should have separator
       expect(result).toContain("---");
     });

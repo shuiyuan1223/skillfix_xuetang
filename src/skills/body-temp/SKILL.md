@@ -1,6 +1,6 @@
 ---
 name: body-temp
-description: "Analyze body temperature data, detect abnormal fluctuations, and provide personalized insights"
+description: "分析体温数据，检测异常波动，提供个性化健康洞察"
 metadata:
   {
     "pha": {
@@ -11,120 +11,120 @@ metadata:
   }
 ---
 
-# Body Temperature Monitor Skill
+# 体温监测 Skill
 
-## Step 1: Classify the Question
+## 第一步：问题分类
 
-| User Says | Question Type | What to Investigate |
-|-----------|-------------|-------------------|
-| "Is my temperature normal?" | **Baseline check** | Compare to personal baseline and population norms |
-| "I think I have a fever" | **Acute elevation** | Context: illness? exercise? environment? |
-| "My temperature has been high lately" | **Trend concern** | Pull multi-day data, check for persistent elevation |
-| "How does my temperature change with my cycle?" | **Menstrual correlation** | Cross-reference with menstrual cycle phases |
-| "My temperature seems low" | **Hypothermia concern** | Check for metabolic or circulation issues |
+| 用户说 | 问题类型 | 需要调查的内容 |
+|--------|---------|--------------|
+| "我的体温正常吗？" | **基线检查** | 与个人基线和人群标准对比 |
+| "我好像发烧了" | **急性升高** | 背景：生病？运动？环境？ |
+| "我最近体温一直偏高" | **趋势关注** | 拉取多日数据，检查是否持续偏高 |
+| "我的体温随月经周期怎么变化？" | **月经周期相关性** | 与月经周期各阶段交叉分析 |
+| "我的体温好像偏低" | **低体温关注** | 检查代谢或循环问题 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据采集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Single day check | `get_body_temperature(date)` | Current reading vs baseline |
-| Menstrual correlation | `get_body_temperature(date_range)` + `get_menstrual_cycle` | BBT biphasic pattern analysis |
-| Trend question | `get_body_temperature(30d range)` | Establish personal baseline and detect drift |
-| Acute concern | `get_body_temperature(today)` + `get_sleep(today)` | Cross-check with recovery signals |
+| 问题类型 | 需要调用的工具 | 原因 |
+|---------|--------------|------|
+| 单日检查 | `get_body_temperature(date)` | 当前读数 vs 基线 |
+| 月经周期相关性 | `get_body_temperature(date_range)` + `get_menstrual_cycle` | BBT 双相模式分析 |
+| 趋势问题 | `get_body_temperature(30d range)` | 建立个人基线并检测偏移 |
+| 急性关注 | `get_body_temperature(today)` + `get_sleep(today)` | 与恢复信号交叉验证 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Temperature Classification
+### 3.1 体温分级标准
 
-**Always establish personal baseline first** — analyze the past 30 days to calculate the user's normal range.
+**始终先建立个人基线** -- 分析过去 30 天的数据，计算用户的正常范围。
 
-Population reference (axillary measurement):
+人群参考标准（腋下测量）：
 
-| Category | Range | Notes |
-|----------|-------|-------|
-| Hypothermia | < 36.0°C | Investigate metabolism, circulation, or hypothyroidism |
-| Normal | 36.0-37.2°C | Healthy range |
-| Low-grade fever | 37.3-38.0°C | Monitor; often transient from exercise, stress, dehydration |
-| Moderate fever | 38.1-39.0°C | Likely illness; recommend rest and monitoring |
-| High fever | > 39.0°C | Recommend medical evaluation |
+| 分类 | 范围 | 说明 |
+|------|------|------|
+| 低体温 | < 36.0°C | 需调查代谢、循环或甲状腺功能减退 |
+| 正常 | 36.0-37.2°C | 健康范围 |
+| 低热 | 37.3-38.0°C | 需监测；常因运动、压力、脱水等暂时性原因引起 |
+| 中度发热 | 38.1-39.0°C | 可能生病；建议休息并持续监测 |
+| 高热 | > 39.0°C | 建议就医评估 |
 
-**Wearable device note**: Wrist skin temperature differs from axillary/oral readings. Always mention this when interpreting data.
+**可穿戴设备提示**：腕部皮肤温度与腋下/口腔测量值不同。解读数据时务必提及这一点。
 
-### 3.2 Female Menstrual Cycle Temperature Patterns
+### 3.2 女性月经周期体温模式
 
-For female users, temperature has a biphasic pattern:
+对于女性用户，体温呈双相模式：
 
-| Phase | Timing (28-day cycle) | Temperature Pattern |
-|-------|----------------------|-------------------|
-| Follicular phase | Day 1-14 (post-menstruation to ovulation) | Lower baseline (~36.2-36.5°C) |
-| Post-ovulation / Luteal phase | Day 15-28 | Rises 0.3-0.5°C, sustained until next period |
+| 阶段 | 时间（28 天周期） | 体温模式 |
+|------|-----------------|---------|
+| 卵泡期 | 第 1-14 天（月经后到排卵） | 基线偏低（约 36.2-36.5°C） |
+| 排卵后 / 黄体期 | 第 15-28 天 | 升高 0.3-0.5°C，持续到下次月经 |
 
-**Key insight**: A post-ovulation temperature rise of ≥0.3°C confirms ovulation occurred. Absence of biphasic pattern may warrant further investigation.
+**关键洞察**：排卵后体温升高 ≥0.3°C 可确认已排卵。如果没有双相模式，可能需要进一步调查。
 
-### 3.3 Factors That Affect Body Temperature
+### 3.3 影响体温的因素
 
-- **Exercise**: Intense activity temporarily raises temperature — this is normal
-- **Sleep deprivation**: Can elevate temperature slightly
-- **Stress/high cortisol**: May cause mild elevation
-- **Alcohol**: Causes vasodilation, can affect readings
-- **Environment**: Ambient temperature, hot baths, etc.
-- **Time of day**: Body temperature is naturally lower in early morning, higher in late afternoon
-- **Dehydration**: Can cause mild elevation
+- **运动**：高强度运动会暂时升高体温 -- 这是正常的
+- **睡眠不足**：可能导致体温轻微升高
+- **压力/皮质醇升高**：可能引起轻微升高
+- **酒精**：引起血管扩张，会影响测量值
+- **环境**：环境温度、热水浴等
+- **时间段**：体温在清晨自然偏低，午后偏高
+- **脱水**：可能引起轻微升高
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨领域分析
 
-**Temperature + Sleep:**
-- Elevated temperature during sleep → body may be fighting infection or under stress
-- Poor sleep + elevated temperature → investigate illness or overtraining
+**体温 + 睡眠：**
+- 睡眠期间体温升高 → 身体可能在对抗感染或处于压力状态
+- 睡眠差 + 体温升高 → 调查是否生病或过度训练
 
-**Temperature + Menstrual Cycle:**
-- Luteal phase temperature rise is normal and expected
-- "My temperature is 36.9°C" during luteal phase → completely normal, reassure the user
-- Sustained high temperature beyond expected period start → may need further investigation
+**体温 + 月经周期：**
+- 黄体期体温升高是正常且预期的
+- 黄体期"我的体温 36.9°C" → 完全正常，安抚用户
+- 超过预期月经日期后持续高温 → 可能需要进一步调查
 
-**Temperature + Activity:**
-- Post-exercise temperature elevation is transient and normal
-- Consistently elevated temperature on rest days → investigate other causes
+**体温 + 运动：**
+- 运动后体温升高是暂时性的，属于正常现象
+- 休息日体温持续偏高 → 调查其他原因
 
-**Temperature + Stress:**
-- Chronic stress can cause persistent low-grade temperature elevation
-- Cross-check with sleep quality and HRV data
+**体温 + 压力：**
+- 慢性压力可导致持续性低热
+- 结合睡眠质量和 HRV 数据交叉验证
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Rule: Context Before Numbers
+### 原则：先看背景，再看数字
 
-**BAD**: "Your temperature is 37.4°C, which is slightly above normal."
+**不好的示范**："你的体温是 37.4°C，略高于正常。"
 
-**GOOD**: "Your temperature today is 37.4°C — that's about 0.6°C above your personal baseline of 36.8°C, reaching low-grade fever level. I see you only slept 5 hours last night and your stress score was elevated. Rest and hydration should help — but if this persists beyond 24 hours or rises above 38°C, consider seeing a doctor."
+**好的示范**："你今天的体温是 37.4°C -- 比你的个人基线 36.8°C 高了约 0.6°C，达到了低热水平。我注意到你昨晚只睡了 5 小时，而且压力指数偏高。休息和多喝水应该会有帮助 -- 但如果超过 24 小时仍未改善或升高到 38°C 以上，建议去看医生。"
 
-### For Female Users (Cycle Context)
+### 女性用户（月经周期背景）
 
-**GOOD**: "You're currently on day 20 of your cycle (luteal phase, day 6). Your temperature of 36.9°C is a normal luteal phase elevation — no cause for concern."
+**好的示范**："你目前处于月经周期的第 20 天（黄体期第 6 天）。你 36.9°C 的体温属于正常的黄体期升高 -- 不用担心。"
 
-### Don't Over-React to Single Readings
+### 不要对单次读数过度反应
 
-- Daily temperature varies by 0.3-0.5°C naturally
-- A single elevated reading doesn't indicate illness
-- Look at the trend over multiple measurements
-- Wearable readings have ±0.3°C accuracy margin
+- 体温每天自然波动 0.3-0.5°C
+- 一次偏高的读数不代表生病
+- 应关注多次测量的趋势
+- 可穿戴设备的精度误差约为 ±0.3°C
 
-## Memory & Personalization
+## 记忆与个性化
 
-**When to search memory:**
-- `memory_search("temperature baseline")` — Check for established personal baseline
-- `memory_search("fever")` or `memory_search("illness")` — Check for recent illness history
-- `memory_search("menstrual cycle")` — For female users, understand cycle context
+**何时搜索记忆：**
+- `memory_search("temperature baseline")` -- 查看是否已建立个人基线
+- `memory_search("fever")` 或 `memory_search("illness")` -- 查看近期生病记录
+- `memory_search("menstrual cycle")` -- 对女性用户，了解月经周期背景
 
-**What to save:**
-- `memory_save` — Record established baselines: "User's normal body temperature range is 36.4-36.8°C based on 30 days of data."
-- `daily_log` — Note significant temperature events and context
+**需要保存的内容：**
+- `memory_save` -- 记录已建立的基线："根据 30 天数据，用户的正常体温范围为 36.4-36.8°C。"
+- `daily_log` -- 记录重要的体温事件及其背景
 
-## Red Lines — When to Escalate
+## 红线 -- 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Temperature > 38°C persisting > 2 days | "Persistent fever beyond 2 days warrants a doctor visit to rule out infection or other causes." |
-| Temperature > 39°C at any point | "A temperature this high needs medical evaluation. Please see a doctor today, especially if accompanied by other symptoms." |
-| Temperature consistently < 36.0°C | "Persistently low body temperature can indicate metabolic issues. Worth mentioning at your next checkup, especially if you're also feeling fatigued or cold." |
-| Fever + severe headache, stiff neck, rash, or difficulty breathing | "These symptoms together need immediate medical attention. Please seek care right away." |
+| 信号 | 处理方式 |
+|------|---------|
+| 体温 > 38°C 持续超过 2 天 | "持续发热超过 2 天需要就医，以排除感染或其他原因。" |
+| 体温在任何时候 > 39°C | "这个体温需要医疗评估。请今天就去看医生，尤其是伴有其他症状时。" |
+| 体温持续 < 36.0°C | "持续低体温可能提示代谢问题。建议在下次体检时提及，尤其是如果你同时感到疲劳或怕冷。" |
+| 发热伴严重头痛、颈部僵硬、皮疹或呼吸困难 | "这些症状同时出现需要立即就医。请马上去医院。" |

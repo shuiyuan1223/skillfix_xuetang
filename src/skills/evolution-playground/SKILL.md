@@ -1,68 +1,60 @@
 ---
 name: evolution-playground
-description: "Evolution Playground workflow methodology - guides the Agent through a 6-step evolution cycle"
+description: "进化实验场工作流方法论 — 引导 Agent 完成 6 步进化闭环"
 metadata:
-  pha:
-    emoji: "zap"
-    triggers:
-      - "evolution cycle"
-      - "improve score"
-      - "evolution workflow"
-      - "playground"
-      - "optimize agent"
-    config: {}
+  {"pha": {"emoji": "zap", "triggers": ["evolution cycle", "improve score", "evolution workflow", "playground", "optimize agent", "进化流程", "进化实验", "提升分数", "进化闭环", "优化Agent"], "config": {}}}
 ---
 
-# Evolution Playground Workflow Guide
+# 进化实验场工作流指南
 
-## 6-Step Evolution Lifecycle
+## 6 步进化生命周期
 
-### Step 1: Benchmark
-- Call `evo_playground_start_cycle` with profile "quick" or "full"
-- Wait for completion (poll `evo_playground_status`)
-- Review overall score, category scores, and pass/fail counts
+### 第 1 步：基准测试（Benchmark）
+- 调用 `evo_playground_start_cycle`，选择 "quick" 或 "full" 配置
+- 等待完成（轮询 `evo_playground_status`）
+- 查看整体评分、各大类评分和通过/失败计数
 
-### Step 2: Diagnose
-- Auto-runs after benchmark completes
-- Analyzes benchmark results to identify weak categories
-- Review weaknesses (categories below threshold) and suggestions
+### 第 2 步：诊断分析（Diagnose）
+- 基准测试完成后自动运行
+- 分析基准测试结果，识别薄弱的大类
+- 查看薄弱项（低于阈值的大类）和改进建议
 
-### Step 3: Propose
-- Analyze diagnosis results carefully
-- Generate improvement proposals targeting weak categories
-- Call `evo_playground_submit_proposal` with:
-  - description: What changes and why
-  - changes: Array of file paths and change descriptions
-  - expectedImprovement: Estimated score improvement
+### 第 3 步：方案提出（Propose）
+- 仔细分析诊断结果
+- 生成针对薄弱大类的改进方案
+- 调用 `evo_playground_submit_proposal`，传入：
+  - description: 改了什么、为什么改
+  - changes: 文件路径和改动描述的数组
+  - expectedImprovement: 预计分数提升幅度
 
-### Step 4: Approve
-- This is a HUMAN GATE - cannot be bypassed by Agent
-- Wait for user approval via UI buttons
-- If rejected, return to Step 3 to revise proposal
+### 第 4 步：用户审批（Approve）
+- 这是一个**人工门禁** — Agent 不可绕过
+- 等待用户通过 UI 按钮进行审批
+- 如果被驳回，返回第 3 步修改方案
 
-### Step 5: Apply
-- Call `evo_playground_apply_changes`
-- Creates git branch and commits changes
-- Review the branch name and changed files
+### 第 5 步：执行变更（Apply）
+- 调用 `evo_playground_apply_changes`
+- 创建 git 分支并提交变更
+- 查看分支名称和变更文件
 
-### Step 6: Validate
-- Call `evo_playground_run_validation`
-- Compare before/after scores across all categories
-- Recommend merge, revert, or iterate based on results
+### 第 6 步：验证效果（Validate）
+- 调用 `evo_playground_run_validation`
+- 对比各大类的前后评分
+- 根据结果建议合并、回滚或继续迭代
 
-## Quality Gates
+## 质量门禁
 
-- Safety binary score must not drop to 0.0
-- No category should regress more than 0.1
-- Overall score should improve by at least 0.02 to recommend merge
+- Safety 二元评分不得降至 0.0
+- 任何大类不得退步超过 0.1
+- 整体评分至少提升 0.02 才建议合并
 
-## Available MCP Tools
+## 可用 MCP 工具
 
-| Tool | Purpose |
-|------|---------|
-| `evo_playground_status` | Check current playground state |
-| `evo_playground_start_cycle` | Start a new evolution cycle |
-| `evo_playground_submit_proposal` | Submit optimization proposal |
-| `evo_playground_apply_changes` | Apply approved changes |
-| `evo_playground_run_validation` | Run validation benchmark |
-| `evo_playground_reset` | Reset playground state |
+| 工具 | 用途 |
+|------|------|
+| `evo_playground_status` | 查看当前实验场状态 |
+| `evo_playground_start_cycle` | 启动新的进化周期 |
+| `evo_playground_submit_proposal` | 提交优化方案 |
+| `evo_playground_apply_changes` | 应用已批准的变更 |
+| `evo_playground_run_validation` | 运行验证基准测试 |
+| `evo_playground_reset` | 重置实验场状态 |

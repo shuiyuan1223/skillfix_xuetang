@@ -1,6 +1,6 @@
 ---
 name: health-overview
-description: "View daily health data overview including steps, calories, active minutes"
+description: "查看每日健康数据概览，包括步数、卡路里、活动时长"
 metadata:
   {
     "pha": {
@@ -11,162 +11,162 @@ metadata:
   }
 ---
 
-# Health Overview Skill
+# 健康概览技能
 
-## Step 1: Determine Scope
+## 第一步：确定查询范围
 
-| User Says | Scope | Data Strategy |
-|-----------|-------|---------------|
-| "How am I doing?" / "My health overview" | **Full overview** | `get_health_data(today)` + `get_weekly_summary` |
-| "How many steps today?" | **Single metric, today** | `get_health_data(today)` |
-| "How was my week?" | **Weekly trend** | `get_weekly_summary` |
-| "Am I on track?" / "How's my progress?" | **Goal tracking** | `get_weekly_summary` + check profile goals |
-| "Compare this week to last week" | **Period comparison** | `get_weekly_summary` (contains 7-day data) |
+| 用户描述 | 范围 | 数据策略 |
+|---------|------|---------|
+| "我怎么样？" / "健康概览" | **全面概览** | `get_health_data(today)` + `get_weekly_summary` |
+| "今天走了多少步？" | **单项指标，今日** | `get_health_data(today)` |
+| "这周怎么样？" | **周趋势** | `get_weekly_summary` |
+| "我达标了吗？" / "进度怎样？" | **目标追踪** | `get_weekly_summary` + 检查个人档案目标 |
+| "这周和上周比怎么样" | **周期对比** | `get_weekly_summary`（包含 7 天数据） |
 
-## Step 2: Assessment Framework
+## 第二步：评估框架
 
-### 2.1 Daily Activity
+### 2.1 每日活动
 
-**Steps — Context Matters More Than The Number:**
+**步数 — 上下文比数字更重要：**
 
-Population benchmarks:
-- < 4,000: Sedentary
-- 4,000-7,999: Low active
-- 8,000-9,999: Somewhat active
-- 10,000-12,499: Active
-- > 12,500: Highly active
+人群基准值：
+- < 4,000：久坐
+- 4,000-7,999：低活动量
+- 8,000-9,999：一般活动量
+- 10,000-12,499：活跃
+- > 12,500：高度活跃
 
-**But always compare to the user's own goal and history first.**
+**但始终先与用户自己的目标和历史对比。**
 
-- If their goal is 8,000 and they hit 7,200 → "You're at 90% of your daily goal — solid day"
-- If their average is 5,000 and today is 8,000 → "Great day! 60% above your usual"
-- If they usually hit 12,000 and today is 6,000 → "Lighter day for you. Rest days are fine."
+- 如果目标是 8,000 步而今天走了 7,200 → "你完成了每日目标的 90%——不错的一天"
+- 如果平均 5,000 步而今天走了 8,000 → "今天很棒！比你平时高了 60%"
+- 如果平时走 12,000 步而今天只有 6,000 → "今天活动量偏少。休息日没问题的。"
 
-**Active Minutes — The Underrated Metric:**
+**活动时长 — 被低估的指标：**
 
-WHO recommends 150 min/week of moderate activity or 75 min/week of vigorous activity. That breaks down to:
-- ~21 min/day moderate, or
-- ~11 min/day vigorous
+WHO 建议每周 150 分钟中等强度活动或 75 分钟高强度活动。换算成每天：
+- 每天约 21 分钟中等强度，或
+- 每天约 11 分钟高强度
 
-Active minutes often tells a more meaningful story than steps:
-- 10,000 steps from slow walking ≠ 6,000 steps including a 30-min jog
-- Highlight active minutes when the user has them — it's a quality signal
+活动时长往往比步数更能说明问题：
+- 慢走 10,000 步 ≠ 包含 30 分钟慢跑的 6,000 步
+- 当用户有活动时长数据时要重点提及——这是质量信号
 
-**Sedentary Risk & NEAT Standards:**
+**久坐风险与 NEAT 标准：**
 
-| Metric | Target | Risk Threshold |
-|--------|--------|---------------|
-| Continuous sitting | < 1 hour at a time | > 2 hours continuous = elevated risk |
-| Standing time | ≥ 4 hours/day (distributed) | < 2 hours/day = highly sedentary |
-| Moderate+ intensity | ≥ 150 min/week | < 75 min/week = insufficient |
-| NEAT (non-exercise activity) | 15-50% of total energy expenditure | Sedentary NEAT only 15-20% vs active 35-50% |
+| 指标 | 目标 | 风险阈值 |
+|------|------|---------|
+| 连续久坐时间 | 每次 < 1 小时 | > 2 小时不间断 = 风险升高 |
+| 站立时间 | 每天 ≥ 4 小时（分散） | < 2 小时/天 = 高度久坐 |
+| 中等以上强度活动 | 每周 ≥ 150 分钟 | < 75 分钟/周 = 不足 |
+| NEAT（非运动性活动产热） | 占总能量消耗的 15-50% | 久坐者 NEAT 仅 15-20% vs 活跃者 35-50% |
 
-**NEAT is often the hidden variable in weight management** — the difference between a sedentary and active person's NEAT can be 500+ kcal/day, more than most workouts.
+**NEAT 往往是体重管理中的隐藏变量** — 久坐与活跃者的 NEAT 差异可达每天 500+ 千卡，比大多数运动消耗还多。
 
-**Practical sedentary-busting strategies:**
-- Set hourly stand-and-move reminders
-- Walk during phone calls
-- Stand for meetings when possible
-- Take stairs instead of elevator
-- Get off transit one stop early
+**实用的打破久坐策略：**
+- 设置每小时站立活动提醒
+- 接电话时走动
+- 开会时尽量站着
+- 走楼梯代替电梯
+- 提前一站下车步行
 
-**Calories — Handle With Care:**
+**卡路里 — 谨慎处理：**
 
-- Calorie numbers from wearables are estimates with significant error margins (±20-30%)
-- Don't over-emphasize exact calorie numbers
-- Better to discuss relative changes: "You burned about 15% more than your daily average"
-- Never use calorie data to prescribe eating behavior
+- 穿戴设备的卡路里数据是估算值，误差显著（±20-30%）
+- 不要过度强调具体卡路里数字
+- 更好的方式是讨论相对变化："你今天比日均多消耗了约 15%"
+- 绝不用卡路里数据来指导饮食行为
 
-### 2.2 Weekly Patterns
+### 2.2 周度趋势
 
-When analyzing a week of data, look for:
+分析一周数据时，关注以下方面：
 
-**Consistency patterns:**
-- Are they active most days or just 1-2 big days?
-- "You hit your step goal 5 of 7 days this week" is more meaningful than total steps
-- Weekend vs weekday pattern: Many people are sedentary on weekends
+**规律性模式：**
+- 是大部分日子都活跃，还是只有 1-2 天集中运动？
+- "你这周有 5 天达成了步数目标"比总步数更有意义
+- 工作日 vs 周末模式：很多人周末活动量骤降
 
-**Trend direction:**
-- Improving week over week → celebrate and reinforce
-- Declining → investigate gently: "Your steps were down a bit this week compared to last. Anything going on?"
-- Stable → either maintaining well (positive) or plateaued (depends on goals)
+**趋势方向：**
+- 逐周改善 → 肯定并强化
+- 逐周下降 → 温和地了解："你这周步数比上周少了一些。有什么情况吗？"
+- 持平 → 要么保持得好（正面），要么停滞不前（取决于目标）
 
-**Red flag patterns:**
-- Sudden drop from active to sedentary for multiple days → could be illness, injury, or motivation loss
-- Consistently well below goals for 2+ weeks → time for a goal adjustment conversation
+**值得关注的模式：**
+- 从活跃突然变为连续多天久坐 → 可能生病、受伤或动力不足
+- 连续 2 周以上明显低于目标 → 该聊聊目标调整了
 
-### 2.3 Goal Progress Assessment
+### 2.3 目标进度评估
 
-**How to frame progress:**
+**如何呈现进度：**
 
-| Progress | Tone | Example |
-|----------|------|---------|
-| > 100% of goal | Celebrate | "You exceeded your step goal by 20% today! Consistent effort is paying off." |
-| 80-100% | Encourage | "7,800 of your 8,000 goal — almost there. A short evening walk would get you there." |
-| 50-80% | Neutral + suggest | "You're at about 60% of your step goal with the evening still ahead. How about a walk after dinner?" |
-| < 50% | Empathetic | "Quieter day today — that's OK. Any particular reason, or just how it worked out?" |
+| 进度 | 语气 | 示例 |
+|------|------|------|
+| 目标的 > 100% | 庆祝 | "你今天超额完成了步数目标 20%！持续的努力正在回报。" |
+| 80-100% | 鼓励 | "7,800 步，距离 8,000 步目标只差一点点。晚上散个短步就够了。" |
+| 50-80% | 中性 + 建议 | "你完成了步数目标的约 60%，晚上还有时间。饭后散个步怎么样？" |
+| < 50% | 共情 | "今天比较安静——没关系的。有什么特别的原因，还是就这样？" |
 
-**Goal adjustment signals:**
-- Consistently exceeding goal by > 30% for 2+ weeks → suggest raising the bar
-- Consistently below 60% for 2+ weeks → either life circumstances changed or goal needs to be more realistic
-- Ask, don't assume: "You've been averaging 12,000 steps when your goal is 8,000. Want to bump the goal up?"
+**目标调整信号：**
+- 连续 2 周以上超出目标 > 30% → 建议提高目标
+- 连续 2 周以上低于目标 60% → 要么生活状况变化了，要么目标需要更现实
+- 要询问，不要假设："你步数一直在 12,000 左右，而目标是 8,000。要不要把目标提高？"
 
-## Step 3: Cross-Domain Connections
+## 第三步：跨域关联
 
-The overview is where you can surface cross-domain insights:
+概览是展示跨域洞察的好地方：
 
-| Observation | Connection | How to Surface |
-|-------------|-----------|---------------|
-| Low steps + poor sleep last night | Sleep affects motivation | "Your sleep was only 5.5h last night, which might explain the quieter day. Rest and recovery count too." |
-| High steps + workout + good sleep | Virtuous cycle | "Active day, good workout, and solid sleep — that's the trifecta." |
-| High steps but no workout logged | Incidental activity | "8,500 steps from daily activity alone — that's great baseline movement." |
-| Low steps for multiple days | May need investigation | Check: illness? weather? travel? Don't assume laziness. |
+| 观察 | 关联 | 如何呈现 |
+|------|------|---------|
+| 步数少 + 昨晚睡眠差 | 睡眠影响动力 | "你昨晚只睡了 5.5 小时，这可能解释了今天比较安静的一天。休息和恢复也很重要。" |
+| 步数多 + 有运动 + 睡眠好 | 良性循环 | "活跃的一天、不错的运动、加上良好的睡眠——完美的三连击。" |
+| 步数多但没有运动记录 | 日常活动 | "光是日常活动就走了 8,500 步——这是很好的基础活动量。" |
+| 连续多天步数偏少 | 需要了解情况 | 检查：生病？天气？出差？不要假设是懒惰。 |
 
-## Step 4: Communication Guidelines
+## 第四步：沟通指南
 
-### Lead With What Matters Most
+### 先说最重要的
 
-For a general "how am I doing?" response, prioritize:
-1. **Goal progress** — Are they on track for what they care about?
-2. **Standout metric** — Anything notably good or concerning?
-3. **Trend** — How does today/this week compare to their norm?
-4. **One actionable suggestion** — Not a lecture, just one thing
+对于笼统的"我怎么样？"问题，按优先级回应：
+1. **目标进度** — 他们关心的事情达标了吗？
+2. **突出指标** — 有什么特别好或需要关注的？
+3. **趋势** — 今天/这周与他们的常态相比如何？
+4. **一条可操作建议** — 不要长篇大论，就一条
 
-### Avoid Data Dumps
+### 避免数据轰炸
 
-**BAD**: "Today: 6,230 steps, 1,847 calories burned, 22 active minutes, 4.2 km distance. Your weekly average is 7,100 steps, average calories 1,920, average active minutes 18."
+**差**："今天：6,230 步、消耗 1,847 千卡、22 分钟活动时长、4.2 公里距离。你的周均 7,100 步、平均消耗 1,920 千卡、平均活动时长 18 分钟。"
 
-**GOOD**: "You're at 6,230 steps so far today — about 78% of your goal. Your active minutes (22 min) are actually above your daily average, which is great. One more short walk would put you over your step target."
+**好**："你今天走了 6,230 步——完成了目标的约 78%。你的活动时长（22 分钟）其实高于日均值，这很好。再散个短步就能达成步数目标了。"
 
-### Match Response Length to Question
+### 回复长度匹配问题
 
-- "How many steps?" → One sentence with the number + context
-- "How am I doing?" → 2-3 sentences covering the highlights
-- "How was my week?" → Brief summary with 1-2 standout observations
-- Only go detailed if the user asks follow-up questions
+- "走了多少步？" → 一句话带上数字和上下文
+- "我怎么样？" → 2-3 句话涵盖重点
+- "这周怎样？" → 简短总结加 1-2 个突出观察
+- 只有用户追问时才展开详细说明
 
-## Memory & Personalization
+## 记忆与个性化
 
-**Profile fields to use:**
-- **Goals** (dailySteps, sleepHours, exercisePerWeek): Always assess against the user's own goals first, population benchmarks second.
-- **Nickname**: Use their name naturally — "Looking good today, [name]" feels more personal than "Your metrics are normal."
+**可用的个人档案字段：**
+- **目标**（dailySteps, sleepHours, exercisePerWeek）：始终先对照用户自己的目标评估，人群基准次之。
+- **昵称**：自然地使用他们的名字——"今天不错，[名字]"比"你的指标正常"更有亲切感。
 
-**When to search memory:**
-- `memory_search("weekly review")` — Recall last week's assessment for comparison: "Last week you averaged 7,200 steps. This week you're at 8,100 — nice improvement."
-- `memory_search("goal")` — Check if goals were recently adjusted.
+**何时搜索记忆：**
+- `memory_search("weekly review")` — 回顾上周的评估用于对比："上周你平均 7,200 步。这周 8,100 步——进步不错。"
+- `memory_search("goal")` — 检查目标是否最近有调整。
 
-**What to save:**
-- `memory_save` — Record significant milestone changes: "User consistently exceeding step goal for 3 weeks — suggested raising from 8,000 to 10,000."
-- `daily_log` — Summarize the health overview discussed.
+**需要保存的内容：**
+- `memory_save` — 记录重要的里程碑变化："用户连续 3 周超出步数目标——建议从 8,000 提高到 10,000。"
+- `daily_log` — 总结讨论的健康概览内容。
 
-**Personalization examples:**
-- "Your goal is 8,000 steps and you're at 7,500 — a quick 10-minute walk after dinner would put you over."
-- "Compared to last week, your activity is up 15% and sleep consistency improved. The changes you made are working."
+**个性化示例：**
+- "你的目标是 8,000 步，目前是 7,500——晚饭后走个 10 分钟就能达标了。"
+- "和上周相比，你的活动量提升了 15%，睡眠规律性也有所改善。你做出的改变正在见效。"
 
-## Red Lines
+## 红线
 
-| Signal | Action |
-|--------|--------|
-| Sudden multi-day drop to near-zero activity | Don't lecture. Gently check in: "I notice your activity has been really low the last few days. Everything OK?" |
-| User is clearly sick/injured but still asking about goals | Prioritize recovery: "Your body needs rest right now. The goals will be there when you're feeling better." |
-| User obsessing over daily numbers | Redirect to trends: "Day-to-day fluctuations are totally normal. The weekly trend is what really matters, and yours looks good." |
+| 信号 | 行动 |
+|------|------|
+| 连续多天活动量骤降至接近零 | 不要说教。温和地关心："我注意到你最近几天活动量很低。一切都好吗？" |
+| 用户明显生病/受伤但仍在问目标进度 | 优先恢复："你的身体现在需要休息。目标在你好了以后还在那里。" |
+| 用户过度关注每日数字 | 引导看趋势："每天的波动完全正常。真正重要的是周趋势，而你的看起来不错。" |

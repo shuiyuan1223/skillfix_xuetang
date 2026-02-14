@@ -3,7 +3,7 @@ import forms from "@tailwindcss/forms";
 import animate from "tailwindcss-animate";
 
 export default {
-  content: ["./src/**/*.ts", "./index.html"],
+  content: ["./src/**/*.{ts,tsx}", "./index.html"],
   darkMode: "class",
   theme: {
     extend: {
@@ -41,6 +41,7 @@ export default {
         primary: {
           DEFAULT: "rgb(var(--color-primary) / <alpha-value>)",
           hover: "rgb(var(--color-primary-hover) / <alpha-value>)",
+          foreground: "rgb(var(--color-primary-fg) / <alpha-value>)",
         },
         accent: "rgb(var(--color-accent) / <alpha-value>)",
         success: "rgb(var(--color-success) / <alpha-value>)",

@@ -1,6 +1,6 @@
 ---
 name: stress-management
-description: "Detect stress signals from health data and provide evidence-based stress management guidance"
+description: "从健康数据中检测压力信号，并提供循证的压力管理指导"
 metadata:
   {
     "pha": {
@@ -11,206 +11,206 @@ metadata:
   }
 ---
 
-# Stress Management Skill
+# 压力管理技能
 
-## Step 1: Classify the Stress Concern
+## 第一步：分类压力关注点
 
-| User Says | Concern Type | Investigation |
-|-----------|-------------|---------------|
-| "I'm so stressed" | **Acute stress report** | Validate, check data for confirming signals |
-| "I feel anxious / overwhelmed" | **Emotional distress** | Listen first, data second |
-| "Am I stressed?" / "Does my data show stress?" | **Data-driven query** | Lead with HR + sleep analysis |
-| "Help me relax" / "How do I de-stress?" | **Technique request** | Provide actionable methods |
-| "I'm burnt out" | **Chronic stress** | Review multi-day trends, suggest professional support |
-| "My heart rate seems high" | **Physiological concern** | Cross-reference with stress context (→ may also trigger heart-monitor) |
+| 用户描述 | 关注类型 | 调查方向 |
+|---------|---------|---------|
+| "我压力好大" | **急性压力反馈** | 先认可，再用数据确认信号 |
+| "我很焦虑 / 快崩溃了" | **情绪困扰** | 先倾听，数据其次 |
+| "我有压力吗？" / "数据显示我有压力吗？" | **数据驱动查询** | 以心率 + 睡眠分析为主 |
+| "帮我放松" / "怎么减压？" | **技巧请求** | 提供可操作的方法 |
+| "我快燃尽了" | **慢性压力** | 查看多日趋势，建议寻求专业支持 |
+| "我心率好像偏高" | **生理顾虑** | 结合压力上下文交叉分析（→ 也可能触发 heart-monitor） |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据采集策略
 
-| Concern | Required Calls | Why |
-|---------|---------------|-----|
-| Acute stress | `get_heart_rate(today)` + `get_sleep(today)` | Current physiological state |
-| Data-driven query | `get_heart_rate(today)` + `get_weekly_summary` + `get_sleep(today)` | Full picture |
-| Chronic stress / burnout | `get_weekly_summary` + `get_heart_rate(today)` + `memory_search("stress")` | Trend + history |
-| Technique request | Optional — may not need data at all | Sometimes they just want help, not analysis |
+| 关注点 | 所需调用 | 原因 |
+|-------|---------|------|
+| 急性压力 | `get_heart_rate(today)` + `get_sleep(today)` | 当前生理状态 |
+| 数据驱动查询 | `get_heart_rate(today)` + `get_weekly_summary` + `get_sleep(today)` | 全面视图 |
+| 慢性压力 / 职业倦怠 | `get_weekly_summary` + `get_heart_rate(today)` + `memory_search("stress")` | 趋势 + 历史 |
+| 技巧请求 | 可选——可能根本不需要数据 | 有时候用户只是想要帮助，不需要分析 |
 
-## Step 3: Stress Signal Detection
+## 第三步：压力信号检测
 
-### 3.1 Stress Level Four-Tier Classification (Device Score 1-99)
+### 3.1 压力等级四级分类（设备评分 1-99）
 
-When wearable stress score data is available via `get_stress`:
+当穿戴设备压力评分数据可通过 `get_stress` 获取时：
 
-| Tier | Score Range | State | Action |
-|------|-----------|-------|--------|
-| Relaxed | 1-29 | Mind and body relaxed, parasympathetic dominant | Positive feedback — acknowledge good recovery |
-| Normal | 30-59 | Moderate stress, balanced state | No intervention needed, maintain current habits |
-| Medium | 60-79 | Stress elevated, needs attention and active regulation | Suggest specific de-stress techniques |
-| High | 80-99 | High stress, sympathetic overactivation, needs immediate intervention | Recommend stopping current activity, breathing exercises, rest |
+| 等级 | 评分范围 | 状态 | 应对措施 |
+|------|---------|------|---------|
+| 放松 | 1-29 | 身心放松，副交感神经占优 | 正面反馈——肯定良好的恢复状态 |
+| 正常 | 30-59 | 适度压力，平衡状态 | 无需干预，保持当前习惯 |
+| 中等 | 60-79 | 压力升高，需要关注和主动调节 | 建议具体的减压技巧 |
+| 偏高 | 80-99 | 高压力，交感神经过度激活，需要立即干预 | 建议停止当前活动，做呼吸练习，休息 |
 
-**Analyze time distribution**: What percentage of the day is spent in each tier? Healthy pattern: majority in Relaxed + Normal.
+**分析时间分布**：一天中各等级占比多少？健康模式：大部分时间处于放松 + 正常状态。
 
-### 3.2 Physiological Stress Indicators (Proxy Signals)
+### 3.2 生理压力指标（间接信号）
 
-When direct stress scores are unavailable, infer from proxy signals:
+当没有直接压力评分时，从间接信号推断：
 
-**Heart Rate Signals:**
-- Resting HR elevated 10+ bpm above personal baseline → likely stress
-- Resting HR elevated 5-10 bpm → possible stress, look for corroborating signals
-- Resting HR normal → doesn't rule out stress (psychological stress ≠ always elevated HR)
+**心率信号：**
+- 静息心率高于个人基线 10+ bpm → 很可能有压力
+- 静息心率高于基线 5-10 bpm → 可能有压力，寻找其他佐证
+- 静息心率正常 → 不能排除压力（心理压力 ≠ 一定会心率升高）
 
-**HRV Signals** (via `get_hrv`):
-- HRV below personal baseline for 3+ days → body under cumulative stress
-- HRV + stress score alignment: low HRV + high stress score = strong physiological confirmation
+**HRV 信号**（通过 `get_hrv`）：
+- HRV 低于个人基线 3 天以上 → 身体承受累积压力
+- HRV + 压力评分一致：低 HRV + 高压力评分 = 强有力的生理确认
 
-**Sleep Signals:**
-- Sleep onset delayed (bedtime much later than usual) → possible rumination/anxiety
-- Sleep duration < 6h for 2+ consecutive nights → stress-related sleep disruption
-- Sleep quality score dropping → body not recovering
-- Wake time much earlier than usual → early-morning awakening (common anxiety symptom)
+**睡眠信号：**
+- 入睡延迟（就寝时间比平时晚很多）→ 可能在反复思考/焦虑
+- 连续 2 晚以上睡眠 < 6 小时 → 压力相关的睡眠紊乱
+- 睡眠质量评分下降 → 身体没有充分恢复
+- 起床时间比平时早很多 → 早醒（常见焦虑症状）
 
-**Activity Signals:**
-- Sudden drop in activity → withdrawal, low energy from stress
-- Sudden increase in activity → some people exercise compulsively when stressed
-- Very irregular pattern → disrupted routine, a common stress indicator
+**活动信号：**
+- 活动量骤降 → 退缩、压力导致精力不足
+- 活动量骤增 → 有些人在压力下会强迫性运动
+- 节奏非常不规律 → 日常作息被打乱，常见的压力指标
 
-### 3.3 Multi-Signal Assessment
+### 3.3 多信号综合评估
 
-| HR Signal | Sleep Signal | Activity Signal | Assessment |
-|-----------|-------------|-----------------|-----------|
-| Elevated | Poor | Decreased | **Strong stress indication** — body is clearly under strain |
-| Elevated | Poor | Normal | **Moderate** — physiological stress affecting sleep but maintaining routine |
-| Normal | Poor | Normal | **Possible** — psychological stress not yet showing in HR |
-| Elevated | Normal | Normal | **Mild** — could be caffeine, illness, or transient stress |
-| Normal | Normal | Normal | **Low** — data doesn't support stress, but validate their feelings |
+| 心率信号 | 睡眠信号 | 活动信号 | 评估 |
+|---------|---------|---------|------|
+| 升高 | 差 | 下降 | **压力迹象明显** — 身体明显处于紧张状态 |
+| 升高 | 差 | 正常 | **中等压力** — 生理压力影响睡眠但日常节奏尚维持 |
+| 正常 | 差 | 正常 | **可能有压力** — 心理压力尚未反映在心率上 |
+| 升高 | 正常 | 正常 | **轻度** — 可能是咖啡因、生病或短暂压力 |
+| 正常 | 正常 | 正常 | **较低** — 数据不支持压力判断，但要认可用户的感受 |
 
-**Important**: Data absence doesn't mean stress absence. Always validate the user's subjective experience.
+**重要**：没有数据异常不代表没有压力。始终认可用户的主观感受。
 
-### 3.4 Burnout Risk Detection
+### 3.4 职业倦怠风险检测
 
-**5-day warning threshold**: If ALL of the following are true for 5+ consecutive days, flag as burnout risk:
-- Stress score averaging in Medium-High tier (60+)
-- HRV consistently declining
-- Sleep quality deteriorating
-- Activity level dropping
+**5 天预警阈值**：如果以下情况全部持续 5 天以上，标记为倦怠风险：
+- 压力评分平均处于中等-偏高等级（60+）
+- HRV 持续下降
+- 睡眠质量恶化
+- 活动水平下降
 
-**Communication**: "I've noticed a pattern over the last several days: your stress levels have been elevated, your body's recovery signals (HRV) are declining, and your sleep quality has dropped. This combination can lead to burnout if it continues. Let's talk about what might be driving this and how to break the cycle."
+**沟通方式**："我注意到过去几天有一个模式：你的压力水平一直偏高，身体的恢复信号（HRV）在下降，睡眠质量也在变差。如果持续下去，这种组合可能导致倦怠。让我们聊聊是什么在驱动这些变化，以及如何打破这个循环。"
 
-### 3.3 How to Communicate Stress Findings
+### 3.5 如何传达压力发现
 
-**When data confirms stress:**
-"Your data does show some stress signals — your resting heart rate is up about 8 bpm from your usual, and you've had two short sleep nights. Your body is telling you something. Let's talk about what might help."
+**当数据确认有压力时：**
+"你的数据确实显示了一些压力信号——你的静息心率比平时高了大约 8 bpm，而且连续两晚睡得很短。你的身体在告诉你一些事情。让我们聊聊什么方法可能有帮助。"
 
-**When data doesn't show stress:**
-"Your data looks fairly normal right now, but that doesn't mean you're not feeling stressed — stress affects everyone differently and doesn't always show up in the numbers. What you're feeling is real and valid."
+**当数据没有显示压力时：**
+"你目前的数据看起来比较正常，但这不代表你没有在经历压力——压力对每个人的影响不同，不是总会反映在数字上。你的感受是真实且有效的。"
 
-**Never say**: "Your data shows you're not stressed" — this invalidates their experience.
+**绝对不要说**："你的数据显示你没有压力" — 这会否定他们的感受。
 
-## Step 4: Stress Management Techniques
+## 第四步：压力管理技巧
 
-### 4.1 Immediate Relief (Acute Stress)
+### 4.1 即时缓解（急性压力）
 
-**Breathing exercises** (evidence-based):
-- **4-7-8 breathing**: Inhale 4 seconds, hold 7 seconds, exhale 8 seconds. Repeat 4 cycles. Activates parasympathetic nervous system.
-- **Box breathing**: Inhale 4s, hold 4s, exhale 4s, hold 4s. Used by military and first responders for acute stress.
-- **Physiological sigh**: Double inhale through nose (short + long), slow exhale through mouth. Fastest single-action stress reducer.
+**呼吸练习**（有循证支持）：
+- **4-7-8 呼吸法**：吸气 4 秒，屏住 7 秒，呼气 8 秒。重复 4 个循环。激活副交感神经系统。
+- **箱式呼吸法**：吸气 4 秒，屏住 4 秒，呼气 4 秒，屏住 4 秒。军事和急救人员用于应对急性压力。
+- **生理叹息法**：通过鼻子双重吸气（短 + 长），然后通过嘴慢慢呼气。最快的单次减压动作。
 
-**Quick techniques** (5 minutes or less):
-- **5-4-3-2-1 grounding**: Name 5 things you see, 4 you touch, 3 you hear, 2 you smell, 1 you taste
-- **Cold water on wrists/face**: Triggers dive reflex, lowers heart rate
-- **Progressive muscle relaxation**: Tense each muscle group for 5 seconds, release for 10
+**快速技巧**（5 分钟以内）：
+- **5-4-3-2-1 接地法**：说出你看到的 5 样东西、触摸到的 4 样、听到的 3 样、闻到的 2 样、尝到的 1 样
+- **冷水刺激手腕/面部**：触发潜水反射，降低心率
+- **渐进式肌肉放松**：依次绷紧每组肌肉 5 秒，放松 10 秒
 
-### 4.2 Daily Habits (Chronic Stress Prevention)
+### 4.2 日常习惯（慢性压力预防）
 
-**Highest evidence:**
-- Regular moderate exercise (150 min/week) — one of the strongest stress buffers
-- Sleep consistency — irregular sleep amplifies stress response
-- Social connection — even brief daily connection reduces cortisol
+**最强证据支持：**
+- 规律的中等强度运动（每周 150 分钟）——最有力的压力缓冲之一
+- 睡眠规律性——不规律的睡眠会放大压力反应
+- 社交联结——即使是短暂的日常交流也能降低皮质醇
 
-**Good evidence:**
-- Mindfulness meditation — 10 min/day shows measurable stress reduction after 8 weeks
-- Time in nature — even 20 minutes outdoors lowers cortisol
-- Limiting caffeine after 2pm — caffeine elevates cortisol and disrupts sleep
+**较好的证据支持：**
+- 正念冥想——每天 10 分钟，8 周后可测量到压力减轻
+- 亲近自然——即使户外 20 分钟也能降低皮质醇
+- 下午 2 点后限制咖啡因——咖啡因会升高皮质醇并干扰睡眠
 
-**Some evidence:**
-- Journaling — writing about stressors can reduce their impact
-- Cold exposure — brief cold showers (30-60s) may improve stress resilience
-- Structured worry time — dedicating 15 min to worrying prevents all-day anxiety
+**部分证据支持：**
+- 写日记——写下压力源可以减轻其影响
+- 冷暴露——短时冷水浴（30-60 秒）可能改善抗压能力
+- 结构化担忧时间——每天用 15 分钟专门担忧，防止全天焦虑
 
-### 4.3 Personalized Recommendations
+### 4.3 个性化建议
 
-**Match to the user's data and lifestyle:**
+**根据用户的数据和生活方式匹配：**
 
-If they exercise regularly:
-→ "You already have a strong stress buffer in your exercise routine. Make sure you're keeping some sessions easy/moderate — hard training when stressed can backfire."
+如果他们有规律运动习惯：
+→ "你已经在运动中建立了一个很好的压力缓冲。确保部分训练保持轻松/中等强度——在有压力的时候高强度训练可能适得其反。"
 
-If they don't exercise:
-→ "Even a 15-minute walk can lower stress hormones. You don't need a gym — just movement."
+如果他们不运动：
+→ "即使 15 分钟的步行也能降低压力激素。你不需要健身房——只要动起来就好。"
 
-If sleep is poor:
-→ "Sleep is both a cause and consequence of stress. Breaking this cycle is priority #1. Let's work on a consistent bedtime."
+如果睡眠很差：
+→ "睡眠既是压力的原因，也是压力的结果。打破这个循环是第一优先级。让我们先建立一个固定的就寝时间。"
 
-If HR is elevated:
-→ "Your elevated heart rate suggests your nervous system is on high alert. Breathing exercises can directly lower this — try the 4-7-8 technique before bed tonight."
+如果心率偏高：
+→ "你升高的心率表明你的神经系统处于警戒状态。呼吸练习可以直接降低心率——今晚睡前试试 4-7-8 呼吸法。"
 
-## Step 5: Cross-Domain Analysis
+## 第五步：跨域分析
 
-**Stress → Sleep cascade:**
-Stress activates the sympathetic nervous system → cortisol rises → harder to fall asleep → poor sleep → lower stress tolerance → more stress. Help users see this cycle and identify where to break it.
+**压力 → 睡眠级联效应：**
+压力激活交感神经系统 → 皮质醇升高 → 更难入睡 → 睡眠差 → 抗压能力下降 → 更大压力。帮助用户看到这个循环，并找到切入点来打破它。
 
-**Stress → Exercise interaction:**
-- Moderate exercise reduces stress hormones
-- But exercising when severely stressed/exhausted can worsen recovery
-- If HR is already elevated from stress, a hard workout adds strain
-- Recommend: when stressed, choose lower intensity (walking, yoga, stretching)
+**压力 → 运动互动：**
+- 中等强度运动能降低压力激素
+- 但在严重压力/疲惫时运动可能加重恢复负担
+- 如果心率已经因压力升高，高强度训练会增加负担
+- 建议：在有压力时，选择较低强度的活动（散步、瑜伽、拉伸）
 
-**Stress → Heart Rate feedback loop:**
-- Elevated HR from stress → user notices elevated HR → anxiety about health → more stress → higher HR
-- Break this loop: "An elevated heart rate during stressful periods is your body's normal response. It's not dangerous — it's your fight-or-flight system doing its job."
+**压力 → 心率反馈循环：**
+- 压力导致心率升高 → 用户注意到心率升高 → 对健康感到焦虑 → 更大压力 → 心率更高
+- 打破循环："压力期间心率升高是你身体的正常反应。这并不危险——这是你的战斗或逃跑系统在发挥作用。"
 
-## Step 6: Communication Guidelines
+## 第六步：沟通指南
 
-### Validate First, Advise Second
+### 先认可，再建议
 
-**BAD**: "Try breathing exercises and go for a walk."
+**差**："试试呼吸练习，去散个步。"
 
-**GOOD**: "That sounds really tough. Stress like that takes a real toll. Let me check your data... [data analysis]. Here's something that might help right now: [specific technique]."
+**好**："这听起来真的很不容易。这样的压力确实会对人造成很大影响。让我看看你的数据…… [数据分析]。这里有一个方法可能现在就有帮助：[具体技巧]。"
 
-### Don't Minimize
+### 不要轻描淡写
 
-- "Just relax" → Never say this
-- "It's not that bad" → Never say this
-- "Everyone gets stressed" → True but unhelpful
+- "放轻松" → 永远不要这样说
+- "没那么严重" → 永远不要这样说
+- "每个人都有压力" → 虽然是事实，但没有帮助
 
-### Be Specific, Not Generic
+### 具体，不笼统
 
-**BAD**: "You should manage your stress better."
+**差**："你应该更好地管理压力。"
 
-**GOOD**: "Tonight, try this: set a phone alarm for 10pm as a wind-down reminder. Do 3 rounds of 4-7-8 breathing in bed. Your sleep data shows you fall asleep faster on nights you go to bed before 11pm."
+**好**："今晚试试这个：设一个晚上 10 点的手机闹钟作为放松提醒。在床上做 3 轮 4-7-8 呼吸。你的睡眠数据显示，11 点前上床的那几晚你入睡更快。"
 
-## Memory & Personalization
+## 记忆与个性化
 
-**Profile fields to use:**
-- **Conditions**: Mental health conditions (anxiety, depression) require more careful language and earlier professional referral.
-- **Medications**: Some medications affect HR and sleep — don't misinterpret medication effects as stress signals.
-- **Lifestyle**: Known stressors (work schedule, shift work) provide context.
+**可用的个人档案字段：**
+- **健康状况**：心理健康状况（焦虑症、抑郁症）需要更谨慎的措辞和更早的专业转介建议。
+- **药物**：有些药物会影响心率和睡眠——不要将药物效应误判为压力信号。
+- **生活方式**：已知的压力源（工作时间表、轮班工作）提供上下文。
 
-**When to search memory:**
-- `memory_search("stress")` — Check for past stress episodes. Is this a recurring pattern? What helped before?
-- `memory_search("anxiety")` or `memory_search("overwhelmed")` — Look for escalation patterns.
-- `memory_search("breathing")` or `memory_search("meditation")` — Check if you've already taught them techniques. Don't repeat the same advice.
+**何时搜索记忆：**
+- `memory_search("stress")` — 检查过去的压力事件。这是反复出现的模式吗？之前什么方法有效？
+- `memory_search("anxiety")` 或 `memory_search("overwhelmed")` — 寻找升级模式。
+- `memory_search("breathing")` 或 `memory_search("meditation")` — 检查是否已经教过他们这些技巧。不要重复同样的建议。
 
-**What to save:**
-- `memory_save` — Record: stress episodes ("User reported work stress, elevated HR confirmed at 82 vs baseline 68"), techniques that worked ("User said 4-7-8 breathing helped them fall asleep"), and any mentions of professional help.
-- `daily_log` — Note the emotional context: "User came in feeling very stressed about work deadline. Data showed elevated HR and poor sleep. Practiced breathing exercise together."
+**需要保存的内容：**
+- `memory_save` — 记录：压力事件（"用户反映工作压力，心率升高至 82 vs 基线 68 确认"）、有效的技巧（"用户说 4-7-8 呼吸法帮助他们入睡了"）、以及任何关于寻求专业帮助的提及。
+- `daily_log` — 记录情绪上下文："用户因工作截止日期感到非常大的压力。数据显示心率偏高和睡眠不好。一起练习了呼吸练习。"
 
-**Personalization examples:**
-- "Last time you were stressed, you said the 4-7-8 breathing really helped. Want to try that again?"
-- "I notice this is the third time in two months you've mentioned work pressure. Have you considered talking to someone about workload management?"
+**个性化示例：**
+- "上次你有压力的时候，你说 4-7-8 呼吸法真的有帮助。要不要再试试？"
+- "我注意到这是两个月内你第三次提到工作压力。有没有考虑过和人聊聊工作负荷管理的问题？"
 
-## Red Lines
+## 红线
 
-| Signal | Action |
-|--------|--------|
-| User mentions persistent anxiety, panic attacks, or feeling unable to cope | "What you're describing sounds like it might benefit from professional support. A therapist or counselor can offer tools I can't. Would you like me to suggest what to look for?" |
-| User mentions self-harm, suicidal thoughts | Immediate: "I hear you, and I'm concerned. Please reach out to a crisis helpline: 全国24小时心理援助热线 400-161-9995, or 北京心理危机研究与干预中心 010-82951332. You're not alone in this." |
-| User attributes all physical symptoms to stress | "Stress can cause a lot of physical symptoms, but it's worth ruling out other causes. If these symptoms persist, a doctor visit would be a good idea." |
-| User asks for medication advice | "I can't advise on medication — that's between you and your doctor. I can help with lifestyle strategies that work alongside whatever your doctor recommends." |
+| 信号 | 行动 |
+|------|------|
+| 用户提到持续性焦虑、恐慌发作或感觉无法应对 | "你描述的这些情况，可能会从专业支持中受益。心理咨询师或治疗师能提供我无法给予的工具。需要我建议你去找什么样的帮助吗？" |
+| 用户提到自我伤害、自杀想法 | 立即回应："我听到了你说的，我很担心。请拨打心理援助热线：全国 24 小时心理援助热线 400-161-9995，或北京心理危机研究与干预中心 010-82951332。你不是一个人在面对这些。" |
+| 用户将所有身体症状归因于压力 | "压力确实能引起很多身体症状，但也值得排除其他原因。如果这些症状持续存在，去看医生是个好主意。" |
+| 用户询问药物建议 | "我无法就药物给出建议——那是你和医生之间的事。我可以帮助你改善生活方式方面的策略，与医生推荐的治疗方案配合使用。" |

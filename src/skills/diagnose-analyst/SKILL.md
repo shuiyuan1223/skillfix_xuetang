@@ -1,66 +1,66 @@
 ---
 name: diagnose-analyst
-description: "Benchmark diagnose analyst — analyzes weak categories from benchmark results and generates actionable improvement suggestions"
+description: "基准测试诊断分析师 — 分析基准测试结果中的薄弱大类，生成可操作的改进建议"
 metadata:
   {"pha": {"emoji": "search", "type": "system", "triggers": ["diagnose", "analyze weakness", "诊断", "分析薄弱", "改进建议"], "requires": {"tools": ["run_diagnose", "list_benchmark_runs", "get_benchmark_run_details"]}, "config": {"weaknessThreshold": 0.7}}}
 ---
 
-# Diagnose Analyst
+# 诊断分析师
 
-This is a **system skill** that defines how PHA analyzes benchmark weaknesses and generates improvement suggestions. It provides the analysis framework used by the `run_diagnose` tool's LLM analysis step.
+这是一个**系统技能**，定义了 PHA 如何分析基准测试的薄弱环节并生成改进建议。它提供了 `run_diagnose` 工具中 LLM 分析步骤所使用的分析框架。
 
-## Analysis Pipeline
+## 分析流水线
 
-1. **Load benchmark results** — From DB by runId (no re-run)
-2. **Identify weak categories** — Score < 0.7 threshold
-3. **LLM deep analysis** — Analyze failing tests' feedback/issues, find root causes
-4. **Generate suggestions** — Specific, actionable improvements with target files
+1. **加载基准测试结果** — 从数据库按 runId 读取（无需重跑）
+2. **识别薄弱大类** — 评分低于 0.7 阈值
+3. **LLM 深度分析** — 分析失败测试用例的反馈/问题，找到根因
+4. **生成建议** — 具体、可操作的改进措施，附带目标文件
 
-## Analysis Prompt Framework
+## 分析提示词框架
 
-When analyzing benchmark weaknesses, follow this structured approach:
+分析基准测试薄弱环节时，遵循以下结构化方法：
 
-### Input Data
+### 输入数据
 
-For each weak category, you will receive:
-- Category name and score (0.0-1.0)
-- Gap below threshold (how far below 0.7)
-- Failing test cases with:
-  - Test case ID
-  - Score
-  - Feedback (from SHARP 2.0 evaluator)
-  - Issues (type, description, severity)
+对于每个薄弱大类，你将收到：
+- 大类名称和评分（0.0-1.0）
+- 与阈值的差距（低于 0.7 多少）
+- 失败的测试用例，包括：
+  - 测试用例 ID
+  - 评分
+  - 反馈（来自 SHARP 2.0 评估器）
+  - 问题（类型、描述、严重程度）
 
-### Analysis Requirements
+### 分析要求
 
-1. **Pattern Extraction** (共性问题归纳)
-   - Do NOT simply translate individual feedback items
-   - Find the **root cause** shared across multiple failing tests
-   - Group issues by type (e.g., "data source adherence failures" vs "computational errors")
-   - Identify systemic issues in the Agent's behavior
+1. **共性问题归纳**
+   - 不要简单翻译各条反馈
+   - 找出多个失败测试共同的**根因**
+   - 按类型归组问题（如 "数据源一致性失败" vs "计算错误"）
+   - 识别 Agent 行为中的系统性问题
 
-2. **Suggestion Generation** (改进建议)
-   Each suggestion must include:
-   - `category`: Which SHARP category this addresses
-   - `description`: Specific, actionable improvement (in Chinese)
-     - What's the root cause
-     - What to change
-     - How to change it
-     - Expected impact
-   - `targetFiles`: Which files to modify
-   - `priority`: high (gap > 0.3) / medium (gap > 0.15) / low
+2. **改进建议生成**
+   每条建议必须包含：
+   - `category`：针对哪个 SHARP 大类
+   - `description`：具体、可操作的改进措施（中文）
+     - 根因是什么
+     - 改什么
+     - 怎么改
+     - 预期效果
+   - `targetFiles`：需要修改哪些文件
+   - `priority`：high（差距 > 0.3）/ medium（差距 > 0.15）/ low
 
-3. **Target File Mapping**
-   | Issue Type | Target File |
-   |-----------|-------------|
-   | Core behavior, personality, response style | `src/prompts/SOUL.md` |
-   | Sleep-related accuracy | `src/skills/sleep-coach/SKILL.md` |
-   | Health data analysis | `src/skills/health-overview/SKILL.md` |
-   | Goal/coaching quality | `src/skills/goal-coach/SKILL.md` |
-   | Safety boundaries | `src/skills/safety-guard/SKILL.md` |
-   | Data computation | `src/tools/health-data.ts` |
+3. **目标文件映射**
+   | 问题类型 | 目标文件 |
+   |---------|---------|
+   | 核心行为、人设、回复风格 | `src/prompts/SOUL.md` |
+   | 睡眠相关准确性 | `src/skills/sleep-coach/SKILL.md` |
+   | 健康数据分析 | `src/skills/health-overview/SKILL.md` |
+   | 目标/教练质量 | `src/skills/goal-coach/SKILL.md` |
+   | 安全边界 | `src/skills/safety-guard/SKILL.md` |
+   | 数据计算 | `src/tools/health-data.ts` |
 
-4. **Output Format**
+4. **输出格式**
    ```json
    {
      "categoryAnalysis": [
@@ -80,32 +80,32 @@ For each weak category, you will receive:
    }
    ```
 
-### Language
+### 语言要求
 
-- All patterns and suggestions must be in **Chinese**
-- Category IDs remain in English (e.g., `health-data-analysis`)
+- 所有共性问题和建议必须使用**中文**
+- Category ID 保持英文（如 `health-data-analysis`）
 
-## Common Weakness Patterns
+## 常见薄弱模式
 
-### Accuracy Issues
-- **Data Source Adherence**: Agent invents data not in user context, or shifts dates/values
-- **Computational Errors**: Math mistakes in calorie/BMI/heart rate calculations
-- **Factual Inaccuracy**: Incorrect physiological claims or trend descriptions
+### 准确性问题
+- **数据源一致性**：Agent 编造用户上下文中不存在的数据，或偏移日期/数值
+- **计算错误**：卡路里/BMI/心率计算中的数学错误
+- **事实错误**：不正确的生理学论断或趋势描述
 
-### Usefulness Issues
-- **Readability**: Wall-of-text responses, poor structure, mixing languages
-- **Comprehensiveness**: Missing key aspects of user's question
-- **Vague Advice**: "Exercise more" instead of "Run 20 minutes at HR 140"
+### 有用性问题
+- **可读性**：大段文字堆砌、结构差、中英混杂
+- **全面性**：遗漏了用户问题的关键方面
+- **建议模糊**："多运动"而非"以心率 140 跑步 20 分钟"
 
-### Safety Issues
-- **Medical Boundary**: Crossing into diagnosis or treatment advice
-- **Missing Risk Disclosure**: Actionable advice without health warnings
-- **Capability Scoping**: Implying control over external systems
+### 安全性问题
+- **医疗边界**：越界到疾病诊断或治疗建议
+- **缺少风险披露**：可操作的建议缺少健康警告
+- **能力边界**：暗示拥有对外部系统的控制权
 
-### Relevance Issues
-- **Topic Drift**: First paragraph doesn't directly answer the question
-- **Over-personalization**: Forcing personal data into generic questions
+### 相关性问题
+- **话题偏移**：第一段没有直接回答问题
+- **过度个性化**：对通用性问题强行使用个人数据
 
-### Personalization Issues
-- **Audience Confusion**: Applying user data to questions about third parties
-- **Shallow Analysis**: Repeating data without insight
+### 个性化问题
+- **受众混淆**：将用户数据应用于关于第三方的问题
+- **分析浅薄**：重复数据但缺乏洞察

@@ -1,6 +1,6 @@
 ---
 name: blood-oxygen
-description: "Monitor blood oxygen saturation (SpO2), screen for respiratory issues, and provide altitude safety guidance"
+description: "监测血氧饱和度（SpO2），筛查呼吸问题，提供高海拔安全指导"
 metadata:
   {
     "pha": {
@@ -11,128 +11,128 @@ metadata:
   }
 ---
 
-# Blood Oxygen Monitor Skill
+# 血氧监测 Skill
 
-## Step 1: Classify the Question
+## 第一步：问题分类
 
-| User Says | Question Type | What to Investigate |
-|-----------|-------------|-------------------|
-| "Is my blood oxygen normal?" | **Baseline check** | Compare SpO2 to standards |
-| "My oxygen was low last night" | **Nocturnal concern** | Night SpO2 + sleep quality |
-| "I'm going to high altitude" | **Altitude preparation** | Current baseline + altitude safety guidance |
-| "I feel short of breath" | **Symptom + data** | SpO2 + HR + activity context |
-| "Do I have sleep apnea?" | **Sleep breathing screen** | Night SpO2 dip events + snoring data |
+| 用户说 | 问题类型 | 需要调查什么 |
+|--------|---------|-------------|
+| "我的血氧正常吗？" | **基线检查** | 将 SpO2 与标准对比 |
+| "昨晚血氧偏低" | **夜间关注** | 夜间 SpO2 + 睡眠质量 |
+| "我要去高原" | **高海拔准备** | 当前基线 + 高海拔安全指导 |
+| "我感觉喘不上气" | **症状 + 数据** | SpO2 + 心率 + 活动背景 |
+| "我是不是有睡眠呼吸暂停？" | **睡眠呼吸筛查** | 夜间 SpO2 下降事件 + 打鼾数据 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据收集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Baseline check | `get_spo2(today)` | Current daytime SpO2 |
-| Night concern | `get_spo2(date)` + `get_sleep(date)` | Night SpO2 events + sleep quality |
-| Trend analysis | `get_spo2(7d)` | Weekly SpO2 pattern |
-| Sleep apnea screen | `get_spo2(7d)` + `get_sleep(7d)` | Night desaturation events + sleep disruption |
+| 问题类型 | 需要调用 | 原因 |
+|---------|---------|------|
+| 基线检查 | `get_spo2(today)` | 当前日间 SpO2 |
+| 夜间关注 | `get_spo2(date)` + `get_sleep(date)` | 夜间 SpO2 事件 + 睡眠质量 |
+| 趋势分析 | `get_spo2(7d)` | 一周 SpO2 模式 |
+| 睡眠呼吸暂停筛查 | `get_spo2(7d)` + `get_sleep(7d)` | 夜间去饱和事件 + 睡眠中断情况 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 SpO2 Classification
+### 3.1 SpO2 分级
 
-| SpO2 Level | Status | Action |
-|-----------|--------|--------|
-| 97-100% | Excellent | Healthy respiratory function |
-| 95-96% | Normal low | Monitor, investigate if persistent |
-| 90-94% | Mild hypoxemia | Rest, seek medical evaluation |
-| 85-89% | Moderate hypoxemia | Immediate intervention needed |
-| < 85% | Severe hypoxemia | Emergency medical care |
+| SpO2 水平 | 状态 | 处理方式 |
+|----------|------|---------|
+| 97-100% | 优秀 | 呼吸功能健康 |
+| 95-96% | 正常偏低 | 监测，如持续存在需进一步调查 |
+| 90-94% | 轻度低氧血症 | 休息，寻求医学评估 |
+| 85-89% | 中度低氧血症 | 需要立即干预 |
+| < 85% | 重度低氧血症 | 紧急医疗救助 |
 
-**Key principle**: SpO2 should remain ≥ 95% at rest at sea level. Consistently below 95% without altitude explanation warrants medical evaluation.
+**核心原则**：在海平面静息状态下，SpO2 应保持 ≥ 95%。如果在无高海拔因素的情况下持续低于 95%，应就医评估。
 
-### 3.2 Nocturnal SpO2 Standards
+### 3.2 夜间 SpO2 标准
 
-For healthy adults at sea level:
-- Night SpO2 should remain ≥ 95% continuously
-- SpO2 dropping below 90% for ≥ 10 seconds suggests possible obstructive sleep apnea (OSA)
-- Count of desaturation events (drops ≥ 4% from baseline) per hour correlates with AHI (apnea-hypopnea index)
+对于海平面健康成人：
+- 夜间 SpO2 应持续保持 ≥ 95%
+- SpO2 低于 90% 持续 ≥ 10 秒提示可能存在阻塞性睡眠呼吸暂停（OSA）
+- 每小时去饱和事件（从基线下降 ≥ 4%）的次数与 AHI（呼吸暂停低通气指数）相关
 
-**OSA screening indicators from wearable data:**
-- Frequent SpO2 dips below 95% during sleep
-- Cyclic desaturation-recovery pattern (classic sawtooth pattern)
-- Snoring data (if available from device)
-- User reports: loud snoring, witnessed apneas, excessive daytime sleepiness
+**从可穿戴设备数据筛查 OSA 的指标：**
+- 睡眠中频繁出现 SpO2 低于 95% 的下降
+- 周期性去饱和-恢复模式（经典锯齿波形）
+- 打鼾数据（如设备可提供）
+- 用户自述：大声打鼾、目击的呼吸暂停、白天过度嗜睡
 
-### 3.3 High Altitude Reference
+### 3.3 高海拔参考
 
-| Altitude (m) | Expected SpO2 | Guidance |
-|--------------|--------------|---------|
-| 0-1,500 | 95-100% | Normal activity |
-| 1,500-3,000 | 92-96% | Monitor changes, reduce intense activity |
-| 3,000-4,500 | 85-92% | Close monitoring, descend if symptomatic |
-| > 4,500 | < 85% risk increases | Carry supplemental oxygen, mandatory acclimatization |
+| 海拔 (m) | 预期 SpO2 | 指导建议 |
+|----------|----------|---------|
+| 0-1,500 | 95-100% | 正常活动 |
+| 1,500-3,000 | 92-96% | 监测变化，减少剧烈活动 |
+| 3,000-4,500 | 85-92% | 密切监测，出现症状时下撤 |
+| > 4,500 | < 85% 风险增加 | 携带补充氧气，必须进行高原适应 |
 
-**Altitude acclimatization rules:**
-- Ascend no more than 300-500m per day above 3,000m
-- Day 1 at new altitude: light activity only
-- SpO2 < 85% or symptoms (headache, nausea, confusion) → descend immediately
-- Lake Louise AMS score > 3 → stop ascending
+**高原适应规则：**
+- 在 3,000m 以上每天上升不超过 300-500m
+- 到达新海拔第一天：仅进行轻度活动
+- SpO2 < 85% 或出现症状（头痛、恶心、意识模糊）→ 立即下撤
+- Lake Louise 急性高山病评分 > 3 → 停止继续上升
 
-### 3.4 Exercise and SpO2
+### 3.4 运动与 SpO2
 
-- Mild SpO2 drop (92-95%) during very high-intensity exercise is normal
-- SpO2 should recover to ≥ 96% within 5 minutes post-exercise
-- Persistent low SpO2 during moderate exercise → investigate respiratory function
-- At altitude: reduce exercise intensity proportionally to SpO2 reduction
+- 高强度运动时 SpO2 轻度下降（92-95%）属于正常
+- 运动后 SpO2 应在 5 分钟内恢复至 ≥ 96%
+- 中等强度运动时 SpO2 持续偏低 → 需调查呼吸功能
+- 在高海拔：应按 SpO2 降低幅度相应减少运动强度
 
-### 3.5 Factors Affecting Wearable SpO2 Accuracy
+### 3.5 影响可穿戴设备 SpO2 准确性的因素
 
-- **Cold extremities / poor perfusion**: Readings may be falsely low
-- **Dark skin pigmentation**: Some devices have ±2-3% additional error
-- **Motion artifacts**: Readings during movement are unreliable
-- **Nail polish / wet skin**: Can interfere with optical sensors
-- **Device accuracy**: Wearable SpO2 is ±2-3% vs medical pulse oximeters
+- **手指冰凉 / 末梢灌注差**：读数可能偏低
+- **深肤色**：部分设备有额外 ±2-3% 误差
+- **运动伪影**：运动中的读数不可靠
+- **指甲油 / 皮肤潮湿**：可能干扰光学传感器
+- **设备精度**：可穿戴设备 SpO2 与医用脉搏血氧仪相比有 ±2-3% 误差
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨领域分析
 
-**SpO2 + Sleep:**
-- Night SpO2 dips correlating with frequent awakenings → strong OSA indicator
-- Low SpO2 + poor deep sleep → respiratory issue likely disrupting sleep architecture
-- Snoring + SpO2 dips + daytime fatigue → classic OSA triad, recommend sleep study
+**SpO2 + 睡眠：**
+- 夜间 SpO2 下降与频繁觉醒相关 → 强烈提示 OSA
+- 低 SpO2 + 深睡眠不足 → 呼吸问题可能破坏睡眠结构
+- 打鼾 + SpO2 下降 + 白天疲劳 → 经典 OSA 三联征，建议做睡眠检查
 
-**SpO2 + Heart Rate:**
-- SpO2 dropping + HR rising → body compensating for low oxygen (normal acute response)
-- If SpO2 dips and HR doesn't respond → concerning, may indicate autonomic issue
+**SpO2 + 心率：**
+- SpO2 下降 + 心率上升 → 身体在代偿低氧（正常急性反应）
+- SpO2 下降但心率无反应 → 值得关注，可能提示自主神经问题
 
-**SpO2 + Activity:**
-- At high altitude: monitor SpO2 before, during, and after exercise
-- Post-exercise SpO2 recovery time is a fitness indicator
+**SpO2 + 运动：**
+- 在高海拔：运动前、运动中和运动后均需监测 SpO2
+- 运动后 SpO2 恢复时间是体能指标之一
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Rule: Reassure When Normal, Act When Not
+### 规则：正常时安抚，异常时行动
 
-**BAD**: "Your SpO2 dropped to 93% last night, which indicates hypoxemia."
+**错误示范**："你的 SpO2 昨晚降到了 93%，这表示低氧血症。"
 
-**GOOD**: "I noticed your SpO2 dipped to 93% briefly during sleep last night, with 2 other dips below 95%. This doesn't necessarily mean there's a problem — wearable readings can fluctuate, especially during deep sleep. But since I've seen this pattern on 3 nights this week, it would be worth discussing with your doctor. A sleep study can give definitive answers about whether there's a breathing issue during sleep."
+**正确示范**："我注意到你昨晚睡眠中 SpO2 短暂降到了 93%，另外还有 2 次低于 95% 的下降。这不一定代表有问题 — 可穿戴设备的读数会波动，尤其在深睡眠期间。但我发现这周有 3 个晚上出现了类似模式，值得跟医生聊聊。睡眠检查可以明确确认睡眠中是否存在呼吸问题。"
 
-### Altitude Context
+### 高海拔场景
 
-**GOOD**: "At 3,200m elevation, your SpO2 of 91% is within the expected range. Your body is adapting. Keep today's activity light, stay hydrated, and monitor for any headache or nausea. If SpO2 drops below 85% or you feel unwell, it's time to descend."
+**正确示范**："在海拔 3,200m，你 91% 的 SpO2 在预期范围内。你的身体正在适应。今天保持轻度活动，多喝水，注意是否有头痛或恶心。如果 SpO2 降到 85% 以下或感觉不适，就该下撤了。"
 
-## Memory & Personalization
+## 记忆与个性化
 
-**When to search memory:**
-- `memory_search("blood oxygen")` or `memory_search("SpO2")` — Check baseline SpO2 level
-- `memory_search("snoring")` or `memory_search("sleep apnea")` — Prior discussions about sleep breathing
-- `memory_search("altitude")` — Past altitude experiences and tolerance
+**何时搜索记忆：**
+- `memory_search("blood oxygen")` 或 `memory_search("SpO2")` — 检查 SpO2 基线水平
+- `memory_search("snoring")` 或 `memory_search("sleep apnea")` — 之前关于睡眠呼吸的讨论
+- `memory_search("altitude")` — 过往高海拔经历和耐受情况
 
-**What to save:**
-- `memory_save` — Record: normal SpO2 baseline, any OSA concerns discussed, altitude tolerance
-- `daily_log` — Note significant SpO2 events and context
+**需要保存的内容：**
+- `memory_save` — 记录：正常 SpO2 基线、已讨论的 OSA 相关问题、高海拔耐受性
+- `daily_log` — 记录重要的 SpO2 事件及其背景
 
-## Red Lines — When to Escalate
+## 红线 — 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Resting SpO2 consistently < 95% at sea level | "Resting blood oxygen consistently below 95% at sea level should be evaluated by a doctor. This could indicate a respiratory or cardiovascular issue." |
-| SpO2 < 90% at any time (non-altitude) | "A reading below 90% is concerning and warrants prompt medical attention, especially if you're experiencing shortness of breath." |
-| Recurrent night SpO2 dips + snoring + daytime sleepiness | "This pattern is consistent with sleep apnea, which is very common and very treatable. I'd strongly recommend a sleep study — it can change your quality of life significantly." |
-| SpO2 < 85% at altitude + symptoms | "At this oxygen level with symptoms, you need to descend immediately and consider supplemental oxygen. Altitude sickness can progress rapidly." |
-| User asks if SpO2 data rules out asthma/COPD | "Wearable SpO2 data can't diagnose respiratory conditions. If you have concerns, pulmonary function tests from your doctor are the proper diagnostic tool." |
+| 信号 | 处理方式 |
+|------|---------|
+| 海平面静息 SpO2 持续 < 95% | "在海平面静息状态下血氧持续低于 95% 应由医生评估。这可能提示呼吸系统或心血管问题。" |
+| SpO2 在任何时候 < 90%（非高海拔） | "低于 90% 的读数令人担忧，需要尽快就医，尤其是在伴有呼吸困难的情况下。" |
+| 反复出现夜间 SpO2 下降 + 打鼾 + 白天嗜睡 | "这种模式符合睡眠呼吸暂停的特征，这是一种非常常见且可以有效治疗的疾病。我强烈建议做一次睡眠检查 — 它可能会显著改善你的生活质量。" |
+| 高海拔 SpO2 < 85% + 出现症状 | "在这个血氧水平伴有症状的情况下，你需要立即下撤并考虑使用补充氧气。高原反应可能迅速恶化。" |
+| 用户询问 SpO2 数据能否排除哮喘/COPD | "可穿戴设备的 SpO2 数据无法诊断呼吸系统疾病。如果你有疑虑，医生的肺功能检查才是正规的诊断工具。" |

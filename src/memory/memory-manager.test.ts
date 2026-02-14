@@ -130,6 +130,6 @@ describe("MemoryManager", () => {
   test("should load SOUL prompt", () => {
     const soul = manager.getSoulPrompt();
     expect(soul).toContain("PHA");
-    expect(soul).toContain("Health");
+    expect(soul).toContain("健康");
   });
 });

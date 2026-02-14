@@ -1,0 +1,960 @@
+import React from "react";
+import type { A2UIComponent } from "../../lib/types";
+import { ICONS, getIcon } from "../../lib/icons";
+import type { RenderContext } from "./A2UIRenderer";
+
+// ---- Code Editor ----
+export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
+  const value = c.value as string;
+  const readonly = c.readonly as boolean;
+  const height = c.height || 400;
+  const lineNumbers = c.lineNumbers !== false;
+  const lines = value.split("\n");
+
+  let highlightedHtml = "";
+  if (readonly) {
+    // Simple HTML escaping fallback (hljs can be added later)
+    highlightedHtml = value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  const lineNumbersEl = lineNumbers ? (
+    <div className="code-line-numbers" id={`code-ln-${c.id || "default"}`}>
+      {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
+    </div>
+  ) : null;
+
+  const syncScroll = lineNumbers ? (e: React.UIEvent) => {
+    const el = e.currentTarget as HTMLElement;
+    const ln = el.closest(".code-editor-container")?.querySelector(".code-line-numbers") as HTMLElement | null;
+    if (ln) ln.scrollTop = el.scrollTop;
+  } : undefined;
+
+  if (readonly) {
+    return (
+      <div className="code-editor-container" style={{ height: typeof height === "number" ? height + "px" : height }}>
+        {lineNumbersEl}
+        <pre className="code-highlight" onScroll={syncScroll}>
+          <code className="hljs" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+        </pre>
+      </div>
+    );
+  }
+
+  return (
+    <div className="code-editor-container" style={{ height: typeof height === "number" ? height + "px" : height }}>
+      {lineNumbersEl}
+      <textarea
+        className="code-textarea"
+        spellCheck={false}
+        defaultValue={value}
+        onInput={(e) => {
+          if (c.onChange) {
+            ctx.sendAction(c.onChange as string, { value: (e.target as HTMLTextAreaElement).value });
+          }
+        }}
+        onScroll={syncScroll}
+      />
+    </div>
+  );
+}
+
+// ---- Commit List ----
+export function renderCommitList(c: A2UIComponent, ctx: RenderContext) {
+  const commits = c.commits as { hash: string; shortHash: string; message: string; date: string; author: string }[];
+  const selectedHash = c.selectedHash as string;
+  return (
+    <div className="flex flex-col gap-1">
+      {commits.map((commit) => (
+        <div
+          key={commit.hash}
+          className={`p-3 rounded-lg cursor-pointer transition-all duration-fast border border-transparent hover:bg-surface-hover ${commit.hash === selectedHash ? "bg-primary/10 border-primary/30" : ""}`}
+          onClick={() => { if (c.onSelect) ctx.sendAction(c.onSelect as string, { hash: commit.hash }); }}
+        >
+          <div className="font-mono text-xs text-primary">{commit.shortHash}</div>
+          <div className="text-sm text-text mt-0.5">{commit.message}</div>
+          <div className="flex gap-3 mt-1 text-xs text-text-muted">
+            <span>{commit.date}</span><span>{commit.author}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Diff View ----
+export function renderDiffView(c: A2UIComponent, ctx: RenderContext) {
+  const before = c.before as string;
+  const after = c.after as string;
+  const title = c.title as string;
+  const unifiedDiff = c.unifiedDiff as string | undefined;
+
+  if (unifiedDiff) return renderUnifiedDiff(title, unifiedDiff);
+
+  const beforeLines = before.split("\n");
+  const afterLines = after.split("\n");
+  return (
+    <div className="rounded-xl border border-border overflow-hidden">
+      {title && <div className="px-4 py-2 text-sm font-medium text-text border-b border-border bg-surface">{title}</div>}
+      <div className="grid grid-cols-2">
+        <div className="border-r border-border">
+          <div className="px-4 py-2 text-xs font-medium text-text-muted bg-surface border-b border-border">Before</div>
+          <div className="font-mono text-xs">
+            {beforeLines.map((line, i) => (
+              <div key={i} className={`flex ${afterLines[i] !== line ? "bg-red-500/10" : ""}`}>
+                <span className="w-10 text-right pr-2 text-text-muted select-none shrink-0 py-px">{i + 1}</span>
+                <span className="flex-1 py-px px-2 whitespace-pre">{line || " "}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="px-4 py-2 text-xs font-medium text-text-muted bg-surface border-b border-border">After</div>
+          <div className="font-mono text-xs">
+            {afterLines.map((line, i) => (
+              <div key={i} className={`flex ${beforeLines[i] !== line ? "bg-emerald-500/10" : ""}`}>
+                <span className="w-10 text-right pr-2 text-text-muted select-none shrink-0 py-px">{i + 1}</span>
+                <span className="flex-1 py-px px-2 whitespace-pre">{line || " "}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderUnifiedDiff(title: string, diff: string) {
+  const lines = diff.split("\n");
+  const bodyLines: { text: string; type: "add" | "remove" | "context" | "hunk" }[] = [];
+  for (const line of lines) {
+    if (line.startsWith("@@")) bodyLines.push({ text: line, type: "hunk" });
+    else if (line.startsWith("+") && !line.startsWith("+++")) bodyLines.push({ text: line, type: "add" });
+    else if (line.startsWith("-") && !line.startsWith("---")) bodyLines.push({ text: line, type: "remove" });
+    else if (line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) { /* skip */ }
+    else bodyLines.push({ text: line, type: "context" });
+  }
+  const lineClass = (type: string) => {
+    switch (type) {
+      case "add": return "bg-emerald-500/20 text-emerald-300";
+      case "remove": return "bg-red-500/20 text-red-300";
+      case "hunk": return "bg-blue-500/10 text-blue-400";
+      default: return "";
+    }
+  };
+  return (
+    <div className="rounded-xl border border-border overflow-hidden">
+      {title && <div className="px-4 py-2 text-sm font-medium text-text border-b border-border bg-surface">{title}</div>}
+      <div className="font-mono text-xs overflow-x-auto max-h-[600px] overflow-y-auto">
+        {bodyLines.map((l, i) => (
+          <div key={i} className={`flex ${lineClass(l.type)}`}>
+            <span className="w-8 text-center text-text-muted select-none shrink-0 py-px opacity-60">
+              {l.type === "add" ? "+" : l.type === "remove" ? "-" : l.type === "hunk" ? "@@" : " "}
+            </span>
+            <span className="flex-1 py-px px-2 whitespace-pre">{l.type === "hunk" ? l.text : l.text.slice(1) || " "}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Data Table ----
+export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
+  const columns = c.columns as { key: string; label: string; width?: string; sortable?: boolean; render?: string }[];
+  const rows = c.rows as Record<string, unknown>[];
+  const pagination = c.pagination as { page: number; pageSize: number; total: number } | undefined;
+  const sortBy = c.sortBy as string;
+  const sortOrder = (c.sortOrder as string) || "asc";
+
+  const badgeV: Record<string, string> = {
+    success: "bg-emerald-500/20 text-emerald-400", error: "bg-red-500/20 text-red-400",
+    failed: "bg-red-500/20 text-red-400", warning: "bg-amber-500/20 text-amber-400",
+    pending: "bg-amber-500/20 text-amber-400",
+  };
+
+  const renderCell = (value: unknown, render?: string) => {
+    if (render === "badge") {
+      const status = String(value).toLowerCase();
+      const cls = badgeV[status] || "bg-slate-500/20 text-slate-300";
+      return <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>{String(value)}</span>;
+    }
+    if (render === "progress") {
+      const str = String(value);
+      let num: number, barCls = "bg-primary", anim = "";
+      if (str.includes("|")) {
+        const [n, v] = str.split("|");
+        num = Number(n) || 0;
+        if (v === "success") barCls = "bg-success";
+        else if (v === "error") barCls = "bg-error";
+        else if (v === "running") anim = "animate-status-pulse";
+      } else { num = Number(str) || 0; }
+      return (
+        <div className="flex items-center gap-2">
+          <div className="h-1.5 bg-surface rounded-full overflow-hidden flex-1 min-w-[48px]">
+            <div className={`h-full rounded-full ${barCls} ${anim}`} style={{ width: `${Math.max(num, 3)}%` }} />
+          </div>
+          <span className="text-xs text-text-muted whitespace-nowrap">{num}%</span>
+        </div>
+      );
+    }
+    if (render === "date") return new Date(Number(value)).toLocaleString();
+    return String(value ?? "");
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr>
+            {columns.map((col) => (
+              <th
+                key={col.key}
+                style={col.width ? { width: col.width } : undefined}
+                className={`p-3 text-left text-xs font-medium uppercase text-text-muted border-b border-border ${col.sortable ? "cursor-pointer hover:text-text" : ""}`}
+                onClick={() => { if (col.sortable && c.onSort) ctx.sendAction(c.onSort as string, { sortBy: col.key, sortOrder: sortBy === col.key && sortOrder === "asc" ? "desc" : "asc" }); }}
+              >
+                {col.label}
+                {col.sortable && sortBy === col.key && <span className="ml-1 text-primary">{sortOrder === "asc" ? "↑" : "↓"}</span>}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i} className={`border-b border-border transition-colors hover:bg-primary/5 ${c.onRowClick ? "cursor-pointer" : ""}`} onClick={() => { if (c.onRowClick) ctx.sendAction(c.onRowClick as string, { row }); }}>
+              {columns.map((col) => <td key={col.key} className="p-3">{renderCell(row[col.key], col.render)}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {pagination && (
+        <div className="flex items-center justify-between px-3 py-3 border-t border-border text-xs text-text-muted">
+          <span>Page {pagination.page + 1} of {Math.ceil(pagination.total / pagination.pageSize)} ({pagination.total} items)</span>
+          <div className="flex gap-2">
+            <button className="px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40" disabled={pagination.page === 0} onClick={() => { if (c.onPageChange) ctx.sendAction(c.onPageChange as string, { page: pagination.page - 1 }); }}>←</button>
+            <button className="px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40" disabled={(pagination.page + 1) * pagination.pageSize >= pagination.total} onClick={() => { if (c.onPageChange) ctx.sendAction(c.onPageChange as string, { page: pagination.page + 1 }); }}>→</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Score Gauge ----
+export function renderScoreGauge(c: A2UIComponent, _ctx: RenderContext) {
+  const value = (c.value as number) || 0;
+  const max = (c.max as number) || 100;
+  const label = c.label as string;
+  const showValue = c.showValue !== false;
+  const size = (c.size as string) || "md";
+  const defaultThresholds = max <= 1
+    ? [{ value: 0.3, color: "#ef4444" }, { value: 0.6, color: "#f59e0b" }, { value: 1.0, color: "#10b981" }]
+    : [{ value: 30, color: "#ef4444" }, { value: 60, color: "#f59e0b" }, { value: 100, color: "#10b981" }];
+  const thresholds = (c.thresholds as { value: number; color: string }[]) || defaultThresholds;
+  const pct = Math.min(100, (value / max) * 100);
+  let color = thresholds[thresholds.length - 1]?.color || "#667eea";
+  for (const t of thresholds) { if (value <= t.value) { color = t.color; break; } }
+  const sizeMap: Record<string, number> = { sm: 80, md: 120, lg: 160 };
+  const diameter = sizeMap[size] || 120;
+  const strokeWidth = diameter / 10;
+  const radius = (diameter - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference - (pct / 100) * circumference;
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: diameter, height: diameter }}>
+      <svg viewBox={`0 0 ${diameter} ${diameter}`}>
+        <circle className="gauge-bg" cx={diameter / 2} cy={diameter / 2} r={radius} strokeWidth={strokeWidth} />
+        <circle className="gauge-fill" cx={diameter / 2} cy={diameter / 2} r={radius} strokeWidth={strokeWidth} stroke={color} strokeDasharray={circumference} strokeDashoffset={dashOffset} transform={`rotate(-90 ${diameter / 2} ${diameter / 2})`} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        {showValue && <div className="text-2xl font-bold" style={{ color }}>{max <= 1 ? (Math.floor(value * 1000) / 1000).toString() : Math.round(value)}</div>}
+        {label && <div className="text-[10px] text-text-muted mt-0.5">{label}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ---- Activity Rings ----
+export function renderActivityRings(c: A2UIComponent, _ctx: RenderContext) {
+  const rings = (c.rings as Array<{ value: number; max: number; label: string; color: string }>) || [];
+  const size = (c.size as number) || 200;
+  const center = size / 2;
+  const strokeWidth = size / 11;
+  const gap = strokeWidth * 0.35;
+
+  return (
+    <div className="flex items-center gap-6">
+      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+        {rings.map((ring, i) => {
+          const radius = center - strokeWidth / 2 - i * (strokeWidth + gap);
+          if (radius <= 0) return null;
+          const circumference = 2 * Math.PI * radius;
+          const pct = Math.min(ring.value / ring.max, 1);
+          const dashOffset = circumference - pct * circumference;
+          return (
+            <React.Fragment key={i}>
+              <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color + "30"} strokeWidth={strokeWidth} />
+              <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} transform={`rotate(-90 ${center} ${center})`} className="ring-fill" />
+            </React.Fragment>
+          );
+        })}
+      </svg>
+      <div className="flex flex-col gap-2">
+        {rings.map((ring, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: ring.color }} />
+            <span className="text-text-secondary">{ring.label}</span>
+            <span className="font-semibold ml-auto" style={{ color: ring.color }}>{Math.min(100, Math.round((ring.value / ring.max) * 100))}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Radar Chart ----
+export function renderRadarChart(c: A2UIComponent, _ctx: RenderContext) {
+  const multiSeries = c.multiSeries as Array<{ label: string; data: Array<{ label: string; value: number; maxValue: number }>; color: string }> | undefined;
+  if (multiSeries && multiSeries.length > 0) return renderRadarChartMultiSeries(c, multiSeries);
+
+  const data = (c.data as Array<{ label: string; value: number; maxValue: number }>) || [];
+  const compareData = c.compareData as Array<{ label: string; value: number; maxValue: number }> | undefined;
+  const size = (c.size as number) || 280;
+  const color = (c.color as string) || "#667eea";
+  const compareColor = (c.compareColor as string) || "#f59e0b";
+  const n = data.length;
+  if (n < 3) return <div className="text-text-muted text-sm p-4">Need at least 3 data points</div>;
+
+  const cx = size / 2, cy = size / 2, radius = size / 2 - 40;
+  const angleStep = (2 * Math.PI) / n, startAngle = -Math.PI / 2;
+  const getPoint = (i: number, pct: number) => ({ x: cx + radius * pct * Math.cos(startAngle + i * angleStep), y: cy + radius * pct * Math.sin(startAngle + i * angleStep) });
+  const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
+  const gridPolygons = gridLevels.map((level) => Array.from({ length: n }, (_, i) => { const p = getPoint(i, level); return `${p.x},${p.y}`; }).join(" "));
+  const axisLines = Array.from({ length: n }, (_, i) => getPoint(i, 1));
+  const dataPoints = data.map((d, i) => { const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0; const p = getPoint(i, pct); return `${p.x},${p.y}`; }).join(" ");
+  let comparePoints = "";
+  if (compareData && compareData.length === n) {
+    comparePoints = compareData.map((d, i) => { const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0; const p = getPoint(i, pct); return `${p.x},${p.y}`; }).join(" ");
+  }
+  const labels = data.map((d, i) => { const angle = startAngle + i * angleStep; const lr = radius + 24; const x = cx + lr * Math.cos(angle); const y = cy + lr * Math.sin(angle); let anchor = "middle"; if (Math.cos(angle) < -0.1) anchor = "end"; else if (Math.cos(angle) > 0.1) anchor = "start"; return { x, y, label: d.label, value: Math.round(d.value), anchor }; });
+
+  return (
+    <div style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+        {gridPolygons.map((points, i) => <polygon key={i} points={points} className="radar-grid" />)}
+        {axisLines.map((p, i) => <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} className="radar-axis" />)}
+        {comparePoints && <polygon points={comparePoints} fill={compareColor} fillOpacity="0.15" stroke={compareColor} strokeWidth="1.5" strokeOpacity="0.6" />}
+        <polygon points={dataPoints} fill={color} fillOpacity="0.25" stroke={color} strokeWidth="2" className="motion-safe:animate-radar-expand" style={{ transformOrigin: `${cx}px ${cy}px` }} />
+        {data.map((d, i) => { const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0; const p = getPoint(i, pct); return <circle key={i} cx={p.x} cy={p.y} r="4" fill={color} />; })}
+        {labels.map((l, i) => (
+          <React.Fragment key={i}>
+            <text x={l.x} y={l.y} textAnchor={l.anchor} className="radar-label" dominantBaseline="central">{l.label}</text>
+            <text x={l.x} y={l.y + 14} textAnchor={l.anchor} className="radar-value" dominantBaseline="central">{l.value}</text>
+          </React.Fragment>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function renderRadarChartMultiSeries(_c: A2UIComponent, multiSeries: Array<{ label: string; data: Array<{ label: string; value: number; maxValue: number }>; color: string }>) {
+  const svgSize = 500;
+  const axisData = multiSeries[0].data;
+  const n = axisData.length;
+  if (n < 3) return <div className="text-text-muted text-sm p-4">Need at least 3 data points</div>;
+  const cx = svgSize / 2, cy = svgSize / 2, radius = svgSize / 2 - 55;
+  const angleStep = (2 * Math.PI) / n, startAngle = -Math.PI / 2;
+  const getPoint = (i: number, pct: number) => ({ x: cx + radius * pct * Math.cos(startAngle + i * angleStep), y: cy + radius * pct * Math.sin(startAngle + i * angleStep) });
+  const gridLevels = [0.25, 0.5, 0.75, 1.0];
+  const gridPolygons = gridLevels.map((level) => Array.from({ length: n }, (_, i) => { const p = getPoint(i, level); return `${p.x},${p.y}`; }).join(" "));
+  const axisLines = Array.from({ length: n }, (_, i) => getPoint(i, 1));
+  const gridLabels = gridLevels.map((level) => ({ x: cx + radius * level + 4, y: cy - 4, text: level.toFixed(2) }));
+  const labelRadius = radius + 30;
+  const labels = axisData.map((d, i) => { const angle = startAngle + i * angleStep; const x = cx + labelRadius * Math.cos(angle); const y = cy + labelRadius * Math.sin(angle); let anchor = "middle"; if (Math.cos(angle) < -0.1) anchor = "end"; else if (Math.cos(angle) > 0.1) anchor = "start"; return { x, y, label: d.label, anchor }; });
+  const seriesData = multiSeries.map((series) => { const points: Array<{ x: number; y: number }> = []; const polyStr = series.data.map((d, i) => { const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0; const p = getPoint(i, pct); points.push(p); return `${p.x},${p.y}`; }).join(" "); return { color: series.color, label: series.label, polyStr, points }; });
+
+  return (
+    <>
+      <div className="arena-radar-container" style={{ maxWidth: 500, width: "100%" }}>
+        <svg viewBox={`0 0 ${svgSize} ${svgSize}`} width="100%">
+          {gridPolygons.map((points, i) => <polygon key={i} points={points} className="radar-grid" />)}
+          {axisLines.map((p, i) => <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} className="radar-axis" />)}
+          {gridLabels.map((gl, i) => <text key={i} x={gl.x} y={gl.y} fill="rgb(var(--color-text-muted, 100 116 139))" fontSize="9" fontFamily="system-ui" opacity="0.6">{gl.text}</text>)}
+          {seriesData.map((sp, i) => (
+            <React.Fragment key={i}>
+              <polygon points={sp.polyStr} fill={sp.color} fillOpacity="0.12" stroke={sp.color} strokeWidth="2" className="motion-safe:animate-radar-expand" style={{ transformOrigin: `${cx}px ${cy}px` }} />
+              {sp.points.map((pt, j) => <circle key={j} cx={pt.x} cy={pt.y} r="3.5" fill={sp.color} />)}
+            </React.Fragment>
+          ))}
+          {labels.map((l, i) => <text key={i} x={l.x} y={l.y} textAnchor={l.anchor} className="radar-label" dominantBaseline="central" fontSize="11">{l.label}</text>)}
+        </svg>
+      </div>
+      <div className="arena-legend">
+        {multiSeries.map((s, i) => (
+          <span key={i} className="arena-legend-item">
+            <span className="arena-legend-dot" style={{ background: s.color, boxShadow: `0 0 8px ${s.color}` }} />
+            {s.label}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+}
+
+// ---- Status Badge ----
+export function renderStatusBadge(c: A2UIComponent, _ctx: RenderContext) {
+  const status = c.status as string;
+  const label = (c.label as string) || status;
+  const pulse = c.pulse as boolean;
+  const statusIcons: Record<string, string> = { pending: "loader", running: "loader", success: "check", failed: "x", warning: "alert-triangle" };
+  const statusColors: Record<string, string> = { pending: "bg-slate-500/20 text-slate-400", running: "bg-blue-500/20 text-blue-400", success: "bg-emerald-500/20 text-emerald-400", failed: "bg-red-500/20 text-red-400", warning: "bg-amber-500/20 text-amber-400" };
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${statusColors[status] || statusColors.pending} ${pulse ? "motion-safe:animate-status-pulse" : ""}`}>
+      <span className="w-4 h-4" dangerouslySetInnerHTML={{ __html: ICONS[statusIcons[status]] || "•" }} />
+      <span>{label}</span>
+    </span>
+  );
+}
+
+// ---- Collapsible ----
+export function renderCollapsible(c: A2UIComponent, ctx: RenderContext) {
+  const title = c.title as string;
+  const expanded = c.expanded !== false;
+  const icon = c.icon as string;
+  return (
+    <div className={`collapsible-group ${expanded ? "is-open" : ""}`}>
+      <button className="flex items-center gap-2 w-full p-3 bg-transparent border-none text-text text-sm cursor-pointer rounded-lg transition-colors hover:bg-surface-hover text-left" onClick={(e) => { (e.currentTarget as HTMLElement).parentElement?.classList.toggle("is-open"); }}>
+        {icon && <span>{icon}</span>}
+        <span className="font-medium flex-1">{title}</span>
+        <span className="text-text-muted transition-transform duration-normal [.is-open>button>&]:rotate-90">▶</span>
+      </button>
+      <div className="collapsible-grid pl-4">
+        <div>{ctx.renderChildren(c.children)}</div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Modal Component ----
+export function renderModalComponent(c: A2UIComponent, ctx: RenderContext) {
+  const title = c.title as string;
+  const size = (c.size as string) || "md";
+  const closable = c.closable !== false;
+  const onClose = c.onClose as string | undefined;
+  const modalSizes: Record<string, string> = { sm: "max-w-[400px] w-[90%]", md: "max-w-[600px] w-[90%]", lg: "max-w-[800px] w-[90%]", xl: "max-w-[1000px] w-[95%]" };
+  return (
+    <div className={`bg-surface-elevated border border-border rounded-2xl shadow-2xl backdrop-blur-[16px] overflow-hidden ${modalSizes[size] || modalSizes.md}`}>
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        <h3 className="text-lg font-semibold text-text">{title}</h3>
+        {closable && (
+          <button className="w-8 h-8 rounded-lg border-none bg-transparent text-text-muted cursor-pointer flex items-center justify-center text-xl transition-colors hover:bg-surface-hover hover:text-text" onClick={() => { if (onClose) ctx.sendAction(onClose); else ctx.sendAction("close_modal"); }}>
+            ×
+          </button>
+        )}
+      </div>
+      <div className="p-6 overflow-y-auto max-h-[70vh]">{ctx.renderChildren(c.children)}</div>
+    </div>
+  );
+}
+
+// ---- Form ----
+export function renderForm(c: A2UIComponent, ctx: RenderContext) {
+  const onSubmit = c.onSubmit as string;
+  const submitLabel = (c.submitLabel as string) || "Submit";
+  const cancelLabel = c.cancelLabel as string | undefined;
+  const onCancel = c.onCancel as string | undefined;
+  const btnBase = "px-5 py-2.5 rounded-[10px] text-sm font-medium cursor-pointer transition-all duration-fast border-none";
+  return (
+    <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const formData = new FormData(form); const data: Record<string, unknown> = {}; formData.forEach((v, k) => { data[k] = v; }); ctx.sendAction(onSubmit, data); }}>
+      {ctx.renderChildren(c.children)}
+      <div className="flex gap-3 justify-end mt-2">
+        {cancelLabel && onCancel && <button type="button" className={`${btnBase} bg-transparent text-text-secondary hover:bg-primary/10 hover:text-text`} onClick={() => ctx.sendAction(onCancel)}>{cancelLabel}</button>}
+        <button type="submit" className={`${btnBase} bg-gradient-to-br from-primary to-accent text-white hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(102,126,234,0.4)]`}>{submitLabel}</button>
+      </div>
+    </form>
+  );
+}
+
+// ---- Form Input ----
+export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
+  const inputType = c.inputType as string;
+  const name = c.name as string;
+  const label = c.label as string | undefined;
+  const placeholder = (c.placeholder as string) || "";
+  const value = c.value as string | number | boolean | undefined;
+  const options = c.options as { value: string; label: string }[] | undefined;
+  const required = c.required as boolean | undefined;
+  const onChange = c.onChange as string | undefined;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    if (onChange) ctx.sendAction(onChange, { name, value: e.target.value });
+  };
+  const inputCls = "w-full py-2.5 px-3.5 bg-surface border border-border rounded-[10px] text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-surface-hover focus:ring-4 focus:ring-primary/10";
+
+  let input: React.ReactNode;
+  switch (inputType) {
+    case "textarea":
+      input = <textarea className={`${inputCls} min-h-[100px] resize-y`} name={name} placeholder={placeholder} required={required} onChange={handleChange} defaultValue={String(value || "")} />;
+      break;
+    case "select": {
+      const selectedOpt = options?.find((opt) => opt.value === value);
+      const selectedLabel = selectedOpt?.label || placeholder || "Select...";
+      input = (
+        <div className="custom-select relative" data-name={name}>
+          <input type="hidden" name={name} defaultValue={String(value ?? "")} />
+          <button type="button" className={`${inputCls} flex items-center justify-between cursor-pointer`} onClick={(e) => {
+            const wrapper = (e.currentTarget as HTMLElement).closest(".custom-select") as HTMLElement;
+            wrapper.classList.toggle("open");
+            const closeHandler = (ev: Event) => { if (!wrapper.contains(ev.target as Node)) { wrapper.classList.remove("open"); document.removeEventListener("click", closeHandler); } };
+            setTimeout(() => document.addEventListener("click", closeHandler), 0);
+          }}>
+            <span className={`select-label ${!selectedOpt ? "text-text-muted" : "text-text"}`}>{selectedLabel}</span>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" className="text-text-muted shrink-0 transition-transform duration-fast"><path d="M8 11L3 6h10l-5 5z" /></svg>
+          </button>
+          <div className="select-dropdown absolute top-full mt-1 left-0 right-0 z-50 bg-surface-elevated backdrop-blur-[12px] border border-primary/20 rounded-xl shadow-2xl max-h-[200px] overflow-y-auto">
+            {options?.map((opt) => (
+              <div
+                key={opt.value}
+                className={`select-option px-3 py-2 cursor-pointer text-sm transition-colors ${value === opt.value ? "text-text bg-primary/10 border-l-2 border-l-primary" : "text-text-secondary border-l-2 border-l-transparent hover:bg-primary/10 hover:text-text"}`}
+                onClick={(e) => {
+                  const wrapper = (e.currentTarget as HTMLElement).closest(".custom-select") as HTMLElement;
+                  if (wrapper) {
+                    const hidden = wrapper.querySelector('input[type="hidden"]') as HTMLInputElement;
+                    if (hidden) hidden.value = opt.value;
+                    const lbl = wrapper.querySelector(".select-label") as HTMLElement;
+                    if (lbl) { lbl.textContent = opt.label; lbl.className = "select-label text-text"; }
+                    wrapper.querySelectorAll(".select-option").forEach((el) => {
+                      (el as HTMLElement).className = el === e.currentTarget
+                        ? "select-option px-3 py-2 cursor-pointer text-sm transition-colors text-text bg-primary/10 border-l-2 border-l-primary"
+                        : "select-option px-3 py-2 cursor-pointer text-sm transition-colors text-text-secondary border-l-2 border-l-transparent hover:bg-primary/10 hover:text-text";
+                    });
+                    wrapper.classList.remove("open");
+                  }
+                  if (onChange) ctx.sendAction(onChange, { name, value: opt.value });
+                }}
+              >{opt.label}</div>
+            ))}
+          </div>
+        </div>
+      );
+      break;
+    }
+    case "checkbox":
+      return (
+        <div className="flex flex-col gap-1.5">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-text">
+            <input type="checkbox" className="w-4 h-4 rounded border-primary/30 bg-surface text-primary focus:ring-primary/20" name={name} defaultChecked={value === true} onChange={handleChange} />
+            <span>{label}</span>
+          </label>
+        </div>
+      );
+    case "number":
+      input = <input type="number" className={inputCls} name={name} placeholder={placeholder} defaultValue={value ?? ""} required={required} onChange={handleChange} />;
+      break;
+    default:
+      input = <input type="text" className={inputCls} name={name} placeholder={placeholder} defaultValue={String(value ?? "")} required={required} onChange={handleChange} />;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {label && inputType !== "checkbox" && <label className="text-xs font-medium text-text-secondary">{label}{required && <span className="text-red-400 ml-0.5">*</span>}</label>}
+      {input}
+    </div>
+  );
+}
+
+// ---- Git Timeline ----
+export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
+  const events = (c.events as any[]) || [];
+  const onEventClick = c.onEventClick as string | undefined;
+  const onContextAction = c.onContextAction as string | undefined;
+  const selectedEventId = c.selectedEventId as string | undefined;
+  const typeIcons: Record<string, string> = { branch: "git-branch", commit: "git-commit", benchmark: "test-tube", merge: "git-merge", revert: "alert-triangle", tag: "star" };
+  const statusColors: Record<string, string> = { success: "rgb(var(--color-success))", failed: "rgb(var(--color-error))", pending: "rgb(var(--color-text-muted))", active: "rgb(var(--color-primary))" };
+
+  const relativeTime = (ts: number) => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  };
+
+  const dateGroups: { date: string; events: { evt: any; idx: number }[] }[] = [];
+  let lastDate = "";
+  for (let i = 0; i < events.length; i++) {
+    const d = new Date(events[i].timestamp as number).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    if (d !== lastDate) { dateGroups.push({ date: d, events: [] }); lastDate = d; }
+    dateGroups[dateGroups.length - 1].events.push({ evt: events[i], idx: i });
+  }
+
+  const ctxBtn = "flex items-center gap-2 w-full px-3 py-2 text-xs bg-transparent border-none text-text-secondary cursor-pointer transition-colors hover:bg-primary/10 hover:text-text text-left";
+  return (
+    <div className="a2ui-git-timeline flex flex-col" onClick={(e) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".timeline-context-menu") && !target.closest(".timeline-context-trigger")) {
+        (e.currentTarget as HTMLElement).querySelectorAll(".timeline-context-menu").forEach((m) => ((m as HTMLElement).style.display = "none"));
+      }
+    }}>
+      {dateGroups.map((group, gi) => (
+        <div key={gi} className="mb-2">
+          <div className="flex items-center gap-3 py-2">
+            <span className="flex-1 h-px bg-border" /><span className="text-xs text-text-muted font-medium">{group.date}</span><span className="flex-1 h-px bg-border" />
+          </div>
+          {group.events.map(({ evt, idx }) => (
+            <div key={idx} className={`flex gap-3 p-2 rounded-lg transition-colors relative ${selectedEventId === evt.id ? "bg-primary/10" : "hover:bg-surface-hover"}`} onClick={() => onEventClick && ctx.sendAction(onEventClick, { eventId: evt.id })} onContextMenu={(e) => {
+              if (!onContextAction) return;
+              e.preventDefault();
+              const menu = (e.currentTarget as HTMLElement).querySelector(".timeline-context-menu") as HTMLElement;
+              if (menu) {
+                (e.currentTarget as HTMLElement).closest(".a2ui-git-timeline")?.querySelectorAll(".timeline-context-menu").forEach((m) => ((m as HTMLElement).style.display = "none"));
+                menu.style.display = menu.style.display === "block" ? "none" : "block";
+                menu.style.top = `${e.nativeEvent.offsetY}px`;
+                menu.style.left = `${e.nativeEvent.offsetX}px`;
+              }
+            }} style={{ cursor: onEventClick ? "pointer" : "default" }}>
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0" style={{ background: statusColors[evt.status as string] || statusColors.pending }}>
+                  <span className="w-4 h-4" dangerouslySetInnerHTML={{ __html: getIcon(typeIcons[evt.type as string] || "git-commit") }} />
+                </div>
+                {idx < events.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1 min-h-[8px]" />}
+              </div>
+              <div className="flex-1 min-w-0 pb-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-text truncate">{evt.label}</span>
+                  <span className="flex items-center gap-2 shrink-0">
+                    {evt.hash && <code className="text-[11px] font-mono text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded">{(evt.hash as string).slice(0, 7)}</code>}
+                    {evt.score !== undefined && <span className="text-xs font-semibold text-primary">{evt.score}</span>}
+                  </span>
+                </div>
+                {evt.description && <div className="text-xs text-text-muted mt-0.5 line-clamp-2">{evt.description}</div>}
+                <div className="flex items-center gap-3 mt-1.5 text-[11px] text-text-muted flex-wrap">
+                  {evt.author && <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-bg-tertiary flex items-center justify-center text-[9px] text-text-secondary font-medium">{(evt.author as string).charAt(0).toUpperCase()}</span>{evt.author}</span>}
+                  {evt.branch && <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary"><span dangerouslySetInnerHTML={{ __html: getIcon("git-branch") }} /> {evt.branch}</span>}
+                  {evt.tags && (evt.tags as string[]).map((tag, ti) => <span key={ti} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400"><span dangerouslySetInnerHTML={{ __html: getIcon("star") }} /> {tag}</span>)}
+                  {evt.filesChanged && <span className="flex items-center gap-1">{evt.filesChanged} file{(evt.filesChanged as number) > 1 ? "s" : ""} {evt.additions && <span className="text-emerald-400">+{evt.additions}</span>} {evt.deletions && <span className="text-red-400">-{evt.deletions}</span>}</span>}
+                  <span className="ml-auto">{relativeTime(evt.timestamp as number)}</span>
+                </div>
+              </div>
+              {onContextAction && (
+                <div className="timeline-context-menu absolute z-50 bg-surface-elevated border border-border rounded-lg shadow-2xl py-1 min-w-[140px]" style={{ display: "none" }}>
+                  {(evt.type === "commit" || evt.type === "merge") && <>
+                    <button className={ctxBtn} onClick={(e) => { e.stopPropagation(); ctx.sendAction(onContextAction, { eventId: evt.id, action: "view_diff" }); }}><span dangerouslySetInnerHTML={{ __html: getIcon("search") }} /> View Diff</button>
+                    <button className={ctxBtn} onClick={(e) => { e.stopPropagation(); ctx.sendAction(onContextAction, { eventId: evt.id, action: "cherry_pick" }); }}><span dangerouslySetInnerHTML={{ __html: getIcon("git-commit") }} /> Cherry-Pick</button>
+                    <button className={`${ctxBtn} !text-red-400 hover:!bg-red-500/10`} onClick={(e) => { e.stopPropagation(); ctx.sendAction(onContextAction, { eventId: evt.id, action: "revert" }); }}><span dangerouslySetInnerHTML={{ __html: getIcon("alert-triangle") }} /> Revert</button>
+                  </>}
+                  {evt.type === "branch" && <>
+                    <button className={ctxBtn} onClick={(e) => { e.stopPropagation(); ctx.sendAction("switch_version", { branch: evt.branch }); }}><span dangerouslySetInnerHTML={{ __html: getIcon("git-branch") }} /> Switch</button>
+                    <button className={ctxBtn} onClick={(e) => { e.stopPropagation(); ctx.sendAction("merge_version", { branch: evt.branch }); }}><span dangerouslySetInnerHTML={{ __html: getIcon("git-merge") }} /> Merge</button>
+                  </>}
+                  {evt.type === "benchmark" && <button className={ctxBtn} onClick={(e) => { e.stopPropagation(); ctx.sendAction("view_benchmark_run", { eventId: evt.id }); }}><span dangerouslySetInnerHTML={{ __html: getIcon("bar-chart") }} /> View Results</button>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Step Indicator ----
+export function renderStepIndicator(c: A2UIComponent, ctx: RenderContext) {
+  const steps = (c.steps as any[]) || [];
+  const orientation = (c.orientation as string) || "horizontal";
+  const onStepClick = c.onStepClick as string | undefined;
+  const isH = orientation === "horizontal";
+
+  return (
+    <div className={`flex ${isH ? "flex-row items-center justify-center" : "flex-col"} gap-0`}>
+      {steps.map((step: any, i: number) => {
+        const status = (step.status as string) || "pending";
+        const connectorDone = status === "completed" || status === "active";
+        const circleClass = status === "completed" ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]"
+          : status === "active" ? "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+          : status === "failed" ? "bg-red-500 border-red-500 text-white"
+          : "bg-transparent border-slate-600 text-slate-500";
+        const labelClass = status === "active" ? "text-indigo-400 font-semibold" : status === "completed" ? "text-emerald-400 font-medium" : "text-slate-500 font-medium";
+        const sizeClass = status === "active" ? "w-12 h-12" : "w-9 h-9";
+        const iconSize = status === "active" ? "w-5 h-5" : "w-4 h-4";
+        const clickable = onStepClick && (status === "completed" || status === "active");
+
+        return (
+          <React.Fragment key={i}>
+            {i > 0 && <div className={`${isH ? "h-1 flex-1 min-w-[24px] rounded-full" : "w-1 h-8 ml-[17px] rounded-full"} ${connectorDone ? "bg-gradient-to-r from-emerald-500 to-indigo-500" : "bg-slate-700"} transition-colors`} />}
+            <div className={`flex ${isH ? "flex-col" : "flex-row"} items-center ${isH ? "gap-2" : "gap-3"} ${clickable ? "cursor-pointer" : ""}`} onClick={clickable ? () => ctx.sendAction(onStepClick!, { stepId: step.id }) : undefined}>
+              <div className={`${sizeClass} rounded-full flex items-center justify-center text-xs border-2 shrink-0 transition-all ${circleClass}`}>
+                {step.status === "completed" ? <span className={iconSize} dangerouslySetInnerHTML={{ __html: getIcon("check") }} />
+                  : step.icon ? <span className={iconSize} dangerouslySetInnerHTML={{ __html: getIcon(step.icon as string) }} />
+                  : <span>{i + 1}</span>}
+              </div>
+              <span className={`text-[11px] whitespace-nowrap uppercase tracking-wider ${labelClass}`}>{step.label}</span>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---- File Tree ----
+export function renderFileTree(c: A2UIComponent, ctx: RenderContext) {
+  const files = (c.files as any[]) || [];
+  const selectedPath = c.selectedPath as string | undefined;
+  const onFileSelect = c.onFileSelect as string | undefined;
+  const statusIcons: Record<string, { symbol: string; color: string }> = {
+    added: { symbol: "+", color: "rgb(var(--color-success))" }, modified: { symbol: "M", color: "rgb(var(--color-primary))" },
+    deleted: { symbol: "-", color: "rgb(var(--color-error))" }, renamed: { symbol: "R", color: "rgb(var(--color-warning))" },
+  };
+  const tree = new Map<string, typeof files>();
+  for (const f of files) {
+    const parts = (f.path as string).split("/");
+    const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : ".";
+    if (!tree.has(dir)) tree.set(dir, []);
+    tree.get(dir)!.push(f);
+  }
+  return (
+    <div className="text-sm font-mono">
+      {Array.from(tree.entries()).map(([dir, dirFiles]) => (
+        <div key={dir} className="mb-2">
+          <div className="text-xs text-text-muted font-medium py-1">{dir}/</div>
+          {dirFiles.map((f: any, fi: number) => {
+            const si = statusIcons[f.status as string] || statusIcons.modified;
+            const filename = (f.path as string).split("/").pop();
+            return (
+              <div key={fi} className={`flex items-center gap-2 py-1 px-2 rounded transition-colors ${f.path === selectedPath ? "bg-primary/10" : "hover:bg-surface-hover"}`} onClick={() => onFileSelect && ctx.sendAction(onFileSelect, { path: f.path })} style={{ cursor: onFileSelect ? "pointer" : "default" }}>
+                <span className="w-4 text-center font-bold text-xs" style={{ color: si.color }}>{si.symbol}</span>
+                <span className="text-text flex-1">{filename}</span>
+                {(f.additions !== undefined || f.deletions !== undefined) && (
+                  <span className="flex gap-1.5 text-[11px]">
+                    {f.additions ? <span className="text-emerald-400">+{f.additions}</span> : null}
+                    {f.deletions ? <span className="text-red-400">-{f.deletions}</span> : null}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Arena Pills ----
+export function renderArenaPills(c: A2UIComponent, ctx: RenderContext) {
+  const pills = (c.pills as Array<{ label: string; color: string; active: boolean; action: string; payload?: Record<string, unknown> }>) || [];
+  const clearAction = c.clearAction as string | undefined;
+  const hasActive = pills.some((p) => p.active);
+  return (
+    <div className="arena-pills">
+      {pills.map((p, i) => (
+        <div key={i} className={`arena-pill ${p.active ? "active" : ""}`} onClick={() => ctx.sendAction(p.action, p.payload)}>
+          <span className="arena-glow-dot" style={{ background: p.color, color: p.color }} /><span>{p.label}</span>
+        </div>
+      ))}
+      {hasActive && clearAction && <div className="arena-clear-pill" onClick={() => ctx.sendAction(clearAction)}>✕ Clear</div>}
+    </div>
+  );
+}
+
+// ---- Arena Score Table ----
+export function renderArenaScoreTable(c: A2UIComponent, _ctx: RenderContext) {
+  const rows = (c.rows as Array<{ label: string; color: string; score: number }>) || [];
+  const scoreClass = (s: number) => s >= 0.9 ? "score-high" : s >= 0.7 ? "score-mid" : "score-low";
+  return (
+    <table className="arena-score-table">
+      <thead><tr><th>Run</th><th>Overall Score</th></tr></thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={i}>
+            <td><div className="arena-score-cell"><span style={{ background: r.color, width: 8, height: 8, borderRadius: "50%", display: "inline-block" }} />{r.label}</div></td>
+            <td><div className="arena-score-cell"><div className="arena-score-bar"><div className="arena-score-bar-fill" style={{ width: `${r.score * 100}%`, background: r.color }} /></div><span className={`arena-score-value ${scoreClass(r.score)}`}>{r.score.toFixed(2)}</span></div></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// ---- Arena Category Card ----
+export function renderArenaCategoryCard(c: A2UIComponent, _ctx: RenderContext) {
+  const name = c.categoryName as string;
+  const color = c.categoryColor as string;
+  const icon = c.categoryIcon as string;
+  const avgScore = c.avgScore as number;
+  const criteria = (c.criteria as Array<{ name: string; scores: Array<{ value: number; color: string }> }>) || [];
+  const scoreClass = (s: number) => s >= 0.9 ? "score-high" : s >= 0.7 ? "score-mid" : "score-low";
+  const showBar = criteria.length > 0 && criteria[0].scores.length <= 1;
+  return (
+    <div className="arena-category-card">
+      <div className="arena-category-header">
+        <div className="arena-category-icon" style={{ background: `${color}20`, color }} dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />
+        <span className="arena-category-name">{name}</span>
+        <span className={`arena-category-avg ${scoreClass(avgScore)}`}>{avgScore.toFixed(2)}</span>
+      </div>
+      <div className="arena-criteria-list">
+        {criteria.map((cr, i) => (
+          <div key={i} className="arena-criterion-row">
+            <span className="arena-criterion-name">{cr.name}</span>
+            {showBar && <div className="arena-criterion-bar">
+              {cr.scores.map((s, j) => (
+                <div key={j} className="arena-criterion-bar-track" title={s.value.toFixed(3)}>
+                  <div className="arena-criterion-bar-fill" style={{ width: `${Math.min(100, s.value * 100)}%`, background: s.color }} />
+                </div>
+              ))}
+            </div>}
+            <div className="arena-criterion-scores">
+              {cr.scores.map((s, j) => <span key={j} className="arena-criterion-score" style={{ color: s.color }}>{s.value.toFixed(2)}</span>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---- Plotly Radar ----
+export function renderPlotlyRadar(c: A2UIComponent, ctx: RenderContext) {
+  const elementId = `plotly-${c.id}`;
+  ctx.pendingPlotlyCharts.current.push({ elementId, traces: c.traces as unknown[], layout: c.layout as unknown, config: c.config as unknown });
+  const legend = (c.categoryLegend as Array<{ name: string; color: string }>) || [];
+  return (
+    <>
+      <div id={elementId} style={{ width: "100%", height: (c as any).height || 500 }} />
+      {legend.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          {legend.map((cat, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "rgb(var(--color-text-secondary))" }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: cat.color, display: "inline-block" }} />
+              <span>{cat.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---- Arena Run Picker ----
+export function renderArenaRunPicker(c: A2UIComponent, ctx: RenderContext) {
+  const runs = (c.runs as Array<{ id: string; label: string; selected: boolean; color?: string; score?: number }>) || [];
+  const action = c.action as string;
+  const clearAction = c.clearAction as string | undefined;
+  const selectedCount = runs.filter((r) => r.selected).length;
+  return (
+    <details className="arena-run-picker">
+      <summary className="arena-run-picker-btn">Runs ({selectedCount}) ▾</summary>
+      <div className="arena-run-picker-panel">
+        {runs.map((r) => (
+          <div key={r.id} className={`arena-run-picker-item ${r.selected ? "selected" : ""}`} onClick={() => ctx.sendAction(action, { runId: r.id })}>
+            <span className="arena-run-picker-dot" style={{ background: r.color || "#555" }} />
+            <span className="arena-run-picker-label">{r.label}</span>
+            {r.score != null && <span className="arena-run-picker-score">{r.score.toFixed(2)}</span>}
+            <span className="arena-run-picker-check">{r.selected ? "✓" : ""}</span>
+          </div>
+        ))}
+        {clearAction && <div className="arena-run-picker-footer" onClick={() => ctx.sendAction(clearAction)}>Clear All</div>}
+      </div>
+    </details>
+  );
+}
+
+// ---- Arena Mode Toggle ----
+export function renderArenaModeToggle(c: A2UIComponent, ctx: RenderContext) {
+  const options = (c.options as Array<{ label: string; value: string }>) || [];
+  const active = c.active as string;
+  const action = c.action as string;
+  return (
+    <div className="arena-toggle">
+      {options.map((opt, i) => (
+        <button key={i} className={`arena-toggle-btn ${opt.value === active ? "active" : ""}`} onClick={() => ctx.sendAction(action, { mode: opt.value })}>{opt.label}</button>
+      ))}
+    </div>
+  );
+}
+
+// ---- Playground FAB ----
+export function renderPlaygroundFab(c: A2UIComponent, ctx: RenderContext) {
+  const primary = c.primary as { icon: string; action: string; payload?: Record<string, unknown> };
+  const actions = (c.actions as Array<{ icon: string; action: string; payload?: Record<string, unknown>; tooltip?: string }>) || [];
+  return (
+    <div className="pg-fab-container">
+      <button className="pg-fab-primary" onClick={() => ctx.sendAction(primary.action, primary.payload)} dangerouslySetInnerHTML={{ __html: getIcon(primary.icon) }} />
+      {actions.map((a, i) => (
+        <button key={i} className="pg-fab-secondary" data-tooltip={a.tooltip || ""} onClick={() => ctx.sendAction(a.action, a.payload)} dangerouslySetInnerHTML={{ __html: getIcon(a.icon) }} />
+      ))}
+    </div>
+  );
+}
+
+// ---- Evolution Pipeline ----
+export function renderEvolutionPipeline(c: A2UIComponent, ctx: RenderContext) {
+  const cycles = (c.cycles as any[]) || [];
+  const onStepClick = c.onStepClick as string | undefined;
+
+  return (
+    <div className="flex flex-col gap-0">
+      {cycles.map((cycle: any, cycleIdx: number) => {
+        const isLast = cycleIdx === cycles.length - 1;
+        const steps = (cycle.steps as any[]) || [];
+        return (
+          <React.Fragment key={cycleIdx}>
+            <div className="flex flex-col gap-1 py-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cycle {cycle.cycleNumber}</span>
+                {cycle.score && <>
+                  <span className="text-[11px] text-slate-400">{cycle.score.before.toFixed(2)} → {cycle.score.after.toFixed(2)}</span>
+                  <span className={`text-[11px] font-semibold ${cycle.score.delta >= 0 ? "text-emerald-400" : "text-red-400"}`}>({cycle.score.delta >= 0 ? "+" : ""}{cycle.score.delta.toFixed(3)})</span>
+                  {cycle.recommendation && <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${cycle.recommendation === "merge" ? "bg-emerald-500/15 text-emerald-400" : cycle.recommendation === "revert" ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400"}`}>{cycle.recommendation}</span>}
+                </>}
+              </div>
+              <div className="flex flex-row items-center justify-center gap-0">
+                {steps.map((step: any, i: number) => {
+                  const status = (step.status as string) || "pending";
+                  const connectorDone = status === "completed" || status === "active";
+                  const circleClass = status === "completed" ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]"
+                    : status === "active" ? "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]"
+                    : status === "failed" ? "bg-red-500 border-red-500 text-white"
+                    : status === "skipped" ? "bg-transparent border-slate-600 border-dashed text-slate-500"
+                    : "bg-transparent border-slate-600 text-slate-500";
+                  const labelClass = status === "active" ? "text-indigo-400 font-semibold" : status === "completed" ? "text-emerald-400 font-medium" : "text-slate-500 font-medium";
+                  const sizeClass = status === "active" ? "w-12 h-12" : "w-9 h-9";
+                  const iconSize = status === "active" ? "w-5 h-5" : "w-4 h-4";
+                  const clickable = onStepClick && (status === "completed" || status === "active");
+                  return (
+                    <React.Fragment key={i}>
+                      {i > 0 && <div className={`h-1 flex-1 min-w-[24px] rounded-full ${connectorDone ? "bg-gradient-to-r from-emerald-500 to-indigo-500" : "bg-slate-700"} transition-colors`} />}
+                      <div className={`flex flex-col items-center gap-2 ${clickable ? "cursor-pointer" : ""}`} onClick={clickable ? () => ctx.sendAction(onStepClick!, { stepId: step.id, cycleNumber: cycle.cycleNumber }) : undefined}>
+                        <div className={`${sizeClass} rounded-full flex items-center justify-center text-xs border-2 shrink-0 transition-all ${circleClass}`}>
+                          {step.status === "completed" ? <span className={iconSize} dangerouslySetInnerHTML={{ __html: getIcon("check") }} />
+                            : step.icon ? <span className={iconSize} dangerouslySetInnerHTML={{ __html: getIcon(step.icon as string) }} />
+                            : <span>{i + 1}</span>}
+                        </div>
+                        <span className={`text-[11px] whitespace-nowrap uppercase tracking-wider ${labelClass}`}>{step.label}</span>
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+            {!isLast && (
+              <div className="flex justify-end pr-8 py-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-amber-400/60 uppercase tracking-wider">iterate</span>
+                  <svg width="40" height="24" viewBox="0 0 40 24">
+                    <path d="M 38 0 C 38 12, 20 12, 20 24" stroke="rgb(245,158,11)" strokeWidth="1.5" fill="none" opacity="0.4" strokeDasharray="4 2" />
+                    <path d="M 17 20 L 20 24 L 23 20" stroke="rgb(245,158,11)" strokeWidth="1.5" fill="none" opacity="0.4" />
+                  </svg>
+                </div>
+              </div>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}

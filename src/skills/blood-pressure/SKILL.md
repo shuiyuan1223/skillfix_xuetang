@@ -1,6 +1,6 @@
 ---
 name: blood-pressure
-description: "Analyze blood pressure data, assess cardiovascular risk levels, and provide lifestyle intervention guidance"
+description: "分析血压数据，评估心血管风险等级，提供生活方式干预指导"
 metadata:
   {
     "pha": {
@@ -11,137 +11,137 @@ metadata:
   }
 ---
 
-# Blood Pressure Monitor Skill
+# 血压监测 Skill
 
-## Step 1: Classify the Question
+## 第一步：问题分类
 
-| User Says | Question Type | What to Investigate |
-|-----------|-------------|-------------------|
-| "Is my blood pressure normal?" | **Baseline check** | Compare to classification standards |
-| "My blood pressure is high" | **Acute concern** | Check context: stress? white coat? measurement error? |
-| "Blood pressure trend" | **Trend analysis** | Pull multi-day data, look for patterns |
-| "How do I lower my blood pressure?" | **Intervention guidance** | Current level + lifestyle factors |
-| "What does my pulse pressure mean?" | **Pulse pressure analysis** | Systolic - diastolic gap |
+| 用户说 | 问题类型 | 需要调查什么 |
+|--------|---------|-------------|
+| "我的血压正常吗？" | **基线检查** | 与分类标准对比 |
+| "我血压高了" | **急性关注** | 检查背景：压力？白大褂效应？测量误差？ |
+| "血压趋势" | **趋势分析** | 拉取多日数据，寻找规律 |
+| "怎么降血压？" | **干预指导** | 当前水平 + 生活方式因素 |
+| "脉压差是什么意思？" | **脉压分析** | 收缩压 - 舒张压差值 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据收集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Baseline check | `get_blood_pressure(today)` | Current reading |
-| Trend analysis | `get_blood_pressure(7-30d)` | Multi-day average (single readings unreliable) |
-| Full assessment | `get_blood_pressure(7d)` + `get_heart_rate(today)` + `get_sleep(today)` | BP + HR + sleep context |
-| Intervention tracking | `get_blood_pressure(30d)` + `get_workouts(week)` | Long-term trend + activity level |
+| 问题类型 | 需要调用 | 原因 |
+|---------|---------|------|
+| 基线检查 | `get_blood_pressure(today)` | 获取当前读数 |
+| 趋势分析 | `get_blood_pressure(7-30d)` | 多日平均值（单次读数不可靠） |
+| 全面评估 | `get_blood_pressure(7d)` + `get_heart_rate(today)` + `get_sleep(today)` | 血压 + 心率 + 睡眠背景 |
+| 干预追踪 | `get_blood_pressure(30d)` + `get_workouts(week)` | 长期趋势 + 活动水平 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Blood Pressure Classification (Chinese Hypertension Guidelines)
+### 3.1 血压分级（中国高血压防治指南）
 
-**Always use the average of multiple measurements, not a single reading.**
+**始终使用多次测量的平均值，而非单次读数。**
 
-| Category | Systolic (mmHg) | Diastolic (mmHg) |
-|----------|----------------|-----------------|
-| Ideal | < 120 | < 80 |
-| Normal | 120-129 | 80-84 |
-| High-normal | 130-139 | 85-89 |
-| Grade 1 Hypertension (mild) | 140-159 | 90-99 |
-| Grade 2 Hypertension (moderate) | 160-179 | 100-109 |
-| Grade 3 Hypertension (severe) | ≥ 180 | ≥ 110 |
+| 类别 | 收缩压 (mmHg) | 舒张压 (mmHg) |
+|------|--------------|--------------|
+| 理想 | < 120 | < 80 |
+| 正常 | 120-129 | 80-84 |
+| 正常高值 | 130-139 | 85-89 |
+| 1级高血压（轻度） | 140-159 | 90-99 |
+| 2级高血压（中度） | 160-179 | 100-109 |
+| 3级高血压（重度） | ≥ 180 | ≥ 110 |
 
-**Classification rule**: When systolic and diastolic fall into different categories, use the higher category.
+**分类规则**：当收缩压和舒张压属于不同级别时，以较高的级别为准。
 
-### 3.2 Pulse Pressure Analysis
+### 3.2 脉压分析
 
-Pulse pressure = Systolic - Diastolic
+脉压 = 收缩压 - 舒张压
 
-| Range | Interpretation |
-|-------|--------------|
-| 30-60 mmHg | Normal |
-| > 60 mmHg | May indicate arterial stiffness — more common with age |
-| < 30 mmHg | May indicate reduced cardiac output — worth monitoring |
+| 范围 | 解读 |
+|------|------|
+| 30-60 mmHg | 正常 |
+| > 60 mmHg | 可能提示动脉硬化 — 随年龄增长更常见 |
+| < 30 mmHg | 可能提示心输出量减少 — 值得关注 |
 
-### 3.3 Blood Pressure Patterns
+### 3.3 血压模式
 
-**Diurnal rhythm**: BP normally dips 10-20% during sleep (dipping pattern)
-- **Non-dipping**: BP doesn't drop at night → higher cardiovascular risk
-- **Morning surge**: BP spikes in early morning → highest stroke risk window
+**昼夜节律**：正常情况下血压在睡眠期间下降 10-20%（杓型模式）
+- **非杓型**：夜间血压不下降 → 心血管风险更高
+- **晨峰现象**：清晨血压骤升 → 卒中风险最高时段
 
-**White coat hypertension**: Elevated readings in clinical settings but normal at home — home monitoring is valuable for ruling this out.
+**白大褂高血压**：在医院测量偏高但家中正常 — 家庭监测对排除此情况很有价值。
 
-**Masked hypertension**: Normal in clinic but elevated at home — this is the more dangerous pattern.
+**隐蔽性高血压**：诊室正常但家中偏高 — 这是更危险的类型。
 
-### 3.4 Lifestyle Impact Factors
+### 3.4 生活方式影响因素
 
-| Factor | Effect on BP |
-|--------|-------------|
-| Salt intake > 6g/day | Significant increase |
-| Each 5 kg of weight loss | ~5 mmHg reduction |
-| Regular exercise (150 min/week moderate) | 5-8 mmHg reduction |
-| Alcohol (> 2 drinks/day) | Elevates BP |
-| Chronic stress / poor sleep | Sustained elevation |
-| Caffeine | Temporary spike (1-3 hours) |
-| Potassium-rich foods (bananas, spinach) | Helps counterbalance sodium |
+| 因素 | 对血压的影响 |
+|------|-------------|
+| 每日盐摄入 > 6g | 显著升高 |
+| 每减重 5 kg | 约降低 5 mmHg |
+| 规律运动（每周 150 分钟中等强度） | 降低 5-8 mmHg |
+| 饮酒（每天 > 2 杯） | 升高血压 |
+| 长期压力 / 睡眠不佳 | 持续升高 |
+| 咖啡因 | 短暂升高（1-3 小时） |
+| 富含钾的食物（香蕉、菠菜） | 有助于抵消钠的影响 |
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨领域分析
 
-**BP + Heart Rate:**
-- Elevated BP + elevated resting HR → sympathetic nervous system overactivation (stress, deconditioning)
-- Elevated BP + normal HR → may be volume-related or arterial stiffness
+**血压 + 心率：**
+- 血压升高 + 静息心率升高 → 交感神经系统过度激活（压力、体能差）
+- 血压升高 + 心率正常 → 可能与容量相关或动脉硬化
 
-**BP + Sleep:**
-- Sleep deprivation is an independent risk factor for hypertension
-- Night shift workers have higher hypertension prevalence
-- Check: Is BP elevated on days following poor sleep?
+**血压 + 睡眠：**
+- 睡眠不足是高血压的独立危险因素
+- 夜班工作者高血压患病率更高
+- 检查：睡眠不佳后的第二天血压是否升高？
 
-**BP + Exercise:**
-- Regular moderate exercise is one of the strongest non-pharmacological interventions
-- BP temporarily rises during exercise (normal) but resting BP decreases over time
-- Avoid heavy weight lifting (Valsalva maneuver) if BP is consistently > 160/100
+**血压 + 运动：**
+- 规律的中等强度运动是最有效的非药物干预措施之一
+- 运动时血压暂时升高（正常），但长期来看静息血压会下降
+- 如果血压持续 > 160/100，避免大重量举重（Valsalva 动作）
 
-**BP + Weight:**
-- Overweight/obesity is the strongest modifiable risk factor
-- Even modest weight loss (5 kg) produces meaningful BP reduction
-- Visceral fat is more strongly associated with hypertension than subcutaneous fat
+**血压 + 体重：**
+- 超重/肥胖是最强的可改变危险因素
+- 即使适度减重（5 kg）也能产生明显的血压下降
+- 内脏脂肪与高血压的关联比皮下脂肪更强
 
-**BP + Diet:**
-- High sodium days often correlate with elevated BP next day
-- DASH diet pattern (fruits, vegetables, low-fat dairy, reduced sodium) is most evidence-based
+**血压 + 饮食：**
+- 高钠饮食当天通常与次日血压升高相关
+- DASH 饮食模式（水果、蔬菜、低脂乳制品、减盐）是最有循证依据的方案
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Rule: Don't Alarm From Single Readings
+### 规则：不要因单次读数而惊慌
 
-**BAD**: "Your blood pressure is 142/91, you have hypertension."
+**错误示范**："你的血压 142/91，你有高血压。"
 
-**GOOD**: "Today's reading is 142/91, which is above the normal range. However, a single reading isn't enough to classify blood pressure — it can be affected by recent caffeine, stress, or even the time of day. Let's look at your trend over the past week... Your 7-day average is 135/87, which is in the high-normal range. This is actually the best window for lifestyle changes to prevent it from progressing."
+**正确示范**："今天的读数是 142/91，高于正常范围。不过，单次读数不足以判定血压分级 — 它可能受到近期咖啡因摄入、压力甚至测量时间的影响。让我们看看你过去一周的趋势……你的 7 天平均值是 135/87，属于正常高值范围。这其实是通过生活方式改变来预防进一步发展的最佳窗口期。"
 
-### Measurement Guidance
+### 测量指导
 
-When users seem to have erratic readings, offer measurement tips:
-- Sit quietly for 5 minutes before measuring
-- Same arm, same time of day for consistency
-- Don't measure right after caffeine, exercise, or a meal
-- Morning readings (before medication if applicable) are most informative
+当用户的读数波动较大时，提供测量建议：
+- 测量前安静坐 5 分钟
+- 同一只手臂、每天同一时间测量以保持一致性
+- 不要在摄入咖啡因、运动或进餐后立即测量
+- 晨起读数（服药前，如适用）最有参考价值
 
-### Encourage, Don't Catastrophize
+### 鼓励而非危言耸听
 
-**High-normal range**: "Your blood pressure is in the high-normal zone — this is exactly where lifestyle changes are most powerful. Regular brisk walking, reducing salt, and managing stress can keep it from progressing."
+**正常高值范围**："你的血压处于正常高值区间 — 这正是生活方式改变最有效的阶段。规律的快步走、减盐和管理压力就能阻止它进一步发展。"
 
-## Memory & Personalization
+## 记忆与个性化
 
-**When to search memory:**
-- `memory_search("blood pressure")` — Check for established BP baseline and history
-- `memory_search("hypertension")` or `memory_search("medication")` — Check for known hypertension diagnosis or BP medications
-- `memory_search("salt")` or `memory_search("diet")` — Dietary patterns that affect BP
+**何时搜索记忆：**
+- `memory_search("blood pressure")` — 检查是否已建立血压基线和历史记录
+- `memory_search("hypertension")` 或 `memory_search("medication")` — 检查是否有已知的高血压诊断或血压药物
+- `memory_search("salt")` 或 `memory_search("diet")` — 影响血压的饮食习惯
 
-**What to save:**
-- `memory_save` — Record: BP baseline range, hypertension diagnosis status, medication use, effective interventions
-- `daily_log` — Note significant BP readings and context
+**需要保存的内容：**
+- `memory_save` — 记录：血压基线范围、高血压诊断状态、用药情况、有效的干预措施
+- `daily_log` — 记录重要的血压读数及其背景
 
-## Red Lines — When to Escalate
+## 红线 — 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| Systolic consistently > 160 mmHg on multiple readings | "Blood pressure consistently above 160 needs professional evaluation. Please schedule a doctor's visit for proper assessment and discussion of treatment options." |
-| BP > 180/110 (hypertensive crisis range) | "This reading is in the hypertensive crisis range. If accompanied by symptoms (severe headache, chest pain, vision changes, shortness of breath), seek emergency medical care immediately." |
-| User asking about adjusting or stopping BP medication | "Medication changes must always be decided with your doctor. Suddenly stopping BP medication can cause dangerous rebound hypertension." |
-| Symptoms: severe headache, vision changes, chest pain with elevated BP | "These symptoms combined with elevated blood pressure require immediate medical attention. Please go to the emergency room or call emergency services." |
+| 信号 | 处理方式 |
+|------|---------|
+| 多次测量收缩压持续 > 160 mmHg | "血压持续超过 160 需要专业评估。请预约医生进行正规检查并讨论治疗方案。" |
+| 血压 > 180/110（高血压危象范围） | "这个读数处于高血压危象范围。如果伴有症状（剧烈头痛、胸痛、视力变化、呼吸困难），请立即就医。" |
+| 用户询问调整或停用降压药 | "药物调整必须由医生决定。突然停用降压药可能导致危险的反跳性高血压。" |
+| 症状：剧烈头痛、视力变化、胸痛伴血压升高 | "这些症状合并血压升高需要立即就医。请前往急诊或拨打急救电话。" |

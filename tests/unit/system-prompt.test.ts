@@ -15,7 +15,7 @@ describe("buildSkillRegistry", () => {
 
   test("contains Available Skills header", () => {
     const registry = buildSkillRegistry();
-    expect(registry).toContain("## Available Skills");
+    expect(registry).toContain("## 可用技能");
   });
 
   test("contains markdown table header", () => {
@@ -38,9 +38,9 @@ describe("buildSkillRegistry", () => {
   test("includes skill descriptions", () => {
     const registry = buildSkillRegistry();
     expect(registry).toContain("sleep");
-    expect(registry).toContain("heart rate");
-    expect(registry).toContain("workout");
-    expect(registry).toContain("health data");
+    expect(registry).toContain("心率");
+    expect(registry).toContain("运动");
+    expect(registry).toContain("健康数据");
   });
 
   test("includes trigger keywords", () => {
@@ -76,6 +76,6 @@ describe("buildSkillRegistry", () => {
 
   test("mentions auto-injection behavior", () => {
     const registry = buildSkillRegistry();
-    expect(registry).toContain("automatically");
+    expect(registry).toContain("自动注入");
   });
 });

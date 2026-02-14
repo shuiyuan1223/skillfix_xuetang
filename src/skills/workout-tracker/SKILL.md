@@ -1,6 +1,6 @@
 ---
 name: workout-tracker
-description: "Track and analyze workout records, provide fitness advice"
+description: "追踪和分析运动记录，提供健身建议"
 metadata:
   {
     "pha": {
@@ -11,244 +11,244 @@ metadata:
   }
 ---
 
-# Workout Tracker Skill
-
-## Step 1: Classify the Question
-
-| User Says | Question Type | Investigation |
-|-----------|-------------|---------------|
-| "Did I work out today?" | **Activity check** | `get_workouts(today)` — simple data retrieval |
-| "Should I work out today?" | **Readiness assessment** | Check yesterday's workout + today's sleep + resting HR |
-| "How was my workout?" | **Session analysis** | Analyze duration, intensity, HR zones |
-| "Am I exercising enough?" | **Volume assessment** | Weekly summary + compare to guidelines |
-| "Help me with a training plan" | **Planning** | Understand current level, goals, available time |
-| "I'm sore / tired from exercise" | **Recovery check** | Recent workout load + sleep + HR trends |
+# 运动追踪技能
+
+## 第一步：分类问题
+
+| 用户描述 | 问题类型 | 调查方向 |
+|---------|---------|---------|
+| "我今天运动了吗？" | **活动检查** | `get_workouts(today)` — 简单数据查询 |
+| "我今天该运动吗？" | **训练准备度评估** | 检查昨天的运动 + 今天的睡眠 + 静息心率 |
+| "我的运动怎么样？" | **单次分析** | 分析时长、强度、心率区间 |
+| "我运动够不够？" | **运动量评估** | 周汇总 + 与指南对比 |
+| "帮我制定训练计划" | **训练规划** | 了解当前水平、目标、可用时间 |
+| "运动后酸痛/疲劳" | **恢复检查** | 近期训练负荷 + 睡眠 + 心率趋势 |
 
-## Step 2: Data Collection Strategy
+## 第二步：数据采集策略
 
-| Question Type | Required Calls | Why |
-|-----------|---------------|-----|
-| Today's workout | `get_workouts(today)` | Direct answer |
-| Should I exercise today? | `get_workouts(yesterday)` + `get_sleep(today)` + `get_heart_rate(today)` | Readiness assessment needs recovery context |
-| Weekly review | `get_weekly_summary` + `get_workouts(today)` | Volume + recent detail |
-| Performance trend | `get_weekly_summary` | Multi-day view |
+| 问题类型 | 所需调用 | 原因 |
+|---------|---------|------|
+| 今天的运动 | `get_workouts(today)` | 直接回答 |
+| 今天该不该运动？ | `get_workouts(yesterday)` + `get_sleep(today)` + `get_heart_rate(today)` | 准备度评估需要恢复上下文 |
+| 周回顾 | `get_weekly_summary` + `get_workouts(today)` | 总量 + 近期详情 |
+| 表现趋势 | `get_weekly_summary` | 多日视图 |
 
-## Step 3: Expert Assessment Framework
+## 第三步：专家评估框架
 
-### 3.1 Training Readiness Assessment
+### 3.1 训练准备度评估
 
-When the user asks "Should I work out today?", assess readiness:
+当用户问"我今天该运动吗？"时，评估准备度：
 
-**Green light (go ahead):**
-- Slept 7+ hours with decent quality
-- Resting HR at or below personal baseline
-- No workout yesterday, or yesterday was light
-- Reports feeling fine
+**绿灯（可以开练）：**
+- 睡了 7 小时以上且质量不错
+- 静息心率处于或低于个人基线
+- 昨天没运动，或昨天是轻量训练
+- 用户反馈状态良好
 
-**Yellow light (go easy):**
-- Sleep 5-7 hours or poor quality
-- Resting HR slightly elevated (5-10 bpm above baseline)
-- Hard workout yesterday
-- Suggest: lighter intensity, shorter duration, or active recovery (walking, yoga)
+**黄灯（轻松练）：**
+- 睡了 5-7 小时或质量较差
+- 静息心率略微升高（比基线高 5-10 bpm）
+- 昨天有高强度训练
+- 建议：降低强度、缩短时间，或主动恢复（散步、瑜伽）
 
-**Red light (rest today):**
-- Sleep < 5 hours
-- Resting HR elevated > 10 bpm above baseline
-- Hard workouts 2+ consecutive days with no rest
-- Reports being sore, exhausted, or unwell
-- Suggest: rest day or very light movement only
+**红灯（今天休息）：**
+- 睡眠 < 5 小时
+- 静息心率高于基线 > 10 bpm
+- 连续 2 天以上高强度训练无休息
+- 用户反馈肌肉酸痛、精疲力竭或身体不适
+- 建议：休息日或仅做非常轻度的活动
 
-**How to communicate readiness:**
+**如何传达准备度判断：**
 
-Don't just say "yes" or "no". Explain why:
+不要只说"行"或"不行"，要解释原因：
 
-"You had a tough workout yesterday and only got 5.5 hours of sleep. Your resting HR is also a bit elevated at 76 (your usual is around 68). Today would be a great day for something light — a walk or some stretching — to let your body recover. Save the hard session for tomorrow when you've caught up on rest."
+"你昨天做了一次高强度训练，而且只睡了 5.5 小时。你的静息心率也稍微偏高，76（你平时大约是 68）。今天很适合做些轻松的活动——散步或拉伸——让身体得到恢复。把高强度训练留到明天，到时候你已经补上了休息。"
 
-### 3.2 Exercise Volume Guidelines
+### 3.2 运动量指南
 
-**Weekly minimums (WHO):**
-- 150 minutes moderate-intensity aerobic, OR
-- 75 minutes vigorous-intensity aerobic, OR
-- Equivalent combination
-- Plus: muscle-strengthening activities 2+ days/week
+**每周最低标准（WHO）：**
+- 150 分钟中等强度有氧运动，或
+- 75 分钟高强度有氧运动，或
+- 等效组合
+- 另加：每周 2 天以上肌肉强化活动
 
-**Practical translation by fitness level:**
+**按体能水平的实用建议：**
 
-| Level | Typical Week | Suggestion |
-|-------|-------------|------------|
-| Beginner | 2-3 sessions, 20-30 min each | Build consistency before intensity. Any movement counts. |
-| Intermediate | 3-4 sessions, 30-45 min each | Mix intensities: 2 moderate, 1-2 harder sessions |
-| Advanced | 4-6 sessions, 45-90 min each | 80/20 rule: 80% easy/moderate, 20% high intensity |
+| 水平 | 典型一周 | 建议 |
+|------|---------|------|
+| 初学者 | 2-3 次，每次 20-30 分钟 | 先建立习惯，再追求强度。任何运动都有价值。 |
+| 中级 | 3-4 次，每次 30-45 分钟 | 混合强度：2 次中等强度，1-2 次较高强度 |
+| 进阶 | 4-6 次，每次 45-90 分钟 | 80/20 原则：80% 轻松/中等，20% 高强度 |
 
-### 3.3 Training Load Analysis
+### 3.3 训练负荷分析
 
-When reviewing workouts, assess:
+在回顾运动记录时，评估以下方面：
 
-**Intensity (via heart rate):**
-If max HR is known (220 - age), classify the workout:
-- avgHR < 60% max: Light / recovery
-- avgHR 60-75% max: Moderate / aerobic base
-- avgHR 75-85% max: Hard / tempo
-- avgHR > 85% max: Very hard / near max effort
+**强度（通过心率判断）：**
+如果已知最大心率（220 - 年龄），对运动进行分类：
+- 平均心率 < 60% 最大心率：轻量 / 恢复
+- 平均心率 60-75% 最大心率：中等 / 有氧基础
+- 平均心率 75-85% 最大心率：较难 / 节奏跑
+- 平均心率 > 85% 最大心率：非常辛苦 / 接近极限
 
-**Duration appropriateness:**
-- Match duration to intensity: long easy or short hard, not long hard every time
-- A 60-min session at 85% max HR is a very taxing workout
-- A 30-min session at 65% max HR is a reasonable moderate effort
+**时长合理性：**
+- 时长与强度匹配：长轻松或短高强度，而非每次都长时间高强度
+- 60 分钟 85% 最大心率的训练是非常大的负荷
+- 30 分钟 65% 最大心率的训练是合理的中等强度
 
-**Weekly load distribution:**
-- Count hard sessions per week (avgHR > 75% max)
-- More than 3 hard sessions/week for most people = overtraining risk
-- Look for adequate rest between hard sessions (at least 48h)
+**周负荷分配：**
+- 统计每周高强度训练次数（平均心率 > 75% 最大心率）
+- 大多数人每周超过 3 次高强度 = 过度训练风险
+- 高强度训练之间要有足够的恢复间隔（至少 48 小时）
 
-### 3.4 Overtraining Detection
+### 3.4 过度训练检测
 
-Warning signs from data:
-- Resting HR trending up over 5+ days
-- Performance declining despite consistent training (slower, lower distance)
-- Sleep quality deteriorating
-- Exercise frequency very high with no rest days
+数据层面的警告信号：
+- 静息心率连续 5 天以上呈上升趋势
+- 尽管坚持训练但表现在下降（更慢、距离更短）
+- 睡眠质量恶化
+- 运动频率非常高且没有休息日
 
-Warning signs from user reports:
-- Persistent fatigue that doesn't improve with sleep
-- Decreased motivation to exercise
-- Increased irritability or mood changes
-- Getting sick more often
+用户反馈层面的警告信号：
+- 即使睡了觉仍持续疲劳
+- 运动动力下降
+- 易怒或情绪变化加剧
+- 更容易生病
 
-**How to address overtraining:**
+**如何谈论过度训练：**
 
-Don't say "you're overtraining" — many people take pride in their exercise and will be defensive. Instead:
+不要直接说"你过度训练了"——很多人对自己的运动习惯很自豪，直说可能会引起防御心理。换个方式：
 
-"Your data shows some interesting patterns. Your resting HR has been creeping up this week, and I notice you've had hard workouts 5 of the last 7 days. Your body might be asking for more recovery time. What if you took tomorrow as a rest day and see how you feel? Sometimes a strategic rest day actually improves the next workout."
+"你的数据显示了一些有趣的模式。你的静息心率这周在慢慢上升，而且过去 7 天有 5 天都是高强度训练。你的身体可能在要求更多恢复时间。明天休息一天怎么样？有时候一个策略性的休息日反而能让下次训练更好。"
 
-### 3.5 Recovery State Assessment (HRV-Based)
+### 3.5 恢复状态评估（基于 HRV）
 
-Use morning HRV and resting HR data to assess recovery before recommending training:
+利用晨间 HRV 和静息心率数据，在推荐训练前评估恢复状态：
 
-| State | HRV vs Baseline | Resting HR | Recommendation |
-|-------|----------------|-----------|---------------|
-| **Good recovery** | ≥ baseline | Normal | Proceed with planned training |
-| **Mild fatigue** | 5-15% below | Slightly elevated | Lower training intensity |
-| **Significant fatigue** | > 15% below | > 5 bpm above baseline | Recovery day only (walking, yoga) |
-| **Overtraining** | > 25% below | Persistently elevated | Full rest 2-3 days |
+| 状态 | HRV 对比基线 | 静息心率 | 建议 |
+|------|------------|---------|------|
+| **恢复良好** | ≥ 基线 | 正常 | 按计划训练 |
+| **轻度疲劳** | 低于基线 5-15% | 略有升高 | 降低训练强度 |
+| **明显疲劳** | 低于基线 > 15% | 高于基线 > 5 bpm | 仅恢复性活动（散步、瑜伽） |
+| **过度训练** | 低于基线 > 25% | 持续升高 | 完全休息 2-3 天 |
 
-### 3.6 Exercise Heart Rate Recovery Standard
+### 3.6 运动后心率恢复标准
 
-Post-exercise heart rate recovery is a key fitness indicator:
+运动后心率恢复速度是体能的关键指标：
 
-| Recovery (1 min post-exercise) | Rating |
-|-------------------------------|--------|
-| Drop ≥ 20 bpm | Excellent cardiovascular fitness |
-| Drop 12-20 bpm | Normal, adequate fitness |
-| Drop < 12 bpm | Below average — focus on building aerobic base |
+| 恢复速度（运动后 1 分钟） | 评级 |
+|------------------------|------|
+| 下降 ≥ 20 bpm | 优秀的心血管体能 |
+| 下降 12-20 bpm | 正常，体能足够 |
+| 下降 < 12 bpm | 偏低——需要加强有氧基础 |
 
-**Tracking recovery improvement over time at the same exercise intensity is one of the best ways to demonstrate fitness progress to the user.**
+**在相同运动强度下追踪恢复心率的改善，是向用户展示体能进步最好的方式之一。**
 
-### 3.7 Exercise Type Analysis (8 Types)
+### 3.7 运动类型分析（8 种类型）
 
-**Running:**
-- Key metrics: distance, pace, cadence/stride, HR zone distribution
-- HR zones: Z1 recovery (50-60%) → Z2 aerobic (60-70%) → Z3 endurance (70-80%) → Z4 threshold (80-90%) → Z5 max (90-100%)
-- 80/20 rule: 80% of runs in Z1-Z2, 20% in Z4-Z5 for optimal endurance gains
-- Weekly distance increase ≤ 10%; target cadence 175-185 steps/min
+**跑步：**
+- 关键指标：距离、配速、步频/步幅、心率区间分布
+- 心率区间：Z1 恢复（50-60%）→ Z2 有氧（60-70%）→ Z3 耐力（70-80%）→ Z4 阈值（80-90%）→ Z5 极限（90-100%）
+- 80/20 原则：80% 的跑量在 Z1-Z2，20% 在 Z4-Z5，以获得最佳耐力提升
+- 周跑量增幅 ≤ 10%；目标步频 175-185 步/分钟
 
-**Cycling:**
-- Key metrics: power (W), cadence (RPM), power-to-weight ratio (W/kg)
-- Flat cadence 90-100 RPM, climbing 75-85 RPM
-- 3 W/kg is the amateur-to-competitive threshold
+**骑行：**
+- 关键指标：功率（W）、踏频（RPM）、功率体重比（W/kg）
+- 平路踏频 90-100 RPM，爬坡 75-85 RPM
+- 3 W/kg 是业余到竞技水平的分界线
 
-**Swimming:**
-- Key metrics: pace, stroke count, SWOLF index (lower = more efficient)
-- Water HR is ~10-15 bpm lower than land HR — adjust zone calculations
+**游泳：**
+- 关键指标：配速、划水次数、SWOLF 指数（越低越高效）
+- 水中心率比陆地低约 10-15 bpm——需要调整区间计算
 
-**Strength training:**
-- Key metrics: training volume (weight × sets × reps), muscle group distribution
-- Weekly volume increase 2-5%; target 10-20 sets per muscle group per week
-- Push-pull ratio should be approximately 1:1
+**力量训练：**
+- 关键指标：训练容量（重量 x 组数 x 次数）、肌群分布
+- 周容量增幅 2-5%；每个肌群每周目标 10-20 组
+- 推拉比例应大致为 1:1
 
-**HIIT:**
-- Key metrics: peak HR (should reach 85-95% max HR), inter-set recovery speed
-- Maximum frequency: 3 sessions per week
-- If recovery between sets is slow, reduce session volume
+**HIIT：**
+- 关键指标：峰值心率（应达到最大心率的 85-95%）、组间恢复速度
+- 最大频率：每周 3 次
+- 如果组间恢复较慢，减少训练量
 
-**Yoga / Pilates:**
-- Focus on: recovery assistance, HRV improvement, complement to high-intensity training
-- Track HRV improvement on days following yoga sessions
+**瑜伽 / 普拉提：**
+- 关注点：辅助恢复、改善 HRV、与高强度训练互补
+- 追踪瑜伽后次日 HRV 的改善
 
-**Outdoor adventure (hiking, mountaineering, climbing):**
-- Focus on: altitude adaptation monitoring (SpO2 < 90% = warning), energy management, HR control
-- At altitude, reduce expected performance by ~3% per 300m above 1,500m
+**户外探险（徒步、登山、攀岩）：**
+- 关注点：海拔适应监测（SpO2 < 90% = 警告）、能量管理、心率控制
+- 在高海拔地区，每上升 300 米（1,500 米以上），预期表现下降约 3%
 
-**Ball sports (basketball, tennis, soccer, etc.):**
-- Characteristics: intermittent high intensity, mixed aerobic-anaerobic
-- Focus on: total training load, adequate warm-up, recovery between matches
+**球类运动（篮球、网球、足球等）：**
+- 特点：间歇性高强度，有氧无氧混合
+- 关注点：总训练负荷、充分热身、比赛间的恢复
 
-## Step 4: Cross-Domain Analysis
+## 第四步：跨域分析
 
-**Exercise + Sleep (bidirectional):**
-- Regular moderate exercise improves sleep quality — mention this when they're struggling with sleep
-- But: exercising within 2h of bedtime can delay sleep onset
-- Poor sleep → worse exercise performance → frustration → possibly poor sleep
-- Help break negative cycles by identifying the root cause
+**运动 + 睡眠（双向关系）：**
+- 规律的中等强度运动能改善睡眠质量——当用户睡眠不好时可以提醒这一点
+- 但是：睡前 2 小时内运动可能延迟入睡
+- 睡眠差 → 运动表现差 → 挫败感 → 可能导致睡眠更差
+- 帮助用户识别根本原因，打破负循环
 
-**Exercise + Heart Rate:**
-- Lower HR at same intensity over time = fitness improving (positive feedback)
-- Elevated resting HR on rest day after hard exercise = normal if transient (24-48h)
-- Elevated resting HR 48h+ post-exercise = possible overtraining
-- Use HR data to validate whether the user's "easy" runs are actually easy
+**运动 + 心率：**
+- 相同强度下心率逐渐降低 = 体能在改善（正向反馈）
+- 高强度运动后休息日静息心率升高 = 如果 24-48 小时内恢复属正常
+- 运动后 48 小时以上静息心率仍然升高 = 可能过度训练
+- 用心率数据验证用户的"轻松跑"是否真的轻松
 
-**Exercise + Steps:**
-- A workout might add 3,000-8,000 "equivalent" steps worth of activity
-- On workout days, step count matters less — the workout is the activity
-- On non-workout days, steps become the primary activity metric
+**运动 + 步数：**
+- 一次运动大约相当于 3,000-8,000 步的活动量
+- 在运动日，步数没那么重要——运动本身就是活动
+- 在非运动日，步数成为主要的活动指标
 
-## Step 5: Personalized Communication
+## 第五步：个性化沟通
 
-### Celebrate Effort, Not Just Numbers
+### 肯定努力，而不只是数字
 
-**BAD**: "You ran 3 km in 25 minutes."
+**差**："你跑了 3 公里，用了 25 分钟。"
 
-**GOOD**: "Nice workout today — 3 km with an average heart rate in your Zone 2. That's a good aerobic effort. Your HR was actually a few beats lower than your last similar run, which suggests your fitness is improving."
+**好**："今天运动不错——3 公里，平均心率在你的 Zone 2。这是一次很好的有氧训练。你的心率实际上比上次类似的跑步低了几跳，说明你的体能在提升。"
 
-### Rest Days Are Wins Too
+### 休息日也是胜利
 
-**BAD**: "You didn't exercise today."
+**差**："你今天没有运动。"
 
-**GOOD**: "Rest day today — your body needs these to adapt from yesterday's hard workout. Recovery is when the fitness gains actually happen."
+**好**："今天是休息日——你的身体需要这些时间来消化昨天高强度训练的成果。恢复阶段才是体能真正增长的时候。"
 
-### Match Advice to Fitness Level
+### 建议匹配体能水平
 
-- **Beginner**: Focus on showing up, not performance. "You exercised 3 times this week — that's building a great habit."
-- **Intermediate**: Focus on balance and variety. "Good mix of runs and rest this week. Your body responds well to this pattern."
-- **Advanced**: Focus on load management and optimization. "Your weekly volume is up 15% from last month. Make sure you're scheduling recovery proportionally."
+- **初学者**：强调坚持，而非表现。"你这周运动了 3 次——正在养成一个好习惯。"
+- **中级**：强调平衡和多样性。"这周跑步和休息搭配得不错。你的身体对这个模式反应良好。"
+- **进阶**：强调负荷管理和优化。"你的周训练量比上个月增加了 15%。确保恢复也按比例跟上。"
 
-## Memory & Personalization
+## 记忆与个性化
 
-**Profile fields to use:**
-- **Age** (from birthYear): Needed for HR zone calculation during exercise. Also affects recovery expectations — a 50-year-old recovers differently from a 25-year-old.
-- **Height/Weight**: BMI context for exercise recommendations. Higher BMI → prefer low-impact activities (swimming, cycling) over running.
-- **Conditions**: Joint issues, injuries, chronic conditions all affect what exercise is safe. Never recommend running to someone with knee problems.
-- **Goals** (exercisePerWeek): Compare actual frequency against their stated goal. "You said you wanted to work out 4x/week — you're hitting 3. Close!"
-- **Lifestyle** (exercisePreference): If they prefer running, don't suggest swimming. Tailor within their preference.
+**可用的个人档案字段：**
+- **年龄**（来自 birthYear）：运动时心率区间计算必需。也影响恢复预期——50 岁和 25 岁的恢复方式不同。
+- **身高/体重**：为运动建议提供 BMI 上下文。BMI 较高 → 优先推荐低冲击活动（游泳、骑行）而非跑步。
+- **健康状况**：关节问题、伤病、慢性病都影响什么运动是安全的。不要向有膝盖问题的人推荐跑步。
+- **目标**（exercisePerWeek）：将实际频率与用户的目标对比。"你说过想每周运动 4 次——你做到了 3 次，很接近了！"
+- **生活方式**（exercisePreference）：如果他们喜欢跑步，就不要建议游泳。在他们的偏好范围内给出建议。
 
-**When to search memory:**
-- `memory_search("injury")` or `memory_search("pain")` — Before recommending exercise, check for known injuries or pain complaints.
-- `memory_search("workout")` — Check workout history to understand fitness level and progression.
-- `memory_search("exercise goal")` — Recall any past discussions about training targets or race goals.
+**何时搜索记忆：**
+- `memory_search("injury")` 或 `memory_search("pain")` — 推荐运动之前，检查已知的伤病或疼痛。
+- `memory_search("workout")` — 查看运动历史以了解体能水平和进步轨迹。
+- `memory_search("exercise goal")` — 回顾过去讨论过的训练目标或比赛计划。
 
-**What to save:**
-- `memory_save` — Record: injuries/pain ("User mentioned right knee pain when running"), fitness milestones ("First 5km run completed"), workout preferences ("Prefers morning workouts, hates treadmill").
-- `daily_log` — Note workout discussions: "Discussed readiness. Recommended rest day due to elevated HR and poor sleep. User agreed."
+**需要保存的内容：**
+- `memory_save` — 记录：伤病/疼痛（"用户提到跑步时右膝疼痛"）、体能里程碑（"完成了第一次 5 公里跑"）、运动偏好（"喜欢晨练，讨厌跑步机"）。
+- `daily_log` — 记录运动相关讨论："评估了训练准备度。因心率偏高和睡眠不好，建议了休息日。用户同意了。"
 
-**Personalization examples:**
-- "You mentioned your knee bothers you after long runs. Today's 45-minute run might have been tough on it — how's it feeling? Maybe alternate with cycling next time."
-- "You've been consistently hitting 3 workouts per week for a month now. That's your best streak since we started tracking."
+**个性化示例：**
+- "你提到过长跑后膝盖不舒服。今天 45 分钟的跑步可能对它有些负担——感觉怎么样？下次可以考虑换骑行。"
+- "你已经连续一个月保持每周 3 次运动了。这是我们开始追踪以来你最好的连续记录。"
 
-## Red Lines — When to Escalate
+## 红线 — 何时升级处理
 
-| Signal | Action |
-|--------|--------|
-| User reports chest pain, dizziness, or unusual shortness of breath during exercise | "Stop exercising immediately and consult a doctor before your next session. These symptoms during exercise need medical evaluation." |
-| Extreme exercise patterns (2+ hours daily, no rest days, body-punishing language) | Gently: "I notice you're training at a very high volume. How are you feeling physically? Exercise is great, but recovery is equally important for long-term health." |
-| User wants exercise advice post-injury | "I'd recommend getting clearance from a doctor or physio before returning to exercise. Once you have the green light, I can help you ease back in gradually." |
-| Signs of exercise addiction or compensatory exercise | Don't diagnose, but acknowledge: "It sounds like exercise might be feeling more like a compulsion than something you enjoy. That's worth exploring, maybe with a professional who understands these patterns." |
+| 信号 | 行动 |
+|------|------|
+| 用户报告运动中胸痛、头晕或异常气短 | "请立即停止运动，在下次训练前咨询医生。运动中的这些症状需要医学评估。" |
+| 极端运动模式（每天 2 小时以上、没有休息日、自我惩罚式言语） | 温和地："我注意到你的训练量非常大。你身体感觉怎么样？运动是好事，但恢复对长期健康同样重要。" |
+| 用户想要伤后运动建议 | "我建议在恢复运动之前先获得医生或物理治疗师的许可。一旦他们说可以了，我可以帮你制定循序渐进的恢复计划。" |
+| 运动成瘾或补偿性运动迹象 | 不要诊断，但要关注："听起来运动对你来说可能更像一种强迫而非享受。这值得探索一下，也许可以找一个了解这类模式的专业人士聊聊。" |
