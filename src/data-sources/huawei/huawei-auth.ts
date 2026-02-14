@@ -150,6 +150,11 @@ export class HuaweiAuth {
     const data = (await response.json()) as HuaweiTokenResponse;
     const tokenData = this.tokenResponseToData(data);
 
+    // Huawei may not return a new refresh_token on refresh — preserve the old one
+    if (!tokenData.refreshToken) {
+      tokenData.refreshToken = refreshToken;
+    }
+
     // Store the new token
     this.tokenStore.saveToken(tokenData);
 
@@ -209,7 +214,7 @@ export class HuaweiAuth {
   private tokenResponseToData(response: HuaweiTokenResponse): TokenData {
     return {
       accessToken: response.access_token,
-      refreshToken: response.refresh_token,
+      refreshToken: response.refresh_token || "",
       expiresAt: Date.now() + response.expires_in * 1000,
       tokenType: response.token_type,
       scope: response.scope,
@@ -285,7 +290,14 @@ export class HuaweiAuth {
     }
 
     const data = (await response.json()) as HuaweiTokenResponse;
-    return this.tokenResponseToData(data);
+    const tokenData = this.tokenResponseToData(data);
+
+    // Huawei may not return a new refresh_token on refresh — preserve the old one
+    if (!tokenData.refreshToken) {
+      tokenData.refreshToken = refreshToken;
+    }
+
+    return tokenData;
   }
 
   /**
