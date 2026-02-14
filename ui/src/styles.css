@@ -965,6 +965,67 @@
   height: 18px;
 }
 
+/* Sidebar nav buttons — icon-only style */
+.sidebar-nav-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: rgb(var(--color-text-muted));
+  cursor: pointer;
+  transition: all 150ms ease;
+  position: relative;
+}
+
+.sidebar-nav-btn:hover {
+  color: rgb(var(--color-text));
+  background: var(--color-surface-hover);
+}
+
+.sidebar-nav-btn.active {
+  color: rgb(var(--color-primary));
+  background: rgb(var(--color-primary) / 0.1);
+}
+
+.sidebar-nav-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 25%;
+  bottom: 25%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: rgb(var(--color-primary));
+  box-shadow: 0 0 8px var(--color-accent-glow);
+}
+
+.sidebar-nav-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar-nav-icon > svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Sidebar divider */
+.sidebar-divider {
+  width: 28px;
+  height: 1px;
+  margin: 6px auto;
+  background: rgb(var(--color-border));
+  flex-shrink: 0;
+}
+
+.light .sidebar-divider {
+  background: rgb(var(--color-border-strong) / 0.4);
+}
+
 .light .shell > .sidebar {
   box-shadow: 1px 0 3px rgba(0, 0, 0, 0.04);
 }

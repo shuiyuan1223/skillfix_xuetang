@@ -60,7 +60,7 @@ export function A2UIRenderer({
       case "progress": return rcProgress(c);
       case "badge": return rcBadge(c);
       case "skeleton": return rcSkeleton(c);
-      case "divider": return <div className="h-px bg-border my-3 mx-2" />;
+      case "divider": return <div className="sidebar-divider" />;
       case "spacer": return <div style={{ height: (c.height as number) || 16 }} />;
       case "chat_messages": return rcChatMessages(c);
       case "chat_input": return rcChatInput(c);
@@ -411,31 +411,19 @@ export function A2UIRenderer({
     const orientation = (c.orientation as string) || "vertical";
     const navDir = orientation === "horizontal" ? "flex-row" : "flex-col";
     return (
-      <nav className={`flex gap-0.5 ${navDir}`}>
+      <nav className={`flex gap-1 items-center ${navDir}`}>
         {items.map((item) => {
           const isActive = item.id === activeId;
           return (
             <button
               key={item.id}
               title={item.label}
-              className={`flex items-center justify-center py-2.5 rounded-lg cursor-pointer transition-all duration-150 border-none bg-transparent w-full relative ${
-                isActive
-                  ? "bg-primary/10 text-text-strong"
-                  : "text-text-secondary hover:text-text hover:bg-surface-hover"
-              }`}
+              className={`sidebar-nav-btn ${isActive ? "active" : ""}`}
               onClick={() => sendNavigate(item.id)}
             >
-              {isActive && (
-                <div
-                  className="absolute left-0 top-[20%] bottom-[20%] w-[3px] rounded-r-full bg-primary"
-                  style={{ boxShadow: "0 0 8px var(--color-accent-glow)" }}
-                />
-              )}
               {item.icon && (
                 <span
-                  className={`w-5 h-5 [&>svg]:w-5 [&>svg]:h-5 transition-colors ${
-                    isActive ? "text-primary" : ""
-                  }`}
+                  className="sidebar-nav-icon"
                   dangerouslySetInnerHTML={{ __html: getIcon(item.icon) }}
                 />
               )}
