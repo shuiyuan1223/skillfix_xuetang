@@ -177,7 +177,7 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
   const renderCell = (value: unknown, render?: string) => {
     if (render === "badge") {
       const status = String(value).toLowerCase();
-      const cls = badgeV[status] || "bg-slate-500/20 text-slate-300";
+      const cls = badgeV[status] || "bg-slate-500/15 text-slate-600 dark:text-slate-300";
       return <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>{String(value)}</span>;
     }
     if (render === "progress") {
