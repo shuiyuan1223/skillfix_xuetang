@@ -368,7 +368,7 @@
     gap: 8px;
     padding: 8px 16px;
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgb(var(--color-border));
     border-radius: 100px;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -378,7 +378,7 @@
   }
 
   .arena-pill:hover {
-    border-color: var(--color-border-hover);
+    border-color: rgb(var(--color-border-hover));
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
     color: rgb(var(--color-text));
@@ -389,7 +389,7 @@
   }
 
   .arena-pill.active {
-    border-color: var(--color-border-hover);
+    border-color: rgb(var(--color-border-hover));
     background: rgb(var(--color-primary) / 0.05);
     color: rgb(var(--color-text));
   }
@@ -408,7 +408,7 @@
   /* Arena card */
   .arena-card {
     background: var(--color-surface-card);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgb(var(--color-border));
     border-radius: 20px;
     padding: 24px;
     backdrop-filter: blur(20px);
@@ -416,7 +416,7 @@
   }
 
   .arena-card:hover {
-    border-color: var(--color-border-hover);
+    border-color: rgb(var(--color-border-hover));
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
   }
 
@@ -505,14 +505,14 @@
   /* Category breakdown cards */
   .arena-category-card {
     background: var(--color-surface-card);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgb(var(--color-border));
     border-radius: 16px;
     overflow: hidden;
     transition: all 0.3s ease;
   }
 
   .arena-category-card:hover {
-    border-color: var(--color-border-hover);
+    border-color: rgb(var(--color-border-hover));
     transform: translateY(-3px);
     box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08);
   }
@@ -526,7 +526,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid rgb(var(--color-border));
   }
 
   .arena-category-icon {
@@ -618,7 +618,7 @@
     gap: 14px;
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid var(--color-border);
+    border-top: 1px solid rgb(var(--color-border));
   }
 
   .arena-legend-item {
@@ -643,7 +643,7 @@
   .arena-run-picker-btn {
     padding: 6px 14px;
     background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    border: 1px solid rgb(var(--color-border));
     border-radius: 8px;
     color: rgb(var(--color-text-secondary));
     font-family: inherit;
@@ -659,7 +659,7 @@
   }
 
   .arena-run-picker-btn:hover {
-    border-color: var(--color-border-hover);
+    border-color: rgb(var(--color-border-hover));
     color: rgb(var(--color-text));
   }
 
@@ -673,7 +673,7 @@
     max-height: 320px;
     overflow-y: auto;
     background: var(--color-surface-elevated);
-    border: 1px solid var(--color-border-hover);
+    border: 1px solid rgb(var(--color-border-hover));
     border-radius: 12px;
     padding: 6px;
     z-index: 100;
@@ -730,7 +730,7 @@
     width: 18px;
     height: 18px;
     border-radius: 4px;
-    border: 1px solid var(--color-border-hover);
+    border: 1px solid rgb(var(--color-border-hover));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -751,7 +751,7 @@
     font-size: 0.78rem;
     color: rgb(var(--color-text-muted));
     cursor: pointer;
-    border-top: 1px solid var(--color-border);
+    border-top: 1px solid rgb(var(--color-border));
     margin-top: 4px;
   }
 
@@ -775,7 +775,7 @@
   .arena-clear-pill {
     padding: 8px 14px;
     background: transparent;
-    border: 1px dashed var(--color-border-hover);
+    border: 1px dashed rgb(var(--color-border-hover));
     border-radius: 100px;
     cursor: pointer;
     font-size: 0.8rem;
@@ -1167,7 +1167,7 @@
   display: flex;
   background: var(--color-surface-code);
   border-radius: 0.75rem;
-  border: 1px solid var(--color-border);
+  border: 1px solid rgb(var(--color-border));
   overflow: hidden;
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 13px;
@@ -1179,7 +1179,7 @@
   text-align: right;
   color: rgb(var(--color-text-muted));
   user-select: none;
-  border-right: 1px solid var(--color-border);
+  border-right: 1px solid rgb(var(--color-border));
   font-size: 11px;
   line-height: 1.6;
   overflow: hidden;
@@ -1277,7 +1277,7 @@
   display: inline-block;
   width: 14px;
   height: 14px;
-  border: 2px solid var(--color-border);
+  border: 2px solid rgb(var(--color-border));
   border-top-color: rgb(var(--color-primary));
   border-radius: 50%;
   animation: tool-spin 0.6s linear infinite;
