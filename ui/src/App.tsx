@@ -594,18 +594,7 @@ export function App() {
             <span className="topbar-title">PHA</span>
           </div>
         </div>
-        <div className="topbar-right">
-          <div className="topbar-status">
-            <span className={`status-dot ${connected ? "online" : "offline"}`} />
-            <span>{connected ? i18n.common.connected : i18n.common.reconnecting}</span>
-          </div>
-          <button
-            className="topbar-btn"
-            onClick={() => toggleTheme()}
-            title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
-            dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
-          />
-        </div>
+        <div className="topbar-right" />
       </header>
 
       {/* Mobile sidebar overlay */}
@@ -638,13 +627,29 @@ export function App() {
             renderSkeleton()
           )}
         </div>
-        <button
-          className="sidebar-collapse-btn hidden md:flex"
-          onClick={() => toggleSidebar()}
-          title={sidebarCollapsed ? "Expand sidebar" : i18n.common.collapseSidebar}
-        >
-          {sidebarCollapsed ? "\u00BB" : "\u00AB"}
-        </button>
+        <div className="sidebar-bottom hidden md:flex">
+          <div className="sidebar-bottom-row">
+            <div className={`sidebar-status ${sidebarCollapsed ? "sidebar-status-collapsed" : ""}`}>
+              <span className={`status-dot ${connected ? "online" : "offline"}`} />
+              {sidebarCollapsed ? null : (
+                <span>{connected ? i18n.common.connected : i18n.common.reconnecting}</span>
+              )}
+            </div>
+            <button
+              className="sidebar-bottom-btn"
+              onClick={() => toggleTheme()}
+              title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
+              dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
+            />
+            <button
+              className="sidebar-bottom-btn"
+              onClick={() => toggleSidebar()}
+              title={sidebarCollapsed ? "Expand sidebar" : i18n.common.collapseSidebar}
+            >
+              {sidebarCollapsed ? "\u00BB" : "\u00AB"}
+            </button>
+          </div>
+        </div>
       </aside>
 
       {/* ===== Main Content ===== */}
