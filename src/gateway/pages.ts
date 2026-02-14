@@ -1629,6 +1629,10 @@ export interface SettingsPageData {
   judgeModelId: string;
   judgeLabel: string;
   benchmarkModelsJson: string;
+  userUuid: string;
+  huaweiScopes: string;
+  mcpJson: string;
+  pluginsJson: string;
 }
 
 export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
@@ -1638,7 +1642,8 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   // Header
   const title = ui.text(t("settings.title"), "h2");
   const subtitle = ui.text(t("settings.subtitle"), "caption");
-  const header = ui.column([title, subtitle], { gap: 4 });
+  const uuidText = ui.text(`${t("settings.userUuid")}: ${data.userUuid || "—"}`, "caption");
+  const header = ui.column([title, subtitle, uuidText], { gap: 4 });
 
   // ---- LLM Section ----
   const providerSelect = ui.formInput("provider", "select", {
@@ -1741,6 +1746,12 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         value: data.huaweiApiBaseUrl,
       })
     );
+    dsInputs.push(
+      ui.formInput("huaweiScopes", "textarea", {
+        label: t("settings.huaweiScopes"),
+        value: data.huaweiScopes,
+      })
+    );
   }
 
   const dsForm = ui.form(dsInputs, "settings_save_datasource", { submitLabel: saveLabel });
@@ -1841,8 +1852,45 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
+  // ---- MCP Section (JSON) ----
+  const mcpJsonInput = ui.formInput("mcpJson", "textarea", {
+    label: t("settings.mcpJson"),
+    value: data.mcpJson,
+  });
+  const mcpForm = ui.form([mcpJsonInput], "settings_save_mcp", {
+    submitLabel: saveLabel,
+  });
+  const mcpCard = ui.card([mcpForm], {
+    title: t("settings.sectionMcp"),
+    padding: 20,
+  });
+
+  // ---- Plugins Section (JSON) ----
+  const pluginsJsonInput = ui.formInput("pluginsJson", "textarea", {
+    label: t("settings.pluginsJson"),
+    value: data.pluginsJson,
+  });
+  const pluginsForm = ui.form([pluginsJsonInput], "settings_save_plugins", {
+    submitLabel: saveLabel,
+  });
+  const pluginsCard = ui.card([pluginsForm], {
+    title: t("settings.sectionPlugins"),
+    padding: 20,
+  });
+
   const root = ui.column(
-    [header, llmCard, gatewayCard, dsCard, tuiCard, embeddingCard, benchmarkCard, bmCard],
+    [
+      header,
+      llmCard,
+      gatewayCard,
+      dsCard,
+      tuiCard,
+      embeddingCard,
+      benchmarkCard,
+      bmCard,
+      mcpCard,
+      pluginsCard,
+    ],
     { gap: 16, padding: 24 }
   );
 

@@ -1715,6 +1715,10 @@ export class GatewaySession {
           benchmarkModelsJson: config.benchmarkModels
             ? JSON.stringify(config.benchmarkModels, null, 2)
             : "{}",
+          userUuid: config.userUuid || "",
+          huaweiScopes: huawei.scopes ? JSON.stringify(huawei.scopes, null, 2) : "[]",
+          mcpJson: config.mcp ? JSON.stringify(config.mcp, null, 2) : "{}",
+          pluginsJson: config.plugins ? JSON.stringify(config.plugins, null, 2) : "{}",
         });
         break;
       }
@@ -2870,7 +2874,9 @@ export class GatewaySession {
       action === "settings_save_tui" ||
       action === "settings_save_embedding" ||
       action === "settings_save_benchmark" ||
-      action === "settings_save_benchmark_models"
+      action === "settings_save_benchmark_models" ||
+      action === "settings_save_mcp" ||
+      action === "settings_save_plugins"
     ) {
       try {
         const config = loadConfig();
@@ -2906,6 +2912,14 @@ export class GatewaySession {
               hw.tokenUrl = String(formData.huaweiTokenUrl) || undefined;
             if (formData.huaweiApiBaseUrl !== undefined)
               hw.apiBaseUrl = String(formData.huaweiApiBaseUrl) || undefined;
+            if (formData.huaweiScopes !== undefined) {
+              try {
+                const parsed = JSON.parse(String(formData.huaweiScopes || "[]"));
+                if (Array.isArray(parsed)) hw.scopes = parsed;
+              } catch {
+                // Invalid JSON — keep existing
+              }
+            }
           }
         } else if (action === "settings_save_tui") {
           if (!config.tui) config.tui = { theme: "dark", showToolCalls: true };
@@ -2942,6 +2956,20 @@ export class GatewaySession {
           try {
             const parsed = JSON.parse(String(formData.benchmarkModelsJson || "{}"));
             config.benchmarkModels = parsed;
+          } catch {
+            // Invalid JSON — keep existing
+          }
+        } else if (action === "settings_save_mcp") {
+          try {
+            const parsed = JSON.parse(String(formData.mcpJson || "{}"));
+            config.mcp = parsed;
+          } catch {
+            // Invalid JSON — keep existing
+          }
+        } else if (action === "settings_save_plugins") {
+          try {
+            const parsed = JSON.parse(String(formData.pluginsJson || "{}"));
+            config.plugins = parsed;
           } catch {
             // Invalid JSON — keep existing
           }

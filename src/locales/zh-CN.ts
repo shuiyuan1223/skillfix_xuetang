@@ -580,6 +580,15 @@ export const zhCN: LocaleMessages = {
     judgeLabel: "显示名称",
     benchmarkModelsJson: "模型配置 (JSON)",
     benchmarkModelsJsonDesc: "基准测试使用的模型列表，JSON 格式",
+    userUuid: "用户 UUID",
+    huaweiScopes: "OAuth Scopes",
+    huaweiScopesDesc: "华为健康授权范围，JSON 数组格式",
+    sectionMcp: "MCP 服务器",
+    mcpJson: "MCP 配置 (JSON)",
+    mcpJsonDesc: "MCP 服务器连接配置",
+    sectionPlugins: "插件",
+    pluginsJson: "插件配置 (JSON)",
+    pluginsJsonDesc: "插件系统配置",
   },
 
   auth: {

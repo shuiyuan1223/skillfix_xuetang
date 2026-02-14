@@ -607,6 +607,15 @@ export interface LocaleMessages {
     judgeLabel: string;
     benchmarkModelsJson: string;
     benchmarkModelsJsonDesc: string;
+    userUuid: string;
+    huaweiScopes: string;
+    huaweiScopesDesc: string;
+    sectionMcp: string;
+    mcpJson: string;
+    mcpJsonDesc: string;
+    sectionPlugins: string;
+    pluginsJson: string;
+    pluginsJsonDesc: string;
   };
 
   // OAuth / Authorization

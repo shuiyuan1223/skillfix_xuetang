@@ -589,6 +589,15 @@ export const en: LocaleMessages = {
     judgeLabel: "Display Name",
     benchmarkModelsJson: "Model Config (JSON)",
     benchmarkModelsJsonDesc: "Benchmark model list in JSON format",
+    userUuid: "User UUID",
+    huaweiScopes: "OAuth Scopes",
+    huaweiScopesDesc: "Huawei Health authorization scopes, JSON array format",
+    sectionMcp: "MCP Servers",
+    mcpJson: "MCP Config (JSON)",
+    mcpJsonDesc: "MCP server connection configuration",
+    sectionPlugins: "Plugins",
+    pluginsJson: "Plugin Config (JSON)",
+    pluginsJsonDesc: "Plugin system configuration",
   },
 
   auth: {
