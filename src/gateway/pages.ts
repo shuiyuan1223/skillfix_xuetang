@@ -1268,7 +1268,8 @@ export function generateIntegrationsPage(data: IntegrationsPageData): A2UIMessag
     // Show "not connected" state
     const noGhTitle = ui.text(t("integrations.noGitHub"), "h2");
     const noGhHint = ui.text(t("integrations.noGitHubHint"), "body");
-    const noGhCard = ui.card([noGhTitle, noGhHint], { padding: 24 });
+    const noGhContent = ui.column([noGhTitle, noGhHint], { gap: 8 });
+    const noGhCard = ui.card([noGhContent], { padding: 24 });
     const root = ui.column([headerRow, noGhCard], { gap: 24, padding: 24 });
     return ui.build(root);
   }

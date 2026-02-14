@@ -170,6 +170,8 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
     success: "bg-emerald-500/20 text-emerald-400", error: "bg-red-500/20 text-red-400",
     failed: "bg-red-500/20 text-red-400", warning: "bg-amber-500/20 text-amber-400",
     pending: "bg-amber-500/20 text-amber-400",
+    view: "bg-blue-500/15 text-blue-500", selected: "bg-emerald-500/15 text-emerald-500",
+    info: "bg-blue-500/15 text-blue-500",
   };
 
   const renderCell = (value: unknown, render?: string) => {
@@ -222,7 +224,7 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
         <tbody>
           {rows.map((row, i) => (
             <tr key={i} className={`border-b border-border transition-colors hover:bg-primary/5 ${c.onRowClick ? "cursor-pointer" : ""}`} onClick={() => { if (c.onRowClick) ctx.sendAction(c.onRowClick as string, { row }); }}>
-              {columns.map((col) => <td key={col.key} className="p-3">{renderCell(row[col.key], col.render)}</td>)}
+              {columns.map((col) => <td key={col.key} className="p-3 max-w-[300px]" title={String(row[col.key] ?? "")}><span className="block truncate">{renderCell(row[col.key], col.render)}</span></td>)}
             </tr>
           ))}
         </tbody>

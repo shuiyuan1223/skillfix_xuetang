@@ -60,7 +60,7 @@ export function A2UIRenderer({
       case "progress": return rcProgress(c);
       case "badge": return rcBadge(c);
       case "skeleton": return rcSkeleton(c);
-      case "divider": return <div className="h-px bg-border my-2" />;
+      case "divider": return <div className="h-px bg-border my-3 mx-2" />;
       case "spacer": return <div style={{ height: (c.height as number) || 16 }} />;
       case "chat_messages": return rcChatMessages(c);
       case "chat_input": return rcChatInput(c);
@@ -187,7 +187,7 @@ export function A2UIRenderer({
         className={`bg-surface-card border border-border rounded-xl backdrop-blur-[16px] transition-all duration-200 hover:border-border-hover ${className}`}
         style={{
           padding,
-          boxShadow: "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)",
+          boxShadow: "var(--shadow-md), inset 0 1px 0 var(--color-card-highlight)",
           animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
         }}
       >
@@ -203,7 +203,7 @@ export function A2UIRenderer({
     const subtitle = c.subtitle as string;
     const icon = c.icon as string;
     const trend = c.trend as { direction: string; value: string } | undefined;
-    const color = (c.color as string) || "rgb(var(--color-primary))";
+    const color = (c.color as string) || "rgb(var(--color-text))";
     const trendColors: Record<string, string> = {
       up: "text-emerald-500", down: "text-red-500", stable: "text-text-muted",
     };
@@ -211,11 +211,11 @@ export function A2UIRenderer({
       <div
         className="bg-surface-card border border-border rounded-xl p-5 backdrop-blur-[16px] transition-all duration-200 relative overflow-hidden group hover:-translate-y-0.5 hover:border-border-hover"
         style={{
-          boxShadow: "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)",
+          boxShadow: "var(--shadow-md), inset 0 1px 0 var(--color-card-highlight)",
           animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
         }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), inset 0 1px 0 var(--color-card-highlight)"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)"; }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-lg), inset 0 1px 0 var(--color-card-highlight)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), inset 0 1px 0 var(--color-card-highlight)"; }}
       >
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         <div className="flex items-center gap-2 mb-3">
@@ -449,13 +449,13 @@ export function A2UIRenderer({
     const contentIds = c.contentIds as Record<string, string>;
     return (
       <div>
-        <div className="flex border-b-2 border-border gap-0">
+        <div className="flex border-b border-border gap-0">
           {tabs.map((tab) => {
             const isActive = tab.id === activeTab;
             return (
               <button key={tab.id} className={`py-3 px-5 bg-transparent border-none text-sm cursor-pointer relative transition-colors duration-normal ${isActive ? "text-text" : "text-text-muted hover:text-text-secondary"}`} onClick={() => sendAction("tab_change", { tab: tab.id })}>
                 {tab.label}
-                <div className={`absolute bottom-[-2px] left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent transition-all duration-normal origin-center ${isActive ? "opacity-100 scale-x-100" : "opacity-0 scale-x-0"}`} />
+                <div className={`absolute bottom-[-1px] left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent transition-all duration-normal origin-center ${isActive ? "opacity-100 scale-x-100" : "opacity-0 scale-x-0"}`} />
               </button>
             );
           })}

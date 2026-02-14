@@ -230,7 +230,9 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
       [warnIcon, ui.column([reAuthTitle, reAuthHint], { gap: 4 }), reAuthBtn],
       { justify: "between", align: "center", gap: 12 }
     );
-    children.push(ui.card([reAuthContent], { padding: 16 }));
+    children.push(
+      ui.card([reAuthContent], { padding: 16, className: "border-l-4 border-l-warning" } as any)
+    );
   }
 
   // ── Hero Section: Activity Rings + Health Score + Quick Stats ──

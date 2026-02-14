@@ -762,7 +762,12 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         }
       }
     } else {
-      arenaChildren.push(ui.text(t("evolution.noRunsSelected"), "caption"));
+      arenaChildren.push(
+        ui.column([ui.text(t("evolution.noRunsSelected"), "caption")], {
+          padding: 32,
+          align: "center",
+        })
+      );
     }
 
     // Recent Benchmark Runs table (merged into Arena section)
@@ -803,7 +808,9 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     children.push(ui.card(arenaChildren, { padding: 16, className: "arena-section" } as any));
   } else {
     const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
-    children.push(ui.card([emptyText], { padding: 24 }));
+    children.push(
+      ui.card([ui.column([emptyText], { padding: 32, align: "center" })], { padding: 24 })
+    );
   }
 
   // Row 4: Active evolution branch (if any)
@@ -992,7 +999,9 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     });
     leftChildren.push(timeline);
   } else {
-    leftChildren.push(ui.text(t("evolution.noVersions"), "caption"));
+    leftChildren.push(
+      ui.column([ui.text(t("evolution.noVersions"), "caption")], { padding: 32, align: "center" })
+    );
   }
 
   // Version detail panel (right side)
@@ -1049,7 +1058,9 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         rightChildren.push(diffId);
       }
     } else {
-      rightChildren.push(ui.text(t("evolution.noChanges"), "caption"));
+      rightChildren.push(
+        ui.column([ui.text(t("evolution.noChanges"), "caption")], { padding: 32, align: "center" })
+      );
     }
 
     // Action buttons
@@ -1243,17 +1254,17 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   // Sub-tabs as buttons
   const subTab = data.dataSubTab || "traces";
   const tracesBtn = ui.button(t("evolution.traces"), "evo_data_subtab_change", {
-    variant: subTab === "traces" ? "primary" : "ghost",
+    variant: subTab === "traces" ? "secondary" : "ghost",
     size: "sm",
     payload: { tab: "traces" },
   });
   const evalsBtn = ui.button(t("evolution.evaluations"), "evo_data_subtab_change", {
-    variant: subTab === "evaluations" ? "primary" : "ghost",
+    variant: subTab === "evaluations" ? "secondary" : "ghost",
     size: "sm",
     payload: { tab: "evaluations" },
   });
   const suggsBtn = ui.button(t("evolution.suggestions"), "evo_data_subtab_change", {
-    variant: subTab === "suggestions" ? "primary" : "ghost",
+    variant: subTab === "suggestions" ? "secondary" : "ghost",
     size: "sm",
     payload: { tab: "suggestions" },
   });
@@ -1288,7 +1299,12 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
       );
       children.push(tracesTable);
     } else {
-      children.push(ui.text(t("evolution.noTracesHint"), "caption"));
+      children.push(
+        ui.column([ui.text(t("evolution.noTracesHint"), "caption")], {
+          padding: 32,
+          align: "center",
+        })
+      );
     }
   }
 
@@ -1315,7 +1331,12 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
       );
       children.push(evalsTable);
     } else {
-      children.push(ui.text(t("evolution.noEvaluationsHint"), "caption"));
+      children.push(
+        ui.column([ui.text(t("evolution.noEvaluationsHint"), "caption")], {
+          padding: 32,
+          align: "center",
+        })
+      );
     }
   }
 
@@ -1344,7 +1365,12 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
       );
       children.push(suggsTable);
     } else {
-      children.push(ui.text(t("evolution.noSuggestionsHint"), "caption"));
+      children.push(
+        ui.column([ui.text(t("evolution.noSuggestionsHint"), "caption")], {
+          padding: 32,
+          align: "center",
+        })
+      );
     }
   }
 
