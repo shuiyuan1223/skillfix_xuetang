@@ -29,8 +29,8 @@ export default {
         overlay: "var(--color-overlay)",
         "gauge-track": "var(--color-gauge-track)",
         border: {
-          DEFAULT: "var(--color-border)",
-          hover: "var(--color-border-hover)",
+          DEFAULT: "rgb(var(--color-border) / <alpha-value>)",
+          hover: "rgb(var(--color-border-hover) / <alpha-value>)",
         },
         // Opaque colors: space-separated RGB + <alpha-value>
         text: {

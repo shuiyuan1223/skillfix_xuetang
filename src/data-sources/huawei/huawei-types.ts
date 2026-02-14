@@ -7,7 +7,7 @@
 // OAuth Token Response
 export interface HuaweiTokenResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string; // May not be returned on token refresh
   expires_in: number;
   token_type: string;
   scope?: string;

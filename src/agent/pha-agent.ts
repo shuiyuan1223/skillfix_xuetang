@@ -15,6 +15,9 @@ import { healthAgentTools, createHealthAgentTools } from "./tools.js";
 import { getMemoryManager } from "../memory/index.js";
 import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/compaction.js";
 import { getUserUuid } from "../utils/config.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Agent/PHA");
 import { preComputeHealthContext } from "./health-context.js";
 import { enrichWithSkills, enrichWithForcedSkill } from "./skill-trigger.js";
 import { sessionToAgentMessages } from "../memory/session-store.js";
@@ -266,7 +269,7 @@ export class PHAAgent {
       // Capture errors for diagnostics
       if ((event as any).type === "error" || (event as any).error) {
         hasError = true;
-        console.warn("[PHAAgent] chatAndWait error event:", (event as any).error || event);
+        log.warn("chatAndWait error event", (event as any).error || event);
       }
     });
 
@@ -275,7 +278,7 @@ export class PHAAgent {
       await this.agent.prompt(enriched);
       await this.agent.waitForIdle();
     } catch (err) {
-      console.warn("[PHAAgent] chatAndWait prompt/idle error:", err);
+      log.warn("chatAndWait prompt/idle error", err);
       throw err;
     } finally {
       unsubscribe();
@@ -292,7 +295,7 @@ export class PHAAgent {
     }
 
     if (!finalContent && hasError) {
-      console.warn("[PHAAgent] chatAndWait completed with empty response and errors");
+      log.warn("chatAndWait completed with empty response and errors");
     }
 
     return finalContent;

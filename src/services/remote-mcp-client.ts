@@ -11,6 +11,9 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { loadConfig, type RemoteMCPServerConfig } from "../utils/config.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Service/RemoteMCP");
 
 export class RemoteMCPClient {
   private client: Client | null = null;
@@ -45,9 +48,9 @@ export class RemoteMCPClient {
       });
       await this.client.connect(this.transport);
       this.connected = true;
-      console.log(`[RemoteMCP:${this.serverKey}] Connected via Streamable HTTP`);
+      log.info(`[${this.serverKey}] Connected via Streamable HTTP`);
     } catch (e) {
-      console.log(`[RemoteMCP:${this.serverKey}] Streamable HTTP failed, trying SSE fallback...`);
+      log.info(`[${this.serverKey}] Streamable HTTP failed, trying SSE fallback...`);
       // Reset client for retry
       this.client = new Client(
         { name: `pha-remote-${this.serverKey}`, version: "1.0.0" },
@@ -59,10 +62,10 @@ export class RemoteMCPClient {
         });
         await this.client.connect(this.transport);
         this.connected = true;
-        console.log(`[RemoteMCP:${this.serverKey}] Connected via SSE`);
+        log.info(`[${this.serverKey}] Connected via SSE`);
       } catch (sseErr) {
-        console.error(
-          `[RemoteMCP:${this.serverKey}] Failed to connect:`,
+        log.error(
+          `[${this.serverKey}] Failed to connect`,
           sseErr instanceof Error ? sseErr.message : sseErr
         );
         this.client = null;
@@ -230,14 +233,9 @@ export async function getRemoteMCPTools(): Promise<AgentTool<any>[]> {
         });
       }
 
-      console.log(
-        `[RemoteMCP:${serverKey}] Registered ${remoteTools.length} tools from "${displayName}"`
-      );
+      log.info(`[${serverKey}] Registered ${remoteTools.length} tools from "${displayName}"`);
     } catch (err) {
-      console.error(
-        `[RemoteMCP:${serverKey}] Failed to load tools:`,
-        err instanceof Error ? err.message : err
-      );
+      log.error(`[${serverKey}] Failed to load tools`, err instanceof Error ? err.message : err);
     }
   }
 

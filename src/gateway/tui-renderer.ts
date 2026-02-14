@@ -151,6 +151,8 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderCollapsible(comp, ctx);
     case "activity_rings":
       return renderActivityRings(comp, ctx);
+    case "log_viewer":
+      return renderLogViewer(comp, ctx);
     case "skeleton":
       return [indent(ctx, ansi.dim("Loading..."))];
     case "divider":
@@ -1096,6 +1098,55 @@ function renderActivityRings(comp: A2UIComponent, ctx: RenderContext): string[] 
         )
       )
     );
+  }
+
+  return lines;
+}
+
+function renderLogViewer(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const entries =
+    (comp.entries as Array<{ time: string; level: string; subsystem: string; message: string }>) ||
+    [];
+  const lines: string[] = [];
+
+  // Header
+  lines.push(
+    indent(
+      ctx,
+      ansi.bold(padRight("Time", 12) + padRight("Level", 8) + padRight("Subsystem", 22) + "Message")
+    )
+  );
+  lines.push(indent(ctx, ansi.dim("─".repeat(Math.min(80, ctx.width - ctx.indent * 2)))));
+
+  // Show last 50 entries
+  const recent = entries.slice(-50);
+  for (const e of recent) {
+    const timeStr = ansi.dim(e.time.split("T")[1]?.split(".")[0] || e.time.slice(11, 19));
+
+    let levelStr: string;
+    switch (e.level) {
+      case "error":
+      case "fatal":
+        levelStr = ansi.red(padRight(e.level.toUpperCase(), 8));
+        break;
+      case "warn":
+        levelStr = ansi.yellow(padRight("WARN", 8));
+        break;
+      case "info":
+        levelStr = ansi.cyan(padRight("INFO", 8));
+        break;
+      default:
+        levelStr = ansi.gray(padRight(e.level.toUpperCase(), 8));
+    }
+
+    const subsysStr = ansi.magenta(padRight(e.subsystem, 22));
+    const msgStr = e.message;
+
+    lines.push(indent(ctx, `${padRight(timeStr, 12)}${levelStr}${subsysStr}${msgStr}`));
+  }
+
+  if (entries.length === 0) {
+    lines.push(indent(ctx, ansi.dim("  No log entries")));
   }
 
   return lines;

@@ -206,7 +206,7 @@ function statOrSkeleton(
     value: available ? opts.value : "--",
     subtitle: opts.subtitle,
     icon: opts.icon,
-    color: opts.color,
+    color: available ? opts.color : undefined,
   });
 }
 
@@ -230,7 +230,9 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
       [warnIcon, ui.column([reAuthTitle, reAuthHint], { gap: 4 }), reAuthBtn],
       { justify: "between", align: "center", gap: 12 }
     );
-    children.push(ui.card([reAuthContent], { padding: 16 }));
+    children.push(
+      ui.card([reAuthContent], { padding: 16, className: "border-l-4 border-l-warning" } as any)
+    );
   }
 
   // ── Hero Section: Activity Rings + Health Score + Quick Stats ──
@@ -422,8 +424,10 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     chartChildren.push(ui.card([hrChartTitle, hrChart], { padding: 20 }));
   }
 
-  if (chartChildren.length > 0) {
-    children.push(ui.row(chartChildren, { gap: 16 }));
+  if (chartChildren.length === 1) {
+    children.push(chartChildren[0]);
+  } else if (chartChildren.length > 1) {
+    children.push(ui.grid(chartChildren, { columns: 2, gap: 16 }));
   }
 
   // ── Sleep trend (if available) ──

@@ -18,6 +18,7 @@ import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import {
   loadConfig,
+  saveConfig,
   getUserUuid,
   getStateDir,
   getBenchmarkModels,
@@ -25,6 +26,8 @@ import {
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
   getBenchmarkConcurrency,
+  PROVIDER_CONFIGS,
+  type LLMProvider,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -58,6 +61,9 @@ import {
   mergePendingCards,
   generateIntegrationsPage,
   generateSystemAgentPage,
+  generateLogsPage,
+  generateSettingsPage,
+  type SettingsPageData,
 } from "./pages.js";
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
@@ -128,6 +134,20 @@ import {
   getGlobalPluginRegistry,
   type PluginRegistry,
 } from "../plugins/index.js";
+import {
+  createLogger,
+  readLogFile,
+  getLogSubsystems,
+  subscribeToLogs,
+  type LogEntry,
+} from "../utils/logger.js";
+
+const log = createLogger("Gateway");
+const logOAuth = log.child("OAuth");
+const logSession = log.child("Session");
+const logAgent = log.child("Agent");
+const logMemory = log.child("Memory");
+const logEvolution = log.child("Evolution");
 
 // ============================================================================
 // Quick Reply Detection
@@ -635,11 +655,11 @@ export function createGatewayApp() {
       const userStore = getUserStore();
       userStore.saveToken(uuid, token);
 
-      console.log(`[OAuth Extension] Successfully authenticated user ${uuid.slice(0, 8)}`);
+      logOAuth.info("Extension: successfully authenticated user", { uuid: uuid.slice(0, 8) });
       return c.json({ success: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[OAuth Extension] Error:`, message);
+      logOAuth.error("Extension: token exchange failed", { error: message });
       return c.json({ success: false, error: message }, 500);
     }
   });
@@ -677,15 +697,15 @@ export function createGatewayApp() {
 
     // Generate auth URL with state parameter
     const authUrl = getHuaweiAuthUrl(uuid);
-    console.log(`[OAuth MCP] Starting Chrome MCP flow for user ${uuid.slice(0, 8)}...`);
-    console.log(`[OAuth MCP] Auth URL: ${authUrl.slice(0, 100)}...`);
+    logOAuth.info("MCP: starting Chrome flow", { uuid: uuid.slice(0, 8) });
+    logOAuth.debug("MCP: auth URL", { url: authUrl.slice(0, 100) });
 
     try {
       // Run OAuth flow with Chrome MCP
       const result = await runOAuthFlowWithChrome(authUrl, { timeout: 180000 });
 
       if ("error" in result) {
-        console.error(`[OAuth MCP] Flow failed:`, result.error);
+        logOAuth.error("MCP: flow failed", { error: result.error });
         return c.json({ success: false, error: result.error }, 400);
       }
 
@@ -703,11 +723,11 @@ export function createGatewayApp() {
       const userStore = getUserStore();
       userStore.saveToken(uuid, token);
 
-      console.log(`[OAuth MCP] Successfully authenticated user ${uuid.slice(0, 8)}`);
+      logOAuth.info("MCP: successfully authenticated user", { uuid: uuid.slice(0, 8) });
       return c.json({ success: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[OAuth MCP] Error:`, message);
+      logOAuth.error("MCP: token exchange failed", { error: message });
       return c.json({ success: false, error: message }, 500);
     }
   });
@@ -933,6 +953,11 @@ export class GatewaySession {
   private memorySearchQuery: string | undefined;
   private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
 
+  // Logs page state
+  private logsLevelFilter: string | undefined;
+  private logsSubsystemFilter: string | undefined;
+  private logsUnsubscribe: (() => void) | null = null;
+
   // Evolution version state
   private activeVersionBranch: string | null = null;
 
@@ -995,7 +1020,7 @@ export class GatewaySession {
     try {
       appendToSession(this.userUuid, sid, [entry]);
     } catch (err) {
-      console.warn("[Session] Failed to persist message:", err);
+      logSession.warn("Failed to persist message", { error: err });
     }
   }
 
@@ -1031,7 +1056,7 @@ export class GatewaySession {
         }
       }
     } catch (err) {
-      console.warn("[Session] Failed to load persisted messages:", err);
+      logSession.warn("Failed to load persisted messages", { error: err });
     }
   }
 
@@ -1078,7 +1103,7 @@ export class GatewaySession {
       try {
         remoteMcpTools = await getRemoteMCPTools();
       } catch (err) {
-        console.error("[Gateway] Failed to load remote MCP tools:", err);
+        log.error("Failed to load remote MCP tools", { error: err });
       }
       const extraTools = [...pluginTools, ...remoteMcpTools];
 
@@ -1241,7 +1266,7 @@ export class GatewaySession {
         send({ type: "pong" });
         break;
       default:
-        console.warn("Unknown message type:", data.type);
+        log.warn("Unknown message type", { type: data.type });
     }
   }
 
@@ -1268,6 +1293,12 @@ export class GatewaySession {
   }
 
   private async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
+    // Unsubscribe from logs when navigating away
+    if (this.currentView === "settings/logs" && view !== "settings/logs" && this.logsUnsubscribe) {
+      this.logsUnsubscribe();
+      this.logsUnsubscribe = null;
+    }
+
     this.currentView = view;
 
     let mainPage;
@@ -1399,7 +1430,7 @@ export class GatewaySession {
           });
           send(generatePage(view, memoryPage));
         } catch (e) {
-          console.error("[Memory] Load error:", e);
+          logMemory.error("Load error", { error: e });
         }
         return;
       }
@@ -1466,7 +1497,7 @@ export class GatewaySession {
             )
           );
         } catch (e) {
-          console.error("[Prompts] Load error:", e);
+          log.error("Prompts load error", { error: e });
         } finally {
           // Always restore to default PHA dir
           setPromptsDir("src/prompts/pha");
@@ -1531,7 +1562,7 @@ export class GatewaySession {
             )
           );
         } catch (e) {
-          console.error("[Skills] Load error:", e);
+          log.error("Skills load error", { error: e });
         }
         return;
       }
@@ -1551,7 +1582,7 @@ export class GatewaySession {
           const labPage = generateEvolutionLab(labData);
           send(generatePage(view, labPage));
         } catch (e) {
-          console.error("[Evolution Lab] Load error:", e);
+          logEvolution.error("Lab load error", { error: e });
         }
         return;
       }
@@ -1585,9 +1616,107 @@ export class GatewaySession {
 
         // Fetch GitHub data async and re-send
         this.loadIntegrationsAsync(send).catch((e) => {
-          console.error("[Integrations] Load error:", e);
+          log.error("Integrations load error", { error: e });
         });
         return;
+      }
+
+      case "settings/logs": {
+        // Unsubscribe from previous log subscription
+        if (this.logsUnsubscribe) {
+          this.logsUnsubscribe();
+          this.logsUnsubscribe = null;
+        }
+
+        // Read today's logs with filters applied
+        const allEntries = readLogFile(undefined, 500);
+        let filteredEntries = allEntries;
+        if (this.logsLevelFilter) {
+          filteredEntries = filteredEntries.filter((e) => e.level === this.logsLevelFilter);
+        }
+        if (this.logsSubsystemFilter) {
+          filteredEntries = filteredEntries.filter((e) => e.subsystem === this.logsSubsystemFilter);
+        }
+
+        const levels = [...new Set(allEntries.map((e) => e.level))].sort();
+        const subsystems = [...new Set(allEntries.map((e) => e.subsystem))].sort();
+
+        mainPage = generateLogsPage({
+          entries: filteredEntries.map((e) => ({
+            time: e.time,
+            level: e.level,
+            subsystem: e.subsystem,
+            message: e.message,
+            data: e.data,
+          })),
+          levels,
+          subsystems,
+          activeLevel: this.logsLevelFilter,
+          activeSubsystem: this.logsSubsystemFilter,
+        });
+
+        // Subscribe to real-time log entries
+        this.logsUnsubscribe = subscribeToLogs((entry: LogEntry) => {
+          // Apply filters
+          if (this.logsLevelFilter && entry.level !== this.logsLevelFilter) return;
+          if (this.logsSubsystemFilter && entry.subsystem !== this.logsSubsystemFilter) return;
+          // Push to client
+          send({
+            type: "log_entry",
+            entry: {
+              time: entry.time,
+              level: entry.level,
+              subsystem: entry.subsystem,
+              message: entry.message,
+              data: entry.data,
+            },
+          });
+        });
+        break;
+      }
+
+      case "settings/general": {
+        const config = loadConfig();
+        const providers = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
+          value: key,
+          label: cfg.name,
+          hint: cfg.hint,
+        }));
+        const huawei = config.dataSources?.huawei || {};
+        const judge = config.judgeModel || {
+          provider: undefined as any,
+          modelId: undefined as any,
+          label: undefined as any,
+        };
+        mainPage = generateSettingsPage({
+          provider: config.llm.provider,
+          providers,
+          apiKeySet: !!config.llm.apiKey,
+          modelId: config.llm.modelId || PROVIDER_CONFIGS[config.llm.provider]?.defaultModel || "",
+          baseUrl: config.llm.baseUrl || PROVIDER_CONFIGS[config.llm.provider]?.baseUrl || "",
+          gatewayPort: config.gateway?.port || 8000,
+          gatewayAutoStart: config.gateway?.autoStart ?? false,
+          dataSourceType: config.dataSources?.type || "mock",
+          embeddingEnabled: config.embedding?.enabled ?? false,
+          embeddingModel: config.embedding?.model || "openai/text-embedding-3-small",
+          tuiTheme: config.tui?.theme || "dark",
+          tuiShowToolCalls: config.tui?.showToolCalls ?? true,
+          huaweiClientId: huawei.clientId || "",
+          huaweiClientSecret: huawei.clientSecret || "",
+          huaweiRedirectUri: huawei.redirectUri || "",
+          huaweiAuthUrl: huawei.authUrl || "",
+          huaweiTokenUrl: huawei.tokenUrl || "",
+          huaweiApiBaseUrl: huawei.apiBaseUrl || "",
+          applyEngine: config.applyEngine || "claude-code",
+          benchmarkConcurrency: config.benchmark?.concurrency || 1,
+          judgeProvider: judge.provider || config.llm.provider,
+          judgeModelId: judge.modelId || "",
+          judgeLabel: judge.label || "",
+          benchmarkModelsJson: config.benchmarkModels
+            ? JSON.stringify(config.benchmarkModels, null, 2)
+            : "{}",
+        });
+        break;
       }
 
       default:
@@ -1613,7 +1742,7 @@ export class GatewaySession {
       hr.runMessageReceived(
         { from: this.userUuid || "unknown", content, timestamp: Date.now() },
         { channelId: "websocket", conversationId: this.sessionId }
-      ).catch((err) => console.warn("[hooks] message_received error:", err));
+      ).catch((err) => log.warn("Hook message_received error", { error: err }));
     }
     this.isStreaming = true;
     this.streamingContent = "";
@@ -1692,7 +1821,7 @@ export class GatewaySession {
       });
       this.sendChatUpdate(send);
 
-      console.error(`[Agent Error] Session ${this.sessionId}:`, error);
+      logAgent.error("Agent error", { sessionId: this.sessionId, error });
 
       send({
         type: "error",
@@ -1800,7 +1929,7 @@ export class GatewaySession {
                   const cards = generateToolCards(toolName, event.result);
                   if (cards) msg.cards = cards;
                 } catch (err) {
-                  console.error(`[System Agent] Card generation error:`, err);
+                  logAgent.error("System Agent card generation error", { error: err });
                 }
               }
               break;
@@ -1976,7 +2105,7 @@ export class GatewaySession {
       await this.handleNavigate("settings/prompts", send);
     } else if (action === "select_commit" && payload?.hash) {
       // Preview commit - could show diff in future
-      console.log("Selected commit:", payload.hash);
+      log.debug("Selected commit", { hash: payload.hash });
     }
     // Skills actions
     else if (action === "select_skill" && payload?.row) {
@@ -2120,7 +2249,7 @@ export class GatewaySession {
           };
           this.sendEvolutionLabUpdate(send);
         } catch (e) {
-          console.error("[Evolution Lab] File select error:", e);
+          logEvolution.error("File select error", { error: e });
         }
       }
     }
@@ -2504,7 +2633,9 @@ export class GatewaySession {
         });
       } else {
         const profile = (payload?.profile as "quick" | "full") || "quick";
-        this.runBenchmarkAsync(profile, send).catch(console.error);
+        this.runBenchmarkAsync(profile, send).catch((err: unknown) =>
+          logEvolution.error("Benchmark failed", { error: err })
+        );
       }
     } else if (action === "submit_run_benchmark") {
       // From model selector modal
@@ -2524,7 +2655,9 @@ export class GatewaySession {
             apiKey,
             baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
             presetName: name,
-          }).catch(console.error);
+          }).catch((err: unknown) =>
+            logEvolution.error("Benchmark failed", { preset: name, error: err })
+          );
         }
       } else if (modelPreset && modelPreset !== "__default__") {
         const benchmarkModels = getBenchmarkModels();
@@ -2537,12 +2670,18 @@ export class GatewaySession {
             apiKey,
             baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
             presetName: modelPreset,
-          }).catch(console.error);
+          }).catch((err: unknown) =>
+            logEvolution.error("Benchmark failed", { preset: modelPreset, error: err })
+          );
         } else {
-          this.runBenchmarkAsync(profile, send).catch(console.error);
+          this.runBenchmarkAsync(profile, send).catch((err: unknown) =>
+            logEvolution.error("Benchmark failed", { error: err })
+          );
         }
       } else {
-        this.runBenchmarkAsync(profile, send).catch(console.error);
+        this.runBenchmarkAsync(profile, send).catch((err: unknown) =>
+          logEvolution.error("Benchmark failed", { error: err })
+        );
       }
     } else if (action === "run_auto_loop") {
       const toast = generateToast(t("evolution.autoLoopHint"), "warning");
@@ -2553,7 +2692,9 @@ export class GatewaySession {
         root_id: toast.root_id,
       });
     } else if (action === "run_diagnose") {
-      this.runDiagnoseAsync(send).catch(console.error);
+      this.runDiagnoseAsync(send).catch((err: unknown) =>
+        logEvolution.error("Diagnose failed", { error: err })
+      );
     } else if (action === "switch_version") {
       const branch = (payload?.branch as string) || null;
       try {
@@ -2703,12 +2844,115 @@ export class GatewaySession {
         root_id: toast.root_id,
       });
       send({ type: "clear_surface", surface_id: "modal" });
-      console.log(`Running test case: ${payload.id}`);
+      logEvolution.info("Running test case", { id: payload.id });
     }
     // Integrations actions
     else if (action === "refresh_integrations") {
       this.integrationsCache = null; // Invalidate cache to force refetch
       await this.handleNavigate("settings/integrations", send);
+    }
+    // Logs page actions
+    else if (action === "logs_filter_level") {
+      this.logsLevelFilter = payload?.value ? String(payload.value) : undefined;
+      await this.handleNavigate("settings/logs", send);
+    } else if (action === "logs_filter_subsystem") {
+      this.logsSubsystemFilter = payload?.value ? String(payload.value) : undefined;
+      await this.handleNavigate("settings/logs", send);
+    } else if (action === "logs_refresh") {
+      await this.handleNavigate("settings/logs", send);
+    }
+    // Settings actions
+    else if (
+      action === "settings_save_llm" ||
+      action === "settings_save_gateway" ||
+      action === "settings_save_datasource" ||
+      action === "settings_save_advanced" ||
+      action === "settings_save_tui" ||
+      action === "settings_save_embedding" ||
+      action === "settings_save_benchmark" ||
+      action === "settings_save_benchmark_models"
+    ) {
+      try {
+        const config = loadConfig();
+        const formData = payload as Record<string, unknown>;
+
+        if (action === "settings_save_llm") {
+          if (formData.provider) config.llm.provider = formData.provider as LLMProvider;
+          if (formData.apiKey && formData.apiKey !== "••••••••")
+            config.llm.apiKey = String(formData.apiKey);
+          if (formData.modelId) config.llm.modelId = String(formData.modelId);
+          if (formData.baseUrl !== undefined)
+            config.llm.baseUrl = String(formData.baseUrl) || undefined;
+        } else if (action === "settings_save_gateway") {
+          if (formData.port) config.gateway.port = Number(formData.port) || 8000;
+          if (formData.autoStart !== undefined)
+            config.gateway.autoStart = formData.autoStart === "true";
+        } else if (action === "settings_save_datasource") {
+          if (formData.dataSourceType)
+            config.dataSources.type = formData.dataSourceType as "mock" | "huawei" | "apple";
+          // Huawei HealthKit config
+          if (config.dataSources.type === "huawei") {
+            if (!config.dataSources.huawei) config.dataSources.huawei = {};
+            const hw = config.dataSources.huawei;
+            if (formData.huaweiClientId !== undefined)
+              hw.clientId = String(formData.huaweiClientId) || undefined;
+            if (formData.huaweiClientSecret !== undefined)
+              hw.clientSecret = String(formData.huaweiClientSecret) || undefined;
+            if (formData.huaweiRedirectUri !== undefined)
+              hw.redirectUri = String(formData.huaweiRedirectUri) || undefined;
+            if (formData.huaweiAuthUrl !== undefined)
+              hw.authUrl = String(formData.huaweiAuthUrl) || undefined;
+            if (formData.huaweiTokenUrl !== undefined)
+              hw.tokenUrl = String(formData.huaweiTokenUrl) || undefined;
+            if (formData.huaweiApiBaseUrl !== undefined)
+              hw.apiBaseUrl = String(formData.huaweiApiBaseUrl) || undefined;
+          }
+        } else if (action === "settings_save_tui") {
+          if (!config.tui) config.tui = { theme: "dark", showToolCalls: true };
+          if (formData.tuiTheme) config.tui.theme = formData.tuiTheme as "dark" | "light";
+          if (formData.tuiShowToolCalls !== undefined)
+            config.tui.showToolCalls = formData.tuiShowToolCalls === "true";
+        } else if (action === "settings_save_advanced") {
+          if (!config.embedding) config.embedding = {};
+          if (formData.embeddingEnabled !== undefined)
+            config.embedding.enabled = formData.embeddingEnabled === "true";
+          if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+        } else if (action === "settings_save_embedding") {
+          if (!config.embedding) config.embedding = {};
+          if (formData.embeddingEnabled !== undefined)
+            config.embedding.enabled = formData.embeddingEnabled === "true";
+          if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
+        } else if (action === "settings_save_benchmark") {
+          if (!config.benchmark) config.benchmark = {};
+          if (formData.benchmarkConcurrency !== undefined)
+            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+          if (!config.judgeModel)
+            config.judgeModel = { provider: config.llm.provider, modelId: "" };
+          if (formData.judgeProvider)
+            config.judgeModel.provider = formData.judgeProvider as LLMProvider;
+          if (formData.judgeModelId !== undefined)
+            config.judgeModel.modelId = String(formData.judgeModelId);
+          if (formData.judgeLabel !== undefined)
+            config.judgeModel.label = String(formData.judgeLabel) || undefined;
+        } else if (action === "settings_save_benchmark_models") {
+          try {
+            const parsed = JSON.parse(String(formData.benchmarkModelsJson || "{}"));
+            config.benchmarkModels = parsed;
+          } catch {
+            // Invalid JSON — keep existing
+          }
+        }
+
+        saveConfig(config);
+        send(generateToast(t("settings.saved"), "success"));
+        await this.handleNavigate("settings/general", send);
+      } catch (e) {
+        send(generateToast(t("settings.saveError"), "error"));
+      }
     }
     // Default - pass to agent
     else {
@@ -3882,7 +4126,7 @@ export class GatewaySession {
               this.pendingCards.push(cards);
             }
           } catch (err) {
-            console.error(`[ToolCards] Failed to generate cards for ${event.toolName}:`, err);
+            log.error("Failed to generate cards", { tool: event.toolName, error: err });
           }
         }
         this.sendChatUpdate(send);
@@ -3948,19 +4192,17 @@ export async function startGateway(
       });
       const loaded = pluginRegistry.plugins.filter((p) => p.status === "loaded");
       if (loaded.length > 0) {
-        console.log(
-          `[Gateway] ${loaded.length} plugin(s) loaded: ${loaded.map((p) => p.id).join(", ")}`
-        );
+        log.info(`${loaded.length} plugin(s) loaded`, { plugins: loaded.map((p) => p.id) });
       }
     } catch (err) {
-      console.warn("[Gateway] Plugin loading failed:", err);
+      log.warn("Plugin loading failed", { error: err });
     }
   }
 
   // Clean up interrupted benchmark runs from previous process (deletes incomplete runs with no data)
   const interrupted = markInterruptedBenchmarkRuns();
   if (interrupted > 0) {
-    console.log(`[Gateway] Cleaned up ${interrupted} interrupted benchmark run(s)`);
+    log.info("Cleaned up interrupted benchmark runs", { count: interrupted });
   }
   clearBenchmarkProgress();
   clearAllUiBenchmarkProgress();
@@ -4033,15 +4275,11 @@ export async function startGateway(
 
         let session = sessions.get(key);
         if (session) {
-          console.log(
-            `WebSocket reconnected: ${sessionId} → reusing session for ${key.slice(0, 8)}...`
-          );
+          logSession.info("WebSocket reconnected", { sessionId, userKey: key.slice(0, 8) });
         } else {
           session = new GatewaySession(wsConfig, userUuid);
           sessions.set(key, session);
-          console.log(
-            `WebSocket connected: ${sessionId}${userUuid ? ` (user: ${userUuid.slice(0, 8)}...)` : ""}`
-          );
+          logSession.info("WebSocket connected", { sessionId, userUuid: userUuid?.slice(0, 8) });
         }
 
         // Bind live send function so in-flight async tasks push to this connection
@@ -4058,7 +4296,7 @@ export async function startGateway(
         if (hookRunner) {
           hookRunner
             .runSessionStart({ sessionId }, { sessionId })
-            .catch((err) => console.warn("[hooks] session_start error:", err));
+            .catch((err) => log.warn("Hook session_start error", { error: err }));
         }
       },
       async message(ws, message) {
@@ -4071,7 +4309,7 @@ export async function startGateway(
             ws.send(JSON.stringify(msg));
           });
         } catch (error) {
-          console.error("WebSocket message error:", error);
+          log.error("WebSocket message error", { error });
           ws.send(
             JSON.stringify({
               type: "error",
@@ -4085,7 +4323,7 @@ export async function startGateway(
         // Don't delete session — keep it alive for reconnection (page refresh)
         const session = sessions.get(ws.data.sessionKey);
         if (session) session.clearSend();
-        console.log(`WebSocket disconnected: ${ws.data.sessionId}`);
+        logSession.info("WebSocket disconnected", { sessionId: ws.data.sessionId });
 
         // Trigger session_end hook
         const hookRunner = getGlobalHookRunner();
@@ -4095,7 +4333,7 @@ export async function startGateway(
               { sessionId: ws.data.sessionId, messageCount: 0 },
               { sessionId: ws.data.sessionId }
             )
-            .catch((err) => console.warn("[hooks] session_end error:", err));
+            .catch((err) => log.warn("Hook session_end error", { error: err }));
         }
       },
     },
@@ -4108,7 +4346,7 @@ export async function startGateway(
   const hr = getGlobalHookRunner();
   if (hr) {
     hr.runGatewayStart({ port }, { port }).catch((err) =>
-      console.warn("[Gateway] gateway_start hook error:", err)
+      log.warn("Hook gateway_start error", { error: err })
     );
   }
 

@@ -29,6 +29,7 @@ import {
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { memorySearchTool, memorySaveTool, dailyLogTool } from "../tools/memory-tools.js";
 import { getSkillTool } from "../tools/skill-tools.js";
+import { getConfigTool, updateConfigTool, listProvidersTool } from "../tools/config-tools.js";
 import { gitAgentTools } from "./git-agent-tools.js";
 
 // Define TypeBox schemas for each tool
@@ -445,6 +446,76 @@ export const getSkillAgentTool: AgentTool<typeof GetSkillSchema> = {
   },
 };
 
+// ========================================================================
+// Config Tools as AgentTools
+// ========================================================================
+
+const ConfigSectionSchema = Type.Object({
+  section: Type.Optional(
+    Type.String({
+      description: "Optional section to read: 'llm', 'gateway', 'dataSources', 'embedding', 'all'",
+    })
+  ),
+});
+
+const ConfigUpdateSchema = Type.Object({
+  updates: Type.Record(Type.String(), Type.Unknown(), {
+    description:
+      "Key-value pairs to update. Keys use dot-notation (e.g. 'llm.provider', 'llm.apiKey', 'gateway.port').",
+  }),
+});
+
+export const getConfigAgentTool: AgentTool<typeof ConfigSectionSchema> = {
+  name: getConfigTool.name,
+  description: getConfigTool.description,
+  label: "Get Config",
+  parameters: ConfigSectionSchema,
+  execute: async (
+    _toolCallId: string,
+    params: { section?: string }
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await getConfigTool.execute(params);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
+export const updateConfigAgentTool: AgentTool<typeof ConfigUpdateSchema> = {
+  name: updateConfigTool.name,
+  description: updateConfigTool.description,
+  label: "Update Config",
+  parameters: ConfigUpdateSchema,
+  execute: async (
+    _toolCallId: string,
+    params: { updates: Record<string, unknown> }
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await updateConfigTool.execute(params);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
+export const listProvidersAgentTool: AgentTool<typeof EmptySchema> = {
+  name: listProvidersTool.name,
+  description: listProvidersTool.description,
+  label: "List Providers",
+  parameters: EmptySchema,
+  execute: async (
+    _toolCallId: string,
+    _params: Record<string, never>
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await listProvidersTool.execute();
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
 // All health tools as AgentTools - use 'any' to avoid variance issues
 export const healthAgentTools: AgentTool<any>[] = [
   healthDataAgentTool,
@@ -469,6 +540,9 @@ export const healthAgentTools: AgentTool<any>[] = [
   dailyLogAgentTool,
   getSkillAgentTool,
   ...gitAgentTools,
+  getConfigAgentTool,
+  updateConfigAgentTool,
+  listProvidersAgentTool,
 ];
 
 /**
@@ -558,5 +632,9 @@ export function createHealthAgentTools(dataSource: HealthDataSource): AgentTool<
     getSkillAgentTool,
     // Git tools are not data-source dependent
     ...gitAgentTools,
+    // Config tools are not data-source dependent
+    getConfigAgentTool,
+    updateConfigAgentTool,
+    listProvidersAgentTool,
   ];
 }

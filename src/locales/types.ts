@@ -16,6 +16,8 @@ export interface LocaleMessages {
     evolution: string;
     integrations: string;
     systemAgent: string;
+    logs: string;
+    settings: string;
   };
 
   // System Agent
@@ -23,6 +25,9 @@ export interface LocaleMessages {
     title: string;
     subtitle: string;
     placeholder: string;
+    runBenchmark: string;
+    startEvolution: string;
+    gitStatus: string;
   };
 
   // Common
@@ -531,6 +536,77 @@ export interface LocaleMessages {
     closed: string;
     merged: string;
     feedbackIssues: string;
+  };
+
+  // Logs page
+  logs: {
+    title: string;
+    subtitle: string;
+    level: string;
+    subsystem: string;
+    message: string;
+    time: string;
+    allLevels: string;
+    allSubsystems: string;
+    noLogs: string;
+    refresh: string;
+  };
+
+  // Settings / General page
+  settings: {
+    title: string;
+    subtitle: string;
+    llmProvider: string;
+    llmProviderDesc: string;
+    apiKey: string;
+    apiKeyDesc: string;
+    apiKeyPlaceholder: string;
+    apiKeySet: string;
+    apiKeyNotSet: string;
+    modelId: string;
+    modelIdDesc: string;
+    baseUrl: string;
+    baseUrlDesc: string;
+    baseUrlPlaceholder: string;
+    gatewayPort: string;
+    gatewayPortDesc: string;
+    dataSource: string;
+    dataSourceDesc: string;
+    embedding: string;
+    embeddingDesc: string;
+    embeddingModel: string;
+    saved: string;
+    saveError: string;
+    saveButton: string;
+    sectionLlm: string;
+    sectionGateway: string;
+    sectionData: string;
+    sectionAdvanced: string;
+    sectionTui: string;
+    sectionHuawei: string;
+    gatewayAutoStart: string;
+    gatewayAutoStartDesc: string;
+    tuiTheme: string;
+    tuiShowToolCalls: string;
+    huaweiClientId: string;
+    huaweiClientSecret: string;
+    huaweiRedirectUri: string;
+    huaweiAuthUrl: string;
+    huaweiTokenUrl: string;
+    huaweiApiBaseUrl: string;
+    applyEngine: string;
+    applyEngineDesc: string;
+    sectionEmbedding: string;
+    sectionBenchmark: string;
+    sectionJudgeModel: string;
+    sectionBenchmarkModels: string;
+    benchmarkConcurrency: string;
+    benchmarkConcurrencyDesc: string;
+    judgeProvider: string;
+    judgeModelId: string;
+    judgeLabel: string;
+    benchmarkModelsJson: string;
+    benchmarkModelsJsonDesc: string;
   };
 
   // OAuth / Authorization

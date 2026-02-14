@@ -170,12 +170,14 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
     success: "bg-emerald-500/20 text-emerald-400", error: "bg-red-500/20 text-red-400",
     failed: "bg-red-500/20 text-red-400", warning: "bg-amber-500/20 text-amber-400",
     pending: "bg-amber-500/20 text-amber-400",
+    view: "bg-blue-500/15 text-blue-500", selected: "bg-emerald-500/15 text-emerald-500",
+    info: "bg-blue-500/15 text-blue-500",
   };
 
   const renderCell = (value: unknown, render?: string) => {
     if (render === "badge") {
       const status = String(value).toLowerCase();
-      const cls = badgeV[status] || "bg-slate-500/20 text-slate-300";
+      const cls = badgeV[status] || "bg-slate-500/15 text-slate-600 dark:text-slate-300";
       return <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>{String(value)}</span>;
     }
     if (render === "progress") {
@@ -222,7 +224,7 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
         <tbody>
           {rows.map((row, i) => (
             <tr key={i} className={`border-b border-border transition-colors hover:bg-primary/5 ${c.onRowClick ? "cursor-pointer" : ""}`} onClick={() => { if (c.onRowClick) ctx.sendAction(c.onRowClick as string, { row }); }}>
-              {columns.map((col) => <td key={col.key} className="p-3">{renderCell(row[col.key], col.render)}</td>)}
+              {columns.map((col) => <td key={col.key} className="p-3 max-w-[300px]" title={String(row[col.key] ?? "")}><span className="block truncate">{renderCell(row[col.key], col.render)}</span></td>)}
             </tr>
           ))}
         </tbody>
@@ -295,7 +297,7 @@ export function renderActivityRings(c: A2UIComponent, _ctx: RenderContext) {
           return (
             <React.Fragment key={i}>
               <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color + "30"} strokeWidth={strokeWidth} />
-              <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} transform={`rotate(-90 ${center} ${center})`} className="ring-fill" />
+              <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} transform={`rotate(-90 ${center} ${center})`} className="ring-fill" style={{ strokeDashoffset: dashOffset, ['--ring-circ' as any]: circumference, animationDelay: `${i * 200}ms` }} />
             </React.Fragment>
           );
         })}
@@ -887,6 +889,52 @@ export function renderPlaygroundFab(c: A2UIComponent, ctx: RenderContext) {
       {actions.map((a, i) => (
         <button key={i} className="pg-fab-secondary" data-tooltip={a.tooltip || ""} onClick={() => ctx.sendAction(a.action, a.payload)} dangerouslySetInnerHTML={{ __html: getIcon(a.icon) }} />
       ))}
+    </div>
+  );
+}
+
+// ---- Log Viewer ----
+export function renderLogViewer(c: A2UIComponent, _ctx: RenderContext) {
+  const entries = (c.entries as Array<{time: string; level: string; subsystem: string; message: string; data?: unknown}>) || [];
+  const levelColors: Record<string, string> = {
+    trace: "text-text-muted bg-text-muted/10",
+    debug: "text-text-muted bg-text-muted/10",
+    info: "text-blue-400 bg-blue-500/10",
+    warn: "text-amber-400 bg-amber-500/10",
+    error: "text-red-400 bg-red-500/10",
+    fatal: "text-red-400 bg-red-500/10",
+  };
+
+  return (
+    <div id="log-viewer-scroll" className="overflow-y-auto max-h-[600px] font-mono text-xs">
+      <table className="w-full border-collapse">
+        <thead className="sticky top-0 z-10 bg-surface">
+          <tr>
+            <th className="p-1.5 text-left text-[10px] font-medium uppercase text-text-muted border-b border-border w-[140px]">Time</th>
+            <th className="p-1.5 text-left text-[10px] font-medium uppercase text-text-muted border-b border-border w-[70px]">Level</th>
+            <th className="p-1.5 text-left text-[10px] font-medium uppercase text-text-muted border-b border-border w-[100px]">Subsystem</th>
+            <th className="p-1.5 text-left text-[10px] font-medium uppercase text-text-muted border-b border-border">Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry, i) => {
+            const colorCls = levelColors[entry.level] || levelColors.info;
+            return (
+              <tr key={i} className="border-b border-border/50 hover:bg-surface-hover transition-colors">
+                <td className="p-1.5 text-text-muted whitespace-nowrap">{entry.time}</td>
+                <td className="p-1.5">
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium uppercase ${colorCls}`}>{entry.level}</span>
+                </td>
+                <td className="p-1.5 text-text-secondary">{entry.subsystem}</td>
+                <td className="p-1.5 text-text break-all">{entry.message}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {entries.length === 0 && (
+        <div className="flex items-center justify-center p-8 text-text-muted text-sm">No log entries</div>
+      )}
     </div>
   );
 }
