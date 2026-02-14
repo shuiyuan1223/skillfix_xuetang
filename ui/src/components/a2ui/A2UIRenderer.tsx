@@ -184,10 +184,14 @@ export function A2UIRenderer({
     const className = (c.className as string) || "";
     return (
       <div
-        className={`bg-surface border border-border rounded-[20px] backdrop-blur-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.1)] transition-all duration-normal hover:border-primary/25 hover:shadow-[0_12px_40px_rgba(0,0,0,0.4)] ${className}`}
-        style={{ padding }}
+        className={`bg-surface-card border border-border rounded-xl backdrop-blur-[16px] transition-all duration-200 hover:border-border-hover ${className}`}
+        style={{
+          padding,
+          boxShadow: "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)",
+          animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
+        }}
       >
-        {title && <div className="text-base font-semibold mb-4 text-text">{title}</div>}
+        {title && <div className="text-[15px] font-semibold mb-4 text-text-strong tracking-tight">{title}</div>}
         {renderChildren(c.children)}
       </div>
     );
@@ -199,21 +203,29 @@ export function A2UIRenderer({
     const subtitle = c.subtitle as string;
     const icon = c.icon as string;
     const trend = c.trend as { direction: string; value: string } | undefined;
-    const color = (c.color as string) || "#667eea";
+    const color = (c.color as string) || "rgb(var(--color-primary))";
     const trendColors: Record<string, string> = {
       up: "text-emerald-500", down: "text-red-500", stable: "text-text-muted",
     };
     return (
-      <div className="bg-surface border border-border rounded-[20px] p-6 backdrop-blur-[16px] shadow-[0_8px_32px_rgba(0,0,0,0.1)] transition-all duration-normal relative overflow-hidden hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_16px_48px_rgba(0,0,0,0.4)] motion-safe:animate-card-entrance">
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+      <div
+        className="bg-surface-card border border-border rounded-xl p-5 backdrop-blur-[16px] transition-all duration-200 relative overflow-hidden group hover:-translate-y-0.5 hover:border-border-hover"
+        style={{
+          boxShadow: "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)",
+          animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), inset 0 1px 0 var(--color-card-highlight)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)"; }}
+      >
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         <div className="flex items-center gap-2 mb-3">
-          {icon && <span className="text-xl" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
-          <span className="text-sm text-text-secondary">{title}</span>
+          {icon && <span className="w-5 h-5 text-text-secondary [&>svg]:w-5 [&>svg]:h-5" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
+          <span className="text-[13px] text-text-secondary font-medium">{title}</span>
         </div>
-        <div className="text-4xl font-bold text-text" style={{ color }}>{value}</div>
-        {subtitle && <div className="text-xs text-text-muted mt-1">{subtitle}</div>}
+        <div className="text-3xl font-bold" style={{ color, letterSpacing: "-0.03em" }}>{value}</div>
+        {subtitle && <div className="text-xs text-text-muted mt-1.5">{subtitle}</div>}
         {trend && (
-          <div className={`text-xs mt-2 ${trendColors[trend.direction] || "text-text-muted"}`}>
+          <div className={`text-xs mt-2 font-medium ${trendColors[trend.direction] || "text-text-muted"}`}>
             {trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"} {trend.value}
           </div>
         )}
@@ -369,15 +381,22 @@ export function A2UIRenderer({
     const variant = (c.variant as string) || "primary";
     const disabled = c.disabled as boolean;
     const payload = c.payload as Record<string, unknown>;
-    const btnBase = "px-5 py-2.5 rounded-[10px] text-sm font-medium cursor-pointer transition-all duration-fast border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97]";
+    const btnBase = "px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
     const btnVariants: Record<string, string> = {
-      primary: "bg-gradient-to-br from-primary to-accent text-white hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(102,126,234,0.4)]",
-      secondary: "bg-surface text-text hover:bg-surface-hover",
-      outline: "bg-transparent !border !border-solid !border-border text-text hover:!border-primary/50",
-      ghost: "bg-transparent text-text-secondary hover:bg-primary/10 hover:text-text",
+      primary: "bg-primary text-primary-fg hover:-translate-y-px",
+      secondary: "bg-surface text-text border border-border hover:bg-surface-hover hover:border-border-hover",
+      outline: "bg-transparent border border-border text-text hover:border-border-hover hover:bg-surface-hover",
+      ghost: "bg-transparent text-text-secondary hover:bg-primary/8 hover:text-text",
     };
     return (
-      <button className={`${btnBase} ${btnVariants[variant] || btnVariants.primary}`} disabled={disabled} onClick={() => sendAction(action, payload)}>
+      <button
+        className={`${btnBase} ${btnVariants[variant] || btnVariants.primary}`}
+        style={variant === "primary" ? { boxShadow: "var(--shadow-sm)" } : undefined}
+        disabled={disabled}
+        onClick={() => sendAction(action, payload)}
+        onMouseEnter={variant === "primary" ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 20px var(--color-accent-glow)"; } : undefined}
+        onMouseLeave={variant === "primary" ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)"; } : undefined}
+      >
         {label}
       </button>
     );
@@ -389,16 +408,33 @@ export function A2UIRenderer({
     const orientation = (c.orientation as string) || "vertical";
     const navDir = orientation === "horizontal" ? "flex-row" : "flex-col";
     return (
-      <nav className={`flex gap-1 ${navDir}`}>
+      <nav className={`flex gap-0.5 ${navDir}`}>
         {items.map((item) => {
           const isActive = item.id === activeId;
-          const activeClass = isActive
-            ? "bg-gradient-to-br from-primary/20 to-accent/15 text-text border-primary/40 shadow-[0_4px_16px_rgba(102,126,234,0.2)]"
-            : "text-text-secondary border-transparent hover:text-text hover:border-border-hover";
           return (
-            <button key={item.id} className={`flex items-center gap-3 py-3.5 px-[18px] rounded-[14px] cursor-pointer transition-all duration-normal border border-solid bg-transparent text-sm font-normal text-left w-full relative overflow-hidden ${activeClass}`} onClick={() => sendNavigate(item.id)}>
-              <div className={`absolute left-0 top-[15%] bottom-[15%] w-[3px] rounded-r-full bg-gradient-to-b from-primary to-accent shadow-[0_0_8px_rgba(102,126,234,0.5)] transition-all duration-normal origin-center ${isActive ? "opacity-100 scale-y-100" : "opacity-0 scale-y-0"}`} />
-              {item.icon && <span className="transition-transform duration-fast" dangerouslySetInnerHTML={{ __html: getIcon(item.icon) }} />}
+            <button
+              key={item.id}
+              className={`flex items-center gap-3 py-2.5 px-3 rounded-lg cursor-pointer transition-all duration-150 border-none bg-transparent text-[13px] font-medium text-left w-full relative ${
+                isActive
+                  ? "bg-primary/10 text-text-strong"
+                  : "text-text-secondary hover:text-text hover:bg-surface-hover"
+              }`}
+              onClick={() => sendNavigate(item.id)}
+            >
+              {isActive && (
+                <div
+                  className="absolute left-0 top-[20%] bottom-[20%] w-[3px] rounded-r-full bg-primary"
+                  style={{ boxShadow: "0 0 8px var(--color-accent-glow)" }}
+                />
+              )}
+              {item.icon && (
+                <span
+                  className={`w-[18px] h-[18px] [&>svg]:w-[18px] [&>svg]:h-[18px] transition-colors ${
+                    isActive ? "text-primary" : ""
+                  }`}
+                  dangerouslySetInnerHTML={{ __html: getIcon(item.icon) }}
+                />
+              )}
               <span className="nav-label">{item.label}</span>
             </button>
           );
@@ -486,17 +522,17 @@ export function A2UIRenderer({
 
     // Server-driven welcome screen
     if (messages.length === 0 && !streaming && welcomeTitle) {
-      const sugBtn = "flex items-center gap-2 px-4 py-3 rounded-2xl bg-surface border border-border text-text-secondary text-sm cursor-pointer transition-all duration-fast hover:border-primary/30 hover:bg-surface-hover hover:text-text hover:shadow-[0_4px_12px_rgba(102,126,234,0.15)]";
+      const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
       return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-primary" dangerouslySetInnerHTML={{ __html: ICONS[welcomeIcon] || ICONS["bot"] }} />
-          <div className="text-2xl font-bold text-text">{welcomeTitle}</div>
-          {welcomeSubtitle && <div className="text-sm text-text-muted max-w-[400px]">{welcomeSubtitle}</div>}
+        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center" style={{ animation: "rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}>
+          <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6" dangerouslySetInnerHTML={{ __html: ICONS[welcomeIcon] || ICONS["bot"] }} />
+          <div className="text-xl font-bold text-text-strong tracking-tight">{welcomeTitle}</div>
+          {welcomeSubtitle && <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{welcomeSubtitle}</div>}
           {welcomeActions && welcomeActions.length > 0 && (
-            <div className="flex flex-wrap gap-3 mt-4 justify-center">
+            <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
               {welcomeActions.map((a, i) => (
-                <button key={i} className={sugBtn} onClick={() => { const actionName = (c.action as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
-                  {a.icon && <span dangerouslySetInnerHTML={{ __html: ICONS[a.icon] || "" }} />}
+                <button key={i} className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animationDelay: `${i * 60}ms`, animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards" }} onClick={() => { const actionName = (c.action as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
+                  {a.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[a.icon] || "" }} />}
                   {a.label}
                 </button>
               ))}
@@ -509,7 +545,7 @@ export function A2UIRenderer({
     const noWelcome = c.noWelcome as boolean;
     if (messages.length === 0 && !streaming && noWelcome) {
       return (
-        <div className="flex-1 flex items-center justify-center p-4 text-text-muted text-sm opacity-50">
+        <div className="flex-1 flex items-center justify-center p-4 text-text-muted text-[13px] opacity-50">
           {i18n.evolution?.playgroundChatPlaceholder || "Waiting for messages..."}
         </div>
       );
@@ -517,29 +553,29 @@ export function A2UIRenderer({
 
     // Default welcome
     if (messages.length === 0 && !streaming) {
-      const sugBtn = "flex items-center gap-2 px-4 py-3 rounded-2xl bg-surface border border-border text-text-secondary text-sm cursor-pointer transition-all duration-fast hover:border-primary/30 hover:bg-surface-hover hover:text-text hover:shadow-[0_4px_12px_rgba(102,126,234,0.15)]";
+      const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
       return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center text-primary" dangerouslySetInnerHTML={{ __html: ICONS["chat"] }} />
-          <div className="text-2xl font-bold text-text">{i18n.chat.title}</div>
-          <div className="text-sm text-text-muted max-w-[400px]">{i18n.chat.subtitle}</div>
-          <div className="flex flex-wrap gap-3 mt-4 justify-center">
-            <button className={sugBtn} onClick={() => sendAction("send_message", { content: i18n.chat.sleepQuestion })}>
-              <span dangerouslySetInnerHTML={{ __html: ICONS["moon"] }} />{i18n.chat.sleepAnalysis}
+        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center" style={{ animation: "rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}>
+          <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6" dangerouslySetInnerHTML={{ __html: ICONS["chat"] }} />
+          <div className="text-xl font-bold text-text-strong tracking-tight">{i18n.chat.title}</div>
+          <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{i18n.chat.subtitle}</div>
+          <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
+            <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards" }} onClick={() => sendAction("send_message", { content: i18n.chat.sleepQuestion })}>
+              <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["moon"] }} />{i18n.chat.sleepAnalysis}
             </button>
-            <button className={sugBtn} onClick={() => sendAction("send_message", { content: i18n.chat.activityQuestion })}>
-              <span dangerouslySetInnerHTML={{ __html: ICONS["activity"] }} />{i18n.chat.activitySummary}
+            <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) 60ms backwards" }} onClick={() => sendAction("send_message", { content: i18n.chat.activityQuestion })}>
+              <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["activity"] }} />{i18n.chat.activitySummary}
             </button>
-            <button className={sugBtn} onClick={() => sendAction("send_message", { content: i18n.chat.heartRateQuestion })}>
-              <span dangerouslySetInnerHTML={{ __html: ICONS["heart"] }} />{i18n.chat.heartRate}
+            <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) 120ms backwards" }} onClick={() => sendAction("send_message", { content: i18n.chat.heartRateQuestion })}>
+              <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["heart"] }} />{i18n.chat.heartRate}
             </button>
           </div>
         </div>
       );
     }
 
-    const avatarBase = "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-white";
-    const msgContent = "max-w-[70%] px-5 py-4 rounded-[20px] leading-relaxed text-sm";
+    const avatarBase = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4";
+    const msgContent = "max-w-[70%] px-4 py-3 rounded-2xl leading-relaxed text-[13.5px]";
 
     // Group consecutive tool messages
     type MsgGroup = { type: "message"; msg: (typeof messages)[0] } | { type: "tools"; msgs: (typeof messages)[0][] };
@@ -621,14 +657,17 @@ export function A2UIRenderer({
           const isUser = msg.role === "user";
           return (
             <div key={gi} className={`flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal ${isUser ? "flex-row-reverse motion-safe:slide-in-from-right-4" : "motion-safe:slide-in-from-left-4"}`}>
-              <div className={`${avatarBase} ${isUser ? "bg-bg-tertiary" : "bg-gradient-to-br from-primary to-accent"}`} dangerouslySetInnerHTML={{ __html: ICONS[msg.role === "assistant" ? "bot" : "user"] }} />
+              <div className={`${avatarBase} ${isUser ? "bg-bg-tertiary text-text-secondary" : "bg-primary"}`} dangerouslySetInnerHTML={{ __html: ICONS[msg.role === "assistant" ? "bot" : "user"] }} />
               {msg.role === "assistant" && msg.cards ? (
                 <div className="flex flex-col gap-3 max-w-[70%]">
-                  <div className={`${msgContent} bg-surface border border-border`} dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+                  <div className={`${msgContent} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
                   <div>{renderInline(msg.cards)}</div>
                 </div>
               ) : (
-                <div className={`${msgContent} ${isUser ? "bg-gradient-to-br from-primary to-accent text-white" : "bg-surface border border-border"}`}>
+                <div
+                  className={`${msgContent} ${isUser ? "bg-primary/10 text-text border border-primary/20" : "bg-surface-card border border-border"}`}
+                  style={!isUser ? { boxShadow: "var(--shadow-sm)" } : undefined}
+                >
                   {msg.role === "assistant" ? <span dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} /> : msg.content}
                 </div>
               )}
@@ -637,15 +676,15 @@ export function A2UIRenderer({
         })}
 
         {streaming && (
-          <div className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-            <div className={`${avatarBase} bg-gradient-to-br from-primary to-accent`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+          <div className="flex gap-3 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
+            <div className={`${avatarBase} bg-primary`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
             {streamingContent ? (
-              <div className={`${msgContent} bg-surface border border-border`} dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }} />
+              <div className={`${msgContent} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }} />
             ) : (
-              <div className="flex gap-1.5 px-5 py-4">
-                <div className="w-2 h-2 rounded-full bg-text-muted motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
-                <div className="w-2 h-2 rounded-full bg-text-muted motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
-                <div className="w-2 h-2 rounded-full bg-text-muted motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+              <div className="flex gap-1.5 px-4 py-3 items-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
               </div>
             )}
           </div>
@@ -680,10 +719,10 @@ export function A2UIRenderer({
     const actionName = (c.action as string) || "send_message";
     const stopAction = actionName.startsWith("sa_") ? "sa_stop_generation" : "stop_generation";
     return (
-      <div className="flex shrink-0 gap-3 p-6 border-t border-border bg-surface backdrop-blur-[12px]">
+      <div className="chat-input-bar flex shrink-0 gap-3 p-4 border-t border-border bg-surface backdrop-blur-[16px]">
         <input
           type="text"
-          className="flex-1 py-3.5 px-5 bg-surface border border-border rounded-2xl text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-surface-hover focus:ring-4 focus:ring-primary/10"
+          className="flex-1 py-2.5 px-4 bg-bg border border-border rounded-xl text-text text-[13.5px] transition-all duration-150 outline-none placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
           placeholder={placeholder}
           disabled={disabled}
           onKeyDown={(e) => {
@@ -698,11 +737,14 @@ export function A2UIRenderer({
           }}
         />
         <button
-          className={`w-[54px] h-[54px] rounded-2xl border-none ${streaming ? "bg-red-500/90 hover:bg-red-600" : "bg-gradient-to-br from-primary to-accent"} text-white cursor-pointer flex items-center justify-center shrink-0 transition-all duration-fast hover:shadow-[0_4px_16px_rgba(102,126,234,0.4)] hover:-translate-y-px`}
+          className={`w-10 h-10 rounded-xl border-none ${streaming ? "bg-red-500 hover:bg-red-600" : "bg-primary"} text-primary-fg cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 hover:-translate-y-px active:scale-[0.97] [&>svg]:w-4 [&>svg]:h-4`}
+          style={{ boxShadow: "var(--shadow-sm)" }}
           title={streaming ? "Stop generating" : "Send"}
+          onMouseEnter={!streaming ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 16px var(--color-accent-glow)"; } : undefined}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)"; }}
           onClick={(e) => {
             if (streaming) { sendAction(stopAction, {}); return; }
-            const container = (e.target as HTMLElement).closest(".flex");
+            const container = (e.target as HTMLElement).closest(".chat-input-bar");
             const input = container?.querySelector("input") as HTMLInputElement;
             if (input?.value.trim()) {
               sendAction(actionName, { content: input.value.trim(), value: input.value.trim() });

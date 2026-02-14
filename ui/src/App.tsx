@@ -554,99 +554,84 @@ export function App() {
   // Skeleton renderers
   // ---------------------------------------------------------------------------
 
-  const skel =
-    "bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] motion-safe:animate-skeleton-shimmer rounded-xl";
+  const skel = "bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] motion-safe:animate-skeleton-shimmer rounded-lg";
 
   const renderSkeleton = () => (
-    <div className="flex flex-col gap-3 p-2">
-      <div className={skel} style={{ height: 44 }} />
-      <div className={skel} style={{ height: 44 }} />
-      <div className={skel} style={{ height: 44 }} />
-      <div className={skel} style={{ height: 44 }} />
+    <div className="flex flex-col gap-2 p-1">
+      <div className={skel} style={{ height: 38 }} />
+      <div className={skel} style={{ height: 38 }} />
+      <div className={skel} style={{ height: 38 }} />
     </div>
   );
 
   const renderMainSkeleton = () => (
-    <div className="flex flex-col gap-4 p-6">
-      <div className={skel} style={{ height: 32, width: 200 }} />
-      <div className={skel} style={{ height: 120 }} />
-      <div className={skel} style={{ height: 200 }} />
+    <div className="flex flex-col gap-4 p-8">
+      <div className={skel} style={{ height: 24, width: 160 }} />
+      <div className={skel} style={{ height: 100 }} />
+      <div className={skel} style={{ height: 160 }} />
     </div>
   );
 
   // ---------------------------------------------------------------------------
-  // JSX
+  // JSX — Grid Shell Layout (Topbar + Sidebar + Content)
   // ---------------------------------------------------------------------------
 
   return (
-    <div
-      className="flex w-full h-dvh relative bg-bg text-text transition-colors duration-normal overflow-hidden"
-      style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" }}
-    >
+    <div className={`shell ${sidebarCollapsed ? "sidebar-off" : ""}`}>
       {/* Decorative grid */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(102,126,234,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(102,126,234,0.03) 1px, transparent 1px)",
-          backgroundSize: "50px 50px",
-        }}
-      />
+      <div className="shell-grid-bg" />
+
+      {/* ===== Topbar ===== */}
+      <header className="topbar">
+        <div className="topbar-left">
+          <button
+            className="topbar-btn md:!hidden"
+            onClick={() => toggleMobileSidebar()}
+            dangerouslySetInnerHTML={{ __html: ICONS["menu"] }}
+          />
+          <div className="topbar-brand">
+            <div className="topbar-logo" dangerouslySetInnerHTML={{ __html: ICONS["hospital"] }} />
+            <span className="topbar-title">PHA</span>
+          </div>
+        </div>
+        <div className="topbar-right">
+          <div className="topbar-status">
+            <span className={`status-dot ${connected ? "online" : "offline"}`} />
+            <span>{connected ? i18n.common.connected : i18n.common.reconnecting}</span>
+          </div>
+          <button
+            className="topbar-btn"
+            onClick={() => toggleTheme()}
+            title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
+            dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
+          />
+          <button
+            className="topbar-btn !hidden md:!flex"
+            onClick={() => toggleSidebar()}
+            title={sidebarCollapsed ? "Expand sidebar" : i18n.common.collapseSidebar}
+          >
+            {sidebarCollapsed ? "\u00BB" : "\u00AB"}
+          </button>
+        </div>
+      </header>
 
       {/* Mobile sidebar overlay */}
       {mobileSidebarOpen ? (
         <div
-          className={`fixed inset-0 z-40 md:hidden transition-colors duration-normal ${
-            mobileSidebarVisible ? "bg-black/50" : "bg-transparent"
+          className={`mobile-overlay md:!hidden transition-opacity duration-normal ${
+            mobileSidebarVisible ? "opacity-100" : "opacity-0"
           }`}
           onClick={() => toggleMobileSidebar()}
         />
       ) : null}
 
-      {/* Sidebar Surface */}
+      {/* ===== Sidebar ===== */}
       <aside
-        className={`flex flex-col bg-surface border-r border-border backdrop-blur-[24px] shadow-[4px_0_24px_rgba(0,0,0,0.1)] transition-[width,transform] duration-normal ease-[cubic-bezier(0.4,0,0.2,1)] z-50 ${
-          sidebarCollapsed ? "w-[73px] sidebar-collapsed" : "w-[280px]"
-        } ${
-          mobileSidebarOpen
-            ? `fixed inset-y-0 left-0 w-[280px] md:relative transition-transform duration-slow ease-out-expo ${
-                mobileSidebarVisible ? "translate-x-0" : "-translate-x-full"
-              }`
-            : "hidden md:flex"
+        className={`sidebar ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
+          mobileSidebarOpen && mobileSidebarVisible ? "mobile-open" : ""
         }`}
       >
-        <div
-          className={`p-6 border-b border-primary/10 bg-primary/[0.03] ${
-            sidebarCollapsed ? "!p-5 flex justify-center" : ""
-          }`}
-        >
-          <div
-            className={`flex items-center gap-3 ${
-              sidebarCollapsed ? "justify-center gap-0" : ""
-            }`}
-          >
-            <div
-              className={`w-11 h-11 bg-gradient-to-br from-primary to-accent rounded-[14px] flex items-center justify-center shadow-[0_4px_16px_rgba(102,126,234,0.4)] text-white ${
-                sidebarCollapsed ? "w-10 h-10" : ""
-              }`}
-              dangerouslySetInnerHTML={{ __html: ICONS["hospital"] }}
-            />
-            <div
-              className={`text-[22px] font-bold bg-gradient-to-r from-primary via-violet-400 to-accent bg-clip-text [-webkit-text-fill-color:transparent] tracking-wide ${
-                sidebarCollapsed ? "hidden" : ""
-              }`}
-              style={{ backgroundClip: "text" }}
-            >
-              PHA
-            </div>
-          </div>
-        </div>
-
-        <div
-          className={`flex-1 p-4 ${
-            sidebarCollapsed ? "px-0 flex flex-col items-center" : ""
-          }`}
-        >
+        <div className={sidebarCollapsed ? "flex flex-col items-center" : ""}>
           {sidebarData ? (
             <A2UIRenderer
               data={sidebarData}
@@ -660,69 +645,12 @@ export function App() {
             renderSkeleton()
           )}
         </div>
-
-        <div
-          className={`p-4 border-t border-primary/10 bg-primary/[0.02] ${
-            sidebarCollapsed ? "px-0 flex justify-center" : ""
-          }`}
-        >
-          {sidebarCollapsed ? (
-            <button
-              className="relative flex items-center justify-center w-11 h-11 mx-auto rounded-xl border border-border bg-bg-secondary text-text-secondary cursor-pointer transition-all text-lg font-medium hover:bg-surface-hover hover:border-primary hover:text-text hover:shadow-[0_4px_16px_rgba(102,126,234,0.25)]"
-              onClick={() => toggleSidebar()}
-              title="Expand sidebar"
-            >
-              <span
-                className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-bg ${
-                  connected
-                    ? "bg-success shadow-[0_0_6px_rgba(16,185,129,0.6)]"
-                    : "bg-error shadow-[0_0_6px_rgba(239,68,68,0.6)]"
-                }`}
-              />
-              &raquo;
-            </button>
-          ) : (
-            <div className="flex items-center gap-2 text-xs text-text-muted w-full">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  connected
-                    ? "bg-success shadow-[0_0_12px_rgba(16,185,129,0.6)] motion-safe:animate-[pulse_2s_ease-in-out_infinite]"
-                    : "bg-error shadow-[0_0_12px_rgba(239,68,68,0.6)]"
-                }`}
-              />
-              <span className="status-text">
-                {connected ? i18n.common.connected : i18n.common.reconnecting}
-              </span>
-              <button
-                className="bg-transparent border-none cursor-pointer text-base p-1 px-2 rounded-lg transition-all text-text-secondary hover:bg-surface-hover"
-                onClick={() => toggleTheme()}
-                title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
-                dangerouslySetInnerHTML={{
-                  __html: darkMode ? ICONS["sun"] : ICONS["moon"],
-                }}
-              />
-              <button
-                className="flex items-center justify-center w-8 h-8 rounded-lg border border-border bg-bg-secondary text-text-secondary cursor-pointer transition-all text-sm ml-auto hover:bg-surface-hover hover:border-primary hover:text-text"
-                onClick={() => toggleSidebar()}
-                title={i18n.common.collapseSidebar}
-              >
-                &laquo;
-              </button>
-            </div>
-          )}
-        </div>
       </aside>
 
-      {/* Main Surface */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-surface backdrop-blur-[12px]">
-        <button
-          className="md:hidden fixed top-4 left-4 z-30 w-10 h-10 rounded-xl bg-surface border border-border flex items-center justify-center text-text cursor-pointer"
-          onClick={() => toggleMobileSidebar()}
-          dangerouslySetInnerHTML={{ __html: ICONS["menu"] }}
-        />
-
+      {/* ===== Main Content ===== */}
+      <main className="main-area">
         {progressData ? (
-          <div className="shrink-0 bg-gradient-to-br from-primary/15 to-accent/15 border-b border-primary/30 z-10">
+          <div className="shrink-0 border-b border-border bg-primary/5 z-10">
             <A2UIRenderer
               data={progressData}
               sendAction={sendAction}
@@ -737,7 +665,8 @@ export function App() {
         <div
           key={pageKey}
           ref={mainContentRef}
-          className="flex-1 min-h-0 flex flex-col overflow-auto motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-slow motion-safe:ease-out"
+          className="main-scroll"
+          style={{ animation: "page-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}
         >
           {mainData ? (
             <A2UIRenderer
@@ -754,7 +683,7 @@ export function App() {
         </div>
       </main>
 
-      {/* Modal Surface (overlay) */}
+      {/* ===== Modal Surface ===== */}
       {modalData ? (
         <div
           className={`fixed inset-0 flex items-center justify-center z-[100] transition-all duration-normal ${
@@ -785,7 +714,7 @@ export function App() {
         </div>
       ) : null}
 
-      {/* Toast Surface (fixed position) */}
+      {/* ===== Toast Surface ===== */}
       {toastData ? (
         <div
           className={`fixed bottom-6 right-6 z-[200] motion-safe:animate-toast-slide-in transition-all duration-normal ${
