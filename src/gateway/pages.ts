@@ -88,7 +88,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
     { activeId: activeView }
   );
 
-  const root = ui.column([mainNav, dividerId, settingsNav], { gap: 8 });
+  const root = ui.column([mainNav, dividerId, settingsNav], { gap: 0 });
 
   return ui.build(root);
 }
