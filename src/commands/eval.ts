@@ -42,6 +42,7 @@ import {
   type BenchmarkModelConfig,
 } from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
+import { sessionToAgentMessages } from "../memory/session-store.js";
 import { getModel, complete } from "@mariozechner/pi-ai";
 import type { LLMProvider } from "../agent/pha-agent.js";
 import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
@@ -914,8 +915,22 @@ export function registerEvalCommand(program: Command): void {
         spinner?.start();
 
         const runner = new BenchmarkRunner({
-          agentCall: async (query: string, _mockContext?: Record<string, unknown>) => {
+          agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
             agent.reset();
+
+            // Inject conversation_history into agent state so it has prior context
+            if (mockContext?.conversation_history) {
+              const history = mockContext.conversation_history as Array<{
+                role: string;
+                content: string;
+                timestamp?: number;
+              }>;
+              const msgs = sessionToAgentMessages(history);
+              for (const msg of msgs) {
+                agent.getAgent().state.messages.push(msg);
+              }
+            }
+
             const result = await Promise.race([
               agent.chatAndWaitWithTools(query),
               new Promise<{
