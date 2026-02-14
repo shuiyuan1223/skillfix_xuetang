@@ -1688,6 +1688,38 @@ export class GatewaySession {
           modelId: undefined as any,
           label: undefined as any,
         };
+
+        // Build benchmark models array from config
+        const bmRecord = config.benchmarkModels || {};
+        const benchmarkModels = Object.entries(bmRecord).map(([key, m]) => ({
+          key,
+          provider: m.provider || config.llm.provider,
+          modelId: m.modelId || "",
+          label: m.label || "",
+        }));
+
+        // Build MCP structured data
+        const chromeMcp = config.mcp?.chromeMcp || {};
+        const remoteServersRecord = config.mcp?.remoteServers || {};
+        const remoteServers = Object.entries(remoteServersRecord).map(([key, s]) => ({
+          key,
+          url: s.url || "",
+          apiKey: s.apiKey || "",
+          name: s.name || "",
+          enabled: s.enabled ?? true,
+        }));
+
+        // Build plugins structured data
+        const pluginsConfig = config.plugins || {};
+        const pluginEntries = Object.entries(pluginsConfig.entries || {}).map(([id, e]) => ({
+          id,
+          enabled: e.enabled ?? true,
+          config: e.config ? JSON.stringify(e.config, null, 2) : "{}",
+        }));
+
+        // Scopes: convert to one-per-line format
+        const scopesLines = (huawei.scopes || []).join("\n");
+
         mainPage = generateSettingsPage({
           provider: config.llm.provider,
           providers,
@@ -1712,13 +1744,18 @@ export class GatewaySession {
           judgeProvider: judge.provider || config.llm.provider,
           judgeModelId: judge.modelId || "",
           judgeLabel: judge.label || "",
-          benchmarkModelsJson: config.benchmarkModels
-            ? JSON.stringify(config.benchmarkModels, null, 2)
-            : "{}",
+          benchmarkModels,
           userUuid: config.userUuid || "",
-          huaweiScopes: huawei.scopes ? JSON.stringify(huawei.scopes, null, 2) : "[]",
-          mcpJson: config.mcp ? JSON.stringify(config.mcp, null, 2) : "{}",
-          pluginsJson: config.plugins ? JSON.stringify(config.plugins, null, 2) : "{}",
+          huaweiScopes: scopesLines,
+          chromeMcpCommand: chromeMcp.command || "npx",
+          chromeMcpArgs: (chromeMcp.args || []).join(", "),
+          chromeMcpBrowserUrl: chromeMcp.browserUrl || "",
+          chromeMcpWsEndpoint: chromeMcp.wsEndpoint || "",
+          remoteServers,
+          pluginEnabled: pluginsConfig.enabled ?? true,
+          pluginPaths: (pluginsConfig.paths || []).join(", "),
+          pluginEntries,
+          rawConfigJson: JSON.stringify(config, null, 2),
         });
         break;
       }
@@ -2874,9 +2911,21 @@ export class GatewaySession {
       action === "settings_save_tui" ||
       action === "settings_save_embedding" ||
       action === "settings_save_benchmark" ||
+      action === "settings_save_benchmark_v2" ||
       action === "settings_save_benchmark_models" ||
+      action === "settings_save_benchmark_models_v2" ||
       action === "settings_save_mcp" ||
-      action === "settings_save_plugins"
+      action === "settings_save_mcp_chrome" ||
+      action === "settings_save_mcp_remote" ||
+      action === "settings_save_plugins" ||
+      action === "settings_save_plugins_v2" ||
+      action === "settings_save_judge" ||
+      action === "settings_bm_add" ||
+      action === "settings_bm_delete" ||
+      action === "settings_mcp_add" ||
+      action === "settings_mcp_delete" ||
+      action === "settings_copy_config" ||
+      action === "settings_download_config"
     ) {
       try {
         const config = loadConfig();
@@ -2912,13 +2961,13 @@ export class GatewaySession {
               hw.tokenUrl = String(formData.huaweiTokenUrl) || undefined;
             if (formData.huaweiApiBaseUrl !== undefined)
               hw.apiBaseUrl = String(formData.huaweiApiBaseUrl) || undefined;
+            // Scopes: one per line (not JSON)
             if (formData.huaweiScopes !== undefined) {
-              try {
-                const parsed = JSON.parse(String(formData.huaweiScopes || "[]"));
-                if (Array.isArray(parsed)) hw.scopes = parsed;
-              } catch {
-                // Invalid JSON — keep existing
-              }
+              const lines = String(formData.huaweiScopes || "")
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean);
+              hw.scopes = lines;
             }
           }
         } else if (action === "settings_save_tui") {
@@ -2952,12 +3001,66 @@ export class GatewaySession {
             config.judgeModel.modelId = String(formData.judgeModelId);
           if (formData.judgeLabel !== undefined)
             config.judgeModel.label = String(formData.judgeLabel) || undefined;
+        } else if (action === "settings_save_benchmark_v2") {
+          // New: only concurrency + applyEngine
+          if (!config.benchmark) config.benchmark = {};
+          if (formData.benchmarkConcurrency !== undefined)
+            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+        } else if (action === "settings_save_judge") {
+          // Judge model as independent card
+          if (!config.judgeModel)
+            config.judgeModel = { provider: config.llm.provider, modelId: "" };
+          if (formData.judgeProvider)
+            config.judgeModel.provider = formData.judgeProvider as LLMProvider;
+          if (formData.judgeModelId !== undefined)
+            config.judgeModel.modelId = String(formData.judgeModelId);
+          if (formData.judgeLabel !== undefined)
+            config.judgeModel.label = String(formData.judgeLabel) || undefined;
         } else if (action === "settings_save_benchmark_models") {
           try {
             const parsed = JSON.parse(String(formData.benchmarkModelsJson || "{}"));
             config.benchmarkModels = parsed;
           } catch {
             // Invalid JSON — keep existing
+          }
+        } else if (action === "settings_save_benchmark_models_v2") {
+          // Parse bm__*__* prefixed fields from page form data
+          // The button sends no form data — we need to re-read from current page state
+          // Actually, the button action payload is empty. We need to collect form values
+          // from the page. Since buttons don't submit forms, we handle via a page re-render
+          // approach: read current config and apply. But we don't have form data here.
+          // Solution: make the save button part of a form, or handle on re-render.
+          // For now, this is handled via the page form data collected from all bm__ inputs.
+          const models: Record<string, { provider: string; modelId: string; label?: string }> = {};
+          if (formData) {
+            for (const [k, v] of Object.entries(formData)) {
+              const match = k.match(/^bm__(.+?)__(.+)$/);
+              if (match) {
+                const [, modelKey, field] = match;
+                if (!models[modelKey]) models[modelKey] = { provider: "", modelId: "" };
+                (models[modelKey] as any)[field] = String(v);
+              }
+            }
+          }
+          if (Object.keys(models).length > 0) {
+            config.benchmarkModels = models as any;
+          }
+        } else if (action === "settings_bm_add") {
+          // Add a default benchmark model entry
+          if (!config.benchmarkModels) config.benchmarkModels = {};
+          const newKey = `model-${Date.now()}`;
+          config.benchmarkModels[newKey] = {
+            provider: config.llm.provider,
+            modelId: "",
+            label: "New Model",
+          };
+        } else if (action === "settings_bm_delete") {
+          // Delete a benchmark model by key
+          const key = formData?.key as string;
+          if (key && config.benchmarkModels) {
+            delete config.benchmarkModels[key];
           }
         } else if (action === "settings_save_mcp") {
           try {
@@ -2966,6 +3069,65 @@ export class GatewaySession {
           } catch {
             // Invalid JSON — keep existing
           }
+        } else if (action === "settings_save_mcp_chrome") {
+          // Save Chrome DevTools MCP config
+          if (!config.mcp) config.mcp = {};
+          if (!config.mcp.chromeMcp) config.mcp.chromeMcp = {};
+          if (formData.chromeMcpCommand !== undefined)
+            config.mcp.chromeMcp.command = String(formData.chromeMcpCommand) || undefined;
+          if (formData.chromeMcpArgs !== undefined) {
+            const argsStr = String(formData.chromeMcpArgs || "");
+            config.mcp.chromeMcp.args = argsStr
+              ? argsStr
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : undefined;
+          }
+          if (formData.chromeMcpBrowserUrl !== undefined)
+            config.mcp.chromeMcp.browserUrl = String(formData.chromeMcpBrowserUrl) || undefined;
+          if (formData.chromeMcpWsEndpoint !== undefined)
+            config.mcp.chromeMcp.wsEndpoint = String(formData.chromeMcpWsEndpoint) || undefined;
+        } else if (action === "settings_save_mcp_remote") {
+          // Parse mcp_remote__*__* prefixed fields
+          const servers: Record<
+            string,
+            { url: string; apiKey?: string; name?: string; enabled?: boolean }
+          > = {};
+          if (formData) {
+            for (const [k, v] of Object.entries(formData)) {
+              const match = k.match(/^mcp_remote__(.+?)__(.+)$/);
+              if (match) {
+                const [, srvKey, field] = match;
+                if (!servers[srvKey]) servers[srvKey] = { url: "" };
+                if (field === "enabled") {
+                  (servers[srvKey] as any)[field] = v === "true";
+                } else {
+                  (servers[srvKey] as any)[field] = String(v);
+                }
+              }
+            }
+          }
+          if (!config.mcp) config.mcp = {};
+          if (Object.keys(servers).length > 0) {
+            config.mcp.remoteServers = servers;
+          }
+        } else if (action === "settings_mcp_add") {
+          // Add a default remote MCP server entry
+          if (!config.mcp) config.mcp = {};
+          if (!config.mcp.remoteServers) config.mcp.remoteServers = {};
+          const newKey = `server-${Date.now()}`;
+          config.mcp.remoteServers[newKey] = {
+            url: "",
+            name: "New Server",
+            enabled: true,
+          };
+        } else if (action === "settings_mcp_delete") {
+          // Delete a remote MCP server by key
+          const key = formData?.key as string;
+          if (key && config.mcp?.remoteServers) {
+            delete config.mcp.remoteServers[key];
+          }
         } else if (action === "settings_save_plugins") {
           try {
             const parsed = JSON.parse(String(formData.pluginsJson || "{}"));
@@ -2973,6 +3135,24 @@ export class GatewaySession {
           } catch {
             // Invalid JSON — keep existing
           }
+        } else if (action === "settings_save_plugins_v2") {
+          // Structured plugins save
+          if (!config.plugins) config.plugins = {};
+          if (formData.pluginEnabled !== undefined)
+            config.plugins.enabled = formData.pluginEnabled === "true";
+          if (formData.pluginPaths !== undefined) {
+            const pathsStr = String(formData.pluginPaths || "");
+            config.plugins.paths = pathsStr
+              ? pathsStr
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : [];
+          }
+        } else if (action === "settings_copy_config" || action === "settings_download_config") {
+          // Handled on frontend — just send toast
+          send(generateToast(t("settings.saved"), "success"));
+          return;
         }
 
         saveConfig(config);

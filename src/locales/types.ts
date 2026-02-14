@@ -610,12 +610,28 @@ export interface LocaleMessages {
     userUuid: string;
     huaweiScopes: string;
     huaweiScopesDesc: string;
+    scopesPerLine: string;
     sectionMcp: string;
     mcpJson: string;
     mcpJsonDesc: string;
+    chromeMcpCommand: string;
+    chromeMcpArgs: string;
+    chromeMcpBrowserUrl: string;
+    chromeMcpWsEndpoint: string;
+    remoteServers: string;
+    addServer: string;
+    deleteServer: string;
     sectionPlugins: string;
     pluginsJson: string;
     pluginsJsonDesc: string;
+    pluginEnabled: string;
+    pluginPaths: string;
+    addModel: string;
+    deleteModel: string;
+    saveAll: string;
+    rawConfig: string;
+    copyConfig: string;
+    downloadConfig: string;
   };
 
   // OAuth / Authorization

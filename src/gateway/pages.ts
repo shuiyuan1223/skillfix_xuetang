@@ -1628,11 +1628,27 @@ export interface SettingsPageData {
   judgeProvider: string;
   judgeModelId: string;
   judgeLabel: string;
-  benchmarkModelsJson: string;
+  benchmarkModels: Array<{ key: string; provider: string; modelId: string; label: string }>;
   userUuid: string;
   huaweiScopes: string;
-  mcpJson: string;
-  pluginsJson: string;
+  // MCP structured fields
+  chromeMcpCommand: string;
+  chromeMcpArgs: string;
+  chromeMcpBrowserUrl: string;
+  chromeMcpWsEndpoint: string;
+  remoteServers: Array<{
+    key: string;
+    url: string;
+    apiKey: string;
+    name: string;
+    enabled: boolean;
+  }>;
+  // Plugins structured fields
+  pluginEnabled: boolean;
+  pluginPaths: string;
+  pluginEntries: Array<{ id: string; enabled: boolean; config: string }>;
+  // Raw config
+  rawConfigJson: string;
 }
 
 export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
@@ -1746,9 +1762,10 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         value: data.huaweiApiBaseUrl,
       })
     );
+    // Scopes: one per line (not JSON)
     dsInputs.push(
       ui.formInput("huaweiScopes", "textarea", {
-        label: t("settings.huaweiScopes"),
+        label: t("settings.scopesPerLine"),
         value: data.huaweiScopes,
       })
     );
@@ -1800,7 +1817,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  // ---- Benchmark & Evolution Section ----
+  // ---- Benchmark & Evolution Section (concurrency + applyEngine only) ----
   const concurrencyInput = ui.formInput("benchmarkConcurrency", "text", {
     label: t("settings.benchmarkConcurrency"),
     value: String(data.benchmarkConcurrency),
@@ -1813,6 +1830,17 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ],
     value: data.applyEngine,
   });
+  const benchmarkForm = ui.form(
+    [concurrencyInput, applyEngineSelect],
+    "settings_save_benchmark_v2",
+    { submitLabel: saveLabel }
+  );
+  const benchmarkCard = ui.card([benchmarkForm], {
+    title: t("settings.sectionBenchmark"),
+    padding: 20,
+  });
+
+  // ---- Judge Model Section (independent card) ----
   const judgeProviderSelect = ui.formInput("judgeProvider", "select", {
     label: t("settings.judgeProvider"),
     options: data.providers.map((p) => ({
@@ -1829,52 +1857,188 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     label: t("settings.judgeLabel"),
     value: data.judgeLabel,
   });
-  const benchmarkForm = ui.form(
-    [concurrencyInput, applyEngineSelect, judgeProviderSelect, judgeModelInput, judgeLabelInput],
-    "settings_save_benchmark",
+  const judgeForm = ui.form(
+    [judgeProviderSelect, judgeModelInput, judgeLabelInput],
+    "settings_save_judge",
     { submitLabel: saveLabel }
   );
-  const benchmarkCard = ui.card([benchmarkForm], {
-    title: t("settings.sectionBenchmark"),
+  const judgeCard = ui.card([judgeForm], {
+    title: t("settings.sectionJudgeModel"),
     padding: 20,
   });
 
-  // ---- Benchmark Models Section (JSON) ----
-  const bmJsonInput = ui.formInput("benchmarkModelsJson", "textarea", {
-    label: t("settings.benchmarkModelsJson"),
-    value: data.benchmarkModelsJson,
+  // ---- Benchmark Models Section (structured collapsible) ----
+  const bmFormInputs: string[] = [];
+  for (const m of data.benchmarkModels) {
+    const mProvider = ui.formInput(`bm__${m.key}__provider`, "select", {
+      label: t("settings.judgeProvider"),
+      options: data.providers.map((p) => ({
+        value: p.value,
+        label: `${p.label}${p.hint ? ` — ${p.hint}` : ""}`,
+      })),
+      value: m.provider,
+    });
+    const mModelId = ui.formInput(`bm__${m.key}__modelId`, "text", {
+      label: t("settings.judgeModelId"),
+      value: m.modelId,
+    });
+    const mLabel = ui.formInput(`bm__${m.key}__label`, "text", {
+      label: t("settings.judgeLabel"),
+      value: m.label,
+    });
+    const deleteBtn = ui.button(t("settings.deleteModel"), "settings_bm_delete", {
+      variant: "danger",
+      payload: { key: m.key },
+    });
+    bmFormInputs.push(
+      ui.collapsible(`${m.key} — ${m.label || m.modelId}`, [mProvider, mModelId, mLabel, deleteBtn])
+    );
+  }
+  const bmForm = ui.form(bmFormInputs, "settings_save_benchmark_models_v2", {
+    submitLabel: t("settings.saveAll"),
   });
-  const bmForm = ui.form([bmJsonInput], "settings_save_benchmark_models", {
-    submitLabel: saveLabel,
-  });
-  const bmCard = ui.card([bmForm], {
+  const bmAddBtn = ui.button(t("settings.addModel"), "settings_bm_add");
+  const bmCard = ui.card([bmForm, bmAddBtn], {
     title: t("settings.sectionBenchmarkModels"),
     padding: 20,
   });
 
-  // ---- MCP Section (JSON) ----
-  const mcpJsonInput = ui.formInput("mcpJson", "textarea", {
-    label: t("settings.mcpJson"),
-    value: data.mcpJson,
+  // ---- MCP Section (structured) ----
+  const mcpChildren: string[] = [];
+
+  // Chrome DevTools MCP sub-form
+  const chromeCmdInput = ui.formInput("chromeMcpCommand", "text", {
+    label: t("settings.chromeMcpCommand"),
+    value: data.chromeMcpCommand,
+    placeholder: "npx",
   });
-  const mcpForm = ui.form([mcpJsonInput], "settings_save_mcp", {
-    submitLabel: saveLabel,
+  const chromeArgsInput = ui.formInput("chromeMcpArgs", "text", {
+    label: t("settings.chromeMcpArgs"),
+    value: data.chromeMcpArgs,
+    placeholder: "-y, chrome-devtools-mcp@latest, --isolated",
   });
-  const mcpCard = ui.card([mcpForm], {
+  const chromeBrowserUrlInput = ui.formInput("chromeMcpBrowserUrl", "text", {
+    label: t("settings.chromeMcpBrowserUrl"),
+    value: data.chromeMcpBrowserUrl,
+    placeholder: "http://127.0.0.1:9222",
+  });
+  const chromeWsInput = ui.formInput("chromeMcpWsEndpoint", "text", {
+    label: t("settings.chromeMcpWsEndpoint"),
+    value: data.chromeMcpWsEndpoint,
+  });
+  const chromeMcpForm = ui.form(
+    [chromeCmdInput, chromeArgsInput, chromeBrowserUrlInput, chromeWsInput],
+    "settings_save_mcp_chrome",
+    { submitLabel: saveLabel }
+  );
+  mcpChildren.push(ui.collapsible("Chrome DevTools", [chromeMcpForm], { expanded: true }));
+
+  // Remote MCP Servers
+  const remoteFormInputs: string[] = [];
+  for (const srv of data.remoteServers) {
+    const sUrl = ui.formInput(`mcp_remote__${srv.key}__url`, "text", {
+      label: "URL",
+      value: srv.url,
+      placeholder: "http://10.0.1.5:3000/mcp",
+    });
+    const sApiKey = ui.formInput(`mcp_remote__${srv.key}__apiKey`, "text", {
+      label: "API Key",
+      value: srv.apiKey,
+    });
+    const sName = ui.formInput(`mcp_remote__${srv.key}__name`, "text", {
+      label: "Name",
+      value: srv.name,
+    });
+    const sEnabled = ui.formInput(`mcp_remote__${srv.key}__enabled`, "select", {
+      label: "Enabled",
+      options: [
+        { value: "true", label: t("common.enable") },
+        { value: "false", label: t("common.disable") },
+      ],
+      value: String(srv.enabled),
+    });
+    const sDeleteBtn = ui.button(t("settings.deleteServer"), "settings_mcp_delete", {
+      variant: "danger",
+      payload: { key: srv.key },
+    });
+    remoteFormInputs.push(
+      ui.collapsible(`${srv.key} — ${srv.name || srv.url}`, [
+        sUrl,
+        sApiKey,
+        sName,
+        sEnabled,
+        sDeleteBtn,
+      ])
+    );
+  }
+  const mcpRemoteForm = ui.form(remoteFormInputs, "settings_save_mcp_remote", {
+    submitLabel: t("settings.saveAll"),
+  });
+  const mcpRemoteAddBtn = ui.button(t("settings.addServer"), "settings_mcp_add");
+  mcpChildren.push(ui.collapsible(t("settings.remoteServers"), [mcpRemoteForm, mcpRemoteAddBtn]));
+
+  const mcpCard = ui.card(mcpChildren, {
     title: t("settings.sectionMcp"),
     padding: 20,
   });
 
-  // ---- Plugins Section (JSON) ----
-  const pluginsJsonInput = ui.formInput("pluginsJson", "textarea", {
-    label: t("settings.pluginsJson"),
-    value: data.pluginsJson,
+  // ---- Plugins Section (structured) ----
+  const pluginsChildren: string[] = [];
+  const pluginEnabledSelect = ui.formInput("pluginEnabled", "select", {
+    label: t("settings.pluginEnabled"),
+    options: [
+      { value: "true", label: t("common.enable") },
+      { value: "false", label: t("common.disable") },
+    ],
+    value: String(data.pluginEnabled),
   });
-  const pluginsForm = ui.form([pluginsJsonInput], "settings_save_plugins", {
-    submitLabel: saveLabel,
+  const pluginPathsInput = ui.formInput("pluginPaths", "text", {
+    label: t("settings.pluginPaths"),
+    value: data.pluginPaths,
   });
-  const pluginsCard = ui.card([pluginsForm], {
+  const pluginsMainForm = ui.form(
+    [pluginEnabledSelect, pluginPathsInput],
+    "settings_save_plugins_v2",
+    { submitLabel: saveLabel }
+  );
+  pluginsChildren.push(pluginsMainForm);
+
+  // Per-plugin entries
+  for (const entry of data.pluginEntries) {
+    const peEnabled = ui.formInput(`plugin__${entry.id}__enabled`, "select", {
+      label: "Enabled",
+      options: [
+        { value: "true", label: t("common.enable") },
+        { value: "false", label: t("common.disable") },
+      ],
+      value: String(entry.enabled),
+    });
+    const peConfig = ui.formInput(`plugin__${entry.id}__config`, "textarea", {
+      label: "Config",
+      value: entry.config,
+    });
+    pluginsChildren.push(ui.collapsible(entry.id, [peEnabled, peConfig]));
+  }
+  const pluginsCard = ui.card(pluginsChildren, {
     title: t("settings.sectionPlugins"),
+    padding: 20,
+  });
+
+  // ---- Raw Config Viewer ----
+  const rawEditor = ui.codeEditor(data.rawConfigJson, {
+    language: "json",
+    readonly: true,
+    height: 300,
+  });
+  const copyBtn = ui.button(t("settings.copyConfig"), "settings_copy_config", {
+    icon: "save",
+  });
+  const downloadBtn = ui.button(t("settings.downloadConfig"), "settings_download_config", {
+    icon: "file-text",
+  });
+  const rawActions = ui.row([copyBtn, downloadBtn], { gap: 8 });
+  const rawCard = ui.card([rawEditor, rawActions], {
+    title: t("settings.rawConfig"),
     padding: 20,
   });
 
@@ -1887,9 +2051,11 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       tuiCard,
       embeddingCard,
       benchmarkCard,
+      judgeCard,
       bmCard,
       mcpCard,
       pluginsCard,
+      rawCard,
     ],
     { gap: 16, padding: 24 }
   );

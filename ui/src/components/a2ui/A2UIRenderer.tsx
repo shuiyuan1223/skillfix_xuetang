@@ -386,6 +386,7 @@ export function A2UIRenderer({
       secondary: "bg-surface text-text border border-border hover:bg-surface-hover hover:border-border-hover",
       outline: "bg-transparent border border-border text-text hover:border-border-hover hover:bg-surface-hover",
       ghost: "bg-transparent text-text-secondary hover:bg-primary/8 hover:text-text",
+      danger: "bg-red-600 text-white hover:bg-red-700 hover:-translate-y-px",
     };
     return (
       <button

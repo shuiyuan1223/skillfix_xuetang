@@ -63,6 +63,10 @@ export function App() {
   const isAutoScrollingRef = useRef(false);
   const pendingPlotlyChartsRef = useRef<PlotlyChart[]>([]);
   const extensionDetectedRef = useRef(false);
+  const mainDataRef = useRef<A2UISurfaceData | null>(null);
+
+  // Keep mainDataRef in sync with mainData state
+  mainDataRef.current = mainData;
 
   // Keep a ref to the latest mainData so the scroll container ref callback
   // can reference it without stale closures.
@@ -294,6 +298,30 @@ export function App() {
         // Also notify server so it can clear scope error cache
         wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
         startHuaweiAuth();
+        return;
+      }
+
+      // Handle copy/download config locally on the frontend
+      if (action === "settings_copy_config" || action === "settings_download_config") {
+        // Find the code_editor component in current main data to get raw config
+        const mainDataSnap = mainDataRef.current;
+        const editorComp = mainDataSnap?.components.find((c: any) => c.type === "code_editor" && c.readonly);
+        const configJson = (editorComp as any)?.value || "{}";
+        if (action === "settings_copy_config") {
+          navigator.clipboard.writeText(configJson).then(() => {
+            wsRef.current?.send(JSON.stringify({ type: "action", action: "show_toast", payload: { message: "Copied!", variant: "success" } }));
+          }).catch(() => {
+            wsRef.current?.send(JSON.stringify({ type: "action", action: "show_toast", payload: { message: "Copy failed", variant: "error" } }));
+          });
+        } else {
+          const blob = new Blob([configJson], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "config.json";
+          a.click();
+          URL.revokeObjectURL(url);
+        }
         return;
       }
 
