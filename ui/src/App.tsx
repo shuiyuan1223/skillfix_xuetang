@@ -605,13 +605,6 @@ export function App() {
             title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
             dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
           />
-          <button
-            className="topbar-btn !hidden md:!flex"
-            onClick={() => toggleSidebar()}
-            title={sidebarCollapsed ? "Expand sidebar" : i18n.common.collapseSidebar}
-          >
-            {sidebarCollapsed ? "\u00BB" : "\u00AB"}
-          </button>
         </div>
       </header>
 
@@ -631,7 +624,7 @@ export function App() {
           mobileSidebarOpen && mobileSidebarVisible ? "mobile-open" : ""
         }`}
       >
-        <div className={sidebarCollapsed ? "flex flex-col items-center" : ""}>
+        <div className={`flex-1 ${sidebarCollapsed ? "flex flex-col items-center" : ""}`}>
           {sidebarData ? (
             <A2UIRenderer
               data={sidebarData}
@@ -645,6 +638,13 @@ export function App() {
             renderSkeleton()
           )}
         </div>
+        <button
+          className="sidebar-collapse-btn hidden md:flex"
+          onClick={() => toggleSidebar()}
+          title={sidebarCollapsed ? "Expand sidebar" : i18n.common.collapseSidebar}
+        >
+          {sidebarCollapsed ? "\u00BB" : "\u00AB"}
+        </button>
       </aside>
 
       {/* ===== Main Content ===== */}

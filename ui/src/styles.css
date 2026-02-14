@@ -957,6 +957,30 @@
   border-right: 1px solid rgb(var(--color-border));
   z-index: 10;
   transition: padding 200ms ease;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sidebar collapse button — pinned to bottom */
+.sidebar-collapse-btn {
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 36px;
+  margin-top: 4px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgb(var(--color-border));
+  color: rgb(var(--color-text-muted));
+  cursor: pointer;
+  font-size: 16px;
+  transition: color 150ms ease, background 150ms ease;
+  flex-shrink: 0;
+}
+
+.sidebar-collapse-btn:hover {
+  color: rgb(var(--color-text));
+  background: var(--color-surface-hover);
 }
 
 .shell.sidebar-off > .sidebar {
