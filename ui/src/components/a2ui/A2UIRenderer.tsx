@@ -60,7 +60,7 @@ export function A2UIRenderer({
       case "progress": return rcProgress(c);
       case "badge": return rcBadge(c);
       case "skeleton": return rcSkeleton(c);
-      case "divider": return <div className="h-px my-3 mx-2" style={{ backgroundColor: "rgb(var(--color-border))" }} />;
+      case "divider": return <div className="h-px bg-border my-3 mx-2" />;
       case "spacer": return <div style={{ height: (c.height as number) || 16 }} />;
       case "chat_messages": return rcChatMessages(c);
       case "chat_input": return rcChatInput(c);
