@@ -36,6 +36,7 @@ import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
 import { getUserStore } from "../data-sources/huawei/user-store.js";
 import { getHuaweiAuthUrl } from "../services/huawei-oauth-service.js";
 import { runOAuthFlowWithChrome } from "../services/chrome-mcp-client.js";
+import { getRemoteMCPTools } from "../services/remote-mcp-client.js";
 import {
   generateChatPage,
   generateMemoryPage,
@@ -381,7 +382,7 @@ export function createGatewayApp() {
 
   // MCP endpoints
   app.post("/mcp/tools/list", async (c) => {
-    const tools = mcpHandler.listTools();
+    const tools = await mcpHandler.listTools();
     return c.json({ tools });
   });
 
@@ -1070,9 +1071,16 @@ export class GatewaySession {
 
   private async getAgent(): Promise<PHAAgent> {
     if (!this.agent) {
-      // Collect plugin tools
+      // Collect plugin tools + remote MCP tools
       const pluginReg = getGlobalPluginRegistry();
-      const extraTools = pluginReg?.tools.map((r) => r.tool) || [];
+      const pluginTools = pluginReg?.tools.map((r) => r.tool) || [];
+      let remoteMcpTools: import("@mariozechner/pi-agent-core").AgentTool<any>[] = [];
+      try {
+        remoteMcpTools = await getRemoteMCPTools();
+      } catch (err) {
+        console.error("[Gateway] Failed to load remote MCP tools:", err);
+      }
+      const extraTools = [...pluginTools, ...remoteMcpTools];
 
       this.agent = await createPHAAgent({
         apiKey: this.config.apiKey,

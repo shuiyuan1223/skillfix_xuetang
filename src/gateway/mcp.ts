@@ -7,6 +7,7 @@
 import { healthTools } from "../tools/health-data.js";
 import { gitTools } from "../tools/git-tools.js";
 import { evolutionTools } from "../tools/evolution-tools.js";
+import { getRemoteMCPToolDefinitions } from "../services/remote-mcp-client.js";
 
 // MCP Tool Definition
 export interface MCPTool {
@@ -40,6 +41,13 @@ export class MCPHandler {
     { name: string; description: string; parameters: any; execute: (args: any) => Promise<any> }
   > = new Map();
 
+  /** Remote tool definitions loaded lazily */
+  private remoteToolDefs: MCPTool[] = [];
+  /** Remote tool executors keyed by tool name */
+  private remoteToolExecutors: Map<string, (args: Record<string, unknown>) => Promise<unknown>> =
+    new Map();
+  private remoteToolsLoaded = false;
+
   constructor() {
     // Register all health tools
     for (const tool of healthTools) {
@@ -60,10 +68,61 @@ export class MCPHandler {
   }
 
   /**
+   * Load remote MCP tool definitions (called once lazily).
+   */
+  private async ensureRemoteTools(): Promise<void> {
+    if (this.remoteToolsLoaded) return;
+    this.remoteToolsLoaded = true;
+
+    try {
+      const { getRemoteMCPTools } = await import("../services/remote-mcp-client.js");
+      const defs = await getRemoteMCPToolDefinitions();
+      const agentTools = await getRemoteMCPTools();
+
+      // Build executor map from AgentTools
+      for (const at of agentTools) {
+        this.remoteToolExecutors.set(at.name, async (args) => {
+          const result = await at.execute("mcp-call", args);
+          // Extract text from AgentToolResult
+          if (result.content && result.content.length > 0) {
+            const text = result.content[0];
+            if (typeof text === "object" && "text" in text) {
+              try {
+                return JSON.parse(text.text);
+              } catch {
+                return text.text;
+              }
+            }
+          }
+          return result.details ?? result;
+        });
+      }
+
+      this.remoteToolDefs = defs.map((d) => ({
+        name: d.name,
+        description: d.description,
+        inputSchema: {
+          type: "object" as const,
+          properties: (d.inputSchema as any)?.properties || {},
+          required: (d.inputSchema as any)?.required,
+        },
+      }));
+
+      if (defs.length > 0) {
+        console.log(`[MCPHandler] Registered ${defs.length} remote MCP tools`);
+      }
+    } catch (err) {
+      console.error("[MCPHandler] Failed to load remote MCP tools:", err);
+    }
+  }
+
+  /**
    * List all available tools
    */
-  listTools(): MCPTool[] {
-    return this.allTools.map((tool) => ({
+  async listTools(): Promise<MCPTool[]> {
+    await this.ensureRemoteTools();
+
+    const local = this.allTools.map((tool) => ({
       name: tool.name,
       description: tool.description,
       inputSchema: {
@@ -72,36 +131,61 @@ export class MCPHandler {
         required: "required" in tool.parameters ? (tool.parameters as any).required : undefined,
       },
     }));
+
+    return [...local, ...this.remoteToolDefs];
   }
 
   /**
    * Call a tool
    */
   async callTool(call: MCPToolCall): Promise<MCPToolResult> {
+    // Check local tools first
     const tool = this.tools.get(call.name);
-    if (!tool) {
-      return {
-        content: [{ type: "text", text: `Unknown tool: ${call.name}` }],
-        isError: true,
-      };
+    if (tool) {
+      try {
+        const result = await tool.execute(call.arguments as any);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
     }
 
-    try {
-      const result = await tool.execute(call.arguments as any);
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        isError: true,
-      };
+    // Check remote tools
+    await this.ensureRemoteTools();
+    const remoteExecutor = this.remoteToolExecutors.get(call.name);
+    if (remoteExecutor) {
+      try {
+        const result = await remoteExecutor(call.arguments);
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
     }
+
+    return {
+      content: [{ type: "text", text: `Unknown tool: ${call.name}` }],
+      isError: true,
+    };
   }
 }
 

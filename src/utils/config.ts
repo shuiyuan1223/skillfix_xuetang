@@ -50,6 +50,17 @@ export interface HuaweiHealthKitConfig {
   apiBaseUrl?: string; // API 基础地址（后面会拼接具体接口路径）
 }
 
+export interface RemoteMCPServerConfig {
+  /** MCP server endpoint URL (e.g. "http://10.0.1.5:3000/mcp") */
+  url: string;
+  /** Optional API key / bearer token */
+  apiKey?: string;
+  /** Whether this server is enabled (default: true) */
+  enabled?: boolean;
+  /** Optional display name */
+  name?: string;
+}
+
 export interface MCPConfig {
   // Chrome DevTools MCP configuration
   chromeMcp?: {
@@ -58,6 +69,8 @@ export interface MCPConfig {
     browserUrl?: string; // Connect to existing browser: http://127.0.0.1:9222
     wsEndpoint?: string; // WebSocket endpoint for existing browser
   };
+  // Remote MCP servers (Streamable HTTP)
+  remoteServers?: Record<string, RemoteMCPServerConfig>;
 }
 
 export interface EmbeddingConfig {

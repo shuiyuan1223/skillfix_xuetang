@@ -27,7 +27,7 @@ export function registerToolsCommand(program: Command): void {
     .option("--json", "Output as JSON")
     .option("-v, --verbose", "Show detailed information")
     .action(async (options) => {
-      const tools = mcpHandler.listTools();
+      const tools = await mcpHandler.listTools();
 
       if (options.json) {
         console.log(JSON.stringify(tools, null, 2));
@@ -92,7 +92,7 @@ export function registerToolsCommand(program: Command): void {
     .option("-a, --arg <args...>", "Arguments as key=value pairs")
     .option("--json", "Output as JSON")
     .action(async (name, options) => {
-      const tools = mcpHandler.listTools();
+      const tools = await mcpHandler.listTools();
       const tool = tools.find((t) => t.name === name);
 
       if (!tool) {
@@ -156,8 +156,8 @@ export function registerToolsCommand(program: Command): void {
   toolsCmd
     .command("info <name>")
     .description("Show detailed info about a tool")
-    .action((name) => {
-      const tools = mcpHandler.listTools();
+    .action(async (name) => {
+      const tools = await mcpHandler.listTools();
       const tool = tools.find((t) => t.name === name);
 
       if (!tool) {
