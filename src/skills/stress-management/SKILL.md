@@ -5,7 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🧘",
-      "requires": { "tools": ["get_heart_rate", "get_sleep", "get_weekly_summary"] },
+      "requires": { "tools": ["get_heart_rate", "get_sleep", "get_weekly_summary", "get_stress", "get_hrv", "get_emotion"] },
       "triggers": ["stress", "stressed", "anxious", "anxiety", "overwhelmed", "burnout", "tense", "pressure", "relax", "relaxation", "calm", "meditation", "breathing", "压力", "焦虑", "紧张", "烦躁", "崩溃", "放松", "冥想", "呼吸", "减压", "心烦", "烦恼", "情绪", "心情不好", "难受", "喘不过气", "疲惫"]
     }
   }
@@ -35,14 +35,31 @@ metadata:
 
 ## Step 3: Stress Signal Detection
 
-### 3.1 Physiological Indicators (from available data)
+### 3.1 Stress Level Four-Tier Classification (Device Score 1-99)
 
-PHA doesn't have a direct stress score, but can infer stress from proxy signals:
+When wearable stress score data is available via `get_stress`:
+
+| Tier | Score Range | State | Action |
+|------|-----------|-------|--------|
+| Relaxed | 1-29 | Mind and body relaxed, parasympathetic dominant | Positive feedback — acknowledge good recovery |
+| Normal | 30-59 | Moderate stress, balanced state | No intervention needed, maintain current habits |
+| Medium | 60-79 | Stress elevated, needs attention and active regulation | Suggest specific de-stress techniques |
+| High | 80-99 | High stress, sympathetic overactivation, needs immediate intervention | Recommend stopping current activity, breathing exercises, rest |
+
+**Analyze time distribution**: What percentage of the day is spent in each tier? Healthy pattern: majority in Relaxed + Normal.
+
+### 3.2 Physiological Stress Indicators (Proxy Signals)
+
+When direct stress scores are unavailable, infer from proxy signals:
 
 **Heart Rate Signals:**
 - Resting HR elevated 10+ bpm above personal baseline → likely stress
 - Resting HR elevated 5-10 bpm → possible stress, look for corroborating signals
 - Resting HR normal → doesn't rule out stress (psychological stress ≠ always elevated HR)
+
+**HRV Signals** (via `get_hrv`):
+- HRV below personal baseline for 3+ days → body under cumulative stress
+- HRV + stress score alignment: low HRV + high stress score = strong physiological confirmation
 
 **Sleep Signals:**
 - Sleep onset delayed (bedtime much later than usual) → possible rumination/anxiety
@@ -55,7 +72,7 @@ PHA doesn't have a direct stress score, but can infer stress from proxy signals:
 - Sudden increase in activity → some people exercise compulsively when stressed
 - Very irregular pattern → disrupted routine, a common stress indicator
 
-### 3.2 Multi-Signal Assessment
+### 3.3 Multi-Signal Assessment
 
 | HR Signal | Sleep Signal | Activity Signal | Assessment |
 |-----------|-------------|-----------------|-----------|
@@ -66,6 +83,16 @@ PHA doesn't have a direct stress score, but can infer stress from proxy signals:
 | Normal | Normal | Normal | **Low** — data doesn't support stress, but validate their feelings |
 
 **Important**: Data absence doesn't mean stress absence. Always validate the user's subjective experience.
+
+### 3.4 Burnout Risk Detection
+
+**5-day warning threshold**: If ALL of the following are true for 5+ consecutive days, flag as burnout risk:
+- Stress score averaging in Medium-High tier (60+)
+- HRV consistently declining
+- Sleep quality deteriorating
+- Activity level dropping
+
+**Communication**: "I've noticed a pattern over the last several days: your stress levels have been elevated, your body's recovery signals (HRV) are declining, and your sleep quality has dropped. This combination can lead to burnout if it continues. Let's talk about what might be driving this and how to break the cycle."
 
 ### 3.3 How to Communicate Stress Findings
 

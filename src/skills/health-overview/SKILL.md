@@ -5,7 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "📊",
-      "requires": { "tools": ["get_health_data", "get_weekly_summary"] },
+      "requires": { "tools": ["get_health_data", "get_weekly_summary", "get_workouts"] },
       "triggers": ["steps", "calories", "activity", "overview", "summary", "progress", "步数", "步行", "走路", "卡路里", "热量", "活动", "运动量", "怎么样", "概览", "总结", "进度", "目标", "今天", "多少步", "消耗"]
     }
   }
@@ -51,6 +51,24 @@ WHO recommends 150 min/week of moderate activity or 75 min/week of vigorous acti
 Active minutes often tells a more meaningful story than steps:
 - 10,000 steps from slow walking ≠ 6,000 steps including a 30-min jog
 - Highlight active minutes when the user has them — it's a quality signal
+
+**Sedentary Risk & NEAT Standards:**
+
+| Metric | Target | Risk Threshold |
+|--------|--------|---------------|
+| Continuous sitting | < 1 hour at a time | > 2 hours continuous = elevated risk |
+| Standing time | ≥ 4 hours/day (distributed) | < 2 hours/day = highly sedentary |
+| Moderate+ intensity | ≥ 150 min/week | < 75 min/week = insufficient |
+| NEAT (non-exercise activity) | 15-50% of total energy expenditure | Sedentary NEAT only 15-20% vs active 35-50% |
+
+**NEAT is often the hidden variable in weight management** — the difference between a sedentary and active person's NEAT can be 500+ kcal/day, more than most workouts.
+
+**Practical sedentary-busting strategies:**
+- Set hourly stand-and-move reminders
+- Walk during phone calls
+- Stand for meetings when possible
+- Take stairs instead of elevator
+- Get off transit one stop early
 
 **Calories — Handle With Care:**
 

@@ -5,7 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🌙",
-      "requires": { "tools": ["get_sleep", "get_weekly_summary"] },
+      "requires": { "tools": ["get_sleep", "get_weekly_summary", "get_heart_rate", "get_spo2"] },
       "triggers": ["sleep", "insomnia", "bedtime", "nap", "wake", "tired", "fatigue", "dream", "睡眠", "睡觉", "失眠", "睡不着", "睡不好", "入睡", "早醒", "困了", "疲劳", "做梦", "熬夜", "晚睡", "深睡", "浅睡", "午睡", "打盹", "助眠", "安眠", "嗜睡", "睡眠质量"]
     }
   }
@@ -56,14 +56,14 @@ How to assess consistency: Look at the week's bedtime/wake times. Calculate the 
 - Spread 60-90 min: Acceptable
 - Spread > 90 min: Circadian disruption — prioritize schedule regularity over total duration
 
-### 3.2 Sleep Architecture
+### 3.2 Sleep Architecture (Expert Clinical Standards)
 
-| Stage | Ideal % | What It Does | What Affects It |
-|-------|---------|-------------|----------------|
-| **Deep sleep** | 15-25% | Physical recovery, immune function, growth hormone | Exercise timing, alcohol, age |
-| **REM** | 20-25% | Memory consolidation, emotional regulation, learning | Sleep timing (REM concentrates in later cycles), alcohol, stress |
-| **Light sleep** | 45-55% | Transition stage, some memory processing | Usually fills remaining time |
-| **Awake** | < 5% | Normal micro-awakenings | Noise, temperature, bladder, pain |
+| Stage | Target Range | What It Does | What Affects It |
+|-------|-------------|-------------|----------------|
+| **Deep sleep** (slow wave) | 20-60% | Physical recovery, immune function, growth hormone | Exercise timing, alcohol, age |
+| **Light sleep** (N1+N2) | < 55% | Transition stage, some memory processing; too high = insufficient deep sleep | Usually fills remaining time |
+| **REM** | 10-30% | Memory consolidation, emotional regulation, learning | Sleep timing (REM concentrates in later cycles), alcohol, stress |
+| **Awake events** | ≤ 1 per night | Normal micro-awakenings | Noise, temperature, bladder, pain; frequent awakenings disrupt sleep continuity |
 
 **Deep sleep patterns**:
 - Concentrates in the first 3-4 hours of sleep
@@ -76,16 +76,35 @@ How to assess consistency: Look at the week's bedtime/wake times. Calculate the 
 - Alcohol significantly suppresses REM even if total sleep looks fine
 - Low REM + reports of poor mood/memory → mention the connection
 
-### 3.3 Sleep Efficiency
+### 3.3 Sleep Onset & Efficiency Standards
 
-Sleep efficiency = actual sleep time / time in bed
+**Sleep onset latency** (time from lying down to falling asleep):
 
-- > 90%: Excellent
-- 85-90%: Good
-- 75-85%: Fair — look for causes
-- < 75%: Poor — consider whether user is spending too long in bed awake
+| Onset Time | Assessment |
+|-----------|-----------|
+| < 20 minutes | Normal — healthy sleep drive |
+| 20-30 minutes | Borderline — may benefit from wind-down routine |
+| > 30 minutes | Onset insomnia indicator — investigate causes |
+
+**Sleep efficiency** = actual sleep time / time in bed × 100%
+
+| Efficiency | Rating |
+|-----------|--------|
+| ≥ 90% | Excellent |
+| 85-90% | Good — target range |
+| 75-85% | Fair — look for causes |
+| < 75% | Poor — consider sleep restriction therapy |
 
 **Counterintuitive advice**: If efficiency is low, sometimes the recommendation is to spend LESS time in bed (sleep restriction), not more. This consolidates sleep drive.
+
+### 3.4 Sleep Disorder Indicators
+
+| Pattern | Possible Issue | Recommendation |
+|---------|---------------|---------------|
+| Onset > 30 min, multiple nights/week, 3+ weeks | Chronic insomnia | CBT-I (Cognitive Behavioral Therapy for Insomnia) is gold standard |
+| Frequent awakenings + SpO2 dips < 95% | Obstructive Sleep Apnea (OSA) | Recommend formal sleep study |
+| Night HR that doesn't drop in first sleep cycle | Sympathetic overactivation | Investigate stress, overtraining, late caffeine |
+| Weekend sleep 2+ hours longer than weekday | Social jetlag | Prioritize consistent wake time 7 days/week |
 
 ## Step 4: Cross-Domain Analysis
 

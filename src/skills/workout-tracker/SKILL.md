@@ -5,7 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🏃",
-      "requires": { "tools": ["get_workouts", "get_weekly_summary"] },
+      "requires": { "tools": ["get_workouts", "get_weekly_summary", "get_heart_rate", "get_hrv"] },
       "triggers": ["workout", "exercise", "fitness", "running", "training", "gym", "rest day", "recovery", "overtraining", "运动", "锻炼", "健身", "跑步", "训练", "健身房", "休息日", "恢复", "过度训练", "骑行", "游泳", "拉伸", "肌肉", "酸痛", "有氧", "无氧", "减脂"]
     }
   }
@@ -121,23 +121,67 @@ Don't say "you're overtraining" — many people take pride in their exercise and
 
 "Your data shows some interesting patterns. Your resting HR has been creeping up this week, and I notice you've had hard workouts 5 of the last 7 days. Your body might be asking for more recovery time. What if you took tomorrow as a rest day and see how you feel? Sometimes a strategic rest day actually improves the next workout."
 
-### 3.5 Exercise Type Guidance
+### 3.5 Recovery State Assessment (HRV-Based)
+
+Use morning HRV and resting HR data to assess recovery before recommending training:
+
+| State | HRV vs Baseline | Resting HR | Recommendation |
+|-------|----------------|-----------|---------------|
+| **Good recovery** | ≥ baseline | Normal | Proceed with planned training |
+| **Mild fatigue** | 5-15% below | Slightly elevated | Lower training intensity |
+| **Significant fatigue** | > 15% below | > 5 bpm above baseline | Recovery day only (walking, yoga) |
+| **Overtraining** | > 25% below | Persistently elevated | Full rest 2-3 days |
+
+### 3.6 Exercise Heart Rate Recovery Standard
+
+Post-exercise heart rate recovery is a key fitness indicator:
+
+| Recovery (1 min post-exercise) | Rating |
+|-------------------------------|--------|
+| Drop ≥ 20 bpm | Excellent cardiovascular fitness |
+| Drop 12-20 bpm | Normal, adequate fitness |
+| Drop < 12 bpm | Below average — focus on building aerobic base |
+
+**Tracking recovery improvement over time at the same exercise intensity is one of the best ways to demonstrate fitness progress to the user.**
+
+### 3.7 Exercise Type Analysis (8 Types)
 
 **Running:**
-- Easy pace: Can maintain a conversation
-- The majority of training runs should be easy
-- Increase weekly distance by max 10% per week
-- Track: distance trends, pace (if available), HR at given pace
+- Key metrics: distance, pace, cadence/stride, HR zone distribution
+- HR zones: Z1 recovery (50-60%) → Z2 aerobic (60-70%) → Z3 endurance (70-80%) → Z4 threshold (80-90%) → Z5 max (90-100%)
+- 80/20 rule: 80% of runs in Z1-Z2, 20% in Z4-Z5 for optimal endurance gains
+- Weekly distance increase ≤ 10%; target cadence 175-185 steps/min
 
-**General cardio (cycling, swimming, etc.):**
-- Same HR zone principles apply
-- Duration is more important than distance for fitness
-- Consistency beats intensity for most goals
+**Cycling:**
+- Key metrics: power (W), cadence (RPM), power-to-weight ratio (W/kg)
+- Flat cadence 90-100 RPM, climbing 75-85 RPM
+- 3 W/kg is the amateur-to-competitive threshold
+
+**Swimming:**
+- Key metrics: pace, stroke count, SWOLF index (lower = more efficient)
+- Water HR is ~10-15 bpm lower than land HR — adjust zone calculations
 
 **Strength training:**
-- Wearable data is less useful here (HR doesn't reflect volume well)
-- Focus on: frequency (2-3x/week), consistency, rest between sessions
-- Major muscle group coverage: push, pull, legs
+- Key metrics: training volume (weight × sets × reps), muscle group distribution
+- Weekly volume increase 2-5%; target 10-20 sets per muscle group per week
+- Push-pull ratio should be approximately 1:1
+
+**HIIT:**
+- Key metrics: peak HR (should reach 85-95% max HR), inter-set recovery speed
+- Maximum frequency: 3 sessions per week
+- If recovery between sets is slow, reduce session volume
+
+**Yoga / Pilates:**
+- Focus on: recovery assistance, HRV improvement, complement to high-intensity training
+- Track HRV improvement on days following yoga sessions
+
+**Outdoor adventure (hiking, mountaineering, climbing):**
+- Focus on: altitude adaptation monitoring (SpO2 < 90% = warning), energy management, HR control
+- At altitude, reduce expected performance by ~3% per 300m above 1,500m
+
+**Ball sports (basketball, tennis, soccer, etc.):**
+- Characteristics: intermittent high intensity, mixed aerobic-anaerobic
+- Focus on: total training load, adequate warm-up, recovery between matches
 
 ## Step 4: Cross-Domain Analysis
 

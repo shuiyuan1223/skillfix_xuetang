@@ -5,7 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "❤️",
-      "requires": { "tools": ["get_heart_rate"] },
+      "requires": { "tools": ["get_heart_rate", "get_hrv", "get_workouts"] },
       "triggers": ["heart rate", "heartbeat", "pulse", "bpm", "resting heart rate", "cardio", "心率", "心跳", "脉搏", "心脏", "静息心率", "运动心率", "心血管", "心慌", "心悸", "房颤"]
     }
   }
@@ -77,15 +77,44 @@ Calculate using: Max HR ≈ 220 - age (if age available from profile)
 ### 3.3 Recovery Heart Rate
 
 How fast HR drops after exercise indicates cardiovascular fitness:
-- Drop of 20+ bpm in 1 minute: Excellent recovery
-- Drop of 12-20 bpm: Good
-- Drop of < 12 bpm: Below average — may indicate need for more cardio base building
 
-### 3.4 Heart Rate Variability (HRV) Context
+| Recovery (1 min post-exercise) | Rating | Implication |
+|-------------------------------|--------|------------|
+| Drop ≥ 20 bpm | Excellent | Strong cardiovascular fitness, good autonomic function |
+| Drop 12-20 bpm | Normal/Good | Adequate recovery capacity |
+| Drop < 12 bpm | Below average | May indicate poor cardiovascular fitness or overtraining; recommend building aerobic base |
 
-HRV data may not be directly available, but resting HR trends serve as a proxy:
-- Rising resting HR trend over days → body under stress (overtraining, illness, poor sleep)
-- Stable or declining resting HR → good recovery, adaptation
+**Tracking recovery over time**: Improving recovery HR at the same exercise intensity is one of the most reliable signs of cardiovascular fitness improvement — even more meaningful than resting HR.
+
+### 3.4 Heart Rate Variability (HRV)
+
+HRV is a key indicator of autonomic nervous system balance and recovery status. **Trend matters more than absolute value** — HRV varies greatly between individuals.
+
+**How to interpret HRV trends:**
+- HRV above personal baseline → good recovery, parasympathetic dominance
+- HRV below baseline for 1-2 days → normal fluctuation (poor sleep, stress)
+- HRV below baseline for 5+ days → systemic stress signal (overtraining, illness, chronic stress)
+- Gradually increasing HRV over weeks → fitness improving, better stress resilience
+
+**HRV + Resting HR combined assessment:**
+
+| HRV vs Baseline | Resting HR | Assessment |
+|----------------|-----------|-----------|
+| At or above | Normal | Good recovery — train as planned |
+| Low 5-15% | Slightly elevated | Mild fatigue — reduce training intensity |
+| Low > 15% | Elevated > 5 bpm | Significant fatigue — schedule recovery day |
+| Low > 25% | Persistently elevated | Overtraining risk — stop training 2-3 days |
+
+### 3.5 Overtraining Detection (Four-Level Assessment)
+
+| Level | HRV Signal | Resting HR Signal | Recommendation |
+|-------|-----------|-------------------|---------------|
+| **Good recovery** | ≥ baseline | Normal | Proceed with planned training |
+| **Mild fatigue** | 5-15% below baseline | Slightly elevated | Lower intensity, shorter sessions |
+| **Significant fatigue** | > 15% below baseline | > 5 bpm above baseline | Recovery day — walking, yoga, stretching only |
+| **Overtraining** | > 25% below baseline | Persistently elevated 4+ days | Full rest 2-3 days, reduce weekly volume 30-40% |
+
+**Warning**: If resting HR has been trending upward for 4+ consecutive days AND HRV is consistently declining, recommend reducing training volume by 30-40% for the current week.
 
 ## Step 4: Cross-Domain Analysis
 
