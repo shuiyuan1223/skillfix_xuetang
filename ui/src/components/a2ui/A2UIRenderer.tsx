@@ -185,14 +185,12 @@ export function A2UIRenderer({
     const className = (c.className as string) || "";
     return (
       <div
-        className={`bg-surface-card border border-border rounded-xl transition-all duration-200 hover:border-border-hover ${className}`}
+        className={`card-hover bg-surface-card border border-border rounded-xl ${className}`}
         style={{
           padding,
           boxShadow: "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)",
           animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
         }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), inset 0 1px 0 var(--color-card-highlight)"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)"; }}
       >
         {title && <div className="text-[15px] font-semibold mb-4 text-text-strong tracking-tight">{title}</div>}
         {renderChildren(c.children)}
@@ -212,13 +210,11 @@ export function A2UIRenderer({
     };
     return (
       <div
-        className="bg-surface-card border border-border rounded-xl p-5 transition-all duration-200 relative overflow-hidden group hover:-translate-y-0.5 hover:border-border-hover"
+        className="card-hover bg-surface-card border border-border rounded-xl p-5 relative overflow-hidden group"
         style={{
           boxShadow: "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)",
           animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
         }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), inset 0 1px 0 var(--color-card-highlight)"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)"; }}
       >
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         <div className="flex items-center gap-2 mb-3">
