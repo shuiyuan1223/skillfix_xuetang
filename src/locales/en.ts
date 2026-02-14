@@ -22,6 +22,9 @@ export const en: LocaleMessages = {
     title: "System Agent",
     subtitle: "AI-powered system management",
     placeholder: "Ask the System Agent...",
+    runBenchmark: "Run Benchmark",
+    startEvolution: "Start Evolution",
+    gitStatus: "Git Status",
   },
 
   common: {

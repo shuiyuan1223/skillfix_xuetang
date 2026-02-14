@@ -23,6 +23,9 @@ export interface LocaleMessages {
     title: string;
     subtitle: string;
     placeholder: string;
+    runBenchmark: string;
+    startEvolution: string;
+    gitStatus: string;
   };
 
   // Common

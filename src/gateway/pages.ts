@@ -161,19 +161,19 @@ export function generateSystemAgentPage(state: {
     welcomeIcon: "bot",
     welcomeActions: [
       {
-        label: "Run Benchmark",
+        label: t("systemAgent.runBenchmark"),
         icon: "test-tube",
         action: "sa_send_message",
         content: "Run a quick benchmark",
       },
       {
-        label: "Start Evolution",
+        label: t("systemAgent.startEvolution"),
         icon: "zap",
         action: "sa_send_message",
         content: "Start a full evolution cycle",
       },
       {
-        label: "Git Status",
+        label: t("systemAgent.gitStatus"),
         icon: "git-branch",
         action: "sa_send_message",
         content: "Show git status",

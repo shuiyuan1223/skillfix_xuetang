@@ -22,6 +22,9 @@ export const zhCN: LocaleMessages = {
     title: "系统 Agent",
     subtitle: "AI 驱动的系统管理",
     placeholder: "向系统 Agent 提问...",
+    runBenchmark: "运行基准测试",
+    startEvolution: "开始进化",
+    gitStatus: "Git 状态",
   },
 
   common: {

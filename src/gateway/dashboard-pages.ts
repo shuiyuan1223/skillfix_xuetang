@@ -206,7 +206,7 @@ function statOrSkeleton(
     value: available ? opts.value : "--",
     subtitle: opts.subtitle,
     icon: opts.icon,
-    color: opts.color,
+    color: available ? opts.color : undefined,
   });
 }
 
@@ -424,8 +424,10 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     chartChildren.push(ui.card([hrChartTitle, hrChart], { padding: 20 }));
   }
 
-  if (chartChildren.length > 0) {
-    children.push(ui.row(chartChildren, { gap: 16 }));
+  if (chartChildren.length === 1) {
+    children.push(chartChildren[0]);
+  } else if (chartChildren.length > 1) {
+    children.push(ui.grid(chartChildren, { columns: 2, gap: 16 }));
   }
 
   // ── Sleep trend (if available) ──
