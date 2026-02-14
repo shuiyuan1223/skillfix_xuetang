@@ -596,6 +596,17 @@ export interface LocaleMessages {
     huaweiApiBaseUrl: string;
     applyEngine: string;
     applyEngineDesc: string;
+    sectionEmbedding: string;
+    sectionBenchmark: string;
+    sectionJudgeModel: string;
+    sectionBenchmarkModels: string;
+    benchmarkConcurrency: string;
+    benchmarkConcurrencyDesc: string;
+    judgeProvider: string;
+    judgeModelId: string;
+    judgeLabel: string;
+    benchmarkModelsJson: string;
+    benchmarkModelsJsonDesc: string;
   };
 
   // OAuth / Authorization

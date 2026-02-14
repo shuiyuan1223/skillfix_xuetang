@@ -682,7 +682,7 @@ export function A2UIRenderer({
             {(c.quickReplies as Array<{ label: string; content: string; icon?: string; variant?: string }>).map((qr, i) => (
               <button
                 key={i}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${
+                className={`quick-reply-btn flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${
                   qr.variant === "danger" ? "border-error/30 text-error bg-error/10 hover:bg-error/20 hover:border-error/50"
                     : qr.variant === "primary" ? "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50"
                     : "border-border text-text-secondary bg-surface hover:bg-surface-hover hover:border-border-hover"
@@ -724,7 +724,7 @@ export function A2UIRenderer({
           }}
         />
         <button
-          className={`w-10 h-10 rounded-xl border-none ${streaming ? "bg-red-500 hover:bg-red-600" : "bg-primary"} text-primary-fg cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 hover:-translate-y-px active:scale-[0.97] [&>svg]:w-4 [&>svg]:h-4`}
+          className={`chat-send-btn w-10 h-10 rounded-xl border-none ${streaming ? "bg-red-500 hover:bg-red-600" : "bg-primary"} text-primary-fg cursor-pointer flex items-center justify-center shrink-0 [&>svg]:w-4 [&>svg]:h-4`}
           style={{ boxShadow: "var(--shadow-sm)" }}
           title={streaming ? "Stop generating" : "Send"}
           onMouseEnter={!streaming ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 16px var(--color-accent-glow)"; } : undefined}

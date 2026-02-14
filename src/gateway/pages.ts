@@ -1624,6 +1624,11 @@ export interface SettingsPageData {
   huaweiTokenUrl: string;
   huaweiApiBaseUrl: string;
   applyEngine: string;
+  benchmarkConcurrency: number;
+  judgeProvider: string;
+  judgeModelId: string;
+  judgeLabel: string;
+  benchmarkModelsJson: string;
 }
 
 export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
@@ -1633,7 +1638,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   // Header
   const title = ui.text(t("settings.title"), "h2");
   const subtitle = ui.text(t("settings.subtitle"), "caption");
-  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+  const header = ui.column([title, subtitle], { gap: 4 });
 
   // ---- LLM Section ----
   const providerSelect = ui.formInput("provider", "select", {
@@ -1763,7 +1768,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   });
   const tuiCard = ui.card([tuiForm], { title: t("settings.sectionTui"), padding: 20 });
 
-  // ---- Advanced Section ----
+  // ---- Embedding Section ----
   const embeddingToggle = ui.formInput("embeddingEnabled", "select", {
     label: t("settings.embedding"),
     options: [
@@ -1776,6 +1781,19 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     label: t("settings.embeddingModel"),
     value: data.embeddingModel,
   });
+  const embeddingForm = ui.form([embeddingToggle, embeddingModelInput], "settings_save_embedding", {
+    submitLabel: saveLabel,
+  });
+  const embeddingCard = ui.card([embeddingForm], {
+    title: t("settings.sectionEmbedding"),
+    padding: 20,
+  });
+
+  // ---- Benchmark & Evolution Section ----
+  const concurrencyInput = ui.formInput("benchmarkConcurrency", "text", {
+    label: t("settings.benchmarkConcurrency"),
+    value: String(data.benchmarkConcurrency),
+  });
   const applyEngineSelect = ui.formInput("applyEngine", "select", {
     label: t("settings.applyEngine"),
     options: [
@@ -1784,17 +1802,49 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ],
     value: data.applyEngine,
   });
-  const advForm = ui.form(
-    [embeddingToggle, embeddingModelInput, applyEngineSelect],
-    "settings_save_advanced",
+  const judgeProviderSelect = ui.formInput("judgeProvider", "select", {
+    label: t("settings.judgeProvider"),
+    options: data.providers.map((p) => ({
+      value: p.value,
+      label: `${p.label}${p.hint ? ` — ${p.hint}` : ""}`,
+    })),
+    value: data.judgeProvider,
+  });
+  const judgeModelInput = ui.formInput("judgeModelId", "text", {
+    label: t("settings.judgeModelId"),
+    value: data.judgeModelId,
+  });
+  const judgeLabelInput = ui.formInput("judgeLabel", "text", {
+    label: t("settings.judgeLabel"),
+    value: data.judgeLabel,
+  });
+  const benchmarkForm = ui.form(
+    [concurrencyInput, applyEngineSelect, judgeProviderSelect, judgeModelInput, judgeLabelInput],
+    "settings_save_benchmark",
     { submitLabel: saveLabel }
   );
-  const advCard = ui.card([advForm], { title: t("settings.sectionAdvanced"), padding: 20 });
-
-  const root = ui.column([header, llmCard, gatewayCard, dsCard, tuiCard, advCard], {
-    gap: 16,
-    padding: 0,
+  const benchmarkCard = ui.card([benchmarkForm], {
+    title: t("settings.sectionBenchmark"),
+    padding: 20,
   });
+
+  // ---- Benchmark Models Section (JSON) ----
+  const bmJsonInput = ui.formInput("benchmarkModelsJson", "textarea", {
+    label: t("settings.benchmarkModelsJson"),
+    value: data.benchmarkModelsJson,
+  });
+  const bmForm = ui.form([bmJsonInput], "settings_save_benchmark_models", {
+    submitLabel: saveLabel,
+  });
+  const bmCard = ui.card([bmForm], {
+    title: t("settings.sectionBenchmarkModels"),
+    padding: 20,
+  });
+
+  const root = ui.column(
+    [header, llmCard, gatewayCard, dsCard, tuiCard, embeddingCard, benchmarkCard, bmCard],
+    { gap: 16, padding: 24 }
+  );
 
   // Add some bottom padding to avoid content being cut off
   const rootComp = ui["components"].get(root);

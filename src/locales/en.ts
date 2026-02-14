@@ -578,6 +578,17 @@ export const en: LocaleMessages = {
     applyEngine: "Apply Engine",
     applyEngineDesc: "Code modification engine for evolution",
     saveButton: "Save",
+    sectionEmbedding: "Embedding & Vector Search",
+    sectionBenchmark: "Benchmark & Evolution",
+    sectionJudgeModel: "Judge Model",
+    sectionBenchmarkModels: "Benchmark Models",
+    benchmarkConcurrency: "Concurrency",
+    benchmarkConcurrencyDesc: "Number of parallel benchmark executions",
+    judgeProvider: "Provider",
+    judgeModelId: "Model ID",
+    judgeLabel: "Display Name",
+    benchmarkModelsJson: "Model Config (JSON)",
+    benchmarkModelsJsonDesc: "Benchmark model list in JSON format",
   },
 
   auth: {

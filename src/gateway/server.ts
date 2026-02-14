@@ -1683,6 +1683,11 @@ export class GatewaySession {
           hint: cfg.hint,
         }));
         const huawei = config.dataSources?.huawei || {};
+        const judge = config.judgeModel || {
+          provider: undefined as any,
+          modelId: undefined as any,
+          label: undefined as any,
+        };
         mainPage = generateSettingsPage({
           provider: config.llm.provider,
           providers,
@@ -1703,6 +1708,13 @@ export class GatewaySession {
           huaweiTokenUrl: huawei.tokenUrl || "",
           huaweiApiBaseUrl: huawei.apiBaseUrl || "",
           applyEngine: config.applyEngine || "claude-code",
+          benchmarkConcurrency: config.benchmark?.concurrency || 1,
+          judgeProvider: judge.provider || config.llm.provider,
+          judgeModelId: judge.modelId || "",
+          judgeLabel: judge.label || "",
+          benchmarkModelsJson: config.benchmarkModels
+            ? JSON.stringify(config.benchmarkModels, null, 2)
+            : "{}",
         });
         break;
       }
@@ -2855,7 +2867,10 @@ export class GatewaySession {
       action === "settings_save_gateway" ||
       action === "settings_save_datasource" ||
       action === "settings_save_advanced" ||
-      action === "settings_save_tui"
+      action === "settings_save_tui" ||
+      action === "settings_save_embedding" ||
+      action === "settings_save_benchmark" ||
+      action === "settings_save_benchmark_models"
     ) {
       try {
         const config = loadConfig();
@@ -2904,6 +2919,32 @@ export class GatewaySession {
           if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
           if (formData.applyEngine)
             config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+        } else if (action === "settings_save_embedding") {
+          if (!config.embedding) config.embedding = {};
+          if (formData.embeddingEnabled !== undefined)
+            config.embedding.enabled = formData.embeddingEnabled === "true";
+          if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
+        } else if (action === "settings_save_benchmark") {
+          if (!config.benchmark) config.benchmark = {};
+          if (formData.benchmarkConcurrency !== undefined)
+            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+          if (!config.judgeModel)
+            config.judgeModel = { provider: config.llm.provider, modelId: "" };
+          if (formData.judgeProvider)
+            config.judgeModel.provider = formData.judgeProvider as LLMProvider;
+          if (formData.judgeModelId !== undefined)
+            config.judgeModel.modelId = String(formData.judgeModelId);
+          if (formData.judgeLabel !== undefined)
+            config.judgeModel.label = String(formData.judgeLabel) || undefined;
+        } else if (action === "settings_save_benchmark_models") {
+          try {
+            const parsed = JSON.parse(String(formData.benchmarkModelsJson || "{}"));
+            config.benchmarkModels = parsed;
+          } catch {
+            // Invalid JSON — keep existing
+          }
         }
 
         saveConfig(config);

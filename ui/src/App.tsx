@@ -666,6 +666,10 @@ export function App() {
           key={pageKey}
           ref={mainContentRef}
           className="main-scroll"
+          onScroll={(e) => {
+            const scrolled = e.currentTarget.scrollTop > 8;
+            document.querySelector('.topbar')?.classList.toggle('topbar-scrolled', scrolled);
+          }}
           style={{ animation: "page-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}
         >
           {mainData ? (

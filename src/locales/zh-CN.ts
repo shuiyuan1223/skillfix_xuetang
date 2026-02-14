@@ -569,6 +569,17 @@ export const zhCN: LocaleMessages = {
     applyEngine: "Apply Engine",
     applyEngineDesc: "进化系统使用的代码修改引擎",
     saveButton: "保存",
+    sectionEmbedding: "Embedding 向量搜索",
+    sectionBenchmark: "基准测试与进化",
+    sectionJudgeModel: "评估模型 (Judge)",
+    sectionBenchmarkModels: "基准测试模型",
+    benchmarkConcurrency: "并发数",
+    benchmarkConcurrencyDesc: "基准测试并行执行数量",
+    judgeProvider: "Provider",
+    judgeModelId: "模型 ID",
+    judgeLabel: "显示名称",
+    benchmarkModelsJson: "模型配置 (JSON)",
+    benchmarkModelsJsonDesc: "基准测试使用的模型列表，JSON 格式",
   },
 
   auth: {

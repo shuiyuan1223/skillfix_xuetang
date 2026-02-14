@@ -297,7 +297,7 @@ export function renderActivityRings(c: A2UIComponent, _ctx: RenderContext) {
           return (
             <React.Fragment key={i}>
               <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color + "30"} strokeWidth={strokeWidth} />
-              <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} transform={`rotate(-90 ${center} ${center})`} className="ring-fill" />
+              <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} transform={`rotate(-90 ${center} ${center})`} className="ring-fill" style={{ strokeDashoffset: dashOffset, ['--ring-circ' as any]: circumference, animationDelay: `${i * 200}ms` }} />
             </React.Fragment>
           );
         })}
