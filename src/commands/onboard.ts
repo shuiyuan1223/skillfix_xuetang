@@ -656,6 +656,8 @@ async function runFullWizard(): Promise<void> {
     "Configuration saved"
   );
 
+  p.log.info(`Tip: Run ${c.cyan("pha state init --remote <url>")} to sync .pha/ to a private repo`);
+
   const nextCmd = config.dataSources.type === "huawei" ? `${c.cyan("pha auth")} then ` : "";
   p.outro(`Next: Run ${nextCmd}${c.cyan("pha start")} or ${c.cyan("pha health")}`);
 }
