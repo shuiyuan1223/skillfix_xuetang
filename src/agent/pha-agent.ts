@@ -11,7 +11,7 @@ import {
   type AgentMessage,
 } from "@mariozechner/pi-agent-core";
 import { getModel, type Model } from "@mariozechner/pi-ai";
-import { healthAgentTools, createHealthAgentTools } from "./tools.js";
+import { globalRegistry } from "../tools/index.js";
 import { getMemoryManager } from "../memory/index.js";
 import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/compaction.js";
 import {
@@ -153,9 +153,10 @@ export class PHAAgent {
     );
 
     // Use per-session tools when a user-specific data source is provided
-    const baseTools =
-      config.tools ||
-      (config.dataSource ? createHealthAgentTools(config.dataSource) : healthAgentTools);
+    const registry = config.dataSource
+      ? globalRegistry.withDataSource(config.dataSource)
+      : globalRegistry;
+    const baseTools = config.tools || registry.toAgentTools();
     const tools =
       config.extraTools && config.extraTools.length > 0
         ? [...baseTools, ...config.extraTools]

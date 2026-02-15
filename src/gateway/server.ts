@@ -66,6 +66,7 @@ import {
   generateAuthRequiredPage,
   generateBenchmarkModelSelectorModal,
   generateToolCards,
+  generateToolsPage,
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
@@ -105,6 +106,7 @@ import {
   createSkillTool,
 } from "../tools/skill-tools.js";
 import { systemMemoryReadTool, systemMemoryWriteTool } from "../tools/system-memory-tools.js";
+import { globalRegistry } from "../tools/index.js";
 import {
   listTraces,
   countTraces,
@@ -945,6 +947,7 @@ export class GatewaySession {
   private promptsScope: "pha" | "system" = "pha";
   private selectedPromptSource: "system" | "user" = "system";
   private skillsScope: "pha" | "system" = "pha";
+  private toolsCategory: string = "all";
 
   // Memory system-agent sub-state
   private saSelectedMemoryFile: string | null = null;
@@ -1656,7 +1659,7 @@ export class GatewaySession {
 
             saMemoryFiles = await Promise.all(
               SA_MEMORY_FILES.map(async (f) => {
-                const result = await systemMemoryReadTool.execute({ file: f.name });
+                const result = (await systemMemoryReadTool.execute({ file: f.name })) as any;
                 const fileContent = result.content === "(empty)" ? "" : result.content;
                 return {
                   name: f.name,
@@ -1670,9 +1673,9 @@ export class GatewaySession {
             );
 
             if (this.saSelectedMemoryFile) {
-              const result = await systemMemoryReadTool.execute({
+              const result = (await systemMemoryReadTool.execute({
                 file: this.saSelectedMemoryFile,
-              });
+              })) as any;
               const raw = result.content === "(empty)" ? "" : result.content;
               saMemoryContent = this.editBuffer ?? raw;
             }
@@ -1797,15 +1800,15 @@ export class GatewaySession {
 
         // Fetch data async
         try {
-          const skillsResult = await listSkillsTool.execute({});
+          const skillsResult = (await listSkillsTool.execute({})) as any;
           let content: string | undefined;
           let language: string | undefined;
 
           if (this.selectedSkill) {
-            const skillResult = await getSkillTool.execute({
+            const skillResult = (await getSkillTool.execute({
               name: this.selectedSkill,
               filePath: this.selectedSkillFile,
-            });
+            })) as any;
             if (skillResult.success && "content" in skillResult) {
               content = this.editBuffer ?? skillResult.content;
               language = skillResult.language as string | undefined;
@@ -1816,8 +1819,8 @@ export class GatewaySession {
           const enrichedSkills = await Promise.all(
             (skillsResult.skills || []).map(async (s: any) => {
               if (s.name === this.selectedSkill) {
-                const info = await getSkillTool.execute({ name: s.name });
-                return { ...s, structure: info.success ? (info as any).structure : undefined };
+                const info = (await getSkillTool.execute({ name: s.name })) as any;
+                return { ...s, structure: info.success ? info.structure : undefined };
               }
               return s;
             })
@@ -1840,6 +1843,20 @@ export class GatewaySession {
         } catch (e) {
           log.error("Skills load error", { error: e });
         }
+        return;
+      }
+
+      case "settings/tools": {
+        const toolsData = globalRegistry.getToolsPageData();
+        send(
+          generatePage(
+            view,
+            generateToolsPage({
+              tools: toolsData,
+              selectedCategory: this.toolsCategory,
+            })
+          )
+        );
         return;
       }
 
@@ -2805,7 +2822,7 @@ export class GatewaySession {
       this.editBuffer = null;
       await this.handleNavigate("settings/skills", send);
     } else if (action === "toggle_skill" && this.selectedSkill) {
-      const skillsResult = await listSkillsTool.execute({});
+      const skillsResult = (await listSkillsTool.execute({})) as any;
       const skill = skillsResult.skills?.find(
         (s: { name: string }) => s.name === this.selectedSkill
       );
@@ -3004,6 +3021,9 @@ export class GatewaySession {
           this.editBuffer = null;
           await this.handleNavigate("settings/skills", send);
         }
+      } else if (this.currentView === "settings/tools") {
+        this.toolsCategory = (payload.tab as string) || "all";
+        await this.handleNavigate("settings/tools", send);
       } else if (this.currentView === "settings/integrations") {
         this.integrationsTab = payload.tab as "overview" | "issues" | "prs" | "branches";
         if (this.integrationsCache) {
@@ -5269,11 +5289,13 @@ export class GatewaySession {
         }
 
         // Add tool_use part
+        const toolDisplayName = globalRegistry.get(event.toolName)?.displayName;
         assistantMsg.parts.push({
           type: "tool_use",
           toolCallId,
           toolName: event.toolName,
           status: "running",
+          ...(toolDisplayName ? { displayName: toolDisplayName } : {}),
         });
 
         // Store toolCallId on event for matching in tool_execution_end

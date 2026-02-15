@@ -13,6 +13,7 @@ export const zhCN: LocaleMessages = {
     memory: "记忆",
     prompts: "提示词",
     skills: "技能",
+    tools: "工具",
     evolution: "进化",
     integrations: "集成",
     systemAgent: "系统 Agent",

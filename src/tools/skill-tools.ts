@@ -14,8 +14,9 @@ import {
   renameSync,
   statSync,
 } from "fs";
-import { join, basename, relative, extname } from "path";
+import { join, basename, extname } from "path";
 import { gitCommitFiles } from "../evolution/version-manager.js";
+import type { PHATool } from "./types.js";
 
 // Default skills directory (relative to project root)
 let skillsDir = "src/skills";
@@ -218,11 +219,15 @@ function getSkillInfo(skillDir: string): {
 /**
  * List all skills
  */
-export const listSkillsTool = {
+export const listSkillsTool: PHATool<{ includeDisabled?: boolean }> = {
   name: "list_skills",
   description: "List all skills with their status and metadata",
-  parameters: {
-    type: "object" as const,
+  displayName: "技能列表",
+  category: "skill",
+  icon: "puzzle",
+  label: "List Skills",
+  inputSchema: {
+    type: "object",
     properties: {
       includeDisabled: {
         type: "boolean",
@@ -289,12 +294,16 @@ export const listSkillsTool = {
 /**
  * Get skill content
  */
-export const getSkillTool = {
+export const getSkillTool: PHATool<{ name: string; filePath?: string }> = {
   name: "get_skill",
   description:
     "Get the full content and metadata of a specific skill. Supports reading sub-files via filePath.",
-  parameters: {
-    type: "object" as const,
+  displayName: "获取技能",
+  category: "skill",
+  icon: "puzzle",
+  label: "Get Skill",
+  inputSchema: {
+    type: "object",
     properties: {
       name: {
         type: "string",
@@ -352,11 +361,15 @@ export const getSkillTool = {
 /**
  * Update skill content
  */
-export const updateSkillTool = {
+export const updateSkillTool: PHATool<{ name: string; content: string; filePath?: string }> = {
   name: "update_skill",
   description: "Update a skill file's content. Supports sub-files via filePath.",
-  parameters: {
-    type: "object" as const,
+  displayName: "更新技能",
+  category: "skill",
+  icon: "puzzle",
+  label: "Update Skill",
+  inputSchema: {
+    type: "object",
     properties: {
       name: {
         type: "string",
@@ -430,11 +443,21 @@ export const updateSkillTool = {
 /**
  * Create a new skill
  */
-export const createSkillTool = {
+export const createSkillTool: PHATool<{
+  name: string;
+  description: string;
+  emoji?: string;
+  triggers?: string[];
+  content?: string;
+}> = {
   name: "create_skill",
   description: "Create a new skill with SKILL.md",
-  parameters: {
-    type: "object" as const,
+  displayName: "创建技能",
+  category: "skill",
+  icon: "puzzle",
+  label: "Create Skill",
+  inputSchema: {
+    type: "object",
     properties: {
       name: {
         type: "string",
@@ -524,11 +547,15 @@ export const createSkillTool = {
 /**
  * Toggle skill enabled/disabled status
  */
-export const toggleSkillTool = {
+export const toggleSkillTool: PHATool<{ name: string; enabled: boolean }> = {
   name: "toggle_skill",
   description: "Enable or disable a skill (renames folder with _disabled suffix)",
-  parameters: {
-    type: "object" as const,
+  displayName: "切换技能状态",
+  category: "skill",
+  icon: "puzzle",
+  label: "Toggle Skill",
+  inputSchema: {
+    type: "object",
     properties: {
       name: {
         type: "string",

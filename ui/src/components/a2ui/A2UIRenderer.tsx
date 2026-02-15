@@ -654,7 +654,7 @@ export function A2UIRenderer({
           : status === "error"
             ? <span className="text-error [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["x"] }} />
             : <span className="text-success [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
-        const displayName = TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
+        const displayName = part.displayName || TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
         return (
           <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[70%]">
             <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />

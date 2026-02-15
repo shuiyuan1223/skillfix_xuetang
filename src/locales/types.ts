@@ -13,6 +13,7 @@ export interface LocaleMessages {
     memory: string;
     prompts: string;
     skills: string;
+    tools: string;
     evolution: string;
     integrations: string;
     systemAgent: string;

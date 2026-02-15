@@ -8,6 +8,7 @@
 import { getMemoryManager } from "../memory/index.js";
 import { getUserUuid } from "../utils/config.js";
 import type { UserProfile } from "../memory/types.js";
+import type { PHATool } from "./types.js";
 
 export interface UpdateProfileParams {
   nickname?: string;
@@ -23,10 +24,30 @@ export interface UpdateProfileParams {
   dietPreference?: string;
 }
 
-export const updateUserProfileTool = {
+export const updateUserProfileTool: PHATool<UpdateProfileParams> = {
   name: "update_user_profile",
   description:
     "Save user profile information collected during conversation. Call this whenever the user shares personal info (name, age, height, weight, health goals, etc.).",
+  displayName: "更新健康档案",
+  category: "profile",
+  icon: "user",
+  label: "Update User Profile",
+  inputSchema: {
+    type: "object",
+    properties: {
+      nickname: { type: "string", description: "User's preferred name" },
+      gender: { type: "string", description: "Gender: 'male' or 'female'" },
+      birthYear: { type: "number", description: "Birth year (e.g. 1990)" },
+      height: { type: "number", description: "Height in cm" },
+      weight: { type: "number", description: "Weight in kg" },
+      conditions: { type: "string", description: "Health conditions (comma-separated)" },
+      allergies: { type: "string", description: "Allergies (comma-separated)" },
+      primaryGoal: { type: "string", description: "Primary health goal" },
+      exercisePreference: { type: "string", description: "Exercise preference" },
+      sleepSchedule: { type: "string", description: "Sleep schedule" },
+      dietPreference: { type: "string", description: "Diet preference" },
+    },
+  },
   execute: async (
     params: UpdateProfileParams
   ): Promise<{ success: boolean; updated: string[] }> => {
@@ -92,10 +113,18 @@ export const updateUserProfileTool = {
   },
 };
 
-export const completeOnboardingTool = {
+export const completeOnboardingTool: PHATool<Record<string, never>> = {
   name: "complete_onboarding",
   description:
     "Complete the first-conversation onboarding. Call this after collecting at least 4 core profile fields (gender, birthYear, height, weight). This removes the BOOTSTRAP.md guidance file.",
+  displayName: "完成引导",
+  category: "profile",
+  icon: "check",
+  label: "Complete Onboarding",
+  inputSchema: {
+    type: "object",
+    properties: {},
+  },
   execute: async (): Promise<{ success: boolean; message: string }> => {
     const uuid = getUserUuid();
     const mm = getMemoryManager();
@@ -110,3 +139,5 @@ export const completeOnboardingTool = {
     return { success: true, message: "No BOOTSTRAP.md found — already completed." };
   },
 };
+
+export const profileTools = [updateUserProfileTool, completeOnboardingTool];

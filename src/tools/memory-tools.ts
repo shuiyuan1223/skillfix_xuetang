@@ -6,13 +6,18 @@
 
 import { getMemoryManager } from "../memory/index.js";
 import { getUserUuid } from "../utils/config.js";
+import type { PHATool } from "./types.js";
 
-export const memorySearchTool = {
+export const memorySearchTool: PHATool<{ query: string; maxResults?: number }> = {
   name: "memory_search",
   description:
     "Search the user's memory. Use when you need to recall past conversations, health history, or preferences. Returns matching memory snippets with relevance scores.",
-  parameters: {
-    type: "object" as const,
+  displayName: "搜索记忆",
+  category: "memory",
+  icon: "search",
+  label: "Memory Search",
+  inputSchema: {
+    type: "object",
     properties: {
       query: {
         type: "string",
@@ -39,12 +44,16 @@ export const memorySearchTool = {
   },
 };
 
-export const memorySaveTool = {
+export const memorySaveTool: PHATool<{ content: string }> = {
   name: "memory_save",
   description:
     "Save important information to the user's long-term memory (MEMORY.md). Use when the user mentions important health info, preferences, or key findings during conversation.",
-  parameters: {
-    type: "object" as const,
+  displayName: "保存记忆",
+  category: "memory",
+  icon: "save",
+  label: "Memory Save",
+  inputSchema: {
+    type: "object",
     properties: {
       content: {
         type: "string",
@@ -64,12 +73,16 @@ export const memorySaveTool = {
   },
 };
 
-export const dailyLogTool = {
+export const dailyLogTool: PHATool<{ content: string }> = {
   name: "daily_log",
   description:
     "Record today's conversation highlights to the daily log. Call before the conversation ends or when important findings arise, to save a summary of health-related discussion.",
-  parameters: {
-    type: "object" as const,
+  displayName: "每日记录",
+  category: "memory",
+  icon: "calendar",
+  label: "Daily Log",
+  inputSchema: {
+    type: "object",
     properties: {
       content: {
         type: "string",

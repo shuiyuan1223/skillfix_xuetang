@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { getPromptsDir } from "../tools/prompt-tools.js";
+import { globalRegistry } from "../tools/index.js";
 
 /**
  * Load all prompt files from src/prompts/ and concatenate in order.
@@ -27,6 +28,18 @@ export function loadAllPrompts(): string {
 
   // Load priority files first
   for (const name of ordered) {
+    if (name === "TOOLS.md" && !files.includes(name)) {
+      // Auto-generate TOOLS.md from registry if file doesn't exist
+      const toolsPrompt = globalRegistry.generateToolsPrompt([
+        "health",
+        "memory",
+        "skill",
+        "config",
+        "profile",
+      ]);
+      if (toolsPrompt) sections.push(toolsPrompt);
+      continue;
+    }
     if (files.includes(name)) {
       const content = readFileSync(join(dir, name), "utf-8").trim();
       if (content) sections.push(content);

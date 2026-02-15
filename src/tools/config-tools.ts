@@ -6,16 +6,21 @@
  */
 
 import { loadConfig, saveConfig, PROVIDER_CONFIGS, listAllModelRefs } from "../utils/config.js";
+import type { PHATool } from "./types.js";
 
 /**
  * MCP Tool: get_config
  * Returns the current config (with API key masked).
  */
-export const getConfigTool = {
+export const getConfigTool: PHATool<{ section?: string }> = {
   name: "get_config",
   description: "Read the current PHA configuration (.pha/config.json). API keys are masked.",
-  parameters: {
-    type: "object" as const,
+  displayName: "读取配置",
+  category: "config",
+  icon: "settings",
+  label: "Get Config",
+  inputSchema: {
+    type: "object",
     properties: {
       section: {
         type: "string",
@@ -65,14 +70,18 @@ export const getConfigTool = {
  * MCP Tool: update_config
  * Updates specific config fields.
  */
-export const updateConfigTool = {
+export const updateConfigTool: PHATool<{ updates: Record<string, unknown> }> = {
   name: "update_config",
   description:
     "Update PHA configuration fields. Changes are written to .pha/config.json immediately. " +
     "Use dot-notation paths like 'llm.provider', 'gateway.port', 'dataSources.type'. " +
     "Available LLM providers: anthropic, openai, google, openrouter, groq, mistral, xai.",
-  parameters: {
-    type: "object" as const,
+  displayName: "更新配置",
+  category: "config",
+  icon: "settings",
+  label: "Update Config",
+  inputSchema: {
+    type: "object",
     properties: {
       updates: {
         type: "object",
@@ -120,11 +129,15 @@ export const updateConfigTool = {
  * MCP Tool: list_providers
  * Lists available LLM providers with their details.
  */
-export const listProvidersTool = {
+export const listProvidersTool: PHATool<Record<string, never>> = {
   name: "list_providers",
   description:
     "List all supported LLM providers with their default models and environment variable names.",
-  parameters: { type: "object" as const, properties: {} },
+  displayName: "列出提供商",
+  category: "config",
+  icon: "settings",
+  label: "List Providers",
+  inputSchema: { type: "object", properties: {} },
   execute: async () => {
     const config = loadConfig();
     const modelRefs = listAllModelRefs(config);

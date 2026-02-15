@@ -5,5 +5,4 @@
  */
 
 export * from "./pha-agent.js";
-export * from "./tools.js";
 export * from "./system-prompt.js";

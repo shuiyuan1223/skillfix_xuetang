@@ -6,6 +6,7 @@
 
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { getConfiguredDataSource, resetCachedDataSource } from "../data-sources/index.js";
+import type { PHATool } from "./types.js";
 
 // Current data source (uses configuration-based source by default)
 let dataSource: HealthDataSource | null = null;
@@ -28,11 +29,16 @@ export function resetDataSource(): void {
 
 // Tool definitions for pi-agent
 
-export const getHealthDataTool = {
+export const getHealthDataTool: PHATool<{ date: string }> = {
   name: "get_health_data",
   description:
     "Retrieve health metrics for a given date. Returns steps, calories, activeMinutes, distance. Call this when the user asks about steps, activity, or exercise.",
-  parameters: {
+  displayName: "健康数据",
+  category: "health" as const,
+  icon: "activity",
+  sessionBound: true,
+  label: "Get Health Data",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -53,11 +59,17 @@ export const getHealthDataTool = {
   },
 };
 
-export const getHeartRateTool = {
+export const getHeartRateTool: PHATool<{ date: string }> = {
   name: "get_heart_rate",
   description:
     "Retrieve heart rate data for a given date. Returns restingAvg, maxToday, minToday, and hourly readings. Call this when the user asks about heart rate.",
-  parameters: {
+  displayName: "心率数据",
+  category: "health" as const,
+  icon: "heart-pulse",
+  companionSkill: "heart-monitor",
+  sessionBound: true,
+  label: "Get Heart Rate",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -78,11 +90,17 @@ export const getHeartRateTool = {
   },
 };
 
-export const getSleepTool = {
+export const getSleepTool: PHATool<{ date: string }> = {
   name: "get_sleep",
   description:
     "Retrieve sleep data for a given date. Returns durationHours, qualityScore, bedTime, wakeTime, and stages (deep/light/rem/awake). Call this when the user asks about sleep or rest.",
-  parameters: {
+  displayName: "睡眠数据",
+  category: "health" as const,
+  icon: "moon",
+  companionSkill: "sleep-coach",
+  sessionBound: true,
+  label: "Get Sleep",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -110,11 +128,17 @@ export const getSleepTool = {
   },
 };
 
-export const getWorkoutsTool = {
+export const getWorkoutsTool: PHATool<{ date: string }> = {
   name: "get_workouts",
   description:
     "Retrieve workout records for a given date. Returns type, durationMinutes, caloriesBurned, distanceKm, avgHeartRate. Call this when the user asks about workouts or exercise.",
-  parameters: {
+  displayName: "运动数据",
+  category: "health" as const,
+  icon: "activity",
+  companionSkill: "workout-tracker",
+  sessionBound: true,
+  label: "Get Workouts",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -136,11 +160,17 @@ export const getWorkoutsTool = {
   },
 };
 
-export const getWeeklySummaryTool = {
+export const getWeeklySummaryTool: PHATool<{}> = {
   name: "get_weekly_summary",
   description:
     "Retrieve a 7-day health summary. Returns daily steps, total/average steps, daily sleep hours, and average sleep. Call this when the user asks about their week or recent days.",
-  parameters: {
+  displayName: "周报汇总",
+  category: "health" as const,
+  icon: "calendar",
+  companionSkill: "weekly-review",
+  sessionBound: true,
+  label: "Get Weekly Summary",
+  inputSchema: {
     type: "object" as const,
     properties: {},
   },
@@ -178,11 +208,17 @@ export const getWeeklySummaryTool = {
   },
 };
 
-export const getStressTool = {
+export const getStressTool: PHATool<{ date: string }> = {
   name: "get_stress",
   description:
     "Retrieve stress data for a given date. Returns current stress level (1-99), average, max, min, and readings throughout the day. Call this when the user asks about stress or mental load.",
-  parameters: {
+  displayName: "压力数据",
+  category: "health" as const,
+  icon: "brain",
+  companionSkill: "stress-management",
+  sessionBound: true,
+  label: "Get Stress",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -210,11 +246,17 @@ export const getStressTool = {
   },
 };
 
-export const getSpO2Tool = {
+export const getSpO2Tool: PHATool<{ date: string }> = {
   name: "get_spo2",
   description:
     "Retrieve blood oxygen (SpO2) data for a given date. Returns current SpO2 percentage, average, max, min, and readings. Call this when the user asks about blood oxygen or oxygen saturation.",
-  parameters: {
+  displayName: "血氧数据",
+  category: "health" as const,
+  icon: "wind",
+  companionSkill: "blood-oxygen",
+  sessionBound: true,
+  label: "Get SpO2",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -238,11 +280,16 @@ export const getSpO2Tool = {
   },
 };
 
-export const getHealthTrendsTool = {
+export const getHealthTrendsTool: PHATool<{ period: string; metrics?: string }> = {
   name: "get_health_trends",
   description:
     "Retrieve long-term health trends for weeks, months, or years. Returns aggregated daily data for steps, sleep, and heart rate over the requested period. Use this for trend analysis, progress tracking, and pattern recognition over extended periods. Supports up to 2 years of history.",
-  parameters: {
+  displayName: "健康趋势",
+  category: "health" as const,
+  icon: "trending-up",
+  sessionBound: true,
+  label: "Get Health Trends",
+  inputSchema: {
     type: "object" as const,
     properties: {
       period: {
@@ -385,11 +432,17 @@ function aggregateWeekly<T extends { date: string }, R>(
     });
 }
 
-export const getBloodPressureTool = {
+export const getBloodPressureTool: PHATool<{ date: string }> = {
   name: "get_blood_pressure",
   description:
     "Retrieve blood pressure data for a given date. Returns systolic/diastolic readings, averages, and individual measurements. Call this when the user asks about blood pressure or hypertension.",
-  parameters: {
+  displayName: "血压数据",
+  category: "health" as const,
+  icon: "heart",
+  companionSkill: "blood-pressure",
+  sessionBound: true,
+  label: "Get Blood Pressure",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -416,11 +469,17 @@ export const getBloodPressureTool = {
   },
 };
 
-export const getBloodGlucoseTool = {
+export const getBloodGlucoseTool: PHATool<{ date: string }> = {
   name: "get_blood_glucose",
   description:
     "Retrieve blood glucose data for a given date. Returns glucose readings in mmol/L with average, max, min. Call this when the user asks about blood sugar or diabetes.",
-  parameters: {
+  displayName: "血糖数据",
+  category: "health" as const,
+  icon: "flame",
+  companionSkill: "blood-sugar",
+  sessionBound: true,
+  label: "Get Blood Glucose",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -447,11 +506,17 @@ export const getBloodGlucoseTool = {
   },
 };
 
-export const getBodyCompositionTool = {
+export const getBodyCompositionTool: PHATool<{ date: string }> = {
   name: "get_body_composition",
   description:
     "Retrieve body composition data including weight, height, BMI, and body fat rate. Uses 30-day lookback to find the latest measurements. Call this when the user asks about weight, BMI, or body fat.",
-  parameters: {
+  displayName: "体成分数据",
+  category: "health" as const,
+  icon: "user",
+  companionSkill: "weight-management",
+  sessionBound: true,
+  label: "Get Body Composition",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -478,11 +543,16 @@ export const getBodyCompositionTool = {
   },
 };
 
-export const getBodyTemperatureTool = {
+export const getBodyTemperatureTool: PHATool<{ date: string }> = {
   name: "get_body_temperature",
   description:
     "Retrieve body temperature data for a given date. Returns temperature readings in Celsius with average, max, min. Call this when the user asks about body temperature or fever.",
-  parameters: {
+  displayName: "体温数据",
+  category: "health" as const,
+  icon: "stethoscope",
+  sessionBound: true,
+  label: "Get Body Temperature",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -509,11 +579,17 @@ export const getBodyTemperatureTool = {
   },
 };
 
-export const getNutritionTool = {
+export const getNutritionTool: PHATool<{ date: string }> = {
   name: "get_nutrition",
   description:
     "Retrieve nutrition and diet data for a given date. Returns total calories, macronutrients (protein, fat, carbs), water intake, and individual meals. Call this when the user asks about nutrition, diet, or calorie intake.",
-  parameters: {
+  displayName: "营养数据",
+  category: "health" as const,
+  icon: "flame",
+  companionSkill: "nutrition",
+  sessionBound: true,
+  label: "Get Nutrition",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -540,11 +616,16 @@ export const getNutritionTool = {
   },
 };
 
-export const getMenstrualCycleTool = {
+export const getMenstrualCycleTool: PHATool<{ date: string }> = {
   name: "get_menstrual_cycle",
   description:
     "Retrieve menstrual cycle data. Returns cycle day, phase, period start date, and cycle records. Only call this when the user explicitly asks about menstrual cycle, period, or ovulation.",
-  parameters: {
+  displayName: "月经周期",
+  category: "health" as const,
+  icon: "calendar",
+  sessionBound: true,
+  label: "Get Menstrual Cycle",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -571,11 +652,16 @@ export const getMenstrualCycleTool = {
   },
 };
 
-export const getVO2MaxTool = {
+export const getVO2MaxTool: PHATool<{ date: string }> = {
   name: "get_vo2max",
   description:
     "Retrieve VO2 Max data for a given date. Returns VO2 Max value in mL/kg/min and fitness level. Call this when the user asks about cardiorespiratory fitness or VO2 Max.",
-  parameters: {
+  displayName: "最大摄氧量",
+  category: "health" as const,
+  icon: "activity",
+  sessionBound: true,
+  label: "Get VO2 Max",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -602,11 +688,17 @@ export const getVO2MaxTool = {
   },
 };
 
-export const getEmotionTool = {
+export const getEmotionTool: PHATool<{ date: string }> = {
   name: "get_emotion",
   description:
     "Retrieve emotion/mood data for a given date. Returns current emotion, mood score, and readings throughout the day. Call this when the user asks about mood or emotional state.",
-  parameters: {
+  displayName: "情绪数据",
+  category: "health" as const,
+  icon: "sparkles",
+  companionSkill: "stress-management",
+  sessionBound: true,
+  label: "Get Emotion",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {
@@ -633,11 +725,17 @@ export const getEmotionTool = {
   },
 };
 
-export const getHRVTool = {
+export const getHRVTool: PHATool<{ date: string }> = {
   name: "get_hrv",
   description:
     "Retrieve HRV (Heart Rate Variability) data for a given date. Returns RMSSD, average, max, min, and hourly readings. Call this when the user asks about HRV or autonomic nervous system.",
-  parameters: {
+  displayName: "心率变异性",
+  category: "health" as const,
+  icon: "heart-pulse",
+  companionSkill: "heart-monitor",
+  sessionBound: true,
+  label: "Get HRV",
+  inputSchema: {
     type: "object" as const,
     properties: {
       date: {

@@ -91,6 +91,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
     [
       { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
       { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
+      { id: "settings/tools", label: t("nav.tools"), icon: "puzzle" },
       { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
       { id: "settings/logs", label: t("nav.logs"), icon: "bar-chart" },
       { id: "settings/general", label: t("nav.settings"), icon: "settings" },
@@ -1138,6 +1139,77 @@ export function generateSkillsPage(data: {
 
   const root = ui.column([header, scopeTabs], { gap: 0 });
 
+  return ui.build(root);
+}
+
+// ============================================================================
+// Tools Page Generator
+// ============================================================================
+
+interface ToolPageEntry {
+  name: string;
+  displayName: string;
+  description: string;
+  category: string;
+  icon?: string;
+  companionSkill?: string;
+}
+
+export function generateToolsPage(data: {
+  tools: ToolPageEntry[];
+  selectedCategory?: string;
+}): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+
+  // Header
+  const title = ui.text(t("nav.tools"), "h2");
+  const subtitle = ui.text(`${data.tools.length} tools registered`, "caption");
+  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+
+  // Category tabs
+  const categories = [...new Set(data.tools.map((t) => t.category))].sort();
+  const activeCategory = data.selectedCategory || "all";
+
+  const tabDefs = [
+    { id: "all", label: `All (${data.tools.length})` },
+    ...categories.map((c) => ({
+      id: c,
+      label: `${c} (${data.tools.filter((t) => t.category === c).length})`,
+    })),
+  ];
+
+  const filteredTools =
+    activeCategory === "all" ? data.tools : data.tools.filter((t) => t.category === activeCategory);
+
+  // Tools table
+  const rows = filteredTools.map((t) => ({
+    name: t.name,
+    displayName: t.displayName,
+    description: t.description,
+    category: t.category,
+    skill: t.companionSkill || "-",
+  }));
+
+  const table = ui.dataTable(
+    [
+      { key: "name", label: "Tool Name", sortable: true },
+      { key: "displayName", label: "Display Name", sortable: true },
+      { key: "description", label: "Description" },
+      { key: "category", label: "Category", render: "badge" },
+      { key: "skill", label: "Skill" },
+    ],
+    rows
+  );
+
+  const tableCard = ui.card([table], { padding: 20 });
+
+  // Build tab content
+  const tabContentIds: Record<string, string> = {};
+  tabContentIds[activeCategory] = ui.column([tableCard], { gap: 16, padding: 24 });
+
+  const tabs = ui.tabs(tabDefs, activeCategory, tabContentIds);
+
+  const root = ui.column([header, tabs], { gap: 0 });
   return ui.build(root);
 }
 

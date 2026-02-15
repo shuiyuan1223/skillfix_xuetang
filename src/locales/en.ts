@@ -13,6 +13,7 @@ export const en: LocaleMessages = {
     memory: "Memory",
     prompts: "Prompts",
     skills: "Skills",
+    tools: "Tools",
     evolution: "Evolution",
     integrations: "Integrations",
     systemAgent: "System Agent",

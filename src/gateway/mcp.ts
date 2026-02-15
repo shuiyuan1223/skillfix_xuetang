@@ -1,13 +1,12 @@
 /**
  * MCP (Model Context Protocol) Handler
  *
- * Exposes health tools via MCP protocol.
+ * Thin wrapper around globalRegistry for legacy REST endpoints.
+ * The primary MCP interface is now mcp-server.ts (JSON-RPC 2.0).
  */
 
-import { healthTools } from "../tools/health-data.js";
-import { gitTools } from "../tools/git-tools.js";
-import { evolutionTools } from "../tools/evolution-tools.js";
-import { configTools } from "../tools/config-tools.js";
+import { globalRegistry } from "../tools/index.js";
+import type { MCPToolResult } from "../tools/types.js";
 import { getRemoteMCPToolDefinitions } from "../services/remote-mcp-client.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -30,50 +29,20 @@ export interface MCPToolCall {
   arguments: Record<string, unknown>;
 }
 
-// MCP Tool Result
-export interface MCPToolResult {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-}
+// MCPToolResult is imported from tools/types.ts and re-exported
+export type { MCPToolResult } from "../tools/types.js";
 
 /**
- * MCP Handler - Handles MCP protocol requests
+ * MCP Handler - Handles MCP protocol requests via legacy REST endpoints.
+ * Delegates to globalRegistry for tool listing and execution.
  */
 export class MCPHandler {
-  private tools: Map<
-    string,
-    { name: string; description: string; parameters: any; execute: (args: any) => Promise<any> }
-  > = new Map();
-
   /** Remote tool definitions loaded lazily */
   private remoteToolDefs: MCPTool[] = [];
   /** Remote tool executors keyed by tool name */
   private remoteToolExecutors: Map<string, (args: Record<string, unknown>) => Promise<unknown>> =
     new Map();
   private remoteToolsLoaded = false;
-
-  constructor() {
-    // Register all health tools
-    for (const tool of healthTools) {
-      this.tools.set(tool.name, tool);
-    }
-    // Register git tools
-    for (const tool of gitTools) {
-      this.tools.set(tool.name, tool);
-    }
-    // Register evolution tools
-    for (const tool of evolutionTools) {
-      this.tools.set(tool.name, tool);
-    }
-    // Register config tools
-    for (const tool of configTools) {
-      this.tools.set(tool.name, tool);
-    }
-  }
-
-  private get allTools() {
-    return [...healthTools, ...gitTools, ...evolutionTools, ...configTools];
-  }
 
   /**
    * Load remote MCP tool definitions (called once lazily).
@@ -91,7 +60,6 @@ export class MCPHandler {
       for (const at of agentTools) {
         this.remoteToolExecutors.set(at.name, async (args) => {
           const result = await at.execute("mcp-call", args);
-          // Extract text from AgentToolResult
           if (result.content && result.content.length > 0) {
             const text = result.content[0];
             if (typeof text === "object" && "text" in text) {
@@ -129,17 +97,7 @@ export class MCPHandler {
    */
   async listTools(): Promise<MCPTool[]> {
     await this.ensureRemoteTools();
-
-    const local = this.allTools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: {
-        type: "object" as const,
-        properties: tool.parameters.properties,
-        required: "required" in tool.parameters ? (tool.parameters as any).required : undefined,
-      },
-    }));
-
+    const local = globalRegistry.listTools() as MCPTool[];
     return [...local, ...this.remoteToolDefs];
   }
 
@@ -147,25 +105,9 @@ export class MCPHandler {
    * Call a tool
    */
   async callTool(call: MCPToolCall): Promise<MCPToolResult> {
-    // Check local tools first
-    const tool = this.tools.get(call.name);
-    if (tool) {
-      try {
-        const result = await tool.execute(call.arguments as any);
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+    // Check local registry first
+    if (globalRegistry.has(call.name)) {
+      return globalRegistry.callTool(call.name, call.arguments);
     }
 
     // Check remote tools

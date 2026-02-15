@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from "fs";
 import { join } from "path";
 import { findProjectRoot } from "../utils/config.js";
+import type { PHATool } from "./types.js";
 
 const MEMORY_DIR = "system-agent";
 
@@ -56,12 +57,16 @@ export function appendEvolutionLog(entry: string): void {
 // Memory Read Tool
 // ========================================================================
 
-export const systemMemoryReadTool = {
+export const systemMemoryReadTool: PHATool<{ file: string }> = {
   name: "system_memory_read",
   description:
     "Read a SystemAgent memory file. Available files: memory.md (general notes), evolution-log.md (evolution history), tool-wishlist.md (desired tool improvements), experience.md (accumulated experience).",
-  parameters: {
-    type: "object" as const,
+  displayName: "读取系统记忆",
+  category: "system",
+  icon: "file-text",
+  label: "Read System Memory",
+  inputSchema: {
+    type: "object",
     properties: {
       file: {
         type: "string",
@@ -87,12 +92,16 @@ export const systemMemoryReadTool = {
 // Memory Write Tool
 // ========================================================================
 
-export const systemMemoryWriteTool = {
+export const systemMemoryWriteTool: PHATool<{ file: string; content: string }> = {
   name: "system_memory_write",
   description:
     "Write or overwrite a SystemAgent memory file. Use this to save structured notes, update experience summaries, or rewrite memory files.",
-  parameters: {
-    type: "object" as const,
+  displayName: "写入系统记忆",
+  category: "system",
+  icon: "save",
+  label: "Write System Memory",
+  inputSchema: {
+    type: "object",
     properties: {
       file: {
         type: "string",
@@ -121,12 +130,16 @@ export const systemMemoryWriteTool = {
 // Memory Append Tool
 // ========================================================================
 
-export const systemMemoryAppendTool = {
+export const systemMemoryAppendTool: PHATool<{ file: string; entry: string }> = {
   name: "system_memory_append",
   description:
     "Append an entry to a SystemAgent memory file. Use this for adding new evolution log entries, tool suggestions, or experience notes without overwriting existing content.",
-  parameters: {
-    type: "object" as const,
+  displayName: "追加系统记忆",
+  category: "system",
+  icon: "save",
+  label: "Append System Memory",
+  inputSchema: {
+    type: "object",
     properties: {
       file: {
         type: "string",
@@ -158,12 +171,16 @@ export const systemMemoryAppendTool = {
 // Memory Search Tool
 // ========================================================================
 
-export const systemMemorySearchTool = {
+export const systemMemorySearchTool: PHATool<{ query: string }> = {
   name: "system_memory_search",
   description:
     "Search across all SystemAgent memory files for a keyword or phrase. Returns matching sections.",
-  parameters: {
-    type: "object" as const,
+  displayName: "搜索系统记忆",
+  category: "system",
+  icon: "search",
+  label: "Search System Memory",
+  inputSchema: {
+    type: "object",
     properties: {
       query: {
         type: "string",
