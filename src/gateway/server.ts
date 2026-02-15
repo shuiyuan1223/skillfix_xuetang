@@ -79,7 +79,13 @@ function findLastTextIdx(parts: MessagePart[]): number {
   return -1;
 }
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
-import { loadMemorySummary, getRecentDailyLogs, getUserDir } from "../memory/profile.js";
+import {
+  loadMemorySummary,
+  getRecentDailyLogs,
+  getUserDir,
+  ensureUserDir,
+  ensureSystemAgentFiles,
+} from "../memory/profile.js";
 import {
   listPromptsTool,
   getPromptTool,
@@ -1034,6 +1040,12 @@ export class GatewaySession {
       this.dataSource = getDataSource();
     }
 
+    // Ensure all OpenClaw user-level files exist for this user + system agent
+    if (this.userUuid) {
+      ensureUserDir(this.userUuid);
+    }
+    ensureSystemAgentFiles();
+
     // Load persisted chat history from JSONL
     this.loadPersistedMessages();
   }
@@ -1376,45 +1388,74 @@ export class GatewaySession {
     await this.handleNavigate(this.currentView, send);
   }
 
+  /** OpenClaw standard: 5 system-level + 3 user-level = 8 files */
+  private static readonly OPENCLAW_SYSTEM_FILES = [
+    "SOUL",
+    "IDENTITY",
+    "AGENTS",
+    "TOOLS",
+    "HEARTBEAT",
+  ];
+  private static readonly OPENCLAW_USER_FILES = ["USER", "MEMORY", "BOOTSTRAP"];
+
   /**
-   * List user-level .md files for the current scope.
-   * PHA scope: .pha/users/{uuid}/ — USER.md, MEMORY.md, BOOTSTRAP.md
-   * System scope: .pha/system-agent/ — memory.md, evolution-log.md, experience.md
+   * Build the fixed 8-file list for OpenClaw alignment.
+   * Files that don't exist yet still appear with exists=false.
    */
-  private listUserLevelFiles(): Array<{
+  private buildOpenClaw8Files(): Array<{
     name: string;
     filename: string;
     title: string;
     lines: number;
+    source: "system" | "user";
+    exists: boolean;
   }> {
-    let dir: string;
+    const systemDir =
+      this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha";
+    let userDir: string;
     if (this.promptsScope === "system") {
-      dir = join(getStateDir(), "system-agent");
+      userDir = join(getStateDir(), "system-agent");
     } else {
       const uuid = this.userUuid || getUserUuid();
-      if (!uuid) return [];
-      dir = getUserDir(uuid);
+      userDir = getUserDir(uuid);
     }
 
-    if (!existsSync(dir)) return [];
-
-    try {
-      const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
-      return files.map((f) => {
-        const filePath = join(dir, f);
+    const readFileInfo = (filePath: string) => {
+      if (!existsSync(filePath)) return { exists: false, title: "—", lines: 0 };
+      try {
         const content = readFileSync(filePath, "utf-8");
-        const lines = content.split("\n");
-        const title = lines.find((l) => l.startsWith("# "))?.slice(2) || f;
-        return {
-          name: f.replace(".md", ""),
-          filename: f,
-          title,
-          lines: lines.length,
-        };
-      });
-    } catch {
-      return [];
+        const contentLines = content.split("\n");
+        const title = contentLines.find((l) => l.startsWith("# "))?.slice(2) || "";
+        return { exists: true, title, lines: contentLines.length };
+      } catch {
+        return { exists: false, title: "—", lines: 0 };
+      }
+    };
+
+    const result: Array<{
+      name: string;
+      filename: string;
+      title: string;
+      lines: number;
+      source: "system" | "user";
+      exists: boolean;
+    }> = [];
+
+    // 5 system-level files
+    for (const name of GatewaySession.OPENCLAW_SYSTEM_FILES) {
+      const filename = `${name}.md`;
+      const info = readFileInfo(join(systemDir, filename));
+      result.push({ name, filename, source: "system", ...info });
     }
+
+    // 3 user-level files
+    for (const name of GatewaySession.OPENCLAW_USER_FILES) {
+      const filename = `${name}.md`;
+      const info = readFileInfo(join(userDir, filename));
+      result.push({ name, filename, source: "user", ...info });
+    }
+
+    return result;
   }
 
   /**
@@ -1584,7 +1625,7 @@ export class GatewaySession {
           generatePage(
             view,
             generatePromptsPage({
-              prompts: [],
+              files: [],
               editing: false,
               loading: true,
               scope: this.promptsScope,
@@ -1592,17 +1633,14 @@ export class GatewaySession {
           )
         );
 
-        // Always set prompts dir based on scope
+        // Set prompts dir for git history lookups
         setPromptsDir(
           this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
         );
 
-        // Fetch data async
         try {
-          const promptsResult = await listPromptsTool.execute({});
-
-          // List user-level files
-          const userFiles = this.listUserLevelFiles();
+          // Build fixed 8-file list (OpenClaw standard)
+          const files = this.buildOpenClaw8Files();
 
           let content: string | undefined;
           let commits:
@@ -1621,6 +1659,9 @@ export class GatewaySession {
               const filePath = this.getUserFilePath(this.selectedPrompt);
               if (filePath && existsSync(filePath)) {
                 content = this.editBuffer ?? readFileSync(filePath, "utf-8");
+              } else {
+                // File doesn't exist yet — open empty editor
+                content = this.editBuffer ?? "";
               }
             } else {
               const promptResult = await getPromptTool.execute({ name: this.selectedPrompt });
@@ -1642,8 +1683,7 @@ export class GatewaySession {
             generatePage(
               view,
               generatePromptsPage({
-                prompts: promptsResult.prompts || [],
-                userFiles,
+                files,
                 selectedPrompt: this.selectedPrompt || undefined,
                 selectedSource: this.selectedPromptSource,
                 content,
@@ -1656,7 +1696,6 @@ export class GatewaySession {
         } catch (e) {
           log.error("Prompts load error", { error: e });
         } finally {
-          // Always restore to default PHA dir
           setPromptsDir("src/prompts/pha");
         }
         return;
@@ -2607,18 +2646,11 @@ export class GatewaySession {
         root_id: toast.root_id,
       });
     }
-    // Prompts actions
-    else if (action === "select_prompt" && payload?.row) {
-      const row = payload.row as { name: string };
+    // Prompts actions — unified select for OpenClaw 8 files
+    else if (action === "select_file" && payload?.row) {
+      const row = payload.row as { name: string; source: string };
       this.selectedPrompt = row.name;
-      this.selectedPromptSource = "system";
-      this.editingPrompt = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/prompts", send);
-    } else if (action === "select_user_file" && payload?.row) {
-      const row = payload.row as { name: string };
-      this.selectedPrompt = row.name;
-      this.selectedPromptSource = "user";
+      this.selectedPromptSource = (row.source === "user" ? "user" : "system") as "system" | "user";
       this.editingPrompt = false;
       this.editBuffer = null;
       await this.handleNavigate("settings/prompts", send);
@@ -2634,9 +2666,12 @@ export class GatewaySession {
       this.editBuffer = payload.value as string;
     } else if (action === "save_prompt" && this.selectedPrompt && this.editBuffer) {
       if (this.selectedPromptSource === "user") {
-        // Save user-level file directly (no git commit)
+        // Save user-level file directly (no git commit), ensure dir exists
         const filePath = this.getUserFilePath(this.selectedPrompt);
         if (filePath) {
+          const { mkdirSync } = await import("fs");
+          const { dirname } = await import("path");
+          mkdirSync(dirname(filePath), { recursive: true });
           writeFileSync(filePath, this.editBuffer, "utf-8");
         }
       } else {

@@ -23,8 +23,8 @@ export function getUserDir(uuid: string): string {
 }
 
 /**
- * Ensure user directory exists.
- * For new users, also creates BOOTSTRAP.md for first-conversation guidance.
+ * Ensure user directory exists with all OpenClaw user-level files.
+ * Creates USER.md, MEMORY.md, BOOTSTRAP.md if they don't exist.
  */
 export function ensureUserDir(uuid: string): string {
   const userDir = getUserDir(uuid);
@@ -33,13 +33,110 @@ export function ensureUserDir(uuid: string): string {
     mkdirSync(userDir, { recursive: true });
     mkdirSync(join(userDir, "memory"), { recursive: true });
     mkdirSync(join(userDir, "sessions"), { recursive: true });
+  }
 
-    // New user — create BOOTSTRAP.md for first-conversation guidance
-    const bootstrapPath = join(userDir, "BOOTSTRAP.md");
-    writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE);
+  // Ensure all 3 OpenClaw user-level files exist
+  const userMdPath = join(userDir, "USER.md");
+  if (!existsSync(userMdPath)) {
+    // Check legacy PROFILE.md — migrate if exists
+    const legacyPath = join(userDir, "PROFILE.md");
+    if (existsSync(legacyPath)) {
+      // Copy legacy content to USER.md
+      writeFileSync(userMdPath, readFileSync(legacyPath, "utf-8"));
+    } else {
+      writeFileSync(userMdPath, generateProfileMd({}));
+    }
+  }
+
+  const memoryMdPath = join(userDir, "MEMORY.md");
+  if (!existsSync(memoryMdPath)) {
+    writeFileSync(
+      memoryMdPath,
+      "# MEMORY.md - 长期记忆\n\n_(Agent 会在对话中自动积累这部分内容。)_\n"
+    );
+  }
+
+  const bootstrapPath = join(userDir, "BOOTSTRAP.md");
+  if (!existsSync(bootstrapPath)) {
+    // Only create BOOTSTRAP for users that haven't been onboarded yet
+    // (i.e., USER.md is still the empty template)
+    const userContent = readFileSync(userMdPath, "utf-8");
+    const hasRealData = userContent.includes("昵称:") && !userContent.includes("{待收集}");
+    if (!hasRealData) {
+      writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE);
+    }
   }
 
   return userDir;
+}
+
+/**
+ * Ensure System Agent directory has all 3 OpenClaw user-level files.
+ */
+export function ensureSystemAgentFiles(): void {
+  const dir = join(getStateDir(), "system-agent");
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const userMdPath = join(dir, "USER.md");
+  if (!existsSync(userMdPath)) {
+    writeFileSync(
+      userMdPath,
+      [
+        "# USER.md - 关于系统 Agent",
+        "",
+        "## 身份",
+        "- 名称: PHA System Agent",
+        "- 类型: 系统运维与进化 Agent",
+        "- 职责: 管理 PHA 系统的持续改进",
+        "",
+        "## 配置",
+        "- 进化模式: 手动",
+        "- Benchmark 频率: 按需",
+        "",
+        "## 上下文",
+        "_(系统 Agent 的运行上下文，随时间积累。)_",
+        "",
+      ].join("\n")
+    );
+  }
+
+  const memoryMdPath = join(dir, "MEMORY.md");
+  if (!existsSync(memoryMdPath)) {
+    // If legacy memory.md exists, copy its content
+    const legacyPath = join(dir, "memory.md");
+    if (existsSync(legacyPath)) {
+      writeFileSync(memoryMdPath, readFileSync(legacyPath, "utf-8"));
+    } else {
+      writeFileSync(
+        memoryMdPath,
+        "# MEMORY.md - 系统 Agent 记忆\n\n_(系统 Agent 会在运行中自动积累这部分内容。)_\n"
+      );
+    }
+  }
+
+  const bootstrapPath = join(dir, "BOOTSTRAP.md");
+  if (!existsSync(bootstrapPath)) {
+    writeFileSync(
+      bootstrapPath,
+      [
+        "# BOOTSTRAP.md - 系统 Agent 初始化",
+        "",
+        "## 首次运行",
+        "",
+        "1. 检查系统状态（git status、构建状态）",
+        "2. 读取 evolution-log.md 了解历史进化记录",
+        "3. 运行 benchmark 获取当前基线分数",
+        "4. 记录初始状态到 MEMORY.md",
+        "",
+        "## 完成初始化后",
+        "",
+        "此文件可以被删除或保留作为参考。",
+        "",
+      ].join("\n")
+    );
+  }
 }
 
 /**

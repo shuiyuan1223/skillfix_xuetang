@@ -206,11 +206,11 @@ export interface LocaleMessages {
     title: string;
     subtitle: string;
     cardTitle: string;
-    userCardTitle: string;
     name: string;
     promptTitle: string;
     lines: string;
     versionHistory: string;
+    notCreated: string;
     tabPha: string;
     tabSystem: string;
   };

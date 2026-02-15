@@ -816,6 +816,8 @@ interface PromptInfo {
   filename: string;
   title: string;
   lines: number;
+  source: "system" | "user";
+  exists: boolean;
 }
 
 interface CommitInfo {
@@ -827,8 +829,8 @@ interface CommitInfo {
 }
 
 export function generatePromptsPage(data: {
-  prompts: PromptInfo[];
-  userFiles?: PromptInfo[];
+  /** All 8 OpenClaw files (system + user-level) in fixed order */
+  files: PromptInfo[];
   selectedPrompt?: string;
   selectedSource?: "system" | "user";
   content?: string;
@@ -863,58 +865,38 @@ export function generatePromptsPage(data: {
     return ui.build(root);
   }
 
-  // System prompts list
-  const promptRows = data.prompts.map((p) => ({
-    name: p.name,
-    title: p.title,
-    lines: p.lines,
-    source: "system",
-    actions: p.name === data.selectedPrompt && selectedSource === "system" ? "Selected" : "View",
-  }));
+  // Unified 8-file table (OpenClaw standard)
+  const rows = data.files.map((p) => {
+    const isSelected = p.name === data.selectedPrompt && p.source === selectedSource;
+    return {
+      name: p.name,
+      title: p.exists ? p.title : "—",
+      lines: p.exists ? p.lines : 0,
+      source: p.source,
+      status: !p.exists ? t("prompts.notCreated") : isSelected ? "Selected" : "View",
+    };
+  });
 
-  const promptsTable = ui.dataTable(
+  const filesTable = ui.dataTable(
     [
-      { key: "name", label: t("prompts.name"), sortable: true },
+      { key: "name", label: t("prompts.name"), sortable: false },
       { key: "title", label: t("prompts.promptTitle") },
       { key: "lines", label: t("prompts.lines") },
-      { key: "actions", label: "", render: "badge" },
+      { key: "status", label: "", render: "badge" },
     ],
-    promptRows,
-    { onRowClick: "select_prompt" }
+    rows,
+    { onRowClick: "select_file" }
   );
 
-  const promptsCard = ui.card([promptsTable], { title: t("prompts.cardTitle"), padding: 20 });
+  const filesCard = ui.card([filesTable], {
+    title: t("prompts.cardTitle"),
+    padding: 20,
+  });
 
-  const children: string[] = [promptsCard];
+  const children: string[] = [filesCard];
 
-  // User-level files list
-  if (data.userFiles && data.userFiles.length > 0) {
-    const userRows = data.userFiles.map((p) => ({
-      name: p.name,
-      title: p.title,
-      lines: p.lines,
-      source: "user",
-      actions: p.name === data.selectedPrompt && selectedSource === "user" ? "Selected" : "View",
-    }));
-
-    const userTable = ui.dataTable(
-      [
-        { key: "name", label: t("prompts.name"), sortable: true },
-        { key: "title", label: t("prompts.promptTitle") },
-        { key: "lines", label: t("prompts.lines") },
-        { key: "actions", label: "", render: "badge" },
-      ],
-      userRows,
-      { onRowClick: "select_user_file" }
-    );
-
-    const userCard = ui.card([userTable], { title: t("prompts.userCardTitle"), padding: 20 });
-    children.push(userCard);
-  }
-
-  // If a prompt is selected, show editor and history
+  // If a file is selected and has content, show editor and history
   if (data.selectedPrompt && data.content !== undefined) {
-    // Editor
     const editor = ui.codeEditor(data.content, {
       language: "markdown",
       readonly: !data.editing,
