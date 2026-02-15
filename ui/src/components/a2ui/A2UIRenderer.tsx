@@ -271,6 +271,8 @@ export function A2UIRenderer({
       itemStyle: { color: "rgb(var(--color-text))" },
     };
     const gradientId = `chart-grad-${c.id}`;
+    const dense = data.length > 15;
+    const dotStyle = dense ? false : { r: 3, fill: color };
 
     if (chartType === "bar") {
       return (
@@ -288,7 +290,7 @@ export function A2UIRenderer({
             <Tooltip {...tooltipStyle} cursor={{ fill: "currentColor", fillOpacity: 0.04 }} />
             <Bar dataKey={yKey} fill={color} fillOpacity={0.6} radius={[3, 3, 0, 0]} />
             <Area type="monotone" dataKey={yKey} fill={`url(#${gradientId})`} stroke="none" />
-            <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} dot={{ r: 3, fill: color }} strokeOpacity={0.8} />
+            <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} dot={dotStyle} strokeOpacity={0.8} />
           </ComposedChart>
         </ResponsiveContainer>
       );
@@ -308,7 +310,7 @@ export function A2UIRenderer({
             <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
             <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
             <Tooltip {...tooltipStyle} />
-            <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={{ r: 3, fill: color }} />
+            <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={dotStyle} />
           </AreaChart>
         </ResponsiveContainer>
       );
@@ -345,7 +347,7 @@ export function A2UIRenderer({
           <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
           <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
           <Tooltip {...tooltipStyle} />
-          <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={2.5} fill={`url(#${gradientId})`} dot={{ r: 4, fill: color }} />
+          <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={dense ? 1.5 : 2.5} fill={`url(#${gradientId})`} dot={dotStyle} />
         </AreaChart>
       </ResponsiveContainer>
     );

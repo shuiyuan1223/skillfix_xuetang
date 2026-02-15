@@ -68,7 +68,6 @@ export default {
         "status-pulse": "statusPulse 1.5s ease-in-out infinite",
         "skeleton-shimmer": "skeletonShimmer 1.5s infinite",
         "toast-slide-in": "toastSlideIn 0.4s ease-out",
-        "ring-draw": "ringDraw 1s ease-out forwards",
       },
       keyframes: {
         cardEntrance: {
@@ -97,9 +96,6 @@ export default {
         toastSlideIn: {
           from: { transform: "translateX(100%)", opacity: "0" },
           to: { transform: "translateX(0)", opacity: "1" },
-        },
-        ringDraw: {
-          from: { strokeDashoffset: "var(--circumference)" },
         },
       },
     },

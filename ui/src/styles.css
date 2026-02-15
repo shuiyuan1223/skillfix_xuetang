@@ -1383,14 +1383,8 @@ select:focus {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.15) !important;
 }
 
-/* ========== P2: Activity Ring Draw Animation ========== */
-.ring-fill {
-  animation: ring-draw 1.2s cubic-bezier(0.16, 1, 0.3, 1) backwards;
-}
-
-@keyframes ring-draw {
-  from { stroke-dashoffset: var(--ring-circ); }
-}
+/* Activity rings rely on transition (see base .ring-fill) for smooth updates.
+   No CSS animation — avoids re-draw on progressive dashboard reloads. */
 
 /* ========== P3: Send Button Hover ========== */
 .chat-send-btn {
