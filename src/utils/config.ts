@@ -469,6 +469,71 @@ function deriveModelName(modelId: string): string {
 }
 
 // ============================================================================
+// Legacy field sync (in-memory only, not persisted to file)
+// ============================================================================
+
+/**
+ * Derive config.llm and config.embedding in-memory from the unified model
+ * repository so that legacy code reading config.llm.* still works.
+ * These fields are NOT written to the config file.
+ */
+function syncLegacyFields(config: PHAConfig): void {
+  // Sync config.llm from agentModel + models.providers
+  if (config.agentModel && config.models?.providers) {
+    try {
+      const { provider, name } = parseModelRef(config.agentModel);
+      const providerCfg = config.models.providers[provider];
+      if (providerCfg) {
+        const modelDef = providerCfg.models.find((m) => m.name === name);
+        config.llm = {
+          provider: provider as LLMProvider,
+          modelId: modelDef?.model,
+          apiKey: providerCfg.apiKey,
+          baseUrl: providerCfg.baseUrl,
+        };
+      }
+    } catch {
+      // Keep DEFAULT_CONFIG.llm
+    }
+  }
+
+  // Sync config.embedding from embeddingModel + models.providers
+  if (config.embeddingModel && config.models?.providers) {
+    try {
+      const { provider, name } = parseModelRef(config.embeddingModel);
+      const providerCfg = config.models.providers[provider];
+      if (providerCfg) {
+        const modelDef = providerCfg.models.find((m) => m.name === name);
+        config.embedding = {
+          enabled: true,
+          model: modelDef?.model,
+        };
+      }
+    } catch {
+      // Keep whatever embedding was
+    }
+  } else if (!config.embeddingModel && config.models?.providers) {
+    // No embedding model ref = disabled
+    config.embedding = { enabled: false };
+  }
+}
+
+/**
+ * Strip legacy fields (llm, embedding, benchmarkModels) that are now derived
+ * from the unified model repository. Returns a clean copy for file persistence.
+ */
+function stripLegacyFieldsForSave(config: PHAConfig): Record<string, unknown> {
+  const copy = { ...config } as Record<string, any>;
+  // Only strip if we have the new format to derive from
+  if (copy.models?.providers && Object.keys(copy.models.providers).length > 0) {
+    delete copy.llm;
+    delete copy.embedding;
+    delete copy.benchmarkModels;
+  }
+  return copy;
+}
+
+// ============================================================================
 // Config load / save
 // ============================================================================
 
@@ -482,15 +547,24 @@ export function loadConfig(): PHAConfig {
     const content = fs.readFileSync(configPath, "utf-8");
     const loaded = JSON.parse(content);
     const config = { ...DEFAULT_CONFIG, ...loaded };
-    // Auto-migrate old format to new; persist if migration was performed
-    const migrated = migrateConfig(config);
-    if (migrated) {
+    // Auto-migrate old format to new
+    let needsSave = migrateConfig(config);
+    // Check if file still has legacy fields that should be stripped
+    if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
+      if ("llm" in loaded || "embedding" in loaded || "benchmarkModels" in loaded) {
+        needsSave = true;
+      }
+    }
+    if (needsSave) {
       try {
-        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+        const clean = stripLegacyFieldsForSave(config);
+        fs.writeFileSync(configPath, JSON.stringify(clean, null, 2));
       } catch {
         // Best-effort — don't fail loadConfig if write fails
       }
     }
+    // Derive legacy fields in-memory for backward compat
+    syncLegacyFields(config);
     return config;
   } catch {
     return { ...DEFAULT_CONFIG };
@@ -500,7 +574,10 @@ export function loadConfig(): PHAConfig {
 export function saveConfig(config: PHAConfig): void {
   ensureConfigDir();
   const configPath = getConfigPath();
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  const clean = stripLegacyFieldsForSave(config);
+  fs.writeFileSync(configPath, JSON.stringify(clean, null, 2));
+  // Re-sync in-memory legacy fields after save
+  syncLegacyFields(config);
 }
 
 // ============================================================================
