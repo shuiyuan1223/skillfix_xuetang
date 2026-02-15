@@ -1838,6 +1838,8 @@ export class GatewaySession {
     // Send updated chat UI immediately
     this.sendChatUpdate(send);
 
+    const chatMsgCountBefore = this.chatMessages.length;
+
     try {
       const agent = await this.getAgent();
 
@@ -1849,6 +1851,35 @@ export class GatewaySession {
       try {
         await agent.chat(content);
         await agent.getAgent().waitForIdle();
+
+        // Fallback: if handleAgentEvent didn't produce any assistant message,
+        // check the agent's internal messages for LLM errors
+        const hasNewAssistant = this.chatMessages
+          .slice(chatMsgCountBefore)
+          .some((m) => m.role === "assistant");
+        if (!hasNewAssistant) {
+          const agentMsgs = agent.getMessages();
+          const lastAgentMsg = agentMsgs[agentMsgs.length - 1] as any;
+          if (lastAgentMsg?.stopReason === "error" && lastAgentMsg?.errorMessage) {
+            const errContent = `⚠️ ${lastAgentMsg.errorMessage}`;
+            this.chatMessages.push({ role: "assistant", content: errContent });
+            this.persistMessage("chat", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: errContent,
+            });
+            log.warn("LLM error caught by fallback (not by event handler)", {
+              errorMessage: lastAgentMsg.errorMessage,
+            });
+          }
+        }
+
+        // Ensure streaming state is always cleaned up
+        if (this.isStreaming) {
+          this.isStreaming = false;
+          this.streamingContent = "";
+          this.sendChatUpdate(send);
+        }
 
         // Index this exchange for memory search
         if (this.userUuid) {
@@ -4283,7 +4314,7 @@ export class GatewaySession {
       case "message_update":
         // Stream partial content
         if (event.message.role === "assistant") {
-          const content = event.message.content;
+          const content = event.message.content || [];
           let text = "";
           for (const block of content) {
             if (block.type === "text") {
@@ -4298,7 +4329,7 @@ export class GatewaySession {
 
       case "message_end":
         if (event.message.role === "assistant") {
-          const content = event.message.content;
+          const content = event.message.content || [];
           let text = "";
 
           for (const block of content) {
@@ -4308,9 +4339,13 @@ export class GatewaySession {
           }
 
           // Check for error responses (API errors, region blocks, etc.)
-          if (!text.trim() && event.message.stopReason === "error") {
+          if (event.message.stopReason === "error") {
             const errorMsg = event.message.errorMessage || "Unknown error occurred";
-            const errContent = `⚠️ ${errorMsg}`;
+            log.error("LLM error in streaming path", {
+              errorMessage: errorMsg,
+              stopReason: event.message.stopReason,
+            });
+            const errContent = text.trim() ? `${text}\n\n⚠️ ${errorMsg}` : `⚠️ ${errorMsg}`;
             this.chatMessages.push({ role: "assistant", content: errContent });
             this.persistMessage("chat", {
               timestamp: Date.now(),
