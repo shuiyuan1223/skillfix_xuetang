@@ -50,18 +50,43 @@ export const myTool = {
   - tool_name: 工具的简短说明
   ```
 
-### 4. Chat Event Labels (optional)
+### 4. Frontend Tool Display Name
+
+- [ ] `ui/src/components/a2ui/A2UIRenderer.tsx` — In `TOOL_DISPLAY_NAMES`, add Chinese name:
+  ```typescript
+  const TOOL_DISPLAY_NAMES: Record<string, string> = {
+    // ... existing tools
+    tool_name: "工具中文名",
+  };
+  ```
+  This label is shown in the chat UI when the Agent calls the tool during SSE streaming.
+
+### 5. Chat Event Labels (optional)
 
 - [ ] `src/gateway/server.ts` — In `handleAgentEvent()`, add label to `memoryToolLabels` or similar:
   ```typescript
   tool_name: "icon 执行描述...",
   ```
 
-### 5. Verify
+### 6. Verify
 
 ```bash
 bun run check && bun test && bun run build
 ```
+
+## SSE Tool Call Event Flow
+
+When the Agent calls a tool during chat, the SSE stream sends these events in order:
+
+```
+ToolCallStart   → { toolCallId, toolCallName, ... }
+                   Frontend shows "正在调用 [TOOL_DISPLAY_NAMES[name]]..."
+ToolCallEnd     → { toolCallId }
+ToolCallResult  → { toolCallId, result }
+                   Frontend hides loading indicator
+```
+
+The frontend renders tool calls inline in the chat message using `TOOL_DISPLAY_NAMES` for user-friendly labels. Tools not in the mapping show the raw tool name.
 
 ## Key Patterns
 
@@ -69,3 +94,4 @@ bun run check && bun test && bun run build
 - Memory operations via `getMemoryManager()` singleton
 - Health data via `getDataSource()` singleton
 - Tool `execute` must return JSON-serializable result
+- Tool errors: Return `{ success: false, error: message }`, never throw

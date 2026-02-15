@@ -130,8 +130,11 @@ pha/
 │   └── data-sources/          # 数据源
 │       ├── interface.ts
 │       └── mock.ts
-├── ui/                        # Web UI (Lit Element)
-│   └── src/main.ts            # A2UI 渲染器
+├── ui/                        # Web UI (React)
+│   └── src/
+│       ├── App.tsx            # 主应用 (SSE + WebSocket)
+│       └── components/a2ui/
+│           └── A2UIRenderer.tsx  # A2UI 组件渲染器
 ├── dist/                      # 构建输出
 └── package.json
 ```
@@ -140,14 +143,14 @@ pha/
 
 | 任务 | 文件 |
 |------|------|
-| 添加新页面 | `src/gateway/pages.ts` → `src/gateway/server.ts` |
-| 添加 MCP 工具 | `src/tools/` → `src/agent/tools.ts` → `src/gateway/mcp.ts` |
-| 添加 Git 工具 | `src/tools/git-tools.ts` → `src/agent/git-agent-tools.ts` |
-| 修改进化实验室 | `src/gateway/evolution-lab.ts` → `src/gateway/server.ts` |
-| 修改 TUI | `src/commands/tui.ts` + `src/gateway/tui-renderer.ts` |
-| 修改 Web UI 组件 | `ui/src/main.ts` |
-| 修改 Agent 提示词 | `src/prompts/SOUL.md` |
-| 修改进化方法论 | `src/skills/evolution-driver/SKILL.md` |
+| 添加新页面 | `src/gateway/pages.ts` → `server.ts` handleNavigate + generateSidebar |
+| 添加 MCP 工具 | `src/tools/` → `src/agent/tools.ts` → `A2UIRenderer.tsx` TOOL_DISPLAY_NAMES |
+| 添加 Agent Skill | `src/skills/*/SKILL.md` (YAML frontmatter + Markdown body) |
+| 修改聊天流 | `server.ts` handleAgentEvent + `App.tsx` handleAGUIEvent |
+| 修改 Web UI 组件 | `ui/src/components/a2ui/A2UIRenderer.tsx` + `ui/src/lib/icons.tsx` |
+| 修改 TUI 渲染 | `src/gateway/tui-renderer.ts` |
+| 修改 Evolution Lab | `src/gateway/evolution-lab.ts` |
+| 修改 Agent 提示词 | `src/memory/soul.ts` DEFAULT_SOUL |
 
 ## 多人协作 (Trunk Based)
 
@@ -296,24 +299,23 @@ chore: 杂项
 ┌─────────────────────────────────────────────────────────┐
 │                  Frontend (Web / TUI)                    │
 │  - 纯渲染器，无业务逻辑                                   │
-└────────────────────────┬────────────────────────────────┘
-                         │ WebSocket (A2UI)
-                         ▼
+│  - Web: React A2UIRenderer / TUI: tui-renderer           │
+└────────────┬───────────────────────┬────────────────────┘
+             │ WebSocket /ws          │ POST /api/ag-ui (SSE)
+             │ (A2UI 页面/导航/弹窗)    │ (AG-UI 聊天事件流)
+             ▼                        ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    Gateway Server                        │
-│  - A2UI 页面生成                                         │
-│  - WebSocket 会话管理                                    │
-│  - MCP 工具调用                                          │
+│  - A2UI 页面生成 (pages.ts)                              │
+│  - WebSocket + SSE 双通道                                │
+│  - GatewaySession 管理聊天状态                            │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    PHA Agent                             │
 │  - pi-agent-core                                         │
-│  - MCP Tools (数据获取、操作执行)                          │
-│  - Skills (专家指导、评估框架、行为模式)                     │
-│                                                          │
-│  Tools = 手 (做事)    Skills = 脑 (判断)                  │
+│  - MCP Tools = 手 (做事)    Skills = 脑 (判断)            │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -363,14 +365,15 @@ PHA 支持两种前端形态，共享同一个 Gateway 和 A2UI 协议：
 
 | | Web UI | TUI |
 |---|--------|-----|
-| 框架 | Lit Element | pi-tui |
-| 入口 | `ui/src/main.ts` | `src/commands/tui.ts` |
-| 渲染器 | A2UI → HTML Components | A2UI → Terminal Widgets |
-| 连接 | WebSocket `/ws` | WebSocket `/ws` |
+| 框架 | React | pi-tui |
+| 入口 | `ui/src/App.tsx` | `src/commands/tui.ts` |
+| 渲染器 | `A2UIRenderer.tsx` | `tui-renderer.ts` |
+| 连接 | WebSocket `/ws` + SSE `/api/ag-ui` | WebSocket `/ws` |
 | 导航 | 侧边栏点击 | 斜杠命令 (`/dashboard`, `/health` 等) |
 | 交互 | 按钮点击 → action 消息 | 编号选择 → action 消息 |
 
 核心文件：
+- `ui/src/components/a2ui/A2UIRenderer.tsx` — A2UI → React 组件渲染器
 - `src/commands/tui.ts` — TUI 入口和主循环
 - `src/gateway/tui-renderer.ts` — A2UI → pi-tui 组件转换层
 
@@ -387,18 +390,35 @@ PHA 支持两种前端形态，共享同一个 Gateway 和 A2UI 协议：
 
 ## 军规 (Iron Rules)
 
-1. **前端无业务逻辑** - 只接收 A2UI 消息并渲染
-2. **UI 是 Agent 输出** - 不是前端产物
-3. **MCP 是唯一 API** - 工具通过 MCP 暴露
-4. **一切工具 MCP 化，一切能力 Skills 化** - 数据操作 → MCP Tool；专家知识/评估框架/行为指导 → Skill。**禁止使用裸 JSON 配置文件替代 Skill**（如评测标准、通知规则等应该是 `src/skills/` 下的 SKILL.md，而非 `.pha/` 下的 JSON）
-5. **保持简单** - 避免过度设计
-6. **禁止 Emoji 做图标** - A2UI 组件的 `icon` 属性必须使用 icon name（如 `"heart"`, `"brain"`），**禁止使用 emoji**（如 ~~`"❤️"`~~, ~~`"🧠"`~~）。前端 `ui/src/main.ts` 的 `ICONS` 对象定义了所有可用图标。如需新图标，在 `ICONS` 中添加 Lucide 风格 SVG，并在 `EMOJI_TO_ICON` 中添加映射。
-7. **i18n 必须同步** - 新增界面文案必须同时更新 `src/locales/types.ts`、`zh-CN.ts`、`en.ts` 三个文件
-8. **开发完成后重启服务** - 完成 `bun run build` + `bun test` 后，执行 `pha restart` 重启 Gateway 服务以验证改动
-9. **自动提交并推送** - 功能开发完成、测试通过后，自动 commit 并 push 代码到远程仓库
-10. **遵循 AgentOS 设计** - 系统设计必须遵循 AgentOS 哲学：前端纯渲染、Agent 驱动 UI、MCP 工具化、Skills 能力化。整体架构要支持 Agentic 自主驱动
-11. **双形态同步 (Web + TUI)** - PHA 有两种前端形态：Web UI (Lit Element) 和 TUI (基于 pi-tui 框架)。所有页面和功能改动必须同步到 TUI。TUI 通过 A2UI-to-TUI 渲染层消费同一套 A2UI 数据，不重复实现业务逻辑
-12. **参考 OpenClaw 架构** - 架构设计应参考学习 OpenClaw 项目 (`../openclaw`)，特别是 Skills 系统、文件系统 Git-backed 状态管理、Agent 自我进化模式等
+### A. AgentOS 哲学 (规则 1-4)
+
+1. **前端无业务逻辑** — Web UI 和 TUI 只接收 A2UI 消息并渲染。禁止在 `ui/` 目录中添加数据获取、状态计算、API 调用等业务代码
+2. **UI 是 Agent 输出** — 所有页面由 `src/gateway/pages.ts` 通过 `A2UIGenerator` 生成，不是前端产物。前端代码只做组件→DOM 的映射
+3. **MCP 是唯一工具 API** — Agent 的所有能力通过 MCP Tools 暴露（`src/tools/`）。禁止 Agent 直接调用内部函数或 REST API
+4. **一切工具 MCP 化，一切能力 Skills 化** — 数据操作 → MCP Tool；专家知识/评估框架/行为指导 → Skill（`src/skills/*/SKILL.md`）。**禁止**用裸 JSON 配置文件替代 Skill
+
+### B. 生成式 UI 约束 (规则 5-10)
+
+5. **A2UI 是唯一 UI 协议** — 所有 UI 通过 4 个 Surface 传递：`main`（主内容）、`sidebar`（侧边栏）、`modal`（弹窗）、`toast`（通知）。每个 Surface 是一棵组件树 `{ components[], root_id }`
+6. **组件树模式** — 页面生成器必须使用 `A2UIGenerator` 构建组件树：`const ui = new A2UIGenerator("main")` → 组合子组件 → `ui.build(rootId)` 返回 `A2UISurfaceData`。禁止手写 JSON 组件树
+7. **禁止 Emoji 做图标** — A2UI `icon` 属性必须使用 icon name（如 `"heart"`, `"brain"`），**禁止**使用 emoji。可用图标见下方列表。如需新图标，在 `ui/src/lib/icons.tsx` 的 `ICONS` 中添加 Lucide 风格 SVG
+8. **i18n 必须同步** — 所有用户可见文案必须使用 `t("key")` 函数。新增文案必须同时更新 `src/locales/types.ts`、`zh-CN.ts`、`en.ts` 三个文件，否则 TypeScript 编译失败
+9. **双形态同步 (Web + TUI)** — PHA 有 Web UI（React）和 TUI（pi-tui）两种前端。两者消费同一套 A2UI 数据，新增页面**无需额外 TUI 代码**（前提：使用已有 A2UI 组件）。如需新组件类型，必须同时在 `A2UIRenderer.tsx` 和 `tui-renderer.ts` 实现渲染
+10. **工具名中文映射** — 前端 `A2UIRenderer.tsx` 的 `TOOL_DISPLAY_NAMES` 维护工具调用时的中文显示名。新增 MCP 工具后必须同步添加映射
+
+### C. 通信协议约束 (规则 11-14)
+
+11. **双通道传输** — 聊天消息走 SSE（`POST /api/ag-ui`），其他功能走 WebSocket（`/ws`）。SSE 传输标准 AG-UI 事件（`RunStarted`/`TextMessageContent`/`ToolCallStart` 等），WebSocket 传输 A2UI 页面更新
+12. **状态归属** — 服务端（`GatewaySession`）是聊天历史的唯一数据源。SSE 模式下前端维护本地 chat state 用于实时渲染，但页面刷新后从服务端 A2UI 重建。非聊天页面的 UI state 完全由服务端驱动
+13. **Action 模式** — 用户交互统一走 `{ type: "action", action: "handler_name", payload: {...} }` 格式。按钮的 `action` 字符串必须与 `server.ts` 的 `handleAction()` 中的 handler 精确匹配
+14. **导航模式** — 侧边栏点击走 `{ type: "navigate", view: "view_id" }` 格式。`view_id` 必须与 `server.ts` 的 `handleNavigate()` 中的 case 精确匹配
+
+### D. 工程纪律 (规则 15-18)
+
+15. **开发完成后重启服务** — 完成 `bun run build` + `bun test` 后，执行 `pha restart` 重启 Gateway 验证改动
+16. **自动提交并推送** — 功能开发完成、测试通过后，自动 commit 并 push 代码到远程仓库
+17. **保持简单** — 避免过度设计、超前抽象。不添加未被要求的功能、文档、类型注解。三行重复代码优于过早抽象
+18. **遵循 AgentOS 设计** — 架构设计参考 OpenClaw 项目，特别是 Skills 系统、文件系统 Git-backed 状态管理、Agent 自我进化模式
 
 ### 可用 Icon 名称
 
@@ -409,7 +429,8 @@ footprints, bed, star, zap, bar-chart, calendar, search, save,
 test-tube, lightbulb, target, link, shield, trending-up,
 trending-down, sparkles, info, settings, hospital, loader,
 check, x, alert-triangle, chevron-left, chevron-right,
-git-branch, git-merge, git-commit
+git-branch, git-merge, git-commit, menu, play, pause,
+skip-forward, refresh-cw, square, sun
 ```
 
 ### Evolution Lab 架构
@@ -450,7 +471,8 @@ Evolution Lab 是顶级导航页面，采用 5-Tab Dashboard 布局：
 | 端点 | 说明 |
 |------|------|
 | `GET /health` | 健康检查 |
-| `WS /ws` | A2UI WebSocket |
+| `WS /ws` | A2UI WebSocket（页面/导航/弹窗） |
+| `POST /api/ag-ui` | AG-UI SSE 聊天事件流 |
 | `POST /mcp/tools/list` | 列出 MCP 工具 |
 | `POST /mcp/tools/call` | 调用 MCP 工具 |
 | `GET /api/health/*` | REST API (兼容) |

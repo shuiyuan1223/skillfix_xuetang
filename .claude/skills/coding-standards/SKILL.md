@@ -7,12 +7,28 @@ description: Use when writing or reviewing code for the PHA project. Covers codi
 
 ## Iron Rules (MUST follow)
 
-1. **Frontend = Pure Renderer** — `ui/src/main.ts` only renders A2UI JSON. No business logic, no API calls, no data processing.
-2. **UI = Agent Output** — All pages generated in `src/gateway/pages.ts`, not frontend.
-3. **MCP is the only API** — Tools exposed via MCP protocol in `src/tools/`.
-4. **No Emoji Icons** — Use icon names (`"heart"`, `"brain"`) in `icon` properties, never emoji (`"❤️"`).
-5. **i18n Sync** — Every user-facing string uses `t()`. Changes require updating `types.ts` + `zh-CN.ts` + `en.ts`.
-6. **Keep it Simple** — No premature abstractions. No over-engineering.
+### AgentOS 哲学
+1. **Frontend = Pure Renderer** — `ui/src/` only renders A2UI JSON. No business logic, no API calls, no data processing.
+2. **UI = Agent Output** — All pages generated in `src/gateway/pages.ts` via `A2UIGenerator`, not frontend.
+3. **MCP is the only tool API** — Tools exposed via MCP protocol in `src/tools/`. Agent never calls internal functions directly.
+4. **Tools = MCP, Knowledge = Skills** — Data operations → MCP Tool; Expert knowledge → Skill (`src/skills/*/SKILL.md`). Never use bare JSON config files as Skills.
+
+### 生成式 UI 约束
+5. **A2UI is the only UI protocol** — 4 Surfaces: `main`, `sidebar`, `modal`, `toast`. Each is a component tree `{ components[], root_id }`.
+6. **Use A2UIGenerator** — `const ui = new A2UIGenerator("main")` → compose → `ui.build(rootId)`. Never hand-write JSON component trees.
+7. **No Emoji Icons** — Use icon names (`"heart"`, `"brain"`) in `icon` properties, never emoji (`"❤️"`).
+8. **i18n Sync** — Every user-facing string uses `t()`. Changes require updating `types.ts` + `zh-CN.ts` + `en.ts` simultaneously.
+9. **Dual Frontend Sync** — Web (React `A2UIRenderer.tsx`) and TUI (`tui-renderer.ts`) consume same A2UI data. New component types need renderers in both.
+10. **Tool Display Names** — New MCP tools must be added to `TOOL_DISPLAY_NAMES` in `ui/src/components/a2ui/A2UIRenderer.tsx` for Chinese display names.
+
+### 通信协议约束
+11. **Dual Channel** — Chat messages via SSE (`POST /api/ag-ui`), everything else via WebSocket (`/ws`). SSE sends AG-UI events (`RunStarted`/`TextMessageContent`/`ToolCallStart` etc.), WebSocket sends A2UI page updates.
+12. **State Ownership** — Server (`GatewaySession`) is the single source of truth for chat history. Frontend maintains local chat state for SSE real-time rendering, but rebuilds from server A2UI on page refresh. Non-chat UI state is fully server-driven.
+13. **Action Pattern** — User interactions: `{ type: "action", action: "handler_name", payload: {...} }`. Action strings must match `handleAction()` in `server.ts` exactly.
+14. **Navigate Pattern** — Sidebar clicks: `{ type: "navigate", view: "view_id" }`. View IDs must match `handleNavigate()` cases exactly.
+
+### 工程纪律
+15. **Keep it Simple** — No premature abstractions. No over-engineering. Three similar lines > one premature abstraction.
 
 ## TypeScript Conventions
 
@@ -39,7 +55,8 @@ description: Use when writing or reviewing code for the PHA project. Covers codi
 | Agent Skills | `src/skills/*/SKILL.md` |
 | Memory system | `src/memory/*.ts` |
 | Translations | `src/locales/{types,zh-CN,en}.ts` |
-| Frontend renderer | `ui/src/main.ts` |
+| Frontend renderer | `ui/src/components/a2ui/A2UIRenderer.tsx` |
+| Frontend icons | `ui/src/lib/icons.tsx` |
 | Tests | `tests/unit/`, `tests/integration/` |
 | Test fixtures | `tests/fixtures/` |
 
@@ -70,6 +87,16 @@ import { getUserUuid } from "../utils/config.js";
 - Add private fields to `GatewaySession` class for page-specific state
 - Reset state when navigating away
 - Pattern: `this.xxxField` for state, read in `handleNavigate`, write in `handleAction`
+- SSE mode flags: `_sseMode` (chat active via SSE), `_chatLock` (prevents concurrent chat requests)
+
+### SSE Chat Flow
+
+```
+Frontend POST /api/ag-ui → GatewaySession.handleChatSSE()
+  → Agent processes message
+  → SSE events stream back: RunStarted → TextMessageContent* → ToolCallStart/End → RunFinished
+  → Frontend updates local chat state in real-time
+```
 
 ## Commit Convention
 
