@@ -118,6 +118,21 @@ export interface ResolvedModel {
 }
 
 // ============================================================================
+// Orchestrator config (unified model assignments)
+// ============================================================================
+
+export interface OrchestratorConfig {
+  /** PHA Agent model ref: "provider/name" */
+  pha?: string;
+  /** System Agent model ref: "provider/name" */
+  sa?: string;
+  /** Judge model ref: "provider/name" */
+  judge?: string;
+  /** Embedding model ref: "provider/name" */
+  embedding?: string;
+}
+
+// ============================================================================
 // Existing types (kept for backward compatibility)
 // ============================================================================
 
@@ -190,13 +205,16 @@ export interface PHAConfig {
   // ---- New unified model repository fields ----
   /** Unified model repository */
   models?: ModelsConfig;
-  /** Agent model reference: "provider/name" */
+  /** Orchestrator: unified model assignments */
+  orchestrator?: OrchestratorConfig;
+  // ---- Legacy model assignment fields (kept for migration) ----
+  /** @deprecated Use orchestrator.pha */
   agentModel?: string;
-  /** Judge model: new format = string "provider/name", old format = BenchmarkModelConfig object */
+  /** @deprecated Use orchestrator.judge; old format = BenchmarkModelConfig object */
   judgeModel?: string | BenchmarkModelConfig;
-  /** System Agent model reference: "provider/name" */
+  /** @deprecated Use orchestrator.sa */
   systemAgentModel?: string;
-  /** Embedding model reference: "provider/name" */
+  /** @deprecated Use orchestrator.embedding */
   embeddingModel?: string;
   /** Benchmark config (new format with model refs) */
   benchmark?: {
@@ -369,7 +387,28 @@ function migrateConfig(config: PHAConfig): boolean {
     modified = true;
   }
 
-  // Already migrated
+  // 5. Migrate top-level model assignment fields → orchestrator
+  if (
+    !config.orchestrator &&
+    (config.agentModel ||
+      config.systemAgentModel ||
+      config.embeddingModel ||
+      typeof config.judgeModel === "string")
+  ) {
+    config.orchestrator = {
+      pha: config.agentModel,
+      sa: config.systemAgentModel,
+      judge: typeof config.judgeModel === "string" ? config.judgeModel : undefined,
+      embedding: config.embeddingModel,
+    };
+    delete config.agentModel;
+    delete config.systemAgentModel;
+    delete config.embeddingModel;
+    if (typeof config.judgeModel === "string") delete config.judgeModel;
+    modified = true;
+  }
+
+  // Already migrated (model repository)
   if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
     return modified;
   }
@@ -403,7 +442,7 @@ function migrateConfig(config: PHAConfig): boolean {
     }
   };
 
-  // 1. Migrate config.llm → agentModel
+  // 1. Migrate config.llm → orchestrator.pha
   const llmProvider = config.llm.provider || "anthropic";
   const llmModelId = config.llm.modelId || PROVIDER_CONFIGS[llmProvider]?.defaultModel || "default";
   const defaultBaseUrl = config.llm.baseUrl || PROVIDER_CONFIGS[llmProvider]?.baseUrl;
@@ -412,7 +451,8 @@ function migrateConfig(config: PHAConfig): boolean {
   // Derive a short name from the model ID
   const agentModelName = deriveModelName(llmModelId);
   addModel(llmProvider, agentModelName, llmModelId);
-  config.agentModel = `${llmProvider}/${agentModelName}`;
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.pha = `${llmProvider}/${agentModelName}`;
 
   // 2. Migrate config.benchmarkModels
   if (config.benchmarkModels && Object.keys(config.benchmarkModels).length > 0) {
@@ -428,7 +468,7 @@ function migrateConfig(config: PHAConfig): boolean {
     config.benchmark.models = benchmarkRefs;
   }
 
-  // 3. Migrate config.judgeModel (object → string ref)
+  // 3. Migrate config.judgeModel (object → orchestrator.judge string ref)
   if (config.judgeModel && typeof config.judgeModel === "object") {
     const jm = config.judgeModel as BenchmarkModelConfig;
     if (jm.provider && jm.modelId) {
@@ -437,11 +477,12 @@ function migrateConfig(config: PHAConfig): boolean {
       ensureProvider(jProvider, jm.apiKey, jBaseUrl);
       const judgeName = deriveModelName(jm.modelId);
       addModel(jProvider, judgeName, jm.modelId, jm.label);
-      config.judgeModel = `${jProvider}/${judgeName}`;
+      config.orchestrator.judge = `${jProvider}/${judgeName}`;
+      delete config.judgeModel;
     }
   }
 
-  // 4. Migrate config.embedding → embeddingModel
+  // 4. Migrate config.embedding → orchestrator.embedding
   if (config.embedding?.model && config.embedding.enabled !== false) {
     // Embedding models typically use the same provider (openrouter) or separate
     const embModel = config.embedding.model;
@@ -450,7 +491,7 @@ function migrateConfig(config: PHAConfig): boolean {
     ensureProvider(embProvider);
     const embName = deriveModelName(embModel);
     addModel(embProvider, embName, embModel);
-    config.embeddingModel = `${embProvider}/${embName}`;
+    config.orchestrator.embedding = `${embProvider}/${embName}`;
   }
 
   // Only set if we actually found something to migrate
@@ -458,6 +499,10 @@ function migrateConfig(config: PHAConfig): boolean {
     config.models = { providers };
     // Remove fully redundant old fields (data now lives in models.providers + benchmark.models)
     delete config.benchmarkModels;
+    // Clean up legacy fields that are now in orchestrator
+    delete config.agentModel;
+    delete config.systemAgentModel;
+    delete config.embeddingModel;
     return true;
   }
   return false;
@@ -480,10 +525,13 @@ function deriveModelName(modelId: string): string {
  * These fields are NOT written to the config file.
  */
 function syncLegacyFields(config: PHAConfig): void {
-  // Sync config.llm from agentModel + models.providers
-  if (config.agentModel && config.models?.providers) {
+  const phaRef = config.orchestrator?.pha;
+  const embRef = config.orchestrator?.embedding;
+
+  // Sync config.llm from orchestrator.pha + models.providers
+  if (phaRef && config.models?.providers) {
     try {
-      const { provider, name } = parseModelRef(config.agentModel);
+      const { provider, name } = parseModelRef(phaRef);
       const providerCfg = config.models.providers[provider];
       if (providerCfg) {
         const modelDef = providerCfg.models.find((m) => m.name === name);
@@ -499,10 +547,10 @@ function syncLegacyFields(config: PHAConfig): void {
     }
   }
 
-  // Sync config.embedding from embeddingModel + models.providers
-  if (config.embeddingModel && config.models?.providers) {
+  // Sync config.embedding from orchestrator.embedding + models.providers
+  if (embRef && config.models?.providers) {
     try {
-      const { provider, name } = parseModelRef(config.embeddingModel);
+      const { provider, name } = parseModelRef(embRef);
       const providerCfg = config.models.providers[provider];
       if (providerCfg) {
         const modelDef = providerCfg.models.find((m) => m.name === name);
@@ -514,7 +562,7 @@ function syncLegacyFields(config: PHAConfig): void {
     } catch {
       // Keep whatever embedding was
     }
-  } else if (!config.embeddingModel && config.models?.providers) {
+  } else if (!embRef && config.models?.providers) {
     // No embedding model ref = disabled
     config.embedding = { enabled: false };
   }
@@ -531,6 +579,13 @@ export function stripLegacyFieldsForSave(config: PHAConfig): Record<string, unkn
     delete copy.llm;
     delete copy.embedding;
     delete copy.benchmarkModels;
+  }
+  // Clean up legacy top-level model assignment fields when orchestrator exists
+  if (copy.orchestrator) {
+    delete copy.agentModel;
+    delete copy.systemAgentModel;
+    delete copy.embeddingModel;
+    if (typeof copy.judgeModel === "string") delete copy.judgeModel;
   }
   return copy;
 }
@@ -554,6 +609,12 @@ export function loadConfig(): PHAConfig {
     // Check if file still has legacy fields that should be stripped
     if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
       if ("llm" in loaded || "embedding" in loaded || "benchmarkModels" in loaded) {
+        needsSave = true;
+      }
+    }
+    // Check if file still has legacy model assignment fields
+    if (config.orchestrator) {
+      if ("agentModel" in loaded || "systemAgentModel" in loaded || "embeddingModel" in loaded) {
         needsSave = true;
       }
     }
@@ -650,7 +711,17 @@ export function resolveModel(ref: string, config?: PHAConfig): ResolvedModel {
 export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
   const cfg = config || loadConfig();
 
-  // New format: agentModel ref
+  // Orchestrator format: orchestrator.pha
+  const phaRef = cfg.orchestrator?.pha;
+  if (phaRef && cfg.models?.providers) {
+    try {
+      return resolveModel(phaRef, cfg);
+    } catch {
+      // Fall through
+    }
+  }
+
+  // Legacy: agentModel ref
   if (cfg.agentModel && cfg.models?.providers) {
     try {
       return resolveModel(cfg.agentModel, cfg);
@@ -690,7 +761,17 @@ export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
 export function resolveSystemAgentModel(config?: PHAConfig): ResolvedModel {
   const cfg = config || loadConfig();
 
-  // New format: systemAgentModel ref
+  // Orchestrator format: orchestrator.sa
+  const saRef = cfg.orchestrator?.sa;
+  if (saRef && cfg.models?.providers) {
+    try {
+      return resolveModel(saRef, cfg);
+    } catch {
+      // Fall through
+    }
+  }
+
+  // Legacy: systemAgentModel ref
   if (cfg.systemAgentModel && cfg.models?.providers) {
     try {
       return resolveModel(cfg.systemAgentModel, cfg);
@@ -710,7 +791,17 @@ export function resolveSystemAgentModel(config?: PHAConfig): ResolvedModel {
 export function resolveJudgeModel(config?: PHAConfig): ResolvedModel {
   const cfg = config || loadConfig();
 
-  // New format: string ref
+  // Orchestrator format: orchestrator.judge
+  const judgeRef = cfg.orchestrator?.judge;
+  if (judgeRef && cfg.models?.providers) {
+    try {
+      return resolveModel(judgeRef, cfg);
+    } catch {
+      // Fall through
+    }
+  }
+
+  // Legacy: string ref
   if (typeof cfg.judgeModel === "string" && cfg.models?.providers) {
     try {
       return resolveModel(cfg.judgeModel, cfg);
@@ -800,7 +891,17 @@ export function resolveEmbeddingModel(config?: PHAConfig): ResolvedModel | null 
   // Check if embedding is disabled
   if (cfg.embedding?.enabled === false) return null;
 
-  // New format: embeddingModel ref
+  // Orchestrator format: orchestrator.embedding
+  const embRef = cfg.orchestrator?.embedding;
+  if (embRef && cfg.models?.providers) {
+    try {
+      return resolveModel(embRef, cfg);
+    } catch {
+      // Fall through
+    }
+  }
+
+  // Legacy: embeddingModel ref
   if (cfg.embeddingModel && cfg.models?.providers) {
     try {
       return resolveModel(cfg.embeddingModel, cfg);

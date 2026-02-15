@@ -1619,10 +1619,10 @@ export interface SettingsPageData {
     models: Array<{ name: string; model: string; label: string }>;
   }>;
   allModelRefs: string[];
-  agentModelRef: string;
-  systemAgentModelRef: string;
-  judgeModelRef: string;
-  embeddingModelRef: string;
+  orchestratorPha: string;
+  orchestratorSa: string;
+  orchestratorJudge: string;
+  orchestratorEmbedding: string;
   benchmarkModelRefs: string[];
   // Gateway
   gatewayPort: number;
@@ -1745,25 +1745,25 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     { value: "", label: t("settings.noneSelected") },
     ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
   ];
-  const agentModelSelect = ui.formInput("agentModelRef", "select", {
+  const agentModelSelect = ui.formInput("orchestratorPha", "select", {
     label: t("settings.agentModelSelect"),
     options: modelRefOptions,
-    value: data.agentModelRef,
+    value: data.orchestratorPha,
   });
-  const systemAgentModelSelect = ui.formInput("systemAgentModelRef", "select", {
+  const systemAgentModelSelect = ui.formInput("orchestratorSa", "select", {
     label: t("settings.systemAgentModelSelect"),
     options: modelRefOptions,
-    value: data.systemAgentModelRef,
+    value: data.orchestratorSa,
   });
-  const judgeModelSelect = ui.formInput("judgeModelRef", "select", {
+  const judgeModelSelect = ui.formInput("orchestratorJudge", "select", {
     label: t("settings.judgeModelSelect"),
     options: modelRefOptions,
-    value: data.judgeModelRef,
+    value: data.orchestratorJudge,
   });
-  const embeddingModelSelect = ui.formInput("embeddingModelRef", "select", {
+  const embeddingModelSelect = ui.formInput("orchestratorEmbedding", "select", {
     label: t("settings.embeddingModelSelect"),
     options: modelRefOptions,
-    value: data.embeddingModelRef,
+    value: data.orchestratorEmbedding,
   });
   const assignmentsForm = ui.form(
     [agentModelSelect, systemAgentModelSelect, judgeModelSelect, embeddingModelSelect],

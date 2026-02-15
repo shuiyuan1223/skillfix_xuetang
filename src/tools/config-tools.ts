@@ -138,9 +138,7 @@ export const listProvidersTool = {
         hint: cfg.hint,
       })),
       configuredModels: modelRefs,
-      agentModel: config.agentModel,
-      judgeModel: typeof config.judgeModel === "string" ? config.judgeModel : undefined,
-      embeddingModel: config.embeddingModel,
+      orchestrator: config.orchestrator,
     };
   },
 };

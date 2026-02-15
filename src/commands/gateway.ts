@@ -105,8 +105,9 @@ export function registerGatewayCommand(program: Command): void {
       const pid = getPid();
       const running = pid ? isRunning(pid) : false;
 
-      const provider = config.agentModel ? config.agentModel.split("/")[0] : config.llm.provider;
-      const model = config.agentModel || config.llm.modelId;
+      const phaRef = config.orchestrator?.pha;
+      const provider = phaRef ? phaRef.split("/")[0] : config.llm.provider;
+      const model = phaRef || config.llm.modelId;
       const status = {
         running,
         pid: running ? pid : null,

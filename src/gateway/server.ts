@@ -168,7 +168,8 @@ function syncEmbeddingToNewFormat(config: PHAConfig, formData: Record<string, un
 
   if (!enabled || !modelId) {
     // Disabled — clear the ref
-    config.embeddingModel = undefined;
+    if (!config.orchestrator) config.orchestrator = {};
+    config.orchestrator.embedding = undefined;
     return;
   }
 
@@ -176,11 +177,12 @@ function syncEmbeddingToNewFormat(config: PHAConfig, formData: Record<string, un
   if (!config.models) config.models = { providers: {} };
 
   // Find or create a provider to hold the embedding model.
-  // Use the first available provider key, or the agent model's provider.
+  // Use the first available provider key, or the orchestrator.pha's provider.
   let targetProvider: string | undefined;
-  if (config.agentModel) {
-    const slashIdx = config.agentModel.indexOf("/");
-    if (slashIdx > 0) targetProvider = config.agentModel.substring(0, slashIdx);
+  const phaRef = config.orchestrator?.pha;
+  if (phaRef) {
+    const slashIdx = phaRef.indexOf("/");
+    if (slashIdx > 0) targetProvider = phaRef.substring(0, slashIdx);
   }
   if (!targetProvider) {
     targetProvider = Object.keys(config.models.providers)[0] || "openrouter";
@@ -201,7 +203,8 @@ function syncEmbeddingToNewFormat(config: PHAConfig, formData: Record<string, un
 
   // Find the name of the model entry (might already exist with a different name)
   const existing = provModels.find((m) => m.model === modelId);
-  config.embeddingModel = `${targetProvider}/${existing?.name || embName}`;
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.embedding = `${targetProvider}/${existing?.name || embName}`;
 }
 
 // ============================================================================
@@ -1832,10 +1835,10 @@ export class GatewaySession {
           baseUrl: config.llm.baseUrl || PROVIDER_CONFIGS[config.llm.provider]?.baseUrl || "",
           modelProviders,
           allModelRefs,
-          agentModelRef: config.agentModel || "",
-          systemAgentModelRef: config.systemAgentModel || "",
-          judgeModelRef: typeof config.judgeModel === "string" ? config.judgeModel : "",
-          embeddingModelRef: config.embeddingModel || "",
+          orchestratorPha: config.orchestrator?.pha || "",
+          orchestratorSa: config.orchestrator?.sa || "",
+          orchestratorJudge: config.orchestrator?.judge || "",
+          orchestratorEmbedding: config.orchestrator?.embedding || "",
           benchmarkModelRefs: config.benchmark?.models || [],
           gatewayPort: config.gateway?.port || 8000,
           gatewayAutoStart: config.gateway?.autoStart ?? false,
@@ -3231,8 +3234,9 @@ export class GatewaySession {
           }
           config.models.providers = newProviders;
           // Sync llm config for backward compat
-          if (config.agentModel) {
-            const parts = config.agentModel.split("/");
+          const phaRef = config.orchestrator?.pha;
+          if (phaRef) {
+            const parts = phaRef.split("/");
             if (parts.length >= 2) {
               const agentProvider = parts[0];
               const agentProv = newProviders[agentProvider];
@@ -3244,18 +3248,19 @@ export class GatewaySession {
             }
           }
         } else if (action === "settings_save_model_assignments") {
-          // Save model assignments
-          if (formData.agentModelRef !== undefined)
-            config.agentModel = String(formData.agentModelRef) || undefined;
-          if (formData.systemAgentModelRef !== undefined)
-            config.systemAgentModel = String(formData.systemAgentModelRef) || undefined;
-          if (formData.judgeModelRef !== undefined)
-            config.judgeModel = String(formData.judgeModelRef) || undefined;
-          if (formData.embeddingModelRef !== undefined)
-            config.embeddingModel = String(formData.embeddingModelRef) || undefined;
+          // Save model assignments to orchestrator
+          if (!config.orchestrator) config.orchestrator = {};
+          if (formData.orchestratorPha !== undefined)
+            config.orchestrator.pha = String(formData.orchestratorPha) || undefined;
+          if (formData.orchestratorSa !== undefined)
+            config.orchestrator.sa = String(formData.orchestratorSa) || undefined;
+          if (formData.orchestratorJudge !== undefined)
+            config.orchestrator.judge = String(formData.orchestratorJudge) || undefined;
+          if (formData.orchestratorEmbedding !== undefined)
+            config.orchestrator.embedding = String(formData.orchestratorEmbedding) || undefined;
           // Sync llm config for backward compat when agent model changes
-          if (config.agentModel) {
-            const parts = config.agentModel.split("/");
+          if (config.orchestrator.pha) {
+            const parts = config.orchestrator.pha.split("/");
             if (parts.length >= 2 && config.models?.providers) {
               const agentProvider = parts[0];
               const agentName = parts.slice(1).join("/");
