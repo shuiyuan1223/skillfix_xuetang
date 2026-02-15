@@ -2109,12 +2109,39 @@ export class GatewaySession {
   ): Promise<void> {
     if (this._chatLock) {
       const err = JSON.stringify({ type: "error", message: "Chat is busy" });
-      writer.write(encoder.encode(`data: ${err}\n\n`));
-      writer.close();
+      try {
+        writer.write(encoder.encode(`data: ${err}\n\n`));
+      } catch {
+        /* noop */
+      }
+      try {
+        writer.close();
+      } catch {
+        /* noop */
+      }
       return;
     }
     this._chatLock = true;
     this._sseMode = true;
+
+    let streamClosed = false;
+    const safeWrite = (data: string) => {
+      if (streamClosed) return;
+      try {
+        writer.write(encoder.encode(data));
+      } catch {
+        streamClosed = true;
+      }
+    };
+    const safeClose = () => {
+      if (streamClosed) return;
+      streamClosed = true;
+      try {
+        writer.close();
+      } catch {
+        /* already closed */
+      }
+    };
 
     const sseSend = (msg: unknown) => {
       // Only forward AG-UI events (not legacy a2ui / agent_text)
@@ -2131,11 +2158,7 @@ export class GatewaySession {
         "Custom",
       ];
       if (m.type && agTypes.includes(m.type as string)) {
-        try {
-          writer.write(encoder.encode(`data: ${JSON.stringify(m)}\n\n`));
-        } catch {
-          // stream may have been closed by client abort
-        }
+        safeWrite(`data: ${JSON.stringify(m)}\n\n`);
       }
     };
 
@@ -2203,11 +2226,7 @@ export class GatewaySession {
           name: "Error",
           data: { message: error instanceof Error ? error.message : String(error) },
         });
-        try {
-          writer.write(encoder.encode(`data: ${errEvent}\n\n`));
-        } catch {
-          /* stream closed */
-        }
+        safeWrite(`data: ${errEvent}\n\n`);
       }
       this.isStreaming = false;
       this.streamingContent = "";
@@ -2216,11 +2235,7 @@ export class GatewaySession {
     } finally {
       this._sseMode = false;
       this._chatLock = false;
-      try {
-        writer.close();
-      } catch {
-        /* already closed */
-      }
+      safeClose();
     }
   }
 
@@ -4883,7 +4898,8 @@ export class GatewaySession {
   }
 
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
-    const activeSend = this.getSend(send);
+    // In SSE mode, use the provided send directly (don't redirect to WebSocket)
+    const activeSend = this._sseMode ? send : this.getSend(send);
 
     switch (event.type) {
       case "message_start": {
@@ -5237,6 +5253,7 @@ export async function startGateway(
 
   Bun.serve<WSData>({
     port,
+    idleTimeout: 255, // SSE streams need long-lived connections (max 255s)
     async fetch(req, server) {
       const url = new URL(req.url);
 
