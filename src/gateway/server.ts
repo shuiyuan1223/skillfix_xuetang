@@ -1105,12 +1105,13 @@ export class GatewaySession {
         const lastTs = chatSession.entries[chatSession.entries.length - 1].timestamp;
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
           this.sessionId = chatSession.sessionId;
-          this.chatMessages = chatSession.entries.map((e) => ({
-            id: crypto.randomUUID(),
-            role: e.role === "tool" ? ("assistant" as const) : (e.role as "user" | "assistant"),
-            parts: [{ type: "text" as const, content: e.content }],
-            content: e.content,
-          }));
+          this.chatMessages = chatSession.entries
+            .filter((e) => e.role === "user" || e.role === "assistant")
+            .map((e) => ({
+              id: crypto.randomUUID(),
+              role: e.role as "user" | "assistant",
+              parts: [{ type: "text" as const, content: e.content }],
+            }));
         }
       }
 
@@ -1119,12 +1120,13 @@ export class GatewaySession {
       if (saSession && saSession.entries.length > 0) {
         const lastTs = saSession.entries[saSession.entries.length - 1].timestamp;
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
-          this.systemAgentChatMessages = saSession.entries.map((e) => ({
-            id: crypto.randomUUID(),
-            role: e.role === "tool" ? ("assistant" as const) : (e.role as "user" | "assistant"),
-            parts: [{ type: "text" as const, content: e.content }],
-            content: e.content,
-          }));
+          this.systemAgentChatMessages = saSession.entries
+            .filter((e) => e.role === "user" || e.role === "assistant")
+            .map((e) => ({
+              id: crypto.randomUUID(),
+              role: e.role as "user" | "assistant",
+              parts: [{ type: "text" as const, content: e.content }],
+            }));
         }
       }
     } catch (err) {
@@ -1190,12 +1192,10 @@ export class GatewaySession {
         sessionMessages: this.chatMessages.map((m) => ({
           role: m.role,
           content:
-            m.content ||
             m.parts
-              ?.filter((p) => p.type === "text")
+              .filter((p) => p.type === "text")
               .map((p) => (p as { type: "text"; content: string }).content)
-              .join("") ||
-            "",
+              .join("") || "",
         })),
         extraTools,
       });
@@ -1263,12 +1263,10 @@ export class GatewaySession {
         sessionMessages: this.systemAgentChatMessages.map((m) => ({
           role: m.role,
           content:
-            m.content ||
             m.parts
-              ?.filter((p) => p.type === "text")
+              .filter((p) => p.type === "text")
               .map((p) => (p as { type: "text"; content: string }).content)
-              .join("") ||
-            "",
+              .join("") || "",
         })),
       });
 
@@ -2076,13 +2074,10 @@ export class GatewaySession {
             const mm = getMemoryManager();
             const lastAssistant = this.chatMessages.filter((m) => m.role === "assistant").pop();
             if (lastAssistant) {
-              const assistantText =
-                lastAssistant.parts
-                  ?.filter((p): p is { type: "text"; content: string } => p.type === "text")
-                  .map((p) => p.content)
-                  .join("") ||
-                lastAssistant.content ||
-                "";
+              const assistantText = lastAssistant.parts
+                .filter((p): p is { type: "text"; content: string } => p.type === "text")
+                .map((p) => p.content)
+                .join("");
               const exchangeText = `User: ${content}\nAssistant: ${assistantText}`;
               mm.appendSessionTranscript(this.userUuid, this.sessionId, exchangeText);
             }
@@ -2267,12 +2262,6 @@ export class GatewaySession {
             status: "running",
           });
 
-          this.persistMessage("system-agent", {
-            timestamp: Date.now(),
-            role: "tool",
-            content: `Using ${toolName}...`,
-            toolName,
-          });
           this.sendEvolutionLabUpdate(send);
         } else if (event.type === "tool_execution_end") {
           const toolName = event.toolName as string;
@@ -5019,14 +5008,6 @@ export class GatewaySession {
 
         // Store toolCallId on event for matching in tool_execution_end
         event._toolCallId = toolCallId;
-
-        // Persist tool usage info
-        this.persistMessage("chat", {
-          timestamp: Date.now(),
-          role: "tool",
-          content: `Using ${event.toolName}...`,
-          toolName: event.toolName,
-        });
 
         // AG-UI events
         activeSend({

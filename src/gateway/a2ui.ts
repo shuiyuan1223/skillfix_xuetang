@@ -744,7 +744,4 @@ export interface PartsChatMessage {
   id: string;
   role: "user" | "assistant";
   parts: MessagePart[];
-  // Backward compat: old messages may only have content
-  content?: string;
-  cards?: { components: unknown[]; root_id: string };
 }
