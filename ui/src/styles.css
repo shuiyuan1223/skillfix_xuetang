@@ -237,22 +237,6 @@
     transition: stroke-dashoffset 1s ease;
   }
 
-  /* Chart point interactions */
-  .chart-point {
-    opacity: 0;
-    transition: opacity 0.2s ease, r 0.2s ease;
-  }
-
-  .chart-point-hitarea {
-    cursor: pointer;
-  }
-
-  .chart-point-group:hover .chart-point {
-    opacity: 1;
-    r: 6;
-  }
-
-
   /* Collapsible: CSS Grid rows technique for smooth height */
   .collapsible-grid {
     display: grid;

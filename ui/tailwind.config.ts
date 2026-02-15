@@ -64,7 +64,6 @@ export default {
         "card-entrance": "cardEntrance 0.5s ease-out backwards",
         "fade-in": "fadeIn 0.3s ease",
         "bounce-dot": "bounceDot 1.4s infinite",
-        "bar-grow": "barGrow 0.6s ease-out backwards",
         "draw-line": "drawLine 1.5s ease-out forwards",
         "status-pulse": "statusPulse 1.5s ease-in-out infinite",
         "skeleton-shimmer": "skeletonShimmer 1.5s infinite",
@@ -84,10 +83,6 @@ export default {
         bounceDot: {
           "0%, 80%, 100%": { transform: "scale(0)" },
           "40%": { transform: "scale(1)" },
-        },
-        barGrow: {
-          from: { transform: "scaleY(0)" },
-          to: { transform: "scaleY(1)" },
         },
         drawLine: {
           to: { strokeDashoffset: "0" },

@@ -4,6 +4,10 @@ import { ICONS, getIcon } from "../../lib/icons";
 import { renderMarkdown } from "../../lib/markdown";
 import { i18n } from "../../lib/i18n";
 import {
+  ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line,
+  AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
+} from "recharts";
+import {
   renderCodeEditor, renderCommitList, renderDiffView, renderDataTable,
   renderScoreGauge, renderActivityRings, renderRadarChart, renderStatusBadge,
   renderCollapsible, renderModalComponent, renderForm, renderFormInput,
@@ -259,148 +263,92 @@ export function A2UIRenderer({
       return <div className="flex items-center justify-center text-text-muted" style={{ height }}>No data</div>;
     }
 
-    const values = data.map((d) => Number(d[yKey]) || 0);
-    const maxVal = Math.max(...values, 1);
+    const axisStyle = { fontSize: 11, fill: "currentColor", fillOpacity: 0.45 };
+    const gridStroke = "currentColor";
+    const gridOpacity = 0.08;
+    const tooltipStyle = {
+      contentStyle: { background: "var(--color-surface-elevated)", border: "1px solid rgb(var(--color-border))", borderRadius: 8, fontSize: 12 },
+      labelStyle: { color: "rgb(var(--color-text-secondary))" },
+      itemStyle: { color: "rgb(var(--color-text))" },
+    };
+    const gradientId = `chart-grad-${c.id}`;
 
     if (chartType === "bar") {
-      const chartW = 960;
-      const mL = 52, mR = 12, mT = 16, mB = 24;
-      const plotW = chartW - mL - mR;
-      const plotH = height - mT - mB;
-      const yPad = maxVal * 0.1 || 1;
-      const yMax = Math.ceil(maxVal + yPad);
-      const barCount = data.length;
-      const barGap = plotW * 0.15 / Math.max(barCount, 1);
-      const barW = (plotW - barGap * (barCount + 1)) / barCount;
-
-      const barCoords = data.map((d, i) => {
-        const x = mL + barGap + i * (barW + barGap);
-        const barH = (values[i] / yMax) * plotH;
-        return { x, y: mT + plotH - barH, w: barW, h: barH, label: String(d[xKey]), value: values[i] };
-      });
-
-      // Trend line through bar centers
-      const linePoints = barCoords.map((b) => `${b.x + b.w / 2},${b.y}`).join(" ");
-      const areaPoints = `${barCoords[0].x + barCoords[0].w / 2},${mT + plotH} ${linePoints} ${barCoords[barCoords.length - 1].x + barCoords[barCoords.length - 1].w / 2},${mT + plotH}`;
-
-      const gridCount = 4;
-      const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
-        const pct = i / gridCount;
-        const val = pct * yMax;
-        return {
-          y: mT + plotH - pct * plotH,
-          label: val >= 10000 ? `${(val / 1000).toFixed(0)}k` : val >= 1000 ? `${(val / 1000).toFixed(1)}k` : String(Math.round(val)),
-        };
-      });
-
-      const gradId = `bar-line-grad-${color.replace("#", "")}`;
-
       return (
-        <div className="w-full relative" style={{ minHeight: height }}>
-          <svg viewBox={`0 0 ${chartW} ${height}`} className="w-full" style={{ display: "block" }}>
-            {gridLines.map((g, i) => (
-              <React.Fragment key={i}>
-                <line x1={mL} y1={g.y} x2={chartW - mR} y2={g.y} stroke="currentColor" strokeOpacity="0.08" strokeWidth="1" />
-                <text x={mL - 8} y={g.y + 4} textAnchor="end" fill="currentColor" fillOpacity="0.45" fontSize="11" fontFamily="system-ui">{g.label}</text>
-              </React.Fragment>
-            ))}
-            {/* Bars */}
-            {barCoords.map((b, i) => (
-              <g key={i} className="chart-point-group">
-                <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={3} fill={color} fillOpacity="0.6" className="transition-all duration-200 hover:fill-opacity-85">
-                  <title>{b.label}: {b.value}</title>
-                </rect>
-              </g>
-            ))}
-            {/* Trend line overlay */}
-            {barCount > 1 && (
-              <>
-                <defs>
-                  <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={color} stopOpacity="0.12" />
-                    <stop offset="100%" stopColor={color} stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <polygon points={areaPoints} fill={`url(#${gradId})`} />
-                <polyline fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" points={linePoints} strokeOpacity="0.8" />
-                {barCoords.map((b, i) => (
-                  <circle key={i} cx={b.x + b.w / 2} cy={b.y} r="3" fill={color} />
-                ))}
-              </>
-            )}
-            {/* X labels */}
-            {barCoords.map((b, i) => (
-              <text key={i} x={b.x + b.w / 2} y={height - 4} textAnchor="middle" fill="currentColor" fillOpacity="0.4" fontSize="11" fontFamily="system-ui">{b.label}</text>
-            ))}
-          </svg>
-        </div>
+        <ResponsiveContainer width="100%" height={height}>
+          <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.12} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
+            <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
+            <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
+            <Tooltip {...tooltipStyle} cursor={{ fill: "currentColor", fillOpacity: 0.04 }} />
+            <Bar dataKey={yKey} fill={color} fillOpacity={0.6} radius={[3, 3, 0, 0]} />
+            <Area type="monotone" dataKey={yKey} fill={`url(#${gradientId})`} stroke="none" />
+            <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} dot={{ r: 3, fill: color }} strokeOpacity={0.8} />
+          </ComposedChart>
+        </ResponsiveContainer>
       );
     }
 
-    // Line chart
-    const chartW = 960;
-    const mL = 52, mR = 12, mT = 12, mB = 22;
-    const plotW = chartW - mL - mR;
-    const plotH = height - mT - mB;
-    const minVal = Math.min(...values);
-    const dataRange = maxVal - minVal;
-    const yPad = dataRange > 0 ? dataRange * 0.15 : maxVal * 0.1 || 1;
-    const yMin = Math.max(0, Math.floor(minVal - yPad));
-    const yMax = Math.ceil(maxVal + yPad);
-    const yRange = yMax - yMin || 1;
+    if (chartType === "area") {
+      return (
+        <ResponsiveContainer width="100%" height={height}>
+          <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
+            <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
+            <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
+            <Tooltip {...tooltipStyle} />
+            <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={{ r: 3, fill: color }} />
+          </AreaChart>
+        </ResponsiveContainer>
+      );
+    }
 
-    const pointCoords = data.map((d, i) => ({
-      x: mL + (data.length > 1 ? (i / (data.length - 1)) * plotW : plotW / 2),
-      y: mT + plotH - ((values[i] - yMin) / yRange) * plotH,
-      label: String(d[xKey]),
-      value: values[i],
-    }));
-    const points = pointCoords.map((p) => `${p.x},${p.y}`).join(" ");
-    const areaPoints = `${pointCoords[0].x},${mT + plotH} ${points} ${pointCoords[pointCoords.length - 1].x},${mT + plotH}`;
+    if (chartType === "pie" || chartType === "donut") {
+      const COLORS = [color, "#14b8a6", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316"];
+      const innerRadius = chartType === "donut" ? "55%" : 0;
+      return (
+        <ResponsiveContainer width="100%" height={height}>
+          <PieChart>
+            <Tooltip {...tooltipStyle} />
+            <Pie data={data} dataKey={yKey} nameKey={xKey} cx="50%" cy="50%" innerRadius={innerRadius} outerRadius="80%" paddingAngle={2} strokeWidth={0}>
+              {data.map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} fillOpacity={0.85} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+      );
+    }
 
-    const gridCount = 4;
-    const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
-      const pct = i / gridCount;
-      const val = yMin + pct * yRange;
-      return {
-        y: mT + plotH - pct * plotH,
-        label: val >= 10000 ? `${(val / 1000).toFixed(0)}k` : val >= 1000 ? `${(val / 1000).toFixed(1)}k` : String(Math.round(val)),
-      };
-    });
-
-    const maxXLabels = Math.min(data.length, 7);
-    const xLabelIdxs = data.length <= maxXLabels
-      ? data.map((_, i) => i)
-      : Array.from({ length: maxXLabels }, (_, i) => Math.round((i * (data.length - 1)) / (maxXLabels - 1)));
-
+    // Default: line chart (also fallback for unknown types)
     return (
-      <div className="w-full relative" style={{ minHeight: height }}>
-        <svg viewBox={`0 0 ${chartW} ${height}`} className="w-full" style={{ display: "block" }}>
-          {gridLines.map((g, i) => (
-            <React.Fragment key={i}>
-              <line x1={mL} y1={g.y} x2={chartW - mR} y2={g.y} stroke="currentColor" strokeOpacity="0.08" strokeWidth="1" />
-              <text x={mL - 8} y={g.y + 4} textAnchor="end" fill="currentColor" fillOpacity="0.45" fontSize="11" fontFamily="system-ui">{g.label}</text>
-            </React.Fragment>
-          ))}
+      <ResponsiveContainer width="100%" height={height}>
+        <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
           <defs>
-            <linearGradient id={`area-grad-${color.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.15" />
-              <stop offset="100%" stopColor={color} stopOpacity="0" />
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.15} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <polygon points={areaPoints} fill={`url(#area-grad-${color.replace('#','')})`} />
-          <polyline fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={points} />
-          {pointCoords.map((p, i) => (
-            <g key={i} className="chart-point-group">
-              <circle cx={p.x} cy={p.y} r="4" fill={color} className="chart-point"><title>{p.label}: {p.value}</title></circle>
-              <circle cx={p.x} cy={p.y} r="14" fill="transparent" className="chart-point-hitarea" />
-            </g>
-          ))}
-          {xLabelIdxs.map((i) => (
-            <text key={i} x={pointCoords[i].x} y={height - 4} textAnchor="middle" fill="currentColor" fillOpacity="0.4" fontSize="11" fontFamily="system-ui">{pointCoords[i].label}</text>
-          ))}
-        </svg>
-      </div>
+          <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
+          <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
+          <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
+          <Tooltip {...tooltipStyle} />
+          <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={2.5} fill={`url(#${gradientId})`} dot={{ r: 4, fill: color }} />
+        </AreaChart>
+      </ResponsiveContainer>
     );
   }
 
