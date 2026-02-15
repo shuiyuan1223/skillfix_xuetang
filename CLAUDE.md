@@ -89,7 +89,7 @@ pha restart         # 重启 Gateway 加载新代码
 pha logs -f
 
 # UI 热更新开发（可选，仅前端改动时用）
-cd ui && bun run dev   # http://localhost:5173（连接同一个 Gateway WebSocket）
+cd ui && bun run dev   # http://localhost:5173（连接同一个 Gateway）
 ```
 
 ## 项目结构
@@ -103,7 +103,10 @@ pha/
 │   │   ├── tui.ts             # pha tui (pi-tui)
 │   │   └── ...
 │   ├── gateway/               # Gateway 服务
-│   │   ├── server.ts          # Bun HTTP/WebSocket
+│   │   ├── server.ts          # Bun HTTP+SSE server
+│   │   ├── sse-manager.ts     # SSE 连接管理器
+│   │   ├── mcp-server.ts      # MCP Streamable HTTP (JSON-RPC 2.0)
+│   │   ├── a2a.ts             # A2A Agent Card + 任务管理
 │   │   ├── pages.ts           # A2UI 页面生成器
 │   │   ├── evolution-lab.ts   # Evolution Lab 5-Tab Dashboard
 │   │   ├── tui-renderer.ts    # A2UI → TUI 文本渲染引擎
@@ -132,7 +135,7 @@ pha/
 │       └── mock.ts
 ├── ui/                        # Web UI (React)
 │   └── src/
-│       ├── App.tsx            # 主应用 (SSE + WebSocket)
+│       ├── App.tsx            # 主应用 (HTTP + SSE)
 │       └── components/a2ui/
 │           └── A2UIRenderer.tsx  # A2UI 组件渲染器
 ├── dist/                      # 构建输出
@@ -301,13 +304,14 @@ chore: 杂项
 │  - 纯渲染器，无业务逻辑                                   │
 │  - Web: React A2UIRenderer / TUI: tui-renderer           │
 └────────────┬───────────────────────┬────────────────────┘
-             │ WebSocket /ws          │ POST /api/ag-ui (SSE)
+             │ HTTP+SSE /api/a2ui/*   │ POST /api/ag-ui (SSE)
              │ (A2UI 页面/导航/弹窗)    │ (AG-UI 聊天事件流)
              ▼                        ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    Gateway Server                        │
 │  - A2UI 页面生成 (pages.ts)                              │
-│  - WebSocket + SSE 双通道                                │
+│  - HTTP+SSE 统一传输 (无 WebSocket)                      │
+│  - MCP JSON-RPC + A2A 协议                               │
 │  - GatewaySession 管理聊天状态                            │
 └────────────────────────┬────────────────────────────────┘
                          │
@@ -368,7 +372,7 @@ PHA 支持两种前端形态，共享同一个 Gateway 和 A2UI 协议：
 | 框架 | React | pi-tui |
 | 入口 | `ui/src/App.tsx` | `src/commands/tui.ts` |
 | 渲染器 | `A2UIRenderer.tsx` | `tui-renderer.ts` |
-| 连接 | WebSocket `/ws` + SSE `/api/ag-ui` | WebSocket `/ws` |
+| 连接 | HTTP+SSE `/api/a2ui/*` + SSE `/api/ag-ui` | HTTP+SSE `/api/a2ui/*` |
 | 导航 | 侧边栏点击 | 斜杠命令 (`/dashboard`, `/health` 等) |
 | 交互 | 按钮点击 → action 消息 | 编号选择 → action 消息 |
 
@@ -408,7 +412,7 @@ PHA 支持两种前端形态，共享同一个 Gateway 和 A2UI 协议：
 
 ### C. 通信协议约束 (规则 11-14)
 
-11. **双通道传输** — 聊天消息走 SSE（`POST /api/ag-ui`），其他功能走 WebSocket（`/ws`）。SSE 传输标准 AG-UI 事件（`RunStarted`/`TextMessageContent`/`ToolCallStart` 等），WebSocket 传输 A2UI 页面更新
+11. **HTTP+SSE 统一传输** — 聊天消息走 AG-UI SSE（`POST /api/ag-ui`），页面/导航/动作走 A2UI HTTP+SSE（`POST /api/a2ui/action` + `GET /api/a2ui/events`）。MCP 走 JSON-RPC 2.0（`POST /api/mcp`），A2A 走标准 Agent 协议（`POST /api/a2a`）。**无 WebSocket**
 12. **状态归属** — 服务端（`GatewaySession`）是聊天历史的唯一数据源。SSE 模式下前端维护本地 chat state 用于实时渲染，但页面刷新后从服务端 A2UI 重建。非聊天页面的 UI state 完全由服务端驱动
 13. **Action 模式** — 用户交互统一走 `{ type: "action", action: "handler_name", payload: {...} }` 格式。按钮的 `action` 字符串必须与 `server.ts` 的 `handleAction()` 中的 handler 精确匹配
 14. **导航模式** — 侧边栏点击走 `{ type: "navigate", view: "view_id" }` 格式。`view_id` 必须与 `server.ts` 的 `handleNavigate()` 中的 case 精确匹配
@@ -471,10 +475,15 @@ Evolution Lab 是顶级导航页面，采用 5-Tab Dashboard 布局：
 | 端点 | 说明 |
 |------|------|
 | `GET /health` | 健康检查 |
-| `WS /ws` | A2UI WebSocket（页面/导航/弹窗） |
+| `POST /api/a2ui/init` | A2UI 创建/恢复会话 |
+| `POST /api/a2ui/action` | A2UI 用户动作 + 导航 |
+| `GET /api/a2ui/events` | A2UI SSE 推送（页面更新/toast/modal） |
 | `POST /api/ag-ui` | AG-UI SSE 聊天事件流 |
-| `POST /mcp/tools/list` | 列出 MCP 工具 |
-| `POST /mcp/tools/call` | 调用 MCP 工具 |
+| `POST /api/mcp` | MCP JSON-RPC 2.0（Streamable HTTP） |
+| `GET /.well-known/agent.json` | A2A Agent Card 发现 |
+| `POST /api/a2a` | A2A JSON-RPC 2.0 任务管理 |
+| `POST /mcp/tools/list` | 列出 MCP 工具 (legacy) |
+| `POST /mcp/tools/call` | 调用 MCP 工具 (legacy) |
 | `GET /api/health/*` | REST API (兼容) |
 
 ## 环境变量

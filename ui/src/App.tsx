@@ -37,6 +37,29 @@ function getUserUuid(): string {
   return uuid;
 }
 
+/** Send an action to the A2UI HTTP endpoint and process response updates. */
+async function postAction(
+  data: Record<string, unknown>,
+  handleMessage: (msg: WSMessage) => void,
+): Promise<void> {
+  try {
+    const res = await fetch("/api/a2ui/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) return;
+    const { updates } = (await res.json()) as { updates: unknown[] };
+    if (updates) {
+      for (const msg of updates) {
+        handleMessage(msg as WSMessage);
+      }
+    }
+  } catch (e) {
+    console.error("[A2UI] Action error:", e);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // App Component
 // ---------------------------------------------------------------------------
@@ -70,12 +93,14 @@ export function App() {
   const chatInitializedRef = useRef(false);
 
   // --- Refs ----------------------------------------------------------------
-  const wsRef = useRef<WebSocket | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const userUuidRef = useRef<string | null>(null);
   const chatAutoScrollRef = useRef(true);
   const isAutoScrollingRef = useRef(false);
   const extensionDetectedRef = useRef(false);
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
+  const handleMessageRef = useRef<(msg: WSMessage) => void>(() => {});
 
   // Keep mainDataRef in sync with mainData state
   mainDataRef.current = mainData;
@@ -142,14 +167,10 @@ export function App() {
     [],
   );
 
-  // We define sendAction early so OAuth helpers can reference it.  Because
-  // sendAction itself depends on wsRef (a ref, stable), there is no circular
-  // dependency issue -- we just need to forward-declare it before the OAuth
-  // functions that call it.
-
+  // sendActionRaw: fire-and-forget action via HTTP POST
   const sendActionRaw = useCallback(
     (action: string, payload?: Record<string, unknown>) => {
-      wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+      postAction({ type: "action", action, payload }, handleMessageRef.current);
     },
     [],
   );
@@ -336,13 +357,7 @@ export function App() {
   const startOAuthWithExtension = useCallback(async () => {
     console.log("[OAuth] Using browser extension flow...");
 
-    wsRef.current?.send(
-      JSON.stringify({
-        type: "action",
-        action: "show_toast",
-        payload: { message: "Opening authorization page...", variant: "info" },
-      }),
-    );
+    sendActionRaw("show_toast", { message: "Opening authorization page...", variant: "info" });
 
     try {
       const urlResponse = await fetch(
@@ -386,26 +401,14 @@ export function App() {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error("[OAuth] Extension flow failed:", message);
-      wsRef.current?.send(
-        JSON.stringify({
-          type: "action",
-          action: "show_toast",
-          payload: { message: `Authentication failed: ${message}`, variant: "error" },
-        }),
-      );
+      sendActionRaw("show_toast", { message: `Authentication failed: ${message}`, variant: "error" });
     }
   }, [requestExtensionOAuth, sendActionRaw]);
 
   const startOAuthWithMCP = useCallback(async () => {
     console.log("[OAuth] Using Chrome MCP flow...");
 
-    wsRef.current?.send(
-      JSON.stringify({
-        type: "action",
-        action: "show_toast",
-        payload: { message: "Launching browser for authentication...", variant: "info" },
-      }),
-    );
+    sendActionRaw("show_toast", { message: "Launching browser for authentication...", variant: "info" });
 
     try {
       const response = await fetch("/auth/huawei/mcp-flow", {
@@ -429,41 +432,23 @@ export function App() {
           result.error?.includes("chrome") ||
           result.error?.includes("spawn")
         ) {
-          wsRef.current?.send(
-            JSON.stringify({
-              type: "action",
-              action: "show_toast",
-              payload: {
-                message: "Please install PHA browser extension for authentication",
-                variant: "warning",
-              },
-            }),
-          );
+          sendActionRaw("show_toast", {
+            message: "Please install PHA browser extension for authentication",
+            variant: "warning",
+          });
         } else {
-          wsRef.current?.send(
-            JSON.stringify({
-              type: "action",
-              action: "show_toast",
-              payload: {
-                message: `Authentication failed: ${result.error}`,
-                variant: "error",
-              },
-            }),
-          );
+          sendActionRaw("show_toast", {
+            message: `Authentication failed: ${result.error}`,
+            variant: "error",
+          });
         }
       }
     } catch (e) {
       console.error("[OAuth] Request failed:", e);
-      wsRef.current?.send(
-        JSON.stringify({
-          type: "action",
-          action: "show_toast",
-          payload: {
-            message: "Failed to start authentication. Please install PHA extension.",
-            variant: "error",
-          },
-        }),
-      );
+      sendActionRaw("show_toast", {
+        message: "Failed to start authentication. Please install PHA extension.",
+        variant: "error",
+      });
     }
   }, [sendActionRaw]);
 
@@ -487,7 +472,7 @@ export function App() {
       // Handle OAuth actions locally
       if (action === "start_huawei_auth") {
         // Also notify server so it can clear scope error cache
-        wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+        postAction({ type: "action", action, payload }, handleMessageRef.current);
         startHuaweiAuth();
         return;
       }
@@ -500,9 +485,9 @@ export function App() {
         const configJson = (editorComp as any)?.value || "{}";
         if (action === "settings_copy_config") {
           navigator.clipboard.writeText(configJson).then(() => {
-            wsRef.current?.send(JSON.stringify({ type: "action", action: "show_toast", payload: { message: "Copied!", variant: "success" } }));
+            sendActionRaw("show_toast", { message: "Copied!", variant: "success" });
           }).catch(() => {
-            wsRef.current?.send(JSON.stringify({ type: "action", action: "show_toast", payload: { message: "Copy failed", variant: "error" } }));
+            sendActionRaw("show_toast", { message: "Copy failed", variant: "error" });
           });
         } else {
           const blob = new Blob([configJson], { type: "application/json" });
@@ -538,13 +523,13 @@ export function App() {
         setChatStreaming(false);
         activeMessageRef.current = null;
         // Also notify server
-        wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+        postAction({ type: "action", action, payload }, handleMessageRef.current);
         return;
       }
 
-      wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+      postAction({ type: "action", action, payload }, handleMessageRef.current);
     },
-    [startHuaweiAuth, sendChatMessage],
+    [startHuaweiAuth, sendChatMessage, sendActionRaw],
   );
 
   const sendNavigate = useCallback((view: string) => {
@@ -566,7 +551,7 @@ export function App() {
       mainContentRef.current.scrollTop = 0;
     }
 
-    wsRef.current?.send(JSON.stringify({ type: "navigate", view }));
+    postAction({ type: "navigate", view }, handleMessageRef.current);
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -614,7 +599,7 @@ export function App() {
   // handleMessage (uses functional setState to avoid stale closures)
   // ---------------------------------------------------------------------------
 
-  // Extract chat history from a2ui surface data (for initial sync from WebSocket)
+  // Extract chat history from a2ui surface data (for initial sync)
   const extractChatHistory = useCallback((surface: A2UISurfaceData) => {
     if (chatInitializedRef.current) return;
     const chatComp = surface.components.find((c) => c.type === "chat_messages");
@@ -737,39 +722,73 @@ export function App() {
     [closeModal, extractChatHistory],
   );
 
+  // Keep handleMessageRef in sync so postAction always uses the latest
+  handleMessageRef.current = handleMessage;
+
   // ---------------------------------------------------------------------------
-  // WebSocket connect (stable via refs)
+  // HTTP+SSE connect (replaces WebSocket)
   // ---------------------------------------------------------------------------
 
-  const connect = useCallback(() => {
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const uuidParam = userUuidRef.current ? `?uuid=${userUuidRef.current}` : "";
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws${uuidParam}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+  const connect = useCallback(async () => {
+    try {
+      // 1. HTTP init — get session + initial page state
+      const uuid = userUuidRef.current;
+      const initRes = await fetch("/api/a2ui/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid }),
+      });
 
-    ws.onopen = () => {
-      setConnected(true);
-      ws.send(JSON.stringify({ type: "init" }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data) as WSMessage;
-        handleMessage(msg);
-      } catch (e) {
-        console.error("Parse error:", e);
+      if (!initRes.ok) {
+        console.error("[A2UI] Init failed:", initRes.status);
+        setTimeout(() => connect(), 2000);
+        return;
       }
-    };
 
-    ws.onerror = () => {
-      console.error("WebSocket error");
-    };
+      const { sessionId, updates } = (await initRes.json()) as {
+        sessionId: string;
+        userUuid?: string;
+        updates: unknown[];
+      };
+      sessionIdRef.current = sessionId;
 
-    ws.onclose = () => {
-      setConnected(false);
+      // Process initial page state
+      for (const msg of updates) {
+        handleMessage(msg as WSMessage);
+      }
+
+      setConnected(true);
+
+      // 2. SSE events — long-lived connection for server push
+      const es = new EventSource(`/api/a2ui/events?sessionId=${sessionId}`);
+      eventSourceRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data) as WSMessage;
+          handleMessage(msg);
+        } catch (e) {
+          console.error("[SSE] Parse error:", e);
+        }
+      };
+
+      es.onerror = () => {
+        setConnected(false);
+        // EventSource automatically reconnects, but if it closes completely
+        // we need to re-init
+        if (es.readyState === EventSource.CLOSED) {
+          eventSourceRef.current = null;
+          setTimeout(() => connect(), 2000);
+        }
+      };
+
+      es.onopen = () => {
+        setConnected(true);
+      };
+    } catch (e) {
+      console.error("[A2UI] Connect error:", e);
       setTimeout(() => connect(), 2000);
-    };
+    }
   }, [handleMessage]);
 
   // ---------------------------------------------------------------------------
@@ -792,12 +811,12 @@ export function App() {
     // Get user UUID
     userUuidRef.current = getUserUuid();
 
-    // Connect WebSocket
+    // Connect via HTTP+SSE
     connect();
 
     // Cleanup
     return () => {
-      wsRef.current?.close();
+      eventSourceRef.current?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
