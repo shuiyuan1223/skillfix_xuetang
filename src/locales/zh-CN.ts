@@ -171,6 +171,7 @@ export const zhCN: LocaleMessages = {
     sleepStages: "睡眠阶段",
     sleepTrend: "睡眠趋势",
     sleepBreathing: "睡眠呼吸",
+    stepsTrend: "步数趋势",
     workouts: "锻炼",
     recentWorkouts: "最近锻炼记录",
     activityRings: "活动环",

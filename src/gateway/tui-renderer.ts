@@ -556,20 +556,40 @@ function renderNav(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderChatMessages(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const messages = (comp.messages as Array<{ role: string; content: string }>) || [];
+  const messages =
+    (comp.messages as Array<{
+      role: string;
+      content?: string;
+      parts?: Array<{ type: string; content?: string; toolName?: string; status?: string }>;
+    }>) || [];
   const streaming = comp.streaming as boolean | undefined;
   const streamingContent = comp.streamingContent as string | undefined;
   const lines: string[] = [];
 
   for (const msg of messages) {
     if (msg.role === "user") {
-      lines.push(indent(ctx, `${ansi.green("You")} ${ansi.dim("›")} ${msg.content}`));
+      const text = msg.parts?.[0]?.content || msg.content || "";
+      lines.push(indent(ctx, `${ansi.green("You")} ${ansi.dim("›")} ${text}`));
     } else if (msg.role === "assistant") {
       lines.push(indent(ctx, ansi.cyan("Assistant")));
-      // Wrap long content
-      lines.push(...wrapLines(msg.content, ctx));
+      if (msg.parts && msg.parts.length > 0) {
+        for (const part of msg.parts) {
+          if (part.type === "text" && part.content?.trim()) {
+            lines.push(...wrapLines(part.content, ctx));
+          } else if (part.type === "tool_use") {
+            const statusLabel =
+              part.status === "running" ? "..." : part.status === "error" ? "ERR" : "OK";
+            lines.push(indent(ctx, `  ${ansi.yellow("Tool")} ${part.toolName} [${statusLabel}]`));
+          } else if (part.type === "tool_result") {
+            lines.push(indent(ctx, ansi.dim("  [Card Results]")));
+          }
+        }
+      } else {
+        lines.push(...wrapLines(msg.content || "", ctx));
+      }
     } else if (msg.role === "tool") {
-      lines.push(indent(ctx, `${ansi.yellow("Tool")} ${ansi.dim("›")} ${msg.content}`));
+      // Legacy tool messages
+      lines.push(indent(ctx, `${ansi.yellow("Tool")} ${ansi.dim("›")} ${msg.content || ""}`));
     }
     lines.push("");
   }

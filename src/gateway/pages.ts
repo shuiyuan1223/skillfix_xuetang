@@ -19,8 +19,18 @@ import {
 
 // Types for page data
 interface Message {
-  role: "user" | "assistant" | "tool";
-  content: string;
+  id?: string;
+  role: "user" | "assistant";
+  parts?: Array<{
+    type: "text" | "tool_use" | "tool_result";
+    content?: string;
+    toolCallId?: string;
+    toolName?: string;
+    status?: string;
+    cards?: { components: unknown[]; root_id: string };
+  }>;
+  // Backward compat
+  content?: string;
   cards?: {
     components: unknown[];
     root_id: string;
@@ -140,7 +150,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
 // ============================================================================
 
 export function generateSystemAgentPage(state: {
-  chatMessages: Array<{ role: string; content: string; cards?: any }>;
+  chatMessages: Array<{ role: string; content?: string; parts?: unknown[]; cards?: any }>;
   streaming: boolean;
   streamingContent: string;
   quickReplies?: QuickReply[];
@@ -3153,9 +3163,10 @@ function generateHeartRateCards(data: unknown): ToolCardResult | null {
 
   const children: string[] = [statsGrid];
 
-  // Heart rate line chart (last 12 readings)
+  // Heart rate line chart (last 12 readings) — wrapped in card
   if (d.readings && d.readings.length > 0) {
     const chartData = d.readings.slice(-12).map((r) => ({ label: r.time, value: r.value }));
+    const chartLabel = ui.text(t("health.heartRateTrend"), "label");
     const chart = ui.chart({
       chartType: "line",
       data: chartData,
@@ -3164,7 +3175,8 @@ function generateHeartRateCards(data: unknown): ToolCardResult | null {
       height: 160,
       color: "#ef4444",
     });
-    children.push(chart);
+    const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+    children.push(chartCard);
   }
 
   // Quick action button
@@ -3216,7 +3228,7 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
 
   const children: string[] = [statsGrid];
 
-  // Sleep stages bar chart
+  // Sleep stages bar chart — wrapped in card
   if (d.stages) {
     const stageData = [
       { label: "Deep", value: d.stages.deep || 0 },
@@ -3224,6 +3236,7 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
       { label: "REM", value: d.stages.rem || 0 },
       { label: "Awake", value: d.stages.awake || 0 },
     ];
+    const chartLabel = ui.text(t("dashboard.sleepTrend"), "label");
     const chart = ui.chart({
       chartType: "bar",
       data: stageData,
@@ -3232,7 +3245,8 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
       height: 140,
       color: "#8b5cf6",
     });
-    children.push(chart);
+    const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+    children.push(chartCard);
   }
 
   // Quick action button
@@ -3283,12 +3297,13 @@ function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
 
   const children: string[] = [statsGrid];
 
-  // Steps bar chart (7 days)
+  // Steps bar chart (7 days) — wrapped in card
   if (d.steps?.daily && d.steps.daily.length > 0) {
     const stepsChartData = d.steps.daily.map((day) => ({
       label: day.date.slice(-2),
       value: day.steps,
     }));
+    const stepsLabel = ui.text(t("dashboard.stepsTrend"), "label");
     const stepsChart = ui.chart({
       chartType: "bar",
       data: stepsChartData,
@@ -3297,15 +3312,17 @@ function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
       height: 140,
       color: "#10b981",
     });
-    children.push(stepsChart);
+    const stepsCard = ui.card([stepsLabel, stepsChart], { padding: 12 });
+    children.push(stepsCard);
   }
 
-  // Sleep bar chart (7 days)
+  // Sleep bar chart (7 days) — wrapped in card
   if (d.sleep?.daily && d.sleep.daily.length > 0) {
     const sleepChartData = d.sleep.daily.map((day) => ({
       label: day.date.slice(-2),
       value: day.hours,
     }));
+    const sleepLabel = ui.text(t("dashboard.sleepTrend"), "label");
     const sleepChart = ui.chart({
       chartType: "bar",
       data: sleepChartData,
@@ -3314,7 +3331,8 @@ function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
       height: 140,
       color: "#8b5cf6",
     });
-    children.push(sleepChart);
+    const sleepCard = ui.card([sleepLabel, sleepChart], { padding: 12 });
+    children.push(sleepCard);
   }
 
   // Quick action button

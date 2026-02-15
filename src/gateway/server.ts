@@ -63,13 +63,21 @@ import {
   generateAuthRequiredPage,
   generateBenchmarkModelSelectorModal,
   generateToolCards,
-  mergePendingCards,
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
   generateSettingsPage,
   type SettingsPageData,
 } from "./pages.js";
+import type { PartsChatMessage, MessagePart, AGUIEvent } from "./a2ui.js";
+
+/** Find the last text part index in a parts array (ES2022-safe replacement for findLastIndex). */
+function findLastTextIdx(parts: MessagePart[]): number {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].type === "text") return i;
+  }
+  return -1;
+}
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
 import {
@@ -219,12 +227,17 @@ interface QuickReply {
 }
 
 function detectQuickReplies(
-  messages: Array<{ role: string; content: string }>
+  messages: Array<{ role: string; content?: string; parts?: MessagePart[] }>
 ): QuickReply[] | undefined {
   if (messages.length === 0) return undefined;
   const last = messages[messages.length - 1];
   if (last.role !== "assistant") return undefined;
-  const text = last.content;
+  const text = last.parts
+    ? last.parts
+        .filter((p): p is { type: "text"; content: string } => p.type === "text")
+        .map((p) => p.content)
+        .join("")
+    : last.content || "";
 
   // Detect approval/confirmation patterns
   if (/批准|approve|确认.*方案|是否.*执行|proceed/i.test(text)) {
@@ -941,17 +954,13 @@ export class GatewaySession {
   // even after a page refresh replaces the WebSocket connection.
   private _activeSend: ((msg: unknown) => void) | null = null;
 
-  // Chat state
-  private chatMessages: Array<{
-    role: "user" | "assistant" | "tool";
-    content: string;
-    cards?: { components: unknown[]; root_id: string };
-    toolName?: string;
-    toolStatus?: "running" | "completed" | "error";
-  }> = [];
-  private pendingCards: Array<{ components: unknown[]; root_id: string }> = [];
+  // Chat state (Parts model — AG-UI aligned)
+  private chatMessages: PartsChatMessage[] = [];
   private isStreaming = false;
   private streamingContent = "";
+  private currentAssistantMsgId: string | null = null;
+  private currentRunId: string | null = null;
+  private lastStreamedText = "";
   private currentView = "chat";
 
   // Settings state
@@ -1029,16 +1038,11 @@ export class GatewaySession {
   private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" = "overview";
   private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
   private evolutionSelectedVersion: string | null = null;
-  private systemAgentChatMessages: Array<{
-    role: "user" | "assistant" | "tool";
-    content: string;
-    cards?: { components: unknown[]; root_id: string };
-    toolName?: string;
-    toolStatus?: "running" | "completed" | "error";
-    progressData?: { current: number; total: number; category: string };
-  }> = [];
+  private systemAgentChatMessages: PartsChatMessage[] = [];
   private systemAgentStreaming = false;
   private systemAgentStreamingContent = "";
+  private saCurrentAssistantMsgId: string | null = null;
+  private saLastStreamedText = "";
   private evolutionInspectedBranch: string | null = null;
   private evolutionLabDiffContent: {
     before: string;
@@ -1102,7 +1106,9 @@ export class GatewaySession {
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
           this.sessionId = chatSession.sessionId;
           this.chatMessages = chatSession.entries.map((e) => ({
-            role: e.role,
+            id: crypto.randomUUID(),
+            role: e.role === "tool" ? ("assistant" as const) : (e.role as "user" | "assistant"),
+            parts: [{ type: "text" as const, content: e.content }],
             content: e.content,
           }));
         }
@@ -1114,7 +1120,9 @@ export class GatewaySession {
         const lastTs = saSession.entries[saSession.entries.length - 1].timestamp;
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
           this.systemAgentChatMessages = saSession.entries.map((e) => ({
-            role: e.role,
+            id: crypto.randomUUID(),
+            role: e.role === "tool" ? ("assistant" as const) : (e.role as "user" | "assistant"),
+            parts: [{ type: "text" as const, content: e.content }],
             content: e.content,
           }));
         }
@@ -1179,7 +1187,16 @@ export class GatewaySession {
         userUuid: this.userUuid || undefined,
         sessionId: this.sessionId,
         dataSource: this.dataSource,
-        sessionMessages: this.chatMessages,
+        sessionMessages: this.chatMessages.map((m) => ({
+          role: m.role,
+          content:
+            m.content ||
+            m.parts
+              ?.filter((p) => p.type === "text")
+              .map((p) => (p as { type: "text"; content: string }).content)
+              .join("") ||
+            "",
+        })),
         extraTools,
       });
 
@@ -1243,7 +1260,16 @@ export class GatewaySession {
         provider: saModel.provider as any,
         modelId: saModel.modelId,
         baseUrl: saModel.baseUrl,
-        sessionMessages: this.systemAgentChatMessages,
+        sessionMessages: this.systemAgentChatMessages.map((m) => ({
+          role: m.role,
+          content:
+            m.content ||
+            m.parts
+              ?.filter((p) => p.type === "text")
+              .map((p) => (p as { type: "text"; content: string }).content)
+              .join("") ||
+            "",
+        })),
       });
 
       // Configure evolution tools: create fresh agents per call for concurrency safety
@@ -1294,18 +1320,22 @@ export class GatewaySession {
           return result;
         },
         concurrency: getBenchmarkConcurrency(),
-        onProgress: (current, total, testCase) => {
-          // Update the last running run_benchmark tool message with progress
+        onProgress: (current, total, _testCase) => {
+          // Update the last running run_benchmark tool_use part with progress
           for (let i = session.systemAgentChatMessages.length - 1; i >= 0; i--) {
             const msg = session.systemAgentChatMessages[i];
-            if (
-              msg.role === "tool" &&
-              msg.toolName === "run_benchmark" &&
-              msg.toolStatus === "running"
-            ) {
-              msg.content = `Running benchmark... ${current}/${total}`;
-              msg.progressData = { current, total, category: testCase.category };
-              break;
+            if (msg.role !== "assistant" || !msg.parts) continue;
+            for (let j = msg.parts.length - 1; j >= 0; j--) {
+              const part = msg.parts[j];
+              if (
+                part.type === "tool_use" &&
+                part.toolName === "run_benchmark" &&
+                part.status === "running"
+              ) {
+                // Store progress info as extra field on the part (extended type)
+                (part as any).progressData = { current, total };
+                break;
+              }
             }
           }
           const send = session._activeSend;
@@ -1942,7 +1972,11 @@ export class GatewaySession {
 
   private async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
     // Add user message to chat history
-    this.chatMessages.push({ role: "user", content });
+    this.chatMessages.push({
+      id: crypto.randomUUID(),
+      role: "user",
+      parts: [{ type: "text", content }],
+    });
     this.persistMessage("chat", { timestamp: Date.now(), role: "user", content });
 
     // Trigger message_received hook
@@ -1955,6 +1989,9 @@ export class GatewaySession {
     }
     this.isStreaming = true;
     this.streamingContent = "";
+    this.currentAssistantMsgId = null;
+    this.currentRunId = null;
+    this.lastStreamedText = "";
 
     // Extract profile info from user message (non-blocking)
     if (this.userUuid) {
@@ -1963,11 +2000,15 @@ export class GatewaySession {
         const extracted = mm.extractAndUpdateProfile(this.userUuid, content);
         if (Object.keys(extracted).length > 0) {
           const fields = Object.keys(extracted).join(", ");
-          const toolContent = `💾 已提取档案: ${fields}`;
-          this.chatMessages.push({ role: "tool", content: toolContent });
+          const toolContent = `已提取档案: ${fields}`;
+          this.chatMessages.push({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            parts: [{ type: "text", content: toolContent }],
+          });
           this.persistMessage("chat", {
             timestamp: Date.now(),
-            role: "tool",
+            role: "assistant",
             content: toolContent,
           });
           this.sendChatUpdate(send);
@@ -2004,7 +2045,11 @@ export class GatewaySession {
           const lastAgentMsg = agentMsgs[agentMsgs.length - 1] as any;
           if (lastAgentMsg?.stopReason === "error" && lastAgentMsg?.errorMessage) {
             const errContent = `⚠️ ${lastAgentMsg.errorMessage}`;
-            this.chatMessages.push({ role: "assistant", content: errContent });
+            this.chatMessages.push({
+              id: crypto.randomUUID(),
+              role: "assistant",
+              parts: [{ type: "text", content: errContent }],
+            });
             this.persistMessage("chat", {
               timestamp: Date.now(),
               role: "assistant",
@@ -2020,6 +2065,8 @@ export class GatewaySession {
         if (this.isStreaming) {
           this.isStreaming = false;
           this.streamingContent = "";
+          this.currentAssistantMsgId = null;
+          this.lastStreamedText = "";
           this.sendChatUpdate(send);
         }
 
@@ -2029,7 +2076,14 @@ export class GatewaySession {
             const mm = getMemoryManager();
             const lastAssistant = this.chatMessages.filter((m) => m.role === "assistant").pop();
             if (lastAssistant) {
-              const exchangeText = `User: ${content}\nAssistant: ${lastAssistant.content}`;
+              const assistantText =
+                lastAssistant.parts
+                  ?.filter((p): p is { type: "text"; content: string } => p.type === "text")
+                  .map((p) => p.content)
+                  .join("") ||
+                lastAssistant.content ||
+                "";
+              const exchangeText = `User: ${content}\nAssistant: ${assistantText}`;
               mm.appendSessionTranscript(this.userUuid, this.sessionId, exchangeText);
             }
           } catch {
@@ -2053,7 +2107,11 @@ export class GatewaySession {
       }
 
       const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-      this.chatMessages.push({ role: "assistant", content: errorContent });
+      this.chatMessages.push({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", content: errorContent }],
+      });
       this.persistMessage("chat", {
         timestamp: Date.now(),
         role: "assistant",
@@ -2093,14 +2151,40 @@ export class GatewaySession {
    * Handle messages in the Evolution Lab chat.
    * Forces evolution-driver skill injection and tracks pipeline steps.
    */
+  /**
+   * Get or create the current system-agent assistant message.
+   */
+  private saGetOrCreateAssistantMsg(): PartsChatMessage {
+    if (this.saCurrentAssistantMsgId) {
+      const existing = this.systemAgentChatMessages.find(
+        (m) => m.id === this.saCurrentAssistantMsgId
+      );
+      if (existing) return existing;
+    }
+    const msg: PartsChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      parts: [],
+    };
+    this.systemAgentChatMessages.push(msg);
+    this.saCurrentAssistantMsgId = msg.id;
+    return msg;
+  }
+
   private async handleSystemAgentMessage(
     content: string,
     send: (msg: unknown) => void
   ): Promise<void> {
-    this.systemAgentChatMessages.push({ role: "user", content });
+    this.systemAgentChatMessages.push({
+      id: crypto.randomUUID(),
+      role: "user",
+      parts: [{ type: "text", content }],
+    });
     this.persistMessage("system-agent", { timestamp: Date.now(), role: "user", content });
     this.systemAgentStreaming = true;
     this.systemAgentStreamingContent = "";
+    this.saCurrentAssistantMsgId = null;
+    this.saLastStreamedText = "";
 
     this.sendEvolutionLabUpdate(send);
 
@@ -2109,23 +2193,32 @@ export class GatewaySession {
 
       const unsubscribe = agent.subscribe((event: any) => {
         if (event.type === "message_start") {
-          // First streaming event — send full page update to show streaming UI
           if (event.message?.role === "assistant") {
             let text = "";
             for (const block of event.message.content || []) {
               if (block.type === "text") text += block.text;
             }
+            const assistantMsg = this.saGetOrCreateAssistantMsg();
+            if (text) assistantMsg.parts.push({ type: "text", content: text });
             this.systemAgentStreamingContent = text;
+            this.saLastStreamedText = text;
             this.sendEvolutionLabUpdate(send);
           }
         } else if (event.type === "message_update") {
-          // Subsequent tokens — only send lightweight agent_text
           if (event.message?.role === "assistant") {
             let text = "";
             for (const block of event.message.content || []) {
               if (block.type === "text") text += block.text;
             }
             this.systemAgentStreamingContent = text;
+            const assistantMsg = this.saGetOrCreateAssistantMsg();
+            const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+            if (lastPart && lastPart.type === "text") {
+              lastPart.content = text;
+            } else if (text) {
+              assistantMsg.parts.push({ type: "text", content: text });
+            }
+            this.saLastStreamedText = text;
             const activeSend = this.getSend(send);
             activeSend({ type: "agent_text", content: text, is_final: false });
           }
@@ -2136,10 +2229,14 @@ export class GatewaySession {
               if (block.type === "text") text += block.text;
             }
             if (text.trim()) {
-              this.systemAgentChatMessages.push({
-                role: "assistant",
-                content: text,
-              });
+              const assistantMsg = this.saGetOrCreateAssistantMsg();
+              const lastTextIdx = findLastTextIdx(assistantMsg.parts);
+              if (lastTextIdx >= 0) {
+                (assistantMsg.parts[lastTextIdx] as { type: "text"; content: string }).content =
+                  text;
+              } else {
+                assistantMsg.parts.push({ type: "text", content: text });
+              }
               this.persistMessage("system-agent", {
                 timestamp: Date.now(),
                 role: "assistant",
@@ -2148,47 +2245,79 @@ export class GatewaySession {
             }
             this.systemAgentStreaming = false;
             this.systemAgentStreamingContent = "";
+            this.saCurrentAssistantMsgId = null;
+            this.saLastStreamedText = "";
             this.sendEvolutionLabUpdate(send);
           }
         } else if (event.type === "tool_execution_start") {
           const toolName = event.toolName as string;
-          const toolContent = `Using ${toolName}...`;
-          this.systemAgentChatMessages.push({
-            role: "tool",
-            content: toolContent,
+          const toolCallId = crypto.randomUUID();
+          const assistantMsg = this.saGetOrCreateAssistantMsg();
+
+          // Clean up empty trailing text part
+          const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+          if (lastPart && lastPart.type === "text" && !lastPart.content.trim()) {
+            assistantMsg.parts.pop();
+          }
+
+          assistantMsg.parts.push({
+            type: "tool_use",
+            toolCallId,
             toolName,
-            toolStatus: "running",
+            status: "running",
           });
+
           this.persistMessage("system-agent", {
             timestamp: Date.now(),
             role: "tool",
-            content: toolContent,
+            content: `Using ${toolName}...`,
             toolName,
           });
           this.sendEvolutionLabUpdate(send);
         } else if (event.type === "tool_execution_end") {
           const toolName = event.toolName as string;
           const isError = event.isError;
+          const assistantMsg = this.saCurrentAssistantMsgId
+            ? this.systemAgentChatMessages.find((m) => m.id === this.saCurrentAssistantMsgId)
+            : null;
 
-          // Find the last matching running tool message and update its status
-          for (let i = this.systemAgentChatMessages.length - 1; i >= 0; i--) {
-            const msg = this.systemAgentChatMessages[i];
-            if (msg.role === "tool" && msg.toolName === toolName && msg.toolStatus === "running") {
-              msg.toolStatus = isError ? "error" : "completed";
-              if (!isError) {
-                try {
-                  const cards = generateToolCards(toolName, event.result);
-                  if (cards) msg.cards = cards;
-                } catch (err) {
-                  logAgent.error("System Agent card generation error", { error: err });
-                }
+          if (assistantMsg) {
+            let matchedToolCallId: string | null = null;
+            for (let i = assistantMsg.parts.length - 1; i >= 0; i--) {
+              const part = assistantMsg.parts[i];
+              if (
+                part.type === "tool_use" &&
+                part.toolName === toolName &&
+                part.status === "running"
+              ) {
+                part.status = isError ? "error" : "completed";
+                matchedToolCallId = part.toolCallId;
+                break;
               }
-              break;
             }
+            if (!isError && matchedToolCallId) {
+              try {
+                const cards = generateToolCards(toolName, event.result);
+                if (cards) {
+                  assistantMsg.parts.push({
+                    type: "tool_result",
+                    toolCallId: matchedToolCallId,
+                    cards,
+                  });
+                }
+              } catch (err) {
+                logAgent.error("System Agent card generation error", { error: err });
+              }
+            }
+            // Push empty text part for next text stream
+            assistantMsg.parts.push({ type: "text", content: "" });
+            this.saLastStreamedText = "";
           }
           this.sendEvolutionLabUpdate(send);
         } else if (event.type === "agent_end") {
           this.systemAgentStreaming = false;
+          this.saCurrentAssistantMsgId = null;
+          this.saLastStreamedText = "";
           this.sendEvolutionLabUpdate(send);
         }
       });
@@ -2214,7 +2343,11 @@ export class GatewaySession {
       }
 
       const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-      this.systemAgentChatMessages.push({ role: "assistant", content: errorContent });
+      this.systemAgentChatMessages.push({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", content: errorContent }],
+      });
       this.persistMessage("system-agent", {
         timestamp: Date.now(),
         role: "assistant",
@@ -2237,9 +2370,20 @@ export class GatewaySession {
       // Stop PHA Agent streaming
       if (this.isStreaming && this.agent) {
         this.agent.abort();
-        // Save partial response if any
-        if (this.streamingContent.trim()) {
-          this.chatMessages.push({ role: "assistant", content: this.streamingContent });
+        // Save partial response if any — finalize the current assistant message
+        if (this.streamingContent.trim() && this.currentAssistantMsgId) {
+          // The assistant message is already in chatMessages with parts; just persist text
+          this.persistMessage("chat", {
+            timestamp: Date.now(),
+            role: "assistant",
+            content: this.streamingContent,
+          });
+        } else if (this.streamingContent.trim()) {
+          this.chatMessages.push({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            parts: [{ type: "text", content: this.streamingContent }],
+          });
           this.persistMessage("chat", {
             timestamp: Date.now(),
             role: "assistant",
@@ -2248,6 +2392,8 @@ export class GatewaySession {
         }
         this.isStreaming = false;
         this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
         this.sendChatUpdate(send);
       }
     } else if (action === "sa_stop_generation") {
@@ -2256,18 +2402,29 @@ export class GatewaySession {
         this.systemAgent.abort();
         // Save partial response if any
         if (this.systemAgentStreamingContent.trim()) {
-          this.systemAgentChatMessages.push({
-            role: "assistant",
-            content: this.systemAgentStreamingContent,
-          });
-          this.persistMessage("system-agent", {
-            timestamp: Date.now(),
-            role: "assistant",
-            content: this.systemAgentStreamingContent,
-          });
+          if (this.saCurrentAssistantMsgId) {
+            this.persistMessage("system-agent", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: this.systemAgentStreamingContent,
+            });
+          } else {
+            this.systemAgentChatMessages.push({
+              id: crypto.randomUUID(),
+              role: "assistant",
+              parts: [{ type: "text", content: this.systemAgentStreamingContent }],
+            });
+            this.persistMessage("system-agent", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: this.systemAgentStreamingContent,
+            });
+          }
         }
         this.systemAgentStreaming = false;
         this.systemAgentStreamingContent = "";
+        this.saCurrentAssistantMsgId = null;
+        this.saLastStreamedText = "";
         this.sendEvolutionLabUpdate(send);
       }
     } else if (action.startsWith("navigate:")) {
@@ -4643,149 +4800,313 @@ export class GatewaySession {
     }
   }
 
+  /**
+   * Get or create the current assistant message in chatMessages.
+   */
+  private getOrCreateAssistantMsg(): PartsChatMessage {
+    if (this.currentAssistantMsgId) {
+      const existing = this.chatMessages.find((m) => m.id === this.currentAssistantMsgId);
+      if (existing) return existing;
+    }
+    const msg: PartsChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      parts: [],
+    };
+    this.chatMessages.push(msg);
+    this.currentAssistantMsgId = msg.id;
+    return msg;
+  }
+
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
     const activeSend = this.getSend(send);
+
     switch (event.type) {
-      case "message_start":
-        // First streaming event — send full page update to show streaming UI
-        if (event.message.role === "assistant") {
-          const content = event.message.content || [];
-          let text = "";
-          for (const block of content) {
-            if (block.type === "text") {
-              text += block.text;
-            }
+      case "message_start": {
+        if (event.message.role !== "assistant") break;
+
+        const content = event.message.content || [];
+        let text = "";
+        for (const block of content) {
+          if (block.type === "text") text += block.text;
+        }
+
+        // Create new run + assistant message
+        this.currentRunId = crypto.randomUUID();
+        const assistantMsg = this.getOrCreateAssistantMsg();
+
+        // Push initial text part
+        if (text) {
+          assistantMsg.parts.push({ type: "text", content: text });
+        }
+
+        this.streamingContent = text;
+        this.lastStreamedText = text;
+
+        // AG-UI events
+        activeSend({
+          type: "RunStarted",
+          threadId: this.sessionId,
+          runId: this.currentRunId,
+        } satisfies AGUIEvent);
+        activeSend({
+          type: "TextMessageStart",
+          messageId: assistantMsg.id,
+          role: "assistant",
+        } satisfies AGUIEvent);
+        if (text) {
+          activeSend({
+            type: "TextMessageContent",
+            messageId: assistantMsg.id,
+            delta: text,
+          } satisfies AGUIEvent);
+        }
+
+        // Legacy compat
+        activeSend({ type: "agent_text", content: text, is_final: false });
+
+        this.sendChatUpdate(send);
+        break;
+      }
+
+      case "message_update": {
+        if (event.message.role !== "assistant") break;
+
+        const content = event.message.content || [];
+        let text = "";
+        for (const block of content) {
+          if (block.type === "text") text += block.text;
+        }
+
+        this.streamingContent = text;
+
+        // Update the last text part in the assistant message
+        const assistantMsg = this.getOrCreateAssistantMsg();
+        const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+        if (lastPart && lastPart.type === "text") {
+          lastPart.content = text;
+        } else if (text) {
+          assistantMsg.parts.push({ type: "text", content: text });
+        }
+
+        // AG-UI delta
+        const delta = text.slice(this.lastStreamedText.length);
+        if (delta) {
+          activeSend({
+            type: "TextMessageContent",
+            messageId: assistantMsg.id,
+            delta,
+          } satisfies AGUIEvent);
+        }
+        this.lastStreamedText = text;
+
+        // Legacy compat
+        activeSend({ type: "agent_text", content: text, is_final: false });
+        break;
+      }
+
+      case "message_end": {
+        if (event.message.role !== "assistant") break;
+
+        const content = event.message.content || [];
+        let text = "";
+        for (const block of content) {
+          if (block.type === "text") text += block.text;
+        }
+
+        const assistantMsg = this.getOrCreateAssistantMsg();
+
+        // Check for error responses (API errors, region blocks, etc.)
+        if (event.message.stopReason === "error") {
+          const errorMsg = event.message.errorMessage || "Unknown error occurred";
+          log.error("LLM error in streaming path", {
+            errorMessage: errorMsg,
+            stopReason: event.message.stopReason,
+          });
+          const errContent = text.trim() ? `${text}\n\n⚠️ ${errorMsg}` : `⚠️ ${errorMsg}`;
+
+          // Replace/add text part with error
+          const lastTextIdx = findLastTextIdx(assistantMsg.parts);
+          if (lastTextIdx >= 0) {
+            (assistantMsg.parts[lastTextIdx] as { type: "text"; content: string }).content =
+              errContent;
+          } else {
+            assistantMsg.parts.push({ type: "text", content: errContent });
           }
-          this.streamingContent = text;
+
+          this.persistMessage("chat", {
+            timestamp: Date.now(),
+            role: "assistant",
+            content: errContent,
+          });
+          this.isStreaming = false;
+          this.streamingContent = "";
+          this.currentAssistantMsgId = null;
+          this.lastStreamedText = "";
+
+          // AG-UI events
+          activeSend({ type: "TextMessageEnd", messageId: assistantMsg.id } satisfies AGUIEvent);
+          if (this.currentRunId) {
+            activeSend({
+              type: "RunFinished",
+              threadId: this.sessionId,
+              runId: this.currentRunId,
+            } satisfies AGUIEvent);
+          }
+
           this.sendChatUpdate(send);
-          activeSend({ type: "agent_text", content: text, is_final: false });
+          activeSend({ type: "agent_text", content: errorMsg, is_final: true });
+          break;
+        }
+
+        // Finalize: ensure last text part has final text
+        if (text.trim()) {
+          const lastTextIdx = findLastTextIdx(assistantMsg.parts);
+          if (lastTextIdx >= 0) {
+            (assistantMsg.parts[lastTextIdx] as { type: "text"; content: string }).content = text;
+          } else {
+            assistantMsg.parts.push({ type: "text", content: text });
+          }
+
+          this.persistMessage("chat", {
+            timestamp: Date.now(),
+            role: "assistant",
+            content: text,
+          });
+        }
+
+        this.isStreaming = false;
+        this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
+
+        // AG-UI events
+        activeSend({ type: "TextMessageEnd", messageId: assistantMsg.id } satisfies AGUIEvent);
+        if (this.currentRunId) {
+          activeSend({
+            type: "RunFinished",
+            threadId: this.sessionId,
+            runId: this.currentRunId,
+          } satisfies AGUIEvent);
+        }
+
+        this.sendChatUpdate(send);
+        if (text.trim()) {
+          activeSend({ type: "agent_text", content: text, is_final: true });
         }
         break;
-      case "message_update":
-        // Subsequent tokens — only send lightweight agent_text, no full page re-render
-        if (event.message.role === "assistant") {
-          const content = event.message.content || [];
-          let text = "";
-          for (const block of content) {
-            if (block.type === "text") {
-              text += block.text;
-            }
-          }
-          this.streamingContent = text;
-          activeSend({ type: "agent_text", content: text, is_final: false });
-        }
-        break;
-
-      case "message_end":
-        if (event.message.role === "assistant") {
-          const content = event.message.content || [];
-          let text = "";
-
-          for (const block of content) {
-            if (block.type === "text") {
-              text += block.text;
-            }
-          }
-
-          // Check for error responses (API errors, region blocks, etc.)
-          if (event.message.stopReason === "error") {
-            const errorMsg = event.message.errorMessage || "Unknown error occurred";
-            log.error("LLM error in streaming path", {
-              errorMessage: errorMsg,
-              stopReason: event.message.stopReason,
-            });
-            const errContent = text.trim() ? `${text}\n\n⚠️ ${errorMsg}` : `⚠️ ${errorMsg}`;
-            this.chatMessages.push({ role: "assistant", content: errContent });
-            this.persistMessage("chat", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: errContent,
-            });
-            this.isStreaming = false;
-            this.streamingContent = "";
-            this.pendingCards = [];
-            this.sendChatUpdate(send);
-            activeSend({ type: "agent_text", content: errorMsg, is_final: true });
-            break;
-          }
-
-          // Update UI if there's text content
-          if (text.trim()) {
-            // Attach any pending tool cards to this assistant message
-            const cards = mergePendingCards(this.pendingCards);
-            this.pendingCards = [];
-
-            this.chatMessages.push({
-              role: "assistant",
-              content: text,
-              ...(cards ? { cards } : {}),
-            });
-            this.persistMessage("chat", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: text,
-            });
-            this.isStreaming = false;
-            this.streamingContent = "";
-            this.sendChatUpdate(send);
-            activeSend({ type: "agent_text", content: text, is_final: true });
-          }
-        }
-        break;
+      }
 
       case "tool_execution_start": {
-        const memoryToolLabels: Record<string, string> = {
-          memory_search: "🔍 搜索记忆...",
-          memory_save: "📝 保存到记忆...",
-          daily_log: "📝 记录到今日日志...",
-        };
-        const toolMsg = memoryToolLabels[event.toolName] || `Using ${event.toolName}...`;
-        this.chatMessages.push({
-          role: "tool",
-          content: toolMsg,
+        const toolCallId = crypto.randomUUID();
+        const assistantMsg = this.getOrCreateAssistantMsg();
+
+        // Snapshot current streamed text as a text part before tool_use
+        // (only if there's uncommitted text that isn't already the last part)
+        const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+        if (lastPart && lastPart.type === "text" && !lastPart.content.trim()) {
+          // Remove empty trailing text part
+          assistantMsg.parts.pop();
+        }
+
+        // Add tool_use part
+        assistantMsg.parts.push({
+          type: "tool_use",
+          toolCallId,
           toolName: event.toolName,
-          toolStatus: "running",
+          status: "running",
         });
+
+        // Store toolCallId on event for matching in tool_execution_end
+        event._toolCallId = toolCallId;
+
+        // Persist tool usage info
         this.persistMessage("chat", {
           timestamp: Date.now(),
           role: "tool",
-          content: toolMsg,
+          content: `Using ${event.toolName}...`,
           toolName: event.toolName,
         });
-        this.sendChatUpdate(send);
+
+        // AG-UI events
+        activeSend({
+          type: "ToolCallStart",
+          toolCallId,
+          toolCallName: event.toolName,
+          parentMessageId: assistantMsg.id,
+        } satisfies AGUIEvent);
+
+        // Legacy compat
         activeSend({ type: "tool_call", tool: event.toolName });
+
+        this.sendChatUpdate(send);
         break;
       }
 
       case "tool_execution_end": {
-        // Update the last matching running tool message's status
-        for (let i = this.chatMessages.length - 1; i >= 0; i--) {
-          const msg = this.chatMessages[i] as any;
-          if (
-            msg.role === "tool" &&
-            msg.toolName === event.toolName &&
-            msg.toolStatus === "running"
-          ) {
-            msg.toolStatus = event.isError ? "error" : "completed";
-            break;
-          }
-        }
-        if (!event.isError) {
-          try {
-            const cards = generateToolCards(event.toolName, event.result);
-            if (cards) {
-              this.pendingCards.push(cards);
+        const assistantMsg = this.currentAssistantMsgId
+          ? this.chatMessages.find((m) => m.id === this.currentAssistantMsgId)
+          : null;
+
+        if (assistantMsg) {
+          // Find the last running tool_use part matching this tool name
+          let matchedToolCallId: string | null = null;
+          for (let i = assistantMsg.parts.length - 1; i >= 0; i--) {
+            const part = assistantMsg.parts[i];
+            if (
+              part.type === "tool_use" &&
+              part.toolName === event.toolName &&
+              part.status === "running"
+            ) {
+              part.status = event.isError ? "error" : "completed";
+              matchedToolCallId = part.toolCallId;
+              break;
             }
-          } catch (err) {
-            log.error("Failed to generate cards", { tool: event.toolName, error: err });
           }
+
+          // Generate and inline tool_result cards
+          if (!event.isError && matchedToolCallId) {
+            try {
+              const cards = generateToolCards(event.toolName, event.result);
+              if (cards) {
+                assistantMsg.parts.push({
+                  type: "tool_result",
+                  toolCallId: matchedToolCallId,
+                  cards,
+                });
+              }
+            } catch (err) {
+              log.error("Failed to generate cards", { tool: event.toolName, error: err });
+            }
+          }
+
+          // AG-UI events
+          if (matchedToolCallId) {
+            activeSend({ type: "ToolCallEnd", toolCallId: matchedToolCallId } satisfies AGUIEvent);
+            const resultCards = !event.isError
+              ? generateToolCards(event.toolName, event.result)
+              : null;
+            activeSend({
+              type: "ToolCallResult",
+              messageId: assistantMsg.id,
+              toolCallId: matchedToolCallId,
+              ...(resultCards ? { cards: resultCards } : {}),
+            } satisfies AGUIEvent);
+          }
+
+          // After tool finishes, push a new empty text part for the next text stream
+          assistantMsg.parts.push({ type: "text", content: "" });
+          this.lastStreamedText = "";
         }
+
         this.sendChatUpdate(send);
         break;
       }
 
       case "agent_end":
         this.isStreaming = false;
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
         this.sendChatUpdate(send);
         break;
     }

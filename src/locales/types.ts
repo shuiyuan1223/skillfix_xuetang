@@ -189,6 +189,7 @@ export interface LocaleMessages {
     sleepTrend: string;
     sleepBreathing: string;
     // Activity tab extras
+    stepsTrend: string;
     workouts: string;
     recentWorkouts: string;
     // Activity rings

@@ -705,3 +705,46 @@ export class A2UIGenerator {
     return JSON.stringify(message);
   }
 }
+
+// ============================================================================
+// AG-UI Event Types (aligned with @ag-ui/core)
+// ============================================================================
+
+export type AGUIEvent =
+  | { type: "RunStarted"; threadId: string; runId: string }
+  | { type: "RunFinished"; threadId: string; runId: string }
+  | { type: "TextMessageStart"; messageId: string; role: "assistant" }
+  | { type: "TextMessageContent"; messageId: string; delta: string }
+  | { type: "TextMessageEnd"; messageId: string }
+  | { type: "ToolCallStart"; toolCallId: string; toolCallName: string; parentMessageId?: string }
+  | { type: "ToolCallEnd"; toolCallId: string }
+  | {
+      type: "ToolCallResult";
+      messageId: string;
+      toolCallId: string;
+      content?: string;
+      cards?: { components: unknown[]; root_id: string };
+    };
+
+// ============================================================================
+// Parts Message Model
+// ============================================================================
+
+export type MessagePart =
+  | { type: "text"; content: string }
+  | {
+      type: "tool_use";
+      toolCallId: string;
+      toolName: string;
+      status: "running" | "completed" | "error";
+    }
+  | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
+
+export interface PartsChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  parts: MessagePart[];
+  // Backward compat: old messages may only have content
+  content?: string;
+  cards?: { components: unknown[]; root_id: string };
+}

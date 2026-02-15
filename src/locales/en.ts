@@ -171,6 +171,7 @@ export const en: LocaleMessages = {
     sleepStages: "Sleep Stages",
     sleepTrend: "Sleep Trend",
     sleepBreathing: "Sleep Breathing",
+    stepsTrend: "Steps Trend",
     workouts: "Workouts",
     recentWorkouts: "Recent Workouts",
     activityRings: "Activity Rings",

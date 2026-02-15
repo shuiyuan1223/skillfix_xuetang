@@ -1,5 +1,5 @@
 import React from "react";
-import type { A2UIComponent, A2UISurfaceData, PlotlyChart } from "../../lib/types";
+import type { A2UIComponent, A2UISurfaceData, PlotlyChart, MessagePart } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
 import { renderMarkdown } from "../../lib/markdown";
 import { i18n } from "../../lib/i18n";
@@ -517,7 +517,7 @@ export function A2UIRenderer({
   // ---- Chat Components ----
 
   function rcChatMessages(c: A2UIComponent) {
-    const messages = (c.messages as { role: string; content: string; cards?: { components: A2UIComponent[]; root_id: string }; toolName?: string; toolStatus?: string; progressData?: { current: number; total: number; category: string } }[]) || [];
+    const rawMessages = (c.messages as any[]) || [];
     const streaming = c.streaming as boolean;
     const streamingContent = c.streamingContent as string;
     const welcomeTitle = c.welcomeTitle as string | undefined;
@@ -526,7 +526,7 @@ export function A2UIRenderer({
     const welcomeActions = c.welcomeActions as Array<{ label: string; icon?: string; action: string; content: string }> | undefined;
 
     // Server-driven welcome screen
-    if (messages.length === 0 && !streaming && welcomeTitle) {
+    if (rawMessages.length === 0 && !streaming && welcomeTitle) {
       const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center" style={{ animation: "rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}>
@@ -548,7 +548,7 @@ export function A2UIRenderer({
     }
 
     const noWelcome = c.noWelcome as boolean;
-    if (messages.length === 0 && !streaming && noWelcome) {
+    if (rawMessages.length === 0 && !streaming && noWelcome) {
       return (
         <div className="flex-1 flex items-center justify-center p-4 text-text-muted text-[13px] opacity-50">
           {i18n.evolution?.playgroundChatPlaceholder || "Waiting for messages..."}
@@ -557,7 +557,7 @@ export function A2UIRenderer({
     }
 
     // Default welcome
-    if (messages.length === 0 && !streaming) {
+    if (rawMessages.length === 0 && !streaming) {
       const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center" style={{ animation: "rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}>
@@ -580,19 +580,82 @@ export function A2UIRenderer({
     }
 
     const avatarBase = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4";
-    const msgContent = "max-w-[70%] px-4 py-3 rounded-2xl leading-relaxed text-[13.5px]";
+    const msgBubble = "max-w-[70%] px-4 py-3 rounded-2xl leading-relaxed text-[13.5px]";
 
-    // Group consecutive tool messages
-    type MsgGroup = { type: "message"; msg: (typeof messages)[0] } | { type: "tools"; msgs: (typeof messages)[0][] };
-    const groups: MsgGroup[] = [];
-    for (const msg of messages) {
-      if (msg.role === "tool") {
-        const last = groups[groups.length - 1];
-        if (last && last.type === "tools") { last.msgs.push(msg); }
-        else { groups.push({ type: "tools", msgs: [msg] }); }
+    // Normalize messages to Parts format
+    interface NormalizedMsg {
+      id: string;
+      role: "user" | "assistant";
+      parts: MessagePart[];
+    }
+    const messages: NormalizedMsg[] = [];
+    for (const raw of rawMessages) {
+      if (raw.parts && raw.parts.length > 0) {
+        // New format with parts
+        messages.push({ id: raw.id || String(messages.length), role: raw.role === "tool" ? "assistant" : raw.role, parts: raw.parts });
+      } else if (raw.role === "tool") {
+        // Legacy: merge tool message into previous assistant or create standalone
+        // (old format: independent tool messages)
+        const prev = messages[messages.length - 1];
+        if (prev && prev.role === "assistant") {
+          prev.parts.push({ type: "tool_use", toolCallId: String(messages.length), toolName: raw.toolName || "", status: raw.toolStatus || "completed" });
+          if (raw.cards) {
+            prev.parts.push({ type: "tool_result", toolCallId: String(messages.length), cards: raw.cards });
+          }
+        } else {
+          messages.push({
+            id: raw.id || String(messages.length),
+            role: "assistant",
+            parts: [
+              { type: "tool_use", toolCallId: String(messages.length), toolName: raw.toolName || "", status: raw.toolStatus || "completed" },
+              ...(raw.cards ? [{ type: "tool_result" as const, toolCallId: String(messages.length), cards: raw.cards }] : []),
+            ],
+          });
+        }
       } else {
-        groups.push({ type: "message", msg });
+        // Legacy text-only or user message
+        const parts: MessagePart[] = [{ type: "text", content: raw.content || "" }];
+        if (raw.cards) {
+          parts.push({ type: "tool_result", toolCallId: "legacy", cards: raw.cards });
+        }
+        messages.push({ id: raw.id || String(messages.length), role: raw.role === "user" ? "user" : "assistant", parts });
       }
+    }
+
+    // Render a single part
+    function renderPart(part: MessagePart, partIdx: number) {
+      if (part.type === "text") {
+        if (!part.content?.trim()) return null;
+        return (
+          <div key={partIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }}>
+            <span dangerouslySetInnerHTML={{ __html: renderMarkdown(part.content) }} />
+          </div>
+        );
+      }
+      if (part.type === "tool_use") {
+        const status = part.status || "completed";
+        const dotClass = status === "running" ? "bg-primary motion-safe:animate-pulse" : status === "error" ? "bg-error" : "bg-success";
+        const statusIcon = status === "running"
+          ? <span className="tool-spinner" />
+          : status === "error"
+            ? <span className="text-error [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["x"] }} />
+            : <span className="text-success [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
+        return (
+          <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[70%]">
+            <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />
+            <span className="truncate">{part.toolName}</span>
+            {statusIcon}
+          </div>
+        );
+      }
+      if (part.type === "tool_result" && part.cards) {
+        return (
+          <div key={partIdx} className="max-w-[70%]">
+            {renderInline(part.cards as { components: A2UIComponent[]; root_id: string })}
+          </div>
+        );
+      }
+      return null;
     }
 
     return (
@@ -604,87 +667,37 @@ export function A2UIRenderer({
           chatAutoScrollRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
         }}
       >
-        {groups.map((group, gi) => {
-          if (group.type === "tools") {
-            return (
-              <div key={gi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-                <div className="flex flex-col max-w-[70%] ml-13">
-                  {group.msgs.map((msg, idx) => {
-                    const toolName = msg.toolName || "";
-                    const status = msg.toolStatus || "completed";
-                    const hasCards = !!msg.cards;
-                    const isLast = idx === group.msgs.length - 1;
-                    const statusIcon = status === "running"
-                      ? <span className="tool-spinner" />
-                      : status === "error"
-                        ? <span className="text-error" dangerouslySetInnerHTML={{ __html: ICONS["x"] }} />
-                        : <span className="text-success" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
-                    const dotClass = status === "running" ? "bg-primary motion-safe:animate-pulse" : status === "error" ? "bg-error" : "bg-success";
+        {messages.map((msg, mi) => {
+          const isUser = msg.role === "user";
 
-                    return (
-                      <div key={idx} className="flex">
-                        <div className="flex flex-col items-center mr-3 relative">
-                          <div className={`w-2.5 h-2.5 rounded-full ${dotClass} z-10 mt-1.5 shrink-0`} />
-                          {!isLast && <div className="w-0.5 flex-1 bg-border" />}
-                        </div>
-                        <div className={`flex-1 pb-3 min-w-0 ${hasCards ? "collapsible-group" : ""}`}>
-                          <div
-                            className={`flex items-center gap-2 text-xs text-text-muted py-1 ${hasCards ? "cursor-pointer select-none" : ""}`}
-                            onClick={hasCards ? (e) => { (e.currentTarget as HTMLElement).parentElement?.classList.toggle("is-open"); } : undefined}
-                          >
-                            <span className="flex-1 truncate">{msg.content || `Using ${toolName}...`}</span>
-                            {statusIcon}
-                            {hasCards && <span className="text-text-muted transition-transform duration-200 [.is-open>&]:rotate-90 text-xs">&#9654;</span>}
-                          </div>
-                          {msg.progressData && status === "running" && (
-                            <div className="flex items-center gap-2 mt-1">
-                              <div className="flex-1 h-1.5 rounded-full bg-border overflow-hidden">
-                                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.round((msg.progressData.current / msg.progressData.total) * 100)}%` }} />
-                              </div>
-                              <span className="text-[10px] text-text-muted shrink-0">{msg.progressData.category}</span>
-                            </div>
-                          )}
-                          {hasCards && (
-                            <div className="collapsible-grid">
-                              <div>{renderInline(msg.cards!)}</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+          if (isUser) {
+            const textContent = msg.parts.filter((p) => p.type === "text").map((p) => (p as { type: "text"; content: string }).content).join("");
+            return (
+              <div key={mi} className="flex gap-4 flex-row-reverse motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-normal">
+                <div className={`${avatarBase} bg-bg-tertiary text-text-secondary`} dangerouslySetInnerHTML={{ __html: ICONS["user"] }} />
+                <div className={`${msgBubble} bg-primary/10 text-text border border-primary/20`}>
+                  {textContent}
                 </div>
               </div>
             );
           }
 
-          const msg = group.msg;
-          const isUser = msg.role === "user";
+          // Assistant message — render parts inline
           return (
-            <div key={gi} className={`flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal ${isUser ? "flex-row-reverse motion-safe:slide-in-from-right-4" : "motion-safe:slide-in-from-left-4"}`}>
-              <div className={`${avatarBase} ${isUser ? "bg-bg-tertiary text-text-secondary" : "bg-primary"}`} dangerouslySetInnerHTML={{ __html: ICONS[msg.role === "assistant" ? "bot" : "user"] }} />
-              {msg.role === "assistant" && msg.cards ? (
-                <div className="flex flex-col gap-3 max-w-[70%]">
-                  <div className={`${msgContent} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
-                  <div>{renderInline(msg.cards)}</div>
-                </div>
-              ) : (
-                <div
-                  className={`${msgContent} ${isUser ? "bg-primary/10 text-text border border-primary/20" : "bg-surface-card border border-border"}`}
-                  style={!isUser ? { boxShadow: "var(--shadow-sm)" } : undefined}
-                >
-                  {msg.role === "assistant" ? <span dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} /> : msg.content}
-                </div>
-              )}
+            <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
+              <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+              <div className="flex flex-col gap-2 min-w-0 flex-1">
+                {msg.parts.map((part, pi) => renderPart(part, pi))}
+              </div>
             </div>
           );
         })}
 
         {streaming && (
-          <div className="flex gap-3 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-            <div className={`${avatarBase} bg-primary`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+          <div className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
+            <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
             {streamingContent ? (
-              <div className={`${msgContent} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }} />
+              <div className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }} />
             ) : (
               <div className="flex gap-1.5 px-4 py-3 items-center">
                 <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
