@@ -14,7 +14,13 @@ import { getModel, type Model } from "@mariozechner/pi-ai";
 import { healthAgentTools, createHealthAgentTools } from "./tools.js";
 import { getMemoryManager } from "../memory/index.js";
 import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/compaction.js";
-import { getUserUuid } from "../utils/config.js";
+import {
+  getUserUuid,
+  type LLMProvider,
+  DEFAULT_MODELS,
+  ENV_KEY_MAP,
+  BUILTIN_PROVIDERS,
+} from "../utils/config.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Agent/PHA");
@@ -22,16 +28,7 @@ import { preComputeHealthContext } from "./health-context.js";
 import { enrichWithSkills, enrichWithForcedSkill } from "./skill-trigger.js";
 import { sessionToAgentMessages } from "../memory/session-store.js";
 
-export type LLMProvider =
-  | "anthropic"
-  | "openai"
-  | "google"
-  | "openrouter"
-  | "moonshot"
-  | "deepseek"
-  | "groq"
-  | "mistral"
-  | "xai";
+export type { LLMProvider } from "../utils/config.js";
 
 export interface PHAAgentConfig {
   /** LLM provider (default: "anthropic") */
@@ -58,40 +55,7 @@ export interface PHAAgentConfig {
   sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>;
 }
 
-const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  anthropic: "claude-sonnet-4-20250514",
-  openai: "gpt-4o",
-  google: "gemini-2.0-flash",
-  openrouter: "openrouter/auto",
-  moonshot: "moonshot-v1-128k", // Not built-in, needs custom handling
-  deepseek: "deepseek-chat", // Not built-in, needs custom handling
-  groq: "llama-3.3-70b-versatile",
-  mistral: "mistral-large-latest",
-  xai: "grok-2-1212",
-};
-
-const ENV_KEYS: Record<LLMProvider, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  google: "GOOGLE_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  moonshot: "MOONSHOT_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-  groq: "GROQ_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  xai: "XAI_API_KEY",
-};
-
-// Providers that are built into pi-ai
-const BUILTIN_PROVIDERS: LLMProvider[] = [
-  "anthropic",
-  "openai",
-  "google",
-  "openrouter",
-  "groq",
-  "mistral",
-  "xai",
-];
+// LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
 
 export class PHAAgent {
   private agent: Agent;
@@ -108,7 +72,7 @@ export class PHAAgent {
 
     if (!apiKey) {
       throw new Error(
-        `API key required for provider: ${provider}. Set ${ENV_KEYS[provider]} or provide apiKey in config.`
+        `API key required for provider: ${provider}. Set ${ENV_KEY_MAP[provider]} or provide apiKey in config.`
       );
     }
 
@@ -221,7 +185,7 @@ export class PHAAgent {
   }
 
   private getEnvApiKey(provider: LLMProvider): string | undefined {
-    const envKey = ENV_KEYS[provider];
+    const envKey = ENV_KEY_MAP[provider];
     if (envKey && typeof process !== "undefined" && process.env[envKey]) {
       return process.env[envKey];
     }
@@ -429,7 +393,7 @@ export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAg
   // Try to get API key from environment if not provided
   if (!config.apiKey) {
     const provider = config.provider || "anthropic";
-    const envKey = ENV_KEYS[provider];
+    const envKey = ENV_KEY_MAP[provider];
     if (envKey && typeof process !== "undefined" && process.env[envKey]) {
       config.apiKey = process.env[envKey];
     }

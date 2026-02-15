@@ -375,6 +375,17 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
       }
 
       config.llm.modelId = providerCfg.defaultModel;
+      // Sync to model repository
+      if (!config.models) config.models = { providers: {} };
+      const pk = newProvider as string;
+      if (!config.models.providers[pk]) config.models.providers[pk] = { models: [] };
+      if (config.llm.apiKey) config.models.providers[pk].apiKey = config.llm.apiKey;
+      if (config.llm.baseUrl) config.models.providers[pk].baseUrl = config.llm.baseUrl;
+      const modelName = config.llm.modelId || providerCfg.defaultModel;
+      if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
+        config.models.providers[pk].models.push({ name: modelName, model: modelName });
+      }
+      config.agentModel = `${pk}/${modelName}`;
       p.log.success(`Provider: ${providerCfg.name}, Model: ${config.llm.modelId}`);
       break;
     }
@@ -391,6 +402,15 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
       handleCancel(newModel);
 
       config.llm.modelId = (newModel as string) || defaultModel;
+      // Sync to model repository
+      const modelName = config.llm.modelId;
+      const pk = config.llm.provider;
+      if (config.models?.providers?.[pk]) {
+        if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
+          config.models.providers[pk].models.push({ name: modelName, model: modelName });
+        }
+        config.agentModel = `${pk}/${modelName}`;
+      }
       p.log.success(`Model: ${config.llm.modelId}`);
       break;
     }
@@ -409,6 +429,11 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
 
       if (apiKey) {
         config.llm.apiKey = apiKey as string;
+        // Sync to model repository
+        const pk = config.llm.provider;
+        if (config.models?.providers?.[pk]) {
+          config.models.providers[pk].apiKey = apiKey as string;
+        }
         p.log.success("API key updated");
       }
       break;
@@ -638,6 +663,23 @@ async function runFullWizard(): Promise<void> {
     );
     config.embedding = { enabled: false };
   }
+
+  // Populate unified model repository from wizard selections
+  const providerKey = config.llm.provider;
+  const modelEntry = {
+    name: config.llm.modelId || providerCfg.defaultModel,
+    model: config.llm.modelId || providerCfg.defaultModel,
+  };
+  config.models = {
+    providers: {
+      [providerKey]: {
+        ...(config.llm.baseUrl ? { baseUrl: config.llm.baseUrl } : {}),
+        ...(config.llm.apiKey ? { apiKey: config.llm.apiKey } : {}),
+        models: [modelEntry],
+      },
+    },
+  };
+  config.agentModel = `${providerKey}/${modelEntry.name}`;
 
   // Save
   saveConfig(config);

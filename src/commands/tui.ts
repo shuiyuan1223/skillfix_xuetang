@@ -111,7 +111,9 @@ export function registerTuiCommand(program: Command): void {
 async function runTUI(options: any, config: any): Promise<void> {
   const port = config.gateway.port;
   const wsUrl = options.url || `ws://localhost:${port}/ws`;
-  const provider = config.llm.provider as LLMProvider;
+  const provider = (
+    config.agentModel ? config.agentModel.split("/")[0] : config.llm.provider
+  ) as LLMProvider;
   const providerCfg = PROVIDER_CONFIGS[provider];
 
   // Check gateway first (before starting TUI)

@@ -5,7 +5,7 @@
  * Follows AgentOS pattern: all system operations are MCP-ized.
  */
 
-import { loadConfig, saveConfig, PROVIDER_CONFIGS } from "../utils/config.js";
+import { loadConfig, saveConfig, PROVIDER_CONFIGS, listAllModelRefs } from "../utils/config.js";
 
 /**
  * MCP Tool: get_config
@@ -36,9 +36,23 @@ export const getConfigTool = {
       if (section === "llm") return llmCopy;
     }
 
+    // Mask API keys in models.providers
+    let maskedModels = config.models;
+    if (config.models?.providers) {
+      maskedModels = {
+        providers: Object.fromEntries(
+          Object.entries(config.models.providers).map(([key, pCfg]) => [
+            key,
+            { ...pCfg, apiKey: maskKey(pCfg.apiKey) },
+          ])
+        ),
+      };
+    }
+
     const safe = {
       ...config,
       llm: { ...config.llm, apiKey: maskKey(config.llm.apiKey) },
+      ...(maskedModels ? { models: maskedModels } : {}),
     };
 
     if (section === "all") return safe;
@@ -112,14 +126,22 @@ export const listProvidersTool = {
     "List all supported LLM providers with their default models and environment variable names.",
   parameters: { type: "object" as const, properties: {} },
   execute: async () => {
-    return Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
-      id: key,
-      name: cfg.name,
-      defaultModel: cfg.defaultModel,
-      envVar: cfg.envVar,
-      baseUrl: cfg.baseUrl || "(default)",
-      hint: cfg.hint,
-    }));
+    const config = loadConfig();
+    const modelRefs = listAllModelRefs(config);
+    return {
+      knownProviders: Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
+        id: key,
+        name: cfg.name,
+        defaultModel: cfg.defaultModel,
+        envVar: cfg.envVar,
+        baseUrl: cfg.baseUrl || "(default)",
+        hint: cfg.hint,
+      })),
+      configuredModels: modelRefs,
+      agentModel: config.agentModel,
+      judgeModel: typeof config.judgeModel === "string" ? config.judgeModel : undefined,
+      embeddingModel: config.embeddingModel,
+    };
   },
 };
 

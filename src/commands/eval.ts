@@ -37,14 +37,19 @@ import {
   loadConfig,
   getBenchmarkModels,
   getJudgeModel,
+  resolveBenchmarkModels,
+  resolveJudgeModel,
+  resolveAgentModel,
   resolveBenchmarkModelApiKey,
   resolveBenchmarkModelBaseUrl,
+  BUILTIN_PROVIDERS,
+  ENV_KEY_MAP,
+  type LLMProvider,
   type BenchmarkModelConfig,
 } from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
 import { sessionToAgentMessages } from "../memory/session-store.js";
 import { getModel, complete } from "@mariozechner/pi-ai";
-import type { LLMProvider } from "../agent/pha-agent.js";
 import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
 import {
   writeBenchmarkProgress,
@@ -71,22 +76,11 @@ import {
   info,
 } from "../utils/cli-ui.js";
 
-/** Provider → env-var name mapping */
-const PROVIDER_ENV_KEYS: Record<string, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  google: "GOOGLE_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-  groq: "GROQ_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  xai: "XAI_API_KEY",
-};
+// PROVIDER_ENV_KEYS and resolveApiKey() removed — use ENV_KEY_MAP and resolveAgentModel() from config.ts
 
 /**
  * Resolve API key for eval commands.
- * When an explicit provider is given and differs from config, prefer the
- * provider-specific env var to avoid sending e.g. an OpenRouter key to Google.
+ * Delegates to resolveAgentModel() when no explicit provider is given.
  */
 function resolveApiKey(
   config: ReturnType<typeof loadConfig>,
@@ -94,30 +88,31 @@ function resolveApiKey(
 ): string | undefined {
   const effectiveProvider = provider || config.llm.provider;
 
-  // 1. If provider matches config → config key is valid
+  // 1. Try resolveAgentModel (handles new format + legacy)
+  try {
+    const resolved = resolveAgentModel(config);
+    if (!provider || provider === resolved.provider) {
+      return resolved.apiKey;
+    }
+  } catch {
+    // Fall through
+  }
+
+  // 2. If provider matches config → config key is valid
   if (effectiveProvider === config.llm.provider && config.llm.apiKey) {
     return config.llm.apiKey;
   }
 
-  // 2. Provider-specific env var
-  const envKey = PROVIDER_ENV_KEYS[effectiveProvider];
+  // 3. Provider-specific env var
+  const envKey = ENV_KEY_MAP[effectiveProvider as LLMProvider];
   if (envKey && process.env[envKey]) {
     return process.env[envKey];
   }
 
-  // 3. Fallback: config key (might still work for OpenRouter multi-model)
+  // 4. Fallback: config key
   if (config.llm.apiKey) return config.llm.apiKey;
 
-  // 4. Last resort: scan all env vars
-  return (
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.OPENAI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.DEEPSEEK_API_KEY ||
-    process.env.GROQ_API_KEY ||
-    undefined
-  );
+  return undefined;
 }
 
 /**
@@ -130,19 +125,8 @@ function createRawLLMCall(
   apiKey: string,
   baseUrl?: string
 ): (prompt: string) => Promise<string> {
-  // Built-in providers
-  const BUILTIN: LLMProvider[] = [
-    "anthropic",
-    "openai",
-    "google",
-    "openrouter",
-    "groq",
-    "mistral",
-    "xai",
-  ];
-
   let model: any;
-  if (BUILTIN.includes(provider)) {
+  if (BUILTIN_PROVIDERS.includes(provider)) {
     model = getModel(provider as any, modelId);
     if (!model && baseUrl) {
       model = {
@@ -825,7 +809,7 @@ export function registerEvalCommand(program: Command): void {
         if (!apiKey) {
           fatal(
             "No API key found",
-            `Set ${PROVIDER_ENV_KEYS[benchProvider] || "an API key"} in environment or config`
+            `Set ${ENV_KEY_MAP[benchProvider] || "an API key"} in environment or config`
           );
         }
 

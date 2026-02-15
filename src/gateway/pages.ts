@@ -1605,30 +1605,51 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage {
 // ============================================================================
 
 export interface SettingsPageData {
+  // Legacy LLM (kept for backward compat)
   provider: string;
   providers: Array<{ value: string; label: string; hint?: string }>;
   apiKeySet: boolean;
   modelId: string;
   baseUrl: string;
+  // Model Repository (new unified format)
+  modelProviders: Array<{
+    key: string;
+    baseUrl: string;
+    apiKeySet: boolean;
+    models: Array<{ name: string; model: string; label: string }>;
+  }>;
+  allModelRefs: string[];
+  agentModelRef: string;
+  judgeModelRef: string;
+  embeddingModelRef: string;
+  benchmarkModelRefs: string[];
+  // Gateway
   gatewayPort: number;
   gatewayAutoStart: boolean;
+  // Data Source
   dataSourceType: string;
+  // Embedding (legacy)
   embeddingEnabled: boolean;
   embeddingModel: string;
+  // TUI
   tuiTheme: string;
   tuiShowToolCalls: boolean;
+  // Huawei Health
   huaweiClientId: string;
   huaweiClientSecret: string;
   huaweiRedirectUri: string;
   huaweiAuthUrl: string;
   huaweiTokenUrl: string;
   huaweiApiBaseUrl: string;
+  // Benchmark & Evolution
   applyEngine: string;
   benchmarkConcurrency: number;
+  // Legacy judge/benchmark models (kept for backward compat)
   judgeProvider: string;
   judgeModelId: string;
   judgeLabel: string;
   benchmarkModels: Array<{ key: string; provider: string; modelId: string; label: string }>;
+  // User UUID
   userUuid: string;
   huaweiScopes: string[];
   // MCP structured fields
@@ -1661,35 +1682,92 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const uuidText = ui.text(`${t("settings.userUuid")}: ${data.userUuid || "—"}`, "caption");
   const header = ui.column([title, subtitle, uuidText], { gap: 4 });
 
-  // ---- LLM Section ----
-  const providerSelect = ui.formInput("provider", "select", {
-    label: t("settings.llmProvider"),
-    options: data.providers.map((p) => ({
-      value: p.value,
-      label: `${p.label}${p.hint ? ` — ${p.hint}` : ""}`,
-    })),
-    value: data.provider,
+  // ---- Model Repository Section ----
+  const repoChildren: string[] = [];
+  for (const mp of data.modelProviders) {
+    const mpBaseUrl = ui.formInput(`mp__${mp.key}__baseUrl`, "text", {
+      label: t("settings.providerBaseUrl"),
+      value: mp.baseUrl,
+      placeholder: "https://...",
+    });
+    const mpApiKey = ui.formInput(`mp__${mp.key}__apiKey`, "text", {
+      label: t("settings.providerApiKey"),
+      placeholder: t("settings.apiKeyPlaceholder"),
+      value: mp.apiKeySet ? "••••••••" : "",
+    });
+    const modelRows: string[] = [];
+    mp.models.forEach((m, idx) => {
+      const mName = ui.formInput(`mp__${mp.key}__m__${idx}__name`, "text", {
+        label: t("settings.modelName"),
+        value: m.name,
+      });
+      const mModel = ui.formInput(`mp__${mp.key}__m__${idx}__model`, "text", {
+        label: t("settings.modelActualId"),
+        value: m.model,
+      });
+      const mLabel = ui.formInput(`mp__${mp.key}__m__${idx}__label`, "text", {
+        label: t("settings.modelLabel"),
+        value: m.label,
+      });
+      const mDeleteBtn = ui.button(t("settings.deleteModel"), "settings_provider_model_delete", {
+        variant: "danger",
+        payload: { provider: mp.key, index: idx },
+      });
+      modelRows.push(ui.row([mName, mModel, mLabel, mDeleteBtn], { gap: 8, align: "end" }));
+    });
+    const addModelBtn = ui.button(t("settings.addModel"), "settings_provider_model_add", {
+      payload: { provider: mp.key },
+    });
+    const deleteProviderBtn = ui.button(t("settings.deleteProvider"), "settings_provider_delete", {
+      variant: "danger",
+      payload: { provider: mp.key },
+    });
+    const providerContent = [
+      mpBaseUrl,
+      mpApiKey,
+      ...modelRows,
+      ui.row([addModelBtn, deleteProviderBtn], { gap: 8 }),
+    ];
+    repoChildren.push(ui.collapsible(mp.key, providerContent, { expanded: true }));
+  }
+  const repoForm = ui.form(repoChildren, "settings_save_model_repository", {
+    submitLabel: t("settings.saveRepository"),
   });
-  const apiKeyInput = ui.formInput("apiKey", "text", {
-    label: t("settings.apiKey"),
-    placeholder: t("settings.apiKeyPlaceholder"),
-    value: data.apiKeySet ? "••••••••" : "",
+  const addProviderBtn = ui.button(t("settings.addProvider"), "settings_provider_add");
+  const repoCard = ui.card([repoForm, addProviderBtn], {
+    title: t("settings.sectionModelRepository"),
+    padding: 20,
   });
-  const modelInput = ui.formInput("modelId", "text", {
-    label: t("settings.modelId"),
-    value: data.modelId,
+
+  // ---- Model Assignments Section ----
+  const modelRefOptions = [
+    { value: "", label: t("settings.noneSelected") },
+    ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
+  ];
+  const agentModelSelect = ui.formInput("agentModelRef", "select", {
+    label: t("settings.agentModelSelect"),
+    options: modelRefOptions,
+    value: data.agentModelRef,
   });
-  const baseUrlInput = ui.formInput("baseUrl", "text", {
-    label: t("settings.baseUrl"),
-    placeholder: t("settings.baseUrlPlaceholder"),
-    value: data.baseUrl,
+  const judgeModelSelect = ui.formInput("judgeModelRef", "select", {
+    label: t("settings.judgeModelSelect"),
+    options: modelRefOptions,
+    value: data.judgeModelRef,
   });
-  const llmForm = ui.form(
-    [providerSelect, apiKeyInput, modelInput, baseUrlInput],
-    "settings_save_llm",
-    { submitLabel: saveLabel }
+  const embeddingModelSelect = ui.formInput("embeddingModelRef", "select", {
+    label: t("settings.embeddingModelSelect"),
+    options: modelRefOptions,
+    value: data.embeddingModelRef,
+  });
+  const assignmentsForm = ui.form(
+    [agentModelSelect, judgeModelSelect, embeddingModelSelect],
+    "settings_save_model_assignments",
+    { submitLabel: t("settings.saveAssignments") }
   );
-  const llmCard = ui.card([llmForm], { title: t("settings.sectionLlm"), padding: 20 });
+  const assignmentsCard = ui.card([assignmentsForm], {
+    title: t("settings.sectionModelAssignments"),
+    padding: 20,
+  });
 
   // ---- Gateway Section ----
   const portInput = ui.formInput("port", "text", {
@@ -1835,7 +1913,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  // ---- Benchmark & Evolution Section (concurrency + applyEngine only) ----
+  // ---- Benchmark & Evolution Section (concurrency + applyEngine + model selection) ----
   const concurrencyInput = ui.formInput("benchmarkConcurrency", "text", {
     label: t("settings.benchmarkConcurrency"),
     value: String(data.benchmarkConcurrency),
@@ -1848,76 +1926,32 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ],
     value: data.applyEngine,
   });
+  // Benchmark model checkboxes from model repository
+  const bmCheckboxes: string[] = [];
+  for (const ref of data.allModelRefs) {
+    const isChecked = data.benchmarkModelRefs.includes(ref);
+    bmCheckboxes.push(
+      ui.formInput(`bm_ref__${ref}`, "select", {
+        label: ref,
+        options: [
+          { value: "true", label: t("common.enable") },
+          { value: "false", label: t("common.disable") },
+        ],
+        value: String(isChecked),
+      })
+    );
+  }
+  const bmSelectGroup =
+    bmCheckboxes.length > 0
+      ? [ui.text(t("settings.benchmarkModelsSelect"), "body"), ...bmCheckboxes]
+      : [];
   const benchmarkForm = ui.form(
-    [concurrencyInput, applyEngineSelect],
-    "settings_save_benchmark_v2",
+    [concurrencyInput, applyEngineSelect, ...bmSelectGroup],
+    "settings_save_benchmark_v3",
     { submitLabel: saveLabel }
   );
   const benchmarkCard = ui.card([benchmarkForm], {
     title: t("settings.sectionBenchmark"),
-    padding: 20,
-  });
-
-  // ---- Judge Model Section (independent card) ----
-  const judgeProviderSelect = ui.formInput("judgeProvider", "select", {
-    label: t("settings.judgeProvider"),
-    options: data.providers.map((p) => ({
-      value: p.value,
-      label: `${p.label}${p.hint ? ` — ${p.hint}` : ""}`,
-    })),
-    value: data.judgeProvider,
-  });
-  const judgeModelInput = ui.formInput("judgeModelId", "text", {
-    label: t("settings.judgeModelId"),
-    value: data.judgeModelId,
-  });
-  const judgeLabelInput = ui.formInput("judgeLabel", "text", {
-    label: t("settings.judgeLabel"),
-    value: data.judgeLabel,
-  });
-  const judgeForm = ui.form(
-    [judgeProviderSelect, judgeModelInput, judgeLabelInput],
-    "settings_save_judge",
-    { submitLabel: saveLabel }
-  );
-  const judgeCard = ui.card([judgeForm], {
-    title: t("settings.sectionJudgeModel"),
-    padding: 20,
-  });
-
-  // ---- Benchmark Models Section (structured collapsible) ----
-  const bmFormInputs: string[] = [];
-  for (const m of data.benchmarkModels) {
-    const mProvider = ui.formInput(`bm__${m.key}__provider`, "select", {
-      label: t("settings.judgeProvider"),
-      options: data.providers.map((p) => ({
-        value: p.value,
-        label: `${p.label}${p.hint ? ` — ${p.hint}` : ""}`,
-      })),
-      value: m.provider,
-    });
-    const mModelId = ui.formInput(`bm__${m.key}__modelId`, "text", {
-      label: t("settings.judgeModelId"),
-      value: m.modelId,
-    });
-    const mLabel = ui.formInput(`bm__${m.key}__label`, "text", {
-      label: t("settings.judgeLabel"),
-      value: m.label,
-    });
-    const deleteBtn = ui.button(t("settings.deleteModel"), "settings_bm_delete", {
-      variant: "danger",
-      payload: { key: m.key },
-    });
-    bmFormInputs.push(
-      ui.collapsible(`${m.key} — ${m.label || m.modelId}`, [mProvider, mModelId, mLabel, deleteBtn])
-    );
-  }
-  const bmForm = ui.form(bmFormInputs, "settings_save_benchmark_models_v2", {
-    submitLabel: t("settings.saveAll"),
-  });
-  const bmAddBtn = ui.button(t("settings.addModel"), "settings_bm_add");
-  const bmCard = ui.card([bmForm, bmAddBtn], {
-    title: t("settings.sectionBenchmarkModels"),
     padding: 20,
   });
 
@@ -2060,18 +2094,9 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  const cards: string[] = [header, llmCard, gatewayCard, dsCard];
+  const cards: string[] = [header, repoCard, assignmentsCard, gatewayCard, dsCard];
   if (scopesCard) cards.push(scopesCard);
-  cards.push(
-    tuiCard,
-    embeddingCard,
-    benchmarkCard,
-    judgeCard,
-    bmCard,
-    mcpCard,
-    pluginsCard,
-    rawCard
-  );
+  cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
   const root = ui.column(cards, { gap: 16, padding: 24 });
 
   // Add some bottom padding to avoid content being cut off

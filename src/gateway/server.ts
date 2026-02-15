@@ -27,7 +27,9 @@ import {
   getJudgeModel,
   getBenchmarkConcurrency,
   PROVIDER_CONFIGS,
+  listAllModelRefs,
   type LLMProvider,
+  type BenchmarkModelConfig,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -1710,13 +1712,11 @@ export class GatewaySession {
           hint: cfg.hint,
         }));
         const huawei = config.dataSources?.huawei || {};
-        const judge = config.judgeModel || {
-          provider: undefined as any,
-          modelId: undefined as any,
-          label: undefined as any,
-        };
+        // Handle judgeModel as either string ref or object
+        const judge: { provider?: any; modelId?: any; label?: any } =
+          typeof config.judgeModel === "object" && config.judgeModel ? config.judgeModel : {};
 
-        // Build benchmark models array from config
+        // Build benchmark models array from old config (legacy)
         const bmRecord = config.benchmarkModels || {};
         const benchmarkModels = Object.entries(bmRecord).map(([key, m]) => ({
           key,
@@ -1724,6 +1724,29 @@ export class GatewaySession {
           modelId: m.modelId || "",
           label: m.label || "",
         }));
+
+        // Build model repository data (new unified format)
+        const modelProviders: Array<{
+          key: string;
+          baseUrl: string;
+          apiKeySet: boolean;
+          models: Array<{ name: string; model: string; label: string }>;
+        }> = [];
+        if (config.models?.providers) {
+          for (const [key, providerCfg] of Object.entries(config.models.providers)) {
+            modelProviders.push({
+              key,
+              baseUrl: providerCfg.baseUrl || "",
+              apiKeySet: !!providerCfg.apiKey,
+              models: (providerCfg.models || []).map((m) => ({
+                name: m.name,
+                model: m.model,
+                label: m.label || "",
+              })),
+            });
+          }
+        }
+        const allModelRefs = listAllModelRefs(config);
 
         // Build MCP structured data
         const chromeMcp = config.mcp?.chromeMcp || {};
@@ -1752,6 +1775,12 @@ export class GatewaySession {
           apiKeySet: !!config.llm.apiKey,
           modelId: config.llm.modelId || PROVIDER_CONFIGS[config.llm.provider]?.defaultModel || "",
           baseUrl: config.llm.baseUrl || PROVIDER_CONFIGS[config.llm.provider]?.baseUrl || "",
+          modelProviders,
+          allModelRefs,
+          agentModelRef: config.agentModel || "",
+          judgeModelRef: typeof config.judgeModel === "string" ? config.judgeModel : "",
+          embeddingModelRef: config.embeddingModel || "",
+          benchmarkModelRefs: config.benchmark?.models || [],
           gatewayPort: config.gateway?.port || 8000,
           gatewayAutoStart: config.gateway?.autoStart ?? false,
           dataSourceType: config.dataSources?.type || "mock",
@@ -2969,6 +2998,7 @@ export class GatewaySession {
       action === "settings_save_embedding" ||
       action === "settings_save_benchmark" ||
       action === "settings_save_benchmark_v2" ||
+      action === "settings_save_benchmark_v3" ||
       action === "settings_save_benchmark_models" ||
       action === "settings_save_benchmark_models_v2" ||
       action === "settings_save_mcp" ||
@@ -2977,6 +3007,12 @@ export class GatewaySession {
       action === "settings_save_plugins" ||
       action === "settings_save_plugins_v2" ||
       action === "settings_save_judge" ||
+      action === "settings_save_model_repository" ||
+      action === "settings_save_model_assignments" ||
+      action === "settings_provider_add" ||
+      action === "settings_provider_delete" ||
+      action === "settings_provider_model_add" ||
+      action === "settings_provider_model_delete" ||
       action === "settings_bm_add" ||
       action === "settings_bm_delete" ||
       action === "settings_mcp_add" ||
@@ -3045,14 +3081,18 @@ export class GatewaySession {
             config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
           if (formData.applyEngine)
             config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
-          if (!config.judgeModel)
-            config.judgeModel = { provider: config.llm.provider, modelId: "" };
-          if (formData.judgeProvider)
-            config.judgeModel.provider = formData.judgeProvider as LLMProvider;
-          if (formData.judgeModelId !== undefined)
-            config.judgeModel.modelId = String(formData.judgeModelId);
+          // Ensure judgeModel is an object for settings_save_benchmark
+          if (!config.judgeModel || typeof config.judgeModel === "string")
+            config.judgeModel = {
+              provider: config.llm.provider,
+              modelId: "",
+            } as BenchmarkModelConfig;
+          const jmBench = config.judgeModel as BenchmarkModelConfig;
+          if (formData.judgeProvider) jmBench.provider = formData.judgeProvider as LLMProvider;
+          if (formData.judgeModelId !== undefined) jmBench.modelId = String(formData.judgeModelId);
           if (formData.judgeLabel !== undefined)
-            config.judgeModel.label = String(formData.judgeLabel) || undefined;
+            jmBench.label = String(formData.judgeLabel) || undefined;
+          config.judgeModel = jmBench;
         } else if (action === "settings_save_benchmark_v2") {
           // New: only concurrency + applyEngine
           if (!config.benchmark) config.benchmark = {};
@@ -3060,16 +3100,150 @@ export class GatewaySession {
             config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
           if (formData.applyEngine)
             config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+        } else if (action === "settings_save_benchmark_v3") {
+          // Benchmark v3: concurrency + applyEngine + model refs from checkboxes
+          if (!config.benchmark) config.benchmark = {};
+          if (formData.benchmarkConcurrency !== undefined)
+            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+          // Collect selected benchmark model refs from bm_ref__* fields
+          const selectedRefs: string[] = [];
+          if (formData) {
+            for (const [k, v] of Object.entries(formData)) {
+              if (k.startsWith("bm_ref__") && v === "true") {
+                selectedRefs.push(k.replace("bm_ref__", ""));
+              }
+            }
+          }
+          config.benchmark.models = selectedRefs;
+        } else if (action === "settings_save_model_repository") {
+          // Parse mp__<key>__* fields to rebuild models.providers
+          if (!config.models) config.models = { providers: {} };
+          const newProviders: Record<
+            string,
+            {
+              baseUrl?: string;
+              apiKey?: string;
+              models: Array<{ name: string; model: string; label?: string }>;
+            }
+          > = {};
+          if (formData) {
+            for (const [k, v] of Object.entries(formData)) {
+              // mp__<provider>__baseUrl or mp__<provider>__apiKey
+              const provMatch = k.match(/^mp__(.+?)__(?:baseUrl|apiKey)$/);
+              if (provMatch) {
+                const provKey = provMatch[1];
+                if (!newProviders[provKey]) newProviders[provKey] = { models: [] };
+                if (k.endsWith("__baseUrl")) {
+                  newProviders[provKey].baseUrl = String(v) || undefined;
+                } else if (k.endsWith("__apiKey")) {
+                  const val = String(v);
+                  if (val && val !== "••••••••") {
+                    newProviders[provKey].apiKey = val;
+                  } else if (config.models.providers?.[provKey]?.apiKey) {
+                    // Preserve existing API key if masked
+                    newProviders[provKey].apiKey = config.models.providers[provKey].apiKey;
+                  }
+                }
+              }
+              // mp__<provider>__m__<idx>__name/model/label
+              const modelMatch = k.match(/^mp__(.+?)__m__(\d+)__(.+)$/);
+              if (modelMatch) {
+                const [, provKey, idxStr, field] = modelMatch;
+                if (!newProviders[provKey]) newProviders[provKey] = { models: [] };
+                const idx = parseInt(idxStr, 10);
+                while (newProviders[provKey].models.length <= idx) {
+                  newProviders[provKey].models.push({ name: "", model: "" });
+                }
+                if (field === "name") newProviders[provKey].models[idx].name = String(v);
+                else if (field === "model") newProviders[provKey].models[idx].model = String(v);
+                else if (field === "label")
+                  newProviders[provKey].models[idx].label = String(v) || undefined;
+              }
+            }
+          }
+          // Preserve providers that weren't in the form (shouldn't happen, but safe)
+          for (const [pk, pv] of Object.entries(config.models.providers || {})) {
+            if (!newProviders[pk]) {
+              newProviders[pk] = pv as any;
+            }
+          }
+          config.models.providers = newProviders;
+          // Sync llm config for backward compat
+          if (config.agentModel) {
+            const parts = config.agentModel.split("/");
+            if (parts.length >= 2) {
+              const agentProvider = parts[0];
+              const agentProv = newProviders[agentProvider];
+              if (agentProv) {
+                config.llm.provider = agentProvider as LLMProvider;
+                if (agentProv.apiKey) config.llm.apiKey = agentProv.apiKey;
+                if (agentProv.baseUrl) config.llm.baseUrl = agentProv.baseUrl;
+              }
+            }
+          }
+        } else if (action === "settings_save_model_assignments") {
+          // Save model assignments
+          if (formData.agentModelRef !== undefined)
+            config.agentModel = String(formData.agentModelRef) || undefined;
+          if (formData.judgeModelRef !== undefined)
+            config.judgeModel = String(formData.judgeModelRef) || undefined;
+          if (formData.embeddingModelRef !== undefined)
+            config.embeddingModel = String(formData.embeddingModelRef) || undefined;
+          // Sync llm config for backward compat when agent model changes
+          if (config.agentModel) {
+            const parts = config.agentModel.split("/");
+            if (parts.length >= 2 && config.models?.providers) {
+              const agentProvider = parts[0];
+              const agentName = parts.slice(1).join("/");
+              const agentProv = config.models.providers[agentProvider];
+              if (agentProv) {
+                config.llm.provider = agentProvider as LLMProvider;
+                if (agentProv.apiKey) config.llm.apiKey = agentProv.apiKey;
+                if (agentProv.baseUrl) config.llm.baseUrl = agentProv.baseUrl;
+                const model = agentProv.models?.find((m) => m.name === agentName);
+                if (model) config.llm.modelId = model.model;
+              }
+            }
+          }
+        } else if (action === "settings_provider_add") {
+          // Add a new empty provider
+          if (!config.models) config.models = { providers: {} };
+          const newKey = `provider-${Date.now()}`;
+          config.models.providers[newKey] = { models: [] };
+        } else if (action === "settings_provider_delete") {
+          // Delete a provider by key
+          const key = formData?.provider as string;
+          if (key && config.models?.providers) {
+            delete config.models.providers[key];
+          }
+        } else if (action === "settings_provider_model_add") {
+          // Add an empty model to a provider
+          const provKey = formData?.provider as string;
+          if (provKey && config.models?.providers?.[provKey]) {
+            config.models.providers[provKey].models.push({ name: "", model: "" });
+          }
+        } else if (action === "settings_provider_model_delete") {
+          // Delete a model from a provider by index
+          const provKey = formData?.provider as string;
+          const idx = Number(formData?.index ?? -1);
+          if (provKey && idx >= 0 && config.models?.providers?.[provKey]) {
+            config.models.providers[provKey].models.splice(idx, 1);
+          }
         } else if (action === "settings_save_judge") {
           // Judge model as independent card
-          if (!config.judgeModel)
-            config.judgeModel = { provider: config.llm.provider, modelId: "" };
-          if (formData.judgeProvider)
-            config.judgeModel.provider = formData.judgeProvider as LLMProvider;
-          if (formData.judgeModelId !== undefined)
-            config.judgeModel.modelId = String(formData.judgeModelId);
+          if (!config.judgeModel || typeof config.judgeModel === "string")
+            config.judgeModel = {
+              provider: config.llm.provider,
+              modelId: "",
+            } as BenchmarkModelConfig;
+          const jmJudge = config.judgeModel as BenchmarkModelConfig;
+          if (formData.judgeProvider) jmJudge.provider = formData.judgeProvider as LLMProvider;
+          if (formData.judgeModelId !== undefined) jmJudge.modelId = String(formData.judgeModelId);
           if (formData.judgeLabel !== undefined)
-            config.judgeModel.label = String(formData.judgeLabel) || undefined;
+            jmJudge.label = String(formData.judgeLabel) || undefined;
+          config.judgeModel = jmJudge;
         } else if (action === "settings_save_benchmark_models") {
           try {
             const parsed = JSON.parse(String(formData.benchmarkModelsJson || "{}"));

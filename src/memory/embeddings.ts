@@ -5,7 +5,10 @@
  * No local/Gemini/Voyage support needed.
  */
 
-import { loadConfig } from "../utils/config.js";
+import {
+  loadConfig,
+  resolveEmbeddingModel as resolveEmbeddingModelFromConfig,
+} from "../utils/config.js";
 import { formatErrorMessage } from "./compat.js";
 import { createOpenAiEmbeddingProvider, type OpenAiEmbeddingClient } from "./embeddings-openai.js";
 
@@ -84,9 +87,16 @@ export function isEmbeddingEnabled(): boolean {
 }
 
 /**
- * Get API key from PHA config or environment
+ * Get API key from PHA config or environment.
+ * Now delegates to the unified resolveEmbeddingModel from config.ts.
  */
 export function resolveEmbeddingApiKey(): string | undefined {
+  try {
+    const resolved = resolveEmbeddingModelFromConfig();
+    if (resolved) return resolved.apiKey;
+  } catch {}
+
+  // Legacy fallback
   if (process.env.OPENROUTER_API_KEY) {
     return process.env.OPENROUTER_API_KEY;
   }
@@ -107,6 +117,11 @@ export function resolveEmbeddingApiKey(): string | undefined {
  */
 export function resolveEmbeddingModel(): string {
   try {
+    const resolved = resolveEmbeddingModelFromConfig();
+    if (resolved) return resolved.modelId;
+  } catch {}
+
+  try {
     const phaConfig = loadConfig();
     return phaConfig.embedding?.model || "text-embedding-3-small";
   } catch {
@@ -118,6 +133,11 @@ export function resolveEmbeddingModel(): string {
  * Get embedding base URL from PHA config
  */
 export function resolveEmbeddingBaseUrl(): string {
+  try {
+    const resolved = resolveEmbeddingModelFromConfig();
+    if (resolved?.baseUrl) return resolved.baseUrl;
+  } catch {}
+
   try {
     const phaConfig = loadConfig();
     if (phaConfig.llm.provider === "openrouter" && phaConfig.llm.baseUrl) {

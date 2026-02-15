@@ -4,7 +4,12 @@
 
 import type { Command } from "commander";
 import { createPHAAgent } from "../agent/index.js";
-import { loadConfig, PROVIDER_CONFIGS, type LLMProvider } from "../utils/config.js";
+import {
+  loadConfig,
+  PROVIDER_CONFIGS,
+  resolveAgentModel,
+  type LLMProvider,
+} from "../utils/config.js";
 import { c, icons, Spinner, fatal, info } from "../utils/cli-ui.js";
 
 export function registerChatCommand(program: Command): void {
@@ -19,19 +24,23 @@ export function registerChatCommand(program: Command): void {
     .option("--show-tools", "Show tool calls")
     .action(async (options) => {
       const config = loadConfig();
-      const provider = options.provider || config.llm.provider;
-      const apiKey =
-        process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || process.env.GOOGLE_API_KEY;
-
-      if (!apiKey) {
-        fatal("No API key found", "Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY");
+      let resolved;
+      try {
+        resolved = resolveAgentModel(config);
+      } catch (err) {
+        fatal(
+          "No API key found",
+          err instanceof Error ? err.message : "Set an API key in config or environment"
+        );
       }
 
+      const provider = options.provider || resolved.provider;
+      const apiKey = resolved.apiKey;
       const providerCfg = PROVIDER_CONFIGS[provider as LLMProvider];
       const agent = await createPHAAgent({
         apiKey,
-        provider: provider as "anthropic" | "openai" | "google",
-        modelId: options.model || config.llm.modelId,
+        provider: provider as LLMProvider,
+        modelId: options.model || resolved.modelId,
       });
 
       // Single message mode
