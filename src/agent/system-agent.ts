@@ -5,7 +5,7 @@
  * Uses Agent from pi-agent-core directly — NOT PHAAgent.
  *
  * Key differences from PHAAgent:
- * - Own system prompt loaded from src/prompts/system-agent/SOUL.md
+ * - Own system prompt loaded from src/prompts/system-agent/ (SOUL.md + AGENTS.md)
  * - Own memory system (.pha/system-agent/)
  * - File operation tools (read, grep, find, bash) for lightweight inspection
  * - Tool feedback mechanism for identifying capability gaps
@@ -17,7 +17,7 @@ import { Agent, type AgentEvent, type AgentMessage } from "@mariozechner/pi-agen
 import { getModel, type Model } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { gitAgentTools } from "./git-agent-tools.js";
 import { claudeCodeAgentTool } from "./claude-code-tool.js";
@@ -59,19 +59,47 @@ export interface SystemAgentConfig {
 const FALLBACK_PROMPT = `你是 PHA 系统 Agent，负责管理和进化 PHA 系统。始终使用中文回复。`;
 
 /**
- * Load SystemAgent system prompt from src/prompts/system-agent/SOUL.md
+ * Load all SystemAgent prompt files from src/prompts/system-agent/
+ * Priority order: SOUL.md, AGENTS.md, then alphabetical.
  */
 function loadSystemAgentPrompt(): string {
-  const soulPath = join("src", "prompts", "system-agent", "SOUL.md");
+  const dir = join("src", "prompts", "system-agent");
   try {
-    if (existsSync(soulPath)) {
-      return readFileSync(soulPath, "utf-8").trim();
+    if (!existsSync(dir)) {
+      log.warn("system-agent prompts dir not found, using fallback");
+      return FALLBACK_PROMPT;
     }
+
+    const ordered = ["SOUL.md", "AGENTS.md"];
+    const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
+    const sections: string[] = [];
+
+    // Load priority files first
+    for (const name of ordered) {
+      if (files.includes(name)) {
+        const content = readFileSync(join(dir, name), "utf-8").trim();
+        if (content) sections.push(content);
+      }
+    }
+
+    // Load remaining files alphabetically
+    for (const file of files.sort()) {
+      if (!ordered.includes(file)) {
+        const content = readFileSync(join(dir, file), "utf-8").trim();
+        if (content) sections.push(content);
+      }
+    }
+
+    if (sections.length === 0) {
+      log.warn("No prompt files found, using fallback");
+      return FALLBACK_PROMPT;
+    }
+
+    return sections.join("\n\n---\n\n");
   } catch {
-    // Fall through to fallback
+    log.warn("Failed to load system-agent prompts, using fallback");
+    return FALLBACK_PROMPT;
   }
-  log.warn("SOUL.md not found, using fallback prompt");
-  return FALLBACK_PROMPT;
 }
 
 /** Memory budget: max characters per memory file */
