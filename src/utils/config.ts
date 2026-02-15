@@ -524,7 +524,7 @@ function syncLegacyFields(config: PHAConfig): void {
  * Strip legacy fields (llm, embedding, benchmarkModels) that are now derived
  * from the unified model repository. Returns a clean copy for file persistence.
  */
-function stripLegacyFieldsForSave(config: PHAConfig): Record<string, unknown> {
+export function stripLegacyFieldsForSave(config: PHAConfig): Record<string, unknown> {
   const copy = { ...config } as Record<string, any>;
   // Only strip if we have the new format to derive from
   if (copy.models?.providers && Object.keys(copy.models.providers).length > 0) {

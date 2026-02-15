@@ -29,6 +29,7 @@ import {
   resolveSystemAgentModel,
   PROVIDER_CONFIGS,
   listAllModelRefs,
+  stripLegacyFieldsForSave,
   type LLMProvider,
   type BenchmarkModelConfig,
   type PHAConfig,
@@ -1865,7 +1866,7 @@ export class GatewaySession {
           pluginEnabled: pluginsConfig.enabled ?? true,
           pluginPaths: (pluginsConfig.paths || []).join(", "),
           pluginEntries,
-          rawConfigJson: JSON.stringify(config, null, 2),
+          rawConfigJson: JSON.stringify(stripLegacyFieldsForSave(config), null, 2),
         });
         break;
       }
