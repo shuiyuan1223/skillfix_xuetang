@@ -1717,8 +1717,7 @@ export class GatewaySession {
           config: e.config ? JSON.stringify(e.config, null, 2) : "{}",
         }));
 
-        // Scopes: convert to one-per-line format
-        const scopesLines = (huawei.scopes || []).join("\n");
+        const scopesArray = huawei.scopes || [];
 
         mainPage = generateSettingsPage({
           provider: config.llm.provider,
@@ -1746,7 +1745,7 @@ export class GatewaySession {
           judgeLabel: judge.label || "",
           benchmarkModels,
           userUuid: config.userUuid || "",
-          huaweiScopes: scopesLines,
+          huaweiScopes: scopesArray,
           chromeMcpCommand: chromeMcp.command || "npx",
           chromeMcpArgs: (chromeMcp.args || []).join(", "),
           chromeMcpBrowserUrl: chromeMcp.browserUrl || "",
@@ -2924,6 +2923,9 @@ export class GatewaySession {
       action === "settings_bm_delete" ||
       action === "settings_mcp_add" ||
       action === "settings_mcp_delete" ||
+      action === "settings_save_scopes" ||
+      action === "settings_scope_add" ||
+      action === "settings_scope_delete" ||
       action === "settings_copy_config" ||
       action === "settings_download_config"
     ) {
@@ -2961,14 +2963,6 @@ export class GatewaySession {
               hw.tokenUrl = String(formData.huaweiTokenUrl) || undefined;
             if (formData.huaweiApiBaseUrl !== undefined)
               hw.apiBaseUrl = String(formData.huaweiApiBaseUrl) || undefined;
-            // Scopes: one per line (not JSON)
-            if (formData.huaweiScopes !== undefined) {
-              const lines = String(formData.huaweiScopes || "")
-                .split("\n")
-                .map((s) => s.trim())
-                .filter(Boolean);
-              hw.scopes = lines;
-            }
           }
         } else if (action === "settings_save_tui") {
           if (!config.tui) config.tui = { theme: "dark", showToolCalls: true };
@@ -3148,6 +3142,35 @@ export class GatewaySession {
                   .map((s) => s.trim())
                   .filter(Boolean)
               : [];
+          }
+        } else if (action === "settings_save_scopes") {
+          // Parse scope__N fields from form
+          if (!config.dataSources.huawei) config.dataSources.huawei = {};
+          const scopes: string[] = [];
+          if (formData) {
+            const scopeKeys = Object.keys(formData)
+              .filter((k) => k.startsWith("scope__"))
+              .sort((a, b) => {
+                const ai = parseInt(a.split("__")[1], 10);
+                const bi = parseInt(b.split("__")[1], 10);
+                return ai - bi;
+              });
+            for (const k of scopeKeys) {
+              const v = String(formData[k] || "").trim();
+              if (v) scopes.push(v);
+            }
+          }
+          config.dataSources.huawei.scopes = scopes;
+        } else if (action === "settings_scope_add") {
+          // Add an empty scope entry
+          if (!config.dataSources.huawei) config.dataSources.huawei = {};
+          if (!config.dataSources.huawei.scopes) config.dataSources.huawei.scopes = [];
+          config.dataSources.huawei.scopes.push("");
+        } else if (action === "settings_scope_delete") {
+          // Delete scope by index
+          const idx = Number(formData?.index ?? -1);
+          if (idx >= 0 && config.dataSources.huawei?.scopes) {
+            config.dataSources.huawei.scopes.splice(idx, 1);
           }
         } else if (action === "settings_copy_config" || action === "settings_download_config") {
           // Handled on frontend — just send toast

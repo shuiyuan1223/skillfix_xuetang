@@ -611,6 +611,8 @@ export interface LocaleMessages {
     huaweiScopes: string;
     huaweiScopesDesc: string;
     scopesPerLine: string;
+    addScope: string;
+    deleteScope: string;
     sectionMcp: string;
     mcpJson: string;
     mcpJsonDesc: string;

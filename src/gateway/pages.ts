@@ -1630,7 +1630,7 @@ export interface SettingsPageData {
   judgeLabel: string;
   benchmarkModels: Array<{ key: string; provider: string; modelId: string; label: string }>;
   userUuid: string;
-  huaweiScopes: string;
+  huaweiScopes: string[];
   // MCP structured fields
   chromeMcpCommand: string;
   chromeMcpArgs: string;
@@ -1762,17 +1762,35 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         value: data.huaweiApiBaseUrl,
       })
     );
-    // Scopes: one per line (not JSON)
-    dsInputs.push(
-      ui.formInput("huaweiScopes", "textarea", {
-        label: t("settings.scopesPerLine"),
-        value: data.huaweiScopes,
-      })
-    );
   }
 
   const dsForm = ui.form(dsInputs, "settings_save_datasource", { submitLabel: saveLabel });
   const dsCard = ui.card([dsForm], { title: t("settings.sectionData"), padding: 20 });
+
+  // ---- OAuth Scopes Section (structured list, only when huawei) ----
+  let scopesCard: string | null = null;
+  if (data.dataSourceType === "huawei") {
+    const scopeFormInputs: string[] = [];
+    data.huaweiScopes.forEach((scope, idx) => {
+      const scopeInput = ui.formInput(`scope__${idx}`, "text", {
+        label: `Scope ${idx + 1}`,
+        value: scope,
+      });
+      const scopeDeleteBtn = ui.button(t("settings.deleteScope"), "settings_scope_delete", {
+        variant: "danger",
+        payload: { index: idx },
+      });
+      scopeFormInputs.push(ui.row([scopeInput, scopeDeleteBtn], { gap: 8, align: "end" }));
+    });
+    const scopesForm = ui.form(scopeFormInputs, "settings_save_scopes", {
+      submitLabel: t("settings.saveAll"),
+    });
+    const scopeAddBtn = ui.button(t("settings.addScope"), "settings_scope_add");
+    scopesCard = ui.card([scopesForm, scopeAddBtn], {
+      title: t("settings.scopesPerLine"),
+      padding: 20,
+    });
+  }
 
   // ---- TUI Section ----
   const tuiThemeSelect = ui.formInput("tuiTheme", "select", {
@@ -2042,23 +2060,19 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  const root = ui.column(
-    [
-      header,
-      llmCard,
-      gatewayCard,
-      dsCard,
-      tuiCard,
-      embeddingCard,
-      benchmarkCard,
-      judgeCard,
-      bmCard,
-      mcpCard,
-      pluginsCard,
-      rawCard,
-    ],
-    { gap: 16, padding: 24 }
+  const cards: string[] = [header, llmCard, gatewayCard, dsCard];
+  if (scopesCard) cards.push(scopesCard);
+  cards.push(
+    tuiCard,
+    embeddingCard,
+    benchmarkCard,
+    judgeCard,
+    bmCard,
+    mcpCard,
+    pluginsCard,
+    rawCard
   );
+  const root = ui.column(cards, { gap: 16, padding: 24 });
 
   // Add some bottom padding to avoid content being cut off
   const rootComp = ui["components"].get(root);
