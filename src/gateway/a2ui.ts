@@ -40,7 +40,6 @@ export type A2UIComponentType =
   | "score_gauge"
   | "status_badge"
   | "collapsible"
-  | "radar_chart"
   | "activity_rings"
   // Evolution Lab components
   | "git_timeline"
@@ -301,32 +300,6 @@ export interface CollapsibleComponent extends A2UIComponent {
   expanded?: boolean;
   icon?: string;
   children: string[];
-}
-
-// Radar Chart Component
-export interface RadarChartComponent extends A2UIComponent {
-  type: "radar_chart";
-  data: Array<{
-    label: string;
-    value: number;
-    maxValue: number;
-  }>;
-  size?: number;
-  showLabels?: boolean;
-  showValues?: boolean;
-  color?: string;
-  compareData?: Array<{
-    label: string;
-    value: number;
-    maxValue: number;
-  }>;
-  compareColor?: string;
-  /** N-series overlay mode. When present, `data`/`compareData` are ignored. */
-  multiSeries?: Array<{
-    label: string;
-    data: Array<{ label: string; value: number; maxValue: number }>;
-    color: string;
-  }>;
 }
 
 // Git Timeline Component
@@ -604,12 +577,6 @@ export class A2UIGenerator {
   ): string {
     const id = this.nextId("status");
     this.components.set(id, { id, type: "status_badge", status, ...opts });
-    return id;
-  }
-
-  radarChart(data: RadarChartComponent["data"], opts: Partial<RadarChartComponent> = {}): string {
-    const id = this.nextId("radar");
-    this.components.set(id, { id, type: "radar_chart", data, ...opts });
     return id;
   }
 

@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import {
   renderCodeEditor, renderCommitList, renderDiffView, renderDataTable,
-  renderScoreGauge, renderActivityRings, renderRadarChart, renderStatusBadge,
+  renderScoreGauge, renderActivityRings, renderStatusBadge,
   renderCollapsible, renderModalComponent, renderForm, renderFormInput,
   renderGitTimeline, renderStepIndicator, renderFileTree,
   renderArenaPills, renderArenaScoreTable, renderArenaCategoryCard,
@@ -74,7 +74,6 @@ export function A2UIRenderer({
       case "data_table": return renderDataTable(c, ctx);
       case "score_gauge": return renderScoreGauge(c, ctx);
       case "activity_rings": return renderActivityRings(c, ctx);
-      case "radar_chart": return renderRadarChart(c, ctx);
       case "status_badge": return renderStatusBadge(c, ctx);
       case "collapsible": return renderCollapsible(c, ctx);
       case "modal": return renderModalComponent(c, ctx);

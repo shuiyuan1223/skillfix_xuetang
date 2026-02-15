@@ -69,7 +69,6 @@ export default {
         "skeleton-shimmer": "skeletonShimmer 1.5s infinite",
         "toast-slide-in": "toastSlideIn 0.4s ease-out",
         "ring-draw": "ringDraw 1s ease-out forwards",
-        "radar-expand": "radarExpand 0.6s ease-out forwards",
       },
       keyframes: {
         cardEntrance: {
@@ -101,10 +100,6 @@ export default {
         },
         ringDraw: {
           from: { strokeDashoffset: "var(--circumference)" },
-        },
-        radarExpand: {
-          from: { opacity: "0", transform: "scale(0.3)" },
-          to: { opacity: "1", transform: "scale(1)" },
         },
       },
     },

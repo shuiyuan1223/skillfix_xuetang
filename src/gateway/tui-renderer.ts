@@ -96,8 +96,6 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderMetric(comp, ctx);
     case "chart":
       return renderChart(comp, ctx);
-    case "radar_chart":
-      return renderRadarChart(comp, ctx);
     case "table":
     case "data_table":
       return renderTable(comp, ctx);
@@ -364,56 +362,6 @@ function renderChart(comp: A2UIComponent, ctx: RenderContext): string[] {
     const first = data[0];
     const last = data[data.length - 1];
     lines.push(indent(ctx, ansi.dim(`  ${first[xKey]} → ${last[xKey]}`)));
-  }
-
-  return lines;
-}
-
-function renderRadarChart(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const multiSeries = comp.multiSeries as
-    | Array<{
-        label: string;
-        data: Array<{ label: string; value: number; maxValue: number }>;
-        color: string;
-      }>
-    | undefined;
-  const lines: string[] = [];
-
-  if (multiSeries && multiSeries.length > 0) {
-    // Multi-series: render as a comparison table
-    lines.push(indent(ctx, ansi.dim("[Radar Chart — Multi-Series]")));
-    // Header: dimension + each series name
-    const axisLabels = multiSeries[0].data.map((d) => d.label);
-    const seriesNames = multiSeries.map((s) => s.label);
-    const colWidth = 10;
-    const headerLine =
-      "  " +
-      padRight("Dimension", 18) +
-      seriesNames.map((n) => padRight(n.slice(0, colWidth), colWidth)).join(" ");
-    lines.push(indent(ctx, ansi.bold(headerLine)));
-    lines.push(indent(ctx, "  " + "─".repeat(18 + seriesNames.length * (colWidth + 1))));
-
-    for (let i = 0; i < axisLabels.length; i++) {
-      const label = axisLabels[i];
-      const vals = multiSeries.map((s) => {
-        const d = s.data[i];
-        const pct = d && d.maxValue > 0 ? Math.round((d.value / d.maxValue) * 100) : 0;
-        return padRight(`${pct}%`, colWidth);
-      });
-      lines.push(indent(ctx, `  ${padRight(label, 18)}${vals.join(" ")}`));
-    }
-    return lines;
-  }
-
-  // Single-series fallback
-  const data = (comp.data as Array<{ label: string; value: number; maxValue: number }>) || [];
-  lines.push(indent(ctx, ansi.dim("[Radar Chart]")));
-
-  for (const item of data) {
-    const pct = item.maxValue > 0 ? Math.round((item.value / item.maxValue) * 100) : 0;
-    const barLen = Math.round(pct / 5);
-    const bar = "█".repeat(barLen) + "░".repeat(20 - barLen);
-    lines.push(indent(ctx, `  ${padRight(item.label, 16)} ${ansi.cyan(bar)} ${pct}%`));
   }
 
   return lines;

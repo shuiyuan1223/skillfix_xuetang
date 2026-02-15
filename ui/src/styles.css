@@ -205,33 +205,6 @@
     transition: stroke-dashoffset 1s ease;
   }
 
-  /* Radar chart SVG */
-  .radar-grid {
-    fill: none;
-    stroke: currentColor;
-    stroke-opacity: 0.08;
-    stroke-width: 1;
-  }
-
-  .radar-axis {
-    stroke: currentColor;
-    stroke-opacity: 0.1;
-    stroke-width: 1;
-  }
-
-  .radar-label {
-    fill: rgb(var(--color-text-secondary));
-    font-size: 11px;
-    font-family: system-ui;
-  }
-
-  .radar-value {
-    fill: rgb(var(--color-primary));
-    font-size: 10px;
-    font-weight: 600;
-    font-family: system-ui;
-  }
-
   /* Activity ring animation */
   .ring-fill {
     transition: stroke-dashoffset 1s ease;
