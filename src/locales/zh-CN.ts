@@ -184,7 +184,8 @@ export const zhCN: LocaleMessages = {
   prompts: {
     title: "提示词",
     subtitle: "管理 Agent 人格和指令",
-    cardTitle: "提示词文件",
+    cardTitle: "系统提示词",
+    userCardTitle: "用户级文件",
     name: "名称",
     promptTitle: "标题",
     lines: "行数",

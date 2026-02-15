@@ -828,7 +828,9 @@ interface CommitInfo {
 
 export function generatePromptsPage(data: {
   prompts: PromptInfo[];
+  userFiles?: PromptInfo[];
   selectedPrompt?: string;
+  selectedSource?: "system" | "user";
   content?: string;
   commits?: CommitInfo[];
   editing?: boolean;
@@ -837,6 +839,7 @@ export function generatePromptsPage(data: {
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
   const scope = data.scope || "pha";
+  const selectedSource = data.selectedSource || "system";
 
   // Header
   const title = ui.text(t("prompts.title"), "h2");
@@ -860,12 +863,13 @@ export function generatePromptsPage(data: {
     return ui.build(root);
   }
 
-  // Prompts list
+  // System prompts list
   const promptRows = data.prompts.map((p) => ({
     name: p.name,
     title: p.title,
     lines: p.lines,
-    actions: p.name === data.selectedPrompt ? "Selected" : "View",
+    source: "system",
+    actions: p.name === data.selectedPrompt && selectedSource === "system" ? "Selected" : "View",
   }));
 
   const promptsTable = ui.dataTable(
@@ -882,6 +886,31 @@ export function generatePromptsPage(data: {
   const promptsCard = ui.card([promptsTable], { title: t("prompts.cardTitle"), padding: 20 });
 
   const children: string[] = [promptsCard];
+
+  // User-level files list
+  if (data.userFiles && data.userFiles.length > 0) {
+    const userRows = data.userFiles.map((p) => ({
+      name: p.name,
+      title: p.title,
+      lines: p.lines,
+      source: "user",
+      actions: p.name === data.selectedPrompt && selectedSource === "user" ? "Selected" : "View",
+    }));
+
+    const userTable = ui.dataTable(
+      [
+        { key: "name", label: t("prompts.name"), sortable: true },
+        { key: "title", label: t("prompts.promptTitle") },
+        { key: "lines", label: t("prompts.lines") },
+        { key: "actions", label: "", render: "badge" },
+      ],
+      userRows,
+      { onRowClick: "select_user_file" }
+    );
+
+    const userCard = ui.card([userTable], { title: t("prompts.userCardTitle"), padding: 20 });
+    children.push(userCard);
+  }
 
   // If a prompt is selected, show editor and history
   if (data.selectedPrompt && data.content !== undefined) {
@@ -902,11 +931,13 @@ export function generatePromptsPage(data: {
       ? ui.button(t("common.cancel"), "cancel_edit", { variant: "ghost" })
       : null;
 
-    const revertBtn = data.editing
-      ? null
-      : data.commits && data.commits.length > 1
-        ? ui.button(t("common.revert"), "revert_prompt", { variant: "ghost" })
-        : null;
+    // Only show revert for git-tracked system prompts
+    const revertBtn =
+      data.editing || selectedSource === "user"
+        ? null
+        : data.commits && data.commits.length > 1
+          ? ui.button(t("common.revert"), "revert_prompt", { variant: "ghost" })
+          : null;
 
     const editorBtns = [editBtn];
     if (cancelBtn) editorBtns.push(cancelBtn);
@@ -921,8 +952,8 @@ export function generatePromptsPage(data: {
 
     children.push(editorCard);
 
-    // Version history
-    if (data.commits && data.commits.length > 0) {
+    // Version history (only for git-tracked system prompts)
+    if (selectedSource === "system" && data.commits && data.commits.length > 0) {
       const commitList = ui.commitList(data.commits, {
         onSelect: "select_commit",
       });

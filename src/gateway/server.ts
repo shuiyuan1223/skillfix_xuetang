@@ -6,7 +6,7 @@
  */
 
 import { join } from "path";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mcpHandler } from "./mcp.js";
@@ -79,7 +79,7 @@ function findLastTextIdx(parts: MessagePart[]): number {
   return -1;
 }
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
-import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
+import { loadMemorySummary, getRecentDailyLogs, getUserDir } from "../memory/profile.js";
 import {
   listPromptsTool,
   getPromptTool,
@@ -935,6 +935,7 @@ export class GatewaySession {
 
   // Scope state for Prompts and Skills pages (PHA ↔ System Agent)
   private promptsScope: "pha" | "system" = "pha";
+  private selectedPromptSource: "system" | "user" = "system";
   private skillsScope: "pha" | "system" = "pha";
 
   // Memory system-agent sub-state
@@ -1375,6 +1376,63 @@ export class GatewaySession {
     await this.handleNavigate(this.currentView, send);
   }
 
+  /**
+   * List user-level .md files for the current scope.
+   * PHA scope: .pha/users/{uuid}/ — USER.md, MEMORY.md, BOOTSTRAP.md
+   * System scope: .pha/system-agent/ — memory.md, evolution-log.md, experience.md
+   */
+  private listUserLevelFiles(): Array<{
+    name: string;
+    filename: string;
+    title: string;
+    lines: number;
+  }> {
+    let dir: string;
+    if (this.promptsScope === "system") {
+      dir = join(getStateDir(), "system-agent");
+    } else {
+      const uuid = this.userUuid || getUserUuid();
+      if (!uuid) return [];
+      dir = getUserDir(uuid);
+    }
+
+    if (!existsSync(dir)) return [];
+
+    try {
+      const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
+      return files.map((f) => {
+        const filePath = join(dir, f);
+        const content = readFileSync(filePath, "utf-8");
+        const lines = content.split("\n");
+        const title = lines.find((l) => l.startsWith("# "))?.slice(2) || f;
+        return {
+          name: f.replace(".md", ""),
+          filename: f,
+          title,
+          lines: lines.length,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get the full file path for a user-level file.
+   */
+  private getUserFilePath(name: string): string | null {
+    const filename = name.endsWith(".md") ? name : `${name}.md`;
+    let dir: string;
+    if (this.promptsScope === "system") {
+      dir = join(getStateDir(), "system-agent");
+    } else {
+      const uuid = this.userUuid || getUserUuid();
+      if (!uuid) return null;
+      dir = getUserDir(uuid);
+    }
+    return join(dir, filename);
+  }
+
   private async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
     // Unsubscribe from logs when navigating away
     if (this.currentView === "settings/logs" && view !== "settings/logs") {
@@ -1542,6 +1600,10 @@ export class GatewaySession {
         // Fetch data async
         try {
           const promptsResult = await listPromptsTool.execute({});
+
+          // List user-level files
+          const userFiles = this.listUserLevelFiles();
+
           let content: string | undefined;
           let commits:
             | Array<{
@@ -1554,17 +1616,25 @@ export class GatewaySession {
             | undefined;
 
           if (this.selectedPrompt) {
-            const promptResult = await getPromptTool.execute({ name: this.selectedPrompt });
-            if (promptResult.success) {
-              content = this.editBuffer ?? promptResult.content;
-            }
+            if (this.selectedPromptSource === "user") {
+              // Read user-level file directly
+              const filePath = this.getUserFilePath(this.selectedPrompt);
+              if (filePath && existsSync(filePath)) {
+                content = this.editBuffer ?? readFileSync(filePath, "utf-8");
+              }
+            } else {
+              const promptResult = await getPromptTool.execute({ name: this.selectedPrompt });
+              if (promptResult.success) {
+                content = this.editBuffer ?? promptResult.content;
+              }
 
-            const historyResult = await getPromptHistoryTool.execute({
-              name: this.selectedPrompt,
-              limit: 10,
-            });
-            if (historyResult.success && historyResult.commits) {
-              commits = historyResult.commits;
+              const historyResult = await getPromptHistoryTool.execute({
+                name: this.selectedPrompt,
+                limit: 10,
+              });
+              if (historyResult.success && historyResult.commits) {
+                commits = historyResult.commits;
+              }
             }
           }
 
@@ -1573,7 +1643,9 @@ export class GatewaySession {
               view,
               generatePromptsPage({
                 prompts: promptsResult.prompts || [],
+                userFiles,
                 selectedPrompt: this.selectedPrompt || undefined,
+                selectedSource: this.selectedPromptSource,
                 content,
                 commits,
                 editing: this.editingPrompt,
@@ -2539,6 +2611,14 @@ export class GatewaySession {
     else if (action === "select_prompt" && payload?.row) {
       const row = payload.row as { name: string };
       this.selectedPrompt = row.name;
+      this.selectedPromptSource = "system";
+      this.editingPrompt = false;
+      this.editBuffer = null;
+      await this.handleNavigate("settings/prompts", send);
+    } else if (action === "select_user_file" && payload?.row) {
+      const row = payload.row as { name: string };
+      this.selectedPrompt = row.name;
+      this.selectedPromptSource = "user";
       this.editingPrompt = false;
       this.editBuffer = null;
       await this.handleNavigate("settings/prompts", send);
@@ -2553,17 +2633,25 @@ export class GatewaySession {
     } else if (action === "prompt_content_change" && payload?.value) {
       this.editBuffer = payload.value as string;
     } else if (action === "save_prompt" && this.selectedPrompt && this.editBuffer) {
-      setPromptsDir(
-        this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
-      );
-      try {
-        await updatePromptTool.execute({
-          name: this.selectedPrompt,
-          content: this.editBuffer,
-          commitMessage: `Update ${this.promptsScope === "system" ? "system-agent " : ""}prompt: ${this.selectedPrompt} via UI`,
-        });
-      } finally {
-        setPromptsDir("src/prompts/pha");
+      if (this.selectedPromptSource === "user") {
+        // Save user-level file directly (no git commit)
+        const filePath = this.getUserFilePath(this.selectedPrompt);
+        if (filePath) {
+          writeFileSync(filePath, this.editBuffer, "utf-8");
+        }
+      } else {
+        setPromptsDir(
+          this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
+        );
+        try {
+          await updatePromptTool.execute({
+            name: this.selectedPrompt,
+            content: this.editBuffer,
+            commitMessage: `Update ${this.promptsScope === "system" ? "system-agent " : ""}prompt: ${this.selectedPrompt} via UI`,
+          });
+        } finally {
+          setPromptsDir("src/prompts/pha");
+        }
       }
       this.editingPrompt = false;
       this.editBuffer = null;
@@ -2786,6 +2874,7 @@ export class GatewaySession {
         if (tab === "pha" || tab === "system") {
           this.promptsScope = tab;
           this.selectedPrompt = null;
+          this.selectedPromptSource = "system";
           this.editingPrompt = false;
           this.editBuffer = null;
           await this.handleNavigate("settings/prompts", send);

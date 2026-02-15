@@ -70,7 +70,7 @@ function loadSystemAgentPrompt(): string {
       return FALLBACK_PROMPT;
     }
 
-    const ordered = ["SOUL.md", "AGENTS.md"];
+    const ordered = ["SOUL.md", "IDENTITY.md", "AGENTS.md", "TOOLS.md", "HEARTBEAT.md"];
     const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
     const sections: string[] = [];
 

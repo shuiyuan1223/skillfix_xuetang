@@ -185,7 +185,8 @@ export const en: LocaleMessages = {
   prompts: {
     title: "Prompts",
     subtitle: "Manage agent personality and instructions",
-    cardTitle: "Prompt Files",
+    cardTitle: "System Prompts",
+    userCardTitle: "User-Level Files",
     name: "Name",
     promptTitle: "Title",
     lines: "Lines",
