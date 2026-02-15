@@ -2054,7 +2054,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const downloadBtn = ui.button(t("settings.downloadConfig"), "settings_download_config", {
     icon: "file-text",
   });
-  const rawActions = ui.row([copyBtn, downloadBtn], { gap: 8 });
+  const rawActions = ui.row([copyBtn, downloadBtn], { gap: 8, style: "margin-top: 12px;" });
   const rawCard = ui.card([rawEditor, rawActions], {
     title: t("settings.rawConfig"),
     padding: 20,

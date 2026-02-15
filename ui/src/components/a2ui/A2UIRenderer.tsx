@@ -321,15 +321,21 @@ export function A2UIRenderer({
       : Array.from({ length: maxXLabels }, (_, i) => Math.round((i * (data.length - 1)) / (maxXLabels - 1)));
 
     return (
-      <div className="w-full relative" style={{ height }}>
-        <svg viewBox={`0 0 ${chartW} ${height}`} className="w-full h-auto">
+      <div className="w-full relative" style={{ minHeight: height }}>
+        <svg viewBox={`0 0 ${chartW} ${height}`} className="w-full" style={{ display: "block" }}>
           {gridLines.map((g, i) => (
             <React.Fragment key={i}>
               <line x1={mL} y1={g.y} x2={chartW - mR} y2={g.y} stroke="currentColor" strokeOpacity="0.08" strokeWidth="1" />
               <text x={mL - 8} y={g.y + 4} textAnchor="end" fill="currentColor" fillOpacity="0.45" fontSize="11" fontFamily="system-ui">{g.label}</text>
             </React.Fragment>
           ))}
-          <polygon points={areaPoints} fill={color} fillOpacity="0.06" />
+          <defs>
+            <linearGradient id={`area-grad-${color.replace('#','')}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.15" />
+              <stop offset="100%" stopColor={color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <polygon points={areaPoints} fill={`url(#area-grad-${color.replace('#','')})`} />
           <polyline fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={points} />
           {pointCoords.map((p, i) => (
             <g key={i} className="chart-point-group">
@@ -387,15 +393,26 @@ export function A2UIRenderer({
       outline: "bg-transparent border border-border text-text hover:border-border-hover hover:bg-surface-hover",
       ghost: "bg-transparent text-text-secondary hover:bg-primary/8 hover:text-text",
       danger: "bg-red-600 text-white hover:bg-red-700 hover:-translate-y-px",
+      accent: "text-white hover:-translate-y-0.5 animate-[glow-pulse_3s_ease-in-out_infinite]",
     };
+    const isAccent = variant === "accent";
+    const isElevated = variant === "primary" || isAccent;
+    const accentStyle: React.CSSProperties = isAccent
+      ? {
+          background: "linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))",
+          boxShadow: "var(--shadow-md), 0 0 24px var(--color-accent-glow)",
+        }
+      : variant === "primary"
+        ? { boxShadow: "var(--shadow-sm)" }
+        : {};
     return (
       <button
         className={`${btnBase} ${btnVariants[variant] || btnVariants.primary}`}
-        style={variant === "primary" ? { boxShadow: "var(--shadow-sm)" } : undefined}
+        style={accentStyle}
         disabled={disabled}
         onClick={() => sendAction(action, payload)}
-        onMouseEnter={variant === "primary" ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 20px var(--color-accent-glow)"; } : undefined}
-        onMouseLeave={variant === "primary" ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)"; } : undefined}
+        onMouseEnter={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 30px var(--color-accent-glow)"; } : undefined}
+        onMouseLeave={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = isAccent ? "var(--shadow-md), 0 0 24px var(--color-accent-glow)" : "var(--shadow-sm)"; } : undefined}
       >
         {label}
       </button>

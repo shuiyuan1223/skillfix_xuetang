@@ -150,7 +150,7 @@ export interface ButtonComponent extends A2UIComponent {
   type: "button";
   label: string;
   action: string;
-  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger" | "accent";
   size?: "sm" | "md" | "lg";
   payload?: Record<string, unknown>;
   disabled?: boolean;
