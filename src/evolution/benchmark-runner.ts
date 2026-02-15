@@ -30,10 +30,12 @@ import {
 } from "../memory/db.js";
 import type { BenchmarkRunRow, BenchmarkResultRow, CategoryScoreRow } from "../memory/db.js";
 import { getBenchmarkTests, ALL_BENCHMARK_TESTS, loadSharpRubrics } from "./benchmark-seed.js";
-import { loadConfig } from "../utils/config.js";
+import { loadConfig, getStateDir } from "../utils/config.js";
 import { aggregateByCategory, computeOverallScore } from "./category-scorer.js";
 import { Semaphore } from "../utils/semaphore.js";
 import { createLogger } from "../utils/logger.js";
+import { mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
 
 const log = createLogger("Evolution/Benchmark");
 
@@ -366,7 +368,126 @@ export class BenchmarkRunner {
       durationMs,
     });
 
+    // Export results to filesystem for offline analysis
+    this.exportToFilesystem(run, results, categoryScores, testCases);
+
     return { run, results, categoryScores };
+  }
+
+  /**
+   * Export benchmark results to filesystem for offline analysis.
+   *
+   * Directory structure:
+   *   .pha/benchmark/runs/<runId>/
+   *     summary.json       — run metadata, scores, pass/fail counts
+   *     results.json        — all test case results with agent responses and SHARP ratings
+   *     categories.json     — per-category score breakdown
+   *     failed/              — individual files for each failed test case
+   *       <testCaseId>.json
+   */
+  private exportToFilesystem(
+    run: BenchmarkRun,
+    results: BenchmarkResult[],
+    categoryScores: Map<BenchmarkCategory, CategoryScore>,
+    testCases: TestCase[]
+  ): void {
+    try {
+      const runDir = join(getStateDir(), "benchmark", "runs", run.id);
+      const failedDir = join(runDir, "failed");
+      mkdirSync(failedDir, { recursive: true });
+
+      // Build test case lookup for enriching results
+      const testCaseMap = new Map(testCases.map((tc) => [tc.id, tc]));
+
+      // 1. summary.json — high-level run info
+      const summary = {
+        id: run.id,
+        timestamp: run.timestamp,
+        date: new Date(run.timestamp).toISOString(),
+        versionTag: run.versionTag,
+        profile: run.profile,
+        model: run.metadata?.modelId ?? "unknown",
+        provider: run.metadata?.provider ?? "unknown",
+        presetName: run.metadata?.presetName ?? undefined,
+        totalTestCases: run.totalTestCases,
+        passedCount: run.passedCount,
+        failedCount: run.failedCount,
+        overallScore: run.overallScore,
+        overallScorePercent: Math.round(run.overallScore * 100),
+        durationMs: run.durationMs,
+        durationSec: Math.round(run.durationMs / 1000),
+        categories: Object.fromEntries(
+          [...categoryScores.entries()].map(([cat, cs]) => [
+            cat,
+            {
+              score: cs.score,
+              scorePercent: Math.round(cs.score * 100),
+              passed: cs.passedCount,
+              total: cs.testCount,
+            },
+          ])
+        ),
+      };
+      writeFileSync(join(runDir, "summary.json"), JSON.stringify(summary, null, 2));
+
+      // 2. results.json — detailed results with test case context
+      const detailedResults = results.map((r) => {
+        const tc = testCaseMap.get(r.testCaseId);
+        return {
+          testCaseId: r.testCaseId,
+          category: tc?.category,
+          subcategory: tc?.subcategory,
+          difficulty: tc?.difficulty,
+          query: tc?.query,
+          passed: r.passed,
+          overallScore: r.overallScore,
+          durationMs: r.durationMs,
+          agentResponse: r.agentResponse,
+          feedback: r.feedback,
+          scores: r.scores,
+          issues: r.issues,
+          expected: tc?.expected,
+          mockContext: tc?.mock_context,
+        };
+      });
+      writeFileSync(join(runDir, "results.json"), JSON.stringify(detailedResults, null, 2));
+
+      // 3. categories.json — per-category breakdown
+      const catData = [...categoryScores.entries()].map(([cat, cs]) => ({
+        category: cat,
+        score: cs.score,
+        testCount: cs.testCount,
+        passedCount: cs.passedCount,
+        details: cs.details,
+      }));
+      writeFileSync(join(runDir, "categories.json"), JSON.stringify(catData, null, 2));
+
+      // 4. failed/<testCaseId>.json — individual failed test details
+      for (const r of results) {
+        if (!r.passed) {
+          const tc = testCaseMap.get(r.testCaseId);
+          const failedDetail = {
+            testCaseId: r.testCaseId,
+            category: tc?.category,
+            subcategory: tc?.subcategory,
+            query: tc?.query,
+            mockContext: tc?.mock_context,
+            expected: tc?.expected,
+            agentResponse: r.agentResponse,
+            overallScore: r.overallScore,
+            scores: r.scores,
+            feedback: r.feedback,
+            issues: r.issues,
+          };
+          const fileName = r.testCaseId.replace(/[^a-zA-Z0-9_-]/g, "_") + ".json";
+          writeFileSync(join(failedDir, fileName), JSON.stringify(failedDetail, null, 2));
+        }
+      }
+
+      log.info(`Benchmark results exported to ${runDir}`);
+    } catch (err) {
+      log.warn("Failed to export benchmark results to filesystem", err);
+    }
   }
 
   /**
