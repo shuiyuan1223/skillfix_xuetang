@@ -259,12 +259,20 @@ export class PHAAgent {
    */
   async chatAndWait(message: string): Promise<string> {
     let hasError = false;
+    let llmErrorMessage = "";
     // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
     let lastAssistantMessage: AgentMessage | null = null;
 
     const unsubscribe = this.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
         lastAssistantMessage = event.message;
+        // Check for LLM-level errors (e.g. 401, rate limit, model not found)
+        const msg = event.message as any;
+        if (msg.stopReason === "error" && msg.errorMessage) {
+          hasError = true;
+          llmErrorMessage = msg.errorMessage;
+          log.error("LLM returned error", { errorMessage: msg.errorMessage, model: msg.model });
+        }
       }
       // Capture errors for diagnostics
       if ((event as any).type === "error" || (event as any).error) {
@@ -282,6 +290,11 @@ export class PHAAgent {
       throw err;
     } finally {
       unsubscribe();
+    }
+
+    // If the LLM returned an error, throw so callers can handle it
+    if (llmErrorMessage) {
+      throw new Error(`LLM error: ${llmErrorMessage}`);
     }
 
     // Extract text from the last assistant message only
@@ -311,6 +324,7 @@ export class PHAAgent {
   }> {
     // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
     let lastAssistantMessage: AgentMessage | null = null;
+    let llmErrorMessage = "";
     const toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }> = [];
     let pendingToolName = "";
     let pendingToolArgs: unknown = undefined;
@@ -318,6 +332,12 @@ export class PHAAgent {
     const unsubscribe = this.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
         lastAssistantMessage = event.message;
+        // Check for LLM-level errors (e.g. 401, rate limit, model not found)
+        const msg = event.message as any;
+        if (msg.stopReason === "error" && msg.errorMessage) {
+          llmErrorMessage = msg.errorMessage;
+          log.error("LLM returned error", { errorMessage: msg.errorMessage, model: msg.model });
+        }
       }
       if (event.type === "tool_execution_start") {
         pendingToolName = (event as any).toolName || "";
@@ -338,6 +358,11 @@ export class PHAAgent {
       await this.agent.waitForIdle();
     } finally {
       unsubscribe();
+    }
+
+    // If the LLM returned an error, throw so callers can handle it
+    if (llmErrorMessage) {
+      throw new Error(`LLM error: ${llmErrorMessage}`);
     }
 
     // Extract text from the last assistant message only
