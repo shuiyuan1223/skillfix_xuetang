@@ -1,5 +1,5 @@
 import React from "react";
-import type { A2UIComponent, A2UISurfaceData, PlotlyChart, MessagePart } from "../../lib/types";
+import type { A2UIComponent, A2UISurfaceData, MessagePart } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
 import { renderMarkdown } from "../../lib/markdown";
 import { i18n } from "../../lib/i18n";
@@ -13,7 +13,7 @@ import {
   renderCollapsible, renderModalComponent, renderForm, renderFormInput,
   renderGitTimeline, renderStepIndicator, renderFileTree,
   renderArenaPills, renderArenaScoreTable, renderArenaCategoryCard,
-  renderPlotlyRadar, renderArenaRunPicker, renderArenaModeToggle,
+  renderRadarChart, renderArenaRunPicker, renderArenaModeToggle,
   renderPlaygroundFab, renderEvolutionPipeline, renderLogViewer,
 } from "./AdvancedRenderers";
 
@@ -23,7 +23,6 @@ export interface RenderContext {
   renderChildren: (ids?: string[]) => React.ReactNode[];
   renderComponent: (id: string) => React.ReactNode;
   renderInline: (data: { components: A2UIComponent[]; root_id: string }) => React.ReactNode;
-  pendingPlotlyCharts: React.MutableRefObject<PlotlyChart[]>;
   chatAutoScrollRef: React.MutableRefObject<boolean>;
   isAutoScrollingRef: React.MutableRefObject<boolean>;
 }
@@ -32,7 +31,6 @@ interface A2UIRendererProps {
   data: A2UISurfaceData;
   sendAction: (action: string, payload?: Record<string, unknown>) => void;
   sendNavigate: (view: string) => void;
-  pendingPlotlyCharts: React.MutableRefObject<PlotlyChart[]>;
   chatAutoScrollRef: React.MutableRefObject<boolean>;
   isAutoScrollingRef: React.MutableRefObject<boolean>;
 }
@@ -48,7 +46,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
 };
 
 export function A2UIRenderer({
-  data, sendAction, sendNavigate, pendingPlotlyCharts, chatAutoScrollRef, isAutoScrollingRef,
+  data, sendAction, sendNavigate, chatAutoScrollRef, isAutoScrollingRef,
 }: A2UIRendererProps) {
   let components = new Map<string, A2UIComponent>();
   for (const c of data.components) {
@@ -95,7 +93,7 @@ export function A2UIRenderer({
       case "arena_pills": return renderArenaPills(c, ctx);
       case "arena_score_table": return renderArenaScoreTable(c, ctx);
       case "arena_category_card": return renderArenaCategoryCard(c, ctx);
-      case "plotly_radar": return renderPlotlyRadar(c, ctx);
+      case "radar_chart": return renderRadarChart(c, ctx);
       case "arena_run_picker": return renderArenaRunPicker(c, ctx);
       case "arena_mode_toggle": return renderArenaModeToggle(c, ctx);
       case "playground_fab": return renderPlaygroundFab(c, ctx);
@@ -124,7 +122,7 @@ export function A2UIRenderer({
 
   const ctx: RenderContext = {
     sendAction, sendNavigate, renderChildren, renderComponent, renderInline,
-    pendingPlotlyCharts, chatAutoScrollRef, isAutoScrollingRef,
+    chatAutoScrollRef, isAutoScrollingRef,
   };
 
   // ---- Layout Components ----

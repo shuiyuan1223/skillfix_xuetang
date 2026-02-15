@@ -2,6 +2,9 @@ import React from "react";
 import type { A2UIComponent } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
 import type { RenderContext } from "./A2UIRenderer";
+import {
+  ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, Legend,
+} from "recharts";
 
 // ---- Code Editor ----
 export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
@@ -730,16 +733,40 @@ export function renderArenaCategoryCard(c: A2UIComponent, _ctx: RenderContext) {
   );
 }
 
-// ---- Plotly Radar ----
-export function renderPlotlyRadar(c: A2UIComponent, ctx: RenderContext) {
-  const elementId = `plotly-${c.id}`;
-  ctx.pendingPlotlyCharts.current.push({ elementId, traces: c.traces as unknown[], layout: c.layout as unknown, config: c.config as unknown });
+// ---- Radar Chart (Recharts) ----
+export function renderRadarChart(c: A2UIComponent, _ctx: RenderContext) {
+  const data = (c.radarData as Array<Record<string, unknown>>) || [];
+  const series = (c.radarSeries as Array<{ key: string; name: string; color: string }>) || [];
+  const height = (c.height as number) || 400;
   const legend = (c.categoryLegend as Array<{ name: string; color: string }>) || [];
+
+  if (data.length === 0 || series.length === 0) {
+    return <div className="flex items-center justify-center text-text-muted" style={{ height }}>No data</div>;
+  }
+
+  const tickStyle = { fontSize: 10, fill: "currentColor", fillOpacity: 0.5 };
+  const tooltipStyle = {
+    contentStyle: { background: "var(--color-surface-elevated)", border: "1px solid rgb(var(--color-border))", borderRadius: 8, fontSize: 12 },
+    labelStyle: { color: "rgb(var(--color-text-secondary))" },
+    itemStyle: { color: "rgb(var(--color-text))" },
+  };
+
   return (
     <>
-      <div id={elementId} style={{ width: "100%", height: (c as any).height || 500 }} />
+      <ResponsiveContainer width="100%" height={height}>
+        <RadarChart data={data} cx="50%" cy="50%" outerRadius="75%">
+          <PolarGrid stroke="currentColor" strokeOpacity={0.08} />
+          <PolarAngleAxis dataKey="subject" tick={tickStyle} />
+          <PolarRadiusAxis domain={[0, 1]} tick={tickStyle} tickCount={5} axisLine={false} />
+          {series.map((s) => (
+            <Radar key={s.key} name={s.name} dataKey={s.key} stroke={s.color} fill={s.color} fillOpacity={0.15} strokeWidth={2} dot={{ r: 2, fill: s.color }} />
+          ))}
+          <Tooltip {...tooltipStyle} formatter={(value: number) => (value * 100).toFixed(0) + "%"} />
+          {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
+        </RadarChart>
+      </ResponsiveContainer>
       {legend.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           {legend.map((cat, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "rgb(var(--color-text-secondary))" }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: cat.color, display: "inline-block" }} />

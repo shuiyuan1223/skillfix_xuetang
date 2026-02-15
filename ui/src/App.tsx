@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { A2UISurfaceData, WSMessage, PlotlyChart, AGUIEvent, MessagePart, QuickReply } from "./lib/types";
+import { A2UISurfaceData, WSMessage, AGUIEvent, MessagePart, QuickReply } from "./lib/types";
 import { generateUUID } from "./lib/utils";
 import { ICONS } from "./lib/icons";
 import { i18n } from "./lib/i18n";
@@ -74,7 +74,6 @@ export function App() {
   const userUuidRef = useRef<string | null>(null);
   const chatAutoScrollRef = useRef(true);
   const isAutoScrollingRef = useRef(false);
-  const pendingPlotlyChartsRef = useRef<PlotlyChart[]>([]);
   const extensionDetectedRef = useRef(false);
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
 
@@ -835,24 +834,10 @@ export function App() {
   }, [mainData, chatMessages, chatStreaming, quickReplies]);
 
   // ---------------------------------------------------------------------------
-  // Auto-scroll & Plotly effect (runs when mainData or chatMessages change)
+  // Auto-scroll effect (runs when mainData or chatMessages change)
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    // Process pending Plotly chart renders after DOM update
-    if (pendingPlotlyChartsRef.current.length) {
-      const charts = [...pendingPlotlyChartsRef.current];
-      pendingPlotlyChartsRef.current = [];
-      requestAnimationFrame(() => {
-        for (const chart of charts) {
-          const el = document.getElementById(chart.elementId);
-          if (el && (window as any).Plotly) {
-            (window as any).Plotly.newPlot(el, chart.traces, chart.layout, chart.config);
-          }
-        }
-      });
-    }
-
     // Auto-scroll chat to bottom on new content
     if (chatAutoScrollRef.current) {
       isAutoScrollingRef.current = true;
@@ -936,7 +921,7 @@ export function App() {
               data={sidebarData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
-              pendingPlotlyCharts={pendingPlotlyChartsRef}
+
               chatAutoScrollRef={chatAutoScrollRef}
               isAutoScrollingRef={isAutoScrollingRef}
             />
@@ -966,7 +951,7 @@ export function App() {
               data={progressData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
-              pendingPlotlyCharts={pendingPlotlyChartsRef}
+
               chatAutoScrollRef={chatAutoScrollRef}
               isAutoScrollingRef={isAutoScrollingRef}
             />
@@ -988,7 +973,7 @@ export function App() {
               data={enhancedMainData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
-              pendingPlotlyCharts={pendingPlotlyChartsRef}
+
               chatAutoScrollRef={chatAutoScrollRef}
               isAutoScrollingRef={isAutoScrollingRef}
             />
@@ -1021,7 +1006,7 @@ export function App() {
               data={modalData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
-              pendingPlotlyCharts={pendingPlotlyChartsRef}
+
               chatAutoScrollRef={chatAutoScrollRef}
               isAutoScrollingRef={isAutoScrollingRef}
             />
@@ -1040,7 +1025,6 @@ export function App() {
             data={toastData}
             sendAction={sendAction}
             sendNavigate={sendNavigate}
-            pendingPlotlyCharts={pendingPlotlyChartsRef}
             chatAutoScrollRef={chatAutoScrollRef}
             isAutoScrollingRef={isAutoScrollingRef}
           />

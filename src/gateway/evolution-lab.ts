@@ -291,16 +291,20 @@ function buildMultiSeriesRadarData(
 }
 
 /**
- * Build Plotly scatterpolar traces from comparison runs.
+ * Build Recharts-compatible radar chart data from comparison runs.
+ * Returns { data: [{subject, seriesKey1, seriesKey2, ...}], series: [{key, name, color}] }
  */
-export function buildPlotlyRadarTraces(
+export function buildRadarChartData(
   runs: ComparisonRun[],
   mode: "categories" | "criteria"
-): Array<Record<string, unknown>> {
-  return runs.map((run) => {
+): {
+  data: Array<Record<string, unknown>>;
+  series: Array<{ key: string; name: string; color: string }>;
+} {
+  // Build subjects (axis labels) and per-run scores
+  const runDataPoints = runs.map((run) => {
     let dataPoints: Array<{ name: string; score: number }>;
     if (mode === "criteria") {
-      // Average each criterion across all categories to get 16 unique points
       const criteriaMap = new Map<string, number[]>();
       for (const cs of run.categoryScores) {
         for (const sub of cs.subComponents || []) {
@@ -313,7 +317,6 @@ export function buildPlotlyRadarTraces(
         name,
         score: scores.reduce((a, b) => a + b, 0) / scores.length,
       }));
-      // Fallback to categories mode if no sub-components available
       if (dataPoints.length === 0) {
         dataPoints = run.categoryScores.map((cs) => ({
           name: getCategoryLabel(cs.category),
@@ -326,65 +329,31 @@ export function buildPlotlyRadarTraces(
         score: cs.score <= 1 ? cs.score : cs.score / 100,
       }));
     }
-
-    const r = dataPoints.map((d) => d.score);
-    const theta = dataPoints.map((d) => d.name);
-    // Close the polygon
-    if (r.length > 0) {
-      r.push(r[0]);
-      theta.push(theta[0]);
-    }
-
-    return {
-      type: "scatterpolar",
-      r,
-      theta,
-      fill: "toself",
-      fillcolor: run.color
-        .replace("rgb", "rgba")
-        .replace(")", mode === "criteria" ? ", 0.15)" : ", 0.2)"),
-      line: { color: run.color, width: mode === "criteria" ? 2 : 3 },
-      name: run.label,
-      hovertemplate: "%{theta}<br>Score: %{r:.2f}<extra></extra>",
-    };
+    return dataPoints;
   });
-}
 
-export const PLOTLY_LAYOUT = {
-  polar: {
-    radialaxis: {
-      visible: true,
-      range: [0, 1],
-      tickvals: [0.25, 0.5, 0.75, 1.0],
-      ticktext: ["0.25", "0.50", "0.75", "1.00"],
-      tickfont: { size: 10, color: "#55556a", family: "JetBrains Mono" },
-      gridcolor: "rgba(255, 255, 255, 0.06)",
-      linecolor: "rgba(255, 255, 255, 0.1)",
-    },
-    angularaxis: {
-      tickfont: { size: 10, color: "#8888a0", family: "Outfit" },
-      gridcolor: "rgba(255, 255, 255, 0.06)",
-      linecolor: "rgba(255, 255, 255, 0.1)",
-      rotation: 90,
-      direction: "clockwise",
-    },
-    bgcolor: "rgba(0, 0, 0, 0)",
-  },
-  paper_bgcolor: "rgba(0, 0, 0, 0)",
-  plot_bgcolor: "rgba(0, 0, 0, 0)",
-  font: { color: "#f0f0f5", family: "Outfit" },
-  showlegend: true,
-  legend: {
-    x: 0.5,
-    y: -0.15,
-    xanchor: "center",
-    orientation: "h",
-    font: { size: 12 },
-    bgcolor: "rgba(0,0,0,0)",
-  },
-  margin: { t: 60, b: 80, l: 80, r: 80 },
-  dragmode: false,
-};
+  // Use first run's subjects as reference
+  const subjects = runDataPoints[0]?.map((d) => d.name) || [];
+
+  // Build flat data array: [{subject, run_0, run_1, ...}]
+  const data = subjects.map((subject, si) => {
+    const row: Record<string, unknown> = { subject };
+    runs.forEach((run, ri) => {
+      const dp = runDataPoints[ri];
+      row[`run_${ri}`] = dp?.[si]?.score ?? 0;
+    });
+    return row;
+  });
+
+  // Build series metadata
+  const series = runs.map((run, ri) => ({
+    key: `run_${ri}`,
+    name: run.label,
+    color: run.color,
+  }));
+
+  return { data, series };
+}
 
 export function getCategoryLabel(category: string): string {
   const labelMap: Record<string, string> = {
@@ -681,15 +650,15 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         color: SHARP_CATEGORY_COLORS[cs.category] || "#818cf8",
       }));
 
-      // Plotly radar chart (with embedded legend data)
-      const plotlyId = `plotly_radar_${Date.now()}`;
-      const traces = buildPlotlyRadarTraces(data.comparisonRuns, radarMode);
-      ui.addComponent(plotlyId, {
-        id: plotlyId,
-        type: "plotly_radar",
-        traces,
-        layout: PLOTLY_LAYOUT,
-        config: { responsive: true, displayModeBar: false },
+      // Radar chart (Recharts)
+      const radarId = `radar_chart_${Date.now()}`;
+      const radarChartData = buildRadarChartData(data.comparisonRuns, radarMode);
+      ui.addComponent(radarId, {
+        id: radarId,
+        type: "radar_chart",
+        radarData: radarChartData.data,
+        radarSeries: radarChartData.series,
+        height: 400,
         categoryLegend: legendCategories,
       });
 
@@ -710,8 +679,8 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         className: "arena-card",
       } as any);
 
-      // Dashboard grid (plotly radar + scores side by side)
-      const radarCardId = ui.column([plotlyId], {
+      // Dashboard grid (radar chart + scores side by side)
+      const radarCardId = ui.column([radarId], {
         gap: 8,
         className: "arena-card",
       } as any);

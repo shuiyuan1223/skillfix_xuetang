@@ -9,8 +9,7 @@ import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
 import { t } from "../locales/index.js";
 import type { UserProfile, MemorySearchResult } from "../memory/types.js";
 import {
-  buildPlotlyRadarTraces,
-  PLOTLY_LAYOUT,
+  buildRadarChartData,
   SHARP_CATEGORY_COLORS,
   getCategoryLabel,
   getCategoryIcon,
@@ -2366,16 +2365,16 @@ export function generateBenchmarkRunDetailModal(
         subComponents: cs.subComponents,
       })),
     };
-    const traces = buildPlotlyRadarTraces([comparisonRun], radarMode);
-    const plotlyId = `modal_plotly_${Date.now()}`;
-    ui.addComponent(plotlyId, {
-      id: plotlyId,
-      type: "plotly_radar",
-      traces,
-      layout: { ...PLOTLY_LAYOUT, showlegend: false },
-      config: { responsive: true, displayModeBar: false },
+    const radarChartData = buildRadarChartData([comparisonRun], radarMode);
+    const radarId = `modal_radar_${Date.now()}`;
+    ui.addComponent(radarId, {
+      id: radarId,
+      type: "radar_chart",
+      radarData: radarChartData.data,
+      radarSeries: radarChartData.series,
+      height: 300,
     });
-    children.push(plotlyId);
+    children.push(radarId);
 
     // Category cards (arena_category_card style)
     const hasSubComponents = categoryScores.some(

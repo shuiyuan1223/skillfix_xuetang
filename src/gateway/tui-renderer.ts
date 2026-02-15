@@ -139,8 +139,8 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderArenaScoreTable(comp, ctx);
     case "arena_category_card":
       return renderArenaCategoryCard(comp, ctx);
-    case "plotly_radar":
-      return renderPlotlyRadarTUI(comp, ctx);
+    case "radar_chart":
+      return renderRadarChartTUI(comp, ctx);
     case "arena_run_picker":
       return renderArenaRunPickerTUI(comp, ctx);
     case "arena_mode_toggle":
@@ -935,32 +935,30 @@ function renderArenaCategoryCard(comp: A2UIComponent, ctx: RenderContext): strin
   return lines;
 }
 
-function renderPlotlyRadarTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const traces = (comp.traces as Array<{ name?: string; r?: number[]; theta?: string[] }>) || [];
+function renderRadarChartTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const radarData = (comp.radarData as Array<Record<string, unknown>>) || [];
+  const radarSeries =
+    (comp.radarSeries as Array<{ key: string; name: string; color: string }>) || [];
   const lines: string[] = [];
-  lines.push(indent(ctx, ansi.dim("[Radar Chart — Plotly]")));
+  lines.push(indent(ctx, ansi.dim("[Radar Chart]")));
 
-  if (traces.length === 0) {
+  if (radarData.length === 0 || radarSeries.length === 0) {
     lines.push(indent(ctx, ansi.dim("  No data")));
     return lines;
   }
 
-  // Build comparison table from trace data
-  const ref = traces[0];
-  const axisLabels = ref.theta?.slice(0, -1) || []; // Remove closing duplicate
-  const seriesNames = traces.map((t) => t.name || "?");
   const colWidth = 10;
   const headerLine =
     "  " +
     padRight("Dimension", 18) +
-    seriesNames.map((n) => padRight(n.slice(0, colWidth), colWidth)).join(" ");
+    radarSeries.map((s) => padRight(s.name.slice(0, colWidth), colWidth)).join(" ");
   lines.push(indent(ctx, ansi.bold(headerLine)));
-  lines.push(indent(ctx, "  " + "─".repeat(18 + seriesNames.length * (colWidth + 1))));
+  lines.push(indent(ctx, "  " + "─".repeat(18 + radarSeries.length * (colWidth + 1))));
 
-  for (let i = 0; i < axisLabels.length; i++) {
-    const label = axisLabels[i];
-    const vals = traces.map((t) => {
-      const val = t.r?.[i] ?? 0;
+  for (const row of radarData) {
+    const label = String(row.subject || "");
+    const vals = radarSeries.map((s) => {
+      const val = Number(row[s.key] ?? 0);
       const pct = Math.round(val * 100);
       return padRight(`${pct}%`, colWidth);
     });

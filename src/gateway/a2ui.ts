@@ -49,7 +49,7 @@ export type A2UIComponentType =
   | "arena_pills"
   | "arena_score_table"
   | "arena_category_card"
-  | "plotly_radar"
+  | "radar_chart"
   | "arena_run_picker"
   | "arena_mode_toggle"
   | "playground_fab"

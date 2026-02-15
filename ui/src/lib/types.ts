@@ -139,10 +139,3 @@ export type WSMessage =
   | ToolCallMessage
   | ErrorMessage
   | AGUIEvent;
-
-export interface PlotlyChart {
-  elementId: string;
-  traces: unknown[];
-  layout: unknown;
-  config: unknown;
-}
