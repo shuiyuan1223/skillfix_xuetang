@@ -188,6 +188,7 @@ async function setupEmbedding(config: PHAConfig): Promise<void> {
 
   if (!enabled) {
     config.embedding = { enabled: false };
+    config.embeddingModel = undefined;
     p.log.success("Vector search disabled");
     return;
   }
@@ -236,6 +237,26 @@ async function setupEmbedding(config: PHAConfig): Promise<void> {
     enabled: true,
     model: modelStr,
   };
+
+  // Sync to unified model repository
+  const embParts = modelStr.split("/");
+  const embName = embParts[embParts.length - 1];
+  // Determine target provider (use agent model's provider or first available)
+  let embProvider = "openrouter";
+  if (config.agentModel) {
+    const slashIdx = config.agentModel.indexOf("/");
+    if (slashIdx > 0) embProvider = config.agentModel.substring(0, slashIdx);
+  } else if (config.llm?.provider) {
+    embProvider = config.llm.provider;
+  }
+  // Add model to provider if models.providers exists
+  if (config.models?.providers?.[embProvider]) {
+    const provModels = config.models.providers[embProvider].models;
+    if (!provModels.find((m) => m.model === modelStr)) {
+      provModels.push({ name: embName, model: modelStr });
+    }
+  }
+  config.embeddingModel = `${embProvider}/${embName}`;
 
   p.log.success(`Embedding: ${modelStr}`);
 }
@@ -670,12 +691,23 @@ async function runFullWizard(): Promise<void> {
     name: config.llm.modelId || providerCfg.defaultModel,
     model: config.llm.modelId || providerCfg.defaultModel,
   };
+  const providerModels = [modelEntry];
+  // Add embedding model to provider if enabled
+  if (config.embedding?.enabled && config.embedding.model) {
+    const embModelId = config.embedding.model;
+    const embParts = embModelId.split("/");
+    const embName = embParts[embParts.length - 1];
+    if (!providerModels.find((m) => m.name === embName)) {
+      providerModels.push({ name: embName, model: embModelId });
+    }
+    config.embeddingModel = `${providerKey}/${embName}`;
+  }
   config.models = {
     providers: {
       [providerKey]: {
         ...(config.llm.baseUrl ? { baseUrl: config.llm.baseUrl } : {}),
         ...(config.llm.apiKey ? { apiKey: config.llm.apiKey } : {}),
-        models: [modelEntry],
+        models: providerModels,
       },
     },
   };

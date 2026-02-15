@@ -30,6 +30,7 @@ import {
   listAllModelRefs,
   type LLMProvider,
   type BenchmarkModelConfig,
+  type PHAConfig,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -150,6 +151,56 @@ const logSession = log.child("Session");
 const logAgent = log.child("Agent");
 const logMemory = log.child("Memory");
 const logEvolution = log.child("Evolution");
+
+// ============================================================================
+// Embedding settings → new format sync helper
+// ============================================================================
+
+/**
+ * Sync embedding settings changes to the unified model repository format.
+ * Called by settings_save_embedding and settings_save_advanced handlers.
+ */
+function syncEmbeddingToNewFormat(config: PHAConfig, formData: Record<string, unknown>): void {
+  const enabled = formData.embeddingEnabled === "true";
+  const modelId = formData.embeddingModel ? String(formData.embeddingModel) : undefined;
+
+  if (!enabled || !modelId) {
+    // Disabled — clear the ref
+    config.embeddingModel = undefined;
+    return;
+  }
+
+  // Ensure models.providers exists
+  if (!config.models) config.models = { providers: {} };
+
+  // Find or create a provider to hold the embedding model.
+  // Use the first available provider key, or the agent model's provider.
+  let targetProvider: string | undefined;
+  if (config.agentModel) {
+    const slashIdx = config.agentModel.indexOf("/");
+    if (slashIdx > 0) targetProvider = config.agentModel.substring(0, slashIdx);
+  }
+  if (!targetProvider) {
+    targetProvider = Object.keys(config.models.providers)[0] || "openrouter";
+  }
+  if (!config.models.providers[targetProvider]) {
+    config.models.providers[targetProvider] = { models: [] };
+  }
+
+  // Derive a short name for the embedding model
+  const parts = modelId.split("/");
+  const embName = parts[parts.length - 1];
+
+  // Add model to provider if not already present
+  const provModels = config.models.providers[targetProvider].models;
+  if (!provModels.find((m) => m.model === modelId)) {
+    provModels.push({ name: embName, model: modelId });
+  }
+
+  // Find the name of the model entry (might already exist with a different name)
+  const existing = provModels.find((m) => m.model === modelId);
+  config.embeddingModel = `${targetProvider}/${existing?.name || embName}`;
+}
 
 // ============================================================================
 // Quick Reply Detection
@@ -3070,11 +3121,15 @@ export class GatewaySession {
           if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
           if (formData.applyEngine)
             config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+          // Sync embedding to new format
+          syncEmbeddingToNewFormat(config, formData);
         } else if (action === "settings_save_embedding") {
           if (!config.embedding) config.embedding = {};
           if (formData.embeddingEnabled !== undefined)
             config.embedding.enabled = formData.embeddingEnabled === "true";
           if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
+          // Sync embedding to new format
+          syncEmbeddingToNewFormat(config, formData);
         } else if (action === "settings_save_benchmark") {
           if (!config.benchmark) config.benchmark = {};
           if (formData.benchmarkConcurrency !== undefined)
