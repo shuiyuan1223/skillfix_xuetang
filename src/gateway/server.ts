@@ -2108,15 +2108,26 @@ export class GatewaySession {
       const agent = await this.getSystemAgent();
 
       const unsubscribe = agent.subscribe((event: any) => {
-        if (event.type === "message_start" || event.type === "message_update") {
+        if (event.type === "message_start") {
+          // First streaming event — send full page update to show streaming UI
           if (event.message?.role === "assistant") {
             let text = "";
             for (const block of event.message.content || []) {
               if (block.type === "text") text += block.text;
             }
             this.systemAgentStreamingContent = text;
-
             this.sendEvolutionLabUpdate(send);
+          }
+        } else if (event.type === "message_update") {
+          // Subsequent tokens — only send lightweight agent_text
+          if (event.message?.role === "assistant") {
+            let text = "";
+            for (const block of event.message.content || []) {
+              if (block.type === "text") text += block.text;
+            }
+            this.systemAgentStreamingContent = text;
+            const activeSend = this.getSend(send);
+            activeSend({ type: "agent_text", content: text, is_final: false });
           }
         } else if (event.type === "message_end") {
           if (event.message?.role === "assistant") {
@@ -4636,8 +4647,7 @@ export class GatewaySession {
     const activeSend = this.getSend(send);
     switch (event.type) {
       case "message_start":
-      case "message_update":
-        // Stream partial content
+        // First streaming event — send full page update to show streaming UI
         if (event.message.role === "assistant") {
           const content = event.message.content || [];
           let text = "";
@@ -4648,6 +4658,20 @@ export class GatewaySession {
           }
           this.streamingContent = text;
           this.sendChatUpdate(send);
+          activeSend({ type: "agent_text", content: text, is_final: false });
+        }
+        break;
+      case "message_update":
+        // Subsequent tokens — only send lightweight agent_text, no full page re-render
+        if (event.message.role === "assistant") {
+          const content = event.message.content || [];
+          let text = "";
+          for (const block of content) {
+            if (block.type === "text") {
+              text += block.text;
+            }
+          }
+          this.streamingContent = text;
           activeSend({ type: "agent_text", content: text, is_final: false });
         }
         break;

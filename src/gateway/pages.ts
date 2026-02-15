@@ -101,8 +101,8 @@ export function generateSidebar(activeView: string): A2UIMessage {
 export function generateChatPage(state: ChatState): A2UIMessage {
   const ui = new A2UIGenerator("main");
 
-  // Chat messages component
-  const messagesId = `chat_msgs_${Date.now()}`;
+  // Chat messages component (stable ID to avoid DOM remount on re-render)
+  const messagesId = "chat_msgs";
   ui.addComponent(messagesId, {
     id: messagesId,
     type: "chat_messages",
@@ -114,7 +114,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
   });
 
   // Chat input component
-  const inputId = `chat_input_${Date.now()}`;
+  const inputId = "chat_input";
   ui.addComponent(inputId, {
     id: inputId,
     type: "chat_input",
@@ -148,8 +148,8 @@ export function generateSystemAgentPage(state: {
   const ui = new A2UIGenerator("main");
   const children: string[] = [];
 
-  // Chat messages with System Agent welcome screen
-  const msgsId = `sa_msgs_${Date.now()}`;
+  // Chat messages with System Agent welcome screen (stable ID)
+  const msgsId = "sa_msgs";
   ui.addComponent(msgsId, {
     id: msgsId,
     type: "chat_messages",
@@ -184,8 +184,8 @@ export function generateSystemAgentPage(state: {
   });
   children.push(msgsId);
 
-  // Chat input (fixed at bottom via flexbox)
-  const inputId = `sa_input_${Date.now()}`;
+  // Chat input (fixed at bottom via flexbox, stable ID)
+  const inputId = "sa_input";
   ui.addComponent(inputId, {
     id: inputId,
     type: "chat_input",

@@ -462,6 +462,24 @@ export function App() {
           }
           break;
 
+        case "agent_text": {
+          // Incremental streaming update — patch streamingContent without full re-render
+          const agentMsg = msg as { type: "agent_text"; content: string; is_final: boolean };
+          if (!agentMsg.is_final) {
+            setMainData((prev) => {
+              if (!prev) return prev;
+              const updated = { ...prev, components: prev.components.map((c) => {
+                if (c.type === "chat_messages") {
+                  return { ...c, streamingContent: agentMsg.content };
+                }
+                return c;
+              })};
+              return updated;
+            });
+          }
+          break;
+        }
+
         case "log_entry": {
           // Append new log entry to current main surface log_viewer component
           setMainData((prev) => {
