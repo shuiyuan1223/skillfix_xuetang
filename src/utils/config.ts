@@ -358,11 +358,18 @@ export function ensureConfigDir(): void {
  * Migrate old config format to new unified model repository (in-memory only).
  * Idempotent: skips if `config.models.providers` already exists.
  */
-/** @returns true if migration was performed */
+/** @returns true if config was modified (migration or cleanup) */
 function migrateConfig(config: PHAConfig): boolean {
+  // Clean up redundant old fields even if already migrated
+  let modified = false;
+  if (config.benchmarkModels && config.models?.providers) {
+    delete config.benchmarkModels;
+    modified = true;
+  }
+
   // Already migrated
   if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
-    return false;
+    return modified;
   }
 
   const providers: Record<string, ModelProviderConfig> = {};
@@ -447,6 +454,8 @@ function migrateConfig(config: PHAConfig): boolean {
   // Only set if we actually found something to migrate
   if (Object.keys(providers).length > 0) {
     config.models = { providers };
+    // Remove fully redundant old fields (data now lives in models.providers + benchmark.models)
+    delete config.benchmarkModels;
     return true;
   }
   return false;
@@ -901,8 +910,29 @@ export function getModelId(provider?: LLMProvider): string {
 export function getBenchmarkModels(): Record<string, BenchmarkModelConfig> {
   const config = loadConfig();
 
+  // Legacy field (may have been removed by migration)
   if (config.benchmarkModels && Object.keys(config.benchmarkModels).length > 0) {
     return config.benchmarkModels;
+  }
+
+  // Build from new format benchmark.models refs
+  if (config.benchmark?.models && config.benchmark.models.length > 0) {
+    const result: Record<string, BenchmarkModelConfig> = {};
+    for (const ref of config.benchmark.models) {
+      try {
+        const resolved = resolveModel(ref, config);
+        result[resolved.name] = {
+          provider: resolved.provider as LLMProvider,
+          modelId: resolved.modelId,
+          label: resolved.label,
+          apiKey: resolved.apiKey,
+          baseUrl: resolved.baseUrl,
+        };
+      } catch {
+        // Skip unresolvable refs
+      }
+    }
+    if (Object.keys(result).length > 0) return result;
   }
 
   const provider = config.llm.provider;
@@ -960,10 +990,27 @@ export function resolveBenchmarkModelBaseUrl(model: BenchmarkModelConfig): strin
 export function getJudgeModel(): BenchmarkModelConfig {
   const config = loadConfig();
 
+  // Legacy: judgeModel as object
   if (config.judgeModel && typeof config.judgeModel === "object") {
     const jm = config.judgeModel as BenchmarkModelConfig;
     if (jm.provider && jm.modelId) {
       return jm;
+    }
+  }
+
+  // New: judgeModel as string ref
+  if (config.judgeModel && typeof config.judgeModel === "string") {
+    try {
+      const resolved = resolveModel(config.judgeModel, config);
+      return {
+        provider: resolved.provider as LLMProvider,
+        modelId: resolved.modelId,
+        label: resolved.label,
+        apiKey: resolved.apiKey,
+        baseUrl: resolved.baseUrl,
+      };
+    } catch {
+      // Fall through to default
     }
   }
 
