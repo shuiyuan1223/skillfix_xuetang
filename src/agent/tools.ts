@@ -30,6 +30,7 @@ import type { HealthDataSource } from "../data-sources/interface.js";
 import { memorySearchTool, memorySaveTool, dailyLogTool } from "../tools/memory-tools.js";
 import { getSkillTool } from "../tools/skill-tools.js";
 import { getConfigTool, updateConfigTool, listProvidersTool } from "../tools/config-tools.js";
+import { updateUserProfileTool, completeOnboardingTool } from "../tools/profile-tools.js";
 import { gitAgentTools } from "./git-agent-tools.js";
 
 // Define TypeBox schemas for each tool
@@ -516,6 +517,58 @@ export const listProvidersAgentTool: AgentTool<typeof EmptySchema> = {
   },
 };
 
+// ========================================================================
+// Profile Tools as AgentTools
+// ========================================================================
+
+const UpdateProfileSchema = Type.Object({
+  nickname: Type.Optional(Type.String({ description: "User's preferred name" })),
+  gender: Type.Optional(Type.String({ description: "'male' or 'female'" })),
+  birthYear: Type.Optional(Type.Number({ description: "Year of birth, e.g. 1990" })),
+  height: Type.Optional(Type.Number({ description: "Height in cm" })),
+  weight: Type.Optional(Type.Number({ description: "Weight in kg" })),
+  conditions: Type.Optional(Type.String({ description: "Chronic conditions, comma-separated" })),
+  allergies: Type.Optional(Type.String({ description: "Allergies, comma-separated" })),
+  primaryGoal: Type.Optional(Type.String({ description: "Primary health goal" })),
+  exercisePreference: Type.Optional(Type.String({ description: "Exercise preference" })),
+  sleepSchedule: Type.Optional(Type.String({ description: "Sleep schedule" })),
+  dietPreference: Type.Optional(Type.String({ description: "Diet preference" })),
+});
+
+export const updateUserProfileAgentTool: AgentTool<typeof UpdateProfileSchema> = {
+  name: updateUserProfileTool.name,
+  description: updateUserProfileTool.description,
+  label: "Update User Profile",
+  parameters: UpdateProfileSchema,
+  execute: async (
+    _toolCallId: string,
+    params: Record<string, unknown>
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await updateUserProfileTool.execute(params as any);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
+export const completeOnboardingAgentTool: AgentTool<typeof EmptySchema> = {
+  name: completeOnboardingTool.name,
+  description: completeOnboardingTool.description,
+  label: "Complete Onboarding",
+  parameters: EmptySchema,
+  execute: async (
+    _toolCallId: string,
+    _params: Record<string, never>
+  ): Promise<AgentToolResult<unknown>> => {
+    const result = await completeOnboardingTool.execute();
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      details: result,
+    };
+  },
+};
+
 // All health tools as AgentTools - use 'any' to avoid variance issues
 export const healthAgentTools: AgentTool<any>[] = [
   healthDataAgentTool,
@@ -543,6 +596,8 @@ export const healthAgentTools: AgentTool<any>[] = [
   getConfigAgentTool,
   updateConfigAgentTool,
   listProvidersAgentTool,
+  updateUserProfileAgentTool,
+  completeOnboardingAgentTool,
 ];
 
 /**
@@ -636,5 +691,8 @@ export function createHealthAgentTools(dataSource: HealthDataSource): AgentTool<
     getConfigAgentTool,
     updateConfigAgentTool,
     listProvidersAgentTool,
+    // Profile tools are not data-source dependent
+    updateUserProfileAgentTool,
+    completeOnboardingAgentTool,
   ];
 }

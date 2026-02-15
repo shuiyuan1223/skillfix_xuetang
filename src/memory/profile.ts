@@ -3,7 +3,7 @@
  * Stores user health profile as Markdown files
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { getStateDir } from "../utils/config.js";
 import type { UserProfile } from "./types.js";
@@ -23,7 +23,8 @@ export function getUserDir(uuid: string): string {
 }
 
 /**
- * Ensure user directory exists
+ * Ensure user directory exists.
+ * For new users, also creates BOOTSTRAP.md for first-conversation guidance.
  */
 export function ensureUserDir(uuid: string): string {
   const userDir = getUserDir(uuid);
@@ -32,16 +33,34 @@ export function ensureUserDir(uuid: string): string {
     mkdirSync(userDir, { recursive: true });
     mkdirSync(join(userDir, "memory"), { recursive: true });
     mkdirSync(join(userDir, "sessions"), { recursive: true });
+
+    // New user — create BOOTSTRAP.md for first-conversation guidance
+    const bootstrapPath = join(userDir, "BOOTSTRAP.md");
+    writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE);
   }
 
   return userDir;
 }
 
 /**
- * Get path to user's PROFILE.md
+ * Get path to user's USER.md (formerly PROFILE.md)
+ * Falls back to PROFILE.md for backward compatibility
  */
 export function getProfilePath(uuid: string): string {
-  return join(getUserDir(uuid), "PROFILE.md");
+  const userMdPath = join(getUserDir(uuid), "USER.md");
+  if (existsSync(userMdPath)) return userMdPath;
+  // Backward compatibility: fall back to PROFILE.md
+  const legacyPath = join(getUserDir(uuid), "PROFILE.md");
+  if (existsSync(legacyPath)) return legacyPath;
+  // Default to USER.md for new users
+  return userMdPath;
+}
+
+/**
+ * Get path to user's BOOTSTRAP.md
+ */
+export function getBootstrapPath(uuid: string): string {
+  return join(getUserDir(uuid), "BOOTSTRAP.md");
 }
 
 /**
@@ -61,7 +80,7 @@ export function getDailyLogPath(uuid: string, date?: Date): string {
 }
 
 /**
- * Load user profile from PROFILE.md
+ * Load user profile from USER.md (or legacy PROFILE.md)
  */
 export function loadProfileFromFile(uuid: string): UserProfile {
   const profilePath = getProfilePath(uuid);
@@ -75,13 +94,14 @@ export function loadProfileFromFile(uuid: string): UserProfile {
 }
 
 /**
- * Save user profile to PROFILE.md
+ * Save user profile to USER.md (always writes to USER.md, even if loaded from legacy PROFILE.md)
  */
 export function saveProfileToFile(uuid: string, profile: UserProfile): void {
   ensureUserDir(uuid);
-  const profilePath = getProfilePath(uuid);
+  // Always write to USER.md
+  const userMdPath = join(getUserDir(uuid), "USER.md");
   const content = generateProfileMd(profile);
-  writeFileSync(profilePath, content);
+  writeFileSync(userMdPath, content);
 }
 
 /**
@@ -251,7 +271,7 @@ export function getRecentDailyLogs(
 }
 
 /**
- * Parse PROFILE.md to UserProfile
+ * Parse USER.md to UserProfile
  */
 function parseProfileMd(content: string): UserProfile {
   const profile: UserProfile = {};
@@ -298,22 +318,22 @@ function parseProfileMd(content: string): UserProfile {
     profile.allergies = allergiesMatch[1].split(/[,，]/).map((s) => s.trim());
   }
 
-  // Daily steps goal
-  const stepsMatch = content.match(/每日步数目标:\s*(\d+)/);
+  // Daily steps goal (supports both "每日步数" and legacy "每日步数目标")
+  const stepsMatch = content.match(/每日步数(?:目标)?:\s*(\d+)/);
   if (stepsMatch) {
     profile.goals = profile.goals || {};
     profile.goals.dailySteps = parseInt(stepsMatch[1]);
   }
 
-  // Sleep hours goal
-  const sleepMatch = content.match(/睡眠时长目标:\s*(\d+)/);
+  // Sleep hours goal (supports both "睡眠时长" and legacy "睡眠时长目标")
+  const sleepMatch = content.match(/睡眠时长(?:目标)?:\s*(\d+)/);
   if (sleepMatch) {
     profile.goals = profile.goals || {};
     profile.goals.sleepHours = parseInt(sleepMatch[1]);
   }
 
-  // Exercise per week goal
-  const exerciseMatch = content.match(/运动频率目标:\s*每周(\d+)/);
+  // Exercise per week goal (supports both "运动频率" and legacy "运动频率目标")
+  const exerciseMatch = content.match(/运动频率(?:目标)?:\s*每周(\d+)/);
   if (exerciseMatch) {
     profile.goals = profile.goals || {};
     profile.goals.exercisePerWeek = parseInt(exerciseMatch[1]);
@@ -339,11 +359,11 @@ function parseProfileMd(content: string): UserProfile {
 }
 
 /**
- * Generate PROFILE.md from UserProfile
+ * Generate USER.md from UserProfile
  */
 function generateProfileMd(profile: UserProfile): string {
   const lines = [
-    "# 健康档案",
+    "# USER.md - 关于你的用户",
     "",
     "## 基本信息",
     `- 昵称: ${profile.nickname || "{待收集}"}`,
@@ -353,20 +373,17 @@ function generateProfileMd(profile: UserProfile): string {
     `- 体重: ${profile.weight ? `${profile.weight}kg` : "{待收集}"}`,
     "",
     "## 健康状况",
-    `- 慢性病: ${profile.conditions?.length ? profile.conditions.join(", ") : "无"}`,
-    `- 过敏史: ${profile.allergies?.length ? profile.allergies.join(", ") : "无"}`,
-    `- 用药情况: ${profile.medications?.length ? profile.medications.join(", ") : "无"}`,
+    `- 慢性病: ${profile.conditions?.length ? profile.conditions.join(", ") : "{待收集}"}`,
+    `- 过敏史: ${profile.allergies?.length ? profile.allergies.join(", ") : "{待收集}"}`,
     "",
     "## 健康目标",
     `- 主要目标: ${profile.goals?.primary || "{待收集}"}`,
-    `- 每日步数目标: ${profile.goals?.dailySteps || 8000}`,
-    `- 睡眠时长目标: ${profile.goals?.sleepHours || 7}小时`,
-    `- 运动频率目标: 每周${profile.goals?.exercisePerWeek || 3}次`,
+    `- 每日步数: ${profile.goals?.dailySteps || 8000}`,
+    `- 睡眠时长: ${profile.goals?.sleepHours || 7}小时`,
+    `- 运动频率: 每周${profile.goals?.exercisePerWeek || 3}次`,
     "",
-    "## 生活习惯",
-    `- 作息: ${profile.lifestyle?.sleepSchedule || "{待收集}"}`,
-    `- 运动偏好: ${profile.lifestyle?.exercisePreference || "{待收集}"}`,
-    `- 饮食偏好: ${profile.lifestyle?.dietPreference || "{待收集}"}`,
+    "## 上下文",
+    `_(用户关心什么？在做什么？什么习惯？随时间积累这部分。)_`,
     "",
     "## 数据来源",
     `- 华为健康: ${profile.dataSources?.huawei?.connected ? "已连接" : "未连接"}`,
@@ -379,48 +396,106 @@ function generateProfileMd(profile: UserProfile): string {
 }
 
 /**
- * Format profile for display in system prompt
+ * Format profile for display in system prompt.
+ * Shows both known fields and missing fields to guide the agent.
  */
 export function formatProfileForPrompt(profile: UserProfile): string {
-  if (!profile.gender && !profile.birthYear && !profile.height && !profile.weight) {
-    return "User basic info not yet collected. Ask at an appropriate moment.";
-  }
-
   const lines: string[] = [];
 
-  if (profile.nickname) {
-    lines.push(`- Nickname: ${profile.nickname}`);
-  }
-
-  if (profile.gender) {
-    lines.push(`- Gender: ${profile.gender}`);
-  }
-
+  // Known fields
+  if (profile.nickname) lines.push(`- Nickname: ${profile.nickname}`);
+  if (profile.gender) lines.push(`- Gender: ${profile.gender}`);
   if (profile.birthYear) {
     const age = new Date().getFullYear() - profile.birthYear;
     lines.push(`- Age: ${age} (born ${profile.birthYear})`);
   }
-
-  if (profile.height) {
-    lines.push(`- Height: ${profile.height}cm`);
-  }
-
-  if (profile.weight) {
-    lines.push(`- Weight: ${profile.weight}kg`);
-  }
-
+  if (profile.height) lines.push(`- Height: ${profile.height}cm`);
+  if (profile.weight) lines.push(`- Weight: ${profile.weight}kg`);
   if (profile.height && profile.weight) {
     const bmi = profile.weight / Math.pow(profile.height / 100, 2);
     lines.push(`- BMI: ${bmi.toFixed(1)}`);
   }
+  if (profile.conditions?.length) lines.push(`- Conditions: ${profile.conditions.join(", ")}`);
+  if (profile.allergies?.length) lines.push(`- Allergies: ${profile.allergies.join(", ")}`);
+  if (profile.goals?.primary) lines.push(`- Health goal: ${profile.goals.primary}`);
 
-  if (profile.conditions?.length) {
-    lines.push(`- Conditions: ${profile.conditions.join(", ")}`);
+  // Missing fields
+  const coreMissing: string[] = [];
+  if (!profile.gender) coreMissing.push("gender");
+  if (!profile.birthYear) coreMissing.push("birthYear");
+  if (!profile.height) coreMissing.push("height");
+  if (!profile.weight) coreMissing.push("weight");
+
+  const optionalMissing: string[] = [];
+  if (!profile.goals?.primary) optionalMissing.push("goals.primary");
+  if (!profile.conditions) optionalMissing.push("conditions");
+
+  if (coreMissing.length > 0 || optionalMissing.length > 0) {
+    lines.push("");
+    lines.push("### Missing Profile Fields");
+    if (coreMissing.length > 0) {
+      lines.push(`**Core (collect when natural):** ${coreMissing.join(", ")}`);
+    }
+    if (optionalMissing.length > 0) {
+      lines.push(`**Optional (collect over time):** ${optionalMissing.join(", ")}`);
+    }
+    lines.push("When you learn any of these, call `update_user_profile` to save.");
   }
 
-  if (profile.goals?.primary) {
-    lines.push(`- Health goal: ${profile.goals.primary}`);
+  if (lines.length === 0) {
+    return "User basic info not yet collected. Ask at an appropriate moment.";
   }
 
   return lines.join("\n");
+}
+
+// ============ BOOTSTRAP ============
+
+const BOOTSTRAP_TEMPLATE = `# BOOTSTRAP.md - 你好，新朋友
+
+你刚和一位新用户开始第一次对话。
+
+## 对话引导
+
+不要审讯。不要机械。就像认识一个新朋友一样自然聊天。
+
+先简单介绍自己，然后在对话中自然地了解：
+
+1. **他们叫什么** — 怎么称呼比较好？
+2. **基本信息** — 性别、年龄（大概就行）
+3. **身体指标** — 身高、体重（方便计算 BMI 等）
+4. **健康目标** — 想改善什么？睡眠？运动？减重？
+5. **数据连接** — 是否已连接华为健康等数据源
+
+不用一次全问完。自然地聊，分几轮收集。
+
+## 收集到信息后
+
+用 \`update_user_profile\` 工具保存每一条收集到的信息。
+
+## 引导完成后
+
+当你收集到至少 4 个核心字段（性别、年龄、身高、体重）后，
+用 \`complete_onboarding\` 工具完成引导。这会删除本文件。
+
+之后就可以正常提供健康服务了。
+`;
+
+/**
+ * Load BOOTSTRAP.md content for a user (if exists)
+ */
+export function loadBootstrap(uuid: string): string | null {
+  const bsPath = getBootstrapPath(uuid);
+  if (!existsSync(bsPath)) return null;
+  return readFileSync(bsPath, "utf-8");
+}
+
+/**
+ * Delete BOOTSTRAP.md — called after onboarding is complete
+ */
+export function deleteBootstrap(uuid: string): boolean {
+  const bsPath = getBootstrapPath(uuid);
+  if (!existsSync(bsPath)) return false;
+  unlinkSync(bsPath);
+  return true;
 }

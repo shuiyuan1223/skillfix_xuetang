@@ -43,6 +43,8 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_workouts: "运动数据",
   get_hrv: "心率变异性",
   get_health_trends: "健康趋势",
+  update_user_profile: "更新健康档案",
+  complete_onboarding: "完成引导",
 };
 
 export function A2UIRenderer({

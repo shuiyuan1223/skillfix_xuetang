@@ -22,16 +22,14 @@ import {
   appendToDailyLog,
   formatProfileForPrompt,
   ensureUserDir,
+  loadBootstrap,
+  deleteBootstrap,
 } from "./profile.js";
 import { buildSkillRegistry } from "../agent/system-prompt.js";
 import {
   getNextMissingField,
   getAllMissingFields,
   getProfileCompleteness,
-  shouldAskForInfo,
-  extractProfileFromMessage,
-  formatQuestion,
-  type AskContext,
 } from "./info-collector.js";
 import { MemoryIndexManager } from "./memory-index.js";
 import { emitSessionTranscriptUpdate } from "./compat.js";
@@ -142,6 +140,12 @@ export class MemoryManager {
     }
   }
 
+  // ============ Onboarding ============
+
+  completeOnboarding(uuid: string): boolean {
+    return deleteBootstrap(uuid);
+  }
+
   // ============ Profile Info Collection ============
 
   getNextMissingField(uuid: string) {
@@ -157,27 +161,6 @@ export class MemoryManager {
   getProfileCompleteness(uuid: string): number {
     const profile = this.getProfile(uuid);
     return getProfileCompleteness(profile);
-  }
-
-  shouldAskForInfo(uuid: string, context: AskContext): boolean {
-    const profile = this.getProfile(uuid);
-    return shouldAskForInfo(profile, context);
-  }
-
-  extractAndUpdateProfile(uuid: string, message: string): Partial<UserProfile> {
-    const extracted = extractProfileFromMessage(message);
-
-    if (Object.keys(extracted).length > 0) {
-      this.updateProfile(uuid, extracted);
-    }
-
-    return extracted;
-  }
-
-  formatMissingInfoQuestion(uuid: string): string | null {
-    const field = this.getNextMissingField(uuid);
-    if (!field) return null;
-    return formatQuestion(field);
   }
 
   // ============ Memory Search (OpenClaw Engine) ============
@@ -262,12 +245,17 @@ export class MemoryManager {
     const soul = this.getSoulPrompt();
     const profile = this.getProfile(uuid);
     const memorySummary = loadMemorySummary(uuid);
+    const bootstrap = loadBootstrap(uuid);
 
     const profileSection = formatProfileForPrompt(profile);
     const memorySection = memorySummary || "No historical memory yet";
     const skillRegistry = buildSkillRegistry();
 
     const today = new Date().toISOString().split("T")[0];
+
+    const bootstrapSection = bootstrap
+      ? `\n## First Conversation — Onboarding\n\n${bootstrap}\n`
+      : "";
 
     const prompt = `${soul}
 
@@ -276,7 +264,7 @@ export class MemoryManager {
 ## Session Context
 
 - **Current Date**: ${today}
-
+${bootstrapSection}
 ## Current User Information
 
 ${profileSection}
@@ -292,7 +280,7 @@ Based on the information above, provide personalized health services.`;
 
     const est = (s: string) => Math.ceil(s.length / 4);
     log.debug(
-      `Token distribution: soul=${est(soul)} profile=${est(profileSection)} memory=${est(memorySection)} health=${est(healthContext || "")} skills=${est(skillRegistry)} total≈${est(prompt)}`
+      `Token distribution: soul=${est(soul)} profile=${est(profileSection)} memory=${est(memorySection)} health=${est(healthContext || "")} skills=${est(skillRegistry)} bootstrap=${est(bootstrapSection)} total≈${est(prompt)}`
     );
 
     return prompt;

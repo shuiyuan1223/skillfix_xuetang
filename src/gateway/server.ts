@@ -1948,31 +1948,6 @@ export class GatewaySession {
     this.currentRunId = null;
     this.lastStreamedText = "";
 
-    // Extract profile info from user message (non-blocking)
-    if (this.userUuid) {
-      try {
-        const mm = getMemoryManager();
-        const extracted = mm.extractAndUpdateProfile(this.userUuid, content);
-        if (Object.keys(extracted).length > 0) {
-          const fields = Object.keys(extracted).join(", ");
-          const toolContent = `已提取档案: ${fields}`;
-          this.chatMessages.push({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            parts: [{ type: "text", content: toolContent }],
-          });
-          this.persistMessage("chat", {
-            timestamp: Date.now(),
-            role: "assistant",
-            content: toolContent,
-          });
-          this.sendChatUpdate(send);
-        }
-      } catch {
-        // Profile extraction is best-effort
-      }
-    }
-
     // Send updated chat UI immediately
     this.sendChatUpdate(send);
 

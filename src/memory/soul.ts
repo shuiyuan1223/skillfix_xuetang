@@ -2,7 +2,7 @@
  * SOUL - Multi-file Prompt Loader
  *
  * Loads all prompt files from src/prompts/ directory and concatenates them.
- * Order: SOUL.md -> RULES.md -> any other .md files.
+ * Order: SOUL.md -> AGENTS.md -> any other .md files.
  */
 
 import { existsSync, readFileSync, readdirSync } from "fs";
@@ -11,7 +11,7 @@ import { getPromptsDir } from "../tools/prompt-tools.js";
 
 /**
  * Load all prompt files from src/prompts/ and concatenate in order.
- * Priority order: SOUL.md, RULES.md, then alphabetical.
+ * Priority order: SOUL.md, AGENTS.md, then alphabetical.
  */
 export function loadAllPrompts(): string {
   const dir = getPromptsDir();
@@ -20,7 +20,7 @@ export function loadAllPrompts(): string {
     return "";
   }
 
-  const ordered = ["SOUL.md", "RULES.md"];
+  const ordered = ["SOUL.md", "AGENTS.md"];
   const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
 
   const sections: string[] = [];

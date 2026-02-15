@@ -90,25 +90,6 @@ describe("MemoryManager", () => {
     expect(completeness).toBeLessThanOrEqual(100);
   });
 
-  test("should extract profile from message", () => {
-    const newUuid = "extract-test-" + Date.now();
-    manager.ensureUser(newUuid);
-
-    const extracted = manager.extractAndUpdateProfile(
-      newUuid,
-      "我是男性，1985年出生，身高180cm，体重75kg"
-    );
-
-    expect(extracted.gender).toBe("male");
-    expect(extracted.birthYear).toBe(1985);
-    expect(extracted.height).toBe(180);
-    expect(extracted.weight).toBe(75);
-
-    // Verify profile was updated (file-based)
-    const profile = manager.getProfile(newUuid);
-    expect(profile.gender).toBe("male");
-  });
-
   test("should append to memory without error", () => {
     manager.appendMemory(testUuid, "## 发现\n用户喜欢跑步");
     // Memory is written to file; indexing is async via OpenClaw engine
