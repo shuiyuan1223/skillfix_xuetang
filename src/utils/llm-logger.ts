@@ -5,7 +5,7 @@
  * Handles SSE streaming responses by reassembling them into standard API response format.
  */
 
-import { existsSync, mkdirSync, appendFileSync } from "fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { getStateDir } from "./config.js";
 import { createLogger } from "./logger.js";
@@ -51,6 +51,67 @@ function extractMeta(url: string, body: Record<string, unknown> | null): Record<
   return meta;
 }
 
+// --- Subscriber system for real-time LLM log updates ---
+
+type LlmLogSubscriber = (pair: LLMCallPair) => void;
+const llmSubscribers = new Set<LlmLogSubscriber>();
+let pendingRequest: LLMLogEntry | null = null;
+let pairIdCounter = 0;
+
+/** Subscribe to new LLM call pairs in real-time */
+export function subscribeToLlmLogs(callback: LlmLogSubscriber): () => void {
+  llmSubscribers.add(callback);
+  return () => {
+    llmSubscribers.delete(callback);
+  };
+}
+
+function notifyLlmSubscribers(entry: Record<string, unknown>): void {
+  if (llmSubscribers.size === 0) return;
+
+  const typed = entry as unknown as LLMLogEntry;
+  if (typed.type === "request") {
+    pendingRequest = typed;
+  } else if (typed.type === "response" && pendingRequest) {
+    const req = pendingRequest;
+    pendingRequest = null;
+
+    const tokenUsage = extractTokenUsage(typed.data);
+    let latencyMs: number | undefined;
+    if (req.timestamp && typed.timestamp) {
+      const reqTime = new Date(req.timestamp).getTime();
+      const resTime = new Date(typed.timestamp).getTime();
+      if (!isNaN(reqTime) && !isNaN(resTime)) latencyMs = resTime - reqTime;
+    }
+
+    const pair: LLMCallPair = {
+      id: ++pairIdCounter,
+      timestamp: req.timestamp,
+      provider: (req.provider as string) || "unknown",
+      model:
+        (req.model as string) ||
+        ((req.data as Record<string, unknown>)?.model as string) ||
+        "unknown",
+      inputTokens: tokenUsage.inputTokens,
+      outputTokens: tokenUsage.outputTokens,
+      totalTokens: tokenUsage.totalTokens,
+      latencyMs,
+      status: typed.status,
+      stream: !!(req.data as Record<string, unknown>)?.stream,
+      requestData: req.data,
+      responseData: typed.data,
+    };
+
+    for (const sub of llmSubscribers) {
+      try {
+        sub(pair);
+      } catch {
+        // Subscriber errors should not break logging
+      }
+    }
+  }
+}
+
 function logEntry(entry: Record<string, unknown>): void {
   try {
     ensureLogDir();
@@ -59,6 +120,7 @@ function logEntry(entry: Record<string, unknown>): void {
       ...entry,
     };
     appendFileSync(getLogFile(), JSON.stringify(fullEntry) + "\n");
+    notifyLlmSubscribers(fullEntry);
   } catch (e) {
     log.warn("Failed to log LLM interaction", e);
   }
@@ -324,6 +386,170 @@ function rebuildSSEResponse(
     return { rebuilt: rebuildAnthropicResponse(events), format: "anthropic" };
   }
   return { rebuilt: rebuildOpenAIResponse(events), format: "openai" };
+}
+
+// --- LLM Log Reader ---
+
+export interface LLMLogEntry {
+  timestamp: string;
+  type: "request" | "response";
+  url: string;
+  provider?: string;
+  model?: string;
+  status?: number;
+  stream?: boolean;
+  data?: unknown;
+}
+
+/** Paired request-response call */
+export interface LLMCallPair {
+  id: number;
+  timestamp: string;
+  provider: string;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  latencyMs?: number;
+  status?: number;
+  stream: boolean;
+  requestData?: unknown;
+  responseData?: unknown;
+}
+
+function extractTokenUsage(data: unknown): {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+} {
+  if (!data || typeof data !== "object") return {};
+  const d = data as Record<string, unknown>;
+
+  // Anthropic format: { usage: { input_tokens, output_tokens } }
+  if (d.usage && typeof d.usage === "object") {
+    const usage = d.usage as Record<string, unknown>;
+    const input = typeof usage.input_tokens === "number" ? usage.input_tokens : undefined;
+    const output = typeof usage.output_tokens === "number" ? usage.output_tokens : undefined;
+    // OpenAI format: { usage: { prompt_tokens, completion_tokens, total_tokens } }
+    const prompt = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : undefined;
+    const completion =
+      typeof usage.completion_tokens === "number" ? usage.completion_tokens : undefined;
+    const total = typeof usage.total_tokens === "number" ? usage.total_tokens : undefined;
+
+    return {
+      inputTokens: input ?? prompt,
+      outputTokens: output ?? completion,
+      totalTokens:
+        total ??
+        ((input ?? prompt) && (output ?? completion)
+          ? (input ?? prompt)! + (output ?? completion)!
+          : undefined),
+    };
+  }
+  return {};
+}
+
+/** Read LLM log file and pair request-response entries */
+export function readLlmLogFile(date?: string, limit?: number): LLMCallPair[] {
+  if (!existsSync(LOG_DIR)) return [];
+
+  let logFile: string;
+  if (date) {
+    logFile = join(LOG_DIR, `llm-${date}.jsonl`);
+  } else {
+    // Find latest log file
+    const files = readdirSync(LOG_DIR)
+      .filter((f) => f.startsWith("llm-") && f.endsWith(".jsonl"))
+      .sort()
+      .reverse();
+    if (files.length === 0) return [];
+    logFile = join(LOG_DIR, files[0]);
+  }
+
+  if (!existsSync(logFile)) return [];
+
+  let content: string;
+  try {
+    content = readFileSync(logFile, "utf-8");
+  } catch {
+    return [];
+  }
+
+  const lines = content.trim().split("\n").filter(Boolean);
+  const entries: LLMLogEntry[] = [];
+  for (const line of lines) {
+    try {
+      entries.push(JSON.parse(line) as LLMLogEntry);
+    } catch {
+      // skip unparseable lines
+    }
+  }
+
+  // Pair requests with responses
+  const pairs: LLMCallPair[] = [];
+  let id = 1;
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (entry.type !== "request") continue;
+
+    // Look for the next response with same url
+    let responseEntry: LLMLogEntry | undefined;
+    for (let j = i + 1; j < entries.length && j <= i + 5; j++) {
+      if (entries[j].type === "response" && entries[j].url === entry.url) {
+        responseEntry = entries[j];
+        break;
+      }
+    }
+
+    const tokenUsage = responseEntry ? extractTokenUsage(responseEntry.data) : {};
+
+    let latencyMs: number | undefined;
+    if (entry.timestamp && responseEntry?.timestamp) {
+      const reqTime = new Date(entry.timestamp).getTime();
+      const resTime = new Date(responseEntry.timestamp).getTime();
+      if (!isNaN(reqTime) && !isNaN(resTime)) {
+        latencyMs = resTime - reqTime;
+      }
+    }
+
+    pairs.push({
+      id: id++,
+      timestamp: entry.timestamp,
+      provider: (entry.provider as string) || "unknown",
+      model:
+        (entry.model as string) ||
+        ((entry.data as Record<string, unknown>)?.model as string) ||
+        "unknown",
+      inputTokens: tokenUsage.inputTokens,
+      outputTokens: tokenUsage.outputTokens,
+      totalTokens: tokenUsage.totalTokens,
+      latencyMs,
+      status: responseEntry?.status,
+      stream: !!(entry.data as Record<string, unknown>)?.stream,
+      requestData: entry.data,
+      responseData: responseEntry?.data,
+    });
+  }
+
+  // Reverse so newest first, apply limit
+  pairs.reverse();
+  if (limit && pairs.length > limit) {
+    return pairs.slice(0, limit);
+  }
+  return pairs;
+}
+
+/** Get distinct provider names from LLM logs */
+export function getLlmProviders(date?: string): string[] {
+  const pairs = readLlmLogFile(date, 1000);
+  return [...new Set(pairs.map((p) => p.provider).filter((p) => p !== "unknown"))].sort();
+}
+
+/** Get distinct model names from LLM logs */
+export function getLlmModels(date?: string): string[] {
+  const pairs = readLlmLogFile(date, 1000);
+  return [...new Set(pairs.map((p) => p.model).filter((m) => m !== "unknown"))].sort();
 }
 
 // --- Main interceptor ---

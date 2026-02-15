@@ -514,8 +514,8 @@ export const zhCN: LocaleMessages = {
   },
 
   logs: {
-    title: "系统日志",
-    subtitle: "查看 Gateway 运行日志",
+    title: "日志",
+    subtitle: "查看系统运行日志和 LLM 调用记录",
     level: "级别",
     subsystem: "子系统",
     message: "消息",
@@ -524,6 +524,18 @@ export const zhCN: LocaleMessages = {
     allSubsystems: "全部子系统",
     noLogs: "暂无日志记录",
     refresh: "刷新",
+    tabSystem: "系统日志",
+    tabLlm: "LLM 调用",
+    llmProvider: "提供商",
+    llmModel: "模型",
+    llmTokens: "Tokens",
+    llmLatency: "延迟",
+    llmStatus: "状态",
+    llmAllProviders: "全部提供商",
+    llmAllModels: "全部模型",
+    llmNoLogs: "暂无 LLM 调用记录",
+    llmRequest: "请求",
+    llmResponse: "响应",
   },
 
   settings: {

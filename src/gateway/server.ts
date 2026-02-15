@@ -1012,9 +1012,15 @@ export class GatewaySession {
   private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
 
   // Logs page state
+  private logsTab: "system" | "llm" = "system";
   private logsLevelFilter: string | undefined;
   private logsSubsystemFilter: string | undefined;
   private logsUnsubscribe: (() => void) | null = null;
+  private llmLogsUnsubscribe: (() => void) | null = null;
+  private llmProviderFilter: string | undefined;
+  private llmModelFilter: string | undefined;
+  private llmPage: number = 0;
+  private llmSelectedId: number | undefined;
 
   // Evolution version state
   private activeVersionBranch: string | null = null;
@@ -1381,9 +1387,15 @@ export class GatewaySession {
 
   private async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
     // Unsubscribe from logs when navigating away
-    if (this.currentView === "settings/logs" && view !== "settings/logs" && this.logsUnsubscribe) {
-      this.logsUnsubscribe();
-      this.logsUnsubscribe = null;
+    if (this.currentView === "settings/logs" && view !== "settings/logs") {
+      if (this.logsUnsubscribe) {
+        this.logsUnsubscribe();
+        this.logsUnsubscribe = null;
+      }
+      if (this.llmLogsUnsubscribe) {
+        this.llmLogsUnsubscribe();
+        this.llmLogsUnsubscribe = null;
+      }
     }
 
     this.currentView = view;
@@ -1715,7 +1727,7 @@ export class GatewaySession {
           this.logsUnsubscribe = null;
         }
 
-        // Read today's logs with filters applied
+        // Read today's system logs with filters applied
         const allEntries = readLogFile(undefined, 500);
         let filteredEntries = allEntries;
         if (this.logsLevelFilter) {
@@ -1728,7 +1740,27 @@ export class GatewaySession {
         const levels = [...new Set(allEntries.map((e) => e.level))].sort();
         const subsystems = [...new Set(allEntries.map((e) => e.subsystem))].sort();
 
+        // Read LLM call logs
+        const { readLlmLogFile, getLlmProviders, getLlmModels } =
+          await import("../utils/llm-logger.js");
+        let allLlmCalls = readLlmLogFile(undefined, 1000);
+        const llmProviders = getLlmProviders();
+        const llmModels = getLlmModels();
+        if (this.llmProviderFilter) {
+          allLlmCalls = allLlmCalls.filter((c) => c.provider === this.llmProviderFilter);
+        }
+        if (this.llmModelFilter) {
+          allLlmCalls = allLlmCalls.filter((c) => c.model === this.llmModelFilter);
+        }
+        const llmTotal = allLlmCalls.length;
+        const llmPageSize = 20;
+        const pagedCalls = allLlmCalls.slice(
+          this.llmPage * llmPageSize,
+          (this.llmPage + 1) * llmPageSize
+        );
+
         mainPage = generateLogsPage({
+          activeTab: this.logsTab,
           entries: filteredEntries.map((e) => ({
             time: e.time,
             level: e.level,
@@ -1740,9 +1772,18 @@ export class GatewaySession {
           subsystems,
           activeLevel: this.logsLevelFilter,
           activeSubsystem: this.logsSubsystemFilter,
+          llmCalls: pagedCalls,
+          llmProviders,
+          llmModels,
+          llmActiveProvider: this.llmProviderFilter,
+          llmActiveModel: this.llmModelFilter,
+          llmPage: this.llmPage,
+          llmPageSize,
+          llmTotal,
+          llmSelectedId: this.llmSelectedId,
         });
 
-        // Subscribe to real-time log entries
+        // Subscribe to real-time log entries (system logs)
         this.logsUnsubscribe = subscribeToLogs((entry: LogEntry) => {
           // Apply filters
           if (this.logsLevelFilter && entry.level !== this.logsLevelFilter) return;
@@ -1758,6 +1799,19 @@ export class GatewaySession {
               data: entry.data,
             },
           });
+        });
+
+        // Subscribe to real-time LLM call pairs
+        if (this.llmLogsUnsubscribe) {
+          this.llmLogsUnsubscribe();
+          this.llmLogsUnsubscribe = null;
+        }
+        const { subscribeToLlmLogs } = await import("../utils/llm-logger.js");
+        this.llmLogsUnsubscribe = subscribeToLlmLogs(() => {
+          // When a new LLM call pair arrives and user is on LLM tab, refresh the page
+          if (this.logsTab === "llm" && this.currentView === "settings/logs") {
+            this.handleNavigate("settings/logs", send).catch(() => {});
+          }
         });
         break;
       }
@@ -2555,6 +2609,9 @@ export class GatewaySession {
       } else if (this.currentView === "evolution") {
         this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
         this.sendEvolutionLabUpdate(send);
+      } else if (this.currentView === "settings/logs") {
+        this.logsTab = payload.tab as "system" | "llm";
+        await this.handleNavigate("settings/logs", send);
       } else {
         type EvolutionTab =
           | "overview"
@@ -3045,6 +3102,33 @@ export class GatewaySession {
       this.logsSubsystemFilter = payload?.value ? String(payload.value) : undefined;
       await this.handleNavigate("settings/logs", send);
     } else if (action === "logs_refresh") {
+      await this.handleNavigate("settings/logs", send);
+    }
+    // LLM log filter actions
+    else if (action === "llm_filter_provider") {
+      this.llmProviderFilter = payload?.value ? String(payload.value) : undefined;
+      this.llmPage = 0;
+      this.llmSelectedId = undefined;
+      await this.handleNavigate("settings/logs", send);
+    } else if (action === "llm_filter_model") {
+      this.llmModelFilter = payload?.value ? String(payload.value) : undefined;
+      this.llmPage = 0;
+      this.llmSelectedId = undefined;
+      await this.handleNavigate("settings/logs", send);
+    }
+    // LLM call detail expand
+    else if (action === "llm_call_detail") {
+      const clickedId = (payload?.row as Record<string, unknown> | undefined)?.id as
+        | number
+        | undefined;
+      // Toggle: click same row again to collapse
+      this.llmSelectedId = this.llmSelectedId === clickedId ? undefined : clickedId;
+      await this.handleNavigate("settings/logs", send);
+    }
+    // LLM pagination
+    else if (action === "llm_page_change") {
+      this.llmPage = Number(payload?.page) || 0;
+      this.llmSelectedId = undefined;
       await this.handleNavigate("settings/logs", send);
     }
     // Settings actions

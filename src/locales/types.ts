@@ -550,6 +550,18 @@ export interface LocaleMessages {
     allSubsystems: string;
     noLogs: string;
     refresh: string;
+    tabSystem: string;
+    tabLlm: string;
+    llmProvider: string;
+    llmModel: string;
+    llmTokens: string;
+    llmLatency: string;
+    llmStatus: string;
+    llmAllProviders: string;
+    llmAllModels: string;
+    llmNoLogs: string;
+    llmRequest: string;
+    llmResponse: string;
   };
 
   // Settings / General page

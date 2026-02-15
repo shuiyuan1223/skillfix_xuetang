@@ -1529,6 +1529,10 @@ function generateIntegrationsBranches(
 // ============================================================================
 
 interface LogsPageData {
+  // Tab control
+  activeTab: "system" | "llm";
+
+  // System logs tab
   entries: Array<{
     time: string;
     level: string;
@@ -1540,6 +1544,17 @@ interface LogsPageData {
   subsystems: string[];
   activeLevel?: string;
   activeSubsystem?: string;
+
+  // LLM calls tab
+  llmCalls: import("../utils/llm-logger.js").LLMCallPair[];
+  llmProviders: string[];
+  llmModels: string[];
+  llmActiveProvider?: string;
+  llmActiveModel?: string;
+  llmPage: number;
+  llmPageSize: number;
+  llmTotal: number;
+  llmSelectedId?: number;
 }
 
 export function generateLogsPage(data: LogsPageData): A2UIMessage {
@@ -1556,6 +1571,29 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage {
     justify: "between",
     align: "center",
   });
+
+  // --- System Logs Tab Content ---
+  const systemTabContent = buildSystemLogsTab(ui, data);
+
+  // --- LLM Calls Tab Content ---
+  const llmTabContent = buildLlmCallsTab(ui, data);
+
+  // Tabs
+  const tabsId = ui.tabs(
+    [
+      { id: "system", label: t("logs.tabSystem"), icon: "bar-chart" },
+      { id: "llm", label: t("logs.tabLlm"), icon: "zap" },
+    ],
+    data.activeTab,
+    { system: systemTabContent, llm: llmTabContent }
+  );
+
+  const root = ui.column([headerRow, tabsId], { gap: 16, padding: 24 });
+  return ui.build(root);
+}
+
+function buildSystemLogsTab(ui: A2UIGenerator, data: LogsPageData): string {
+  const children: string[] = [];
 
   // Filter row
   const levelOptions = [
@@ -1579,25 +1617,135 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage {
     value: data.activeSubsystem || "",
     onChange: "logs_filter_subsystem",
   });
-  const filterRow = ui.row([levelSelect, subsystemSelect], { gap: 12 });
+  children.push(ui.row([levelSelect, subsystemSelect], { gap: 12 }));
 
-  // Log viewer component
-  const logViewer = ui.logViewer(data.entries, {
-    levels: data.levels,
-    subsystems: data.subsystems,
-    activeLevel: data.activeLevel,
-    activeSubsystem: data.activeSubsystem,
-  });
-
-  // No logs message
   if (data.entries.length === 0) {
-    const noLogs = ui.text(t("logs.noLogs"), "caption");
-    const root = ui.column([headerRow, filterRow, noLogs], { gap: 16, padding: 24 });
-    return ui.build(root);
+    children.push(ui.text(t("logs.noLogs"), "caption"));
+  } else {
+    children.push(
+      ui.logViewer(data.entries, {
+        levels: data.levels,
+        subsystems: data.subsystems,
+        activeLevel: data.activeLevel,
+        activeSubsystem: data.activeSubsystem,
+      })
+    );
   }
 
-  const root = ui.column([headerRow, filterRow, logViewer], { gap: 16, padding: 24 });
-  return ui.build(root);
+  return ui.column(children, { gap: 12 });
+}
+
+function buildLlmCallsTab(ui: A2UIGenerator, data: LogsPageData): string {
+  const children: string[] = [];
+
+  // Filter row: Provider + Model selects
+  const providerOptions = [
+    { value: "", label: t("logs.llmAllProviders") },
+    ...data.llmProviders.map((p) => ({ value: p, label: p })),
+  ];
+  const modelOptions = [
+    { value: "", label: t("logs.llmAllModels") },
+    ...data.llmModels.map((m) => ({ value: m, label: m })),
+  ];
+
+  const providerSelect = ui.formInput("llm_provider", "select", {
+    label: t("logs.llmProvider"),
+    options: providerOptions,
+    value: data.llmActiveProvider || "",
+    onChange: "llm_filter_provider",
+  });
+  const modelSelect = ui.formInput("llm_model", "select", {
+    label: t("logs.llmModel"),
+    options: modelOptions,
+    value: data.llmActiveModel || "",
+    onChange: "llm_filter_model",
+  });
+  children.push(ui.row([providerSelect, modelSelect], { gap: 12 }));
+
+  if (data.llmCalls.length === 0) {
+    children.push(ui.text(t("logs.llmNoLogs"), "caption"));
+    return ui.column(children, { gap: 12 });
+  }
+
+  // Data table
+  const columns = [
+    { key: "time", label: t("logs.time"), render: "text" as const },
+    { key: "provider", label: t("logs.llmProvider"), render: "badge" as const },
+    { key: "model", label: t("logs.llmModel"), render: "text" as const },
+    { key: "tokens", label: t("logs.llmTokens"), render: "text" as const },
+    { key: "latency", label: t("logs.llmLatency"), render: "text" as const },
+    { key: "status", label: t("logs.llmStatus"), render: "badge" as const },
+  ];
+
+  const rows = data.llmCalls.map((call) => {
+    const timeStr = call.timestamp
+      ? new Date(call.timestamp).toLocaleTimeString("en-US", { hour12: false })
+      : "-";
+    const tokensStr =
+      call.inputTokens != null && call.outputTokens != null
+        ? `${call.inputTokens}/${call.outputTokens}`
+        : call.totalTokens != null
+          ? String(call.totalTokens)
+          : "-";
+    const latencyStr =
+      call.latencyMs != null
+        ? call.latencyMs >= 1000
+          ? `${(call.latencyMs / 1000).toFixed(1)}s`
+          : `${call.latencyMs}ms`
+        : "-";
+    const statusStr = call.status != null ? String(call.status) : "-";
+
+    return {
+      id: call.id,
+      time: timeStr,
+      provider: call.provider,
+      model: call.model,
+      tokens: tokensStr,
+      latency: latencyStr,
+      status: statusStr,
+    };
+  });
+
+  const tableId = ui.dataTable(columns, rows, {
+    pagination: {
+      page: data.llmPage,
+      pageSize: data.llmPageSize,
+      total: data.llmTotal,
+    },
+    onRowClick: "llm_call_detail",
+    onPageChange: "llm_page_change",
+  });
+  children.push(tableId);
+
+  // Detail view for selected call
+  if (data.llmSelectedId != null) {
+    const selectedCall = data.llmCalls.find((c) => c.id === data.llmSelectedId);
+    if (selectedCall) {
+      const detailChildren: string[] = [];
+
+      // Request collapsible
+      const reqJson = JSON.stringify(selectedCall.requestData ?? {}, null, 2);
+      const reqEditor = ui.codeEditor(reqJson, {
+        language: "json",
+        readonly: true,
+        height: 300,
+      });
+      detailChildren.push(ui.collapsible(t("logs.llmRequest"), [reqEditor], { expanded: true }));
+
+      // Response collapsible
+      const resJson = JSON.stringify(selectedCall.responseData ?? {}, null, 2);
+      const resEditor = ui.codeEditor(resJson, {
+        language: "json",
+        readonly: true,
+        height: 300,
+      });
+      detailChildren.push(ui.collapsible(t("logs.llmResponse"), [resEditor], { expanded: true }));
+
+      children.push(ui.column(detailChildren, { gap: 8 }));
+    }
+  }
+
+  return ui.column(children, { gap: 12 });
 }
 
 // ============================================================================

@@ -523,8 +523,8 @@ export const en: LocaleMessages = {
   },
 
   logs: {
-    title: "System Logs",
-    subtitle: "View Gateway runtime logs",
+    title: "Logs",
+    subtitle: "View system logs and LLM call records",
     level: "Level",
     subsystem: "Subsystem",
     message: "Message",
@@ -533,6 +533,18 @@ export const en: LocaleMessages = {
     allSubsystems: "All Subsystems",
     noLogs: "No log entries yet",
     refresh: "Refresh",
+    tabSystem: "System Logs",
+    tabLlm: "LLM Calls",
+    llmProvider: "Provider",
+    llmModel: "Model",
+    llmTokens: "Tokens",
+    llmLatency: "Latency",
+    llmStatus: "Status",
+    llmAllProviders: "All Providers",
+    llmAllModels: "All Models",
+    llmNoLogs: "No LLM call logs yet",
+    llmRequest: "Request",
+    llmResponse: "Response",
   },
 
   settings: {
