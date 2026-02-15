@@ -64,13 +64,10 @@ export default {
         "card-entrance": "cardEntrance 0.5s ease-out backwards",
         "fade-in": "fadeIn 0.3s ease",
         "bounce-dot": "bounceDot 1.4s infinite",
-        "bar-grow": "barGrow 0.6s ease-out backwards",
         "draw-line": "drawLine 1.5s ease-out forwards",
         "status-pulse": "statusPulse 1.5s ease-in-out infinite",
         "skeleton-shimmer": "skeletonShimmer 1.5s infinite",
         "toast-slide-in": "toastSlideIn 0.4s ease-out",
-        "ring-draw": "ringDraw 1s ease-out forwards",
-        "radar-expand": "radarExpand 0.6s ease-out forwards",
       },
       keyframes: {
         cardEntrance: {
@@ -84,10 +81,6 @@ export default {
         bounceDot: {
           "0%, 80%, 100%": { transform: "scale(0)" },
           "40%": { transform: "scale(1)" },
-        },
-        barGrow: {
-          from: { transform: "scaleY(0)" },
-          to: { transform: "scaleY(1)" },
         },
         drawLine: {
           to: { strokeDashoffset: "0" },
@@ -103,13 +96,6 @@ export default {
         toastSlideIn: {
           from: { transform: "translateX(100%)", opacity: "0" },
           to: { transform: "translateX(0)", opacity: "1" },
-        },
-        ringDraw: {
-          from: { strokeDashoffset: "var(--circumference)" },
-        },
-        radarExpand: {
-          from: { opacity: "0", transform: "scale(0.3)" },
-          to: { opacity: "1", transform: "scale(1)" },
         },
       },
     },

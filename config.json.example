@@ -1,13 +1,29 @@
 {
+  "models": {
+    "providers": {
+      "openrouter": {
+        "baseUrl": "https://openrouter.ai/api/v1",
+        "apiKey": "sk-or-xxx-your-api-key",
+        "models": [
+          { "name": "claude-sonnet", "model": "anthropic/claude-sonnet-4" },
+          { "name": "gpt-4o", "model": "openai/gpt-4o" },
+          { "name": "deepseek-v3", "model": "deepseek/deepseek-chat", "label": "DeepSeek V3" },
+          { "name": "qwen-72b", "model": "qwen/qwen-2.5-72b-instruct", "label": "Qwen 2.5 72B" },
+          { "name": "embed-small", "model": "openai/text-embedding-3-small" }
+        ]
+      }
+    }
+  },
+  "agentModel": "openrouter/claude-sonnet",
+  "judgeModel": "openrouter/gpt-4o",
+  "embeddingModel": "openrouter/embed-small",
+  "benchmark": {
+    "concurrency": 5,
+    "models": ["openrouter/deepseek-v3", "openrouter/qwen-72b"]
+  },
   "gateway": {
     "port": 8000,
     "autoStart": false
-  },
-  "llm": {
-    "provider": "openrouter",
-    "apiKey": "sk-or-xxx-your-api-key",
-    "baseUrl": "https://openrouter.ai/api/v1",
-    "modelId": "anthropic/claude-sonnet-4"
   },
   "dataSources": {
     "type": "huawei",
@@ -48,15 +64,5 @@
   "tui": {
     "theme": "dark",
     "showToolCalls": true
-  },
-  "embedding": {
-    "enabled": true,
-    "model": "openai/text-embedding-3-small"
-  },
-  "benchmarkModels": {
-    "claude-sonnet": { "provider": "openrouter", "modelId": "anthropic/claude-sonnet-4", "label": "Claude Sonnet 4" },
-    "deepseek-v3": { "provider": "openrouter", "modelId": "deepseek/deepseek-chat", "label": "DeepSeek V3" },
-    "qwen-72b": { "provider": "openrouter", "modelId": "qwen/qwen-2.5-72b-instruct", "label": "Qwen 2.5 72B" },
-    "gpt-4o": { "provider": "openrouter", "modelId": "openai/gpt-4o", "label": "GPT-4o" }
   }
 }

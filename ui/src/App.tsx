@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { A2UISurfaceData, WSMessage, PlotlyChart } from "./lib/types";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { A2UISurfaceData, WSMessage, PlotlyChart, AGUIEvent, MessagePart, QuickReply } from "./lib/types";
 import { generateUUID } from "./lib/utils";
 import { ICONS } from "./lib/icons";
 import { i18n } from "./lib/i18n";
@@ -56,6 +56,19 @@ export function App() {
   const [pageKey, setPageKey] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
 
+  // --- AG-UI SSE Chat State ------------------------------------------------
+  interface ChatMessage {
+    id: string;
+    role: "user" | "assistant";
+    parts: MessagePart[];
+  }
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatStreaming, setChatStreaming] = useState(false);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const activeMessageRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const chatInitializedRef = useRef(false);
+
   // --- Refs ----------------------------------------------------------------
   const wsRef = useRef<WebSocket | null>(null);
   const userUuidRef = useRef<string | null>(null);
@@ -63,6 +76,10 @@ export function App() {
   const isAutoScrollingRef = useRef(false);
   const pendingPlotlyChartsRef = useRef<PlotlyChart[]>([]);
   const extensionDetectedRef = useRef(false);
+  const mainDataRef = useRef<A2UISurfaceData | null>(null);
+
+  // Keep mainDataRef in sync with mainData state
+  mainDataRef.current = mainData;
 
   // Keep a ref to the latest mainData so the scroll container ref callback
   // can reference it without stale closures.
@@ -137,6 +154,185 @@ export function App() {
     },
     [],
   );
+
+  // ---------------------------------------------------------------------------
+  // AG-UI SSE Chat
+  // ---------------------------------------------------------------------------
+
+  const handleAGUIEvent = useCallback((event: AGUIEvent) => {
+    switch (event.type) {
+      case "TextMessageStart": {
+        const msg: ChatMessage = { id: event.messageId, role: "assistant", parts: [] };
+        activeMessageRef.current = event.messageId;
+        setChatMessages((prev) => [...prev, msg]);
+        break;
+      }
+      case "TextMessageContent": {
+        setChatMessages((prev) => {
+          const msgs = [...prev];
+          const last = msgs[msgs.length - 1];
+          if (last && last.id === event.messageId) {
+            const updated = { ...last, parts: [...last.parts] };
+            const lastPart = updated.parts[updated.parts.length - 1];
+            if (lastPart && lastPart.type === "text") {
+              updated.parts[updated.parts.length - 1] = { ...lastPart, content: lastPart.content + event.delta };
+            } else {
+              updated.parts.push({ type: "text", content: event.delta });
+            }
+            msgs[msgs.length - 1] = updated;
+          }
+          return msgs;
+        });
+        break;
+      }
+      case "TextMessageEnd": {
+        // No-op: text is already accumulated
+        break;
+      }
+      case "ToolCallStart": {
+        setChatMessages((prev) => {
+          const msgs = [...prev];
+          const last = msgs[msgs.length - 1];
+          if (last && last.role === "assistant") {
+            const updated = { ...last, parts: [...last.parts] };
+            // Remove empty trailing text part before tool_use
+            const lastP = updated.parts[updated.parts.length - 1];
+            if (lastP && lastP.type === "text" && !lastP.content.trim()) {
+              updated.parts.pop();
+            }
+            updated.parts.push({
+              type: "tool_use",
+              toolCallId: event.toolCallId,
+              toolName: event.toolCallName,
+              status: "running" as const,
+            });
+            msgs[msgs.length - 1] = updated;
+          }
+          return msgs;
+        });
+        break;
+      }
+      case "ToolCallEnd": {
+        setChatMessages((prev) => {
+          const msgs = [...prev];
+          const last = msgs[msgs.length - 1];
+          if (last && last.role === "assistant") {
+            const updated = { ...last, parts: last.parts.map((p) => {
+              if (p.type === "tool_use" && p.toolCallId === event.toolCallId) {
+                return { ...p, status: "completed" as const };
+              }
+              return p;
+            })};
+            msgs[msgs.length - 1] = updated;
+          }
+          return msgs;
+        });
+        break;
+      }
+      case "ToolCallResult": {
+        setChatMessages((prev) => {
+          const msgs = [...prev];
+          const last = msgs[msgs.length - 1];
+          if (last && last.role === "assistant" && event.cards) {
+            const updated = { ...last, parts: [...last.parts] };
+            updated.parts.push({
+              type: "tool_result",
+              toolCallId: event.toolCallId,
+              cards: event.cards,
+            });
+            // Add empty text part for next text stream
+            updated.parts.push({ type: "text", content: "" });
+            msgs[msgs.length - 1] = updated;
+          }
+          return msgs;
+        });
+        break;
+      }
+      case "RunFinished": {
+        setChatStreaming(false);
+        activeMessageRef.current = null;
+        break;
+      }
+      case "Custom": {
+        if (event.name === "QuickReplies") {
+          setQuickReplies(event.data as QuickReply[]);
+        }
+        break;
+      }
+    }
+  }, []);
+
+  const sendChatMessage = useCallback((content: string) => {
+    // Optimistic: add user message
+    const userMsg: ChatMessage = {
+      id: generateUUID(),
+      role: "user",
+      parts: [{ type: "text", content }],
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+    setChatStreaming(true);
+    setQuickReplies([]);
+    chatAutoScrollRef.current = true;
+
+    // Abort previous if still running
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const uuid = userUuidRef.current || "anonymous";
+
+    fetch("/api/ag-ui", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ thread_id: uuid, messages: [{ role: "user", content }] }),
+      signal: controller.signal,
+    }).then(async (res) => {
+      if (!res.ok || !res.body) {
+        setChatStreaming(false);
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE lines
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || ""; // keep incomplete line
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const event = JSON.parse(line.slice(6)) as AGUIEvent;
+              handleAGUIEvent(event);
+            } catch {
+              // skip malformed
+            }
+          }
+        }
+      }
+
+      // Process remaining buffer
+      if (buffer.startsWith("data: ")) {
+        try {
+          const event = JSON.parse(buffer.slice(6)) as AGUIEvent;
+          handleAGUIEvent(event);
+        } catch { /* skip */ }
+      }
+
+      setChatStreaming(false);
+      activeMessageRef.current = null;
+    }).catch((err) => {
+      if (err.name !== "AbortError") {
+        console.error("[SSE] Chat error:", err);
+      }
+      setChatStreaming(false);
+      activeMessageRef.current = null;
+    });
+  }, [handleAGUIEvent]);
 
   const startOAuthWithExtension = useCallback(async () => {
     console.log("[OAuth] Using browser extension flow...");
@@ -297,6 +493,30 @@ export function App() {
         return;
       }
 
+      // Handle copy/download config locally on the frontend
+      if (action === "settings_copy_config" || action === "settings_download_config") {
+        // Find the code_editor component in current main data to get raw config
+        const mainDataSnap = mainDataRef.current;
+        const editorComp = mainDataSnap?.components.find((c: any) => c.type === "code_editor" && c.readonly);
+        const configJson = (editorComp as any)?.value || "{}";
+        if (action === "settings_copy_config") {
+          navigator.clipboard.writeText(configJson).then(() => {
+            wsRef.current?.send(JSON.stringify({ type: "action", action: "show_toast", payload: { message: "Copied!", variant: "success" } }));
+          }).catch(() => {
+            wsRef.current?.send(JSON.stringify({ type: "action", action: "show_toast", payload: { message: "Copy failed", variant: "error" } }));
+          });
+        } else {
+          const blob = new Blob([configJson], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "config.json";
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+        return;
+      }
+
       // Reset auto-scroll when user sends a message
       if (
         action === "send_message" ||
@@ -307,9 +527,25 @@ export function App() {
         chatAutoScrollRef.current = true;
       }
 
+      // Route main chat messages through SSE
+      if (action === "send_message" && payload?.content) {
+        sendChatMessage(String(payload.content));
+        return;
+      }
+
+      // Stop generation: abort SSE fetch
+      if (action === "stop_generation") {
+        abortControllerRef.current?.abort();
+        setChatStreaming(false);
+        activeMessageRef.current = null;
+        // Also notify server
+        wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+        return;
+      }
+
       wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
     },
-    [startHuaweiAuth],
+    [startHuaweiAuth, sendChatMessage],
   );
 
   const sendNavigate = useCallback((view: string) => {
@@ -379,12 +615,35 @@ export function App() {
   // handleMessage (uses functional setState to avoid stale closures)
   // ---------------------------------------------------------------------------
 
+  // Extract chat history from a2ui surface data (for initial sync from WebSocket)
+  const extractChatHistory = useCallback((surface: A2UISurfaceData) => {
+    if (chatInitializedRef.current) return;
+    const chatComp = surface.components.find((c) => c.type === "chat_messages");
+    if (!chatComp) return;
+    const rawMessages = (chatComp.messages as any[]) || [];
+    if (rawMessages.length === 0) return;
+    chatInitializedRef.current = true;
+    const normalized: ChatMessage[] = [];
+    for (const raw of rawMessages) {
+      if (raw.parts && raw.parts.length > 0) {
+        normalized.push({ id: raw.id || generateUUID(), role: raw.role === "user" ? "user" : "assistant", parts: raw.parts });
+      } else {
+        const parts: MessagePart[] = raw.content ? [{ type: "text", content: raw.content }] : [];
+        normalized.push({ id: raw.id || generateUUID(), role: raw.role === "user" ? "user" : "assistant", parts });
+      }
+    }
+    setChatMessages(normalized);
+  }, []);
+
   const handleMessage = useCallback(
     (msg: WSMessage) => {
       switch (msg.type) {
         case "page":
           if (msg.surfaces.sidebar) setSidebarData(msg.surfaces.sidebar);
-          if (msg.surfaces.main) setMainData(msg.surfaces.main);
+          if (msg.surfaces.main) {
+            setMainData(msg.surfaces.main);
+            extractChatHistory(msg.surfaces.main);
+          }
           break;
 
         case "a2ui":
@@ -392,9 +651,12 @@ export function App() {
             case "sidebar":
               setSidebarData({ components: msg.components, root_id: msg.root_id });
               break;
-            case "main":
-              setMainData({ components: msg.components, root_id: msg.root_id });
+            case "main": {
+              const mainSurface = { components: msg.components, root_id: msg.root_id };
+              setMainData(mainSurface);
+              extractChatHistory(mainSurface);
               break;
+            }
             case "modal":
               setModalData({ components: msg.components, root_id: msg.root_id });
               // Trigger enter animation on next frame
@@ -434,6 +696,24 @@ export function App() {
           }
           break;
 
+        case "agent_text": {
+          // Incremental streaming update — patch streamingContent without full re-render
+          const agentMsg = msg as { type: "agent_text"; content: string; is_final: boolean };
+          if (!agentMsg.is_final) {
+            setMainData((prev) => {
+              if (!prev) return prev;
+              const updated = { ...prev, components: prev.components.map((c) => {
+                if (c.type === "chat_messages") {
+                  return { ...c, streamingContent: agentMsg.content };
+                }
+                return c;
+              })};
+              return updated;
+            });
+          }
+          break;
+        }
+
         case "log_entry": {
           // Append new log entry to current main surface log_viewer component
           setMainData((prev) => {
@@ -455,7 +735,7 @@ export function App() {
         }
       }
     },
-    [closeModal],
+    [closeModal, extractChatHistory],
   );
 
   // ---------------------------------------------------------------------------
@@ -524,7 +804,38 @@ export function App() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Auto-scroll & Plotly effect (runs when mainData changes)
+  // Inject client-side chat state into mainData for rendering
+  // ---------------------------------------------------------------------------
+
+  const enhancedMainData = useMemo(() => {
+    if (!mainData) return null;
+    // Check if mainData has a chat_messages component (i.e. we're on chat page)
+    const hasChatMessages = mainData.components.some((c) => c.type === "chat_messages");
+    if (!hasChatMessages || chatMessages.length === 0) return mainData;
+
+    // Override chat_messages component with client-managed state
+    return {
+      ...mainData,
+      components: mainData.components.map((c) => {
+        if (c.type === "chat_messages") {
+          return {
+            ...c,
+            messages: chatMessages,
+            streaming: chatStreaming,
+            streamingContent: "", // No longer used; text is inline in parts
+            quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
+          };
+        }
+        if (c.type === "chat_input") {
+          return { ...c, streaming: chatStreaming };
+        }
+        return c;
+      }),
+    };
+  }, [mainData, chatMessages, chatStreaming, quickReplies]);
+
+  // ---------------------------------------------------------------------------
+  // Auto-scroll & Plotly effect (runs when mainData or chatMessages change)
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
@@ -554,7 +865,7 @@ export function App() {
         }, 100);
       });
     }
-  }, [mainData]);
+  }, [mainData, chatMessages, chatStreaming]);
 
   // ---------------------------------------------------------------------------
   // Skeleton renderers
@@ -672,9 +983,9 @@ export function App() {
           }}
           style={{ animation: "page-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}
         >
-          {mainData ? (
+          {enhancedMainData ? (
             <A2UIRenderer
-              data={mainData}
+              data={enhancedMainData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
               pendingPlotlyCharts={pendingPlotlyChartsRef}

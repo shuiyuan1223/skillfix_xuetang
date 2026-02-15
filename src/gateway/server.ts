@@ -26,8 +26,13 @@ import {
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
   getBenchmarkConcurrency,
+  resolveSystemAgentModel,
   PROVIDER_CONFIGS,
+  listAllModelRefs,
+  stripLegacyFieldsForSave,
   type LLMProvider,
+  type BenchmarkModelConfig,
+  type PHAConfig,
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
@@ -58,13 +63,21 @@ import {
   generateAuthRequiredPage,
   generateBenchmarkModelSelectorModal,
   generateToolCards,
-  mergePendingCards,
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
   generateSettingsPage,
   type SettingsPageData,
 } from "./pages.js";
+import type { PartsChatMessage, MessagePart, AGUIEvent } from "./a2ui.js";
+
+/** Find the last text part index in a parts array (ES2022-safe replacement for findLastIndex). */
+function findLastTextIdx(parts: MessagePart[]): number {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].type === "text") return i;
+  }
+  return -1;
+}
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import { loadMemorySummary, getRecentDailyLogs } from "../memory/profile.js";
 import {
@@ -150,43 +163,60 @@ const logMemory = log.child("Memory");
 const logEvolution = log.child("Evolution");
 
 // ============================================================================
-// Quick Reply Detection
+// Embedding settings → new format sync helper
 // ============================================================================
 
-interface QuickReply {
-  label: string;
-  content: string;
-  icon?: string;
-  variant?: "primary" | "danger";
-}
+/**
+ * Sync embedding settings changes to the unified model repository format.
+ * Called by settings_save_embedding and settings_save_advanced handlers.
+ */
+function syncEmbeddingToNewFormat(config: PHAConfig, formData: Record<string, unknown>): void {
+  const enabled = formData.embeddingEnabled === "true";
+  const modelId = formData.embeddingModel ? String(formData.embeddingModel) : undefined;
 
-function detectQuickReplies(
-  messages: Array<{ role: string; content: string }>
-): QuickReply[] | undefined {
-  if (messages.length === 0) return undefined;
-  const last = messages[messages.length - 1];
-  if (last.role !== "assistant") return undefined;
-  const text = last.content;
-
-  // Detect approval/confirmation patterns
-  if (/批准|approve|确认.*方案|是否.*执行|proceed/i.test(text)) {
-    return [
-      { label: "批准", content: "批准，请执行", icon: "check", variant: "primary" },
-      { label: "拒绝", content: "拒绝，请重新修改方案", icon: "x", variant: "danger" },
-    ];
+  if (!enabled || !modelId) {
+    // Disabled — clear the ref
+    if (!config.orchestrator) config.orchestrator = {};
+    config.orchestrator.embedding = undefined;
+    return;
   }
 
-  // Detect yes/no questions
-  if (/是否|要不要|好吗|可以吗|需要吗/i.test(text)) {
-    return [
-      { label: "好的", content: "好的", variant: "primary" },
-      { label: "不了", content: "不了" },
-    ];
+  // Ensure models.providers exists
+  if (!config.models) config.models = { providers: {} };
+
+  // Find or create a provider to hold the embedding model.
+  // Use the first available provider key, or the orchestrator.pha's provider.
+  let targetProvider: string | undefined;
+  const phaRef = config.orchestrator?.pha;
+  if (phaRef) {
+    const slashIdx = phaRef.indexOf("/");
+    if (slashIdx > 0) targetProvider = phaRef.substring(0, slashIdx);
+  }
+  if (!targetProvider) {
+    targetProvider = Object.keys(config.models.providers)[0] || "openrouter";
+  }
+  if (!config.models.providers[targetProvider]) {
+    config.models.providers[targetProvider] = { models: [] };
   }
 
-  return undefined;
+  // Derive a short name for the embedding model
+  const parts = modelId.split("/");
+  const embName = parts[parts.length - 1];
+
+  // Add model to provider if not already present
+  const provModels = config.models.providers[targetProvider].models;
+  if (!provModels.find((m) => m.model === modelId)) {
+    provModels.push({ name: embName, model: modelId });
+  }
+
+  // Find the name of the model entry (might already exist with a different name)
+  const existing = provModels.find((m) => m.model === modelId);
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.embedding = `${targetProvider}/${existing?.name || embName}`;
 }
 
+// ============================================================================
+// Quick Reply Detection
 // ============================================================================
 // SHARP Category Re-aggregation
 // ============================================================================
@@ -883,18 +913,17 @@ export class GatewaySession {
   // even after a page refresh replaces the WebSocket connection.
   private _activeSend: ((msg: unknown) => void) | null = null;
 
-  // Chat state
-  private chatMessages: Array<{
-    role: "user" | "assistant" | "tool";
-    content: string;
-    cards?: { components: unknown[]; root_id: string };
-    toolName?: string;
-    toolStatus?: "running" | "completed" | "error";
-  }> = [];
-  private pendingCards: Array<{ components: unknown[]; root_id: string }> = [];
+  // Chat state (Parts model — AG-UI aligned)
+  private chatMessages: PartsChatMessage[] = [];
   private isStreaming = false;
   private streamingContent = "";
+  private currentAssistantMsgId: string | null = null;
+  private currentRunId: string | null = null;
+  private lastStreamedText = "";
   private currentView = "chat";
+  // SSE mode: when true, sendChatUpdate is skipped (client manages chat state)
+  public _sseMode = false;
+  private _chatLock = false;
 
   // Settings state
   private selectedPrompt: string | null = null;
@@ -954,9 +983,15 @@ export class GatewaySession {
   private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
 
   // Logs page state
+  private logsTab: "system" | "llm" = "system";
   private logsLevelFilter: string | undefined;
   private logsSubsystemFilter: string | undefined;
   private logsUnsubscribe: (() => void) | null = null;
+  private llmLogsUnsubscribe: (() => void) | null = null;
+  private llmProviderFilter: string | undefined;
+  private llmModelFilter: string | undefined;
+  private llmPage: number = 0;
+  private llmSelectedId: number | undefined;
 
   // Evolution version state
   private activeVersionBranch: string | null = null;
@@ -965,16 +1000,11 @@ export class GatewaySession {
   private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" = "overview";
   private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
   private evolutionSelectedVersion: string | null = null;
-  private systemAgentChatMessages: Array<{
-    role: "user" | "assistant" | "tool";
-    content: string;
-    cards?: { components: unknown[]; root_id: string };
-    toolName?: string;
-    toolStatus?: "running" | "completed" | "error";
-    progressData?: { current: number; total: number; category: string };
-  }> = [];
+  private systemAgentChatMessages: PartsChatMessage[] = [];
   private systemAgentStreaming = false;
   private systemAgentStreamingContent = "";
+  private saCurrentAssistantMsgId: string | null = null;
+  private saLastStreamedText = "";
   private evolutionInspectedBranch: string | null = null;
   private evolutionLabDiffContent: {
     before: string;
@@ -1037,10 +1067,13 @@ export class GatewaySession {
         const lastTs = chatSession.entries[chatSession.entries.length - 1].timestamp;
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
           this.sessionId = chatSession.sessionId;
-          this.chatMessages = chatSession.entries.map((e) => ({
-            role: e.role,
-            content: e.content,
-          }));
+          this.chatMessages = chatSession.entries
+            .filter((e) => e.role === "user" || e.role === "assistant")
+            .map((e) => ({
+              id: crypto.randomUUID(),
+              role: e.role as "user" | "assistant",
+              parts: [{ type: "text" as const, content: e.content }],
+            }));
         }
       }
 
@@ -1049,10 +1082,13 @@ export class GatewaySession {
       if (saSession && saSession.entries.length > 0) {
         const lastTs = saSession.entries[saSession.entries.length - 1].timestamp;
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
-          this.systemAgentChatMessages = saSession.entries.map((e) => ({
-            role: e.role,
-            content: e.content,
-          }));
+          this.systemAgentChatMessages = saSession.entries
+            .filter((e) => e.role === "user" || e.role === "assistant")
+            .map((e) => ({
+              id: crypto.randomUUID(),
+              role: e.role as "user" | "assistant",
+              parts: [{ type: "text" as const, content: e.content }],
+            }));
         }
       }
     } catch (err) {
@@ -1115,27 +1151,56 @@ export class GatewaySession {
         userUuid: this.userUuid || undefined,
         sessionId: this.sessionId,
         dataSource: this.dataSource,
-        sessionMessages: this.chatMessages,
+        sessionMessages: this.chatMessages.map((m) => ({
+          role: m.role,
+          content:
+            m.parts
+              .filter((p) => p.type === "text")
+              .map((p) => (p as { type: "text"; content: string }).content)
+              .join("") || "",
+        })),
         extraTools,
       });
 
-      // Configure evolution tools with agent capabilities
+      // Configure evolution tools: create fresh agents per call for concurrency safety
+      // (shared agent + concurrent reset = race condition → empty responses)
       const AGENT_TIMEOUT_MS = 120_000;
-      const agentRef = this.agent;
+      const sessionConfig = this.config;
       setEvolutionRunnerConfig({
-        agentCall: async (query: string) => {
-          agentRef.reset();
+        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
+          const { MockDataSource: BenchMockDS } = await import("../data-sources/mock.js");
+          const testAgent = await createPHAAgent({
+            apiKey: sessionConfig.apiKey,
+            provider: sessionConfig.provider as any,
+            modelId: sessionConfig.modelId,
+            baseUrl: sessionConfig.baseUrl,
+            dataSource: new BenchMockDS(),
+          });
+          const enriched = mockContext
+            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
+            : query;
           const result = await Promise.race([
-            agentRef.chatAndWait(query).then((response: string) => ({ response })),
-            new Promise<{ response: string }>((_, reject) =>
+            testAgent.chatAndWaitWithTools(enriched),
+            new Promise<{
+              response: string;
+              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+            }>((_, reject) =>
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
           return result;
         },
         llmCall: async (prompt: string) => {
+          const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+          const judgeAgent = await createPHAAgent({
+            apiKey: sessionConfig.apiKey,
+            provider: sessionConfig.provider as any,
+            modelId: sessionConfig.modelId,
+            baseUrl: sessionConfig.baseUrl,
+            dataSource: new JudgeMockDS(),
+          });
           const result = await Promise.race([
-            agentRef.chatAndWait(prompt),
+            judgeAgent.chatAndWait(prompt),
             new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error("LLM call timed out")), AGENT_TIMEOUT_MS)
             ),
@@ -1150,48 +1215,62 @@ export class GatewaySession {
 
   private async getSystemAgent(): Promise<SystemAgent> {
     if (!this.systemAgent) {
+      const config = loadConfig();
+      const saModel = resolveSystemAgentModel(config);
       this.systemAgent = createSystemAgent({
-        apiKey: this.config.apiKey,
-        provider: this.config.provider,
-        modelId: this.config.modelId,
-        baseUrl: this.config.baseUrl,
-        sessionMessages: this.systemAgentChatMessages,
+        apiKey: saModel.apiKey,
+        provider: saModel.provider as any,
+        modelId: saModel.modelId,
+        baseUrl: saModel.baseUrl,
+        sessionMessages: this.systemAgentChatMessages.map((m) => ({
+          role: m.role,
+          content:
+            m.parts
+              .filter((p) => p.type === "text")
+              .map((p) => (p as { type: "text"; content: string }).content)
+              .join("") || "",
+        })),
       });
 
-      // Configure evolution tools: use dedicated PHA agents for benchmark test cases
-      // and judge evaluation (NOT the system agent — otherwise responses leak into system agent chat)
+      // Configure evolution tools: create fresh agents per call for concurrency safety
+      // (NOT the system agent — otherwise responses leak into system agent chat)
       const AGENT_TIMEOUT_MS = 120_000;
-      const { MockDataSource } = await import("../data-sources/mock.js");
-      const benchmarkAgent = await createPHAAgent({
-        apiKey: this.config.apiKey,
-        provider: this.config.provider,
-        modelId: this.config.modelId,
-        baseUrl: this.config.baseUrl,
-        dataSource: new MockDataSource(),
-      });
-      const judgeAgent = await createPHAAgent({
-        apiKey: this.config.apiKey,
-        provider: this.config.provider,
-        modelId: this.config.modelId,
-        baseUrl: this.config.baseUrl,
-        dataSource: new MockDataSource(),
-      });
       // Capture session reference for onProgress callback
-
       const session = this;
+      const sessionConfig = this.config;
       setEvolutionRunnerConfig({
-        agentCall: async (query: string) => {
-          benchmarkAgent.reset();
+        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
+          const { MockDataSource: BenchMockDS } = await import("../data-sources/mock.js");
+          const testAgent = await createPHAAgent({
+            apiKey: sessionConfig.apiKey,
+            provider: sessionConfig.provider as any,
+            modelId: sessionConfig.modelId,
+            baseUrl: sessionConfig.baseUrl,
+            dataSource: new BenchMockDS(),
+          });
+          const enriched = mockContext
+            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
+            : query;
           const result = await Promise.race([
-            benchmarkAgent.chatAndWait(query).then((response: string) => ({ response })),
-            new Promise<{ response: string }>((_, reject) =>
+            testAgent.chatAndWaitWithTools(enriched),
+            new Promise<{
+              response: string;
+              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+            }>((_, reject) =>
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
           return result;
         },
         llmCall: async (prompt: string) => {
-          judgeAgent.reset();
+          const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+          const judgeAgent = await createPHAAgent({
+            apiKey: sessionConfig.apiKey,
+            provider: sessionConfig.provider as any,
+            modelId: sessionConfig.modelId,
+            baseUrl: sessionConfig.baseUrl,
+            dataSource: new JudgeMockDS(),
+          });
           const result = await Promise.race([
             judgeAgent.chatAndWait(prompt),
             new Promise<string>((_, reject) =>
@@ -1201,18 +1280,22 @@ export class GatewaySession {
           return result;
         },
         concurrency: getBenchmarkConcurrency(),
-        onProgress: (current, total, testCase) => {
-          // Update the last running run_benchmark tool message with progress
+        onProgress: (current, total, _testCase) => {
+          // Update the last running run_benchmark tool_use part with progress
           for (let i = session.systemAgentChatMessages.length - 1; i >= 0; i--) {
             const msg = session.systemAgentChatMessages[i];
-            if (
-              msg.role === "tool" &&
-              msg.toolName === "run_benchmark" &&
-              msg.toolStatus === "running"
-            ) {
-              msg.content = `Running benchmark... ${current}/${total}`;
-              msg.progressData = { current, total, category: testCase.category };
-              break;
+            if (msg.role !== "assistant" || !msg.parts) continue;
+            for (let j = msg.parts.length - 1; j >= 0; j--) {
+              const part = msg.parts[j];
+              if (
+                part.type === "tool_use" &&
+                part.toolName === "run_benchmark" &&
+                part.status === "running"
+              ) {
+                // Store progress info as extra field on the part (extended type)
+                (part as any).progressData = { current, total };
+                break;
+              }
             }
           }
           const send = session._activeSend;
@@ -1294,9 +1377,15 @@ export class GatewaySession {
 
   private async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
     // Unsubscribe from logs when navigating away
-    if (this.currentView === "settings/logs" && view !== "settings/logs" && this.logsUnsubscribe) {
-      this.logsUnsubscribe();
-      this.logsUnsubscribe = null;
+    if (this.currentView === "settings/logs" && view !== "settings/logs") {
+      if (this.logsUnsubscribe) {
+        this.logsUnsubscribe();
+        this.logsUnsubscribe = null;
+      }
+      if (this.llmLogsUnsubscribe) {
+        this.llmLogsUnsubscribe();
+        this.llmLogsUnsubscribe = null;
+      }
     }
 
     this.currentView = view;
@@ -1309,7 +1398,6 @@ export class GatewaySession {
           messages: this.chatMessages,
           streaming: this.isStreaming,
           streamingContent: this.streamingContent,
-          quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
         });
         break;
 
@@ -1318,9 +1406,6 @@ export class GatewaySession {
           chatMessages: this.systemAgentChatMessages,
           streaming: this.systemAgentStreaming,
           streamingContent: this.systemAgentStreamingContent,
-          quickReplies: this.systemAgentStreaming
-            ? undefined
-            : detectQuickReplies(this.systemAgentChatMessages),
         });
         break;
 
@@ -1628,7 +1713,7 @@ export class GatewaySession {
           this.logsUnsubscribe = null;
         }
 
-        // Read today's logs with filters applied
+        // Read today's system logs with filters applied
         const allEntries = readLogFile(undefined, 500);
         let filteredEntries = allEntries;
         if (this.logsLevelFilter) {
@@ -1641,7 +1726,27 @@ export class GatewaySession {
         const levels = [...new Set(allEntries.map((e) => e.level))].sort();
         const subsystems = [...new Set(allEntries.map((e) => e.subsystem))].sort();
 
+        // Read LLM call logs
+        const { readLlmLogFile, getLlmProviders, getLlmModels } =
+          await import("../utils/llm-logger.js");
+        let allLlmCalls = readLlmLogFile(undefined, 1000);
+        const llmProviders = getLlmProviders();
+        const llmModels = getLlmModels();
+        if (this.llmProviderFilter) {
+          allLlmCalls = allLlmCalls.filter((c) => c.provider === this.llmProviderFilter);
+        }
+        if (this.llmModelFilter) {
+          allLlmCalls = allLlmCalls.filter((c) => c.model === this.llmModelFilter);
+        }
+        const llmTotal = allLlmCalls.length;
+        const llmPageSize = 20;
+        const pagedCalls = allLlmCalls.slice(
+          this.llmPage * llmPageSize,
+          (this.llmPage + 1) * llmPageSize
+        );
+
         mainPage = generateLogsPage({
+          activeTab: this.logsTab,
           entries: filteredEntries.map((e) => ({
             time: e.time,
             level: e.level,
@@ -1653,9 +1758,18 @@ export class GatewaySession {
           subsystems,
           activeLevel: this.logsLevelFilter,
           activeSubsystem: this.logsSubsystemFilter,
+          llmCalls: pagedCalls,
+          llmProviders,
+          llmModels,
+          llmActiveProvider: this.llmProviderFilter,
+          llmActiveModel: this.llmModelFilter,
+          llmPage: this.llmPage,
+          llmPageSize,
+          llmTotal,
+          llmSelectedId: this.llmSelectedId,
         });
 
-        // Subscribe to real-time log entries
+        // Subscribe to real-time log entries (system logs)
         this.logsUnsubscribe = subscribeToLogs((entry: LogEntry) => {
           // Apply filters
           if (this.logsLevelFilter && entry.level !== this.logsLevelFilter) return;
@@ -1672,6 +1786,19 @@ export class GatewaySession {
             },
           });
         });
+
+        // Subscribe to real-time LLM call pairs
+        if (this.llmLogsUnsubscribe) {
+          this.llmLogsUnsubscribe();
+          this.llmLogsUnsubscribe = null;
+        }
+        const { subscribeToLlmLogs } = await import("../utils/llm-logger.js");
+        this.llmLogsUnsubscribe = subscribeToLlmLogs(() => {
+          // When a new LLM call pair arrives and user is on LLM tab, refresh the page
+          if (this.logsTab === "llm" && this.currentView === "settings/logs") {
+            this.handleNavigate("settings/logs", send).catch(() => {});
+          }
+        });
         break;
       }
 
@@ -1683,17 +1810,76 @@ export class GatewaySession {
           hint: cfg.hint,
         }));
         const huawei = config.dataSources?.huawei || {};
-        const judge = config.judgeModel || {
-          provider: undefined as any,
-          modelId: undefined as any,
-          label: undefined as any,
-        };
+        // Handle judgeModel as either string ref or object
+        const judge: { provider?: any; modelId?: any; label?: any } =
+          typeof config.judgeModel === "object" && config.judgeModel ? config.judgeModel : {};
+
+        // Build benchmark models array from old config (legacy)
+        const bmRecord = config.benchmarkModels || {};
+        const benchmarkModels = Object.entries(bmRecord).map(([key, m]) => ({
+          key,
+          provider: m.provider || config.llm.provider,
+          modelId: m.modelId || "",
+          label: m.label || "",
+        }));
+
+        // Build model repository data (new unified format)
+        const modelProviders: Array<{
+          key: string;
+          baseUrl: string;
+          apiKeySet: boolean;
+          models: Array<{ name: string; model: string; label: string }>;
+        }> = [];
+        if (config.models?.providers) {
+          for (const [key, providerCfg] of Object.entries(config.models.providers)) {
+            modelProviders.push({
+              key,
+              baseUrl: providerCfg.baseUrl || "",
+              apiKeySet: !!providerCfg.apiKey,
+              models: (providerCfg.models || []).map((m) => ({
+                name: m.name,
+                model: m.model,
+                label: m.label || "",
+              })),
+            });
+          }
+        }
+        const allModelRefs = listAllModelRefs(config);
+
+        // Build MCP structured data
+        const chromeMcp = config.mcp?.chromeMcp || {};
+        const remoteServersRecord = config.mcp?.remoteServers || {};
+        const remoteServers = Object.entries(remoteServersRecord).map(([key, s]) => ({
+          key,
+          url: s.url || "",
+          apiKey: s.apiKey || "",
+          name: s.name || "",
+          enabled: s.enabled ?? true,
+        }));
+
+        // Build plugins structured data
+        const pluginsConfig = config.plugins || {};
+        const pluginEntries = Object.entries(pluginsConfig.entries || {}).map(([id, e]) => ({
+          id,
+          enabled: e.enabled ?? true,
+          config: e.config ? JSON.stringify(e.config, null, 2) : "{}",
+        }));
+
+        const scopesArray = huawei.scopes || [];
+
         mainPage = generateSettingsPage({
           provider: config.llm.provider,
           providers,
           apiKeySet: !!config.llm.apiKey,
           modelId: config.llm.modelId || PROVIDER_CONFIGS[config.llm.provider]?.defaultModel || "",
           baseUrl: config.llm.baseUrl || PROVIDER_CONFIGS[config.llm.provider]?.baseUrl || "",
+          modelProviders,
+          allModelRefs,
+          orchestratorPha: config.orchestrator?.pha || "",
+          orchestratorSa: config.orchestrator?.sa || "",
+          orchestratorJudge: config.orchestrator?.judge || "",
+          orchestratorEmbedding: config.orchestrator?.embedding || "",
+          benchmarkModelRefs: config.benchmark?.models || [],
           gatewayPort: config.gateway?.port || 8000,
           gatewayAutoStart: config.gateway?.autoStart ?? false,
           dataSourceType: config.dataSources?.type || "mock",
@@ -1712,9 +1898,18 @@ export class GatewaySession {
           judgeProvider: judge.provider || config.llm.provider,
           judgeModelId: judge.modelId || "",
           judgeLabel: judge.label || "",
-          benchmarkModelsJson: config.benchmarkModels
-            ? JSON.stringify(config.benchmarkModels, null, 2)
-            : "{}",
+          benchmarkModels,
+          userUuid: config.userUuid || "",
+          huaweiScopes: scopesArray,
+          chromeMcpCommand: chromeMcp.command || "npx",
+          chromeMcpArgs: (chromeMcp.args || []).join(", "),
+          chromeMcpBrowserUrl: chromeMcp.browserUrl || "",
+          chromeMcpWsEndpoint: chromeMcp.wsEndpoint || "",
+          remoteServers,
+          pluginEnabled: pluginsConfig.enabled ?? true,
+          pluginPaths: (pluginsConfig.paths || []).join(", "),
+          pluginEntries,
+          rawConfigJson: JSON.stringify(stripLegacyFieldsForSave(config), null, 2),
         });
         break;
       }
@@ -1724,7 +1919,6 @@ export class GatewaySession {
           messages: this.chatMessages,
           streaming: this.isStreaming,
           streamingContent: this.streamingContent,
-          quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
         });
     }
 
@@ -1733,7 +1927,11 @@ export class GatewaySession {
 
   private async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
     // Add user message to chat history
-    this.chatMessages.push({ role: "user", content });
+    this.chatMessages.push({
+      id: crypto.randomUUID(),
+      role: "user",
+      parts: [{ type: "text", content }],
+    });
     this.persistMessage("chat", { timestamp: Date.now(), role: "user", content });
 
     // Trigger message_received hook
@@ -1746,6 +1944,9 @@ export class GatewaySession {
     }
     this.isStreaming = true;
     this.streamingContent = "";
+    this.currentAssistantMsgId = null;
+    this.currentRunId = null;
+    this.lastStreamedText = "";
 
     // Extract profile info from user message (non-blocking)
     if (this.userUuid) {
@@ -1754,11 +1955,15 @@ export class GatewaySession {
         const extracted = mm.extractAndUpdateProfile(this.userUuid, content);
         if (Object.keys(extracted).length > 0) {
           const fields = Object.keys(extracted).join(", ");
-          const toolContent = `💾 已提取档案: ${fields}`;
-          this.chatMessages.push({ role: "tool", content: toolContent });
+          const toolContent = `已提取档案: ${fields}`;
+          this.chatMessages.push({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            parts: [{ type: "text", content: toolContent }],
+          });
           this.persistMessage("chat", {
             timestamp: Date.now(),
-            role: "tool",
+            role: "assistant",
             content: toolContent,
           });
           this.sendChatUpdate(send);
@@ -1770,6 +1975,8 @@ export class GatewaySession {
 
     // Send updated chat UI immediately
     this.sendChatUpdate(send);
+
+    const chatMsgCountBefore = this.chatMessages.length;
 
     try {
       const agent = await this.getAgent();
@@ -1783,13 +1990,52 @@ export class GatewaySession {
         await agent.chat(content);
         await agent.getAgent().waitForIdle();
 
+        // Fallback: if handleAgentEvent didn't produce any assistant message,
+        // check the agent's internal messages for LLM errors
+        const hasNewAssistant = this.chatMessages
+          .slice(chatMsgCountBefore)
+          .some((m) => m.role === "assistant");
+        if (!hasNewAssistant) {
+          const agentMsgs = agent.getMessages();
+          const lastAgentMsg = agentMsgs[agentMsgs.length - 1] as any;
+          if (lastAgentMsg?.stopReason === "error" && lastAgentMsg?.errorMessage) {
+            const errContent = `⚠️ ${lastAgentMsg.errorMessage}`;
+            this.chatMessages.push({
+              id: crypto.randomUUID(),
+              role: "assistant",
+              parts: [{ type: "text", content: errContent }],
+            });
+            this.persistMessage("chat", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: errContent,
+            });
+            log.warn("LLM error caught by fallback (not by event handler)", {
+              errorMessage: lastAgentMsg.errorMessage,
+            });
+          }
+        }
+
+        // Ensure streaming state is always cleaned up
+        if (this.isStreaming) {
+          this.isStreaming = false;
+          this.streamingContent = "";
+          this.currentAssistantMsgId = null;
+          this.lastStreamedText = "";
+          this.sendChatUpdate(send);
+        }
+
         // Index this exchange for memory search
         if (this.userUuid) {
           try {
             const mm = getMemoryManager();
             const lastAssistant = this.chatMessages.filter((m) => m.role === "assistant").pop();
             if (lastAssistant) {
-              const exchangeText = `User: ${content}\nAssistant: ${lastAssistant.content}`;
+              const assistantText = lastAssistant.parts
+                .filter((p): p is { type: "text"; content: string } => p.type === "text")
+                .map((p) => p.content)
+                .join("");
+              const exchangeText = `User: ${content}\nAssistant: ${assistantText}`;
               mm.appendSessionTranscript(this.userUuid, this.sessionId, exchangeText);
             }
           } catch {
@@ -1813,7 +2059,11 @@ export class GatewaySession {
       }
 
       const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-      this.chatMessages.push({ role: "assistant", content: errorContent });
+      this.chatMessages.push({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", content: errorContent }],
+      });
       this.persistMessage("chat", {
         timestamp: Date.now(),
         role: "assistant",
@@ -1833,12 +2083,12 @@ export class GatewaySession {
 
   private sendChatUpdate(send: (msg: unknown) => void): void {
     const activeSend = this.getSend(send);
+    if (this._sseMode) return; // SSE mode: client manages chat state
     if (this.currentView === "chat") {
       const chatPage = generateChatPage({
         messages: this.chatMessages,
         streaming: this.isStreaming,
         streamingContent: this.streamingContent,
-        quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
       });
       activeSend({
         type: "a2ui",
@@ -1850,17 +2100,179 @@ export class GatewaySession {
   }
 
   /**
-   * Handle messages in the Evolution Lab chat.
-   * Forces evolution-driver skill injection and tracks pipeline steps.
+   * Handle an SSE chat request. Returns a ReadableStream of AG-UI SSE events.
    */
+  async handleChatSSE(
+    content: string,
+    writer: WritableStreamDefaultWriter<Uint8Array>,
+    encoder: TextEncoder
+  ): Promise<void> {
+    if (this._chatLock) {
+      const err = JSON.stringify({ type: "error", message: "Chat is busy" });
+      try {
+        writer.write(encoder.encode(`data: ${err}\n\n`));
+      } catch {
+        /* noop */
+      }
+      try {
+        writer.close();
+      } catch {
+        /* noop */
+      }
+      return;
+    }
+    this._chatLock = true;
+    this._sseMode = true;
+
+    let streamClosed = false;
+    const safeWrite = (data: string) => {
+      if (streamClosed) return;
+      try {
+        writer.write(encoder.encode(data));
+      } catch {
+        streamClosed = true;
+      }
+    };
+    const safeClose = () => {
+      if (streamClosed) return;
+      streamClosed = true;
+      try {
+        writer.close();
+      } catch {
+        /* already closed */
+      }
+    };
+
+    const sseSend = (msg: unknown) => {
+      // Only forward AG-UI events (not legacy a2ui / agent_text)
+      const m = msg as Record<string, unknown>;
+      const agTypes = [
+        "RunStarted",
+        "RunFinished",
+        "TextMessageStart",
+        "TextMessageContent",
+        "TextMessageEnd",
+        "ToolCallStart",
+        "ToolCallEnd",
+        "ToolCallResult",
+        "Custom",
+      ];
+      if (m.type && agTypes.includes(m.type as string)) {
+        safeWrite(`data: ${JSON.stringify(m)}\n\n`);
+      }
+    };
+
+    try {
+      // Add user message
+      this.chatMessages.push({
+        id: crypto.randomUUID(),
+        role: "user",
+        parts: [{ type: "text", content }],
+      });
+      this.persistMessage("chat", { timestamp: Date.now(), role: "user", content });
+
+      this.isStreaming = true;
+      this.streamingContent = "";
+      this.currentAssistantMsgId = null;
+      this.currentRunId = null;
+      this.lastStreamedText = "";
+
+      const agent = await this.getAgent();
+      const unsubscribe = agent.subscribe((event) => {
+        this.handleAgentEvent(event, sseSend);
+      });
+
+      try {
+        await agent.chat(content);
+        await agent.getAgent().waitForIdle();
+      } finally {
+        unsubscribe();
+      }
+
+      // Ensure streaming state is cleaned up
+      if (this.isStreaming) {
+        this.isStreaming = false;
+        this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
+      }
+
+      // Index exchange for memory search
+      if (this.userUuid) {
+        try {
+          const mm = getMemoryManager();
+          const lastAssistant = this.chatMessages.filter((m) => m.role === "assistant").pop();
+          if (lastAssistant) {
+            const assistantText = lastAssistant.parts
+              .filter((p): p is { type: "text"; content: string } => p.type === "text")
+              .map((p) => p.content)
+              .join("");
+            mm.appendSessionTranscript(
+              this.userUuid,
+              this.sessionId,
+              `User: ${content}\nAssistant: ${assistantText}`
+            );
+          }
+        } catch {
+          // best-effort
+        }
+      }
+    } catch (error) {
+      const isAbort =
+        error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
+      if (!isAbort) {
+        const errEvent = JSON.stringify({
+          type: "Custom",
+          name: "Error",
+          data: { message: error instanceof Error ? error.message : String(error) },
+        });
+        safeWrite(`data: ${errEvent}\n\n`);
+      }
+      this.isStreaming = false;
+      this.streamingContent = "";
+      this.currentAssistantMsgId = null;
+      this.lastStreamedText = "";
+    } finally {
+      this._sseMode = false;
+      this._chatLock = false;
+      safeClose();
+    }
+  }
+
+  /**
+   * Get or create the current system-agent assistant message.
+   */
+  private saGetOrCreateAssistantMsg(): PartsChatMessage {
+    if (this.saCurrentAssistantMsgId) {
+      const existing = this.systemAgentChatMessages.find(
+        (m) => m.id === this.saCurrentAssistantMsgId
+      );
+      if (existing) return existing;
+    }
+    const msg: PartsChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      parts: [],
+    };
+    this.systemAgentChatMessages.push(msg);
+    this.saCurrentAssistantMsgId = msg.id;
+    return msg;
+  }
+
   private async handleSystemAgentMessage(
     content: string,
     send: (msg: unknown) => void
   ): Promise<void> {
-    this.systemAgentChatMessages.push({ role: "user", content });
+    this.systemAgentChatMessages.push({
+      id: crypto.randomUUID(),
+      role: "user",
+      parts: [{ type: "text", content }],
+    });
     this.persistMessage("system-agent", { timestamp: Date.now(), role: "user", content });
     this.systemAgentStreaming = true;
     this.systemAgentStreamingContent = "";
+    this.saCurrentAssistantMsgId = null;
+    this.saLastStreamedText = "";
 
     this.sendEvolutionLabUpdate(send);
 
@@ -1868,15 +2280,35 @@ export class GatewaySession {
       const agent = await this.getSystemAgent();
 
       const unsubscribe = agent.subscribe((event: any) => {
-        if (event.type === "message_start" || event.type === "message_update") {
+        if (event.type === "message_start") {
+          if (event.message?.role === "assistant") {
+            let text = "";
+            for (const block of event.message.content || []) {
+              if (block.type === "text") text += block.text;
+            }
+            const assistantMsg = this.saGetOrCreateAssistantMsg();
+            if (text) assistantMsg.parts.push({ type: "text", content: text });
+            this.systemAgentStreamingContent = text;
+            this.saLastStreamedText = text;
+            this.sendEvolutionLabUpdate(send);
+          }
+        } else if (event.type === "message_update") {
           if (event.message?.role === "assistant") {
             let text = "";
             for (const block of event.message.content || []) {
               if (block.type === "text") text += block.text;
             }
             this.systemAgentStreamingContent = text;
-
-            this.sendEvolutionLabUpdate(send);
+            const assistantMsg = this.saGetOrCreateAssistantMsg();
+            const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+            if (lastPart && lastPart.type === "text") {
+              lastPart.content = text;
+            } else if (text) {
+              assistantMsg.parts.push({ type: "text", content: text });
+            }
+            this.saLastStreamedText = text;
+            const activeSend = this.getSend(send);
+            activeSend({ type: "agent_text", content: text, is_final: false });
           }
         } else if (event.type === "message_end") {
           if (event.message?.role === "assistant") {
@@ -1885,10 +2317,14 @@ export class GatewaySession {
               if (block.type === "text") text += block.text;
             }
             if (text.trim()) {
-              this.systemAgentChatMessages.push({
-                role: "assistant",
-                content: text,
-              });
+              const assistantMsg = this.saGetOrCreateAssistantMsg();
+              const lastTextIdx = findLastTextIdx(assistantMsg.parts);
+              if (lastTextIdx >= 0) {
+                (assistantMsg.parts[lastTextIdx] as { type: "text"; content: string }).content =
+                  text;
+              } else {
+                assistantMsg.parts.push({ type: "text", content: text });
+              }
               this.persistMessage("system-agent", {
                 timestamp: Date.now(),
                 role: "assistant",
@@ -1897,47 +2333,73 @@ export class GatewaySession {
             }
             this.systemAgentStreaming = false;
             this.systemAgentStreamingContent = "";
+            this.saCurrentAssistantMsgId = null;
+            this.saLastStreamedText = "";
             this.sendEvolutionLabUpdate(send);
           }
         } else if (event.type === "tool_execution_start") {
           const toolName = event.toolName as string;
-          const toolContent = `Using ${toolName}...`;
-          this.systemAgentChatMessages.push({
-            role: "tool",
-            content: toolContent,
+          const toolCallId = crypto.randomUUID();
+          const assistantMsg = this.saGetOrCreateAssistantMsg();
+
+          // Clean up empty trailing text part
+          const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+          if (lastPart && lastPart.type === "text" && !lastPart.content.trim()) {
+            assistantMsg.parts.pop();
+          }
+
+          assistantMsg.parts.push({
+            type: "tool_use",
+            toolCallId,
             toolName,
-            toolStatus: "running",
+            status: "running",
           });
-          this.persistMessage("system-agent", {
-            timestamp: Date.now(),
-            role: "tool",
-            content: toolContent,
-            toolName,
-          });
+
           this.sendEvolutionLabUpdate(send);
         } else if (event.type === "tool_execution_end") {
           const toolName = event.toolName as string;
           const isError = event.isError;
+          const assistantMsg = this.saCurrentAssistantMsgId
+            ? this.systemAgentChatMessages.find((m) => m.id === this.saCurrentAssistantMsgId)
+            : null;
 
-          // Find the last matching running tool message and update its status
-          for (let i = this.systemAgentChatMessages.length - 1; i >= 0; i--) {
-            const msg = this.systemAgentChatMessages[i];
-            if (msg.role === "tool" && msg.toolName === toolName && msg.toolStatus === "running") {
-              msg.toolStatus = isError ? "error" : "completed";
-              if (!isError) {
-                try {
-                  const cards = generateToolCards(toolName, event.result);
-                  if (cards) msg.cards = cards;
-                } catch (err) {
-                  logAgent.error("System Agent card generation error", { error: err });
-                }
+          if (assistantMsg) {
+            let matchedToolCallId: string | null = null;
+            for (let i = assistantMsg.parts.length - 1; i >= 0; i--) {
+              const part = assistantMsg.parts[i];
+              if (
+                part.type === "tool_use" &&
+                part.toolName === toolName &&
+                part.status === "running"
+              ) {
+                part.status = isError ? "error" : "completed";
+                matchedToolCallId = part.toolCallId;
+                break;
               }
-              break;
             }
+            if (!isError && matchedToolCallId) {
+              try {
+                const cards = generateToolCards(toolName, event.result);
+                if (cards) {
+                  assistantMsg.parts.push({
+                    type: "tool_result",
+                    toolCallId: matchedToolCallId,
+                    cards,
+                  });
+                }
+              } catch (err) {
+                logAgent.error("System Agent card generation error", { error: err });
+              }
+            }
+            // Push empty text part for next text stream
+            assistantMsg.parts.push({ type: "text", content: "" });
+            this.saLastStreamedText = "";
           }
           this.sendEvolutionLabUpdate(send);
         } else if (event.type === "agent_end") {
           this.systemAgentStreaming = false;
+          this.saCurrentAssistantMsgId = null;
+          this.saLastStreamedText = "";
           this.sendEvolutionLabUpdate(send);
         }
       });
@@ -1963,7 +2425,11 @@ export class GatewaySession {
       }
 
       const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-      this.systemAgentChatMessages.push({ role: "assistant", content: errorContent });
+      this.systemAgentChatMessages.push({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", content: errorContent }],
+      });
       this.persistMessage("system-agent", {
         timestamp: Date.now(),
         role: "assistant",
@@ -1986,9 +2452,20 @@ export class GatewaySession {
       // Stop PHA Agent streaming
       if (this.isStreaming && this.agent) {
         this.agent.abort();
-        // Save partial response if any
-        if (this.streamingContent.trim()) {
-          this.chatMessages.push({ role: "assistant", content: this.streamingContent });
+        // Save partial response if any — finalize the current assistant message
+        if (this.streamingContent.trim() && this.currentAssistantMsgId) {
+          // The assistant message is already in chatMessages with parts; just persist text
+          this.persistMessage("chat", {
+            timestamp: Date.now(),
+            role: "assistant",
+            content: this.streamingContent,
+          });
+        } else if (this.streamingContent.trim()) {
+          this.chatMessages.push({
+            id: crypto.randomUUID(),
+            role: "assistant",
+            parts: [{ type: "text", content: this.streamingContent }],
+          });
           this.persistMessage("chat", {
             timestamp: Date.now(),
             role: "assistant",
@@ -1997,6 +2474,8 @@ export class GatewaySession {
         }
         this.isStreaming = false;
         this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
         this.sendChatUpdate(send);
       }
     } else if (action === "sa_stop_generation") {
@@ -2005,18 +2484,29 @@ export class GatewaySession {
         this.systemAgent.abort();
         // Save partial response if any
         if (this.systemAgentStreamingContent.trim()) {
-          this.systemAgentChatMessages.push({
-            role: "assistant",
-            content: this.systemAgentStreamingContent,
-          });
-          this.persistMessage("system-agent", {
-            timestamp: Date.now(),
-            role: "assistant",
-            content: this.systemAgentStreamingContent,
-          });
+          if (this.saCurrentAssistantMsgId) {
+            this.persistMessage("system-agent", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: this.systemAgentStreamingContent,
+            });
+          } else {
+            this.systemAgentChatMessages.push({
+              id: crypto.randomUUID(),
+              role: "assistant",
+              parts: [{ type: "text", content: this.systemAgentStreamingContent }],
+            });
+            this.persistMessage("system-agent", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: this.systemAgentStreamingContent,
+            });
+          }
         }
         this.systemAgentStreaming = false;
         this.systemAgentStreamingContent = "";
+        this.saCurrentAssistantMsgId = null;
+        this.saLastStreamedText = "";
         this.sendEvolutionLabUpdate(send);
       }
     } else if (action.startsWith("navigate:")) {
@@ -2369,6 +2859,9 @@ export class GatewaySession {
       } else if (this.currentView === "evolution") {
         this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
         this.sendEvolutionLabUpdate(send);
+      } else if (this.currentView === "settings/logs") {
+        this.logsTab = payload.tab as "system" | "llm";
+        await this.handleNavigate("settings/logs", send);
       } else {
         type EvolutionTab =
           | "overview"
@@ -2861,6 +3354,33 @@ export class GatewaySession {
     } else if (action === "logs_refresh") {
       await this.handleNavigate("settings/logs", send);
     }
+    // LLM log filter actions
+    else if (action === "llm_filter_provider") {
+      this.llmProviderFilter = payload?.value ? String(payload.value) : undefined;
+      this.llmPage = 0;
+      this.llmSelectedId = undefined;
+      await this.handleNavigate("settings/logs", send);
+    } else if (action === "llm_filter_model") {
+      this.llmModelFilter = payload?.value ? String(payload.value) : undefined;
+      this.llmPage = 0;
+      this.llmSelectedId = undefined;
+      await this.handleNavigate("settings/logs", send);
+    }
+    // LLM call detail expand
+    else if (action === "llm_call_detail") {
+      const clickedId = (payload?.row as Record<string, unknown> | undefined)?.id as
+        | number
+        | undefined;
+      // Toggle: click same row again to collapse
+      this.llmSelectedId = this.llmSelectedId === clickedId ? undefined : clickedId;
+      await this.handleNavigate("settings/logs", send);
+    }
+    // LLM pagination
+    else if (action === "llm_page_change") {
+      this.llmPage = Number(payload?.page) || 0;
+      this.llmSelectedId = undefined;
+      await this.handleNavigate("settings/logs", send);
+    }
     // Settings actions
     else if (
       action === "settings_save_llm" ||
@@ -2870,7 +3390,31 @@ export class GatewaySession {
       action === "settings_save_tui" ||
       action === "settings_save_embedding" ||
       action === "settings_save_benchmark" ||
-      action === "settings_save_benchmark_models"
+      action === "settings_save_benchmark_v2" ||
+      action === "settings_save_benchmark_v3" ||
+      action === "settings_save_benchmark_models" ||
+      action === "settings_save_benchmark_models_v2" ||
+      action === "settings_save_mcp" ||
+      action === "settings_save_mcp_chrome" ||
+      action === "settings_save_mcp_remote" ||
+      action === "settings_save_plugins" ||
+      action === "settings_save_plugins_v2" ||
+      action === "settings_save_judge" ||
+      action === "settings_save_model_repository" ||
+      action === "settings_save_model_assignments" ||
+      action === "settings_provider_add" ||
+      action === "settings_provider_delete" ||
+      action === "settings_provider_model_add" ||
+      action === "settings_provider_model_delete" ||
+      action === "settings_bm_add" ||
+      action === "settings_bm_delete" ||
+      action === "settings_mcp_add" ||
+      action === "settings_mcp_delete" ||
+      action === "settings_save_scopes" ||
+      action === "settings_scope_add" ||
+      action === "settings_scope_delete" ||
+      action === "settings_copy_config" ||
+      action === "settings_download_config"
     ) {
       try {
         const config = loadConfig();
@@ -2919,25 +3463,188 @@ export class GatewaySession {
           if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
           if (formData.applyEngine)
             config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+          // Sync embedding to new format
+          syncEmbeddingToNewFormat(config, formData);
         } else if (action === "settings_save_embedding") {
           if (!config.embedding) config.embedding = {};
           if (formData.embeddingEnabled !== undefined)
             config.embedding.enabled = formData.embeddingEnabled === "true";
           if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
+          // Sync embedding to new format
+          syncEmbeddingToNewFormat(config, formData);
         } else if (action === "settings_save_benchmark") {
           if (!config.benchmark) config.benchmark = {};
           if (formData.benchmarkConcurrency !== undefined)
             config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
           if (formData.applyEngine)
             config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
-          if (!config.judgeModel)
-            config.judgeModel = { provider: config.llm.provider, modelId: "" };
-          if (formData.judgeProvider)
-            config.judgeModel.provider = formData.judgeProvider as LLMProvider;
-          if (formData.judgeModelId !== undefined)
-            config.judgeModel.modelId = String(formData.judgeModelId);
+          // Ensure judgeModel is an object for settings_save_benchmark
+          if (!config.judgeModel || typeof config.judgeModel === "string")
+            config.judgeModel = {
+              provider: config.llm.provider,
+              modelId: "",
+            } as BenchmarkModelConfig;
+          const jmBench = config.judgeModel as BenchmarkModelConfig;
+          if (formData.judgeProvider) jmBench.provider = formData.judgeProvider as LLMProvider;
+          if (formData.judgeModelId !== undefined) jmBench.modelId = String(formData.judgeModelId);
           if (formData.judgeLabel !== undefined)
-            config.judgeModel.label = String(formData.judgeLabel) || undefined;
+            jmBench.label = String(formData.judgeLabel) || undefined;
+          config.judgeModel = jmBench;
+        } else if (action === "settings_save_benchmark_v2") {
+          // New: only concurrency + applyEngine
+          if (!config.benchmark) config.benchmark = {};
+          if (formData.benchmarkConcurrency !== undefined)
+            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+        } else if (action === "settings_save_benchmark_v3") {
+          // Benchmark v3: concurrency + applyEngine + model refs from checkboxes
+          if (!config.benchmark) config.benchmark = {};
+          if (formData.benchmarkConcurrency !== undefined)
+            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+          // Collect selected benchmark model refs from bm_ref__* fields
+          const selectedRefs: string[] = [];
+          if (formData) {
+            for (const [k, v] of Object.entries(formData)) {
+              if (k.startsWith("bm_ref__") && v === "true") {
+                selectedRefs.push(k.replace("bm_ref__", ""));
+              }
+            }
+          }
+          config.benchmark.models = selectedRefs;
+        } else if (action === "settings_save_model_repository") {
+          // Parse mp__<key>__* fields to rebuild models.providers
+          if (!config.models) config.models = { providers: {} };
+          const newProviders: Record<
+            string,
+            {
+              baseUrl?: string;
+              apiKey?: string;
+              models: Array<{ name: string; model: string; label?: string }>;
+            }
+          > = {};
+          if (formData) {
+            for (const [k, v] of Object.entries(formData)) {
+              // mp__<provider>__baseUrl or mp__<provider>__apiKey
+              const provMatch = k.match(/^mp__(.+?)__(?:baseUrl|apiKey)$/);
+              if (provMatch) {
+                const provKey = provMatch[1];
+                if (!newProviders[provKey]) newProviders[provKey] = { models: [] };
+                if (k.endsWith("__baseUrl")) {
+                  newProviders[provKey].baseUrl = String(v) || undefined;
+                } else if (k.endsWith("__apiKey")) {
+                  const val = String(v);
+                  if (val && val !== "••••••••") {
+                    newProviders[provKey].apiKey = val;
+                  } else if (config.models.providers?.[provKey]?.apiKey) {
+                    // Preserve existing API key if masked
+                    newProviders[provKey].apiKey = config.models.providers[provKey].apiKey;
+                  }
+                }
+              }
+              // mp__<provider>__m__<idx>__name/model/label
+              const modelMatch = k.match(/^mp__(.+?)__m__(\d+)__(.+)$/);
+              if (modelMatch) {
+                const [, provKey, idxStr, field] = modelMatch;
+                if (!newProviders[provKey]) newProviders[provKey] = { models: [] };
+                const idx = parseInt(idxStr, 10);
+                while (newProviders[provKey].models.length <= idx) {
+                  newProviders[provKey].models.push({ name: "", model: "" });
+                }
+                if (field === "name") newProviders[provKey].models[idx].name = String(v);
+                else if (field === "model") newProviders[provKey].models[idx].model = String(v);
+                else if (field === "label")
+                  newProviders[provKey].models[idx].label = String(v) || undefined;
+              }
+            }
+          }
+          // Preserve providers that weren't in the form (shouldn't happen, but safe)
+          for (const [pk, pv] of Object.entries(config.models.providers || {})) {
+            if (!newProviders[pk]) {
+              newProviders[pk] = pv as any;
+            }
+          }
+          config.models.providers = newProviders;
+          // Sync llm config for backward compat
+          const phaRef = config.orchestrator?.pha;
+          if (phaRef) {
+            const parts = phaRef.split("/");
+            if (parts.length >= 2) {
+              const agentProvider = parts[0];
+              const agentProv = newProviders[agentProvider];
+              if (agentProv) {
+                config.llm.provider = agentProvider as LLMProvider;
+                if (agentProv.apiKey) config.llm.apiKey = agentProv.apiKey;
+                if (agentProv.baseUrl) config.llm.baseUrl = agentProv.baseUrl;
+              }
+            }
+          }
+        } else if (action === "settings_save_model_assignments") {
+          // Save model assignments to orchestrator
+          if (!config.orchestrator) config.orchestrator = {};
+          if (formData.orchestratorPha !== undefined)
+            config.orchestrator.pha = String(formData.orchestratorPha) || undefined;
+          if (formData.orchestratorSa !== undefined)
+            config.orchestrator.sa = String(formData.orchestratorSa) || undefined;
+          if (formData.orchestratorJudge !== undefined)
+            config.orchestrator.judge = String(formData.orchestratorJudge) || undefined;
+          if (formData.orchestratorEmbedding !== undefined)
+            config.orchestrator.embedding = String(formData.orchestratorEmbedding) || undefined;
+          // Sync llm config for backward compat when agent model changes
+          if (config.orchestrator.pha) {
+            const parts = config.orchestrator.pha.split("/");
+            if (parts.length >= 2 && config.models?.providers) {
+              const agentProvider = parts[0];
+              const agentName = parts.slice(1).join("/");
+              const agentProv = config.models.providers[agentProvider];
+              if (agentProv) {
+                config.llm.provider = agentProvider as LLMProvider;
+                if (agentProv.apiKey) config.llm.apiKey = agentProv.apiKey;
+                if (agentProv.baseUrl) config.llm.baseUrl = agentProv.baseUrl;
+                const model = agentProv.models?.find((m) => m.name === agentName);
+                if (model) config.llm.modelId = model.model;
+              }
+            }
+          }
+        } else if (action === "settings_provider_add") {
+          // Add a new empty provider
+          if (!config.models) config.models = { providers: {} };
+          const newKey = `provider-${Date.now()}`;
+          config.models.providers[newKey] = { models: [] };
+        } else if (action === "settings_provider_delete") {
+          // Delete a provider by key
+          const key = formData?.provider as string;
+          if (key && config.models?.providers) {
+            delete config.models.providers[key];
+          }
+        } else if (action === "settings_provider_model_add") {
+          // Add an empty model to a provider
+          const provKey = formData?.provider as string;
+          if (provKey && config.models?.providers?.[provKey]) {
+            config.models.providers[provKey].models.push({ name: "", model: "" });
+          }
+        } else if (action === "settings_provider_model_delete") {
+          // Delete a model from a provider by index
+          const provKey = formData?.provider as string;
+          const idx = Number(formData?.index ?? -1);
+          if (provKey && idx >= 0 && config.models?.providers?.[provKey]) {
+            config.models.providers[provKey].models.splice(idx, 1);
+          }
+        } else if (action === "settings_save_judge") {
+          // Judge model as independent card
+          if (!config.judgeModel || typeof config.judgeModel === "string")
+            config.judgeModel = {
+              provider: config.llm.provider,
+              modelId: "",
+            } as BenchmarkModelConfig;
+          const jmJudge = config.judgeModel as BenchmarkModelConfig;
+          if (formData.judgeProvider) jmJudge.provider = formData.judgeProvider as LLMProvider;
+          if (formData.judgeModelId !== undefined) jmJudge.modelId = String(formData.judgeModelId);
+          if (formData.judgeLabel !== undefined)
+            jmJudge.label = String(formData.judgeLabel) || undefined;
+          config.judgeModel = jmJudge;
         } else if (action === "settings_save_benchmark_models") {
           try {
             const parsed = JSON.parse(String(formData.benchmarkModelsJson || "{}"));
@@ -2945,6 +3652,163 @@ export class GatewaySession {
           } catch {
             // Invalid JSON — keep existing
           }
+        } else if (action === "settings_save_benchmark_models_v2") {
+          // Parse bm__*__* prefixed fields from page form data
+          // The button sends no form data — we need to re-read from current page state
+          // Actually, the button action payload is empty. We need to collect form values
+          // from the page. Since buttons don't submit forms, we handle via a page re-render
+          // approach: read current config and apply. But we don't have form data here.
+          // Solution: make the save button part of a form, or handle on re-render.
+          // For now, this is handled via the page form data collected from all bm__ inputs.
+          const models: Record<string, { provider: string; modelId: string; label?: string }> = {};
+          if (formData) {
+            for (const [k, v] of Object.entries(formData)) {
+              const match = k.match(/^bm__(.+?)__(.+)$/);
+              if (match) {
+                const [, modelKey, field] = match;
+                if (!models[modelKey]) models[modelKey] = { provider: "", modelId: "" };
+                (models[modelKey] as any)[field] = String(v);
+              }
+            }
+          }
+          if (Object.keys(models).length > 0) {
+            config.benchmarkModels = models as any;
+          }
+        } else if (action === "settings_bm_add") {
+          // Add a default benchmark model entry
+          if (!config.benchmarkModels) config.benchmarkModels = {};
+          const newKey = `model-${Date.now()}`;
+          config.benchmarkModels[newKey] = {
+            provider: config.llm.provider,
+            modelId: "",
+            label: "New Model",
+          };
+        } else if (action === "settings_bm_delete") {
+          // Delete a benchmark model by key
+          const key = formData?.key as string;
+          if (key && config.benchmarkModels) {
+            delete config.benchmarkModels[key];
+          }
+        } else if (action === "settings_save_mcp") {
+          try {
+            const parsed = JSON.parse(String(formData.mcpJson || "{}"));
+            config.mcp = parsed;
+          } catch {
+            // Invalid JSON — keep existing
+          }
+        } else if (action === "settings_save_mcp_chrome") {
+          // Save Chrome DevTools MCP config
+          if (!config.mcp) config.mcp = {};
+          if (!config.mcp.chromeMcp) config.mcp.chromeMcp = {};
+          if (formData.chromeMcpCommand !== undefined)
+            config.mcp.chromeMcp.command = String(formData.chromeMcpCommand) || undefined;
+          if (formData.chromeMcpArgs !== undefined) {
+            const argsStr = String(formData.chromeMcpArgs || "");
+            config.mcp.chromeMcp.args = argsStr
+              ? argsStr
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : undefined;
+          }
+          if (formData.chromeMcpBrowserUrl !== undefined)
+            config.mcp.chromeMcp.browserUrl = String(formData.chromeMcpBrowserUrl) || undefined;
+          if (formData.chromeMcpWsEndpoint !== undefined)
+            config.mcp.chromeMcp.wsEndpoint = String(formData.chromeMcpWsEndpoint) || undefined;
+        } else if (action === "settings_save_mcp_remote") {
+          // Parse mcp_remote__*__* prefixed fields
+          const servers: Record<
+            string,
+            { url: string; apiKey?: string; name?: string; enabled?: boolean }
+          > = {};
+          if (formData) {
+            for (const [k, v] of Object.entries(formData)) {
+              const match = k.match(/^mcp_remote__(.+?)__(.+)$/);
+              if (match) {
+                const [, srvKey, field] = match;
+                if (!servers[srvKey]) servers[srvKey] = { url: "" };
+                if (field === "enabled") {
+                  (servers[srvKey] as any)[field] = v === "true";
+                } else {
+                  (servers[srvKey] as any)[field] = String(v);
+                }
+              }
+            }
+          }
+          if (!config.mcp) config.mcp = {};
+          if (Object.keys(servers).length > 0) {
+            config.mcp.remoteServers = servers;
+          }
+        } else if (action === "settings_mcp_add") {
+          // Add a default remote MCP server entry
+          if (!config.mcp) config.mcp = {};
+          if (!config.mcp.remoteServers) config.mcp.remoteServers = {};
+          const newKey = `server-${Date.now()}`;
+          config.mcp.remoteServers[newKey] = {
+            url: "",
+            name: "New Server",
+            enabled: true,
+          };
+        } else if (action === "settings_mcp_delete") {
+          // Delete a remote MCP server by key
+          const key = formData?.key as string;
+          if (key && config.mcp?.remoteServers) {
+            delete config.mcp.remoteServers[key];
+          }
+        } else if (action === "settings_save_plugins") {
+          try {
+            const parsed = JSON.parse(String(formData.pluginsJson || "{}"));
+            config.plugins = parsed;
+          } catch {
+            // Invalid JSON — keep existing
+          }
+        } else if (action === "settings_save_plugins_v2") {
+          // Structured plugins save
+          if (!config.plugins) config.plugins = {};
+          if (formData.pluginEnabled !== undefined)
+            config.plugins.enabled = formData.pluginEnabled === "true";
+          if (formData.pluginPaths !== undefined) {
+            const pathsStr = String(formData.pluginPaths || "");
+            config.plugins.paths = pathsStr
+              ? pathsStr
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : [];
+          }
+        } else if (action === "settings_save_scopes") {
+          // Parse scope__N fields from form
+          if (!config.dataSources.huawei) config.dataSources.huawei = {};
+          const scopes: string[] = [];
+          if (formData) {
+            const scopeKeys = Object.keys(formData)
+              .filter((k) => k.startsWith("scope__"))
+              .sort((a, b) => {
+                const ai = parseInt(a.split("__")[1], 10);
+                const bi = parseInt(b.split("__")[1], 10);
+                return ai - bi;
+              });
+            for (const k of scopeKeys) {
+              const v = String(formData[k] || "").trim();
+              if (v) scopes.push(v);
+            }
+          }
+          config.dataSources.huawei.scopes = scopes;
+        } else if (action === "settings_scope_add") {
+          // Add an empty scope entry
+          if (!config.dataSources.huawei) config.dataSources.huawei = {};
+          if (!config.dataSources.huawei.scopes) config.dataSources.huawei.scopes = [];
+          config.dataSources.huawei.scopes.push("");
+        } else if (action === "settings_scope_delete") {
+          // Delete scope by index
+          const idx = Number(formData?.index ?? -1);
+          if (idx >= 0 && config.dataSources.huawei?.scopes) {
+            config.dataSources.huawei.scopes.splice(idx, 1);
+          }
+        } else if (action === "settings_copy_config" || action === "settings_download_config") {
+          // Handled on frontend — just send toast
+          send(generateToast(t("settings.saved"), "success"));
+          return;
         }
 
         saveConfig(config);
@@ -3483,9 +4347,6 @@ export class GatewaySession {
         chatMessages: this.systemAgentChatMessages,
         streaming: this.systemAgentStreaming,
         streamingContent: this.systemAgentStreamingContent,
-        quickReplies: this.systemAgentStreaming
-          ? undefined
-          : detectQuickReplies(this.systemAgentChatMessages),
       });
       activeSend({
         type: "a2ui",
@@ -3791,41 +4652,37 @@ export class GatewaySession {
     const AGENT_TIMEOUT_MS = 120_000; // 2 minutes per test case
 
     try {
-      // Create target agent: use override model or default session agent
-      let agent;
-      if (modelConfig?.apiKey) {
-        const { MockDataSource } = await import("../data-sources/mock.js");
-        agent = await createPHAAgent({
-          apiKey: modelConfig.apiKey,
-          provider: modelConfig.provider as any,
-          modelId: modelConfig.modelId,
-          baseUrl: modelConfig.baseUrl,
-          dataSource: new MockDataSource(),
-        });
-      } else {
-        agent = await this.getAgent();
-      }
+      // Resolve agent config: use override model or default session config
+      const agentApiKey = modelConfig?.apiKey || this.config.apiKey;
+      const agentProvider = (modelConfig?.provider || this.config.provider) as any;
+      const agentModelId = modelConfig?.modelId || this.config.modelId;
+      const agentBaseUrl = modelConfig?.baseUrl || this.config.baseUrl;
 
-      // Create dedicated judge agent (separate from target)
+      // Resolve judge config
       const judgeConfig = getJudgeModel();
       const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
       const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
-      const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
-      const judgeAgent = await createPHAAgent({
-        apiKey: judgeApiKey,
-        provider: judgeConfig.provider as any,
-        modelId: judgeConfig.modelId,
-        baseUrl: judgeBaseUrl,
-        dataSource: new JudgeMockDS(),
-      });
 
       const runner = new BenchmarkRunner({
-        agentCall: async (query: string) => {
-          // Reset agent between test cases to avoid context accumulation
-          if (typeof agent.reset === "function") agent.reset();
+        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
+          // Create fresh agent per test case for concurrency safety
+          const { MockDataSource: AgentMockDS } = await import("../data-sources/mock.js");
+          const testAgent = await createPHAAgent({
+            apiKey: agentApiKey,
+            provider: agentProvider,
+            modelId: agentModelId,
+            baseUrl: agentBaseUrl,
+            dataSource: new AgentMockDS(),
+          });
+          const enriched = mockContext
+            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
+            : query;
           const result = await Promise.race([
-            agent.chatAndWait(query).then((response: string) => ({ response })),
-            new Promise<{ response: string }>((_, reject) =>
+            testAgent.chatAndWaitWithTools(enriched),
+            new Promise<{
+              response: string;
+              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+            }>((_, reject) =>
               setTimeout(
                 () => reject(new Error("Agent call timed out after 2 minutes")),
                 AGENT_TIMEOUT_MS
@@ -3835,8 +4692,15 @@ export class GatewaySession {
           return result;
         },
         llmCall: async (prompt: string) => {
-          // Use dedicated judge agent for evaluation
-          if (typeof judgeAgent.reset === "function") judgeAgent.reset();
+          // Create fresh judge agent per evaluation for concurrency safety
+          const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+          const judgeAgent = await createPHAAgent({
+            apiKey: judgeApiKey,
+            provider: judgeConfig.provider as any,
+            modelId: judgeConfig.modelId,
+            baseUrl: judgeBaseUrl,
+            dataSource: new JudgeMockDS(),
+          });
           const result = await Promise.race([
             judgeAgent.chatAndWait(prompt),
             new Promise<string>((_, reject) =>
@@ -3942,11 +4806,17 @@ export class GatewaySession {
       const result = await diagnose({
         profile: "quick",
         runnerConfig: {
-          agentCall: async (query: string) => {
+          agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
             if (typeof agent.reset === "function") agent.reset();
+            const enriched = mockContext
+              ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
+              : query;
             const res = await Promise.race([
-              agent.chatAndWait(query).then((response: string) => ({ response })),
-              new Promise<{ response: string }>((_, reject) =>
+              agent.chatAndWaitWithTools(enriched),
+              new Promise<{
+                response: string;
+                toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+              }>((_, reject) =>
                 setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
               ),
             ]);
@@ -4009,132 +4879,306 @@ export class GatewaySession {
     }
   }
 
+  /**
+   * Get or create the current assistant message in chatMessages.
+   */
+  private getOrCreateAssistantMsg(): PartsChatMessage {
+    if (this.currentAssistantMsgId) {
+      const existing = this.chatMessages.find((m) => m.id === this.currentAssistantMsgId);
+      if (existing) return existing;
+    }
+    const msg: PartsChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      parts: [],
+    };
+    this.chatMessages.push(msg);
+    this.currentAssistantMsgId = msg.id;
+    return msg;
+  }
+
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
-    const activeSend = this.getSend(send);
+    // In SSE mode, use the provided send directly (don't redirect to WebSocket)
+    const activeSend = this._sseMode ? send : this.getSend(send);
+
     switch (event.type) {
-      case "message_start":
-      case "message_update":
-        // Stream partial content
-        if (event.message.role === "assistant") {
-          const content = event.message.content;
-          let text = "";
-          for (const block of content) {
-            if (block.type === "text") {
-              text += block.text;
-            }
+      case "message_start": {
+        if (event.message.role !== "assistant") break;
+
+        const content = event.message.content || [];
+        let text = "";
+        for (const block of content) {
+          if (block.type === "text") text += block.text;
+        }
+
+        // Create new run + assistant message
+        this.currentRunId = crypto.randomUUID();
+        const assistantMsg = this.getOrCreateAssistantMsg();
+
+        // Push initial text part
+        if (text) {
+          assistantMsg.parts.push({ type: "text", content: text });
+        }
+
+        this.streamingContent = text;
+        this.lastStreamedText = text;
+
+        // AG-UI events
+        activeSend({
+          type: "RunStarted",
+          threadId: this.sessionId,
+          runId: this.currentRunId,
+        } satisfies AGUIEvent);
+        activeSend({
+          type: "TextMessageStart",
+          messageId: assistantMsg.id,
+          role: "assistant",
+        } satisfies AGUIEvent);
+        if (text) {
+          activeSend({
+            type: "TextMessageContent",
+            messageId: assistantMsg.id,
+            delta: text,
+          } satisfies AGUIEvent);
+        }
+
+        // Legacy compat
+        activeSend({ type: "agent_text", content: text, is_final: false });
+
+        this.sendChatUpdate(send);
+        break;
+      }
+
+      case "message_update": {
+        if (event.message.role !== "assistant") break;
+
+        const content = event.message.content || [];
+        let text = "";
+        for (const block of content) {
+          if (block.type === "text") text += block.text;
+        }
+
+        this.streamingContent = text;
+
+        // Update the last text part in the assistant message
+        const assistantMsg = this.getOrCreateAssistantMsg();
+        const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+        if (lastPart && lastPart.type === "text") {
+          lastPart.content = text;
+        } else if (text) {
+          assistantMsg.parts.push({ type: "text", content: text });
+        }
+
+        // AG-UI delta
+        const delta = text.slice(this.lastStreamedText.length);
+        if (delta) {
+          activeSend({
+            type: "TextMessageContent",
+            messageId: assistantMsg.id,
+            delta,
+          } satisfies AGUIEvent);
+        }
+        this.lastStreamedText = text;
+
+        // Legacy compat
+        activeSend({ type: "agent_text", content: text, is_final: false });
+        break;
+      }
+
+      case "message_end": {
+        if (event.message.role !== "assistant") break;
+
+        const content = event.message.content || [];
+        let text = "";
+        for (const block of content) {
+          if (block.type === "text") text += block.text;
+        }
+
+        const assistantMsg = this.getOrCreateAssistantMsg();
+
+        // Check for error responses (API errors, region blocks, etc.)
+        if (event.message.stopReason === "error") {
+          const errorMsg = event.message.errorMessage || "Unknown error occurred";
+          log.error("LLM error in streaming path", {
+            errorMessage: errorMsg,
+            stopReason: event.message.stopReason,
+          });
+          const errContent = text.trim() ? `${text}\n\n⚠️ ${errorMsg}` : `⚠️ ${errorMsg}`;
+
+          // Replace/add text part with error
+          const lastTextIdx = findLastTextIdx(assistantMsg.parts);
+          if (lastTextIdx >= 0) {
+            (assistantMsg.parts[lastTextIdx] as { type: "text"; content: string }).content =
+              errContent;
+          } else {
+            assistantMsg.parts.push({ type: "text", content: errContent });
           }
-          this.streamingContent = text;
+
+          this.persistMessage("chat", {
+            timestamp: Date.now(),
+            role: "assistant",
+            content: errContent,
+          });
+          this.isStreaming = false;
+          this.streamingContent = "";
+          this.currentAssistantMsgId = null;
+          this.lastStreamedText = "";
+
+          // AG-UI events
+          activeSend({ type: "TextMessageEnd", messageId: assistantMsg.id } satisfies AGUIEvent);
+          if (this.currentRunId) {
+            activeSend({
+              type: "RunFinished",
+              threadId: this.sessionId,
+              runId: this.currentRunId,
+            } satisfies AGUIEvent);
+          }
+
           this.sendChatUpdate(send);
-          activeSend({ type: "agent_text", content: text, is_final: false });
+          activeSend({ type: "agent_text", content: errorMsg, is_final: true });
+          break;
+        }
+
+        // Finalize: ensure last text part has final text
+        if (text.trim()) {
+          const lastTextIdx = findLastTextIdx(assistantMsg.parts);
+          if (lastTextIdx >= 0) {
+            (assistantMsg.parts[lastTextIdx] as { type: "text"; content: string }).content = text;
+          } else {
+            assistantMsg.parts.push({ type: "text", content: text });
+          }
+
+          this.persistMessage("chat", {
+            timestamp: Date.now(),
+            role: "assistant",
+            content: text,
+          });
+        }
+
+        this.isStreaming = false;
+        this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
+
+        // AG-UI events
+        activeSend({ type: "TextMessageEnd", messageId: assistantMsg.id } satisfies AGUIEvent);
+        if (this.currentRunId) {
+          activeSend({
+            type: "RunFinished",
+            threadId: this.sessionId,
+            runId: this.currentRunId,
+          } satisfies AGUIEvent);
+        }
+
+        this.sendChatUpdate(send);
+        if (text.trim()) {
+          activeSend({ type: "agent_text", content: text, is_final: true });
         }
         break;
-
-      case "message_end":
-        if (event.message.role === "assistant") {
-          const content = event.message.content;
-          let text = "";
-
-          for (const block of content) {
-            if (block.type === "text") {
-              text += block.text;
-            }
-          }
-
-          // Check for error responses (API errors, region blocks, etc.)
-          if (!text.trim() && event.message.stopReason === "error") {
-            const errorMsg = event.message.errorMessage || "Unknown error occurred";
-            const errContent = `⚠️ ${errorMsg}`;
-            this.chatMessages.push({ role: "assistant", content: errContent });
-            this.persistMessage("chat", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: errContent,
-            });
-            this.isStreaming = false;
-            this.streamingContent = "";
-            this.pendingCards = [];
-            this.sendChatUpdate(send);
-            activeSend({ type: "agent_text", content: errorMsg, is_final: true });
-            break;
-          }
-
-          // Update UI if there's text content
-          if (text.trim()) {
-            // Attach any pending tool cards to this assistant message
-            const cards = mergePendingCards(this.pendingCards);
-            this.pendingCards = [];
-
-            this.chatMessages.push({
-              role: "assistant",
-              content: text,
-              ...(cards ? { cards } : {}),
-            });
-            this.persistMessage("chat", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: text,
-            });
-            this.isStreaming = false;
-            this.streamingContent = "";
-            this.sendChatUpdate(send);
-            activeSend({ type: "agent_text", content: text, is_final: true });
-          }
-        }
-        break;
+      }
 
       case "tool_execution_start": {
-        const memoryToolLabels: Record<string, string> = {
-          memory_search: "🔍 搜索记忆...",
-          memory_save: "📝 保存到记忆...",
-          daily_log: "📝 记录到今日日志...",
-        };
-        const toolMsg = memoryToolLabels[event.toolName] || `Using ${event.toolName}...`;
-        this.chatMessages.push({
-          role: "tool",
-          content: toolMsg,
+        const toolCallId = crypto.randomUUID();
+        const assistantMsg = this.getOrCreateAssistantMsg();
+
+        // Snapshot current streamed text as a text part before tool_use
+        // (only if there's uncommitted text that isn't already the last part)
+        const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+        if (lastPart && lastPart.type === "text" && !lastPart.content.trim()) {
+          // Remove empty trailing text part
+          assistantMsg.parts.pop();
+        }
+
+        // Add tool_use part
+        assistantMsg.parts.push({
+          type: "tool_use",
+          toolCallId,
           toolName: event.toolName,
-          toolStatus: "running",
+          status: "running",
         });
-        this.persistMessage("chat", {
-          timestamp: Date.now(),
-          role: "tool",
-          content: toolMsg,
-          toolName: event.toolName,
-        });
-        this.sendChatUpdate(send);
+
+        // Store toolCallId on event for matching in tool_execution_end
+        event._toolCallId = toolCallId;
+
+        // AG-UI events
+        activeSend({
+          type: "ToolCallStart",
+          toolCallId,
+          toolCallName: event.toolName,
+          parentMessageId: assistantMsg.id,
+        } satisfies AGUIEvent);
+
+        // Legacy compat
         activeSend({ type: "tool_call", tool: event.toolName });
+
+        this.sendChatUpdate(send);
         break;
       }
 
       case "tool_execution_end": {
-        // Update the last matching running tool message's status
-        for (let i = this.chatMessages.length - 1; i >= 0; i--) {
-          const msg = this.chatMessages[i] as any;
-          if (
-            msg.role === "tool" &&
-            msg.toolName === event.toolName &&
-            msg.toolStatus === "running"
-          ) {
-            msg.toolStatus = event.isError ? "error" : "completed";
-            break;
-          }
-        }
-        if (!event.isError) {
-          try {
-            const cards = generateToolCards(event.toolName, event.result);
-            if (cards) {
-              this.pendingCards.push(cards);
+        const assistantMsg = this.currentAssistantMsgId
+          ? this.chatMessages.find((m) => m.id === this.currentAssistantMsgId)
+          : null;
+
+        if (assistantMsg) {
+          // Find the last running tool_use part matching this tool name
+          let matchedToolCallId: string | null = null;
+          for (let i = assistantMsg.parts.length - 1; i >= 0; i--) {
+            const part = assistantMsg.parts[i];
+            if (
+              part.type === "tool_use" &&
+              part.toolName === event.toolName &&
+              part.status === "running"
+            ) {
+              part.status = event.isError ? "error" : "completed";
+              matchedToolCallId = part.toolCallId;
+              break;
             }
-          } catch (err) {
-            log.error("Failed to generate cards", { tool: event.toolName, error: err });
           }
+
+          // Generate and inline tool_result cards
+          if (!event.isError && matchedToolCallId) {
+            try {
+              const cards = generateToolCards(event.toolName, event.result);
+              if (cards) {
+                assistantMsg.parts.push({
+                  type: "tool_result",
+                  toolCallId: matchedToolCallId,
+                  cards,
+                });
+              }
+            } catch (err) {
+              log.error("Failed to generate cards", { tool: event.toolName, error: err });
+            }
+          }
+
+          // AG-UI events
+          if (matchedToolCallId) {
+            activeSend({ type: "ToolCallEnd", toolCallId: matchedToolCallId } satisfies AGUIEvent);
+            const resultCards = !event.isError
+              ? generateToolCards(event.toolName, event.result)
+              : null;
+            activeSend({
+              type: "ToolCallResult",
+              messageId: assistantMsg.id,
+              toolCallId: matchedToolCallId,
+              ...(resultCards ? { cards: resultCards } : {}),
+            } satisfies AGUIEvent);
+          }
+
+          // After tool finishes, push a new empty text part for the next text stream
+          assistantMsg.parts.push({ type: "text", content: "" });
+          this.lastStreamedText = "";
         }
+
         this.sendChatUpdate(send);
         break;
       }
 
       case "agent_end":
         this.isStreaming = false;
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
         this.sendChatUpdate(send);
         break;
     }
@@ -4209,8 +5253,63 @@ export async function startGateway(
 
   Bun.serve<WSData>({
     port,
+    idleTimeout: 255, // SSE streams need long-lived connections (max 255s)
     async fetch(req, server) {
       const url = new URL(req.url);
+
+      // AG-UI SSE endpoint
+      if (url.pathname === "/api/ag-ui" && req.method === "POST") {
+        try {
+          const body = (await req.json()) as {
+            thread_id?: string;
+            messages?: Array<{ role: string; content: string }>;
+          };
+          const threadId = body.thread_id;
+          const userMessages = body.messages || [];
+          const lastUserMsg = userMessages.filter((m) => m.role === "user").pop();
+          if (!lastUserMsg?.content) {
+            return new Response(JSON.stringify({ error: "No user message" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          // Find or create session by thread_id
+          const key = threadId || crypto.randomUUID();
+          let session = sessions.get(key);
+          if (!session) {
+            session = new GatewaySession(config, key);
+            sessions.set(key, session);
+          }
+
+          const { readable, writable } = new TransformStream<Uint8Array>();
+          const writer = writable.getWriter();
+          const encoder = new TextEncoder();
+
+          // Run chat SSE in background (non-blocking)
+          session.handleChatSSE(lastUserMsg.content, writer, encoder).catch(() => {
+            try {
+              writer.close();
+            } catch {
+              /* noop */
+            }
+          });
+
+          return new Response(readable, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: String(e) }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
 
       // Upgrade WebSocket connections
       if (url.pathname === "/ws") {

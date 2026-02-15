@@ -40,7 +40,6 @@ export type A2UIComponentType =
   | "score_gauge"
   | "status_badge"
   | "collapsible"
-  | "radar_chart"
   | "activity_rings"
   // Evolution Lab components
   | "git_timeline"
@@ -150,7 +149,7 @@ export interface ButtonComponent extends A2UIComponent {
   type: "button";
   label: string;
   action: string;
-  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger";
+  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger" | "accent";
   size?: "sm" | "md" | "lg";
   payload?: Record<string, unknown>;
   disabled?: boolean;
@@ -301,32 +300,6 @@ export interface CollapsibleComponent extends A2UIComponent {
   expanded?: boolean;
   icon?: string;
   children: string[];
-}
-
-// Radar Chart Component
-export interface RadarChartComponent extends A2UIComponent {
-  type: "radar_chart";
-  data: Array<{
-    label: string;
-    value: number;
-    maxValue: number;
-  }>;
-  size?: number;
-  showLabels?: boolean;
-  showValues?: boolean;
-  color?: string;
-  compareData?: Array<{
-    label: string;
-    value: number;
-    maxValue: number;
-  }>;
-  compareColor?: string;
-  /** N-series overlay mode. When present, `data`/`compareData` are ignored. */
-  multiSeries?: Array<{
-    label: string;
-    data: Array<{ label: string; value: number; maxValue: number }>;
-    color: string;
-  }>;
 }
 
 // Git Timeline Component
@@ -607,12 +580,6 @@ export class A2UIGenerator {
     return id;
   }
 
-  radarChart(data: RadarChartComponent["data"], opts: Partial<RadarChartComponent> = {}): string {
-    const id = this.nextId("radar");
-    this.components.set(id, { id, type: "radar_chart", data, ...opts });
-    return id;
-  }
-
   collapsible(title: string, children: string[], opts: Partial<CollapsibleComponent> = {}): string {
     const id = this.nextId("collapse");
     this.components.set(id, { id, type: "collapsible", title, children, ...opts });
@@ -704,4 +671,45 @@ export class A2UIGenerator {
     const message = this.build(rootId);
     return JSON.stringify(message);
   }
+}
+
+// ============================================================================
+// AG-UI Event Types (aligned with @ag-ui/core)
+// ============================================================================
+
+export type AGUIEvent =
+  | { type: "RunStarted"; threadId: string; runId: string }
+  | { type: "RunFinished"; threadId: string; runId: string }
+  | { type: "TextMessageStart"; messageId: string; role: "assistant" }
+  | { type: "TextMessageContent"; messageId: string; delta: string }
+  | { type: "TextMessageEnd"; messageId: string }
+  | { type: "ToolCallStart"; toolCallId: string; toolCallName: string; parentMessageId?: string }
+  | { type: "ToolCallEnd"; toolCallId: string }
+  | {
+      type: "ToolCallResult";
+      messageId: string;
+      toolCallId: string;
+      content?: string;
+      cards?: { components: unknown[]; root_id: string };
+    }
+  | { type: "Custom"; name: string; data: unknown };
+
+// ============================================================================
+// Parts Message Model
+// ============================================================================
+
+export type MessagePart =
+  | { type: "text"; content: string }
+  | {
+      type: "tool_use";
+      toolCallId: string;
+      toolName: string;
+      status: "running" | "completed" | "error";
+    }
+  | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
+
+export interface PartsChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  parts: MessagePart[];
 }

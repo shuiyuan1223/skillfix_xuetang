@@ -96,8 +96,6 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderMetric(comp, ctx);
     case "chart":
       return renderChart(comp, ctx);
-    case "radar_chart":
-      return renderRadarChart(comp, ctx);
     case "table":
     case "data_table":
       return renderTable(comp, ctx);
@@ -369,56 +367,6 @@ function renderChart(comp: A2UIComponent, ctx: RenderContext): string[] {
   return lines;
 }
 
-function renderRadarChart(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const multiSeries = comp.multiSeries as
-    | Array<{
-        label: string;
-        data: Array<{ label: string; value: number; maxValue: number }>;
-        color: string;
-      }>
-    | undefined;
-  const lines: string[] = [];
-
-  if (multiSeries && multiSeries.length > 0) {
-    // Multi-series: render as a comparison table
-    lines.push(indent(ctx, ansi.dim("[Radar Chart — Multi-Series]")));
-    // Header: dimension + each series name
-    const axisLabels = multiSeries[0].data.map((d) => d.label);
-    const seriesNames = multiSeries.map((s) => s.label);
-    const colWidth = 10;
-    const headerLine =
-      "  " +
-      padRight("Dimension", 18) +
-      seriesNames.map((n) => padRight(n.slice(0, colWidth), colWidth)).join(" ");
-    lines.push(indent(ctx, ansi.bold(headerLine)));
-    lines.push(indent(ctx, "  " + "─".repeat(18 + seriesNames.length * (colWidth + 1))));
-
-    for (let i = 0; i < axisLabels.length; i++) {
-      const label = axisLabels[i];
-      const vals = multiSeries.map((s) => {
-        const d = s.data[i];
-        const pct = d && d.maxValue > 0 ? Math.round((d.value / d.maxValue) * 100) : 0;
-        return padRight(`${pct}%`, colWidth);
-      });
-      lines.push(indent(ctx, `  ${padRight(label, 18)}${vals.join(" ")}`));
-    }
-    return lines;
-  }
-
-  // Single-series fallback
-  const data = (comp.data as Array<{ label: string; value: number; maxValue: number }>) || [];
-  lines.push(indent(ctx, ansi.dim("[Radar Chart]")));
-
-  for (const item of data) {
-    const pct = item.maxValue > 0 ? Math.round((item.value / item.maxValue) * 100) : 0;
-    const barLen = Math.round(pct / 5);
-    const bar = "█".repeat(barLen) + "░".repeat(20 - barLen);
-    lines.push(indent(ctx, `  ${padRight(item.label, 16)} ${ansi.cyan(bar)} ${pct}%`));
-  }
-
-  return lines;
-}
-
 function renderTable(comp: A2UIComponent, ctx: RenderContext): string[] {
   const columns = (comp.columns as Array<{ key: string; label: string }>) || [];
   const rows = (comp.rows as Record<string, unknown>[]) || [];
@@ -556,20 +504,40 @@ function renderNav(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderChatMessages(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const messages = (comp.messages as Array<{ role: string; content: string }>) || [];
+  const messages =
+    (comp.messages as Array<{
+      role: string;
+      content?: string;
+      parts?: Array<{ type: string; content?: string; toolName?: string; status?: string }>;
+    }>) || [];
   const streaming = comp.streaming as boolean | undefined;
   const streamingContent = comp.streamingContent as string | undefined;
   const lines: string[] = [];
 
   for (const msg of messages) {
     if (msg.role === "user") {
-      lines.push(indent(ctx, `${ansi.green("You")} ${ansi.dim("›")} ${msg.content}`));
+      const text = msg.parts?.[0]?.content || msg.content || "";
+      lines.push(indent(ctx, `${ansi.green("You")} ${ansi.dim("›")} ${text}`));
     } else if (msg.role === "assistant") {
       lines.push(indent(ctx, ansi.cyan("Assistant")));
-      // Wrap long content
-      lines.push(...wrapLines(msg.content, ctx));
+      if (msg.parts && msg.parts.length > 0) {
+        for (const part of msg.parts) {
+          if (part.type === "text" && part.content?.trim()) {
+            lines.push(...wrapLines(part.content, ctx));
+          } else if (part.type === "tool_use") {
+            const statusLabel =
+              part.status === "running" ? "..." : part.status === "error" ? "ERR" : "OK";
+            lines.push(indent(ctx, `  ${ansi.yellow("Tool")} ${part.toolName} [${statusLabel}]`));
+          } else if (part.type === "tool_result") {
+            lines.push(indent(ctx, ansi.dim("  [Card Results]")));
+          }
+        }
+      } else {
+        lines.push(...wrapLines(msg.content || "", ctx));
+      }
     } else if (msg.role === "tool") {
-      lines.push(indent(ctx, `${ansi.yellow("Tool")} ${ansi.dim("›")} ${msg.content}`));
+      // Legacy tool messages
+      lines.push(indent(ctx, `${ansi.yellow("Tool")} ${ansi.dim("›")} ${msg.content || ""}`));
     }
     lines.push("");
   }

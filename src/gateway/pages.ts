@@ -19,8 +19,18 @@ import {
 
 // Types for page data
 interface Message {
-  role: "user" | "assistant" | "tool";
-  content: string;
+  id?: string;
+  role: "user" | "assistant";
+  parts?: Array<{
+    type: "text" | "tool_use" | "tool_result";
+    content?: string;
+    toolCallId?: string;
+    toolName?: string;
+    status?: string;
+    cards?: { components: unknown[]; root_id: string };
+  }>;
+  // Backward compat
+  content?: string;
   cards?: {
     components: unknown[];
     root_id: string;
@@ -101,8 +111,8 @@ export function generateSidebar(activeView: string): A2UIMessage {
 export function generateChatPage(state: ChatState): A2UIMessage {
   const ui = new A2UIGenerator("main");
 
-  // Chat messages component
-  const messagesId = `chat_msgs_${Date.now()}`;
+  // Chat messages component (stable ID to avoid DOM remount on re-render)
+  const messagesId = "chat_msgs";
   ui.addComponent(messagesId, {
     id: messagesId,
     type: "chat_messages",
@@ -114,7 +124,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
   });
 
   // Chat input component
-  const inputId = `chat_input_${Date.now()}`;
+  const inputId = "chat_input";
   ui.addComponent(inputId, {
     id: inputId,
     type: "chat_input",
@@ -140,7 +150,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
 // ============================================================================
 
 export function generateSystemAgentPage(state: {
-  chatMessages: Array<{ role: string; content: string; cards?: any }>;
+  chatMessages: Array<{ role: string; content?: string; parts?: unknown[]; cards?: any }>;
   streaming: boolean;
   streamingContent: string;
   quickReplies?: QuickReply[];
@@ -148,8 +158,8 @@ export function generateSystemAgentPage(state: {
   const ui = new A2UIGenerator("main");
   const children: string[] = [];
 
-  // Chat messages with System Agent welcome screen
-  const msgsId = `sa_msgs_${Date.now()}`;
+  // Chat messages with System Agent welcome screen (stable ID)
+  const msgsId = "sa_msgs";
   ui.addComponent(msgsId, {
     id: msgsId,
     type: "chat_messages",
@@ -184,8 +194,8 @@ export function generateSystemAgentPage(state: {
   });
   children.push(msgsId);
 
-  // Chat input (fixed at bottom via flexbox)
-  const inputId = `sa_input_${Date.now()}`;
+  // Chat input (fixed at bottom via flexbox, stable ID)
+  const inputId = "sa_input";
   ui.addComponent(inputId, {
     id: inputId,
     type: "chat_input",
@@ -1529,6 +1539,10 @@ function generateIntegrationsBranches(
 // ============================================================================
 
 interface LogsPageData {
+  // Tab control
+  activeTab: "system" | "llm";
+
+  // System logs tab
   entries: Array<{
     time: string;
     level: string;
@@ -1540,6 +1554,17 @@ interface LogsPageData {
   subsystems: string[];
   activeLevel?: string;
   activeSubsystem?: string;
+
+  // LLM calls tab
+  llmCalls: import("../utils/llm-logger.js").LLMCallPair[];
+  llmProviders: string[];
+  llmModels: string[];
+  llmActiveProvider?: string;
+  llmActiveModel?: string;
+  llmPage: number;
+  llmPageSize: number;
+  llmTotal: number;
+  llmSelectedId?: number;
 }
 
 export function generateLogsPage(data: LogsPageData): A2UIMessage {
@@ -1556,6 +1581,29 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage {
     justify: "between",
     align: "center",
   });
+
+  // --- System Logs Tab Content ---
+  const systemTabContent = buildSystemLogsTab(ui, data);
+
+  // --- LLM Calls Tab Content ---
+  const llmTabContent = buildLlmCallsTab(ui, data);
+
+  // Tabs
+  const tabsId = ui.tabs(
+    [
+      { id: "system", label: t("logs.tabSystem"), icon: "bar-chart" },
+      { id: "llm", label: t("logs.tabLlm"), icon: "zap" },
+    ],
+    data.activeTab,
+    { system: systemTabContent, llm: llmTabContent }
+  );
+
+  const root = ui.column([headerRow, tabsId], { gap: 16, padding: 24 });
+  return ui.build(root);
+}
+
+function buildSystemLogsTab(ui: A2UIGenerator, data: LogsPageData): string {
+  const children: string[] = [];
 
   // Filter row
   const levelOptions = [
@@ -1579,25 +1627,135 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage {
     value: data.activeSubsystem || "",
     onChange: "logs_filter_subsystem",
   });
-  const filterRow = ui.row([levelSelect, subsystemSelect], { gap: 12 });
+  children.push(ui.row([levelSelect, subsystemSelect], { gap: 12 }));
 
-  // Log viewer component
-  const logViewer = ui.logViewer(data.entries, {
-    levels: data.levels,
-    subsystems: data.subsystems,
-    activeLevel: data.activeLevel,
-    activeSubsystem: data.activeSubsystem,
-  });
-
-  // No logs message
   if (data.entries.length === 0) {
-    const noLogs = ui.text(t("logs.noLogs"), "caption");
-    const root = ui.column([headerRow, filterRow, noLogs], { gap: 16, padding: 24 });
-    return ui.build(root);
+    children.push(ui.text(t("logs.noLogs"), "caption"));
+  } else {
+    children.push(
+      ui.logViewer(data.entries, {
+        levels: data.levels,
+        subsystems: data.subsystems,
+        activeLevel: data.activeLevel,
+        activeSubsystem: data.activeSubsystem,
+      })
+    );
   }
 
-  const root = ui.column([headerRow, filterRow, logViewer], { gap: 16, padding: 24 });
-  return ui.build(root);
+  return ui.column(children, { gap: 12 });
+}
+
+function buildLlmCallsTab(ui: A2UIGenerator, data: LogsPageData): string {
+  const children: string[] = [];
+
+  // Filter row: Provider + Model selects
+  const providerOptions = [
+    { value: "", label: t("logs.llmAllProviders") },
+    ...data.llmProviders.map((p) => ({ value: p, label: p })),
+  ];
+  const modelOptions = [
+    { value: "", label: t("logs.llmAllModels") },
+    ...data.llmModels.map((m) => ({ value: m, label: m })),
+  ];
+
+  const providerSelect = ui.formInput("llm_provider", "select", {
+    label: t("logs.llmProvider"),
+    options: providerOptions,
+    value: data.llmActiveProvider || "",
+    onChange: "llm_filter_provider",
+  });
+  const modelSelect = ui.formInput("llm_model", "select", {
+    label: t("logs.llmModel"),
+    options: modelOptions,
+    value: data.llmActiveModel || "",
+    onChange: "llm_filter_model",
+  });
+  children.push(ui.row([providerSelect, modelSelect], { gap: 12 }));
+
+  if (data.llmCalls.length === 0) {
+    children.push(ui.text(t("logs.llmNoLogs"), "caption"));
+    return ui.column(children, { gap: 12 });
+  }
+
+  // Data table
+  const columns = [
+    { key: "time", label: t("logs.time"), render: "text" as const },
+    { key: "provider", label: t("logs.llmProvider"), render: "badge" as const },
+    { key: "model", label: t("logs.llmModel"), render: "text" as const },
+    { key: "tokens", label: t("logs.llmTokens"), render: "text" as const },
+    { key: "latency", label: t("logs.llmLatency"), render: "text" as const },
+    { key: "status", label: t("logs.llmStatus"), render: "badge" as const },
+  ];
+
+  const rows = data.llmCalls.map((call) => {
+    const timeStr = call.timestamp
+      ? new Date(call.timestamp).toLocaleTimeString("en-US", { hour12: false })
+      : "-";
+    const tokensStr =
+      call.inputTokens != null && call.outputTokens != null
+        ? `${call.inputTokens}/${call.outputTokens}`
+        : call.totalTokens != null
+          ? String(call.totalTokens)
+          : "-";
+    const latencyStr =
+      call.latencyMs != null
+        ? call.latencyMs >= 1000
+          ? `${(call.latencyMs / 1000).toFixed(1)}s`
+          : `${call.latencyMs}ms`
+        : "-";
+    const statusStr = call.status != null ? String(call.status) : "-";
+
+    return {
+      id: call.id,
+      time: timeStr,
+      provider: call.provider,
+      model: call.model,
+      tokens: tokensStr,
+      latency: latencyStr,
+      status: statusStr,
+    };
+  });
+
+  const tableId = ui.dataTable(columns, rows, {
+    pagination: {
+      page: data.llmPage,
+      pageSize: data.llmPageSize,
+      total: data.llmTotal,
+    },
+    onRowClick: "llm_call_detail",
+    onPageChange: "llm_page_change",
+  });
+  children.push(tableId);
+
+  // Detail view for selected call
+  if (data.llmSelectedId != null) {
+    const selectedCall = data.llmCalls.find((c) => c.id === data.llmSelectedId);
+    if (selectedCall) {
+      const detailChildren: string[] = [];
+
+      // Request collapsible
+      const reqJson = JSON.stringify(selectedCall.requestData ?? {}, null, 2);
+      const reqEditor = ui.codeEditor(reqJson, {
+        language: "json",
+        readonly: true,
+        height: 300,
+      });
+      detailChildren.push(ui.collapsible(t("logs.llmRequest"), [reqEditor], { expanded: true }));
+
+      // Response collapsible
+      const resJson = JSON.stringify(selectedCall.responseData ?? {}, null, 2);
+      const resEditor = ui.codeEditor(resJson, {
+        language: "json",
+        readonly: true,
+        height: 300,
+      });
+      detailChildren.push(ui.collapsible(t("logs.llmResponse"), [resEditor], { expanded: true }));
+
+      children.push(ui.column(detailChildren, { gap: 8 }));
+    }
+  }
+
+  return ui.column(children, { gap: 12 });
 }
 
 // ============================================================================
@@ -1605,30 +1763,72 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage {
 // ============================================================================
 
 export interface SettingsPageData {
+  // Legacy LLM (kept for backward compat)
   provider: string;
   providers: Array<{ value: string; label: string; hint?: string }>;
   apiKeySet: boolean;
   modelId: string;
   baseUrl: string;
+  // Model Repository (new unified format)
+  modelProviders: Array<{
+    key: string;
+    baseUrl: string;
+    apiKeySet: boolean;
+    models: Array<{ name: string; model: string; label: string }>;
+  }>;
+  allModelRefs: string[];
+  orchestratorPha: string;
+  orchestratorSa: string;
+  orchestratorJudge: string;
+  orchestratorEmbedding: string;
+  benchmarkModelRefs: string[];
+  // Gateway
   gatewayPort: number;
   gatewayAutoStart: boolean;
+  // Data Source
   dataSourceType: string;
+  // Embedding (legacy)
   embeddingEnabled: boolean;
   embeddingModel: string;
+  // TUI
   tuiTheme: string;
   tuiShowToolCalls: boolean;
+  // Huawei Health
   huaweiClientId: string;
   huaweiClientSecret: string;
   huaweiRedirectUri: string;
   huaweiAuthUrl: string;
   huaweiTokenUrl: string;
   huaweiApiBaseUrl: string;
+  // Benchmark & Evolution
   applyEngine: string;
   benchmarkConcurrency: number;
+  // Legacy judge/benchmark models (kept for backward compat)
   judgeProvider: string;
   judgeModelId: string;
   judgeLabel: string;
-  benchmarkModelsJson: string;
+  benchmarkModels: Array<{ key: string; provider: string; modelId: string; label: string }>;
+  // User UUID
+  userUuid: string;
+  huaweiScopes: string[];
+  // MCP structured fields
+  chromeMcpCommand: string;
+  chromeMcpArgs: string;
+  chromeMcpBrowserUrl: string;
+  chromeMcpWsEndpoint: string;
+  remoteServers: Array<{
+    key: string;
+    url: string;
+    apiKey: string;
+    name: string;
+    enabled: boolean;
+  }>;
+  // Plugins structured fields
+  pluginEnabled: boolean;
+  pluginPaths: string;
+  pluginEntries: Array<{ id: string; enabled: boolean; config: string }>;
+  // Raw config
+  rawConfigJson: string;
 }
 
 export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
@@ -1638,37 +1838,100 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   // Header
   const title = ui.text(t("settings.title"), "h2");
   const subtitle = ui.text(t("settings.subtitle"), "caption");
-  const header = ui.column([title, subtitle], { gap: 4 });
+  const uuidText = ui.text(`${t("settings.userUuid")}: ${data.userUuid || "—"}`, "caption");
+  const header = ui.column([title, subtitle, uuidText], { gap: 4 });
 
-  // ---- LLM Section ----
-  const providerSelect = ui.formInput("provider", "select", {
-    label: t("settings.llmProvider"),
-    options: data.providers.map((p) => ({
-      value: p.value,
-      label: `${p.label}${p.hint ? ` — ${p.hint}` : ""}`,
-    })),
-    value: data.provider,
+  // ---- Model Repository Section ----
+  const repoChildren: string[] = [];
+  for (const mp of data.modelProviders) {
+    const mpBaseUrl = ui.formInput(`mp__${mp.key}__baseUrl`, "text", {
+      label: t("settings.providerBaseUrl"),
+      value: mp.baseUrl,
+      placeholder: "https://...",
+    });
+    const mpApiKey = ui.formInput(`mp__${mp.key}__apiKey`, "text", {
+      label: t("settings.providerApiKey"),
+      placeholder: t("settings.apiKeyPlaceholder"),
+      value: mp.apiKeySet ? "••••••••" : "",
+    });
+    const modelRows: string[] = [];
+    mp.models.forEach((m, idx) => {
+      const mName = ui.formInput(`mp__${mp.key}__m__${idx}__name`, "text", {
+        label: t("settings.modelName"),
+        value: m.name,
+      });
+      const mModel = ui.formInput(`mp__${mp.key}__m__${idx}__model`, "text", {
+        label: t("settings.modelActualId"),
+        value: m.model,
+      });
+      const mLabel = ui.formInput(`mp__${mp.key}__m__${idx}__label`, "text", {
+        label: t("settings.modelLabel"),
+        value: m.label,
+      });
+      const mDeleteBtn = ui.button(t("settings.deleteModel"), "settings_provider_model_delete", {
+        variant: "danger",
+        payload: { provider: mp.key, index: idx },
+      });
+      modelRows.push(ui.row([mName, mModel, mLabel, mDeleteBtn], { gap: 8, align: "end" }));
+    });
+    const addModelBtn = ui.button(t("settings.addModel"), "settings_provider_model_add", {
+      payload: { provider: mp.key },
+    });
+    const deleteProviderBtn = ui.button(t("settings.deleteProvider"), "settings_provider_delete", {
+      variant: "danger",
+      payload: { provider: mp.key },
+    });
+    const providerContent = [
+      mpBaseUrl,
+      mpApiKey,
+      ...modelRows,
+      ui.row([addModelBtn, deleteProviderBtn], { gap: 8 }),
+    ];
+    repoChildren.push(ui.collapsible(mp.key, providerContent, { expanded: true }));
+  }
+  const repoForm = ui.form(repoChildren, "settings_save_model_repository", {
+    submitLabel: t("settings.saveRepository"),
   });
-  const apiKeyInput = ui.formInput("apiKey", "text", {
-    label: t("settings.apiKey"),
-    placeholder: t("settings.apiKeyPlaceholder"),
-    value: data.apiKeySet ? "••••••••" : "",
+  const addProviderBtn = ui.button(t("settings.addProvider"), "settings_provider_add");
+  const repoCard = ui.card([repoForm, addProviderBtn], {
+    title: t("settings.sectionModelRepository"),
+    padding: 20,
   });
-  const modelInput = ui.formInput("modelId", "text", {
-    label: t("settings.modelId"),
-    value: data.modelId,
+
+  // ---- Model Assignments Section ----
+  const modelRefOptions = [
+    { value: "", label: t("settings.noneSelected") },
+    ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
+  ];
+  const agentModelSelect = ui.formInput("orchestratorPha", "select", {
+    label: t("settings.agentModelSelect"),
+    options: modelRefOptions,
+    value: data.orchestratorPha,
   });
-  const baseUrlInput = ui.formInput("baseUrl", "text", {
-    label: t("settings.baseUrl"),
-    placeholder: t("settings.baseUrlPlaceholder"),
-    value: data.baseUrl,
+  const systemAgentModelSelect = ui.formInput("orchestratorSa", "select", {
+    label: t("settings.systemAgentModelSelect"),
+    options: modelRefOptions,
+    value: data.orchestratorSa,
   });
-  const llmForm = ui.form(
-    [providerSelect, apiKeyInput, modelInput, baseUrlInput],
-    "settings_save_llm",
-    { submitLabel: saveLabel }
+  const judgeModelSelect = ui.formInput("orchestratorJudge", "select", {
+    label: t("settings.judgeModelSelect"),
+    options: modelRefOptions,
+    value: data.orchestratorJudge,
+  });
+  const embeddingModelSelect = ui.formInput("orchestratorEmbedding", "select", {
+    label: t("settings.embeddingModelSelect"),
+    options: modelRefOptions,
+    value: data.orchestratorEmbedding,
+  });
+  const assignmentsForm = ui.form(
+    [agentModelSelect, systemAgentModelSelect, judgeModelSelect, embeddingModelSelect],
+    "settings_save_model_assignments",
+    { submitLabel: t("settings.saveAssignments") }
   );
-  const llmCard = ui.card([llmForm], { title: t("settings.sectionLlm"), padding: 20 });
+  const assignmentsCard = ui.card([assignmentsForm], {
+    title: t("settings.sectionModelAssignments"),
+    padding: 20,
+  });
 
   // ---- Gateway Section ----
   const portInput = ui.formInput("port", "text", {
@@ -1746,6 +2009,31 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const dsForm = ui.form(dsInputs, "settings_save_datasource", { submitLabel: saveLabel });
   const dsCard = ui.card([dsForm], { title: t("settings.sectionData"), padding: 20 });
 
+  // ---- OAuth Scopes Section (structured list, only when huawei) ----
+  let scopesCard: string | null = null;
+  if (data.dataSourceType === "huawei") {
+    const scopeFormInputs: string[] = [];
+    data.huaweiScopes.forEach((scope, idx) => {
+      const scopeInput = ui.formInput(`scope__${idx}`, "text", {
+        label: `Scope ${idx + 1}`,
+        value: scope,
+      });
+      const scopeDeleteBtn = ui.button(t("settings.deleteScope"), "settings_scope_delete", {
+        variant: "danger",
+        payload: { index: idx },
+      });
+      scopeFormInputs.push(ui.row([scopeInput, scopeDeleteBtn], { gap: 8, align: "end" }));
+    });
+    const scopesForm = ui.form(scopeFormInputs, "settings_save_scopes", {
+      submitLabel: t("settings.saveAll"),
+    });
+    const scopeAddBtn = ui.button(t("settings.addScope"), "settings_scope_add");
+    scopesCard = ui.card([scopesForm, scopeAddBtn], {
+      title: t("settings.scopesPerLine"),
+      padding: 20,
+    });
+  }
+
   // ---- TUI Section ----
   const tuiThemeSelect = ui.formInput("tuiTheme", "select", {
     label: t("settings.tuiTheme"),
@@ -1789,7 +2077,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  // ---- Benchmark & Evolution Section ----
+  // ---- Benchmark & Evolution Section (concurrency + applyEngine + model selection) ----
   const concurrencyInput = ui.formInput("benchmarkConcurrency", "text", {
     label: t("settings.benchmarkConcurrency"),
     value: String(data.benchmarkConcurrency),
@@ -1802,25 +2090,28 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ],
     value: data.applyEngine,
   });
-  const judgeProviderSelect = ui.formInput("judgeProvider", "select", {
-    label: t("settings.judgeProvider"),
-    options: data.providers.map((p) => ({
-      value: p.value,
-      label: `${p.label}${p.hint ? ` — ${p.hint}` : ""}`,
-    })),
-    value: data.judgeProvider,
-  });
-  const judgeModelInput = ui.formInput("judgeModelId", "text", {
-    label: t("settings.judgeModelId"),
-    value: data.judgeModelId,
-  });
-  const judgeLabelInput = ui.formInput("judgeLabel", "text", {
-    label: t("settings.judgeLabel"),
-    value: data.judgeLabel,
-  });
+  // Benchmark model checkboxes from model repository
+  const bmCheckboxes: string[] = [];
+  for (const ref of data.allModelRefs) {
+    const isChecked = data.benchmarkModelRefs.includes(ref);
+    bmCheckboxes.push(
+      ui.formInput(`bm_ref__${ref}`, "select", {
+        label: ref,
+        options: [
+          { value: "true", label: t("common.enable") },
+          { value: "false", label: t("common.disable") },
+        ],
+        value: String(isChecked),
+      })
+    );
+  }
+  const bmSelectGroup =
+    bmCheckboxes.length > 0
+      ? [ui.text(t("settings.benchmarkModelsSelect"), "body"), ...bmCheckboxes]
+      : [];
   const benchmarkForm = ui.form(
-    [concurrencyInput, applyEngineSelect, judgeProviderSelect, judgeModelInput, judgeLabelInput],
-    "settings_save_benchmark",
+    [concurrencyInput, applyEngineSelect, ...bmSelectGroup],
+    "settings_save_benchmark_v3",
     { submitLabel: saveLabel }
   );
   const benchmarkCard = ui.card([benchmarkForm], {
@@ -1828,23 +2119,149 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  // ---- Benchmark Models Section (JSON) ----
-  const bmJsonInput = ui.formInput("benchmarkModelsJson", "textarea", {
-    label: t("settings.benchmarkModelsJson"),
-    value: data.benchmarkModelsJson,
+  // ---- MCP Section (structured) ----
+  const mcpChildren: string[] = [];
+
+  // Chrome DevTools MCP sub-form
+  const chromeCmdInput = ui.formInput("chromeMcpCommand", "text", {
+    label: t("settings.chromeMcpCommand"),
+    value: data.chromeMcpCommand,
+    placeholder: "npx",
   });
-  const bmForm = ui.form([bmJsonInput], "settings_save_benchmark_models", {
-    submitLabel: saveLabel,
+  const chromeArgsInput = ui.formInput("chromeMcpArgs", "text", {
+    label: t("settings.chromeMcpArgs"),
+    value: data.chromeMcpArgs,
+    placeholder: "-y, chrome-devtools-mcp@latest, --isolated",
   });
-  const bmCard = ui.card([bmForm], {
-    title: t("settings.sectionBenchmarkModels"),
+  const chromeBrowserUrlInput = ui.formInput("chromeMcpBrowserUrl", "text", {
+    label: t("settings.chromeMcpBrowserUrl"),
+    value: data.chromeMcpBrowserUrl,
+    placeholder: "http://127.0.0.1:9222",
+  });
+  const chromeWsInput = ui.formInput("chromeMcpWsEndpoint", "text", {
+    label: t("settings.chromeMcpWsEndpoint"),
+    value: data.chromeMcpWsEndpoint,
+  });
+  const chromeMcpForm = ui.form(
+    [chromeCmdInput, chromeArgsInput, chromeBrowserUrlInput, chromeWsInput],
+    "settings_save_mcp_chrome",
+    { submitLabel: saveLabel }
+  );
+  mcpChildren.push(ui.collapsible("Chrome DevTools", [chromeMcpForm], { expanded: true }));
+
+  // Remote MCP Servers
+  const remoteFormInputs: string[] = [];
+  for (const srv of data.remoteServers) {
+    const sUrl = ui.formInput(`mcp_remote__${srv.key}__url`, "text", {
+      label: "URL",
+      value: srv.url,
+      placeholder: "http://10.0.1.5:3000/mcp",
+    });
+    const sApiKey = ui.formInput(`mcp_remote__${srv.key}__apiKey`, "text", {
+      label: "API Key",
+      value: srv.apiKey,
+    });
+    const sName = ui.formInput(`mcp_remote__${srv.key}__name`, "text", {
+      label: "Name",
+      value: srv.name,
+    });
+    const sEnabled = ui.formInput(`mcp_remote__${srv.key}__enabled`, "select", {
+      label: "Enabled",
+      options: [
+        { value: "true", label: t("common.enable") },
+        { value: "false", label: t("common.disable") },
+      ],
+      value: String(srv.enabled),
+    });
+    const sDeleteBtn = ui.button(t("settings.deleteServer"), "settings_mcp_delete", {
+      variant: "danger",
+      payload: { key: srv.key },
+    });
+    remoteFormInputs.push(
+      ui.collapsible(`${srv.key} — ${srv.name || srv.url}`, [
+        sUrl,
+        sApiKey,
+        sName,
+        sEnabled,
+        sDeleteBtn,
+      ])
+    );
+  }
+  const mcpRemoteForm = ui.form(remoteFormInputs, "settings_save_mcp_remote", {
+    submitLabel: t("settings.saveAll"),
+  });
+  const mcpRemoteAddBtn = ui.button(t("settings.addServer"), "settings_mcp_add");
+  mcpChildren.push(ui.collapsible(t("settings.remoteServers"), [mcpRemoteForm, mcpRemoteAddBtn]));
+
+  const mcpCard = ui.card(mcpChildren, {
+    title: t("settings.sectionMcp"),
     padding: 20,
   });
 
-  const root = ui.column(
-    [header, llmCard, gatewayCard, dsCard, tuiCard, embeddingCard, benchmarkCard, bmCard],
-    { gap: 16, padding: 24 }
+  // ---- Plugins Section (structured) ----
+  const pluginsChildren: string[] = [];
+  const pluginEnabledSelect = ui.formInput("pluginEnabled", "select", {
+    label: t("settings.pluginEnabled"),
+    options: [
+      { value: "true", label: t("common.enable") },
+      { value: "false", label: t("common.disable") },
+    ],
+    value: String(data.pluginEnabled),
+  });
+  const pluginPathsInput = ui.formInput("pluginPaths", "text", {
+    label: t("settings.pluginPaths"),
+    value: data.pluginPaths,
+  });
+  const pluginsMainForm = ui.form(
+    [pluginEnabledSelect, pluginPathsInput],
+    "settings_save_plugins_v2",
+    { submitLabel: saveLabel }
   );
+  pluginsChildren.push(pluginsMainForm);
+
+  // Per-plugin entries
+  for (const entry of data.pluginEntries) {
+    const peEnabled = ui.formInput(`plugin__${entry.id}__enabled`, "select", {
+      label: "Enabled",
+      options: [
+        { value: "true", label: t("common.enable") },
+        { value: "false", label: t("common.disable") },
+      ],
+      value: String(entry.enabled),
+    });
+    const peConfig = ui.formInput(`plugin__${entry.id}__config`, "textarea", {
+      label: "Config",
+      value: entry.config,
+    });
+    pluginsChildren.push(ui.collapsible(entry.id, [peEnabled, peConfig]));
+  }
+  const pluginsCard = ui.card(pluginsChildren, {
+    title: t("settings.sectionPlugins"),
+    padding: 20,
+  });
+
+  // ---- Raw Config Viewer ----
+  const rawEditor = ui.codeEditor(data.rawConfigJson, {
+    language: "json",
+    readonly: true,
+    height: 300,
+  });
+  const copyBtn = ui.button(t("settings.copyConfig"), "settings_copy_config", {
+    icon: "save",
+  });
+  const downloadBtn = ui.button(t("settings.downloadConfig"), "settings_download_config", {
+    icon: "file-text",
+  });
+  const rawActions = ui.row([copyBtn, downloadBtn], { gap: 8, style: "margin-top: 12px;" });
+  const rawCard = ui.card([rawEditor, rawActions], {
+    title: t("settings.rawConfig"),
+    padding: 20,
+  });
+
+  const cards: string[] = [header, repoCard, assignmentsCard, gatewayCard, dsCard];
+  if (scopesCard) cards.push(scopesCard);
+  cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
+  const root = ui.column(cards, { gap: 16, padding: 24 });
 
   // Add some bottom padding to avoid content being cut off
   const rootComp = ui["components"].get(root);
@@ -2698,8 +3115,9 @@ function generateHealthDataCards(data: unknown): ToolCardResult | null {
 
   // Quick action button
   const viewBtn = ui.button(t("activity.title"), "navigate:activity", {
-    variant: "ghost",
+    variant: "outline",
     size: "sm",
+    icon: "chevron-right",
   });
   children.push(viewBtn);
 
@@ -2727,17 +3145,17 @@ function generateHeartRateCards(data: unknown): ToolCardResult | null {
   });
 
   const maxCard = ui.statCard({
-    title: t("health.heartRate"),
+    title: t("health.maxHR"),
     value: d.maxToday ?? "--",
-    subtitle: `Max`,
+    subtitle: t("health.bpmMax"),
     icon: "trending-up",
     color: "#f97316",
   });
 
   const minCard = ui.statCard({
-    title: t("health.heartRate"),
+    title: t("health.minHR"),
     value: d.minToday ?? "--",
-    subtitle: `Min`,
+    subtitle: t("health.bpmMin"),
     icon: "trending-down",
     color: "#3b82f6",
   });
@@ -2746,9 +3164,10 @@ function generateHeartRateCards(data: unknown): ToolCardResult | null {
 
   const children: string[] = [statsGrid];
 
-  // Heart rate line chart (last 12 readings)
+  // Heart rate line chart (last 12 readings) — wrapped in card
   if (d.readings && d.readings.length > 0) {
     const chartData = d.readings.slice(-12).map((r) => ({ label: r.time, value: r.value }));
+    const chartLabel = ui.text(t("health.heartRateTrend"), "label");
     const chart = ui.chart({
       chartType: "line",
       data: chartData,
@@ -2757,13 +3176,15 @@ function generateHeartRateCards(data: unknown): ToolCardResult | null {
       height: 160,
       color: "#ef4444",
     });
-    children.push(chart);
+    const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+    children.push(chartCard);
   }
 
   // Quick action button
   const viewBtn = ui.button(t("health.title"), "navigate:health", {
-    variant: "ghost",
+    variant: "outline",
     size: "sm",
+    icon: "chevron-right",
   });
   children.push(viewBtn);
 
@@ -2809,7 +3230,7 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
 
   const children: string[] = [statsGrid];
 
-  // Sleep stages bar chart
+  // Sleep stages bar chart — wrapped in card
   if (d.stages) {
     const stageData = [
       { label: "Deep", value: d.stages.deep || 0 },
@@ -2817,6 +3238,7 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
       { label: "REM", value: d.stages.rem || 0 },
       { label: "Awake", value: d.stages.awake || 0 },
     ];
+    const chartLabel = ui.text(t("dashboard.sleepTrend"), "label");
     const chart = ui.chart({
       chartType: "bar",
       data: stageData,
@@ -2825,13 +3247,15 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
       height: 140,
       color: "#8b5cf6",
     });
-    children.push(chart);
+    const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+    children.push(chartCard);
   }
 
   // Quick action button
   const viewBtn = ui.button(t("sleep.title"), "navigate:sleep", {
-    variant: "ghost",
+    variant: "outline",
     size: "sm",
+    icon: "chevron-right",
   });
   children.push(viewBtn);
 
@@ -2876,12 +3300,13 @@ function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
 
   const children: string[] = [statsGrid];
 
-  // Steps bar chart (7 days)
+  // Steps bar chart (7 days) — wrapped in card
   if (d.steps?.daily && d.steps.daily.length > 0) {
     const stepsChartData = d.steps.daily.map((day) => ({
       label: day.date.slice(-2),
       value: day.steps,
     }));
+    const stepsLabel = ui.text(t("dashboard.stepsTrend"), "label");
     const stepsChart = ui.chart({
       chartType: "bar",
       data: stepsChartData,
@@ -2890,15 +3315,17 @@ function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
       height: 140,
       color: "#10b981",
     });
-    children.push(stepsChart);
+    const stepsCard = ui.card([stepsLabel, stepsChart], { padding: 12 });
+    children.push(stepsCard);
   }
 
-  // Sleep bar chart (7 days)
+  // Sleep bar chart (7 days) — wrapped in card
   if (d.sleep?.daily && d.sleep.daily.length > 0) {
     const sleepChartData = d.sleep.daily.map((day) => ({
       label: day.date.slice(-2),
       value: day.hours,
     }));
+    const sleepLabel = ui.text(t("dashboard.sleepTrend"), "label");
     const sleepChart = ui.chart({
       chartType: "bar",
       data: sleepChartData,
@@ -2907,13 +3334,15 @@ function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
       height: 140,
       color: "#8b5cf6",
     });
-    children.push(sleepChart);
+    const sleepCard = ui.card([sleepLabel, sleepChart], { padding: 12 });
+    children.push(sleepCard);
   }
 
   // Quick action button
   const viewBtn = ui.button(t("activity.title"), "navigate:activity", {
-    variant: "ghost",
+    variant: "outline",
     size: "sm",
+    icon: "chevron-right",
   });
   children.push(viewBtn);
 

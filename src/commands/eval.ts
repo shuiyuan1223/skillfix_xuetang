@@ -37,14 +37,19 @@ import {
   loadConfig,
   getBenchmarkModels,
   getJudgeModel,
+  resolveBenchmarkModels,
+  resolveJudgeModel,
+  resolveAgentModel,
   resolveBenchmarkModelApiKey,
   resolveBenchmarkModelBaseUrl,
+  BUILTIN_PROVIDERS,
+  ENV_KEY_MAP,
+  type LLMProvider,
   type BenchmarkModelConfig,
 } from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
 import { sessionToAgentMessages } from "../memory/session-store.js";
 import { getModel, complete } from "@mariozechner/pi-ai";
-import type { LLMProvider } from "../agent/pha-agent.js";
 import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
 import {
   writeBenchmarkProgress,
@@ -71,22 +76,11 @@ import {
   info,
 } from "../utils/cli-ui.js";
 
-/** Provider → env-var name mapping */
-const PROVIDER_ENV_KEYS: Record<string, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  google: "GOOGLE_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-  groq: "GROQ_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  xai: "XAI_API_KEY",
-};
+// PROVIDER_ENV_KEYS and resolveApiKey() removed — use ENV_KEY_MAP and resolveAgentModel() from config.ts
 
 /**
  * Resolve API key for eval commands.
- * When an explicit provider is given and differs from config, prefer the
- * provider-specific env var to avoid sending e.g. an OpenRouter key to Google.
+ * Delegates to resolveAgentModel() when no explicit provider is given.
  */
 function resolveApiKey(
   config: ReturnType<typeof loadConfig>,
@@ -94,30 +88,31 @@ function resolveApiKey(
 ): string | undefined {
   const effectiveProvider = provider || config.llm.provider;
 
-  // 1. If provider matches config → config key is valid
+  // 1. Try resolveAgentModel (handles new format + legacy)
+  try {
+    const resolved = resolveAgentModel(config);
+    if (!provider || provider === resolved.provider) {
+      return resolved.apiKey;
+    }
+  } catch {
+    // Fall through
+  }
+
+  // 2. If provider matches config → config key is valid
   if (effectiveProvider === config.llm.provider && config.llm.apiKey) {
     return config.llm.apiKey;
   }
 
-  // 2. Provider-specific env var
-  const envKey = PROVIDER_ENV_KEYS[effectiveProvider];
+  // 3. Provider-specific env var
+  const envKey = ENV_KEY_MAP[effectiveProvider as LLMProvider];
   if (envKey && process.env[envKey]) {
     return process.env[envKey];
   }
 
-  // 3. Fallback: config key (might still work for OpenRouter multi-model)
+  // 4. Fallback: config key
   if (config.llm.apiKey) return config.llm.apiKey;
 
-  // 4. Last resort: scan all env vars
-  return (
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.OPENAI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.OPENROUTER_API_KEY ||
-    process.env.DEEPSEEK_API_KEY ||
-    process.env.GROQ_API_KEY ||
-    undefined
-  );
+  return undefined;
 }
 
 /**
@@ -130,19 +125,8 @@ function createRawLLMCall(
   apiKey: string,
   baseUrl?: string
 ): (prompt: string) => Promise<string> {
-  // Built-in providers
-  const BUILTIN: LLMProvider[] = [
-    "anthropic",
-    "openai",
-    "google",
-    "openrouter",
-    "groq",
-    "mistral",
-    "xai",
-  ];
-
   let model: any;
-  if (BUILTIN.includes(provider)) {
+  if (BUILTIN_PROVIDERS.includes(provider)) {
     model = getModel(provider as any, modelId);
     if (!model && baseUrl) {
       model = {
@@ -616,24 +600,21 @@ export function registerEvalCommand(program: Command): void {
       const profile = options.profile as "quick" | "full";
       const diagBaseUrl = diagProvider === config.llm.provider ? config.llm.baseUrl : undefined;
 
-      const { MockDataSource } = await import("../data-sources/mock.js");
-      const mockDataSource = new MockDataSource();
-
-      const agent = await createPHAAgent({
-        apiKey,
-        provider: diagProvider,
-        modelId: diagModelId,
-        baseUrl: diagBaseUrl,
-        dataSource: mockDataSource,
-      });
-
       let rawLLMCall: (prompt: string) => Promise<string>;
       try {
         rawLLMCall = createRawLLMCall(diagProvider, diagModelId, apiKey!, diagBaseUrl);
       } catch {
         rawLLMCall = async (prompt: string) => {
-          agent.reset();
-          return agent.chatAndWait(prompt);
+          // Create fresh agent per judge call for concurrency safety
+          const { MockDataSource } = await import("../data-sources/mock.js");
+          const judgeAgent = await createPHAAgent({
+            apiKey,
+            provider: diagProvider,
+            modelId: diagModelId,
+            baseUrl: diagBaseUrl,
+            dataSource: new MockDataSource(),
+          });
+          return judgeAgent.chatAndWait(prompt);
         };
       }
 
@@ -647,9 +628,17 @@ export function registerEvalCommand(program: Command): void {
           profile,
           runnerConfig: {
             agentCall: async (query: string) => {
-              agent.reset();
+              // Create fresh agent per test case for concurrency safety
+              const { MockDataSource } = await import("../data-sources/mock.js");
+              const testAgent = await createPHAAgent({
+                apiKey,
+                provider: diagProvider,
+                modelId: diagModelId,
+                baseUrl: diagBaseUrl,
+                dataSource: new MockDataSource(),
+              });
               const response = await Promise.race([
-                agent.chatAndWait(query).then((r: string) => ({ response: r })),
+                testAgent.chatAndWait(query).then((r: string) => ({ response: r })),
                 new Promise<{ response: string }>((_, reject) =>
                   setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
                 ),
@@ -820,7 +809,7 @@ export function registerEvalCommand(program: Command): void {
         if (!apiKey) {
           fatal(
             "No API key found",
-            `Set ${PROVIDER_ENV_KEYS[benchProvider] || "an API key"} in environment or config`
+            `Set ${ENV_KEY_MAP[benchProvider] || "an API key"} in environment or config`
           );
         }
 
@@ -885,15 +874,6 @@ export function registerEvalCommand(program: Command): void {
           printHeader(isMulti ? `Benchmark — ${entry.label}` : "Benchmark", `${profile} profile`);
         }
 
-        const mockDataSource = new MockDataSource();
-        const agent = await createPHAAgent({
-          apiKey: entry.apiKey,
-          provider: entry.provider,
-          modelId: entry.modelId,
-          baseUrl: entry.baseUrl,
-          dataSource: mockDataSource,
-        });
-
         let rawLLMCall: (prompt: string) => Promise<string>;
         try {
           rawLLMCall = createRawLLMCall(
@@ -904,8 +884,16 @@ export function registerEvalCommand(program: Command): void {
           );
         } catch {
           rawLLMCall = async (prompt: string) => {
-            agent.reset();
-            return agent.chatAndWait(prompt);
+            // Create fresh agent per judge call for concurrency safety
+            const judgeDs = new MockDataSource();
+            const judgeAgent = await createPHAAgent({
+              apiKey: entry.apiKey,
+              provider: entry.provider,
+              modelId: entry.modelId,
+              baseUrl: entry.baseUrl,
+              dataSource: judgeDs,
+            });
+            return judgeAgent.chatAndWait(prompt);
           };
         }
 
@@ -916,7 +904,15 @@ export function registerEvalCommand(program: Command): void {
 
         const runner = new BenchmarkRunner({
           agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-            agent.reset();
+            // Create fresh agent per test case for concurrency safety
+            const testDs = new MockDataSource();
+            const testAgent = await createPHAAgent({
+              apiKey: entry.apiKey,
+              provider: entry.provider,
+              modelId: entry.modelId,
+              baseUrl: entry.baseUrl,
+              dataSource: testDs,
+            });
 
             // Inject conversation_history into agent state so it has prior context
             if (mockContext?.conversation_history) {
@@ -927,12 +923,12 @@ export function registerEvalCommand(program: Command): void {
               }>;
               const msgs = sessionToAgentMessages(history);
               for (const msg of msgs) {
-                agent.getAgent().state.messages.push(msg);
+                testAgent.getAgent().state.messages.push(msg);
               }
             }
 
             const result = await Promise.race([
-              agent.chatAndWaitWithTools(query),
+              testAgent.chatAndWaitWithTools(query),
               new Promise<{
                 response: string;
                 toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
