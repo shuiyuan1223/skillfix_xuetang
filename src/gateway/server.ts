@@ -1119,17 +1119,25 @@ export class GatewaySession {
         extraTools,
       });
 
-      // Configure evolution tools with agent capabilities
+      // Configure evolution tools: create fresh agents per call for concurrency safety
+      // (shared agent + concurrent reset = race condition → empty responses)
       const AGENT_TIMEOUT_MS = 120_000;
-      const agentRef = this.agent;
+      const sessionConfig = this.config;
       setEvolutionRunnerConfig({
         agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-          agentRef.reset();
+          const { MockDataSource: BenchMockDS } = await import("../data-sources/mock.js");
+          const testAgent = await createPHAAgent({
+            apiKey: sessionConfig.apiKey,
+            provider: sessionConfig.provider as any,
+            modelId: sessionConfig.modelId,
+            baseUrl: sessionConfig.baseUrl,
+            dataSource: new BenchMockDS(),
+          });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
             : query;
           const result = await Promise.race([
-            agentRef.chatAndWaitWithTools(enriched),
+            testAgent.chatAndWaitWithTools(enriched),
             new Promise<{
               response: string;
               toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
@@ -1140,8 +1148,16 @@ export class GatewaySession {
           return result;
         },
         llmCall: async (prompt: string) => {
+          const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+          const judgeAgent = await createPHAAgent({
+            apiKey: sessionConfig.apiKey,
+            provider: sessionConfig.provider as any,
+            modelId: sessionConfig.modelId,
+            baseUrl: sessionConfig.baseUrl,
+            dataSource: new JudgeMockDS(),
+          });
           const result = await Promise.race([
-            agentRef.chatAndWait(prompt),
+            judgeAgent.chatAndWait(prompt),
             new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error("LLM call timed out")), AGENT_TIMEOUT_MS)
             ),
@@ -1164,35 +1180,27 @@ export class GatewaySession {
         sessionMessages: this.systemAgentChatMessages,
       });
 
-      // Configure evolution tools: use dedicated PHA agents for benchmark test cases
-      // and judge evaluation (NOT the system agent — otherwise responses leak into system agent chat)
+      // Configure evolution tools: create fresh agents per call for concurrency safety
+      // (NOT the system agent — otherwise responses leak into system agent chat)
       const AGENT_TIMEOUT_MS = 120_000;
-      const { MockDataSource } = await import("../data-sources/mock.js");
-      const benchmarkAgent = await createPHAAgent({
-        apiKey: this.config.apiKey,
-        provider: this.config.provider,
-        modelId: this.config.modelId,
-        baseUrl: this.config.baseUrl,
-        dataSource: new MockDataSource(),
-      });
-      const judgeAgent = await createPHAAgent({
-        apiKey: this.config.apiKey,
-        provider: this.config.provider,
-        modelId: this.config.modelId,
-        baseUrl: this.config.baseUrl,
-        dataSource: new MockDataSource(),
-      });
       // Capture session reference for onProgress callback
-
       const session = this;
+      const sessionConfig = this.config;
       setEvolutionRunnerConfig({
         agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-          benchmarkAgent.reset();
+          const { MockDataSource: BenchMockDS } = await import("../data-sources/mock.js");
+          const testAgent = await createPHAAgent({
+            apiKey: sessionConfig.apiKey,
+            provider: sessionConfig.provider as any,
+            modelId: sessionConfig.modelId,
+            baseUrl: sessionConfig.baseUrl,
+            dataSource: new BenchMockDS(),
+          });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
             : query;
           const result = await Promise.race([
-            benchmarkAgent.chatAndWaitWithTools(enriched),
+            testAgent.chatAndWaitWithTools(enriched),
             new Promise<{
               response: string;
               toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
@@ -1203,7 +1211,14 @@ export class GatewaySession {
           return result;
         },
         llmCall: async (prompt: string) => {
-          judgeAgent.reset();
+          const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+          const judgeAgent = await createPHAAgent({
+            apiKey: sessionConfig.apiKey,
+            provider: sessionConfig.provider as any,
+            modelId: sessionConfig.modelId,
+            baseUrl: sessionConfig.baseUrl,
+            dataSource: new JudgeMockDS(),
+          });
           const result = await Promise.race([
             judgeAgent.chatAndWait(prompt),
             new Promise<string>((_, reject) =>
@@ -4034,43 +4049,33 @@ export class GatewaySession {
     const AGENT_TIMEOUT_MS = 120_000; // 2 minutes per test case
 
     try {
-      // Create target agent: use override model or default session agent
-      let agent;
-      if (modelConfig?.apiKey) {
-        const { MockDataSource } = await import("../data-sources/mock.js");
-        agent = await createPHAAgent({
-          apiKey: modelConfig.apiKey,
-          provider: modelConfig.provider as any,
-          modelId: modelConfig.modelId,
-          baseUrl: modelConfig.baseUrl,
-          dataSource: new MockDataSource(),
-        });
-      } else {
-        agent = await this.getAgent();
-      }
+      // Resolve agent config: use override model or default session config
+      const agentApiKey = modelConfig?.apiKey || this.config.apiKey;
+      const agentProvider = (modelConfig?.provider || this.config.provider) as any;
+      const agentModelId = modelConfig?.modelId || this.config.modelId;
+      const agentBaseUrl = modelConfig?.baseUrl || this.config.baseUrl;
 
-      // Create dedicated judge agent (separate from target)
+      // Resolve judge config
       const judgeConfig = getJudgeModel();
       const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
       const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
-      const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
-      const judgeAgent = await createPHAAgent({
-        apiKey: judgeApiKey,
-        provider: judgeConfig.provider as any,
-        modelId: judgeConfig.modelId,
-        baseUrl: judgeBaseUrl,
-        dataSource: new JudgeMockDS(),
-      });
 
       const runner = new BenchmarkRunner({
         agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-          // Reset agent between test cases to avoid context accumulation
-          if (typeof agent.reset === "function") agent.reset();
+          // Create fresh agent per test case for concurrency safety
+          const { MockDataSource: AgentMockDS } = await import("../data-sources/mock.js");
+          const testAgent = await createPHAAgent({
+            apiKey: agentApiKey,
+            provider: agentProvider,
+            modelId: agentModelId,
+            baseUrl: agentBaseUrl,
+            dataSource: new AgentMockDS(),
+          });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
             : query;
           const result = await Promise.race([
-            agent.chatAndWaitWithTools(enriched),
+            testAgent.chatAndWaitWithTools(enriched),
             new Promise<{
               response: string;
               toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
@@ -4084,8 +4089,15 @@ export class GatewaySession {
           return result;
         },
         llmCall: async (prompt: string) => {
-          // Use dedicated judge agent for evaluation
-          if (typeof judgeAgent.reset === "function") judgeAgent.reset();
+          // Create fresh judge agent per evaluation for concurrency safety
+          const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+          const judgeAgent = await createPHAAgent({
+            apiKey: judgeApiKey,
+            provider: judgeConfig.provider as any,
+            modelId: judgeConfig.modelId,
+            baseUrl: judgeBaseUrl,
+            dataSource: new JudgeMockDS(),
+          });
           const result = await Promise.race([
             judgeAgent.chatAndWait(prompt),
             new Promise<string>((_, reject) =>

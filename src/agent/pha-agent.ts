@@ -350,6 +350,13 @@ export class PHAAgent {
       }
     }
 
+    if (!finalContent) {
+      log.warn("chatAndWaitWithTools completed with empty response", {
+        hasLastAssistantMessage: !!lastAssistantMessage,
+        toolCallCount: toolCalls.length,
+      });
+    }
+
     return { response: finalContent, toolCalls };
   }
 

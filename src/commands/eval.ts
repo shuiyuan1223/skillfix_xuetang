@@ -616,24 +616,21 @@ export function registerEvalCommand(program: Command): void {
       const profile = options.profile as "quick" | "full";
       const diagBaseUrl = diagProvider === config.llm.provider ? config.llm.baseUrl : undefined;
 
-      const { MockDataSource } = await import("../data-sources/mock.js");
-      const mockDataSource = new MockDataSource();
-
-      const agent = await createPHAAgent({
-        apiKey,
-        provider: diagProvider,
-        modelId: diagModelId,
-        baseUrl: diagBaseUrl,
-        dataSource: mockDataSource,
-      });
-
       let rawLLMCall: (prompt: string) => Promise<string>;
       try {
         rawLLMCall = createRawLLMCall(diagProvider, diagModelId, apiKey!, diagBaseUrl);
       } catch {
         rawLLMCall = async (prompt: string) => {
-          agent.reset();
-          return agent.chatAndWait(prompt);
+          // Create fresh agent per judge call for concurrency safety
+          const { MockDataSource } = await import("../data-sources/mock.js");
+          const judgeAgent = await createPHAAgent({
+            apiKey,
+            provider: diagProvider,
+            modelId: diagModelId,
+            baseUrl: diagBaseUrl,
+            dataSource: new MockDataSource(),
+          });
+          return judgeAgent.chatAndWait(prompt);
         };
       }
 
@@ -647,9 +644,17 @@ export function registerEvalCommand(program: Command): void {
           profile,
           runnerConfig: {
             agentCall: async (query: string) => {
-              agent.reset();
+              // Create fresh agent per test case for concurrency safety
+              const { MockDataSource } = await import("../data-sources/mock.js");
+              const testAgent = await createPHAAgent({
+                apiKey,
+                provider: diagProvider,
+                modelId: diagModelId,
+                baseUrl: diagBaseUrl,
+                dataSource: new MockDataSource(),
+              });
               const response = await Promise.race([
-                agent.chatAndWait(query).then((r: string) => ({ response: r })),
+                testAgent.chatAndWait(query).then((r: string) => ({ response: r })),
                 new Promise<{ response: string }>((_, reject) =>
                   setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
                 ),
@@ -885,15 +890,6 @@ export function registerEvalCommand(program: Command): void {
           printHeader(isMulti ? `Benchmark — ${entry.label}` : "Benchmark", `${profile} profile`);
         }
 
-        const mockDataSource = new MockDataSource();
-        const agent = await createPHAAgent({
-          apiKey: entry.apiKey,
-          provider: entry.provider,
-          modelId: entry.modelId,
-          baseUrl: entry.baseUrl,
-          dataSource: mockDataSource,
-        });
-
         let rawLLMCall: (prompt: string) => Promise<string>;
         try {
           rawLLMCall = createRawLLMCall(
@@ -904,8 +900,16 @@ export function registerEvalCommand(program: Command): void {
           );
         } catch {
           rawLLMCall = async (prompt: string) => {
-            agent.reset();
-            return agent.chatAndWait(prompt);
+            // Create fresh agent per judge call for concurrency safety
+            const judgeDs = new MockDataSource();
+            const judgeAgent = await createPHAAgent({
+              apiKey: entry.apiKey,
+              provider: entry.provider,
+              modelId: entry.modelId,
+              baseUrl: entry.baseUrl,
+              dataSource: judgeDs,
+            });
+            return judgeAgent.chatAndWait(prompt);
           };
         }
 
@@ -916,7 +920,15 @@ export function registerEvalCommand(program: Command): void {
 
         const runner = new BenchmarkRunner({
           agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-            agent.reset();
+            // Create fresh agent per test case for concurrency safety
+            const testDs = new MockDataSource();
+            const testAgent = await createPHAAgent({
+              apiKey: entry.apiKey,
+              provider: entry.provider,
+              modelId: entry.modelId,
+              baseUrl: entry.baseUrl,
+              dataSource: testDs,
+            });
 
             // Inject conversation_history into agent state so it has prior context
             if (mockContext?.conversation_history) {
@@ -927,12 +939,12 @@ export function registerEvalCommand(program: Command): void {
               }>;
               const msgs = sessionToAgentMessages(history);
               for (const msg of msgs) {
-                agent.getAgent().state.messages.push(msg);
+                testAgent.getAgent().state.messages.push(msg);
               }
             }
 
             const result = await Promise.race([
-              agent.chatAndWaitWithTools(query),
+              testAgent.chatAndWaitWithTools(query),
               new Promise<{
                 response: string;
                 toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
