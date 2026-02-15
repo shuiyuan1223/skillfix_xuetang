@@ -1123,11 +1123,17 @@ export class GatewaySession {
       const AGENT_TIMEOUT_MS = 120_000;
       const agentRef = this.agent;
       setEvolutionRunnerConfig({
-        agentCall: async (query: string) => {
+        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
           agentRef.reset();
+          const enriched = mockContext
+            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
+            : query;
           const result = await Promise.race([
-            agentRef.chatAndWait(query).then((response: string) => ({ response })),
-            new Promise<{ response: string }>((_, reject) =>
+            agentRef.chatAndWaitWithTools(enriched),
+            new Promise<{
+              response: string;
+              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+            }>((_, reject) =>
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
@@ -1180,11 +1186,17 @@ export class GatewaySession {
 
       const session = this;
       setEvolutionRunnerConfig({
-        agentCall: async (query: string) => {
+        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
           benchmarkAgent.reset();
+          const enriched = mockContext
+            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
+            : query;
           const result = await Promise.race([
-            benchmarkAgent.chatAndWait(query).then((response: string) => ({ response })),
-            new Promise<{ response: string }>((_, reject) =>
+            benchmarkAgent.chatAndWaitWithTools(enriched),
+            new Promise<{
+              response: string;
+              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+            }>((_, reject) =>
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
@@ -4051,12 +4063,18 @@ export class GatewaySession {
       });
 
       const runner = new BenchmarkRunner({
-        agentCall: async (query: string) => {
+        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
           // Reset agent between test cases to avoid context accumulation
           if (typeof agent.reset === "function") agent.reset();
+          const enriched = mockContext
+            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
+            : query;
           const result = await Promise.race([
-            agent.chatAndWait(query).then((response: string) => ({ response })),
-            new Promise<{ response: string }>((_, reject) =>
+            agent.chatAndWaitWithTools(enriched),
+            new Promise<{
+              response: string;
+              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+            }>((_, reject) =>
               setTimeout(
                 () => reject(new Error("Agent call timed out after 2 minutes")),
                 AGENT_TIMEOUT_MS
@@ -4173,11 +4191,17 @@ export class GatewaySession {
       const result = await diagnose({
         profile: "quick",
         runnerConfig: {
-          agentCall: async (query: string) => {
+          agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
             if (typeof agent.reset === "function") agent.reset();
+            const enriched = mockContext
+              ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
+              : query;
             const res = await Promise.race([
-              agent.chatAndWait(query).then((response: string) => ({ response })),
-              new Promise<{ response: string }>((_, reject) =>
+              agent.chatAndWaitWithTools(enriched),
+              new Promise<{
+                response: string;
+                toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+              }>((_, reject) =>
                 setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
               ),
             ]);
