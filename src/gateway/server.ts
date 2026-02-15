@@ -218,47 +218,6 @@ function syncEmbeddingToNewFormat(config: PHAConfig, formData: Record<string, un
 // ============================================================================
 // Quick Reply Detection
 // ============================================================================
-
-interface QuickReply {
-  label: string;
-  content: string;
-  icon?: string;
-  variant?: "primary" | "danger";
-}
-
-function detectQuickReplies(
-  messages: Array<{ role: string; content?: string; parts?: MessagePart[] }>
-): QuickReply[] | undefined {
-  if (messages.length === 0) return undefined;
-  const last = messages[messages.length - 1];
-  if (last.role !== "assistant") return undefined;
-  const text = last.parts
-    ? last.parts
-        .filter((p): p is { type: "text"; content: string } => p.type === "text")
-        .map((p) => p.content)
-        .join("")
-    : last.content || "";
-
-  // Detect approval/confirmation patterns
-  if (/批准|approve|确认.*方案|是否.*执行|proceed/i.test(text)) {
-    return [
-      { label: "批准", content: "批准，请执行", icon: "check", variant: "primary" },
-      { label: "拒绝", content: "拒绝，请重新修改方案", icon: "x", variant: "danger" },
-    ];
-  }
-
-  // Detect yes/no questions
-  if (/是否|要不要|好吗|可以吗|需要吗/i.test(text)) {
-    return [
-      { label: "好的", content: "好的", variant: "primary" },
-      { label: "不了", content: "不了" },
-    ];
-  }
-
-  return undefined;
-}
-
-// ============================================================================
 // SHARP Category Re-aggregation
 // ============================================================================
 
@@ -962,6 +921,9 @@ export class GatewaySession {
   private currentRunId: string | null = null;
   private lastStreamedText = "";
   private currentView = "chat";
+  // SSE mode: when true, sendChatUpdate is skipped (client manages chat state)
+  public _sseMode = false;
+  private _chatLock = false;
 
   // Settings state
   private selectedPrompt: string | null = null;
@@ -1436,7 +1398,6 @@ export class GatewaySession {
           messages: this.chatMessages,
           streaming: this.isStreaming,
           streamingContent: this.streamingContent,
-          quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
         });
         break;
 
@@ -1445,9 +1406,6 @@ export class GatewaySession {
           chatMessages: this.systemAgentChatMessages,
           streaming: this.systemAgentStreaming,
           streamingContent: this.systemAgentStreamingContent,
-          quickReplies: this.systemAgentStreaming
-            ? undefined
-            : detectQuickReplies(this.systemAgentChatMessages),
         });
         break;
 
@@ -1961,7 +1919,6 @@ export class GatewaySession {
           messages: this.chatMessages,
           streaming: this.isStreaming,
           streamingContent: this.streamingContent,
-          quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
         });
     }
 
@@ -2126,12 +2083,12 @@ export class GatewaySession {
 
   private sendChatUpdate(send: (msg: unknown) => void): void {
     const activeSend = this.getSend(send);
+    if (this._sseMode) return; // SSE mode: client manages chat state
     if (this.currentView === "chat") {
       const chatPage = generateChatPage({
         messages: this.chatMessages,
         streaming: this.isStreaming,
         streamingContent: this.streamingContent,
-        quickReplies: this.isStreaming ? undefined : detectQuickReplies(this.chatMessages),
       });
       activeSend({
         type: "a2ui",
@@ -2143,9 +2100,130 @@ export class GatewaySession {
   }
 
   /**
-   * Handle messages in the Evolution Lab chat.
-   * Forces evolution-driver skill injection and tracks pipeline steps.
+   * Handle an SSE chat request. Returns a ReadableStream of AG-UI SSE events.
    */
+  async handleChatSSE(
+    content: string,
+    writer: WritableStreamDefaultWriter<Uint8Array>,
+    encoder: TextEncoder
+  ): Promise<void> {
+    if (this._chatLock) {
+      const err = JSON.stringify({ type: "error", message: "Chat is busy" });
+      writer.write(encoder.encode(`data: ${err}\n\n`));
+      writer.close();
+      return;
+    }
+    this._chatLock = true;
+    this._sseMode = true;
+
+    const sseSend = (msg: unknown) => {
+      // Only forward AG-UI events (not legacy a2ui / agent_text)
+      const m = msg as Record<string, unknown>;
+      const agTypes = [
+        "RunStarted",
+        "RunFinished",
+        "TextMessageStart",
+        "TextMessageContent",
+        "TextMessageEnd",
+        "ToolCallStart",
+        "ToolCallEnd",
+        "ToolCallResult",
+        "Custom",
+      ];
+      if (m.type && agTypes.includes(m.type as string)) {
+        try {
+          writer.write(encoder.encode(`data: ${JSON.stringify(m)}\n\n`));
+        } catch {
+          // stream may have been closed by client abort
+        }
+      }
+    };
+
+    try {
+      // Add user message
+      this.chatMessages.push({
+        id: crypto.randomUUID(),
+        role: "user",
+        parts: [{ type: "text", content }],
+      });
+      this.persistMessage("chat", { timestamp: Date.now(), role: "user", content });
+
+      this.isStreaming = true;
+      this.streamingContent = "";
+      this.currentAssistantMsgId = null;
+      this.currentRunId = null;
+      this.lastStreamedText = "";
+
+      const agent = await this.getAgent();
+      const unsubscribe = agent.subscribe((event) => {
+        this.handleAgentEvent(event, sseSend);
+      });
+
+      try {
+        await agent.chat(content);
+        await agent.getAgent().waitForIdle();
+      } finally {
+        unsubscribe();
+      }
+
+      // Ensure streaming state is cleaned up
+      if (this.isStreaming) {
+        this.isStreaming = false;
+        this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
+      }
+
+      // Index exchange for memory search
+      if (this.userUuid) {
+        try {
+          const mm = getMemoryManager();
+          const lastAssistant = this.chatMessages.filter((m) => m.role === "assistant").pop();
+          if (lastAssistant) {
+            const assistantText = lastAssistant.parts
+              .filter((p): p is { type: "text"; content: string } => p.type === "text")
+              .map((p) => p.content)
+              .join("");
+            mm.appendSessionTranscript(
+              this.userUuid,
+              this.sessionId,
+              `User: ${content}\nAssistant: ${assistantText}`
+            );
+          }
+        } catch {
+          // best-effort
+        }
+      }
+    } catch (error) {
+      const isAbort =
+        error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
+      if (!isAbort) {
+        const errEvent = JSON.stringify({
+          type: "Custom",
+          name: "Error",
+          data: { message: error instanceof Error ? error.message : String(error) },
+        });
+        try {
+          writer.write(encoder.encode(`data: ${errEvent}\n\n`));
+        } catch {
+          /* stream closed */
+        }
+      }
+      this.isStreaming = false;
+      this.streamingContent = "";
+      this.currentAssistantMsgId = null;
+      this.lastStreamedText = "";
+    } finally {
+      this._sseMode = false;
+      this._chatLock = false;
+      try {
+        writer.close();
+      } catch {
+        /* already closed */
+      }
+    }
+  }
+
   /**
    * Get or create the current system-agent assistant message.
    */
@@ -4254,9 +4332,6 @@ export class GatewaySession {
         chatMessages: this.systemAgentChatMessages,
         streaming: this.systemAgentStreaming,
         streamingContent: this.systemAgentStreamingContent,
-        quickReplies: this.systemAgentStreaming
-          ? undefined
-          : detectQuickReplies(this.systemAgentChatMessages),
       });
       activeSend({
         type: "a2ui",
@@ -5164,6 +5239,60 @@ export async function startGateway(
     port,
     async fetch(req, server) {
       const url = new URL(req.url);
+
+      // AG-UI SSE endpoint
+      if (url.pathname === "/api/ag-ui" && req.method === "POST") {
+        try {
+          const body = (await req.json()) as {
+            thread_id?: string;
+            messages?: Array<{ role: string; content: string }>;
+          };
+          const threadId = body.thread_id;
+          const userMessages = body.messages || [];
+          const lastUserMsg = userMessages.filter((m) => m.role === "user").pop();
+          if (!lastUserMsg?.content) {
+            return new Response(JSON.stringify({ error: "No user message" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          // Find or create session by thread_id
+          const key = threadId || crypto.randomUUID();
+          let session = sessions.get(key);
+          if (!session) {
+            session = new GatewaySession(config, key);
+            sessions.set(key, session);
+          }
+
+          const { readable, writable } = new TransformStream<Uint8Array>();
+          const writer = writable.getWriter();
+          const encoder = new TextEncoder();
+
+          // Run chat SSE in background (non-blocking)
+          session.handleChatSSE(lastUserMsg.content, writer, encoder).catch(() => {
+            try {
+              writer.close();
+            } catch {
+              /* noop */
+            }
+          });
+
+          return new Response(readable, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: String(e) }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
 
       // Upgrade WebSocket connections
       if (url.pathname === "/ws") {

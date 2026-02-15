@@ -3115,8 +3115,9 @@ function generateHealthDataCards(data: unknown): ToolCardResult | null {
 
   // Quick action button
   const viewBtn = ui.button(t("activity.title"), "navigate:activity", {
-    variant: "ghost",
+    variant: "outline",
     size: "sm",
+    icon: "chevron-right",
   });
   children.push(viewBtn);
 
@@ -3144,17 +3145,17 @@ function generateHeartRateCards(data: unknown): ToolCardResult | null {
   });
 
   const maxCard = ui.statCard({
-    title: t("health.heartRate"),
+    title: t("health.maxHR"),
     value: d.maxToday ?? "--",
-    subtitle: `Max`,
+    subtitle: t("health.bpmMax"),
     icon: "trending-up",
     color: "#f97316",
   });
 
   const minCard = ui.statCard({
-    title: t("health.heartRate"),
+    title: t("health.minHR"),
     value: d.minToday ?? "--",
-    subtitle: `Min`,
+    subtitle: t("health.bpmMin"),
     icon: "trending-down",
     color: "#3b82f6",
   });
@@ -3181,8 +3182,9 @@ function generateHeartRateCards(data: unknown): ToolCardResult | null {
 
   // Quick action button
   const viewBtn = ui.button(t("health.title"), "navigate:health", {
-    variant: "ghost",
+    variant: "outline",
     size: "sm",
+    icon: "chevron-right",
   });
   children.push(viewBtn);
 
@@ -3251,8 +3253,9 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
 
   // Quick action button
   const viewBtn = ui.button(t("sleep.title"), "navigate:sleep", {
-    variant: "ghost",
+    variant: "outline",
     size: "sm",
+    icon: "chevron-right",
   });
   children.push(viewBtn);
 
@@ -3337,8 +3340,9 @@ function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
 
   // Quick action button
   const viewBtn = ui.button(t("activity.title"), "navigate:activity", {
-    variant: "ghost",
+    variant: "outline",
     size: "sm",
+    icon: "chevron-right",
   });
   children.push(viewBtn);
 

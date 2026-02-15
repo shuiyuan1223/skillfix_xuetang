@@ -37,6 +37,16 @@ interface A2UIRendererProps {
   isAutoScrollingRef: React.MutableRefObject<boolean>;
 }
 
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  get_health_data: "健康数据",
+  get_heart_rate: "心率数据",
+  get_sleep: "睡眠数据",
+  get_weekly_summary: "周报汇总",
+  get_workouts: "运动数据",
+  get_hrv: "心率变异性",
+  get_health_trends: "健康趋势",
+};
+
 export function A2UIRenderer({
   data, sendAction, sendNavigate, pendingPlotlyCharts, chatAutoScrollRef, isAutoScrollingRef,
 }: A2UIRendererProps) {
@@ -308,7 +318,7 @@ export function A2UIRenderer({
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
             <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
-            <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
+            <YAxis tick={axisStyle} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
             <Tooltip {...tooltipStyle} />
             <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={dotStyle} />
           </AreaChart>
@@ -345,7 +355,7 @@ export function A2UIRenderer({
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
           <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
-          <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
+          <YAxis tick={axisStyle} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
           <Tooltip {...tooltipStyle} />
           <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={dense ? 1.5 : 2.5} fill={`url(#${gradientId})`} dot={dotStyle} />
         </AreaChart>
@@ -388,7 +398,8 @@ export function A2UIRenderer({
     const variant = (c.variant as string) || "primary";
     const disabled = c.disabled as boolean;
     const payload = c.payload as Record<string, unknown>;
-    const btnBase = "px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
+    const icon = c.icon as string | undefined;
+    const btnBase = "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
     const btnVariants: Record<string, string> = {
       primary: "bg-primary text-primary-fg hover:-translate-y-px",
       secondary: "bg-surface text-text border border-border hover:bg-surface-hover hover:border-border-hover",
@@ -416,6 +427,7 @@ export function A2UIRenderer({
         onMouseEnter={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 30px var(--color-accent-glow)"; } : undefined}
         onMouseLeave={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = isAccent ? "var(--shadow-md), 0 0 24px var(--color-accent-glow)" : "var(--shadow-sm)"; } : undefined}
       >
+        {icon && <span className="inline-flex w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
         {label}
       </button>
     );
@@ -642,10 +654,11 @@ export function A2UIRenderer({
           : status === "error"
             ? <span className="text-error [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["x"] }} />
             : <span className="text-success [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
+        const displayName = TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
         return (
           <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[70%]">
             <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />
-            <span className="truncate">{part.toolName}</span>
+            <span className="truncate">{displayName}</span>
             {statusIcon}
           </div>
         );
@@ -685,30 +698,43 @@ export function A2UIRenderer({
           }
 
           // Assistant message — render parts inline
-          return (
-            <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-              <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
-              <div className="flex flex-col gap-2 min-w-0 flex-1">
-                {msg.parts.map((part, pi) => renderPart(part, pi))}
-              </div>
-            </div>
-          );
-        })}
+          {
+            const hasVisibleParts = msg.parts.some((p) =>
+              (p.type === "text" && p.content?.trim()) || p.type === "tool_use" || p.type === "tool_result"
+            );
+            const isActiveMsg = streaming && mi === messages.length - 1;
 
-        {streaming && (
-          <div className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-            <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
-            {streamingContent ? (
-              <div className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }} />
-            ) : (
-              <div className="flex gap-1.5 px-4 py-3 items-center">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
-                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
-                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+            return (
+              <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
+                <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+                <div className="flex flex-col gap-2 min-w-0 flex-1">
+                  {msg.parts.map((part, pi) => {
+                    // Add stream-border-pulse to actively streaming text part
+                    if (
+                      isActiveMsg && part.type === "text" && part.content?.trim() &&
+                      pi === msg.parts.length - 1
+                    ) {
+                      return (
+                        <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+                          <span dangerouslySetInnerHTML={{ __html: renderMarkdown(part.content) }} />
+                        </div>
+                      );
+                    }
+                    return renderPart(part, pi);
+                  })}
+                  {/* Typing indicator when assistant message has no visible parts yet */}
+                  {isActiveMsg && !hasVisibleParts && (
+                    <div className="flex gap-1.5 px-4 py-3 items-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        )}
+            );
+          }
+        })}
 
         {!streaming && (c.quickReplies as Array<{ label: string; content: string; icon?: string; variant?: string }>)?.length ? (
           <div className="flex gap-2 pl-13 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal">

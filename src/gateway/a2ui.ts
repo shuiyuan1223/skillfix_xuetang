@@ -691,7 +691,8 @@ export type AGUIEvent =
       toolCallId: string;
       content?: string;
       cards?: { components: unknown[]; root_id: string };
-    };
+    }
+  | { type: "Custom"; name: string; data: unknown };
 
 // ============================================================================
 // Parts Message Model

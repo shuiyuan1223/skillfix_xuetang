@@ -96,6 +96,19 @@ export interface AGUIToolCallResult {
   cards?: { components: unknown[]; root_id: string };
 }
 
+export interface AGUICustom {
+  type: "Custom";
+  name: string;
+  data: unknown;
+}
+
+export interface QuickReply {
+  label: string;
+  content: string;
+  icon?: string;
+  variant?: "primary" | "danger";
+}
+
 export type AGUIEvent =
   | AGUIRunStarted
   | AGUIRunFinished
@@ -104,7 +117,8 @@ export type AGUIEvent =
   | AGUITextMessageEnd
   | AGUIToolCallStart
   | AGUIToolCallEnd
-  | AGUIToolCallResult;
+  | AGUIToolCallResult
+  | AGUICustom;
 
 // Parts message model
 export type MessagePart =
