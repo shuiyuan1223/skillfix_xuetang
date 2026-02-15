@@ -358,10 +358,11 @@ export function ensureConfigDir(): void {
  * Migrate old config format to new unified model repository (in-memory only).
  * Idempotent: skips if `config.models.providers` already exists.
  */
-function migrateConfig(config: PHAConfig): void {
+/** @returns true if migration was performed */
+function migrateConfig(config: PHAConfig): boolean {
   // Already migrated
   if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
-    return;
+    return false;
   }
 
   const providers: Record<string, ModelProviderConfig> = {};
@@ -446,7 +447,9 @@ function migrateConfig(config: PHAConfig): void {
   // Only set if we actually found something to migrate
   if (Object.keys(providers).length > 0) {
     config.models = { providers };
+    return true;
   }
+  return false;
 }
 
 /** Derive a short model name from a full model ID (e.g. "anthropic/claude-sonnet-4" → "claude-sonnet-4") */
@@ -470,8 +473,15 @@ export function loadConfig(): PHAConfig {
     const content = fs.readFileSync(configPath, "utf-8");
     const loaded = JSON.parse(content);
     const config = { ...DEFAULT_CONFIG, ...loaded };
-    // Auto-migrate old format to new (in-memory only)
-    migrateConfig(config);
+    // Auto-migrate old format to new; persist if migration was performed
+    const migrated = migrateConfig(config);
+    if (migrated) {
+      try {
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      } catch {
+        // Best-effort — don't fail loadConfig if write fails
+      }
+    }
     return config;
   } catch {
     return { ...DEFAULT_CONFIG };
