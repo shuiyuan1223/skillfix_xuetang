@@ -263,23 +263,76 @@ export function A2UIRenderer({
     const maxVal = Math.max(...values, 1);
 
     if (chartType === "bar") {
+      const chartW = 960;
+      const mL = 52, mR = 12, mT = 16, mB = 24;
+      const plotW = chartW - mL - mR;
+      const plotH = height - mT - mB;
+      const yPad = maxVal * 0.1 || 1;
+      const yMax = Math.ceil(maxVal + yPad);
+      const barCount = data.length;
+      const barGap = plotW * 0.15 / Math.max(barCount, 1);
+      const barW = (plotW - barGap * (barCount + 1)) / barCount;
+
+      const barCoords = data.map((d, i) => {
+        const x = mL + barGap + i * (barW + barGap);
+        const barH = (values[i] / yMax) * plotH;
+        return { x, y: mT + plotH - barH, w: barW, h: barH, label: String(d[xKey]), value: values[i] };
+      });
+
+      // Trend line through bar centers
+      const linePoints = barCoords.map((b) => `${b.x + b.w / 2},${b.y}`).join(" ");
+      const areaPoints = `${barCoords[0].x + barCoords[0].w / 2},${mT + plotH} ${linePoints} ${barCoords[barCoords.length - 1].x + barCoords[barCoords.length - 1].w / 2},${mT + plotH}`;
+
+      const gridCount = 4;
+      const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
+        const pct = i / gridCount;
+        const val = pct * yMax;
+        return {
+          y: mT + plotH - pct * plotH,
+          label: val >= 10000 ? `${(val / 1000).toFixed(0)}k` : val >= 1000 ? `${(val / 1000).toFixed(1)}k` : String(Math.round(val)),
+        };
+      });
+
+      const gradId = `bar-line-grad-${color.replace("#", "")}`;
+
       return (
-        <div className="w-full relative flex items-end gap-2 px-2 pb-8 pt-4 box-border" style={{ height }}>
-          {data.map((d, i) => {
-            const pct = (values[i] / maxVal) * 100;
-            return (
-              <div key={i} className="flex-1 flex flex-col items-center h-full justify-end relative cursor-pointer group">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full bg-surface-elevated text-text px-2 py-1 rounded text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none transition-opacity duration-fast z-10 shadow-lg group-hover:opacity-100">
-                  {values[i]}
-                </div>
-                <div
-                  className="w-full max-w-[40px] min-h-[4px] rounded-t transition-[height] duration-normal origin-bottom motion-safe:animate-bar-grow group-hover:brightness-125"
-                  style={{ height: `${pct}%`, background: color }}
-                />
-                <div className="text-[10px] text-text-muted mt-2 whitespace-nowrap">{String(d[xKey])}</div>
-              </div>
-            );
-          })}
+        <div className="w-full relative" style={{ minHeight: height }}>
+          <svg viewBox={`0 0 ${chartW} ${height}`} className="w-full" style={{ display: "block" }}>
+            {gridLines.map((g, i) => (
+              <React.Fragment key={i}>
+                <line x1={mL} y1={g.y} x2={chartW - mR} y2={g.y} stroke="currentColor" strokeOpacity="0.08" strokeWidth="1" />
+                <text x={mL - 8} y={g.y + 4} textAnchor="end" fill="currentColor" fillOpacity="0.45" fontSize="11" fontFamily="system-ui">{g.label}</text>
+              </React.Fragment>
+            ))}
+            {/* Bars */}
+            {barCoords.map((b, i) => (
+              <g key={i} className="chart-point-group">
+                <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={3} fill={color} fillOpacity="0.6" className="transition-all duration-200 hover:fill-opacity-85">
+                  <title>{b.label}: {b.value}</title>
+                </rect>
+              </g>
+            ))}
+            {/* Trend line overlay */}
+            {barCount > 1 && (
+              <>
+                <defs>
+                  <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity="0.12" />
+                    <stop offset="100%" stopColor={color} stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <polygon points={areaPoints} fill={`url(#${gradId})`} />
+                <polyline fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" points={linePoints} strokeOpacity="0.8" />
+                {barCoords.map((b, i) => (
+                  <circle key={i} cx={b.x + b.w / 2} cy={b.y} r="3" fill={color} />
+                ))}
+              </>
+            )}
+            {/* X labels */}
+            {barCoords.map((b, i) => (
+              <text key={i} x={b.x + b.w / 2} y={height - 4} textAnchor="middle" fill="currentColor" fillOpacity="0.4" fontSize="11" fontFamily="system-ui">{b.label}</text>
+            ))}
+          </svg>
         </div>
       );
     }
