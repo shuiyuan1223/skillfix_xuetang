@@ -194,6 +194,8 @@ export interface PHAConfig {
   agentModel?: string;
   /** Judge model: new format = string "provider/name", old format = BenchmarkModelConfig object */
   judgeModel?: string | BenchmarkModelConfig;
+  /** System Agent model reference: "provider/name" */
+  systemAgentModel?: string;
   /** Embedding model reference: "provider/name" */
   embeddingModel?: string;
   /** Benchmark config (new format with model refs) */
@@ -679,6 +681,26 @@ export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
     label: `${providerName} (${modelId})`,
     name: deriveModelName(modelId),
   };
+}
+
+/**
+ * Resolve the system agent model (used for evolution/code operations).
+ * Falls back to agent model if systemAgentModel is not configured.
+ */
+export function resolveSystemAgentModel(config?: PHAConfig): ResolvedModel {
+  const cfg = config || loadConfig();
+
+  // New format: systemAgentModel ref
+  if (cfg.systemAgentModel && cfg.models?.providers) {
+    try {
+      return resolveModel(cfg.systemAgentModel, cfg);
+    } catch {
+      // Fall through to agent model
+    }
+  }
+
+  // Fallback: use agent model
+  return resolveAgentModel(cfg);
 }
 
 /**

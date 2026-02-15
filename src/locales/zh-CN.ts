@@ -613,6 +613,7 @@ export const zhCN: LocaleMessages = {
     modelActualId: "模型 ID (API)",
     modelLabel: "显示名称",
     agentModelSelect: "Agent 模型",
+    systemAgentModelSelect: "System Agent 模型",
     judgeModelSelect: "评估模型 (Judge)",
     embeddingModelSelect: "Embedding 模型",
     benchmarkModelsSelect: "基准测试模型",

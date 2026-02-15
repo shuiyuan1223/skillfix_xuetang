@@ -640,6 +640,7 @@ export interface LocaleMessages {
     modelActualId: string;
     modelLabel: string;
     agentModelSelect: string;
+    systemAgentModelSelect: string;
     judgeModelSelect: string;
     embeddingModelSelect: string;
     benchmarkModelsSelect: string;

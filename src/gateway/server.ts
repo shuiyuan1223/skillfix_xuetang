@@ -26,6 +26,7 @@ import {
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
   getBenchmarkConcurrency,
+  resolveSystemAgentModel,
   PROVIDER_CONFIGS,
   listAllModelRefs,
   type LLMProvider,
@@ -1225,11 +1226,13 @@ export class GatewaySession {
 
   private async getSystemAgent(): Promise<SystemAgent> {
     if (!this.systemAgent) {
+      const config = loadConfig();
+      const saModel = resolveSystemAgentModel(config);
       this.systemAgent = createSystemAgent({
-        apiKey: this.config.apiKey,
-        provider: this.config.provider,
-        modelId: this.config.modelId,
-        baseUrl: this.config.baseUrl,
+        apiKey: saModel.apiKey,
+        provider: saModel.provider as any,
+        modelId: saModel.modelId,
+        baseUrl: saModel.baseUrl,
         sessionMessages: this.systemAgentChatMessages,
       });
 
@@ -1829,6 +1832,7 @@ export class GatewaySession {
           modelProviders,
           allModelRefs,
           agentModelRef: config.agentModel || "",
+          systemAgentModelRef: config.systemAgentModel || "",
           judgeModelRef: typeof config.judgeModel === "string" ? config.judgeModel : "",
           embeddingModelRef: config.embeddingModel || "",
           benchmarkModelRefs: config.benchmark?.models || [],
@@ -3242,6 +3246,8 @@ export class GatewaySession {
           // Save model assignments
           if (formData.agentModelRef !== undefined)
             config.agentModel = String(formData.agentModelRef) || undefined;
+          if (formData.systemAgentModelRef !== undefined)
+            config.systemAgentModel = String(formData.systemAgentModelRef) || undefined;
           if (formData.judgeModelRef !== undefined)
             config.judgeModel = String(formData.judgeModelRef) || undefined;
           if (formData.embeddingModelRef !== undefined)

@@ -622,6 +622,7 @@ export const en: LocaleMessages = {
     modelActualId: "Model ID (API)",
     modelLabel: "Display Name",
     agentModelSelect: "Agent Model",
+    systemAgentModelSelect: "System Agent Model",
     judgeModelSelect: "Judge Model",
     embeddingModelSelect: "Embedding Model",
     benchmarkModelsSelect: "Benchmark Models",

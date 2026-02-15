@@ -1620,6 +1620,7 @@ export interface SettingsPageData {
   }>;
   allModelRefs: string[];
   agentModelRef: string;
+  systemAgentModelRef: string;
   judgeModelRef: string;
   embeddingModelRef: string;
   benchmarkModelRefs: string[];
@@ -1749,6 +1750,11 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     options: modelRefOptions,
     value: data.agentModelRef,
   });
+  const systemAgentModelSelect = ui.formInput("systemAgentModelRef", "select", {
+    label: t("settings.systemAgentModelSelect"),
+    options: modelRefOptions,
+    value: data.systemAgentModelRef,
+  });
   const judgeModelSelect = ui.formInput("judgeModelRef", "select", {
     label: t("settings.judgeModelSelect"),
     options: modelRefOptions,
@@ -1760,7 +1766,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     value: data.embeddingModelRef,
   });
   const assignmentsForm = ui.form(
-    [agentModelSelect, judgeModelSelect, embeddingModelSelect],
+    [agentModelSelect, systemAgentModelSelect, judgeModelSelect, embeddingModelSelect],
     "settings_save_model_assignments",
     { submitLabel: t("settings.saveAssignments") }
   );
