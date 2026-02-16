@@ -692,7 +692,7 @@ export function A2UIRenderer({
 
     return (
       <div
-        className="chat-scroll-container flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-6"
+        className="chat-scroll-container flex-1 min-h-0 overflow-y-auto px-6 py-6 md:px-12 lg:px-20 flex flex-col gap-6"
         onScroll={(e) => {
           if (isAutoScrollingRef.current) return;
           const el = e.currentTarget;
@@ -741,10 +741,10 @@ export function A2UIRenderer({
                   })}
                   {/* Typing indicator when assistant message has no visible parts yet */}
                   {isActiveMsg && !hasVisibleParts && (
-                    <div className={`${msgBubble} bg-surface-card border border-border flex gap-1.5 items-center`} style={{ boxShadow: "var(--shadow-sm)" }}>
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+                    <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border" style={{ boxShadow: "var(--shadow-sm)" }}>
+                      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+                      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+                      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
                     </div>
                   )}
                 </div>
