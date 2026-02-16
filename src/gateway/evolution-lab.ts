@@ -813,18 +813,34 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
 
-  // Action buttons
-  const quickBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
-    variant: "secondary",
+  // Header row: title left, icon action buttons right
+  const tabTitle = ui.text(t("evolution.tabBenchmark"), "h3");
+  const quickBtn = ui.button("", "run_benchmark", {
+    variant: "outline",
     size: "sm",
+    icon: "play",
+    tooltip: t("evolution.runQuickBenchmark"),
     payload: { profile: "quick" },
-  });
-  const fullBtn = ui.button(t("evolution.runFullBenchmark"), "run_benchmark", {
-    variant: "secondary",
+  } as any);
+  const fullBtn = ui.button("", "run_benchmark", {
+    variant: "primary",
     size: "sm",
+    icon: "zap",
+    tooltip: t("evolution.runFullBenchmark"),
     payload: { profile: "full" },
-  });
-  children.push(ui.card([ui.row([quickBtn, fullBtn], { gap: 8 })], { padding: 12 }));
+  } as any);
+  const addTestBtn = ui.button("", "create_test_case", {
+    variant: "outline",
+    size: "sm",
+    icon: "sparkles",
+    tooltip: t("evolution.addTestCase"),
+  } as any);
+  children.push(
+    ui.row([tabTitle, ui.row([addTestBtn, quickBtn, fullBtn], { gap: 6 })], {
+      justify: "between",
+      align: "center",
+    })
+  );
 
   // SHARP Category Breakdown Cards (using arena_category_card style)
   if (data.latestRunCategoryScores && data.latestRunCategoryScores.length > 0) {
@@ -916,11 +932,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
       testRows,
       { onRowClick: "view_test_case" }
     );
-    const addTestBtn = ui.button(t("evolution.addTestCase"), "create_test_case", {
-      variant: "primary",
-      size: "sm",
-    });
-    children.push(ui.card([testCasesLabel, testsTable, addTestBtn], { padding: 16 }));
+    children.push(ui.card([testCasesLabel, testsTable], { padding: 16 }));
   }
 
   // Config summary
@@ -937,17 +949,33 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
 function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
 
-  // Active version indicator
+  // Header row: title + active branch badge + icon buttons
+  const tabTitle = ui.text(t("evolution.tabVersions"), "h3");
+  const headerLeft: string[] = [tabTitle];
+  const headerRight: string[] = [];
+
   if (data.activeVersionBranch) {
     const activeBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
-    const activeLabel = ui.text(t("evolution.activeVersion"), "label");
-    const resetBtn = ui.button(t("evolution.resetToMain"), "switch_version", {
+    headerLeft.push(activeBadge);
+    const resetBtn = ui.button("", "switch_version", {
       variant: "outline",
       size: "sm",
+      icon: "refresh-cw",
+      tooltip: t("evolution.resetToMain"),
       payload: { branch: null },
-    });
-    children.push(ui.row([activeLabel, activeBadge, resetBtn], { gap: 12, align: "center" }));
+    } as any);
+    headerRight.push(resetBtn);
   }
+
+  children.push(
+    ui.row(
+      [
+        ui.row(headerLeft, { gap: 8, align: "center" }),
+        ...(headerRight.length > 0 ? [ui.row(headerRight, { gap: 6 })] : []),
+      ],
+      { justify: "between", align: "center" }
+    )
+  );
 
   // Left-right layout: GitLens timeline + detail panel
   const leftChildren: string[] = [];
@@ -1218,7 +1246,8 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
 
-  // Sub-tabs as buttons
+  // Header row: title left, sub-tab toggles right
+  const tabTitle = ui.text(t("evolution.tabData"), "h3");
   const subTab = data.dataSubTab || "traces";
   const tracesBtn = ui.button(t("evolution.traces"), "evo_data_subtab_change", {
     variant: subTab === "traces" ? "secondary" : "ghost",
@@ -1235,7 +1264,12 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
     size: "sm",
     payload: { tab: "suggestions" },
   });
-  children.push(ui.row([tracesBtn, evalsBtn, suggsBtn], { gap: 8 }));
+  children.push(
+    ui.row([tabTitle, ui.row([tracesBtn, evalsBtn, suggsBtn], { gap: 4 })], {
+      justify: "between",
+      align: "center",
+    })
+  );
 
   // Traces sub-tab
   if (subTab === "traces") {

@@ -153,6 +153,7 @@ export interface ButtonComponent extends A2UIComponent {
   size?: "sm" | "md" | "lg";
   payload?: Record<string, unknown>;
   disabled?: boolean;
+  tooltip?: string; // Tooltip text (shown on hover). When icon is set and label is empty, renders as icon-only button.
 }
 
 // Progress Component

@@ -146,10 +146,16 @@ export function A2UIRenderer({
 
   function rcRow(c: A2UIComponent) {
     const gap = (c.gap as number) || 0;
-    const justify = (c.justify as string) || "start";
+    const rawJustify = (c.justify as string) || "start";
     const align = (c.align as string) || "center";
     const className = (c.className as string) || "";
     const extraStyle = (c.style as string) || "";
+    // Map shorthand values to valid CSS
+    const justifyMap: Record<string, string> = {
+      start: "flex-start", center: "center", end: "flex-end",
+      between: "space-between", around: "space-around",
+    };
+    const justify = justifyMap[rawJustify] || rawJustify;
     return (
       <div className={`flex flex-row ${className}`} style={parseStyle(`gap: ${gap}px; justify-content: ${justify}; align-items: ${align}; ${extraStyle}`)}>
         {renderChildren(c.children)}
@@ -399,7 +405,9 @@ export function A2UIRenderer({
     const disabled = c.disabled as boolean;
     const payload = c.payload as Record<string, unknown>;
     const icon = c.icon as string | undefined;
-    const btnBase = "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
+    const tooltip = c.tooltip as string | undefined;
+    const isIconOnly = icon && !label;
+
     const btnVariants: Record<string, string> = {
       primary: "bg-primary text-primary-fg hover:-translate-y-px",
       secondary: "bg-surface text-text border border-border hover:bg-surface-hover hover:border-border-hover",
@@ -408,6 +416,11 @@ export function A2UIRenderer({
       danger: "bg-red-600 text-white hover:bg-red-700 hover:-translate-y-px",
       accent: "text-white hover:-translate-y-0.5 animate-[glow-pulse_3s_ease-in-out_infinite]",
     };
+
+    const btnBase = isIconOnly
+      ? "inline-flex items-center justify-center w-8 h-8 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.93] transition-all duration-150 [&>svg]:w-4 [&>svg]:h-4"
+      : "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
+
     const isAccent = variant === "accent";
     const isElevated = variant === "primary" || isAccent;
     const accentStyle: React.CSSProperties = isAccent
@@ -423,11 +436,15 @@ export function A2UIRenderer({
         className={`${btnBase} ${btnVariants[variant] || btnVariants.primary}`}
         style={accentStyle}
         disabled={disabled}
+        title={tooltip || (isIconOnly ? undefined : undefined)}
         onClick={() => sendAction(action, payload)}
         onMouseEnter={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 30px var(--color-accent-glow)"; } : undefined}
         onMouseLeave={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = isAccent ? "var(--shadow-md), 0 0 24px var(--color-accent-glow)" : "var(--shadow-sm)"; } : undefined}
       >
-        {icon && <span className="inline-flex w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
+        {icon && (isIconOnly
+          ? <span dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />
+          : <span className="inline-flex w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />
+        )}
         {label}
       </button>
     );

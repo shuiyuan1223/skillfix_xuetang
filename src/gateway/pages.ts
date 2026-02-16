@@ -990,10 +990,12 @@ export function generateSkillsPage(data: {
   const headerChildren = [ui.column([title, subtitle], { gap: 4 })];
   // Only show create button for PHA scope
   if (scope === "pha") {
-    const createBtn = ui.button(t("skills.newSkill"), "create_skill", {
+    const createBtn = ui.button("", "create_skill", {
       variant: "primary",
       size: "sm",
-    });
+      icon: "sparkles",
+      tooltip: t("skills.newSkill"),
+    } as any);
     headerChildren.push(createBtn);
   }
   const headerRow = ui.row(headerChildren, {
@@ -1434,10 +1436,12 @@ export function generateIntegrationsPage(data: IntegrationsPageData): A2UIMessag
   // Header
   const title = ui.text(t("integrations.title"), "h1");
   const subtitle = ui.text(t("integrations.subtitle"), "caption");
-  const refreshBtn = ui.button(t("integrations.refreshData"), "refresh_integrations", {
+  const refreshBtn = ui.button("", "refresh_integrations", {
     variant: "outline",
     size: "sm",
-  });
+    icon: "refresh-cw",
+    tooltip: t("integrations.refreshData"),
+  } as any);
   const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), refreshBtn], {
     justify: "between",
     align: "center",
@@ -1781,10 +1785,12 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage {
   // Header
   const title = ui.text(t("logs.title"), "h1");
   const subtitle = ui.text(t("logs.subtitle"), "caption");
-  const refreshBtn = ui.button(t("logs.refresh"), "logs_refresh", {
+  const refreshBtn = ui.button("", "logs_refresh", {
     variant: "outline",
     size: "sm",
-  });
+    icon: "refresh-cw",
+    tooltip: t("logs.refresh"),
+  } as any);
   const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), refreshBtn], {
     justify: "between",
     align: "center",
