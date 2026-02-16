@@ -5599,7 +5599,14 @@ export async function startGateway(
         const userUuid = extractUserUuid(req);
         const session = getOrCreateSession(userUuid);
 
-        const { readable, connection } = sseManager.createConnection(session.getSessionId());
+        const result = sseManager.createConnection(session.getSessionId());
+        if (!result) {
+          return new Response("Too Many Requests", {
+            status: 429,
+            headers: { "Retry-After": "2" },
+          });
+        }
+        const { readable, connection } = result;
 
         // Bind session's active send to this SSE connection
         session.setSend((msg) => {

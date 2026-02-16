@@ -68,26 +68,38 @@ export class SSEConnection {
   /** Send an SSE event with id + data fields. */
   send(msg: unknown, eventId?: number): void {
     if (this.closed) return;
-    try {
-      let frame = "";
-      if (eventId !== undefined) {
-        frame += `id: ${eventId}\n`;
-      }
-      frame += `data: ${JSON.stringify(msg)}\n\n`;
-      this.writer.write(this.encoder.encode(frame));
-    } catch {
-      this.closed = true;
+    let frame = "";
+    if (eventId !== undefined) {
+      frame += `id: ${eventId}\n`;
     }
+    frame += `data: ${JSON.stringify(msg)}\n\n`;
+    this.writer.write(this.encoder.encode(frame)).catch(() => {
+      this.closed = true;
+    });
   }
 
   /** SSE comment line as heartbeat. */
   sendHeartbeat(): void {
     if (this.closed) return;
-    try {
-      this.writer.write(this.encoder.encode(": heartbeat\n\n"));
-    } catch {
+    this.writer.write(this.encoder.encode(": heartbeat\n\n")).catch(() => {
       this.closed = true;
+    });
+  }
+
+  /**
+   * Detach: stop heartbeat but do NOT close the writer.
+   * Prevents reconnection cascade — the old stream dies naturally
+   * when the client disconnects instead of triggering an immediate
+   * EventSource reconnect.
+   */
+  detach(): void {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
+    // Intentionally NOT closing writer
   }
 
   /** Close the underlying stream. */
@@ -98,11 +110,9 @@ export class SSEConnection {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
-    try {
-      this.writer.close();
-    } catch {
-      /* already closed */
-    }
+    this.writer.close().catch(() => {
+      /* already closed or errored */
+    });
   }
 
   get isClosed(): boolean {
@@ -116,23 +126,40 @@ export class SSEConnection {
 
 const REPLAY_BUFFER_SIZE = 100;
 
+/** Minimum interval between SSE reconnections for the same session (ms). */
+const SSE_RECONNECT_MIN_INTERVAL = 1000;
+
 export class SSEConnectionManager {
   private connections = new Map<string, SSEConnection>();
   private eventBuffers = new Map<string, RingBuffer<SSEEvent>>();
   private eventCounters = new Map<string, number>();
+  private lastConnectTime = new Map<string, number>();
 
   /**
    * Create a new SSE connection for a session.
    * Closes any existing connection for the same session (browser reconnect).
+   * Returns null if the session is reconnecting too fast (rate limited).
    */
   createConnection(sessionId: string): {
     readable: ReadableStream<Uint8Array>;
     connection: SSEConnection;
-  } {
-    // Close previous connection if any
+  } | null {
+    // Rate limit: reject rapid reconnections for the same session
+    const now = Date.now();
+    const lastTime = this.lastConnectTime.get(sessionId) || 0;
+    if (now - lastTime < SSE_RECONNECT_MIN_INTERVAL) {
+      log.warn("SSE reconnect too fast, throttled", { sessionId: sessionId.slice(0, 8) });
+      return null;
+    }
+    this.lastConnectTime.set(sessionId, now);
+
+    // Detach previous connection — do NOT close its writer, as that would
+    // end the ReadableStream and trigger the browser's EventSource to
+    // immediately reconnect, creating a cascade of rapid reconnections.
+    // Just stop its heartbeat and let it die naturally when the client drops.
     const prev = this.connections.get(sessionId);
     if (prev) {
-      prev.close();
+      prev.detach();
     }
 
     const { readable, writable } = new TransformStream<Uint8Array>();
