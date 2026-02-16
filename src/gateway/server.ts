@@ -2299,12 +2299,12 @@ export class GatewaySession {
     if (this._chatLock) {
       const err = JSON.stringify({ type: "error", message: "Chat is busy" });
       try {
-        writer.write(encoder.encode(`data: ${err}\n\n`));
+        writer.write(encoder.encode(`data: ${err}\n\n`)).catch(() => {});
       } catch {
         /* noop */
       }
       try {
-        writer.close();
+        writer.close().catch(() => {});
       } catch {
         /* noop */
       }
@@ -2317,7 +2317,9 @@ export class GatewaySession {
     const safeWrite = (data: string) => {
       if (streamClosed) return;
       try {
-        writer.write(encoder.encode(data));
+        writer.write(encoder.encode(data)).catch(() => {
+          streamClosed = true;
+        });
       } catch {
         streamClosed = true;
       }
@@ -2326,7 +2328,9 @@ export class GatewaySession {
       if (streamClosed) return;
       streamClosed = true;
       try {
-        writer.close();
+        writer.close().catch(() => {
+          /* already closed */
+        });
       } catch {
         /* already closed */
       }
@@ -5672,7 +5676,7 @@ export async function startGateway(
           // Run chat SSE in background (non-blocking)
           session.handleChatSSE(lastUserMsg.content, writer, encoder).catch(() => {
             try {
-              writer.close();
+              writer.close().catch(() => {});
             } catch {
               /* noop */
             }
@@ -5965,10 +5969,18 @@ export async function startGateway(
 
   // Prevent uncaught errors from crashing the process
   process.on("uncaughtException", (err) => {
-    log.error("Uncaught exception (process kept alive)", { error: err });
+    log.error("Uncaught exception (process kept alive)", {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : new Error().stack,
+      type: typeof err,
+    });
   });
   process.on("unhandledRejection", (reason) => {
-    log.error("Unhandled rejection (process kept alive)", { error: reason });
+    log.error("Unhandled rejection (process kept alive)", {
+      error: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack : new Error().stack,
+      type: typeof reason,
+    });
   });
 }
 
