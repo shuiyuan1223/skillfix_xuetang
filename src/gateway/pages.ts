@@ -1151,6 +1151,7 @@ export interface ToolPageEntry {
   displayName: string;
   description: string;
   category: string;
+  agent: string; // "PHA" | "System" | "PHA / System"
   icon?: string;
   companionSkill?: string;
   inputSchema?: Record<string, unknown>;
@@ -1188,6 +1189,7 @@ export function generateToolsPage(data: {
     displayName: t.displayName,
     description: t.description,
     category: t.category,
+    agent: t.agent,
     skill: t.companionSkill || "-",
   }));
 
@@ -1197,6 +1199,7 @@ export function generateToolsPage(data: {
       { key: "displayName", label: "Display Name", sortable: true },
       { key: "description", label: "Description" },
       { key: "category", label: "Category", render: "badge" },
+      { key: "agent", label: "Agent", render: "badge" },
       { key: "skill", label: "Skill", render: "link" as const, action: "view_skill_from_table" },
     ],
     rows,
@@ -1227,10 +1230,12 @@ export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
   const descText = ui.text(tool.description, "body");
   children.push(descText);
 
-  // Category + Skill row
+  // Category + Agent + Skill
   const metaItems: string[] = [];
   const catLabel = ui.text(`Category: ${tool.category}`, "caption");
   metaItems.push(catLabel);
+  const agentLabel = ui.text(`Agent: ${tool.agent}`, "caption");
+  metaItems.push(agentLabel);
   if (tool.companionSkill) {
     const skillBtn = ui.button(`Companion Skill: ${tool.companionSkill}`, "view_skill_from_tool", {
       variant: "ghost",

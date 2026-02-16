@@ -11,6 +11,17 @@ import type { PHATool, ToolCategory, MCPToolResult } from "./types.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { createHealthTools } from "./health-data.js";
 
+// Derive agent assignment from category
+// PHA Agent gets ALL tools; System Agent gets git/evolution/system/feedback/skill
+const SA_CATEGORIES = new Set<ToolCategory>(["git", "evolution", "system", "feedback", "skill"]);
+const PHA_ONLY_CATEGORIES = new Set<ToolCategory>(["health", "memory", "profile", "config"]);
+
+export function categoryToAgent(category: ToolCategory): string {
+  if (PHA_ONLY_CATEGORIES.has(category)) return "PHA";
+  if (SA_CATEGORIES.has(category)) return "PHA / System";
+  return "PHA";
+}
+
 export class ToolRegistry {
   private tools = new Map<string, PHATool<any>>();
 
@@ -145,6 +156,7 @@ export class ToolRegistry {
     displayName: string;
     description: string;
     category: ToolCategory;
+    agent: string;
     icon?: string;
     companionSkill?: string;
     inputSchema?: Record<string, unknown>;
@@ -154,6 +166,7 @@ export class ToolRegistry {
       displayName: t.displayName,
       description: t.description,
       category: t.category,
+      agent: categoryToAgent(t.category),
       icon: t.icon,
       companionSkill: t.companionSkill,
       inputSchema: t.inputSchema,

@@ -108,7 +108,7 @@ import {
   createSkillTool,
 } from "../tools/skill-tools.js";
 import { systemMemoryReadTool, systemMemoryWriteTool } from "../tools/system-memory-tools.js";
-import { globalRegistry } from "../tools/index.js";
+import { globalRegistry, categoryToAgent } from "../tools/index.js";
 import {
   listTraces,
   countTraces,
@@ -3025,6 +3025,7 @@ export class GatewaySession {
             displayName: tool.displayName,
             description: tool.description,
             category: tool.category,
+            agent: categoryToAgent(tool.category),
             icon: tool.icon,
             companionSkill: tool.companionSkill,
             inputSchema: tool.inputSchema,

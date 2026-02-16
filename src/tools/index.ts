@@ -49,4 +49,4 @@ export * from "./system-memory-tools.js";
 export * from "./profile-tools.js";
 export * from "./tool-feedback.js";
 export * from "./types.js";
-export { ToolRegistry } from "./registry.js";
+export { ToolRegistry, categoryToAgent } from "./registry.js";
