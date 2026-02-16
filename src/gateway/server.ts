@@ -39,7 +39,12 @@ import {
 } from "../utils/config.js";
 import { installFetchInterceptor } from "../utils/llm-logger.js";
 import { getMemoryManager } from "../memory/index.js";
-import { appendToSession, loadLatestSession, type SessionEntry } from "../memory/session-store.js";
+import {
+  appendToSession,
+  loadLatestSession,
+  touchSession,
+  type SessionEntry,
+} from "../memory/session-store.js";
 
 // Install fetch interceptor to log raw LLM API requests/responses
 installFetchInterceptor();
@@ -918,6 +923,7 @@ export class GatewaySession {
   private systemAgent: SystemAgent | null = null;
   private config: GatewayConfig;
   private sessionId: string;
+  private saSessionId: string; // Separate session ID for System Agent persistence
   private dataSource: HealthDataSource;
 
   // User identification (from cookie)
@@ -1040,6 +1046,7 @@ export class GatewaySession {
   constructor(config: GatewayConfig = {}, userUuid?: string) {
     this.config = config;
     this.sessionId = crypto.randomUUID();
+    this.saSessionId = crypto.randomUUID();
     this.userUuid = userUuid || getUserUuid();
 
     // Use user-specific data source if userUuid is provided
@@ -1068,7 +1075,7 @@ export class GatewaySession {
    */
   private persistMessage(channel: "chat" | "system-agent", entry: SessionEntry): void {
     if (!this.userUuid) return;
-    const sid = channel === "chat" ? this.sessionId : `sa-${this.sessionId}`;
+    const sid = channel === "chat" ? this.sessionId : `sa-${this.saSessionId}`;
     try {
       appendToSession(this.userUuid, sid, [entry]);
     } catch (err) {
@@ -1104,6 +1111,8 @@ export class GatewaySession {
       if (saSession && saSession.entries.length > 0) {
         const lastTs = saSession.entries[saSession.entries.length - 1].timestamp;
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
+          // Extract saSessionId from the persisted file name (strip "sa-" prefix)
+          this.saSessionId = saSession.sessionId.replace(/^sa-/, "");
           this.systemAgentChatMessages = saSession.entries
             .filter((e) => e.role === "user" || e.role === "assistant")
             .map((e) => ({
@@ -2638,7 +2647,28 @@ export class GatewaySession {
     send: (msg: unknown) => void
   ): Promise<void> {
     // Handle UI actions (button clicks, form submissions, etc.)
-    if (action === "send_message" && payload?.content) {
+    if (action === "clear_chat") {
+      // Clear PHA chat history and start a new session
+      this.chatMessages = [];
+      this.isStreaming = false;
+      this.streamingContent = "";
+      this.currentAssistantMsgId = null;
+      this.lastStreamedText = "";
+      this.sessionId = crypto.randomUUID(); // New session so old messages won't reload
+      if (this.userUuid) touchSession(this.userUuid, this.sessionId); // Create empty file as "latest"
+      this.agent = null; // Force agent rebuild without old history
+      this.sendChatUpdate(send);
+    } else if (action === "sa_clear_chat") {
+      // Clear System Agent chat history and start a new session
+      this.systemAgentChatMessages = [];
+      this.systemAgentStreaming = false;
+      this.systemAgentStreamingContent = "";
+      this.saCurrentAssistantMsgId = null;
+      this.saLastStreamedText = "";
+      this.saSessionId = crypto.randomUUID(); // New SA session so old messages won't reload
+      if (this.userUuid) touchSession(this.userUuid, `sa-${this.saSessionId}`); // Create empty file as "latest"
+      this.sendEvolutionLabUpdate(send);
+    } else if (action === "send_message" && payload?.content) {
       // Chat message from UI
       await this.handleUserMessage(payload.content as string, send);
     } else if (action === "stop_generation") {

@@ -15,6 +15,7 @@ export const i18n = {
     switchToLight: "切换到亮色模式",
     switchToDark: "切换到暗色模式",
     collapseSidebar: "收起侧边栏",
+    newChat: "新对话",
   },
   evolution: {
     playgroundChatPlaceholder: "Waiting for messages...",

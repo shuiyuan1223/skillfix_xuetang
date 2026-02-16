@@ -552,6 +552,34 @@ export function App() {
         });
       }
 
+      // Clear chat: reset local + server state, show welcome screen
+      if (action === "clear_chat") {
+        abortControllerRef.current?.abort();
+        setChatMessages([]);
+        setChatStreaming(false);
+        setQuickReplies([]);
+        activeMessageRef.current = null;
+        chatInitializedRef.current = false;
+        // Clear messages from mainData so welcome screen shows immediately
+        setMainData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            components: prev.components.map((c) => {
+              if (c.type === "chat_messages" && (!c.action || c.action === "send_message")) {
+                return { ...c, messages: [], streaming: false };
+              }
+              if (c.type === "chat_input" && (!c.action || c.action === "send_message")) {
+                return { ...c, streaming: false };
+              }
+              return c;
+            }),
+          };
+        });
+        postAction({ type: "action", action, payload: {} }, handleMessageRef.current);
+        return;
+      }
+
       // Stop generation: abort SSE fetch
       if (action === "stop_generation") {
         abortControllerRef.current?.abort();
@@ -989,16 +1017,18 @@ export function App() {
           )}
         </div>
         <div className="sidebar-bottom">
-          <button
-            className="sidebar-bottom-btn"
-            onClick={() => toggleTheme()}
-            title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
-            dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
-          />
-          <span
-            className={`status-dot ${connected ? "online" : "offline"}`}
-            title={connected ? i18n.common.connected : i18n.common.reconnecting}
-          />
+          <div className="relative">
+            <button
+              className="sidebar-bottom-btn"
+              onClick={() => toggleTheme()}
+              title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
+              dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
+            />
+            <span
+              className={`status-dot-badge ${connected ? "online" : "offline"}`}
+              title={connected ? i18n.common.connected : i18n.common.reconnecting}
+            />
+          </div>
         </div>
       </aside>
 

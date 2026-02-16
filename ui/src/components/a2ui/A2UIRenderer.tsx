@@ -780,9 +780,18 @@ export function A2UIRenderer({
     const disabled = c.disabled as boolean;
     const placeholder = (c.placeholder as string) || "Ask me anything...";
     const actionName = (c.action as string) || "send_message";
+    const clearAction = c.clearAction as string | undefined;
     const stopAction = actionName.startsWith("sa_") ? "sa_stop_generation" : "stop_generation";
     return (
       <div className="chat-input-bar flex shrink-0 gap-3 p-4 border-t border-border bg-surface backdrop-blur-[16px]">
+        {clearAction && (
+          <button
+            className="w-10 h-10 rounded-xl border border-border bg-transparent text-text-secondary cursor-pointer flex items-center justify-center shrink-0 [&>svg]:w-4 [&>svg]:h-4 hover:text-text hover:bg-surface-hover hover:border-border-hover transition-all duration-150 active:scale-[0.93]"
+            title={i18n.common?.newChat || "New Chat"}
+            onClick={() => sendAction(clearAction)}
+            dangerouslySetInnerHTML={{ __html: ICONS["refresh-cw"] }}
+          />
+        )}
         <input
           type="text"
           className="flex-1 py-2.5 px-4 bg-bg border border-border rounded-xl text-text text-[13.5px] transition-all duration-150 outline-none placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/10"

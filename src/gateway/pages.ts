@@ -129,6 +129,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
     id: inputId,
     type: "chat_input",
     action: "send_message",
+    clearAction: "clear_chat",
     disabled: state.streaming,
     streaming: state.streaming,
     placeholder: t("chat.placeholder"),
@@ -203,6 +204,7 @@ export function generateSystemAgentPage(state: {
     streaming: state.streaming,
     placeholder: t("systemAgent.placeholder"),
     action: "sa_send_message",
+    clearAction: "sa_clear_chat",
   });
   children.push(inputId);
 

@@ -46,6 +46,7 @@ export const zhCN: LocaleMessages = {
     create: "新建",
     normal: "正常",
     close: "关闭",
+    newChat: "新对话",
   },
 
   chat: {

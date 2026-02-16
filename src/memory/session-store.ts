@@ -4,7 +4,15 @@
  * Each session is a separate .jsonl file under .pha/users/{uuid}/sessions/
  */
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, statSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  appendFileSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { join } from "path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { UserMessage, AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
@@ -156,6 +164,20 @@ export function appendToSession(uuid: string, sessionId: string, entries: Sessio
 
   const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
   appendFileSync(filePath, lines);
+}
+
+/**
+ * Create an empty session file so it becomes the "latest" by mtime.
+ * Used when clearing chat: the empty file prevents loadLatestSession
+ * from falling back to older session files with stale messages.
+ */
+export function touchSession(uuid: string, sessionId: string): void {
+  ensureUserDir(uuid);
+  const sessionsDir = getSessionsDir(uuid);
+  if (!existsSync(sessionsDir)) {
+    mkdirSync(sessionsDir, { recursive: true });
+  }
+  writeFileSync(join(sessionsDir, `${sessionId}.jsonl`), "");
 }
 
 /**
