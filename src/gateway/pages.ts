@@ -830,26 +830,19 @@ interface CommitInfo {
 }
 
 export function generatePromptsPage(data: {
-  /** All 8 OpenClaw files (system + user-level) in fixed order */
   files: PromptInfo[];
-  selectedPrompt?: string;
-  selectedSource?: "system" | "user";
-  content?: string;
-  commits?: CommitInfo[];
-  editing?: boolean;
   loading?: boolean;
   scope?: "pha" | "system";
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
   const scope = data.scope || "pha";
-  const selectedSource = data.selectedSource || "system";
 
   // Header
   const title = ui.text(t("prompts.title"), "h2");
   const subtitle = ui.text(t("prompts.subtitle"), "caption");
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
-  // Loading skeleton — need early return before building tabs
+  // Loading skeleton
   if (data.loading) {
     const scopeTabContentIds: Record<string, string> = {};
     const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
@@ -866,17 +859,14 @@ export function generatePromptsPage(data: {
     return ui.build(root);
   }
 
-  // Unified 8-file table (OpenClaw standard)
-  const rows = data.files.map((p) => {
-    const isSelected = p.name === data.selectedPrompt && p.source === selectedSource;
-    return {
-      name: p.name,
-      title: p.exists ? p.title : "—",
-      lines: p.exists ? p.lines : 0,
-      source: p.source,
-      status: !p.exists ? t("prompts.notCreated") : isSelected ? "Selected" : "View",
-    };
-  });
+  // File list table
+  const rows = data.files.map((p) => ({
+    name: p.name,
+    title: p.exists ? p.title : "—",
+    lines: p.exists ? p.lines : 0,
+    source: p.source,
+    status: p.exists ? "View" : t("prompts.notCreated"),
+  }));
 
   const filesTable = ui.dataTable(
     [
@@ -894,64 +884,9 @@ export function generatePromptsPage(data: {
     padding: 20,
   });
 
-  const children: string[] = [filesCard];
-
-  // If a file is selected and has content, show editor and history
-  if (data.selectedPrompt && data.content !== undefined) {
-    const editor = ui.codeEditor(data.content, {
-      language: "markdown",
-      readonly: !data.editing,
-      lineNumbers: true,
-      height: 400,
-      onChange: "prompt_content_change",
-    });
-
-    const editBtn = data.editing
-      ? ui.button(t("common.save"), "save_prompt", { variant: "primary" })
-      : ui.button(t("common.edit"), "edit_prompt", { variant: "outline" });
-
-    const cancelBtn = data.editing
-      ? ui.button(t("common.cancel"), "cancel_edit", { variant: "ghost" })
-      : null;
-
-    // Only show revert for git-tracked system prompts
-    const revertBtn =
-      data.editing || selectedSource === "user"
-        ? null
-        : data.commits && data.commits.length > 1
-          ? ui.button(t("common.revert"), "revert_prompt", { variant: "ghost" })
-          : null;
-
-    const editorBtns = [editBtn];
-    if (cancelBtn) editorBtns.push(cancelBtn);
-    if (revertBtn) editorBtns.push(revertBtn);
-
-    const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
-
-    const editorCard = ui.card([editorHeader, editor], {
-      title: `${data.selectedPrompt}.md`,
-      padding: 20,
-    });
-
-    children.push(editorCard);
-
-    // Version history (only for git-tracked system prompts)
-    if (selectedSource === "system" && data.commits && data.commits.length > 0) {
-      const commitList = ui.commitList(data.commits, {
-        onSelect: "select_commit",
-      });
-
-      const historyCard = ui.card([commitList], {
-        title: t("prompts.versionHistory"),
-        padding: 20,
-      });
-      children.push(historyCard);
-    }
-  }
-
-  // Wrap content as tab content so tabs component renders it
+  // Wrap as tab content
   const scopeTabContentIds: Record<string, string> = {};
-  scopeTabContentIds[scope] = ui.column(children, { gap: 24, padding: 24 });
+  scopeTabContentIds[scope] = ui.column([filesCard], { gap: 24, padding: 24 });
   const scopeTabs = ui.tabs(
     [
       { id: "pha", label: t("prompts.tabPha"), icon: "heart" },
@@ -962,7 +897,62 @@ export function generatePromptsPage(data: {
   );
 
   const root = ui.column([header, scopeTabs], { gap: 0 });
+  return ui.build(root);
+}
 
+/** Prompt detail modal — view/edit content, version history, revert */
+export function generatePromptDetailModal(data: {
+  name: string;
+  source: "system" | "user";
+  content: string;
+  editing: boolean;
+  commits?: CommitInfo[];
+}): A2UIMessage {
+  const ui = new A2UIGenerator("modal");
+  const children: string[] = [];
+
+  // Source badge
+  const sourceBadge = ui.text(
+    data.source === "system" ? "System prompt" : "User override",
+    "caption"
+  );
+  children.push(sourceBadge);
+
+  // Code editor
+  const editor = ui.codeEditor(data.content, {
+    language: "markdown",
+    readonly: !data.editing,
+    lineNumbers: true,
+    height: 400,
+    onChange: "prompt_content_change",
+  });
+  children.push(editor);
+
+  // Action buttons
+  const btns: string[] = [];
+  if (data.editing) {
+    btns.push(ui.button(t("common.save"), "save_prompt_from_modal", { variant: "primary" }));
+    btns.push(ui.button(t("common.cancel"), "cancel_edit_from_modal", { variant: "ghost" }));
+  } else {
+    btns.push(ui.button(t("common.edit"), "edit_prompt_from_modal", { variant: "outline" }));
+    // Revert only for git-tracked system prompts with history
+    if (data.source === "system" && data.commits && data.commits.length > 1) {
+      btns.push(ui.button(t("common.revert"), "revert_prompt", { variant: "ghost" }));
+    }
+  }
+  const btnRow = ui.row(btns, { gap: 8, justify: "end" });
+  children.push(btnRow);
+
+  // Version history (system prompts only)
+  if (data.source === "system" && data.commits && data.commits.length > 0) {
+    const historyTitle = ui.text(t("prompts.versionHistory"), "h3");
+    children.push(historyTitle);
+    const commitList = ui.commitList(data.commits, { onSelect: "select_commit" });
+    children.push(commitList);
+  }
+
+  const body = ui.column(children, { gap: 12 });
+  const root = ui.modal(`${data.name}.md`, [body], { size: "lg" });
   return ui.build(root);
 }
 

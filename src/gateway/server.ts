@@ -52,6 +52,7 @@ import {
   generateChatPage,
   generateMemoryPage,
   generatePromptsPage,
+  generatePromptDetailModal,
   generateSkillsPage,
   generateBenchmarkRunDetailModal,
   generatePage,
@@ -1545,6 +1546,62 @@ export class GatewaySession {
   /**
    * Get the full file path for a user-level file.
    */
+  /** Open prompt detail modal with content + git history */
+  private async openPromptModal(send: (msg: unknown) => void): Promise<void> {
+    if (!this.selectedPrompt) return;
+
+    let content = "";
+    let commits: Array<{
+      hash: string;
+      shortHash: string;
+      message: string;
+      date: string;
+      author: string;
+    }> = [];
+
+    if (this.selectedPromptSource === "user") {
+      const filePath = this.getUserFilePath(this.selectedPrompt);
+      if (filePath && existsSync(filePath)) {
+        content = this.editBuffer ?? readFileSync(filePath, "utf-8");
+      } else {
+        content = this.editBuffer ?? "";
+      }
+    } else {
+      setPromptsDir(
+        this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
+      );
+      try {
+        const promptResult = await getPromptTool.execute({ name: this.selectedPrompt });
+        if (promptResult.success) {
+          content = this.editBuffer ?? (promptResult.content as string);
+        }
+        const historyResult = await getPromptHistoryTool.execute({
+          name: this.selectedPrompt,
+          limit: 10,
+        });
+        if (historyResult.success && historyResult.commits) {
+          commits = historyResult.commits as typeof commits;
+        }
+      } finally {
+        setPromptsDir("src/prompts/pha");
+      }
+    }
+
+    const modal = generatePromptDetailModal({
+      name: this.selectedPrompt,
+      source: this.selectedPromptSource,
+      content,
+      editing: this.editingPrompt,
+      commits,
+    });
+    send({
+      type: "a2ui",
+      surface_id: "modal",
+      components: modal.components,
+      root_id: modal.root_id,
+    });
+  }
+
   private getUserFilePath(name: string): string | null {
     const filename = name.endsWith(".md") ? name : `${name}.md`;
     let dir: string;
@@ -1709,77 +1766,25 @@ export class GatewaySession {
             view,
             generatePromptsPage({
               files: [],
-              editing: false,
               loading: true,
               scope: this.promptsScope,
             })
           )
         );
 
-        // Set prompts dir for git history lookups
-        setPromptsDir(
-          this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
-        );
-
         try {
-          // Build fixed 8-file list (OpenClaw standard)
           const files = this.buildOpenClaw8Files();
-
-          let content: string | undefined;
-          let commits:
-            | Array<{
-                hash: string;
-                shortHash: string;
-                message: string;
-                date: string;
-                author: string;
-              }>
-            | undefined;
-
-          if (this.selectedPrompt) {
-            if (this.selectedPromptSource === "user") {
-              // Read user-level file directly
-              const filePath = this.getUserFilePath(this.selectedPrompt);
-              if (filePath && existsSync(filePath)) {
-                content = this.editBuffer ?? readFileSync(filePath, "utf-8");
-              } else {
-                // File doesn't exist yet — open empty editor
-                content = this.editBuffer ?? "";
-              }
-            } else {
-              const promptResult = await getPromptTool.execute({ name: this.selectedPrompt });
-              if (promptResult.success) {
-                content = this.editBuffer ?? promptResult.content;
-              }
-
-              const historyResult = await getPromptHistoryTool.execute({
-                name: this.selectedPrompt,
-                limit: 10,
-              });
-              if (historyResult.success && historyResult.commits) {
-                commits = historyResult.commits;
-              }
-            }
-          }
-
           send(
             generatePage(
               view,
               generatePromptsPage({
                 files,
-                selectedPrompt: this.selectedPrompt || undefined,
-                selectedSource: this.selectedPromptSource,
-                content,
-                commits,
-                editing: this.editingPrompt,
                 scope: this.promptsScope,
               })
             )
           );
         } catch (e) {
           log.error("Prompts load error", { error: e });
-        } finally {
-          setPromptsDir("src/prompts/pha");
         }
         return;
       }
@@ -2743,27 +2748,25 @@ export class GatewaySession {
         root_id: toast.root_id,
       });
     }
-    // Prompts actions — unified select for OpenClaw 8 files
+    // Prompts actions — modal-based viewing/editing
     else if (action === "select_file" && payload?.row) {
       const row = payload.row as { name: string; source: string };
       this.selectedPrompt = row.name;
       this.selectedPromptSource = (row.source === "user" ? "user" : "system") as "system" | "user";
       this.editingPrompt = false;
       this.editBuffer = null;
-      await this.handleNavigate("settings/prompts", send);
-    } else if (action === "edit_prompt") {
+      await this.openPromptModal(send);
+    } else if (action === "edit_prompt_from_modal") {
       this.editingPrompt = true;
-      await this.handleNavigate("settings/prompts", send);
-    } else if (action === "cancel_edit") {
+      await this.openPromptModal(send);
+    } else if (action === "cancel_edit_from_modal") {
       this.editingPrompt = false;
-      this.editingSkill = false;
       this.editBuffer = null;
-      await this.handleNavigate(this.currentView, send);
+      await this.openPromptModal(send);
     } else if (action === "prompt_content_change" && payload?.value) {
       this.editBuffer = payload.value as string;
-    } else if (action === "save_prompt" && this.selectedPrompt && this.editBuffer) {
+    } else if (action === "save_prompt_from_modal" && this.selectedPrompt && this.editBuffer) {
       if (this.selectedPromptSource === "user") {
-        // Save user-level file directly (no git commit), ensure dir exists
         const filePath = this.getUserFilePath(this.selectedPrompt);
         if (filePath) {
           const { mkdirSync } = await import("fs");
@@ -2787,9 +2790,9 @@ export class GatewaySession {
       }
       this.editingPrompt = false;
       this.editBuffer = null;
-      await this.handleNavigate("settings/prompts", send);
+      // Re-open modal with saved content
+      await this.openPromptModal(send);
     } else if (action === "select_commit" && payload?.hash) {
-      // Preview commit - could show diff in future
       log.debug("Selected commit", { hash: payload.hash });
     }
     // Skills actions
@@ -2827,6 +2830,10 @@ export class GatewaySession {
     } else if (action === "edit_skill") {
       this.editingSkill = true;
       await this.handleNavigate("settings/skills", send);
+    } else if (action === "cancel_edit") {
+      this.editingSkill = false;
+      this.editBuffer = null;
+      await this.handleNavigate(this.currentView, send);
     } else if (action === "skill_content_change" && payload?.value) {
       this.editBuffer = payload.value as string;
     } else if (action === "save_skill" && this.selectedSkill && this.editBuffer) {
