@@ -5235,6 +5235,14 @@ export class GatewaySession {
   }
 
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
+    try {
+      this._handleAgentEventInner(event, send);
+    } catch (err) {
+      log.error("handleAgentEvent uncaught error", { eventType: event?.type, error: err });
+    }
+  }
+
+  private _handleAgentEventInner(event: any, send: (msg: unknown) => void): void {
     // In AG-UI SSE mode, use the provided send directly (write to SSE writer)
     const activeSend = this._sseMode ? send : this.getSend(send);
 
@@ -5495,9 +5503,14 @@ export class GatewaySession {
           // AG-UI events
           if (matchedToolCallId) {
             activeSend({ type: "ToolCallEnd", toolCallId: matchedToolCallId } satisfies AGUIEvent);
-            const resultCards = !event.isError
-              ? generateToolCards(event.toolName, event.result)
-              : null;
+            let resultCards: ReturnType<typeof generateToolCards> = null;
+            if (!event.isError) {
+              try {
+                resultCards = generateToolCards(event.toolName, event.result);
+              } catch (err) {
+                log.error("Failed to generate AG-UI cards", { tool: event.toolName, error: err });
+              }
+            }
             activeSend({
               type: "ToolCallResult",
               messageId: assistantMsg.id,
@@ -5949,6 +5962,14 @@ export async function startGateway(
   };
   process.on("SIGINT", handleExit);
   process.on("SIGTERM", handleExit);
+
+  // Prevent uncaught errors from crashing the process
+  process.on("uncaughtException", (err) => {
+    log.error("Uncaught exception (process kept alive)", { error: err });
+  });
+  process.on("unhandledRejection", (reason) => {
+    log.error("Unhandled rejection (process kept alive)", { error: reason });
+  });
 }
 
 // Legacy export for compatibility
