@@ -527,6 +527,30 @@ export function App() {
         return;
       }
 
+      // Optimistic user message for server-driven chats (SA/evo/pg)
+      if (
+        (action === "sa_send_message" || action === "evo_send_message" || action === "pg_send_message") &&
+        (payload?.content || payload?.value)
+      ) {
+        const text = String(payload.content || payload.value);
+        setMainData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            components: prev.components.map((c) => {
+              if (c.type === "chat_messages" && c.action === action) {
+                const msgs = (c.messages as any[]) || [];
+                return {
+                  ...c,
+                  messages: [...msgs, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", content: text }] }],
+                };
+              }
+              return c;
+            }),
+          };
+        });
+      }
+
       // Stop generation: abort SSE fetch
       if (action === "stop_generation") {
         abortControllerRef.current?.abort();
@@ -612,7 +636,7 @@ export function App() {
   // Extract chat history from a2ui surface data (for initial sync)
   const extractChatHistory = useCallback((surface: A2UISurfaceData) => {
     if (chatInitializedRef.current) return;
-    const chatComp = surface.components.find((c) => c.type === "chat_messages");
+    const chatComp = surface.components.find((c) => c.type === "chat_messages" && (!c.action || c.action === "send_message"));
     if (!chatComp) return;
     const rawMessages = (chatComp.messages as any[]) || [];
     if (rawMessages.length === 0) return;

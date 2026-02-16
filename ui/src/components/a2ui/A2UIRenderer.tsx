@@ -611,7 +611,7 @@ export function A2UIRenderer({
     }
 
     const avatarBase = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4";
-    const msgBubble = "max-w-[70%] px-4 py-3 rounded-2xl leading-relaxed text-[13.5px]";
+    const msgBubble = "max-w-[70%] px-5 py-3.5 rounded-2xl leading-relaxed text-[13.5px]";
 
     // Normalize messages to Parts format
     interface NormalizedMsg {
@@ -692,7 +692,7 @@ export function A2UIRenderer({
 
     return (
       <div
-        className="chat-scroll-container flex-1 min-h-0 overflow-y-auto px-6 py-6 md:px-12 lg:px-20 flex flex-col gap-6"
+        className="chat-scroll-container flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-6"
         onScroll={(e) => {
           if (isAutoScrollingRef.current) return;
           const el = e.currentTarget;
