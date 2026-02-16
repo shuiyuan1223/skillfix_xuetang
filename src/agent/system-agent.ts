@@ -19,6 +19,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { globalRegistry } from "../tools/index.js";
+import { buildSkillRegistry } from "./system-prompt.js";
 import { claudeCodeAgentTool } from "./claude-code-tool.js";
 import { fileAgentTools } from "./file-tools.js";
 // Skill loading is now LLM-driven via system prompt skill registry + get_skill tool.
@@ -67,18 +68,6 @@ function loadSystemAgentPrompt(): string {
 
     // Load priority files first
     for (const name of ordered) {
-      if (name === "TOOLS.md" && !files.includes(name)) {
-        // Auto-generate TOOLS.md from registry if file doesn't exist
-        const toolsPrompt = globalRegistry.generateToolsPrompt([
-          "git",
-          "evolution",
-          "system",
-          "feedback",
-          "skill",
-        ]);
-        if (toolsPrompt) sections.push(toolsPrompt);
-        continue;
-      }
       if (files.includes(name)) {
         const content = readFileSync(join(dir, name), "utf-8").trim();
         if (content) sections.push(content);
@@ -119,6 +108,7 @@ const SA_MEMORY_BUDGET = {
  */
 function buildSASystemPrompt(): string {
   const soul = loadSystemAgentPrompt();
+  const skillRegistry = buildSkillRegistry();
 
   // Load memory files (tail to get most recent content)
   const memoryRaw = readMemoryFile("memory.md");
@@ -134,9 +124,6 @@ function buildSASystemPrompt(): string {
   const evolution = tailSlice(evolutionRaw, SA_MEMORY_BUDGET.evolutionLog);
   const experience = tailSlice(experienceRaw, SA_MEMORY_BUDGET.experience);
 
-  const hasMemory = memory || evolution || experience;
-  if (!hasMemory) return soul;
-
   const today = new Date().toISOString().split("T")[0];
   const sections: string[] = [soul, "\n---\n", `## Session Context\n\n- **Date**: ${today}\n`];
 
@@ -149,13 +136,16 @@ function buildSASystemPrompt(): string {
   if (experience) {
     sections.push(`## Recent Experience\n\n${experience}\n`);
   }
+  if (skillRegistry) {
+    sections.push(skillRegistry);
+  }
 
   const prompt = sections.join("\n");
 
   // Token distribution report (debug)
   const est = (s: string) => Math.ceil(s.length / 4);
   log.debug(
-    `Token distribution: soul=${est(soul)} memory=${est(memory)} evolution=${est(evolution)} experience=${est(experience)} total≈${est(prompt)}`
+    `Token distribution: soul=${est(soul)} memory=${est(memory)} evolution=${est(evolution)} experience=${est(experience)} skills=${est(skillRegistry)} total≈${est(prompt)}`
   );
 
   return prompt;

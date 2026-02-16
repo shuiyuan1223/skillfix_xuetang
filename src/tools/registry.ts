@@ -9,6 +9,7 @@ import { Type } from "@sinclair/typebox";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { PHATool, ToolCategory, MCPToolResult } from "./types.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
+import { createHealthTools } from "./health-data.js";
 
 export class ToolRegistry {
   private tools = new Map<string, PHATool<any>>();
@@ -99,7 +100,6 @@ export class ToolRegistry {
 
   private toAgentTool(tool: PHATool<any>): AgentTool<any> {
     const schema = Type.Unsafe<Record<string, unknown>>(tool.inputSchema as any);
-    const registry = this;
 
     return {
       name: tool.name,
@@ -110,18 +110,20 @@ export class ToolRegistry {
         _toolCallId: string,
         params: Record<string, unknown>
       ): Promise<AgentToolResult<unknown>> => {
-        const result = await registry.callTool(tool.name, params);
-        const text = result.content[0]?.text || "{}";
-        let details: unknown;
         try {
-          details = JSON.parse(text);
-        } catch {
-          details = text;
+          const result = await tool.execute(params as any);
+          const text = JSON.stringify(result, null, 2);
+          return {
+            content: [{ type: "text" as const, text }],
+            details: result,
+          };
+        } catch (error) {
+          const text = `Error: ${error instanceof Error ? error.message : String(error)}`;
+          return {
+            content: [{ type: "text" as const, text }],
+            details: text,
+          };
         }
-        return {
-          content: result.content.map((c) => ({ type: "text" as const, text: c.text })),
-          details,
-        };
       },
     };
   }
@@ -157,58 +159,10 @@ export class ToolRegistry {
   }
 
   // ===========================================================================
-  // System Prompt Generation (replaces hand-maintained TOOLS.md)
-  // ===========================================================================
-
-  generateToolsPrompt(categories?: ToolCategory[]): string {
-    const tools = categories
-      ? this.getAll().filter((t) => categories.includes(t.category))
-      : this.getAll();
-
-    // Group by category
-    const grouped = new Map<ToolCategory, PHATool<any>[]>();
-    for (const tool of tools) {
-      const list = grouped.get(tool.category) || [];
-      list.push(tool);
-      grouped.set(tool.category, list);
-    }
-
-    const categoryLabels: Record<ToolCategory, string> = {
-      health: "健康数据工具",
-      memory: "记忆工具",
-      skill: "技能工具",
-      config: "配置工具",
-      profile: "用户档案工具",
-      git: "Git 工具",
-      evolution: "进化系统工具",
-      system: "系统记忆工具",
-      feedback: "工具反馈",
-    };
-
-    const sections: string[] = ["# 工具清单\n"];
-
-    for (const [category, categoryTools] of grouped) {
-      sections.push(`## ${categoryLabels[category] || category}\n`);
-      sections.push("| 工具 | 说明 |");
-      sections.push("|---|---|");
-      for (const tool of categoryTools) {
-        // Use first sentence of description for the table
-        const desc = tool.description.split(/\.\s/)[0].replace(/\.$/, "");
-        sections.push(`| \`${tool.name}\` | ${desc} |`);
-      }
-      sections.push("");
-    }
-
-    return sections.join("\n");
-  }
-
-  // ===========================================================================
   // Per-session Data Source Binding
   // ===========================================================================
 
   withDataSource(dataSource: HealthDataSource): ToolRegistry {
-    // Import createHealthTools lazily to avoid circular deps
-    const { createHealthTools } = require("./health-data.js") as typeof import("./health-data.js");
     const boundTools = createHealthTools(dataSource);
 
     const newRegistry = new ToolRegistry();
