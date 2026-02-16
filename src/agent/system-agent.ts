@@ -21,7 +21,7 @@ import { join } from "path";
 import { globalRegistry } from "../tools/index.js";
 import { claudeCodeAgentTool } from "./claude-code-tool.js";
 import { fileAgentTools } from "./file-tools.js";
-import { enrichWithForcedSkill, enrichWithSkills } from "./skill-trigger.js";
+// Skill loading is now LLM-driven via system prompt skill registry + get_skill tool.
 import { sessionToAgentMessages } from "../memory/session-store.js";
 import { createSACompactionFlush } from "../memory/compaction.js";
 import { readMemoryFile, appendMemoryFile } from "../tools/system-memory-tools.js";
@@ -299,19 +299,18 @@ export class SystemAgent {
   }
 
   /**
-   * Send a message with a specific skill force-injected.
+   * Send a message with a hint to use a specific skill.
    */
   async chatWithSkill(message: string, skillName: string): Promise<void> {
-    const enriched = enrichWithForcedSkill(message, skillName);
-    await this.agent.prompt(enriched);
+    const hint = `[Load skill "${skillName}" via get_skill before responding]\n\n${message}`;
+    await this.agent.prompt(hint);
   }
 
   /**
-   * Send a message with auto skill matching.
+   * Send a message to the agent.
    */
   async chat(message: string): Promise<void> {
-    const enriched = enrichWithSkills(message);
-    await this.agent.prompt(enriched);
+    await this.agent.prompt(message);
   }
 
   /**
@@ -328,8 +327,7 @@ export class SystemAgent {
     });
 
     try {
-      const enriched = enrichWithSkills(message);
-      await this.agent.prompt(enriched);
+      await this.agent.prompt(message);
       await this.agent.waitForIdle();
     } finally {
       unsubscribe();

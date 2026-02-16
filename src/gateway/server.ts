@@ -149,7 +149,7 @@ import {
   getWorktreePath,
 } from "../evolution/version-manager.js";
 import { setSkillsDir } from "../tools/skill-tools.js";
-import { resetSkillCache } from "../agent/skill-trigger.js";
+// skill-trigger.ts removed — skill loading is now LLM-driven
 import { generateEvolutionLab, RUN_COLORS, type EvolutionLabData } from "./evolution-lab.js";
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
 import {
@@ -1337,8 +1337,7 @@ export class GatewaySession {
       setPromptsDir("src/prompts/pha");
       setSkillsDir("src/skills");
     }
-    resetSkillCache();
-    this.agent = null; // Force agent rebuild with new paths
+    this.agent = null; // Force agent rebuild with new paths (skill registry rebuilds automatically)
     this.activeVersionBranch = branch;
   }
 

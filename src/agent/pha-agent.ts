@@ -25,7 +25,8 @@ import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Agent/PHA");
 import { preComputeHealthContext } from "./health-context.js";
-import { enrichWithSkills, enrichWithForcedSkill } from "./skill-trigger.js";
+// Skill loading is now LLM-driven via system prompt skill registry + get_skill tool.
+// No regex trigger injection.
 import { sessionToAgentMessages } from "../memory/session-store.js";
 
 export type { LLMProvider } from "../utils/config.js";
@@ -202,20 +203,20 @@ export class PHAAgent {
 
   /**
    * Send a message to the agent.
-   * Automatically injects relevant skill guides based on message content.
+   * Skill loading is LLM-driven: agent scans skill registry in system prompt
+   * and calls get_skill() on demand.
    */
   async chat(message: string): Promise<void> {
-    const enriched = enrichWithSkills(message);
-    await this.agent.prompt(enriched);
+    await this.agent.prompt(message);
   }
 
   /**
-   * Send a message with a specific skill force-injected.
-   * Used by Evolution Lab to guarantee the evolution-driver skill is always present.
+   * Send a message with a hint to use a specific skill.
+   * Used by Evolution Lab to guarantee the evolution-driver skill is loaded.
    */
   async chatWithSkill(message: string, skillName: string): Promise<void> {
-    const enriched = enrichWithForcedSkill(message, skillName);
-    await this.agent.prompt(enriched);
+    const hint = `[Load skill "${skillName}" via get_skill before responding]\n\n${message}`;
+    await this.agent.prompt(hint);
   }
 
   /**
@@ -247,8 +248,7 @@ export class PHAAgent {
     });
 
     try {
-      const enriched = enrichWithSkills(message);
-      await this.agent.prompt(enriched);
+      await this.agent.prompt(message);
       await this.agent.waitForIdle();
     } catch (err) {
       log.warn("chatAndWait prompt/idle error", err);
@@ -318,8 +318,7 @@ export class PHAAgent {
     });
 
     try {
-      const enriched = enrichWithSkills(message);
-      await this.agent.prompt(enriched);
+      await this.agent.prompt(message);
       await this.agent.waitForIdle();
     } finally {
       unsubscribe();
