@@ -246,6 +246,7 @@ export interface DataTableComponent extends A2UIComponent {
     width?: string;
     sortable?: boolean;
     render?: "text" | "badge" | "progress" | "date" | "link";
+    action?: string;
   }[];
   rows: Record<string, unknown>[];
   pagination?: {

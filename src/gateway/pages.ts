@@ -1197,7 +1197,7 @@ export function generateToolsPage(data: {
       { key: "displayName", label: "Display Name", sortable: true },
       { key: "description", label: "Description" },
       { key: "category", label: "Category", render: "badge" },
-      { key: "skill", label: "Skill" },
+      { key: "skill", label: "Skill", render: "link" as const, action: "view_skill_from_table" },
     ],
     rows,
     { onRowClick: "view_tool_detail" }
@@ -1279,6 +1279,13 @@ export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
     }
   }
 
+  // Close button
+  const closeBtn = ui.button(t("common.close"), "close_modal", {
+    variant: "outline",
+  });
+  const closeRow = ui.row([closeBtn], { justify: "end" });
+  children.push(closeRow);
+
   const root = ui.column(children, { gap: 12, padding: 24 });
   return ui.build(root);
 }
@@ -1331,6 +1338,25 @@ export function generateSkillDetailModal(skill: {
     });
     children.push(contentBlock);
   }
+
+  // Action buttons
+  const toggleBtn = ui.button(
+    skill.enabled ? t("common.disable") : t("common.enable"),
+    "toggle_skill_from_modal",
+    {
+      variant: skill.enabled ? "ghost" : "secondary",
+      payload: { skillName: skill.name },
+    }
+  );
+  const editBtn = ui.button(t("common.edit"), "edit_skill_from_modal", {
+    variant: "outline",
+    payload: { skillName: skill.name },
+  });
+  const closeBtn = ui.button(t("common.close"), "close_modal", {
+    variant: "outline",
+  });
+  const actionRow = ui.row([toggleBtn, editBtn, closeBtn], { gap: 8, justify: "end" });
+  children.push(actionRow);
 
   const root = ui.column(children, { gap: 12, padding: 24 });
   return ui.build(root);

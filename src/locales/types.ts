@@ -47,6 +47,7 @@ export interface LocaleMessages {
     disable: string;
     create: string;
     normal: string;
+    close: string;
   };
 
   // Chat page

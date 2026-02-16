@@ -1609,23 +1609,16 @@ export class GatewaySession {
         else if (view === "activity") this.dashboardTab = "activity";
 
         // Use progressive loader for dashboard
-        // Use SSE send for progressive updates (send = collector for HTTP response)
-        const dashSend = this._activeSend || send;
         if (!this.dashboardLoader) {
-          this.dashboardLoader = new ProgressiveDashboardLoader(this.dataSource, dashSend);
+          this.dashboardLoader = new ProgressiveDashboardLoader(this.dataSource, send);
         } else {
-          this.dashboardLoader.updateSend(dashSend);
+          this.dashboardLoader.updateSend(send);
         }
 
-        // Send skeleton immediately via HTTP response, then load data in background via SSE
-        this.dashboardLoader.sendSkeleton(this.dashboardTab);
+        // Load data progressively — this sends updates directly via send()
+        await this.dashboardLoader.load(this.dashboardTab);
 
-        // Fire-and-forget: load data progressively in the background
-        this.dashboardLoader.load(this.dashboardTab).catch(() => {
-          /* API errors handled inside loader */
-        });
-
-        // Return early — skeleton already sent, data arrives via SSE
+        // Return early — progressive loader already sent the page
         return;
       }
 
@@ -2804,11 +2797,28 @@ export class GatewaySession {
       const row = payload.row as { name: string };
       // Extract skill name (remove emoji prefix)
       const name = row.name.replace(/^[^\s]+\s+/, "");
-      this.selectedSkill = name;
-      this.selectedSkillFile = "SKILL.md";
-      this.editingSkill = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/skills", send);
+      // Open skill detail modal (same as tools page)
+      try {
+        const result = (await getSkillTool.execute({ name })) as any;
+        if (result?.success !== false) {
+          const modal = generateSkillDetailModal({
+            name,
+            description: result.description || "",
+            enabled: result.enabled !== false,
+            content: result.content || "",
+            triggers: result.metadata?.pha?.triggers,
+            emoji: result.metadata?.pha?.emoji,
+          });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
+        }
+      } catch {
+        /* skill not found — ignore */
+      }
     } else if (action === "select_skill_file" && payload?.file) {
       this.selectedSkillFile = payload.file as string;
       this.editingSkill = false;
@@ -2840,6 +2850,43 @@ export class GatewaySession {
         });
         await this.handleNavigate("settings/skills", send);
       }
+    } else if (action === "toggle_skill_from_modal" && payload?.skillName) {
+      const skillName = payload.skillName as string;
+      const skillsResult = (await listSkillsTool.execute({})) as any;
+      const skill = skillsResult.skills?.find((s: { name: string }) => s.name === skillName);
+      if (skill) {
+        await toggleSkillTool.execute({
+          name: skillName,
+          enabled: !skill.enabled,
+        });
+        // Re-open modal with updated state
+        const updated = (await getSkillTool.execute({ name: skillName })) as any;
+        if (updated?.success !== false) {
+          const modal = generateSkillDetailModal({
+            name: skillName,
+            description: updated.description || "",
+            enabled: updated.enabled !== false,
+            content: updated.content || "",
+            triggers: updated.metadata?.pha?.triggers,
+            emoji: updated.metadata?.pha?.emoji,
+          });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
+        }
+      }
+    } else if (action === "edit_skill_from_modal" && payload?.skillName) {
+      const skillName = payload.skillName as string;
+      // Close modal and navigate to skills page with skill selected for editing
+      send({ type: "clear_surface", surface_id: "modal" });
+      this.selectedSkill = skillName;
+      this.selectedSkillFile = "SKILL.md";
+      this.editingSkill = true;
+      this.editBuffer = null;
+      await this.handleNavigate("settings/skills", send);
     } else if (action === "create_skill") {
       // Show create skill modal
       const modal = generateCreateSkillModal();
@@ -2991,7 +3038,32 @@ export class GatewaySession {
         }
       }
     }
-    // Skill detail modal (from tool detail or tools table)
+    // Skill detail modal (from tools table skill column click)
+    else if (action === "view_skill_from_table" && payload?.value) {
+      const skillName = payload.value as string;
+      try {
+        const result = (await getSkillTool.execute({ name: skillName })) as any;
+        if (result?.success !== false) {
+          const modal = generateSkillDetailModal({
+            name: skillName,
+            description: result.description || "",
+            enabled: result.enabled !== false,
+            content: result.content || "",
+            triggers: result.metadata?.pha?.triggers,
+            emoji: result.metadata?.pha?.emoji,
+          });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
+        }
+      } catch {
+        /* skill not found — ignore */
+      }
+    }
+    // Skill detail modal (from tool detail companion skill button)
     else if (action === "view_skill_from_tool" && payload?.skillName) {
       const skillName = payload.skillName as string;
       try {

@@ -163,7 +163,7 @@ function renderUnifiedDiff(title: string, diff: string) {
 
 // ---- Data Table ----
 export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
-  const columns = c.columns as { key: string; label: string; width?: string; sortable?: boolean; render?: string }[];
+  const columns = c.columns as { key: string; label: string; width?: string; sortable?: boolean; render?: string; action?: string }[];
   const rows = c.rows as Record<string, unknown>[];
   const pagination = c.pagination as { page: number; pageSize: number; total: number } | undefined;
   const sortBy = c.sortBy as string;
@@ -203,6 +203,11 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
       );
     }
     if (render === "date") return new Date(Number(value)).toLocaleString();
+    if (render === "link") {
+      const text = String(value ?? "");
+      if (!text || text === "-") return text;
+      return <span className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary">{text}</span>;
+    }
     return String(value ?? "");
   };
 
@@ -227,7 +232,7 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
         <tbody>
           {rows.map((row, i) => (
             <tr key={i} className={`border-b border-border transition-colors hover:bg-primary/5 ${c.onRowClick ? "cursor-pointer" : ""}`} onClick={() => { if (c.onRowClick) ctx.sendAction(c.onRowClick as string, { row }); }}>
-              {columns.map((col) => <td key={col.key} className="p-3 max-w-[300px]" title={String(row[col.key] ?? "")}><span className="block truncate">{renderCell(row[col.key], col.render)}</span></td>)}
+              {columns.map((col) => <td key={col.key} className={`p-3 max-w-[300px] ${col.action && row[col.key] && String(row[col.key]) !== "-" ? "cursor-pointer" : ""}`} title={String(row[col.key] ?? "")} onClick={col.action && row[col.key] && String(row[col.key]) !== "-" ? (e) => { e.stopPropagation(); ctx.sendAction(col.action!, { row, value: row[col.key] }); } : undefined}><span className="block truncate">{renderCell(row[col.key], col.render)}</span></td>)}
             </tr>
           ))}
         </tbody>

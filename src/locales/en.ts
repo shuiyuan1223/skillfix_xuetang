@@ -45,6 +45,7 @@ export const en: LocaleMessages = {
     disable: "Disable",
     create: "Create",
     normal: "Normal",
+    close: "Close",
   },
 
   chat: {
