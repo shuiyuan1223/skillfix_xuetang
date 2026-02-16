@@ -34,3 +34,7 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: E2E tests
+        run: bun test tests/e2e
+        timeout-minutes: 3

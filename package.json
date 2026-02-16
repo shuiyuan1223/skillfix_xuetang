@@ -32,7 +32,8 @@
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "test:unit": "bun test tests/unit",
-    "test:integration": "bun test tests/integration"
+    "test:integration": "bun test tests/integration",
+    "test:e2e": "bun test tests/e2e"
   },
   "lint-staged": {
     "*.ts": [

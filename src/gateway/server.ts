@@ -5567,8 +5567,8 @@ function getContentType(filePath: string): string {
  */
 export async function startGateway(
   config: GatewayConfig & { webDir?: string } = {}
-): Promise<void> {
-  const port = config.port || 8000;
+): Promise<ReturnType<typeof Bun.serve>> {
+  const port = config.port ?? 8000;
   const app = createGatewayApp();
   const sessions = new Map<string, GatewaySession>();
   const sseManager = new SSEConnectionManager();
@@ -5638,7 +5638,7 @@ export async function startGateway(
   clearBenchmarkProgress();
   clearAllUiBenchmarkProgress();
 
-  Bun.serve({
+  const server = Bun.serve({
     port,
     idleTimeout: 255, // SSE streams need long-lived connections (max 255s)
     async fetch(req, server) {
@@ -5982,6 +5982,8 @@ export async function startGateway(
       type: typeof reason,
     });
   });
+
+  return server;
 }
 
 // Legacy export for compatibility
