@@ -81,6 +81,7 @@ export interface AGUIToolCallStart {
   toolCallId: string;
   toolCallName: string;
   parentMessageId?: string;
+  displayName?: string;
 }
 
 export interface AGUIToolCallEnd {
@@ -128,6 +129,7 @@ export type MessagePart =
       toolCallId: string;
       toolName: string;
       status: "running" | "completed" | "error";
+      displayName?: string;
     }
   | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
 

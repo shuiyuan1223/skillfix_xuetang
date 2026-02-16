@@ -5445,6 +5445,7 @@ export class GatewaySession {
           toolCallId,
           toolCallName: event.toolName,
           parentMessageId: assistantMsg.id,
+          ...(toolDisplayName ? { displayName: toolDisplayName } : {}),
         } satisfies AGUIEvent);
 
         // Legacy compat

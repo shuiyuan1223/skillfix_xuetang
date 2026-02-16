@@ -685,7 +685,13 @@ export type AGUIEvent =
   | { type: "TextMessageStart"; messageId: string; role: "assistant" }
   | { type: "TextMessageContent"; messageId: string; delta: string }
   | { type: "TextMessageEnd"; messageId: string }
-  | { type: "ToolCallStart"; toolCallId: string; toolCallName: string; parentMessageId?: string }
+  | {
+      type: "ToolCallStart";
+      toolCallId: string;
+      toolCallName: string;
+      parentMessageId?: string;
+      displayName?: string;
+    }
   | { type: "ToolCallEnd"; toolCallId: string }
   | {
       type: "ToolCallResult";

@@ -184,7 +184,11 @@ export function App() {
       case "TextMessageStart": {
         const msg: ChatMessage = { id: event.messageId, role: "assistant", parts: [] };
         activeMessageRef.current = event.messageId;
-        setChatMessages((prev) => [...prev, msg]);
+        // Replace placeholder with real assistant message
+        setChatMessages((prev) => {
+          const filtered = prev.filter(m => m.id !== "streaming-placeholder");
+          return [...filtered, msg];
+        });
         break;
       }
       case "TextMessageContent": {
@@ -225,6 +229,7 @@ export function App() {
               toolCallId: event.toolCallId,
               toolName: event.toolCallName,
               status: "running" as const,
+              ...(event.displayName ? { displayName: event.displayName } : {}),
             });
             msgs[msgs.length - 1] = updated;
           }
@@ -289,7 +294,12 @@ export function App() {
       role: "user",
       parts: [{ type: "text", content }],
     };
-    setChatMessages((prev) => [...prev, userMsg]);
+    const placeholderMsg: ChatMessage = {
+      id: "streaming-placeholder",
+      role: "assistant",
+      parts: [],
+    };
+    setChatMessages((prev) => [...prev, userMsg, placeholderMsg]);
     setChatStreaming(true);
     setQuickReplies([]);
     chatAutoScrollRef.current = true;

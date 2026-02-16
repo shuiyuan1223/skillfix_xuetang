@@ -3279,8 +3279,22 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
       return generateWeeklySummaryCards(data);
     case "get_workouts":
       return generateWorkoutsCards(data);
+    case "get_hrv":
+      return generateHrvCards(data);
+    case "get_blood_pressure":
+      return generateBloodPressureCards(data);
+    case "get_stress":
+      return generateStressCards(data);
+    case "get_spo2":
+      return generateSpo2Cards(data);
+    case "get_body_composition":
+      return generateBodyCompositionCards(data);
+    case "get_blood_glucose":
+      return generateBloodGlucoseCards(data);
+    case "get_nutrition":
+      return generateNutritionCards(data);
     default:
-      return null;
+      return generateGenericToolCards(data);
   }
 }
 
@@ -3595,6 +3609,420 @@ function generateWorkoutsCards(data: unknown): ToolCardResult | null {
   const tableCard = ui.card([table], { padding: 12 });
 
   const root = ui.column([tableCard], { gap: 12 });
+  return ui.build(root);
+}
+
+function generateHrvCards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    rmssd?: number;
+    average?: number;
+    max?: number;
+    min?: number;
+    readings?: { time: string; value: number }[];
+  };
+  if (!d) return null;
+
+  const ui = new A2UIGenerator("ic-hrv");
+
+  const rmssdCard = ui.statCard({
+    title: "RMSSD",
+    value: d.rmssd ?? "--",
+    subtitle: "ms",
+    icon: "activity",
+    color: "#8b5cf6",
+  });
+
+  const avgCard = ui.statCard({
+    title: t("health.hrv"),
+    value: d.average ?? "--",
+    subtitle: "ms avg",
+    icon: "heart-pulse",
+    color: "#3b82f6",
+  });
+
+  const rangeCard = ui.statCard({
+    title: "Range",
+    value: d.min != null && d.max != null ? `${d.min}-${d.max}` : "--",
+    subtitle: "ms",
+    icon: "trending-up",
+    color: "#10b981",
+  });
+
+  const statsGrid = ui.grid([rmssdCard, avgCard, rangeCard], { columns: 3, gap: 12 });
+  const children: string[] = [statsGrid];
+
+  if (d.readings && d.readings.length > 0) {
+    const chartData = d.readings.slice(-12).map((r) => ({ label: r.time, value: r.value }));
+    const chartLabel = ui.text(t("health.hrvLabel"), "label");
+    const chart = ui.chart({
+      chartType: "line",
+      data: chartData,
+      xKey: "label",
+      yKey: "value",
+      height: 160,
+      color: "#8b5cf6",
+    });
+    const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+    children.push(chartCard);
+  }
+
+  const root = ui.column(children, { gap: 12 });
+  return ui.build(root);
+}
+
+function generateBloodPressureCards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    systolicAvg?: number;
+    diastolicAvg?: number;
+    systolicMax?: number;
+    diastolicMax?: number;
+    readings?: { time: string; systolic: number; diastolic: number }[];
+  };
+  if (!d) return null;
+
+  const ui = new A2UIGenerator("ic-bp");
+
+  const sysCard = ui.statCard({
+    title: t("health.systolic"),
+    value: d.systolicAvg ?? "--",
+    subtitle: "mmHg",
+    icon: "trending-up",
+    color: "#ef4444",
+  });
+
+  const diaCard = ui.statCard({
+    title: t("health.diastolic"),
+    value: d.diastolicAvg ?? "--",
+    subtitle: "mmHg",
+    icon: "trending-down",
+    color: "#3b82f6",
+  });
+
+  const maxCard = ui.statCard({
+    title: "Peak",
+    value: d.systolicMax != null ? `${d.systolicMax}/${d.diastolicMax ?? "--"}` : "--",
+    subtitle: "mmHg",
+    icon: "alert-triangle",
+    color: "#f97316",
+  });
+
+  const statsGrid = ui.grid([sysCard, diaCard, maxCard], { columns: 3, gap: 12 });
+  const root = ui.column([statsGrid], { gap: 12 });
+  return ui.build(root);
+}
+
+function generateStressCards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    current?: number;
+    average?: number;
+    max?: number;
+    min?: number;
+    readings?: { time: string; value: number }[];
+  };
+  if (!d) return null;
+
+  const ui = new A2UIGenerator("ic-stress");
+
+  const currentCard = ui.statCard({
+    title: t("health.stress"),
+    value: d.current ?? "--",
+    subtitle: "/99",
+    icon: "brain",
+    color: d.current != null && d.current > 60 ? "#ef4444" : "#10b981",
+  });
+
+  const avgCard = ui.statCard({
+    title: "Average",
+    value: d.average ?? "--",
+    subtitle: t("health.stressLevel"),
+    icon: "activity",
+    color: "#3b82f6",
+  });
+
+  const rangeCard = ui.statCard({
+    title: "Range",
+    value: d.min != null && d.max != null ? `${d.min}-${d.max}` : "--",
+    icon: "bar-chart",
+    color: "#8b5cf6",
+  });
+
+  const statsGrid = ui.grid([currentCard, avgCard, rangeCard], { columns: 3, gap: 12 });
+  const children: string[] = [statsGrid];
+
+  if (d.readings && d.readings.length > 0) {
+    const chartData = d.readings.slice(-12).map((r) => ({ label: r.time, value: r.value }));
+    const chartLabel = ui.text(t("health.stressLevel"), "label");
+    const chart = ui.chart({
+      chartType: "area",
+      data: chartData,
+      xKey: "label",
+      yKey: "value",
+      height: 140,
+      color: "#8b5cf6",
+    });
+    const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+    children.push(chartCard);
+  }
+
+  const root = ui.column(children, { gap: 12 });
+  return ui.build(root);
+}
+
+function generateSpo2Cards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    current?: number;
+    average?: number;
+    max?: number;
+    min?: number;
+    readings?: { time: string; value: number }[];
+  };
+  if (!d) return null;
+
+  const ui = new A2UIGenerator("ic-spo2");
+
+  const currentCard = ui.statCard({
+    title: t("health.spo2"),
+    value: d.current != null ? `${d.current}%` : "--",
+    icon: "wind",
+    color: d.current != null && d.current < 95 ? "#ef4444" : "#10b981",
+  });
+
+  const avgCard = ui.statCard({
+    title: "Average",
+    value: d.average != null ? `${d.average}%` : "--",
+    icon: "activity",
+    color: "#3b82f6",
+  });
+
+  const minCard = ui.statCard({
+    title: "Min",
+    value: d.min != null ? `${d.min}%` : "--",
+    icon: "trending-down",
+    color: "#f97316",
+  });
+
+  const statsGrid = ui.grid([currentCard, avgCard, minCard], { columns: 3, gap: 12 });
+  const root = ui.column([statsGrid], { gap: 12 });
+  return ui.build(root);
+}
+
+function generateBodyCompositionCards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    weight?: number;
+    height?: number;
+    bmi?: number;
+    bodyFat?: number;
+  };
+  if (!d) return null;
+
+  const ui = new A2UIGenerator("ic-body");
+
+  const cards: string[] = [];
+
+  if (d.weight != null) {
+    cards.push(
+      ui.statCard({
+        title: t("health.bodyWeight"),
+        value: `${d.weight}`,
+        subtitle: "kg",
+        icon: "user",
+        color: "#3b82f6",
+      })
+    );
+  }
+  if (d.bmi != null) {
+    const bmiColor = d.bmi < 18.5 || d.bmi >= 25 ? "#f97316" : "#10b981";
+    cards.push(
+      ui.statCard({
+        title: t("health.bmi"),
+        value: d.bmi.toFixed(1),
+        icon: "target",
+        color: bmiColor,
+      })
+    );
+  }
+  if (d.bodyFat != null) {
+    cards.push(
+      ui.statCard({
+        title: t("health.bodyFat"),
+        value: `${d.bodyFat}%`,
+        icon: "activity",
+        color: "#8b5cf6",
+      })
+    );
+  }
+
+  if (cards.length === 0) return null;
+
+  const statsGrid = ui.grid(cards, { columns: Math.min(cards.length, 3), gap: 12 });
+  const root = ui.column([statsGrid], { gap: 12 });
+  return ui.build(root);
+}
+
+function generateBloodGlucoseCards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    current?: number;
+    average?: number;
+    max?: number;
+    min?: number;
+    readings?: { time: string; value: number }[];
+  };
+  if (!d) return null;
+
+  const ui = new A2UIGenerator("ic-glucose");
+
+  const currentCard = ui.statCard({
+    title: t("health.bloodGlucose"),
+    value: d.current ?? "--",
+    subtitle: "mmol/L",
+    icon: "flame",
+    color: d.current != null && (d.current < 3.9 || d.current > 7.8) ? "#ef4444" : "#10b981",
+  });
+
+  const avgCard = ui.statCard({
+    title: "Average",
+    value: d.average ?? "--",
+    subtitle: "mmol/L",
+    icon: "activity",
+    color: "#3b82f6",
+  });
+
+  const rangeCard = ui.statCard({
+    title: "Range",
+    value: d.min != null && d.max != null ? `${d.min}-${d.max}` : "--",
+    subtitle: "mmol/L",
+    icon: "bar-chart",
+    color: "#8b5cf6",
+  });
+
+  const statsGrid = ui.grid([currentCard, avgCard, rangeCard], { columns: 3, gap: 12 });
+  const root = ui.column([statsGrid], { gap: 12 });
+  return ui.build(root);
+}
+
+function generateNutritionCards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    totalCalories?: number;
+    protein?: number;
+    fat?: number;
+    carbs?: number;
+    water?: number;
+    meals?: Array<{ name?: string; calories?: number }>;
+  };
+  if (!d) return null;
+
+  const ui = new A2UIGenerator("ic-nutrition");
+
+  const calCard = ui.statCard({
+    title: t("activity.calories"),
+    value: d.totalCalories != null ? d.totalCalories.toLocaleString() : "--",
+    subtitle: "kcal",
+    icon: "flame",
+    color: "#f97316",
+  });
+
+  const proteinCard = ui.statCard({
+    title: "Protein",
+    value: d.protein != null ? `${d.protein}g` : "--",
+    icon: "zap",
+    color: "#ef4444",
+  });
+
+  const carbsCard = ui.statCard({
+    title: "Carbs",
+    value: d.carbs != null ? `${d.carbs}g` : "--",
+    icon: "activity",
+    color: "#3b82f6",
+  });
+
+  const statsGrid = ui.grid([calCard, proteinCard, carbsCard], { columns: 3, gap: 12 });
+  const children: string[] = [statsGrid];
+
+  if (d.meals && d.meals.length > 0) {
+    const rows = d.meals.map((m) => ({
+      meal: m.name || "-",
+      calories: m.calories != null ? `${m.calories}` : "-",
+    }));
+    const table = ui.table(
+      [
+        { key: "meal", label: "Meal" },
+        { key: "calories", label: "Cal" },
+      ],
+      rows
+    );
+    const tableCard = ui.card([table], { padding: 12 });
+    children.push(tableCard);
+  }
+
+  const root = ui.column(children, { gap: 12 });
+  return ui.build(root);
+}
+
+/**
+ * Generic fallback card generator for tools without specialized cards.
+ * Intelligently renders objects as stat cards, arrays as tables, simple values as text.
+ */
+function generateGenericToolCards(data: unknown): ToolCardResult | null {
+  if (data == null) return null;
+
+  const ui = new A2UIGenerator("ic-generic");
+
+  // Array → data_table
+  if (Array.isArray(data)) {
+    if (data.length === 0) return null;
+    // Extract columns from first row keys
+    const first = data[0];
+    if (typeof first !== "object" || first === null) {
+      // Simple value array → text
+      const text = ui.text(data.map(String).join(", "), "body");
+      const root = ui.column([text], { gap: 8 });
+      return ui.build(root);
+    }
+    const keys = Object.keys(first).slice(0, 6); // Limit columns
+    const columns = keys.map((k) => ({ key: k, label: k }));
+    const rows = data.slice(0, 20).map((item) => {
+      const row: Record<string, unknown> = {};
+      for (const k of keys) {
+        const v = (item as Record<string, unknown>)[k];
+        row[k] = v != null ? String(v) : "-";
+      }
+      return row;
+    });
+    const table = ui.dataTable(columns, rows);
+    const tableCard = ui.card([table], { padding: 12 });
+    const root = ui.column([tableCard], { gap: 12 });
+    return ui.build(root);
+  }
+
+  // Object → stat_card grid
+  if (typeof data === "object") {
+    const entries = Object.entries(data as Record<string, unknown>).filter(
+      ([, v]) => v != null && typeof v !== "object"
+    );
+    if (entries.length === 0) return null;
+
+    const cards: string[] = [];
+    for (const [key, value] of entries.slice(0, 9)) {
+      const isNum = typeof value === "number";
+      cards.push(
+        ui.statCard({
+          title: key,
+          value: isNum ? (value as number).toLocaleString() : String(value),
+          icon: isNum ? "bar-chart" : "info",
+          color: "#6366f1",
+        })
+      );
+    }
+
+    const cols = Math.min(cards.length, 3);
+    const statsGrid = ui.grid(cards, { columns: cols, gap: 12 });
+    const root = ui.column([statsGrid], { gap: 12 });
+    return ui.build(root);
+  }
+
+  // Primitive → text
+  const text = ui.text(String(data), "body");
+  const root = ui.column([text], { gap: 8 });
   return ui.build(root);
 }
 
