@@ -288,14 +288,19 @@ export class ProgressiveDashboardLoader {
   }
 
   /**
+   * Send skeleton page immediately (no data loading).
+   * Called synchronously so the HTTP response returns fast.
+   */
+  sendSkeleton(activeTab: TabId): void {
+    sendDashboardPage(this.send, this.data, activeTab, true);
+  }
+
+  /**
    * Load data for a specific tab with progressive rendering
    */
   async load(activeTab: TabId): Promise<void> {
     const today = getLocalDateString(new Date());
     const groups = getGroupsForTab(activeTab, this.dataSource, today);
-
-    // 1. Send skeleton page immediately
-    sendDashboardPage(this.send, this.data, activeTab, true);
 
     // 2. Load groups sequentially, rendering after each group
     for (let i = 0; i < groups.length; i++) {

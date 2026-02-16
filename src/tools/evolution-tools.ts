@@ -58,7 +58,7 @@ function getRunnerConfig(): BenchmarkRunnerConfig {
 
 export const listTracesTool: PHATool<{ limit?: number; offset?: number; sessionId?: string }> = {
   name: "list_traces",
-  description: "List agent interaction traces with optional filtering",
+  description: "列出 Agent 交互追踪记录，支持筛选",
   displayName: "追踪列表",
   category: "evolution" as const,
   icon: "search",
@@ -111,7 +111,7 @@ export const listTracesTool: PHATool<{ limit?: number; offset?: number; sessionI
 
 export const getTraceTool: PHATool<{ id: string }> = {
   name: "get_trace",
-  description: "Get full details of a specific trace",
+  description: "获取特定追踪记录的完整详情",
   displayName: "追踪详情",
   category: "evolution" as const,
   icon: "search",
@@ -170,7 +170,7 @@ export const getTraceTool: PHATool<{ id: string }> = {
 
 export const getEvaluationStatsTool: PHATool<Record<string, never>> = {
   name: "get_evaluation_stats",
-  description: "Get aggregate evaluation statistics",
+  description: "获取评估统计汇总",
   displayName: "评估统计",
   category: "evolution" as const,
   icon: "bar-chart",
@@ -199,7 +199,7 @@ export const listEvaluationsTool: PHATool<{
   maxScore?: number;
 }> = {
   name: "list_evaluations",
-  description: "List evaluation results with optional score filtering",
+  description: "列出评估结果，支持按分数筛选",
   displayName: "评估列表",
   category: "evolution" as const,
   icon: "bar-chart",
@@ -251,7 +251,7 @@ export const listEvaluationsTool: PHATool<{
 
 export const listTestCasesTool: PHATool<{ category?: string; limit?: number }> = {
   name: "list_test_cases",
-  description: "List benchmark test cases",
+  description: "列出基准测试用例",
   displayName: "测试用例列表",
   category: "evolution" as const,
   icon: "test-tube",
@@ -292,7 +292,7 @@ export const listTestCasesTool: PHATool<{ category?: string; limit?: number }> =
 
 export const getTestCaseTool: PHATool<{ id: string }> = {
   name: "get_test_case",
-  description: "Get full details of a test case",
+  description: "获取测试用例的完整详情",
   displayName: "测试用例详情",
   category: "evolution" as const,
   icon: "test-tube",
@@ -341,7 +341,7 @@ export const createTestCaseTool: PHATool<{
   minScore?: number;
 }> = {
   name: "create_test_case",
-  description: "Create a new benchmark test case",
+  description: "创建新的基准测试用例",
   displayName: "创建测试用例",
   category: "evolution" as const,
   icon: "test-tube",
@@ -410,7 +410,7 @@ export const createTestCaseTool: PHATool<{
 
 export const deleteTestCaseTool: PHATool<{ id: string }> = {
   name: "delete_test_case",
-  description: "Delete a benchmark test case",
+  description: "删除基准测试用例",
   displayName: "删除测试用例",
   category: "evolution" as const,
   icon: "test-tube",
@@ -449,7 +449,7 @@ export const deleteTestCaseTool: PHATool<{ id: string }> = {
 
 export const listSuggestionsTool: PHATool<{ status?: string; type?: string; limit?: number }> = {
   name: "list_suggestions",
-  description: "List optimization suggestions",
+  description: "列出优化建议",
   displayName: "建议列表",
   category: "evolution" as const,
   icon: "lightbulb",
@@ -497,7 +497,7 @@ export const listSuggestionsTool: PHATool<{ status?: string; type?: string; limi
 
 export const getSuggestionTool: PHATool<{ id: string }> = {
   name: "get_suggestion",
-  description: "Get full details of a suggestion",
+  description: "获取建议的完整详情",
   displayName: "建议详情",
   category: "evolution" as const,
   icon: "lightbulb",
@@ -547,7 +547,7 @@ export const createSuggestionTool: PHATool<{
   rationale?: string;
 }> = {
   name: "create_suggestion",
-  description: "Create an optimization suggestion",
+  description: "创建优化建议",
   displayName: "创建建议",
   category: "evolution" as const,
   icon: "lightbulb",
@@ -611,7 +611,7 @@ export const updateSuggestionStatusTool: PHATool<{
   validationResults?: { before: number; after: number; improvement: number };
 }> = {
   name: "update_suggestion_status",
-  description: "Update the status of a suggestion",
+  description: "更新建议的状态",
   displayName: "更新建议状态",
   category: "evolution" as const,
   icon: "lightbulb",
@@ -667,7 +667,7 @@ export const updateSuggestionStatusTool: PHATool<{
 
 export const listBenchmarkRunsTool: PHATool<{ limit?: number }> = {
   name: "list_benchmark_runs",
-  description: "List benchmark run history with scores and pass/fail counts",
+  description: "列出基准评测运行历史，含分数和通过/失败计数",
   displayName: "评测列表",
   category: "evolution" as const,
   icon: "flask",
@@ -705,7 +705,7 @@ export const listBenchmarkRunsTool: PHATool<{ limit?: number }> = {
 
 export const getBenchmarkRunDetailsTool: PHATool<{ runId: string }> = {
   name: "get_benchmark_run_details",
-  description: "Get detailed results for a benchmark run including category scores",
+  description: "获取基准评测运行的详细结果，含各维度分数",
   displayName: "评测详情",
   category: "evolution" as const,
   icon: "flask",
@@ -770,7 +770,7 @@ export const runBenchmarkTool: PHATool<{
 }> = {
   name: "run_benchmark",
   description:
-    "Run benchmark evaluation suite to measure agent capabilities across five dimensions: health data analysis, health coaching, safety boundaries, personalization memory, and communication quality. Returns scores and radar chart data.",
+    "运行基准评测套件，从五个维度衡量 Agent 能力：健康数据分析、健康指导、安全边界、个性化记忆、沟通质量。返回分数和雷达图数据。",
   displayName: "运行评测",
   category: "evolution" as const,
   icon: "play",
@@ -865,7 +865,7 @@ export const runDiagnoseTool: PHATool<{
 }> = {
   name: "run_diagnose",
   description:
-    "Run the diagnose pipeline: analyze benchmark weaknesses using LLM and generate improvement suggestions. If runId is provided, uses existing benchmark results from DB (fast, no re-run). Otherwise runs a fresh benchmark first.",
+    "运行诊断流水线：使用 LLM 分析评测弱项并生成改进建议。如提供 runId 则使用数据库中已有的评测结果（快速，无需重跑）；否则先运行新的基准评测。",
   displayName: "运行诊断",
   category: "evolution" as const,
   icon: "stethoscope",

@@ -221,7 +221,7 @@ function getSkillInfo(skillDir: string): {
  */
 export const listSkillsTool: PHATool<{ includeDisabled?: boolean }> = {
   name: "list_skills",
-  description: "List all skills with their status and metadata",
+  description: "列出所有技能及其状态和元数据",
   displayName: "技能列表",
   category: "skill",
   icon: "puzzle",
@@ -296,8 +296,7 @@ export const listSkillsTool: PHATool<{ includeDisabled?: boolean }> = {
  */
 export const getSkillTool: PHATool<{ name: string; filePath?: string }> = {
   name: "get_skill",
-  description:
-    "Get the full content and metadata of a specific skill. Supports reading sub-files via filePath.",
+  description: "获取特定技能的完整内容和元数据。支持通过 filePath 读取子文件。",
   displayName: "获取技能",
   category: "skill",
   icon: "puzzle",
@@ -363,7 +362,7 @@ export const getSkillTool: PHATool<{ name: string; filePath?: string }> = {
  */
 export const updateSkillTool: PHATool<{ name: string; content: string; filePath?: string }> = {
   name: "update_skill",
-  description: "Update a skill file's content. Supports sub-files via filePath.",
+  description: "更新技能文件内容。支持通过 filePath 更新子文件。",
   displayName: "更新技能",
   category: "skill",
   icon: "puzzle",
@@ -451,7 +450,7 @@ export const createSkillTool: PHATool<{
   content?: string;
 }> = {
   name: "create_skill",
-  description: "Create a new skill with SKILL.md",
+  description: "使用 SKILL.md 创建新技能",
   displayName: "创建技能",
   category: "skill",
   icon: "puzzle",
@@ -549,7 +548,7 @@ export const createSkillTool: PHATool<{
  */
 export const toggleSkillTool: PHATool<{ name: string; enabled: boolean }> = {
   name: "toggle_skill",
-  description: "Enable or disable a skill (renames folder with _disabled suffix)",
+  description: "启用或禁用技能（通过 _disabled 后缀重命名文件夹）",
   displayName: "切换技能状态",
   category: "skill",
   icon: "puzzle",

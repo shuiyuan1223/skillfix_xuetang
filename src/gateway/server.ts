@@ -68,6 +68,7 @@ import {
   generateToolCards,
   generateToolsPage,
   generateToolDetailModal,
+  generateSkillDetailModal,
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
@@ -1608,17 +1609,23 @@ export class GatewaySession {
         else if (view === "activity") this.dashboardTab = "activity";
 
         // Use progressive loader for dashboard
+        // Use SSE send for progressive updates (send = collector for HTTP response)
+        const dashSend = this._activeSend || send;
         if (!this.dashboardLoader) {
-          this.dashboardLoader = new ProgressiveDashboardLoader(this.dataSource, send);
+          this.dashboardLoader = new ProgressiveDashboardLoader(this.dataSource, dashSend);
         } else {
-          // Update send function in case WebSocket reconnected
-          this.dashboardLoader.updateSend(send);
+          this.dashboardLoader.updateSend(dashSend);
         }
 
-        // Load data progressively — this sends updates directly via send()
-        await this.dashboardLoader.load(this.dashboardTab);
+        // Send skeleton immediately via HTTP response, then load data in background via SSE
+        this.dashboardLoader.sendSkeleton(this.dashboardTab);
 
-        // Return early — progressive loader already sent the page
+        // Fire-and-forget: load data progressively in the background
+        this.dashboardLoader.load(this.dashboardTab).catch(() => {
+          /* API errors handled inside loader */
+        });
+
+        // Return early — skeleton already sent, data arrives via SSE
         return;
       }
 
@@ -2982,6 +2989,31 @@ export class GatewaySession {
             root_id: modal.root_id,
           });
         }
+      }
+    }
+    // Skill detail modal (from tool detail or tools table)
+    else if (action === "view_skill_from_tool" && payload?.skillName) {
+      const skillName = payload.skillName as string;
+      try {
+        const result = (await getSkillTool.execute({ name: skillName })) as any;
+        if (result?.success !== false) {
+          const modal = generateSkillDetailModal({
+            name: skillName,
+            description: result.description || "",
+            enabled: result.enabled !== false,
+            content: result.content || "",
+            triggers: result.metadata?.pha?.triggers,
+            emoji: result.metadata?.pha?.emoji,
+          });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
+        }
+      } catch {
+        /* skill not found — ignore */
       }
     }
     // Evolution actions (legacy)

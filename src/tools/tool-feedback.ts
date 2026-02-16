@@ -29,7 +29,7 @@ export const suggestToolImprovementTool: PHATool<{
 }> = {
   name: "suggest_tool_improvement",
   description:
-    "Record a tool improvement suggestion or missing capability. Use this when you identify a gap in your current toolset that would help you perform tasks better. Suggestions are saved to the tool wishlist for the development team to review.",
+    "记录工具改进建议或缺失能力。当发现现有工具集存在不足、可以更好地完成任务时调用。建议保存到工具愿望清单供开发团队审阅。",
   displayName: "建议工具改进",
   category: "feedback",
   icon: "lightbulb",
@@ -111,7 +111,7 @@ export const suggestToolImprovementTool: PHATool<{
 
 export const listToolWishlistTool: PHATool<Record<string, never>> = {
   name: "list_tool_wishlist",
-  description: "Read the current tool improvement wishlist to review pending suggestions.",
+  description: "读取当前工具改进愿望清单，查看待处理的建议。",
   displayName: "工具建议清单",
   category: "feedback",
   icon: "lightbulb",

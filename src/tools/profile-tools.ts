@@ -27,7 +27,7 @@ export interface UpdateProfileParams {
 export const updateUserProfileTool: PHATool<UpdateProfileParams> = {
   name: "update_user_profile",
   description:
-    "Save user profile information collected during conversation. Call this whenever the user shares personal info (name, age, height, weight, health goals, etc.).",
+    "保存对话中收集到的用户档案信息。当用户分享个人信息（姓名、年龄、身高、体重、健康目标等）时调用。",
   displayName: "更新健康档案",
   category: "profile",
   icon: "user",
@@ -116,7 +116,7 @@ export const updateUserProfileTool: PHATool<UpdateProfileParams> = {
 export const completeOnboardingTool: PHATool<Record<string, never>> = {
   name: "complete_onboarding",
   description:
-    "Complete the first-conversation onboarding. Call this after collecting at least 4 core profile fields (gender, birthYear, height, weight). This removes the BOOTSTRAP.md guidance file.",
+    "完成首次对话引导。在收集到至少 4 个核心档案字段（性别、出生年份、身高、体重）后调用。此操作会移除 BOOTSTRAP.md 引导文件。",
   displayName: "完成引导",
   category: "profile",
   icon: "check",

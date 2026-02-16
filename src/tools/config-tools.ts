@@ -14,7 +14,7 @@ import type { PHATool } from "./types.js";
  */
 export const getConfigTool: PHATool<{ section?: string }> = {
   name: "get_config",
-  description: "Read the current PHA configuration (.pha/config.json). API keys are masked.",
+  description: "读取当前 PHA 配置（.pha/config.json）。API Key 已脱敏。",
   displayName: "读取配置",
   category: "config",
   icon: "settings",
@@ -73,9 +73,7 @@ export const getConfigTool: PHATool<{ section?: string }> = {
 export const updateConfigTool: PHATool<{ updates: Record<string, unknown> }> = {
   name: "update_config",
   description:
-    "Update PHA configuration fields. Changes are written to .pha/config.json immediately. " +
-    "Use dot-notation paths like 'llm.provider', 'gateway.port', 'dataSources.type'. " +
-    "Available LLM providers: anthropic, openai, google, openrouter, groq, mistral, xai.",
+    "更新 PHA 配置字段。更改立即写入 .pha/config.json。使用点分路径如 'llm.provider'、'gateway.port'、'dataSources.type'。可用 LLM 提供商：anthropic、openai、google、openrouter、groq、mistral、xai。",
   displayName: "更新配置",
   category: "config",
   icon: "settings",
@@ -131,8 +129,7 @@ export const updateConfigTool: PHATool<{ updates: Record<string, unknown> }> = {
  */
 export const listProvidersTool: PHATool<Record<string, never>> = {
   name: "list_providers",
-  description:
-    "List all supported LLM providers with their default models and environment variable names.",
+  description: "列出所有支持的 LLM 提供商及其默认模型和环境变量名。",
   displayName: "列出提供商",
   category: "config",
   icon: "settings",

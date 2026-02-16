@@ -1238,8 +1238,11 @@ export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
   const catLabel = ui.text(`Category: ${tool.category}`, "caption");
   metaItems.push(catLabel);
   if (tool.companionSkill) {
-    const skillLabel = ui.text(`Companion Skill: ${tool.companionSkill}`, "caption");
-    metaItems.push(skillLabel);
+    const skillBtn = ui.button(`Companion Skill: ${tool.companionSkill}`, "view_skill_from_tool", {
+      variant: "ghost",
+      payload: { skillName: tool.companionSkill },
+    });
+    metaItems.push(skillBtn);
   }
   const metaRow = ui.column(metaItems, { gap: 4 });
   children.push(metaRow);
@@ -1274,6 +1277,59 @@ export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
       );
       children.push(paramTable);
     }
+  }
+
+  const root = ui.column(children, { gap: 12, padding: 24 });
+  return ui.build(root);
+}
+
+export function generateSkillDetailModal(skill: {
+  name: string;
+  description: string;
+  enabled: boolean;
+  content: string;
+  triggers?: string[];
+  emoji?: string;
+}): A2UIMessage {
+  const ui = new A2UIGenerator("modal");
+  const children: string[] = [];
+
+  // Title
+  const prefix = skill.emoji ? `${skill.emoji} ` : "";
+  const title = ui.text(`${prefix}${skill.name}`, "h2");
+  children.push(title);
+
+  // Status badge
+  const status = ui.text(skill.enabled ? "Enabled" : "Disabled", "caption");
+  children.push(status);
+
+  // Description
+  if (skill.description) {
+    const descTitle = ui.text("Description", "h3");
+    children.push(descTitle);
+    const desc = ui.text(skill.description, "body");
+    children.push(desc);
+  }
+
+  // Triggers
+  if (skill.triggers && skill.triggers.length > 0) {
+    const trigTitle = ui.text("Triggers", "h3");
+    children.push(trigTitle);
+    const trigText = ui.text(skill.triggers.join(", "), "caption");
+    children.push(trigText);
+  }
+
+  // Content preview (first ~2000 chars)
+  if (skill.content) {
+    const contentTitle = ui.text("SKILL.md", "h3");
+    children.push(contentTitle);
+    const preview =
+      skill.content.length > 2000 ? skill.content.slice(0, 2000) + "\n..." : skill.content;
+    const contentBlock = ui.codeEditor(preview, {
+      language: "markdown",
+      readOnly: true,
+    });
+    children.push(contentBlock);
   }
 
   const root = ui.column(children, { gap: 12, padding: 24 });

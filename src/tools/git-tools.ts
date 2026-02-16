@@ -29,7 +29,7 @@ import type { PHATool } from "./types.js";
 
 export const gitStatusTool: PHATool<{ path?: string }> = {
   name: "git_status",
-  description: "Show git working tree status (porcelain format)",
+  description: "显示 Git 工作区状态（porcelain 格式）",
   displayName: "工作区状态",
   category: "git" as const,
   icon: "git-branch",
@@ -59,7 +59,7 @@ export const gitStatusTool: PHATool<{ path?: string }> = {
 
 export const gitLogTool: PHATool<{ limit?: number; branch?: string; all?: boolean }> = {
   name: "git_log",
-  description: "Show commit history with optional branch filtering",
+  description: "显示提交历史，支持按分支筛选",
   displayName: "提交历史",
   category: "git" as const,
   icon: "git-commit",
@@ -97,7 +97,7 @@ export const gitLogTool: PHATool<{ limit?: number; branch?: string; all?: boolea
 
 export const gitShowFileTool: PHATool<{ branch: string; path: string }> = {
   name: "git_show_file",
-  description: "Read a file from a specific branch without checkout",
+  description: "从指定分支读取文件内容（无需切换分支）",
   displayName: "查看文件",
   category: "git" as const,
   icon: "file-text",
@@ -140,7 +140,7 @@ export const gitShowFileTool: PHATool<{ branch: string; path: string }> = {
 
 export const gitDiffTool: PHATool<{ branch: string; baseBranch?: string }> = {
   name: "git_diff",
-  description: "Get diff between two branches (actual diff content)",
+  description: "获取两个分支之间的差异（实际 diff 内容）",
   displayName: "查看差异",
   category: "git" as const,
   icon: "git-branch",
@@ -177,7 +177,7 @@ export const gitDiffTool: PHATool<{ branch: string; baseBranch?: string }> = {
 
 export const gitBranchListTool: PHATool<Record<string, never>> = {
   name: "git_branch_list",
-  description: "List all evolution (evo/*) branches",
+  description: "列出所有进化分支（evo/*）",
   displayName: "列出分支",
   category: "git" as const,
   icon: "git-branch",
@@ -202,8 +202,7 @@ export const gitBranchListTool: PHATool<Record<string, never>> = {
 
 export const gitBranchCreateTool: PHATool<{ triggerMode?: string; triggerRef?: string }> = {
   name: "git_branch_create",
-  description:
-    "Create a new evolution branch (evo/vN) with a git worktree for isolated modifications",
+  description: "创建新的进化分支（evo/vN），使用 git worktree 进行隔离修改",
   displayName: "创建分支",
   category: "git" as const,
   icon: "git-branch",
@@ -246,7 +245,7 @@ export const gitBranchCreateTool: PHATool<{ triggerMode?: string; triggerRef?: s
 
 export const gitBranchDeleteTool: PHATool<{ branch: string }> = {
   name: "git_branch_delete",
-  description: "Delete an evolution branch and its worktree, marking it as abandoned",
+  description: "删除进化分支及其 worktree，标记为已放弃",
   displayName: "删除分支",
   category: "git" as const,
   icon: "git-branch",
@@ -283,7 +282,7 @@ export const gitBranchDeleteTool: PHATool<{ branch: string }> = {
 
 export const gitWorktreeListTool: PHATool<Record<string, never>> = {
   name: "git_worktree_list",
-  description: "List active git worktrees (evolution branches with working directories)",
+  description: "列出活跃的 git worktree（拥有工作目录的进化分支）",
   displayName: "工作树列表",
   category: "git" as const,
   icon: "git-branch",
@@ -308,7 +307,7 @@ export const gitWorktreeListTool: PHATool<Record<string, never>> = {
 
 export const gitCommitTool: PHATool<{ files: string[]; message: string; cwd?: string }> = {
   name: "git_commit",
-  description: "Stage specified files and create a git commit",
+  description: "暂存指定文件并创建 git 提交",
   displayName: "提交变更",
   category: "git" as const,
   icon: "git-commit",
@@ -344,7 +343,7 @@ export const gitCommitTool: PHATool<{ files: string[]; message: string; cwd?: st
 
 export const gitMergeTool: PHATool<{ branch: string }> = {
   name: "git_merge",
-  description: "Merge an evolution branch into its parent (typically main)",
+  description: "将进化分支合并到父分支（通常是 main）",
   displayName: "合并分支",
   category: "git" as const,
   icon: "git-merge",
@@ -371,7 +370,7 @@ export const gitMergeTool: PHATool<{ branch: string }> = {
 
 export const gitRevertTool: PHATool<{ cwd?: string }> = {
   name: "git_revert",
-  description: "Revert the last commit on the current branch",
+  description: "撤销当前分支的最后一次提交",
   displayName: "撤销提交",
   category: "git" as const,
   icon: "git-commit",
@@ -397,7 +396,7 @@ export const gitRevertTool: PHATool<{ cwd?: string }> = {
 
 export const gitChangedFilesTool: PHATool<{ branch: string }> = {
   name: "git_changed_files",
-  description: "List files changed on a branch compared to its parent",
+  description: "列出某分支相对于父分支的变更文件",
   displayName: "变更文件",
   category: "git" as const,
   icon: "file-text",

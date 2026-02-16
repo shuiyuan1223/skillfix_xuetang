@@ -10,8 +10,7 @@ import type { PHATool } from "./types.js";
 
 export const memorySearchTool: PHATool<{ query: string; maxResults?: number }> = {
   name: "memory_search",
-  description:
-    "Search the user's memory. Use when you need to recall past conversations, health history, or preferences. Returns matching memory snippets with relevance scores.",
+  description: "搜索用户记忆。用于回忆过往对话、健康历史或偏好。返回匹配的记忆片段及相关度评分。",
   displayName: "搜索记忆",
   category: "memory",
   icon: "search",
@@ -47,7 +46,7 @@ export const memorySearchTool: PHATool<{ query: string; maxResults?: number }> =
 export const memorySaveTool: PHATool<{ content: string }> = {
   name: "memory_save",
   description:
-    "Save important information to the user's long-term memory (MEMORY.md). Use when the user mentions important health info, preferences, or key findings during conversation.",
+    "将重要信息保存到用户长期记忆（MEMORY.md）。当用户提到重要健康信息、偏好或对话中的关键发现时调用。",
   displayName: "保存记忆",
   category: "memory",
   icon: "save",
@@ -76,7 +75,7 @@ export const memorySaveTool: PHATool<{ content: string }> = {
 export const dailyLogTool: PHATool<{ content: string }> = {
   name: "daily_log",
   description:
-    "Record today's conversation highlights to the daily log. Call before the conversation ends or when important findings arise, to save a summary of health-related discussion.",
+    "记录今日对话要点到每日日志。在对话结束前或出现重要健康发现时调用，保存健康相关讨论的摘要。",
   displayName: "每日记录",
   category: "memory",
   icon: "calendar",
