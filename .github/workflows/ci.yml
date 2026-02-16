@@ -38,3 +38,10 @@ jobs:
       - name: E2E tests
         run: bun test tests/e2e
         timeout-minutes: 3
+
+      - name: Install Playwright
+        run: bunx playwright install chromium --with-deps
+
+      - name: Browser E2E tests
+        run: bun run test:e2e-browser
+        timeout-minutes: 3

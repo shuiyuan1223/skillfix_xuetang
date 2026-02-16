@@ -78,6 +78,14 @@ export class SSEConnection {
     });
   }
 
+  /** Send SSE retry field to control browser reconnect interval. */
+  sendRetry(ms: number): void {
+    if (this.closed) return;
+    this.writer.write(this.encoder.encode(`retry: ${ms}\n\n`)).catch(() => {
+      this.closed = true;
+    });
+  }
+
   /** SSE comment line as heartbeat. */
   sendHeartbeat(): void {
     if (this.closed) return;

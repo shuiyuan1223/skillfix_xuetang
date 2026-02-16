@@ -99,6 +99,7 @@ export function App() {
   const chatAutoScrollRef = useRef(true);
   const isAutoScrollingRef = useRef(false);
   const extensionDetectedRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
   const handleMessageRef = useRef<(msg: WSMessage) => void>(() => {});
 
@@ -800,6 +801,7 @@ export function App() {
       es.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data) as WSMessage;
+          if ((msg as any).type === "throttled") return; // Graceful 429: ignore, browser retries per retry: field
           handleMessage(msg);
         } catch (e) {
           console.error("[SSE] Parse error:", e);
@@ -808,16 +810,19 @@ export function App() {
 
       es.onerror = () => {
         setConnected(false);
-        // EventSource automatically reconnects, but if it closes completely
-        // we need to re-init
+        // EventSource has native reconnection (interval controlled by server retry: field).
+        // Only manually reconnect when the connection is fully closed (won't auto-retry).
         if (es.readyState === EventSource.CLOSED) {
           eventSourceRef.current = null;
-          setTimeout(() => connect(), 2000);
+          reconnectAttemptRef.current++;
+          const delay = Math.min(2000 * Math.pow(1.5, reconnectAttemptRef.current - 1), 30000);
+          setTimeout(() => connect(), delay);
         }
       };
 
       es.onopen = () => {
         setConnected(true);
+        reconnectAttemptRef.current = 0;
       };
     } catch (e) {
       console.error("[A2UI] Connect error:", e);

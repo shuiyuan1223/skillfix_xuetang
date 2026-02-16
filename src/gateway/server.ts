@@ -5777,12 +5777,23 @@ export async function startGateway(
 
         const result = sseManager.createConnection(session.getSessionId());
         if (!result) {
-          return new Response("Too Many Requests", {
-            status: 429,
-            headers: { "Retry-After": "2" },
+          // Return a valid SSE stream with retry directive instead of HTTP 429.
+          // HTTP 429 causes EventSource to fire onerror then reconnect immediately,
+          // creating a cascade. A valid SSE with long retry lets the browser wait.
+          const encoder = new TextEncoder();
+          const body = encoder.encode(`retry: 5000\ndata: {"type":"throttled"}\n\n`);
+          return new Response(body, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              "Access-Control-Allow-Origin": "*",
+            },
           });
         }
         const { readable, connection } = result;
+
+        // Tell browser to wait at least 3s before auto-reconnecting
+        connection.sendRetry(3000);
 
         // Bind session's active send to this SSE connection
         session.setSend((msg) => {
