@@ -1,11 +1,11 @@
 /**
- * ClawHub Integration Tools
+ * SkillsHub Integration Tools
  *
- * Install skills from ClawHub (clawhub.ai) or any compatible skill source.
+ * Install skills from SkillsHub, ClawHub, GitHub, or any compatible skill source.
  * Handles format adaptation: OpenClaw metadata.openclaw → PHA metadata.pha
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join, basename } from "path";
 import { gitCommitFiles } from "../evolution/version-manager.js";
 import { getSkillsDir } from "./skill-tools.js";
@@ -29,7 +29,7 @@ function adaptOpenClawMetadata(content: string): string {
 /**
  * Fetch skill content from a URL.
  * Supports:
- * - ClawHub skill page URL (clawhub.ai/skills/<slug>)
+ * - SkillsHub / ClawHub skill page URL
  * - GitHub raw file URL
  * - Direct SKILL.md URL
  */
@@ -84,26 +84,20 @@ async function fetchSkillFromGitHub(url: string): Promise<{
   const files = new Map<string, string>();
   files.set("SKILL.md", content);
 
-  // Try to fetch common subdirectory files
-  for (const subDir of ["reference", "scripts", "instructions", "tools"]) {
-    // We can't list GitHub directories via raw URLs, so we skip subdirectory discovery
-    // The SKILL.md itself is the minimum viable unit
-  }
-
   return { content, name, files, source: url };
 }
 
 /**
- * Install a skill from a ClawHub or compatible source.
+ * Install a skill from SkillsHub, ClawHub, GitHub, or any URL.
  */
-export const installClawHubSkillTool: PHATool<{
+export const installSkillFromUrlTool: PHATool<{
   source: string;
   name?: string;
   force?: boolean;
 }> = {
   name: "install_skill_from_url",
   description:
-    "从 ClawHub 或 GitHub 安装技能。支持 ClawHub URL、GitHub 仓库 URL、或直接 SKILL.md URL。自动适配 OpenClaw 格式。",
+    "从 SkillsHub、GitHub 或其他来源安装技能。支持 GitHub 仓库 URL、ClawHub URL、或直接 SKILL.md URL。自动适配 OpenClaw 格式。",
   displayName: "安装外部技能",
   category: "skill",
   icon: "link",
@@ -114,7 +108,7 @@ export const installClawHubSkillTool: PHATool<{
       source: {
         type: "string",
         description:
-          "Skill source URL. Supports: GitHub repo URL (github.com/.../skills/name), raw SKILL.md URL, or ClawHub URL (clawhub.ai/skills/slug)",
+          "Skill source URL. Supports: GitHub repo URL (github.com/.../skills/name), raw SKILL.md URL, or skill registry URL",
       },
       name: {
         type: "string",
@@ -150,12 +144,9 @@ export const installClawHubSkillTool: PHATool<{
     // Fallback to direct URL fetch
     if (!result) {
       // If it's a ClawHub URL, try to resolve to raw content
-      const fetchUrl = url;
       if (url.includes("clawhub.ai/skills/")) {
-        // ClawHub skill page → try raw download endpoint
         const slug = url.split("/skills/")[1]?.split(/[?#]/)[0];
         if (slug) {
-          // Try common API patterns
           const apiUrls = [
             `https://clawhub.ai/api/skills/${slug}/raw`,
             `https://clawhub.ai/api/skills/${slug}/download`,
@@ -164,13 +155,12 @@ export const installClawHubSkillTool: PHATool<{
             result = await fetchSkillFromUrl(apiUrl);
             if (result) break;
           }
-          // If API fails, try page scrape
           if (!result) {
-            result = await fetchSkillFromUrl(fetchUrl);
+            result = await fetchSkillFromUrl(url);
           }
         }
       } else {
-        result = await fetchSkillFromUrl(fetchUrl);
+        result = await fetchSkillFromUrl(url);
       }
     }
 
@@ -178,7 +168,7 @@ export const installClawHubSkillTool: PHATool<{
       return {
         success: false,
         error: `Failed to fetch skill from: ${url}`,
-        hint: "Supported sources: GitHub repo URL, raw SKILL.md URL, or ClawHub skill page URL",
+        hint: "Supported sources: GitHub repo URL, raw SKILL.md URL, or skill registry URL",
       };
     }
 
@@ -218,7 +208,7 @@ export const installClawHubSkillTool: PHATool<{
     }
 
     // Git commit
-    gitCommitFiles(skillDir, `Install skill from ClawHub: ${skillName}`);
+    gitCommitFiles(skillDir, `Install skill: ${skillName}`);
 
     return {
       success: true,
@@ -231,18 +221,18 @@ export const installClawHubSkillTool: PHATool<{
 };
 
 /**
- * Search for skills on ClawHub.
+ * Search for skills on SkillsHub / ClawHub.
  */
-export const searchClawHubTool: PHATool<{
+export const searchSkillsHubTool: PHATool<{
   query: string;
   limit?: number;
 }> = {
-  name: "search_clawhub",
-  description: "在 ClawHub (clawhub.ai) 搜索社区技能。返回匹配的技能列表。",
-  displayName: "搜索 ClawHub",
+  name: "search_skillshub",
+  description: "在 SkillsHub 搜索社区技能。返回匹配的技能列表。",
+  displayName: "搜索 SkillsHub",
   category: "skill",
   icon: "search",
-  label: "Search ClawHub",
+  label: "Search SkillsHub",
   inputSchema: {
     type: "object",
     properties: {
@@ -260,7 +250,7 @@ export const searchClawHubTool: PHATool<{
   execute: async (args: { query: string; limit?: number }) => {
     const limit = args.limit || 10;
 
-    // Try ClawHub API search
+    // Try ClawHub API search (SkillsHub backend)
     const searchUrls = [
       `https://clawhub.ai/api/skills/search?q=${encodeURIComponent(args.query)}&limit=${limit}`,
       `https://clawhub.ai/api/search?q=${encodeURIComponent(args.query)}&limit=${limit}`,
@@ -273,7 +263,6 @@ export const searchClawHubTool: PHATool<{
         });
         if (res.ok) {
           const data = await res.json();
-          // Normalize response: ClawHub may return different shapes
           const skills = Array.isArray(data)
             ? data
             : (data as Record<string, unknown>).skills ||
@@ -290,7 +279,7 @@ export const searchClawHubTool: PHATool<{
               tags: s.tags,
             })),
             count: (skills as unknown[]).length,
-            source: "clawhub.ai",
+            source: "skillshub",
           };
         }
       } catch {
@@ -301,7 +290,7 @@ export const searchClawHubTool: PHATool<{
     // API not available — return guidance
     return {
       success: false,
-      error: "ClawHub API search is currently unavailable",
+      error: "SkillsHub search is currently unavailable",
       hint: `Browse skills at https://clawhub.ai and use install_skill_from_url to install. Search query: "${args.query}"`,
       browseUrl: `https://clawhub.ai/?q=${encodeURIComponent(args.query)}`,
     };
@@ -309,4 +298,4 @@ export const searchClawHubTool: PHATool<{
 };
 
 // Export all tools as array
-export const clawHubTools = [installClawHubSkillTool, searchClawHubTool];
+export const skillsHubTools = [installSkillFromUrlTool, searchSkillsHubTool];

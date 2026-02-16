@@ -116,7 +116,7 @@ export function registerStatusCommand(program: Command): void {
 
       if (options.json) {
         console.log(JSON.stringify(status, null, 2));
-        return;
+        process.exit(0);
       }
 
       console.log("");
@@ -205,6 +205,7 @@ export function registerStatusCommand(program: Command): void {
       }
 
       console.log("");
+      process.exit(0);
     });
 
   // Add logs command

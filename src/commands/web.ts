@@ -50,6 +50,7 @@ async function openBrowser(url: string) {
 }
 
 export function registerWebCommand(program: Command): void {
+  // pha web — open web UI
   program
     .command("web")
     .description("Open PHA web UI in browser")
@@ -66,6 +67,27 @@ export function registerWebCommand(program: Command): void {
       }
 
       info(`Opening ${c.cyan(url)}`);
+      await openBrowser(url);
+    });
+
+  // pha dashboard — alias for pha web, opens browser
+  program
+    .command("dashboard")
+    .alias("dash")
+    .description("Open PHA dashboard in browser (alias for 'pha web')")
+    .option("-p, --port <number>", "Port (default: from config)")
+    .action(async (options) => {
+      const config = loadConfig();
+      const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
+      const url = `http://localhost:${port}`;
+
+      const pid = getPid();
+      if (!pid || !isRunning(pid)) {
+        fatal("PHA is not running", `Start it first with: ${c.cyan("pha start")}`);
+        return;
+      }
+
+      info(`Opening dashboard ${c.cyan(url)}`);
       await openBrowser(url);
     });
 }

@@ -16,7 +16,7 @@ import { skillTools } from "./skill-tools.js";
 import { systemMemoryTools } from "./system-memory-tools.js";
 import { profileTools } from "./profile-tools.js";
 import { toolFeedbackTools } from "./tool-feedback.js";
-import { clawHubTools } from "./clawhub-tools.js";
+import { skillsHubTools } from "./skillshub-tools.js";
 
 // ===========================================================================
 // Global Registry — single source of truth for all tools
@@ -33,7 +33,7 @@ globalRegistry.registerAll([
   ...systemMemoryTools,
   ...profileTools,
   ...toolFeedbackTools,
-  ...clawHubTools,
+  ...skillsHubTools,
 ]);
 
 // ===========================================================================
@@ -50,6 +50,6 @@ export * from "./memory-tools.js";
 export * from "./system-memory-tools.js";
 export * from "./profile-tools.js";
 export * from "./tool-feedback.js";
-export * from "./clawhub-tools.js";
+export * from "./skillshub-tools.js";
 export * from "./types.js";
 export { ToolRegistry, categoryToAgent } from "./registry.js";
