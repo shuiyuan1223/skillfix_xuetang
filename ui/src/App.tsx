@@ -832,10 +832,11 @@ export function App() {
     if (!hasChatMessages || chatMessages.length === 0) return mainData;
 
     // Override chat_messages component with client-managed state
+    // Only override PHA chat (action="send_message"), NOT system-agent (action="sa_send_message")
     return {
       ...mainData,
       components: mainData.components.map((c) => {
-        if (c.type === "chat_messages") {
+        if (c.type === "chat_messages" && (!c.action || c.action === "send_message")) {
           return {
             ...c,
             messages: chatMessages,
@@ -844,7 +845,7 @@ export function App() {
             quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
           };
         }
-        if (c.type === "chat_input") {
+        if (c.type === "chat_input" && (!c.action || c.action === "send_message")) {
           return { ...c, streaming: chatStreaming };
         }
         return c;

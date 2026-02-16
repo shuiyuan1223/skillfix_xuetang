@@ -67,6 +67,7 @@ import {
   generateBenchmarkModelSelectorModal,
   generateToolCards,
   generateToolsPage,
+  generateToolDetailModal,
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
@@ -2957,6 +2958,31 @@ export class GatewaySession {
         "Start a full evolution cycle: benchmark, diagnose, propose improvements, and wait for my approval before applying.",
         send
       );
+    }
+    // Tool detail modal
+    else if (action === "view_tool_detail" && payload?.row) {
+      const row = payload.row as Record<string, unknown>;
+      const toolName = row.name as string;
+      if (toolName) {
+        const tool = globalRegistry.get(toolName);
+        if (tool) {
+          const modal = generateToolDetailModal({
+            name: tool.name,
+            displayName: tool.displayName,
+            description: tool.description,
+            category: tool.category,
+            icon: tool.icon,
+            companionSkill: tool.companionSkill,
+            inputSchema: tool.inputSchema,
+          });
+          send({
+            type: "a2ui",
+            surface_id: "modal",
+            components: modal.components,
+            root_id: modal.root_id,
+          });
+        }
+      }
     }
     // Evolution actions (legacy)
     else if (action === "tab_change" && payload?.tab) {

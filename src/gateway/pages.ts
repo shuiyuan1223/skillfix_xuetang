@@ -91,7 +91,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
     [
       { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
       { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
-      { id: "settings/tools", label: t("nav.tools"), icon: "puzzle" },
+      { id: "settings/tools", label: t("nav.tools"), icon: "target" },
       { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
       { id: "settings/logs", label: t("nav.logs"), icon: "bar-chart" },
       { id: "settings/general", label: t("nav.settings"), icon: "settings" },
@@ -1146,13 +1146,14 @@ export function generateSkillsPage(data: {
 // Tools Page Generator
 // ============================================================================
 
-interface ToolPageEntry {
+export interface ToolPageEntry {
   name: string;
   displayName: string;
   description: string;
   category: string;
   icon?: string;
   companionSkill?: string;
+  inputSchema?: Record<string, unknown>;
 }
 
 export function generateToolsPage(data: {
@@ -1198,7 +1199,8 @@ export function generateToolsPage(data: {
       { key: "category", label: "Category", render: "badge" },
       { key: "skill", label: "Skill" },
     ],
-    rows
+    rows,
+    { onRowClick: "view_tool_detail" }
   );
 
   const tableCard = ui.card([table], { padding: 20 });
@@ -1210,6 +1212,71 @@ export function generateToolsPage(data: {
   const tabs = ui.tabs(tabDefs, activeCategory, tabContentIds);
 
   const root = ui.column([header, tabs], { gap: 0 });
+  return ui.build(root);
+}
+
+export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
+  const ui = new A2UIGenerator("modal");
+
+  const children: string[] = [];
+
+  // Tool name + display name
+  const title = ui.text(`${tool.displayName}`, "h2");
+  children.push(title);
+
+  const nameBadge = ui.text(`${tool.name}`, "caption");
+  children.push(nameBadge);
+
+  // Description
+  const descTitle = ui.text("Description", "h3");
+  children.push(descTitle);
+  const descText = ui.text(tool.description, "body");
+  children.push(descText);
+
+  // Category + Skill row
+  const metaItems: string[] = [];
+  const catLabel = ui.text(`Category: ${tool.category}`, "caption");
+  metaItems.push(catLabel);
+  if (tool.companionSkill) {
+    const skillLabel = ui.text(`Companion Skill: ${tool.companionSkill}`, "caption");
+    metaItems.push(skillLabel);
+  }
+  const metaRow = ui.column(metaItems, { gap: 4 });
+  children.push(metaRow);
+
+  // Parameters (inputSchema)
+  if (tool.inputSchema) {
+    const paramsTitle = ui.text("Parameters", "h3");
+    children.push(paramsTitle);
+
+    const props = (tool.inputSchema.properties || {}) as Record<string, Record<string, unknown>>;
+    const required = (tool.inputSchema.required || []) as string[];
+
+    if (Object.keys(props).length === 0) {
+      const noParams = ui.text("No parameters required", "caption");
+      children.push(noParams);
+    } else {
+      const paramRows = Object.entries(props).map(([key, schema]) => ({
+        name: key,
+        type: String(schema.type || "any"),
+        required: required.includes(key) ? "yes" : "no",
+        description: String(schema.description || "-"),
+      }));
+
+      const paramTable = ui.dataTable(
+        [
+          { key: "name", label: "Name" },
+          { key: "type", label: "Type", render: "badge" as const },
+          { key: "required", label: "Required", render: "badge" as const },
+          { key: "description", label: "Description" },
+        ],
+        paramRows
+      );
+      children.push(paramTable);
+    }
+  }
+
+  const root = ui.column(children, { gap: 12, padding: 24 });
   return ui.build(root);
 }
 

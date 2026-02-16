@@ -147,6 +147,7 @@ export class ToolRegistry {
     category: ToolCategory;
     icon?: string;
     companionSkill?: string;
+    inputSchema?: Record<string, unknown>;
   }> {
     return this.getAll().map((t) => ({
       name: t.name,
@@ -155,6 +156,7 @@ export class ToolRegistry {
       category: t.category,
       icon: t.icon,
       companionSkill: t.companionSkill,
+      inputSchema: t.inputSchema,
     }));
   }
 
