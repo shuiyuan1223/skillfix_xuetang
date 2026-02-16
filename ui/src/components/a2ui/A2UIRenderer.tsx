@@ -741,7 +741,7 @@ export function A2UIRenderer({
                   })}
                   {/* Typing indicator when assistant message has no visible parts yet */}
                   {isActiveMsg && !hasVisibleParts && (
-                    <div className="flex gap-1.5 px-4 py-3 items-center">
+                    <div className={`${msgBubble} bg-surface-card border border-border flex gap-1.5 items-center`} style={{ boxShadow: "var(--shadow-sm)" }}>
                       <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
                       <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
                       <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
