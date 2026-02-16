@@ -151,7 +151,7 @@ import {
   abandonVersion,
   getWorktreePath,
 } from "../evolution/version-manager.js";
-import { setSkillsDir } from "../tools/skill-tools.js";
+import { setSkillsDir, getSkillsDir } from "../tools/skill-tools.js";
 // skill-trigger.ts removed — skill loading is now LLM-driven
 import { generateEvolutionLab, RUN_COLORS, type EvolutionLabData } from "./evolution-lab.js";
 import { setEvolutionRunnerConfig } from "../tools/evolution-tools.js";
@@ -168,6 +168,7 @@ import {
   subscribeToLogs,
   type LogEntry,
 } from "../utils/logger.js";
+import chokidar from "chokidar";
 
 const log = createLogger("Gateway");
 const logOAuth = log.child("OAuth");
@@ -5590,6 +5591,25 @@ export async function startGateway(
     } catch (err) {
       log.warn("Plugin loading failed", { error: err });
     }
+  }
+
+  // Skills hot reload: watch for SKILL.md changes and notify connected clients
+  const skillsWatchDir = getSkillsDir();
+  if (existsSync(skillsWatchDir)) {
+    let skillDebounce: ReturnType<typeof setTimeout> | null = null;
+    const skillWatcher = chokidar.watch(skillsWatchDir, {
+      ignoreInitial: true,
+      awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
+    });
+    skillWatcher.on("all", (event, changedPath) => {
+      if (!changedPath.endsWith("SKILL.md")) return;
+      if (skillDebounce) clearTimeout(skillDebounce);
+      skillDebounce = setTimeout(() => {
+        skillDebounce = null;
+        log.info("Skill file changed, notifying clients", { event, path: changedPath });
+        sseManager.broadcast(generateToast("技能文件已更新", "info"));
+      }, 1000);
+    });
   }
 
   // Clean up interrupted benchmark runs from previous process (deletes incomplete runs with no data)

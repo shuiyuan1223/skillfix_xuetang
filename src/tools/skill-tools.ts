@@ -347,12 +347,28 @@ export const getSkillTool: PHATool<{ name: string; filePath?: string }> = {
     const content = readFileSync(fullPath, "utf-8");
     const language = getLanguageFromFile(targetFile);
 
+    // Skill gating: validate requires.tools against registry
+    const metadata = info.frontmatter.metadata as Record<string, unknown> | undefined;
+    const pha = metadata?.pha as Record<string, unknown> | undefined;
+    const requires = pha?.requires as Record<string, unknown> | undefined;
+    const requiredTools = requires?.tools as string[] | undefined;
+    let missingTools: string[] | undefined;
+
+    if (requiredTools && Array.isArray(requiredTools)) {
+      // Lazy import to avoid circular dependency at module load time
+      const { globalRegistry } = await import("./index.js");
+      missingTools = requiredTools.filter((t) => !globalRegistry.has(t));
+    }
+
     return {
       success: true,
       ...info,
       content,
       filePath: targetFile,
       language,
+      ...(missingTools && missingTools.length > 0
+        ? { warning: `Missing required tools: ${missingTools.join(", ")}`, missingTools }
+        : {}),
     };
   },
 };

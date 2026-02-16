@@ -203,6 +203,20 @@ export class SSEConnectionManager {
   }
 
   /**
+   * Broadcast a message to all active SSE connections.
+   */
+  broadcast(msg: unknown): void {
+    for (const [sessionId, conn] of this.connections) {
+      if (conn.isClosed) continue;
+      const counter = (this.eventCounters.get(sessionId) || 0) + 1;
+      this.eventCounters.set(sessionId, counter);
+      const event: SSEEvent = { id: counter, data: JSON.stringify(msg) };
+      this.eventBuffers.get(sessionId)?.push(event);
+      conn.send(msg, counter);
+    }
+  }
+
+  /**
    * Close and remove a connection.
    */
   closeConnection(sessionId: string): void {
