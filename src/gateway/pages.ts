@@ -1220,16 +1220,10 @@ export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
 
   const children: string[] = [];
 
-  // Tool name + display name
-  const title = ui.text(`${tool.displayName}`, "h2");
-  children.push(title);
-
   const nameBadge = ui.text(`${tool.name}`, "caption");
   children.push(nameBadge);
 
   // Description
-  const descTitle = ui.text("Description", "h3");
-  children.push(descTitle);
   const descText = ui.text(tool.description, "body");
   children.push(descText);
 
@@ -1279,14 +1273,8 @@ export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
     }
   }
 
-  // Close button
-  const closeBtn = ui.button(t("common.close"), "close_modal", {
-    variant: "outline",
-  });
-  const closeRow = ui.row([closeBtn], { justify: "end" });
-  children.push(closeRow);
-
-  const root = ui.column(children, { gap: 12, padding: 24 });
+  const body = ui.column(children, { gap: 12 });
+  const root = ui.modal(tool.displayName, [body], { size: "lg" });
   return ui.build(root);
 }
 
@@ -1301,19 +1289,12 @@ export function generateSkillDetailModal(skill: {
   const ui = new A2UIGenerator("modal");
   const children: string[] = [];
 
-  // Title
-  const prefix = skill.emoji ? `${skill.emoji} ` : "";
-  const title = ui.text(`${prefix}${skill.name}`, "h2");
-  children.push(title);
-
   // Status badge
   const status = ui.text(skill.enabled ? "Enabled" : "Disabled", "caption");
   children.push(status);
 
   // Description
   if (skill.description) {
-    const descTitle = ui.text("Description", "h3");
-    children.push(descTitle);
     const desc = ui.text(skill.description, "body");
     children.push(desc);
   }
@@ -1352,13 +1333,12 @@ export function generateSkillDetailModal(skill: {
     variant: "outline",
     payload: { skillName: skill.name },
   });
-  const closeBtn = ui.button(t("common.close"), "close_modal", {
-    variant: "outline",
-  });
-  const actionRow = ui.row([toggleBtn, editBtn, closeBtn], { gap: 8, justify: "end" });
+  const actionRow = ui.row([toggleBtn, editBtn], { gap: 8, justify: "end" });
   children.push(actionRow);
 
-  const root = ui.column(children, { gap: 12, padding: 24 });
+  const body = ui.column(children, { gap: 12 });
+  const prefix = skill.emoji ? `${skill.emoji} ` : "";
+  const root = ui.modal(`${prefix}${skill.name}`, [body], { size: "lg" });
   return ui.build(root);
 }
 
