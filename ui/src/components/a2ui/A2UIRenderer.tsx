@@ -741,7 +741,7 @@ export function A2UIRenderer({
                   })}
                   {/* Typing indicator when assistant message has no visible parts yet */}
                   {isActiveMsg && !hasVisibleParts && (
-                    <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border" style={{ boxShadow: "var(--shadow-sm)" }}>
+                    <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
                       <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
                       <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
                       <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
