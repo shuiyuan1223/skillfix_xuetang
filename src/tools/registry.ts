@@ -12,13 +12,17 @@ import type { HealthDataSource } from "../data-sources/interface.js";
 import { createHealthTools } from "./health-data.js";
 
 // Derive agent assignment from category
-// PHA Agent gets ALL tools; System Agent gets git/evolution/system/feedback/skill
+// PHA Agent: health/memory/profile/config/skill (面向用户的健康助手)
+// System Agent: git/evolution/system/feedback/skill (面向开发者的系统进化)
+const PHA_CATEGORIES = new Set<ToolCategory>(["health", "memory", "profile", "config", "skill"]);
 const SA_CATEGORIES = new Set<ToolCategory>(["git", "evolution", "system", "feedback", "skill"]);
-const PHA_ONLY_CATEGORIES = new Set<ToolCategory>(["health", "memory", "profile", "config"]);
 
 export function categoryToAgent(category: ToolCategory): string {
-  if (PHA_ONLY_CATEGORIES.has(category)) return "PHA";
-  if (SA_CATEGORIES.has(category)) return "PHA / System";
+  const inPHA = PHA_CATEGORIES.has(category);
+  const inSA = SA_CATEGORIES.has(category);
+  if (inPHA && inSA) return "PHA / System";
+  if (inPHA) return "PHA";
+  if (inSA) return "System";
   return "PHA";
 }
 
