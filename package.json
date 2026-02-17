@@ -53,6 +53,8 @@
     "chokidar": "^5.0.0",
     "commander": "^14.0.0",
     "hono": "^4.6.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "sqlite-vec": "^0.1.7-alpha.2"
   },
   "devDependencies": {

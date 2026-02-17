@@ -2476,6 +2476,15 @@ export class GatewaySession {
     this.saCurrentAssistantMsgId = null;
     this.saLastStreamedText = "";
 
+    // Add empty assistant placeholder so loading dots show immediately
+    const placeholder: PartsChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      parts: [],
+    };
+    this.systemAgentChatMessages.push(placeholder);
+    this.saCurrentAssistantMsgId = placeholder.id;
+
     this.sendEvolutionLabUpdate(send);
 
     try {
@@ -2509,6 +2518,8 @@ export class GatewaySession {
               assistantMsg.parts.push({ type: "text", content: text });
             }
             this.saLastStreamedText = text;
+            // Push page update so text streams visually (throttled to avoid flooding)
+            this.sendEvolutionLabUpdateThrottled(send);
             const activeSend = this.getSend(send);
             activeSend({ type: "agent_text", content: text, is_final: false });
           }

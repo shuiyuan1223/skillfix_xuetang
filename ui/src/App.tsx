@@ -266,8 +266,6 @@ export function App() {
               toolCallId: event.toolCallId,
               cards: event.cards,
             });
-            // Add empty text part for next text stream
-            updated.parts.push({ type: "text", content: "" });
             msgs[msgs.length - 1] = updated;
           }
           return msgs;

@@ -1097,6 +1097,46 @@
   50% { box-shadow: 0 0 20px var(--color-accent-glow); }
 }
 
+/* ── Markdown elements in chat bubbles ── */
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--color-border));
+}
+
+.md-table th,
+.md-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgb(var(--color-border));
+}
+
+.md-table th {
+  font-weight: 600;
+  font-size: 12px;
+  color: rgb(var(--color-text-secondary));
+  background: rgb(var(--color-surface-hover));
+}
+
+.md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.md-table tbody tr:hover td {
+  background: rgb(var(--color-surface-hover) / 0.5);
+}
+
+.md-hr {
+  border: none;
+  height: 1px;
+  background: rgb(var(--color-border));
+  margin: 16px 0;
+}
+
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

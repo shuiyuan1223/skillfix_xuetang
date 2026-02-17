@@ -1,7 +1,7 @@
 import React from "react";
 import type { A2UIComponent, A2UISurfaceData, MessagePart } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
-import { renderMarkdown } from "../../lib/markdown";
+import { Markdown } from "../../lib/markdown";
 import { i18n } from "../../lib/i18n";
 import {
   ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line,
@@ -193,7 +193,7 @@ export function A2UIRenderer({
     const variantClass = textVariants[variant] || textVariants.body;
     return (
       <span className={variantClass} style={{ color, fontWeight: weight }}>
-        {c.markdown ? <span dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} /> : text}
+        {c.markdown ? <Markdown>{text}</Markdown> : text}
       </span>
     );
   }
@@ -659,7 +659,7 @@ export function A2UIRenderer({
         if (!part.content?.trim()) return null;
         return (
           <div key={partIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }}>
-            <span dangerouslySetInnerHTML={{ __html: renderMarkdown(part.content) }} />
+            <Markdown>{part.content}</Markdown>
           </div>
         );
       }
@@ -733,7 +733,7 @@ export function A2UIRenderer({
                     ) {
                       return (
                         <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
-                          <span dangerouslySetInnerHTML={{ __html: renderMarkdown(part.content) }} />
+                          <Markdown>{part.content}</Markdown>
                         </div>
                       );
                     }
