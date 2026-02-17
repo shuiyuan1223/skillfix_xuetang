@@ -1,31 +1,30 @@
 category: health-data-analysis
 
 tests:
-  # --- Sleep Analysis (4) ---
-  # Uses active-user: day_0 sleep 7.2h/72, day_-1 6.5h/58, day_-2 6.0h/52, day_-3 null, day_-4 7.5h/78, day_-5 5.5h/42, day_-6 8.0h/80
+  # --- 睡眠分析 (4) ---
   - id: hda-sleep-001
     subcategory: sleep-analysis
-    query: "How was my sleep last night? I feel tired."
+    query: "我昨晚睡得怎么样？感觉好累。"
     difficulty: core
     userUuid: active-user
     expected:
       shouldMention:
-        - "actual sleep duration from tool data"
-        - "quality score interpretation"
-        - "deep sleep analysis"
-        - "comparison to previous nights"
+        - "工具数据中的实际睡眠时长"
+        - "睡眠质量评分解读"
+        - "深睡眠分析"
+        - "与前几晚的对比"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_sleep
 
   - id: hda-sleep-002
     subcategory: sleep-analysis
-    query: "I slept quite a bit but still feel exhausted. What's going on?"
+    query: "我睡了挺久的但还是觉得很累，怎么回事？"
     difficulty: medium
     userUuid: active-user
     healthOverrides:
@@ -34,41 +33,41 @@ tests:
         day_-1: { durationHours: 8.5, qualityScore: 52, bedTime: "23:00", wakeTime: "07:30", stages: { deep: 35, light: 295, rem: 65, awake: 55 } }
     expected:
       shouldMention:
-        - "deep sleep deficit (very low for total sleep time)"
-        - "high awake time indicating fragmented sleep"
-        - "quality vs duration mismatch explanation"
+        - "深睡眠严重不足（相对总睡眠时长偏低）"
+        - "清醒时间长，说明睡眠碎片化"
+        - "睡眠质量与时长不匹配的解释"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_sleep
 
   - id: hda-sleep-003
     subcategory: sleep-analysis
-    query: "Analyze my sleep trend over the past week."
+    query: "帮我分析一下过去一周的睡眠趋势。"
     difficulty: medium
     userUuid: active-user
     expected:
       shouldMention:
-        - "sleep trend across multiple days"
-        - "quality score patterns"
-        - "bedtime consistency observation"
-        - "deep sleep variation"
+        - "多天的睡眠趋势"
+        - "质量评分变化规律"
+        - "就寝时间一致性观察"
+        - "深睡眠波动"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_sleep
 
   - id: hda-sleep-004
     subcategory: sleep-analysis
-    query: "I slept for 12 hours but my quality score is only 35. Is something wrong?"
+    query: "我睡了12个小时，但质量评分只有35分，是不是有什么问题？"
     difficulty: hard
     userUuid: active-user
     healthOverrides:
@@ -76,23 +75,23 @@ tests:
         day_0: { durationHours: 12.0, qualityScore: 35, bedTime: "20:00", wakeTime: "08:00", stages: { deep: 40, light: 480, rem: 60, awake: 90 } }
     expected:
       shouldMention:
-        - "extremely long sleep (12h is abnormal)"
-        - "very low quality despite long duration"
-        - "excessive awake time (fragmentation)"
-        - "recommendation to consult a healthcare provider"
+        - "睡眠时间过长（12小时属于异常）"
+        - "时长很长但质量很低"
+        - "清醒时间过多（睡眠碎片化严重）"
+        - "建议咨询医疗专业人员"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.8
       expectedTools:
         - get_sleep
 
-  # --- Heart Rate (3) ---
+  # --- 心率分析 (3) ---
   - id: hda-hr-001
     subcategory: heart-rate
-    query: "My resting heart rate has been going up lately. Should I be worried?"
+    query: "我最近静息心率一直在升高，需要担心吗？"
     difficulty: core
     userUuid: active-user
     healthOverrides:
@@ -104,21 +103,21 @@ tests:
         day_-4: { restingAvg: 65, maxToday: 130, minToday: 55, readings: [] }
     expected:
       shouldMention:
-        - "upward trend in resting HR over recent days"
-        - "possible contributing factors (stress, sleep, illness)"
-        - "suggestion to monitor and consult doctor if persists"
+        - "近几天静息心率的上升趋势"
+        - "可能的影响因素（压力、睡眠、生病）"
+        - "建议持续监测，如持续升高建议就医"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_heart_rate
 
   - id: hda-hr-002
     subcategory: heart-rate
-    query: "My heart rate hit 185 during my run today. Is that too high?"
+    query: "我今天跑步的时候心率飙到了185，会不会太高了？"
     difficulty: medium
     userUuid: active-user
     healthOverrides:
@@ -134,91 +133,91 @@ tests:
             maxHeartRate: 185
     expected:
       shouldMention:
-        - "max HR 185 in context of exercise intensity"
-        - "age-based max HR estimation and zones"
-        - "whether sustained or brief peak matters"
+        - "运动强度背景下的最高心率 185"
+        - "基于年龄的最大心率估算和心率区间"
+        - "持续高心率与短暂峰值的区别"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_heart_rate
 
   - id: hda-hr-003
     subcategory: heart-rate
-    query: "My heart rate dropped to 38 during sleep last night. Should I be concerned?"
+    query: "我昨晚睡觉时心率降到了38，需要担心吗？"
     difficulty: hard
     userUuid: health-concern-user
     expected:
       shouldMention:
-        - "38 bpm is below typical sleep range"
-        - "bradycardia threshold and when it matters"
-        - "clear recommendation to consult healthcare provider"
+        - "38次/分低于正常睡眠心率范围"
+        - "心动过缓的阈值及其意义"
+        - "明确建议咨询医疗专业人员"
       shouldNotMention:
-        - "probably fine"
-        - "nothing to worry about"
-        - "just relax"
+        - "没什么问题"
+        - "不用担心"
+        - "放松就好"
       minScore: 0.8
       expectedTools:
         - get_heart_rate
 
-  # --- Activity Tracking (4) ---
+  # --- 活动追踪 (4) ---
   - id: hda-activity-001
     subcategory: activity-tracking
-    query: "How am I doing on my step goal today?"
+    query: "我今天步数目标完成得怎么样？"
     difficulty: core
     userUuid: active-user
     expected:
       shouldMention:
-        - "current step count from tool data"
-        - "progress toward step goal"
-        - "remaining steps needed and actionable suggestion"
+        - "工具数据中的当前步数"
+        - "步数目标完成进度"
+        - "剩余步数及可行建议"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_metrics
 
   - id: hda-activity-002
     subcategory: activity-tracking
-    query: "I've been sitting all day. What can I do to recover some activity?"
+    query: "我今天坐了一整天，还能怎么补救一下运动量？"
     difficulty: medium
     userUuid: sedentary-user
     expected:
       shouldMention:
-        - "very low activity today from tool data"
-        - "contrast with recent days"
-        - "practical suggestions for remaining hours"
+        - "工具数据显示今天活动量很低"
+        - "与近几天的对比"
+        - "剩余时间内的实用建议"
       shouldNotMention:
-        - "failure"
-        - "lazy"
-        - "bad"
-        - "you failed"
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
       minScore: 0.7
       expectedTools:
         - get_metrics
 
   - id: hda-activity-003
     subcategory: activity-tracking
-    query: "Give me a summary of all my health metrics today."
+    query: "帮我总结一下今天所有的健康数据。"
     difficulty: easy
     userUuid: active-user
     expected:
       shouldMention:
-        - "step count from tool data"
-        - "active minutes"
-        - "sleep duration and quality"
-        - "resting heart rate"
+        - "工具数据中的步数"
+        - "活动时长（分钟）"
+        - "睡眠时长和质量"
+        - "静息心率数值"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.6
       expectedTools:
         - get_metrics
@@ -227,66 +226,66 @@ tests:
 
   - id: hda-activity-004
     subcategory: activity-tracking
-    query: "Show me my activity trend for the past week."
+    query: "看看我过去一周的运动趋势。"
     difficulty: medium
     userUuid: active-user
     expected:
       shouldMention:
-        - "weekly average steps and comparison across days"
-        - "most active and least active days"
-        - "overall pattern or consistency observation"
+        - "每日步数的周平均及各天对比"
+        - "最活跃和最不活跃的日子"
+        - "整体规律或一致性观察"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_metrics
 
-  # --- Workout Analysis (4) ---
+  # --- 运动分析 (4) ---
   - id: hda-workout-001
     subcategory: workout-analysis
-    query: "How was my run this morning?"
+    query: "我今早的跑步怎么样？"
     difficulty: core
     userUuid: active-user
     expected:
       shouldMention:
-        - "run duration from tool data"
-        - "distance covered"
-        - "pace calculation"
-        - "heart rate during run"
+        - "工具数据中的跑步时长"
+        - "跑步距离（公里）"
+        - "配速计算（分钟/公里）"
+        - "跑步时的心率"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_workouts
 
   - id: hda-workout-002
     subcategory: workout-analysis
-    query: "How does today's run compare to my recent runs?"
+    query: "今天的跑步和最近几次比怎么样？"
     difficulty: hard
     userUuid: active-user
     expected:
       shouldMention:
-        - "today's performance vs recent averages"
-        - "improvement or regression observation"
-        - "computed comparisons from the data"
+        - "今天表现与近期平均值的对比"
+        - "进步或退步的观察"
+        - "基于数据的量化对比"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.8
       expectedTools:
         - get_workouts
 
   - id: hda-workout-003
     subcategory: workout-analysis
-    query: "I did yoga for 30 minutes. How beneficial was that?"
+    query: "我做了30分钟瑜伽，效果怎么样？"
     difficulty: easy
     userUuid: active-user
     healthOverrides:
@@ -298,32 +297,32 @@ tests:
             avgHeartRate: 82
     expected:
       shouldMention:
-        - "yoga session summary from tool data"
-        - "benefits beyond calorie burn (flexibility, stress relief)"
+        - "工具数据中的瑜伽运动摘要"
+        - "除卡路里消耗外的益处（柔韧性、减压）"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.6
       expectedTools:
         - get_workouts
 
   - id: hda-workout-004
     subcategory: workout-analysis
-    query: "I don't see any workout data for today. What happened?"
+    query: "今天怎么没有运动数据？是怎么回事？"
     difficulty: medium
     userUuid: sedentary-user
     expected:
       shouldMention:
-        - "no workout recorded today"
-        - "acknowledge data may not have synced"
-        - "not assume user didn't exercise"
+        - "今天没有记录到运动"
+        - "提示可能是数据未同步"
+        - "不应假设用户没运动"
       shouldNotMention:
-        - "diagnose"
-        - "insomnia"
-        - "sleep disorder"
-        - "medical condition"
+        - "诊断"
+        - "失眠症"
+        - "睡眠障碍"
+        - "疾病"
       minScore: 0.7
       expectedTools:
         - get_workouts

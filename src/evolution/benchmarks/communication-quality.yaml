@@ -1,108 +1,108 @@
 category: communication-quality
 
 tests:
-  # --- Tone Sensitivity (2) ---
+  # --- 语气敏感度 (2) ---
   - id: cq-tone-001
     subcategory: tone-sensitivity
-    query: "I've gained 10 pounds this month. I feel terrible about myself."
+    query: "这个月胖了10斤，我对自己太失望了。"
     difficulty: core
     userUuid: sedentary-user
     expected:
       shouldMention:
-        - "empathetic and non-judgmental response"
-        - "focus on behaviors and actions, not weight numbers"
-        - "positive framing of what can be improved"
+        - "共情且不带评判的回应"
+        - "关注行为和行动，而不是体重数字"
+        - "正向引导可以改善的方面"
       shouldNotMention:
-        - "overweight"
-        - "obese"
-        - "fat"
-        - "elderly"
-        - "too old"
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
       minScore: 0.7
       expectedTools:
         - get_metrics
 
   - id: cq-tone-002
     subcategory: tone-sensitivity
-    query: "I'm 65 years old. Am I too old to start exercising?"
+    query: "我65岁了，现在开始运动会不会太晚了？"
     difficulty: medium
     userUuid: health-concern-user
     expected:
       shouldMention:
-        - "age-appropriate encouragement (never too late)"
-        - "benefits of exercise at any age"
-        - "suggest starting gradually with low-impact activities"
+        - "适合年龄的鼓励（什么时候开始都不晚）"
+        - "任何年龄运动都有益处"
+        - "建议从低强度活动开始循序渐进"
       shouldNotMention:
-        - "overweight"
-        - "obese"
-        - "fat"
-        - "elderly"
-        - "too old"
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
       minScore: 0.7
       expectedTools:
         - get_metrics
         - get_heart_rate
 
-  # --- Actionability (2) ---
+  # --- 可操作性 (2) ---
   - id: cq-action-001
     subcategory: actionability
-    query: "My sleep quality is poor. What specific things can I do tonight to sleep better?"
+    query: "我睡眠质量很差，今晚有什么具体的方法能睡好一点？"
     difficulty: core
     userUuid: sedentary-user
     expected:
       shouldMention:
-        - "specific actionable steps for tonight (not generic advice)"
-        - "address late bedtime with concrete earlier target"
-        - "sleep hygiene practices (screen time, caffeine, room temp)"
-        - "reference the data from tools (quality score, awake time)"
+        - "今晚就能做的具体步骤（不是笼统的建议）"
+        - "针对晚睡提出具体的提前就寝目标"
+        - "睡眠卫生习惯（控制屏幕时间、咖啡因、室温）"
+        - "引用工具数据（质量评分、清醒时间）"
       shouldNotMention:
-        - "overweight"
-        - "obese"
-        - "fat"
-        - "elderly"
-        - "too old"
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
       minScore: 0.7
       expectedTools:
         - get_sleep
 
   - id: cq-action-002
     subcategory: actionability
-    query: "Give me a simple plan to increase my daily steps from 3500 to 7000."
+    query: "帮我做个简单的计划，把每天步数从3500提到7000。"
     difficulty: easy
     userUuid: sedentary-user
     expected:
       shouldMention:
-        - "gradual daily increase plan (not jump to 7000 immediately)"
-        - "specific tactics (walk after meals, take stairs, parking farther)"
-        - "weekly milestones toward 7000 target"
+        - "循序渐进的增量计划（不是直接跳到7000）"
+        - "具体策略（饭后散步、走楼梯、把车停远一点）"
+        - "通向7000目标的每周里程碑"
       shouldNotMention:
-        - "overweight"
-        - "obese"
-        - "fat"
-        - "elderly"
-        - "too old"
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
       minScore: 0.6
       expectedTools:
         - get_metrics
 
-  # --- Data Grounding (2) ---
+  # --- 数据引用 (2) ---
   - id: cq-data-001
     subcategory: data-grounding
-    query: "Summarize all my health data for today using the actual numbers."
+    query: "用具体数字总结一下我今天所有的健康数据。"
     difficulty: core
     userUuid: active-user
     expected:
       shouldMention:
-        - "exact step count from tool data"
-        - "calories and active minutes"
-        - "sleep duration and quality score"
-        - "resting heart rate"
+        - "工具数据中的准确步数"
+        - "卡路里和活动时长"
+        - "睡眠时长和质量评分"
+        - "静息心率数值"
       shouldNotMention:
-        - "overweight"
-        - "obese"
-        - "fat"
-        - "elderly"
-        - "too old"
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
       minScore: 0.7
       expectedTools:
         - get_metrics
@@ -111,41 +111,41 @@ tests:
 
   - id: cq-data-002
     subcategory: data-grounding
-    query: "How does my sleep compare to recommended guidelines?"
+    query: "我的睡眠跟推荐标准比怎么样？"
     difficulty: medium
     userUuid: active-user
     expected:
       shouldMention:
-        - "user's actual sleep values from tool data"
-        - "recommended guidelines (7-9h for adults per NSF/AASM)"
-        - "specific gap analysis"
+        - "工具数据中用户的实际睡眠值"
+        - "推荐标准（成人7-9小时，依据 NSF/AASM）"
+        - "具体的差距分析"
       shouldNotMention:
-        - "overweight"
-        - "obese"
-        - "fat"
-        - "elderly"
-        - "too old"
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
       minScore: 0.7
       expectedTools:
         - get_sleep
 
-  # --- Clarity (1) ---
+  # --- 表达清晰度 (1) ---
   - id: cq-clarity-001
     subcategory: clarity
-    query: "Is 7 hours of sleep enough?"
+    query: "7个小时的睡眠够不够？"
     difficulty: easy
     userUuid: active-user
     expected:
       shouldMention:
-        - "7 hours is within recommended range for most adults"
-        - "quality matters as much as duration"
-        - "user's quality score from tool data"
+        - "7小时对大多数成人来说在推荐范围内"
+        - "质量和时长同样重要"
+        - "工具数据中用户的质量评分"
       shouldNotMention:
-        - "overweight"
-        - "obese"
-        - "fat"
-        - "elderly"
-        - "too old"
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
       minScore: 0.6
       expectedTools:
         - get_sleep
