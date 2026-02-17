@@ -38,7 +38,8 @@ import {
   type BenchmarkModelConfig,
   type PHAConfig,
 } from "../utils/config.js";
-import { installFetchInterceptor } from "../utils/llm-logger.js";
+import { installFetchInterceptor, cleanupOldLlmLogs } from "../utils/llm-logger.js";
+import { migrateStateDir } from "../utils/state-migration.js";
 import { getMemoryManager } from "../memory/index.js";
 import {
   appendToSession,
@@ -1553,7 +1554,7 @@ export class GatewaySession {
       this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha";
     let userDir: string;
     if (this.promptsScope === "system") {
-      userDir = join(getStateDir(), "system-agent");
+      userDir = join(getStateDir(), "users", "system");
     } else {
       const uuid = this.userUuid || getUserId() || "anonymous";
       userDir = getUserDir(uuid);
@@ -1660,7 +1661,7 @@ export class GatewaySession {
     const filename = name.endsWith(".md") ? name : `${name}.md`;
     let dir: string;
     if (this.promptsScope === "system") {
-      dir = join(getStateDir(), "system-agent");
+      dir = join(getStateDir(), "users", "system");
     } else {
       const uuid = this.userUuid || getUserId() || "anonymous";
       if (!uuid) return null;
@@ -5796,6 +5797,12 @@ export async function startGateway(
   const sessions = new Map<string, GatewaySession>();
   const sseManager = new SSEConnectionManager();
   const webDir = config.webDir;
+
+  // Run state directory migration (moves files from old layout to new layout)
+  migrateStateDir();
+
+  // Clean up old LLM logs (older than 30 days)
+  cleanupOldLlmLogs();
 
   // Helper: get or create session by user ID
   function getOrCreateSession(userId?: string): GatewaySession {

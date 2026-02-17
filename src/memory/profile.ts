@@ -74,7 +74,7 @@ export function ensureUserDir(uuid: string): string {
  * Ensure System Agent directory has all 3 OpenClaw user-level files.
  */
 export function ensureSystemAgentFiles(): void {
-  const dir = join(getStateDir(), "system-agent");
+  const dir = join(getStateDir(), "users", "system");
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }

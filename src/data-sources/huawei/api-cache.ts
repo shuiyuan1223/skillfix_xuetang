@@ -1,26 +1,37 @@
 /**
  * API Response Cache
  *
- * Caches API responses to .pha/api-cache/ for debugging and analysis.
+ * Caches API responses to per-user .pha/users/{uuid}/api-cache/ for debugging.
  * Also provides in-memory caching to reduce API calls.
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import { getStateDir } from "../../utils/config.js";
-
-const CACHE_DIR = path.join(getStateDir(), "api-cache");
+import { getUserId } from "../../utils/config.js";
 
 // In-memory cache with TTL (5 minutes default)
 const memoryCache = new Map<string, { data: unknown; timestamp: number }>();
 const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
+ * Get the cache directory for a user (per-user isolation)
+ */
+function getCacheDir(userUuid?: string): string {
+  const uid = userUuid || getUserId();
+  if (uid) {
+    return path.join(getStateDir(), "users", uid, "api-cache");
+  }
+  // Anonymous user — no file cache
+  return "";
+}
+
+/**
  * Ensure cache directory exists
  */
-function ensureCacheDir(): void {
-  if (!fs.existsSync(CACHE_DIR)) {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
+function ensureCacheDir(cacheDir: string): void {
+  if (cacheDir && !fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
   }
 }
 
@@ -42,12 +53,15 @@ export function saveToFileCache(
   response: unknown,
   error?: string
 ): void {
-  ensureCacheDir();
+  const cacheDir = getCacheDir();
+  if (!cacheDir) return; // No file cache for anonymous users
+
+  ensureCacheDir(cacheDir);
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const endpointName = endpoint.replace(/[/:]/g, "_").slice(0, 50);
   const filename = `${timestamp}_${endpointName}.json`;
-  const filepath = path.join(CACHE_DIR, filename);
+  const filepath = path.join(cacheDir, filename);
 
   const cacheData = {
     timestamp: new Date().toISOString(),
@@ -98,18 +112,21 @@ export function clearMemoryCache(): void {
 }
 
 /**
- * List all cached files
+ * List all cached files for a user
  */
-export function listCacheFiles(): string[] {
-  ensureCacheDir();
-  return fs.readdirSync(CACHE_DIR).filter((f) => f.endsWith(".json"));
+export function listCacheFiles(userUuid?: string): string[] {
+  const cacheDir = getCacheDir(userUuid);
+  if (!cacheDir || !fs.existsSync(cacheDir)) return [];
+  return fs.readdirSync(cacheDir).filter((f) => f.endsWith(".json"));
 }
 
 /**
- * Read a cache file
+ * Read a cache file for a user
  */
-export function readCacheFile(filename: string): unknown {
-  const filepath = path.join(CACHE_DIR, filename);
+export function readCacheFile(filename: string, userUuid?: string): unknown {
+  const cacheDir = getCacheDir(userUuid);
+  if (!cacheDir) return null;
+  const filepath = path.join(cacheDir, filename);
   if (fs.existsSync(filepath)) {
     return JSON.parse(fs.readFileSync(filepath, "utf-8"));
   }

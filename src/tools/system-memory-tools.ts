@@ -9,9 +9,10 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } from "fs";
 import { join } from "path";
 import { findProjectRoot } from "../utils/config.js";
+
 import type { PHATool } from "./types.js";
 
-const MEMORY_DIR = "system-agent";
+const MEMORY_DIR = join("users", "system");
 
 function getMemoryDir(): string {
   const root = findProjectRoot();

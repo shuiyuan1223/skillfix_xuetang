@@ -8,11 +8,10 @@
  * Files are the source of truth; OpenClaw's per-user index handles all search.
  */
 
-import { Database } from "bun:sqlite";
 import { join } from "path";
 import { getStateDir } from "../utils/config.js";
-import { ensureMemorySchema, openMemoryDatabase } from "./schema.js";
-import { UserStore } from "./user-store.js";
+// Side-effect import: macOS SQLite compat patch
+import "./schema.js";
 import { loadSoul } from "./soul.js";
 import {
   loadProfileFromFile,
@@ -44,17 +43,10 @@ export interface MemoryManagerConfig {
 }
 
 export class MemoryManager {
-  private db: Database;
-  private userStore: UserStore;
   private indexManagers = new Map<string, MemoryIndexManager | null>();
   private indexInitPromises = new Map<string, Promise<MemoryIndexManager | null>>();
 
-  constructor(private config: MemoryManagerConfig = {}) {
-    const dbPath = join(getStateDir(), "memory.db");
-    this.db = openMemoryDatabase(dbPath);
-    ensureMemorySchema(this.db);
-    this.userStore = new UserStore(this.db);
-  }
+  constructor(private config: MemoryManagerConfig = {}) {}
 
   // ============ Index Manager (OpenClaw Engine) ============
 
@@ -95,7 +87,6 @@ export class MemoryManager {
   // ============ User Management ============
 
   ensureUser(uuid: string): void {
-    this.userStore.ensureUser(uuid);
     ensureUserDir(uuid);
   }
 
@@ -132,8 +123,7 @@ export class MemoryManager {
   }
 
   deleteUser(uuid: string): void {
-    this.userStore.deleteUser(uuid);
-    // Also close and remove the user's index manager
+    // Close and remove the user's index manager
     const manager = this.indexManagers.get(uuid);
     if (manager) {
       void manager.close();
@@ -241,14 +231,14 @@ export class MemoryManager {
 
   // ============ SOUL ============
 
-  getSoulPrompt(): string {
-    return loadSoul();
+  getSoulPrompt(uuid?: string): string {
+    return loadSoul(uuid);
   }
 
   // ============ System Prompt Building ============
 
   buildSystemPrompt(uuid: string, healthContext?: string): string {
-    const soul = this.getSoulPrompt();
+    const soul = this.getSoulPrompt(uuid);
     const profile = this.getProfile(uuid);
     const memorySummary = loadMemorySummary(uuid);
     const bootstrap = loadBootstrap(uuid);
@@ -295,7 +285,6 @@ Based on the information above, provide personalized health services.`;
   // ============ Lifecycle ============
 
   close(): void {
-    this.db.close();
     // Close all index managers
     for (const [, manager] of this.indexManagers) {
       if (manager) {

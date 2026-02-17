@@ -25,17 +25,35 @@ pha tui           # 终端聊天界面
 
 ```
 .pha/
-├── config.json        # 核心配置（LLM provider、API Key、端口等）
-├── gateway.pid        # Gateway 进程 PID
-├── gateway.log        # Gateway 运行日志
-├── users.db           # 用户数据 (SQLite)
-├── memory.db          # 记忆系统数据 (SQLite)
-├── huawei-tokens.json # 华为健康 OAuth Token
-├── SOUL.md            # Agent 灵魂提示词（运行时副本）
-├── api-cache/         # API 响应缓存
-├── llm-logs/          # LLM 调用日志
-├── users/             # 用户会话数据
-└── vectors/           # 向量索引
+├── config.json              # 全局配置（LLM provider、API Key、端口等）
+├── gateway.pid              # Gateway 进程 PID
+├── gateway.log              # Gateway 运行日志
+│
+├── db/                      # 所有 SQLite 数据库集中
+│   ├── evolution.db         # Benchmark/Evolution 数据
+│   └── oauth.db             # OAuth Token（多用户）
+│
+├── users/                   # 用户数据（统一入口）
+│   ├── {userId}/            # 真实用户（华为 ID）
+│   │   ├── USER.md
+│   │   ├── MEMORY.md
+│   │   ├── BOOTSTRAP.md
+│   │   ├── SOUL.md          # 可选：per-user SOUL 覆盖（存在时优先于全局）
+│   │   ├── memory/          # 每日记忆日志
+│   │   ├── sessions/        # 会话记录
+│   │   ├── memory-index.db  # 向量搜索索引
+│   │   └── api-cache/       # 华为 API 响应缓存（per-user）
+│   ├── benchmark-*/         # Benchmark 测试用户（运行时生成）
+│   └── system/              # 系统 Agent
+│       ├── USER.md
+│       ├── MEMORY.md
+│       └── BOOTSTRAP.md
+│
+├── benchmark/               # Benchmark 导出结果
+│   └── runs/{run_id}/
+│
+└── llm-logs/                # LLM 调用日志（每日 JSONL，自动清理 30 天前）
+    └── llm-YYYY-MM-DD.jsonl
 ```
 
 ### config.json 结构

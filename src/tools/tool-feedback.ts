@@ -13,7 +13,7 @@ import type { PHATool } from "./types.js";
 
 function getWishlistPath(): string {
   const root = findProjectRoot();
-  const dir = join(root, ".pha", "system-agent");
+  const dir = join(root, ".pha", "users", "system");
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }

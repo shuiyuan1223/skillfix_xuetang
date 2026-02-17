@@ -7,10 +7,11 @@
 
 import { Database } from "bun:sqlite";
 import * as path from "path";
+import { mkdirSync, existsSync } from "fs";
 import { getStateDir, ensureConfigDir } from "../../utils/config.js";
 import type { TokenData } from "./huawei-types.js";
 
-const DB_FILE = "users.db";
+const DB_FILE = path.join("db", "oauth.db");
 
 // Buffer time before token expiry (5 minutes)
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
@@ -30,6 +31,10 @@ export class UserStore {
   constructor(dbPath?: string) {
     ensureConfigDir();
     const finalPath = dbPath || path.join(getStateDir(), DB_FILE);
+    const dir = path.dirname(finalPath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
     this.db = new Database(finalPath);
     this.init();
   }
