@@ -265,15 +265,20 @@ export class HuaweiAuth {
     if (data.id_token) {
       try {
         huaweiUserId = decodeIdToken(data.id_token);
-      } catch {
-        // id_token decode failed — fall through to UserInfo
+      } catch (e) {
+        console.error("[Huawei/Auth] id_token decode failed:", e);
       }
+    } else {
+      console.warn(
+        "[Huawei/Auth] Token response has no id_token, keys:",
+        Object.keys(data).join(",")
+      );
     }
     if (!huaweiUserId) {
       try {
         huaweiUserId = await fetchUserInfoSub(tokenData.accessToken);
-      } catch {
-        // UserInfo also failed — continue without user ID
+      } catch (e) {
+        console.error("[Huawei/Auth] UserInfo fallback failed:", e);
       }
     }
 
@@ -384,23 +389,40 @@ export function decodeIdToken(idToken: string): string {
  * Fetch user ID from Huawei OIDC UserInfo endpoint using access_token.
  * Fallback when id_token is not present in the token response.
  */
+/**
+ * Fetch user ID via Huawei's proprietary getTokenInfo API.
+ * POST https://oauth-api.cloud.huawei.com/rest.php
+ *   nsp_svc=huawei.oauth2.user.getTokenInfo&access_token=...&open_id=OPENID
+ */
 async function fetchUserInfoSub(accessToken: string): Promise<string> {
-  const config = loadConfig();
-  const baseUrl = config.dataSources.huawei?.authUrl || DEFAULT_AUTH_URL;
-  // Derive userinfo URL from auth URL base (same host)
-  const url = new URL(baseUrl);
-  url.pathname = "/oauth2/v3/userinfo";
+  const url = "https://oauth-api.cloud.huawei.com/rest.php";
+  const body = new URLSearchParams({
+    nsp_svc: "huawei.oauth2.user.getTokenInfo",
+    open_id: "OPENID",
+    access_token: accessToken,
+  });
 
-  const response = await fetch(url.toString(), {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  console.log("[Huawei/Auth] Fetching getTokenInfo from:", url);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
   });
   if (!response.ok) {
-    throw new Error(`UserInfo request failed: ${response.status}`);
+    const text = await response.text().catch(() => "");
+    console.error("[Huawei/Auth] getTokenInfo failed:", response.status, text.slice(0, 300));
+    throw new Error(`getTokenInfo request failed: ${response.status}`);
   }
-  const data = (await response.json()) as { sub?: string; openID?: string };
-  const sub = data.sub || data.openID;
-  if (!sub) throw new Error("UserInfo response missing sub/openID");
-  return sub;
+  const data = (await response.json()) as Record<string, unknown>;
+  console.log("[Huawei/Auth] getTokenInfo response keys:", Object.keys(data).join(","));
+  const uid = (data.union_id || data.open_id || data.unionID || data.openID || data.sub) as
+    | string
+    | undefined;
+  if (!uid) {
+    console.error("[Huawei/Auth] getTokenInfo has no user ID:", JSON.stringify(data).slice(0, 300));
+    throw new Error("getTokenInfo response missing user ID");
+  }
+  return uid;
 }
 
 // Default instance

@@ -23,6 +23,7 @@ import { registerAuthCommand } from "./commands/auth.js";
 import { registerWebCommand } from "./commands/web.js";
 import { registerStateCommand } from "./commands/state.js";
 import { registerInitCommand } from "./commands/init.js";
+import { registerGetCommand } from "./commands/get.js";
 
 const program = new Command();
 
@@ -93,5 +94,8 @@ registerWebCommand(program);
 // State management
 registerStateCommand(program);
 registerInitCommand(program);
+
+// Quick data retrieval
+registerGetCommand(program);
 
 program.parse();
