@@ -636,6 +636,7 @@ export function registerEvalCommand(program: Command): void {
                 modelId: diagModelId,
                 baseUrl: diagBaseUrl,
                 dataSource: new MockDataSource(),
+                isolateMemory: true,
               });
               const response = await Promise.race([
                 testAgent.chatAndWait(query).then((r: string) => ({ response: r })),
@@ -912,6 +913,7 @@ export function registerEvalCommand(program: Command): void {
               modelId: entry.modelId,
               baseUrl: entry.baseUrl,
               dataSource: testDs,
+              isolateMemory: true,
             });
 
             // Inject conversation_history into agent state so it has prior context

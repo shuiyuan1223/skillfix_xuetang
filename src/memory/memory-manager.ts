@@ -292,6 +292,44 @@ Based on the information above, provide personalized health services.`;
     return prompt;
   }
 
+  /**
+   * Build system prompt for benchmark isolation — SOUL + skills only, no user profile/memory.
+   * Prevents the agent from referencing real user data during benchmark tests.
+   */
+  buildIsolatedSystemPrompt(healthContext?: string): string {
+    const soul = this.getSoulPrompt();
+    const skillRegistry = buildSkillRegistry();
+    const today = new Date().toISOString().split("T")[0];
+
+    const prompt = `${soul}
+
+---
+
+## Session Context
+
+- **Current Date**: ${today}
+
+## Current User Information
+
+No user profile available.
+
+## User Memory
+
+No historical memory.
+${healthContext || ""}
+${skillRegistry}
+---
+
+Based on the information above, provide personalized health services.`;
+
+    const est = (s: string) => Math.ceil(s.length / 4);
+    log.debug(
+      `[Isolated] Token distribution: soul=${est(soul)} skills=${est(skillRegistry)} total≈${est(prompt)}`
+    );
+
+    return prompt;
+  }
+
   // ============ Lifecycle ============
 
   close(): void {

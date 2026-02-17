@@ -1224,6 +1224,7 @@ export class GatewaySession {
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
             dataSource: new BenchMockDS(),
+            isolateMemory: true,
           });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
@@ -1296,6 +1297,7 @@ export class GatewaySession {
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
             dataSource: new BenchMockDS(),
+            isolateMemory: true,
           });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
@@ -5178,6 +5180,7 @@ export class GatewaySession {
             modelId: agentModelId,
             baseUrl: agentBaseUrl,
             dataSource: new AgentMockDS(),
+            isolateMemory: true,
           });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`

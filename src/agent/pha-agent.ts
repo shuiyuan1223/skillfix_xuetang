@@ -54,6 +54,8 @@ export interface PHAAgentConfig {
   agentOptions?: Partial<AgentOptions>;
   /** Prior chat messages to restore context after restart */
   sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>;
+  /** When true, skip user profile and memory injection in system prompt (for benchmark isolation) */
+  isolateMemory?: boolean;
 }
 
 // LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
@@ -126,10 +128,12 @@ export class PHAAgent {
       );
     }
 
-    // Build system prompt with memory and pre-computed health context
+    // Build system prompt — in isolateMemory mode, use SOUL only (no user profile/memory)
     const memoryManager = getMemoryManager();
     memoryManager.ensureUser(this.userUuid);
-    const systemPrompt = memoryManager.buildSystemPrompt(this.userUuid, healthContext);
+    const systemPrompt = config.isolateMemory
+      ? memoryManager.buildIsolatedSystemPrompt(healthContext)
+      : memoryManager.buildSystemPrompt(this.userUuid, healthContext);
 
     // Build LLM config for compaction summarization
     const llmConfig: LLMSummarizationConfig = {
