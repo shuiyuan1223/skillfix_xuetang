@@ -39,6 +39,32 @@ import { join } from "path";
 
 const log = createLogger("Evolution/Benchmark");
 
+/**
+ * Extract the user-data sections from the agent's system prompt,
+ * stripping the SOUL persona and skill registry to keep only
+ * data the Judge needs for accuracy verification.
+ */
+function extractAgentDataContext(systemPrompt: string): string {
+  // Find "## Session Context" or "## Current User Information" — start of user data
+  const sessionIdx = systemPrompt.indexOf("## Session Context");
+  const userInfoIdx = systemPrompt.indexOf("## Current User Information");
+  const startIdx = sessionIdx >= 0 ? sessionIdx : userInfoIdx;
+
+  if (startIdx < 0) return systemPrompt.slice(0, 2000); // Fallback: first 2000 chars
+
+  let section = systemPrompt.slice(startIdx);
+
+  // Strip skill registry (not relevant for data verification)
+  const skillIdx = section.indexOf("## Available Skills");
+  if (skillIdx > 0) section = section.slice(0, skillIdx);
+
+  // Strip trailing boilerplate
+  const trailingIdx = section.indexOf("Based on the information above");
+  if (trailingIdx > 0) section = section.slice(0, trailingIdx);
+
+  return section.trim();
+}
+
 export interface BenchmarkRunnerConfig {
   /** Function to send a query to the agent and get response */
   agentCall: (
@@ -47,6 +73,8 @@ export interface BenchmarkRunnerConfig {
   ) => Promise<{
     response: string;
     toolCalls?: Array<{ tool: string; arguments: unknown; result: unknown }>;
+    /** The agent's system prompt (user profile + memory + health context) — passed to Judge as ground truth */
+    agentContext?: string;
   }>;
   /** LLM function for evaluation (LLM-as-Judge) */
   llmCall: (prompt: string) => Promise<string>;
@@ -63,9 +91,14 @@ function buildSharpEvalPrompt(
   rubrics: SharpRubricCategory[],
   testCase: TestCase,
   response: string,
-  toolCalls?: Array<{ tool: string; arguments: unknown; result: unknown }>
+  toolCalls?: Array<{ tool: string; arguments: unknown; result: unknown }>,
+  agentContext?: string
 ): string {
   const rubricJson = JSON.stringify(rubrics, null, 2);
+
+  // Extract the user-facing data sections from the agent's system prompt
+  // (profile, memory, health context) — this is what the agent actually knew
+  const agentDataSection = agentContext ? extractAgentDataContext(agentContext) : "Not available";
 
   return `You are an expert evaluator for a Personal Health Agent (PHA). You must evaluate the AI's response using the SHARP 2.0 framework with 16 sub-components.
 
@@ -81,11 +114,18 @@ ${rubricJson}
 **User Query**:
 ${testCase.query}
 
-**Injected Health Data Context** (this data was provided directly to the agent as part of the input — treat as ground truth for accuracy):
+**Agent's Available Data** (the complete data context the agent had access to when generating its response — ALL of this is legitimate ground truth):
+
+1. Injected Health Data (provided in the user query):
 ${JSON.stringify(testCase.mock_context || {}, null, 2)}
 
-**Tool Call Results** (if the agent also called tools, their results appear here):
-${toolCalls?.length ? JSON.stringify(toolCalls, null, 2) : "None (agent used the injected health data context above instead of calling tools — this is expected and correct)"}
+2. Agent System Context (user profile, memory, and session info from system prompt):
+${agentDataSection}
+
+3. Tool Call Results (data retrieved by calling tools during the response):
+${toolCalls?.length ? JSON.stringify(toolCalls, null, 2) : "None"}
+
+**IMPORTANT for Data Source Adherence scoring**: The agent may reference data from ANY of the 3 sources above. Data from the system context (user profile, historical memory) is NOT fabricated — it is real user data the agent legitimately had access to. Only mark data as fabricated if it appears in NONE of these sources.
 
 ## AI Response
 
@@ -503,13 +543,19 @@ export class BenchmarkRunner {
 
     try {
       // Call agent with mock context
-      const { response, toolCalls } = await this.config.agentCall(
+      const { response, toolCalls, agentContext } = await this.config.agentCall(
         testCase.query,
         testCase.mock_context
       );
 
-      // Evaluate with SHARP 2.0
-      const evalResult = await this.evaluateSharp(rubrics, testCase, response, toolCalls);
+      // Evaluate with SHARP 2.0 — pass agentContext so Judge knows what data the agent had
+      const evalResult = await this.evaluateSharp(
+        rubrics,
+        testCase,
+        response,
+        toolCalls,
+        agentContext
+      );
 
       // Compute SHARP overall score (0.0-1.0)
       const overallScore = computeSharpScore(evalResult.ratings);
@@ -592,12 +638,13 @@ export class BenchmarkRunner {
     rubrics: SharpRubricCategory[],
     testCase: TestCase,
     response: string,
-    toolCalls?: Array<{ tool: string; arguments: unknown; result: unknown }>
+    toolCalls?: Array<{ tool: string; arguments: unknown; result: unknown }>,
+    agentContext?: string
   ): Promise<{
     ratings: SharpRating[];
     feedback: string;
   }> {
-    const prompt = buildSharpEvalPrompt(rubrics, testCase, response, toolCalls);
+    const prompt = buildSharpEvalPrompt(rubrics, testCase, response, toolCalls, agentContext);
     const MAX_ATTEMPTS = 3;
 
     // Retry up to 3 times on parse failure, with progressively stronger repair prompts

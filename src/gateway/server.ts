@@ -1229,6 +1229,7 @@ export class GatewaySession {
             baseUrl: sessionConfig.baseUrl,
             dataSource: new BenchMockDS(),
           });
+          const agentContext = testAgent.getSystemPrompt();
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
             : query;
@@ -1241,7 +1242,7 @@ export class GatewaySession {
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
-          return result;
+          return { ...result, agentContext };
         },
         llmCall: async (prompt: string) => {
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
@@ -1301,6 +1302,7 @@ export class GatewaySession {
             baseUrl: sessionConfig.baseUrl,
             dataSource: new BenchMockDS(),
           });
+          const agentContext = testAgent.getSystemPrompt();
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
             : query;
@@ -1313,7 +1315,7 @@ export class GatewaySession {
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
-          return result;
+          return { ...result, agentContext };
         },
         llmCall: async (prompt: string) => {
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
@@ -5183,6 +5185,7 @@ export class GatewaySession {
             baseUrl: agentBaseUrl,
             dataSource: new AgentMockDS(),
           });
+          const agentContext = testAgent.getSystemPrompt();
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
             : query;
@@ -5198,7 +5201,7 @@ export class GatewaySession {
               )
             ),
           ]);
-          return result;
+          return { ...result, agentContext };
         },
         llmCall: async (prompt: string) => {
           // Create fresh judge agent per evaluation for concurrency safety

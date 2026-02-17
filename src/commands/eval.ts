@@ -637,9 +637,10 @@ export function registerEvalCommand(program: Command): void {
                 baseUrl: diagBaseUrl,
                 dataSource: new MockDataSource(),
               });
+              const agentContext = testAgent.getSystemPrompt();
               const response = await Promise.race([
-                testAgent.chatAndWait(query).then((r: string) => ({ response: r })),
-                new Promise<{ response: string }>((_, reject) =>
+                testAgent.chatAndWait(query).then((r: string) => ({ response: r, agentContext })),
+                new Promise<{ response: string; agentContext?: string }>((_, reject) =>
                   setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
                 ),
               ]);
@@ -927,6 +928,7 @@ export function registerEvalCommand(program: Command): void {
               }
             }
 
+            const agentContext = testAgent.getSystemPrompt();
             const result = await Promise.race([
               testAgent.chatAndWaitWithTools(query),
               new Promise<{
@@ -939,7 +941,7 @@ export function registerEvalCommand(program: Command): void {
                 )
               ),
             ]);
-            return result;
+            return { ...result, agentContext };
           },
           llmCall: rawLLMCall,
           onProgress: (current, total, testCase) => {

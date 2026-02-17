@@ -203,6 +203,14 @@ export class PHAAgent {
     return this.userUuid;
   }
 
+  /**
+   * Get the system prompt that was built for this agent.
+   * Used by benchmark runner to pass agent context to the Judge.
+   */
+  getSystemPrompt(): string {
+    return this.agent.state.systemPrompt || "";
+  }
+
   private getEnvApiKey(provider: LLMProvider): string | undefined {
     const envKey = ENV_KEY_MAP[provider];
     if (envKey && typeof process !== "undefined" && process.env[envKey]) {
