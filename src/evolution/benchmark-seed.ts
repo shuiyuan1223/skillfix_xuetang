@@ -3,7 +3,7 @@
  *
  * 55 test cases across 5 categories, 16 subcategories.
  * Based on MedHELM and Google Personal Health Agent frameworks.
- * Scoring: 0.0–1.0 scale, semantic shouldMention, multi-day mock_context.
+ * Scoring: 0.0–1.0 scale, semantic shouldMention, UUID test users.
  *
  * Categories and weights are Skills-based:
  *   src/skills/benchmark-evaluator/SKILL.md (metadata.pha.config)

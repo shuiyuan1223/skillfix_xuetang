@@ -120,19 +120,13 @@ function analyzeDataGaps(results: BenchmarkResult[]): DataGap[] {
     const tc = testCaseMap.get(result.testCaseId);
     if (!tc) continue;
 
-    // 1. Test case with no mock_context at all
-    if (!tc.mock_context || Object.keys(tc.mock_context).length === 0) {
-      gaps.push({
-        testCaseId: tc.id,
-        type: "no_mock_context",
-        description: `Test "${tc.id}" has no mock_context — agent has no data to work with`,
-        suggestion: "Add realistic mock_context with relevant health data for this scenario",
-      });
+    // 1. Test case with no healthOverrides — skip data quality checks (uses fixture data)
+    if (!tc.healthOverrides || Object.keys(tc.healthOverrides).length === 0) {
       continue;
     }
 
-    // 2. Check for unrealistic values in health data
-    const ctx = tc.mock_context;
+    // 2. Check for unrealistic values in health overrides
+    const ctx = tc.healthOverrides;
     for (const [dataType, data] of Object.entries(ctx)) {
       if (!data || typeof data !== "object") continue;
       const records = (data as any).daily || (data as any).sessions;

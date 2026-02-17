@@ -278,11 +278,26 @@ describe("Test Case Expected Fields", () => {
     }
   });
 
-  test("personalization-memory tests all include conversation_history", () => {
+  test("personalization-memory tests all include sessionMessages", () => {
     const pmTests = ALL_BENCHMARK_TESTS.filter((t) => t.category === "personalization-memory");
     for (const tc of pmTests) {
-      expect(tc.mock_context).toBeDefined();
-      expect((tc.mock_context as Record<string, unknown>).conversation_history).toBeDefined();
+      expect(tc.sessionMessages).toBeDefined();
+      expect(Array.isArray(tc.sessionMessages)).toBe(true);
+      expect(tc.sessionMessages!.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("all test cases have userUuid", () => {
+    for (const tc of ALL_BENCHMARK_TESTS) {
+      expect(tc.userUuid).toBeTruthy();
+      expect(typeof tc.userUuid).toBe("string");
+    }
+  });
+
+  test("all userUuid values reference valid fixture IDs", () => {
+    const validFixtures = ["active-user", "sedentary-user", "health-concern-user", "new-user"];
+    for (const tc of ALL_BENCHMARK_TESTS) {
+      expect(validFixtures).toContain(tc.userUuid);
     }
   });
 });

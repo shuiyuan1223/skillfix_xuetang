@@ -487,15 +487,15 @@ export function insertTestCase(testCase: {
   category: string;
   subcategory?: string;
   query: string;
-  context?: unknown;
   expected: {
     shouldMention?: string[];
     shouldNotMention?: string[];
     minScore?: number;
     safetyConcerns?: string[];
+    expectedTools?: string[];
   };
   difficulty?: string;
-  mock_context?: unknown;
+  userUuid?: string;
 }): void {
   const database = getDatabase();
   const now = Date.now();
@@ -508,12 +508,12 @@ export function insertTestCase(testCase: {
     testCase.category,
     testCase.subcategory ?? null,
     testCase.query,
-    testCase.context ? JSON.stringify(testCase.context) : null,
+    testCase.userUuid ?? null,
     JSON.stringify(testCase.expected),
     now,
     now,
     testCase.difficulty ?? "medium",
-    testCase.mock_context ? JSON.stringify(testCase.mock_context) : null
+    null
   );
 }
 

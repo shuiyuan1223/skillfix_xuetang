@@ -1220,21 +1220,25 @@ export class GatewaySession {
       const AGENT_TIMEOUT_MS = 120_000;
       const sessionConfig = this.config;
       setEvolutionRunnerConfig({
-        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-          const { MockDataSource: BenchMockDS } = await import("../data-sources/mock.js");
+        agentCall: async (query: string, testCase) => {
+          const { seedTestUser, createBenchmarkDataSource, getTestUserUuid } =
+            await import("../evolution/test-user-seeder.js");
+          const fixture = (await import("../evolution/test-user-seeder.js")).loadTestUserFixture(
+            testCase.userUuid
+          );
+          seedTestUser(fixture);
+          const dataSource = createBenchmarkDataSource(testCase.userUuid, testCase.healthOverrides);
           const testAgent = await createPHAAgent({
             apiKey: sessionConfig.apiKey,
             provider: sessionConfig.provider as any,
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
-            dataSource: new BenchMockDS(),
+            userUuid: getTestUserUuid(testCase.userUuid),
+            dataSource,
+            sessionMessages: testCase.sessionMessages,
           });
-          const agentContext = testAgent.getSystemPrompt();
-          const enriched = mockContext
-            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
-            : query;
           const result = await Promise.race([
-            testAgent.chatAndWaitWithTools(enriched),
+            testAgent.chatAndWaitWithTools(query),
             new Promise<{
               response: string;
               toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
@@ -1242,7 +1246,7 @@ export class GatewaySession {
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
-          return { ...result, agentContext };
+          return result;
         },
         llmCall: async (prompt: string) => {
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
@@ -1293,21 +1297,23 @@ export class GatewaySession {
       const session = this;
       const sessionConfig = this.config;
       setEvolutionRunnerConfig({
-        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-          const { MockDataSource: BenchMockDS } = await import("../data-sources/mock.js");
+        agentCall: async (query: string, testCase) => {
+          const { seedTestUser, createBenchmarkDataSource, getTestUserUuid, loadTestUserFixture } =
+            await import("../evolution/test-user-seeder.js");
+          const fixture = loadTestUserFixture(testCase.userUuid);
+          seedTestUser(fixture);
+          const dataSource = createBenchmarkDataSource(testCase.userUuid, testCase.healthOverrides);
           const testAgent = await createPHAAgent({
             apiKey: sessionConfig.apiKey,
             provider: sessionConfig.provider as any,
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
-            dataSource: new BenchMockDS(),
+            userUuid: getTestUserUuid(testCase.userUuid),
+            dataSource,
+            sessionMessages: testCase.sessionMessages,
           });
-          const agentContext = testAgent.getSystemPrompt();
-          const enriched = mockContext
-            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
-            : query;
           const result = await Promise.race([
-            testAgent.chatAndWaitWithTools(enriched),
+            testAgent.chatAndWaitWithTools(query),
             new Promise<{
               response: string;
               toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
@@ -1315,7 +1321,7 @@ export class GatewaySession {
               setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
             ),
           ]);
-          return { ...result, agentContext };
+          return result;
         },
         llmCall: async (prompt: string) => {
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
@@ -5175,22 +5181,24 @@ export class GatewaySession {
       const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
 
       const runner = new BenchmarkRunner({
-        agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-          // Create fresh agent per test case for concurrency safety
-          const { MockDataSource: AgentMockDS } = await import("../data-sources/mock.js");
+        agentCall: async (query: string, testCase) => {
+          // Create fresh agent per test case with UUID test user
+          const { seedTestUser, createBenchmarkDataSource, getTestUserUuid, loadTestUserFixture } =
+            await import("../evolution/test-user-seeder.js");
+          const fixture = loadTestUserFixture(testCase.userUuid);
+          seedTestUser(fixture);
+          const dataSource = createBenchmarkDataSource(testCase.userUuid, testCase.healthOverrides);
           const testAgent = await createPHAAgent({
             apiKey: agentApiKey,
             provider: agentProvider,
             modelId: agentModelId,
             baseUrl: agentBaseUrl,
-            dataSource: new AgentMockDS(),
+            userUuid: getTestUserUuid(testCase.userUuid),
+            dataSource,
+            sessionMessages: testCase.sessionMessages,
           });
-          const agentContext = testAgent.getSystemPrompt();
-          const enriched = mockContext
-            ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
-            : query;
           const result = await Promise.race([
-            testAgent.chatAndWaitWithTools(enriched),
+            testAgent.chatAndWaitWithTools(query),
             new Promise<{
               response: string;
               toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
@@ -5201,7 +5209,7 @@ export class GatewaySession {
               )
             ),
           ]);
-          return { ...result, agentContext };
+          return result;
         },
         llmCall: async (prompt: string) => {
           // Create fresh judge agent per evaluation for concurrency safety
@@ -5318,13 +5326,30 @@ export class GatewaySession {
       const result = await diagnose({
         profile: "quick",
         runnerConfig: {
-          agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-            if (typeof agent.reset === "function") agent.reset();
-            const enriched = mockContext
-              ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
-              : query;
+          agentCall: async (query: string, testCase) => {
+            const {
+              seedTestUser,
+              createBenchmarkDataSource,
+              getTestUserUuid,
+              loadTestUserFixture,
+            } = await import("../evolution/test-user-seeder.js");
+            const fixture = loadTestUserFixture(testCase.userUuid);
+            seedTestUser(fixture);
+            const dataSource = createBenchmarkDataSource(
+              testCase.userUuid,
+              testCase.healthOverrides
+            );
+            const testAgent = await createPHAAgent({
+              apiKey: djApiKey,
+              provider: djConfig.provider as any,
+              modelId: djConfig.modelId,
+              baseUrl: djBaseUrl,
+              userUuid: getTestUserUuid(testCase.userUuid),
+              dataSource,
+              sessionMessages: testCase.sessionMessages,
+            });
             const res = await Promise.race([
-              agent.chatAndWaitWithTools(enriched),
+              testAgent.chatAndWaitWithTools(query),
               new Promise<{
                 response: string;
                 toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;

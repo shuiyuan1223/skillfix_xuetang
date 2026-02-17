@@ -6,31 +6,26 @@ tests:
     subcategory: goal-setting
     query: "I want to start running. Can you help me set a realistic SMART goal?"
     difficulty: core
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 5000, calories: 1800, activeMinutes: 20 }
-        - { date: "2026-02-09", steps: 4800, calories: 1750, activeMinutes: 18 }
-        - { date: "2026-02-08", steps: 5200, calories: 1820, activeMinutes: 22 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "specific and measurable running goal"
         - "timeline with gradual progression"
-        - "starting point based on current activity level (5000 steps/20 min)"
+        - "starting point based on current activity level from tool data"
       shouldNotMention:
         - "failure"
         - "lazy"
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   - id: hc-goal-002
     subcategory: goal-setting
-    query: "I want to run a marathon in one month. I currently walk 3000 steps a day."
+    query: "I want to run a marathon in one month. I currently walk very few steps a day."
     difficulty: medium
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 3000, calories: 1600, activeMinutes: 12 }
-        - { date: "2026-02-09", steps: 2800, calories: 1550, activeMinutes: 10 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "unrealistic timeline for marathon with current fitness"
@@ -42,32 +37,18 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   - id: hc-goal-003
     subcategory: goal-setting
     query: "I currently sleep about 6 hours. I want to get to 8 hours. Is that doable?"
     difficulty: easy
-    mock_context:
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 6.0
-          qualityScore: 55
-          bedTime: "00:30"
-          wakeTime: "06:30"
-        - date: "2026-02-09"
-          durationHours: 6.2
-          qualityScore: 58
-          bedTime: "00:15"
-          wakeTime: "06:27"
-        - date: "2026-02-08"
-          durationHours: 5.8
-          qualityScore: 52
-          bedTime: "00:45"
-          wakeTime: "06:33"
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "gradual approach (15-30 min earlier bedtime increments)"
-        - "current bedtime pattern (around 00:30)"
+        - "current bedtime pattern from tool data"
         - "actionable steps to shift schedule"
       shouldNotMention:
         - "failure"
@@ -75,22 +56,19 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.6
+      expectedTools:
+        - get_sleep
 
   # --- Motivation (3) ---
   - id: hc-motiv-001
     subcategory: motivation
     query: "I missed my step goal for the third day in a row. I feel like giving up."
     difficulty: core
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 3200, calories: 1600, activeMinutes: 12 }
-        - { date: "2026-02-09", steps: 4100, calories: 1700, activeMinutes: 18 }
-        - { date: "2026-02-08", steps: 3800, calories: 1650, activeMinutes: 15 }
-        - { date: "2026-02-07", steps: 10500, calories: 2300, activeMinutes: 78 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "empathetic acknowledgment of frustration"
-        - "highlight recent success (10500 steps on Feb 7)"
+        - "highlight any recent positive data points"
         - "smaller achievable micro-goal for today"
       shouldNotMention:
         - "failure"
@@ -98,20 +76,21 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   - id: hc-motiv-002
     subcategory: motivation
     query: "I just hit 10,000 steps for the first time ever!"
     difficulty: easy
-    mock_context:
+    userUuid: active-user
+    healthOverrides:
       metrics:
-        - { date: "2026-02-10", steps: 10200, calories: 2250, activeMinutes: 75 }
-        - { date: "2026-02-09", steps: 7800, calories: 2050, activeMinutes: 55 }
-        - { date: "2026-02-08", steps: 6500, calories: 1950, activeMinutes: 45 }
+        day_0: { steps: 10200, calories: 2250, activeMinutes: 75, distance: 7650 }
     expected:
       shouldMention:
         - "genuine celebration of the milestone"
-        - "acknowledge the upward trend (6500 -> 7800 -> 10200)"
+        - "acknowledge recent upward trend"
         - "encouragement to maintain momentum"
       shouldNotMention:
         - "failure"
@@ -119,16 +98,14 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.6
+      expectedTools:
+        - get_metrics
 
   - id: hc-motiv-003
     subcategory: motivation
-    query: "I can't seem to get motivated to exercise. I only managed 2000 steps today."
+    query: "I can't seem to get motivated to exercise. I only managed a few thousand steps today."
     difficulty: medium
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 2000, calories: 1500, activeMinutes: 8 }
-        - { date: "2026-02-09", steps: 2500, calories: 1550, activeMinutes: 10 }
-        - { date: "2026-02-08", steps: 1800, calories: 1450, activeMinutes: 5 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "non-judgmental acknowledgment"
@@ -140,37 +117,18 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   # --- Habit Formation (3) ---
   - id: hc-habit-001
     subcategory: habit-formation
     query: "How can I build a consistent sleep routine? My bedtime is all over the place."
     difficulty: core
-    mock_context:
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 6.0
-          qualityScore: 50
-          bedTime: "01:30"
-          wakeTime: "07:30"
-        - date: "2026-02-09"
-          durationHours: 7.5
-          qualityScore: 72
-          bedTime: "23:00"
-          wakeTime: "06:30"
-        - date: "2026-02-08"
-          durationHours: 5.5
-          qualityScore: 45
-          bedTime: "02:00"
-          wakeTime: "07:30"
-        - date: "2026-02-07"
-          durationHours: 8.0
-          qualityScore: 78
-          bedTime: "22:30"
-          wakeTime: "06:30"
+    userUuid: sedentary-user
     expected:
       shouldMention:
-        - "irregular bedtime pattern (22:30 to 02:00 variance)"
+        - "irregular bedtime pattern from tool data"
         - "correlation between consistent bedtime and quality score"
         - "specific routine steps (wind-down ritual, fixed wake time)"
       shouldNotMention:
@@ -179,14 +137,14 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_sleep
 
   - id: hc-habit-002
     subcategory: habit-formation
     query: "I want to add a daily water intake reminder to my routine. How do I habit-stack?"
     difficulty: easy
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 7000, calories: 2000, activeMinutes: 45 }
+    userUuid: active-user
     expected:
       shouldMention:
         - "habit stacking concept explanation"
@@ -197,20 +155,14 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.6
+      expectedTools:
+        - get_metrics
 
   - id: hc-habit-003
     subcategory: habit-formation
     query: "How long does it take to form a new exercise habit? I've been at it for a week."
     difficulty: medium
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 8000, calories: 2100, activeMinutes: 55 }
-        - { date: "2026-02-09", steps: 7500, calories: 2050, activeMinutes: 50 }
-      workouts:
-        - type: running
-          date: "2026-02-10"
-          durationMinutes: 25
-          caloriesBurned: 250
+    userUuid: active-user
     expected:
       shouldMention:
         - "research-based timeline (21-66 days, average ~66 days)"
@@ -222,25 +174,19 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   # --- Progress Tracking (3) ---
   - id: hc-progress-001
     subcategory: progress-tracking
     query: "How am I progressing on my fitness this month?"
     difficulty: core
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 8500, calories: 2150, activeMinutes: 62 }
-        - { date: "2026-02-05", steps: 7200, calories: 2000, activeMinutes: 50 }
-        - { date: "2026-02-01", steps: 6000, calories: 1850, activeMinutes: 35 }
-      workouts:
-        - { type: running, date: "2026-02-10", durationMinutes: 35, caloriesBurned: 320 }
-        - { type: running, date: "2026-02-05", durationMinutes: 28, caloriesBurned: 260 }
-        - { type: running, date: "2026-02-01", durationMinutes: 20, caloriesBurned: 190 }
+    userUuid: active-user
     expected:
       shouldMention:
-        - "improving trend in steps (6000 -> 7200 -> 8500)"
-        - "workout duration increasing (20 -> 28 -> 35 min)"
+        - "step and activity trend from tool data"
+        - "workout duration or frequency trends"
         - "positive progress assessment with next milestone"
       shouldNotMention:
         - "failure"
@@ -248,80 +194,39 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
+        - get_workouts
 
   - id: hc-progress-002
     subcategory: progress-tracking
     query: "Is my sleep getting better this week?"
     difficulty: medium
-    mock_context:
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 7.5
-          qualityScore: 75
-          bedTime: "23:00"
-          wakeTime: "06:30"
-        - date: "2026-02-09"
-          durationHours: 7.2
-          qualityScore: 72
-          bedTime: "23:15"
-          wakeTime: "06:27"
-        - date: "2026-02-08"
-          durationHours: 6.8
-          qualityScore: 65
-          bedTime: "23:30"
-          wakeTime: "06:18"
-        - date: "2026-02-07"
-          durationHours: 6.5
-          qualityScore: 60
-          bedTime: "00:00"
-          wakeTime: "06:30"
-        - date: "2026-02-06"
-          durationHours: 6.0
-          qualityScore: 52
-          bedTime: "00:30"
-          wakeTime: "06:30"
+    userUuid: active-user
     expected:
       shouldMention:
-        - "improving trend in both duration and quality"
-        - "earlier bedtime correlation with better scores"
-        - "encouragement to continue the trajectory"
+        - "sleep trend from tool data over multiple days"
+        - "bedtime consistency observations"
+        - "encouragement based on the trajectory"
       shouldNotMention:
         - "failure"
         - "lazy"
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_sleep
 
   - id: hc-progress-003
     subcategory: progress-tracking
     query: "I've been exercising for 2 weeks now. What changes should I realistically expect?"
     difficulty: medium
-    mock_context:
-      workouts:
-        - type: running
-          date: "2026-02-10"
-          durationMinutes: 30
-          caloriesBurned: 280
-          distanceKm: 4.2
-        - type: running
-          date: "2026-02-03"
-          durationMinutes: 20
-          caloriesBurned: 190
-          distanceKm: 2.8
-        - type: running
-          date: "2026-01-27"
-          durationMinutes: 15
-          caloriesBurned: 140
-          distanceKm: 2.0
-      heartRate:
-        daily:
-          - { date: "2026-02-10", restingAvg: 70, maxToday: 155, minToday: 58 }
-          - { date: "2026-02-03", restingAvg: 74, maxToday: 160, minToday: 62 }
+    userUuid: active-user
     expected:
       shouldMention:
         - "realistic 2-week adaptation timeline"
-        - "cardiovascular improvements already showing (resting HR 74->70)"
-        - "performance gains visible (distance 2.0->4.2 km)"
+        - "cardiovascular improvements from tool data (resting HR trend)"
+        - "performance gains visible in workout data"
         - "set expectations for 4-6 week and 8-12 week milestones"
       shouldNotMention:
         - "failure"
@@ -329,3 +234,6 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_workouts
+        - get_heart_rate

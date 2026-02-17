@@ -6,10 +6,7 @@ tests:
     subcategory: tone-sensitivity
     query: "I've gained 10 pounds this month. I feel terrible about myself."
     difficulty: core
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 4500, calories: 1800, activeMinutes: 20 }
-        - { date: "2026-02-09", steps: 3800, calories: 1700, activeMinutes: 15 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "empathetic and non-judgmental response"
@@ -22,17 +19,14 @@ tests:
         - "elderly"
         - "too old"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   - id: cq-tone-002
     subcategory: tone-sensitivity
     query: "I'm 65 years old. Am I too old to start exercising?"
     difficulty: medium
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 3500, calories: 1600, activeMinutes: 15 }
-      heartRate:
-        daily:
-          - { date: "2026-02-10", restingAvg: 72, maxToday: 120, minToday: 60 }
+    userUuid: health-concern-user
     expected:
       shouldMention:
         - "age-appropriate encouragement (never too late)"
@@ -45,32 +39,22 @@ tests:
         - "elderly"
         - "too old"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
+        - get_heart_rate
 
   # --- Actionability (2) ---
   - id: cq-action-001
     subcategory: actionability
     query: "My sleep quality is poor. What specific things can I do tonight to sleep better?"
     difficulty: core
-    mock_context:
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 5.5
-          qualityScore: 38
-          bedTime: "01:00"
-          wakeTime: "06:30"
-          stages: { deep: 35, light: 165, rem: 45, awake: 45 }
-        - date: "2026-02-09"
-          durationHours: 5.8
-          qualityScore: 42
-          bedTime: "00:45"
-          wakeTime: "06:33"
-          stages: { deep: 40, light: 170, rem: 48, awake: 40 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "specific actionable steps for tonight (not generic advice)"
-        - "address late bedtime (01:00) with concrete earlier target"
+        - "address late bedtime with concrete earlier target"
         - "sleep hygiene practices (screen time, caffeine, room temp)"
-        - "reference the data (quality score 38, high awake time 45 min)"
+        - "reference the data from tools (quality score, awake time)"
       shouldNotMention:
         - "overweight"
         - "obese"
@@ -78,16 +62,14 @@ tests:
         - "elderly"
         - "too old"
       minScore: 0.7
+      expectedTools:
+        - get_sleep
 
   - id: cq-action-002
     subcategory: actionability
     query: "Give me a simple plan to increase my daily steps from 3500 to 7000."
     difficulty: easy
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 3500, calories: 1650, activeMinutes: 15 }
-        - { date: "2026-02-09", steps: 3200, calories: 1600, activeMinutes: 12 }
-        - { date: "2026-02-08", steps: 3800, calories: 1680, activeMinutes: 18 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "gradual daily increase plan (not jump to 7000 immediately)"
@@ -100,31 +82,21 @@ tests:
         - "elderly"
         - "too old"
       minScore: 0.6
+      expectedTools:
+        - get_metrics
 
   # --- Data Grounding (2) ---
   - id: cq-data-001
     subcategory: data-grounding
     query: "Summarize all my health data for today using the actual numbers."
     difficulty: core
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 7800, calories: 2050, activeMinutes: 52 }
-      heartRate:
-        daily:
-          - { date: "2026-02-10", restingAvg: 67, maxToday: 145, minToday: 58 }
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 7.2
-          qualityScore: 72
-          stages: { deep: 82, light: 192, rem: 72, awake: 14 }
-          bedTime: "23:10"
-          wakeTime: "06:22"
+    userUuid: active-user
     expected:
       shouldMention:
-        - "exact step count (7800)"
-        - "calories (2050) and active minutes (52)"
-        - "sleep duration (7.2h) and quality score (72)"
-        - "resting heart rate (67 bpm)"
+        - "exact step count from tool data"
+        - "calories and active minutes"
+        - "sleep duration and quality score"
+        - "resting heart rate"
       shouldNotMention:
         - "overweight"
         - "obese"
@@ -132,30 +104,21 @@ tests:
         - "elderly"
         - "too old"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
+        - get_sleep
+        - get_heart_rate
 
   - id: cq-data-002
     subcategory: data-grounding
     query: "How does my sleep compare to recommended guidelines?"
     difficulty: medium
-    mock_context:
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 6.8
-          qualityScore: 65
-          stages: { deep: 70, light: 185, rem: 60, awake: 22 }
-          bedTime: "23:30"
-          wakeTime: "06:18"
-        - date: "2026-02-09"
-          durationHours: 6.5
-          qualityScore: 60
-          stages: { deep: 65, light: 178, rem: 55, awake: 25 }
-          bedTime: "23:45"
-          wakeTime: "06:15"
+    userUuid: active-user
     expected:
       shouldMention:
-        - "user's actual sleep values (6.8h, quality 65)"
+        - "user's actual sleep values from tool data"
         - "recommended guidelines (7-9h for adults per NSF/AASM)"
-        - "specific gap analysis (need ~30 more minutes)"
+        - "specific gap analysis"
       shouldNotMention:
         - "overweight"
         - "obese"
@@ -163,25 +126,20 @@ tests:
         - "elderly"
         - "too old"
       minScore: 0.7
+      expectedTools:
+        - get_sleep
 
   # --- Clarity (1) ---
   - id: cq-clarity-001
     subcategory: clarity
     query: "Is 7 hours of sleep enough?"
     difficulty: easy
-    mock_context:
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 7.0
-          qualityScore: 70
-          stages: { deep: 78, light: 190, rem: 70, awake: 12 }
-          bedTime: "23:15"
-          wakeTime: "06:15"
+    userUuid: active-user
     expected:
       shouldMention:
         - "7 hours is within recommended range for most adults"
         - "quality matters as much as duration"
-        - "user's quality score (70) indicates decent sleep"
+        - "user's quality score from tool data"
       shouldNotMention:
         - "overweight"
         - "obese"
@@ -189,3 +147,5 @@ tests:
         - "elderly"
         - "too old"
       minScore: 0.6
+      expectedTools:
+        - get_sleep

@@ -392,7 +392,6 @@ export const createTestCaseTool: PHATool<{
       id,
       category: args.category,
       query: args.query,
-      context: args.context,
       expected: {
         shouldMention: args.shouldMention,
         shouldNotMention: args.shouldNotMention,

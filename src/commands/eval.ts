@@ -48,7 +48,6 @@ import {
   type BenchmarkModelConfig,
 } from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
-import { sessionToAgentMessages } from "../memory/session-store.js";
 import { getModel, complete } from "@mariozechner/pi-ai";
 import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
 import {
@@ -627,20 +626,35 @@ export function registerEvalCommand(program: Command): void {
         const result = await diagnose({
           profile,
           runnerConfig: {
-            agentCall: async (query: string) => {
-              // Create fresh agent per test case for concurrency safety
-              const { MockDataSource } = await import("../data-sources/mock.js");
+            agentCall: async (query: string, testCase) => {
+              // Create fresh agent per test case with UUID test user
+              const {
+                seedTestUser,
+                createBenchmarkDataSource,
+                getTestUserUuid,
+                loadTestUserFixture,
+              } = await import("../evolution/test-user-seeder.js");
+              const fixture = loadTestUserFixture(testCase.userUuid);
+              seedTestUser(fixture);
+              const dataSource = createBenchmarkDataSource(
+                testCase.userUuid,
+                testCase.healthOverrides
+              );
               const testAgent = await createPHAAgent({
                 apiKey,
                 provider: diagProvider,
                 modelId: diagModelId,
                 baseUrl: diagBaseUrl,
-                dataSource: new MockDataSource(),
+                userUuid: getTestUserUuid(testCase.userUuid),
+                dataSource,
+                sessionMessages: testCase.sessionMessages,
               });
-              const agentContext = testAgent.getSystemPrompt();
               const response = await Promise.race([
-                testAgent.chatAndWait(query).then((r: string) => ({ response: r, agentContext })),
-                new Promise<{ response: string; agentContext?: string }>((_, reject) =>
+                testAgent.chatAndWaitWithTools(query),
+                new Promise<{
+                  response: string;
+                  toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
+                }>((_, reject) =>
                   setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
                 ),
               ]);
@@ -904,31 +918,29 @@ export function registerEvalCommand(program: Command): void {
         spinner?.start();
 
         const runner = new BenchmarkRunner({
-          agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-            // Create fresh agent per test case for concurrency safety
-            const testDs = new MockDataSource();
+          agentCall: async (query: string, testCase) => {
+            // Create fresh agent per test case with UUID test user
+            const {
+              seedTestUser,
+              createBenchmarkDataSource,
+              getTestUserUuid,
+              loadTestUserFixture,
+            } = await import("../evolution/test-user-seeder.js");
+            const fixture = loadTestUserFixture(testCase.userUuid);
+            seedTestUser(fixture);
+            const dataSource = createBenchmarkDataSource(
+              testCase.userUuid,
+              testCase.healthOverrides
+            );
             const testAgent = await createPHAAgent({
               apiKey: entry.apiKey,
               provider: entry.provider,
               modelId: entry.modelId,
               baseUrl: entry.baseUrl,
-              dataSource: testDs,
+              userUuid: getTestUserUuid(testCase.userUuid),
+              dataSource,
+              sessionMessages: testCase.sessionMessages,
             });
-
-            // Inject conversation_history into agent state so it has prior context
-            if (mockContext?.conversation_history) {
-              const history = mockContext.conversation_history as Array<{
-                role: string;
-                content: string;
-                timestamp?: number;
-              }>;
-              const msgs = sessionToAgentMessages(history);
-              for (const msg of msgs) {
-                testAgent.getAgent().state.messages.push(msg);
-              }
-            }
-
-            const agentContext = testAgent.getSystemPrompt();
             const result = await Promise.race([
               testAgent.chatAndWaitWithTools(query),
               new Promise<{
@@ -941,7 +953,7 @@ export function registerEvalCommand(program: Command): void {
                 )
               ),
             ]);
-            return { ...result, agentContext };
+            return result;
           },
           llmCall: rawLLMCall,
           onProgress: (current, total, testCase) => {

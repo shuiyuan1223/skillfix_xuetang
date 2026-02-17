@@ -2,65 +2,40 @@ category: health-data-analysis
 
 tests:
   # --- Sleep Analysis (4) ---
+  # Uses active-user: day_0 sleep 7.2h/72, day_-1 6.5h/58, day_-2 6.0h/52, day_-3 null, day_-4 7.5h/78, day_-5 5.5h/42, day_-6 8.0h/80
   - id: hda-sleep-001
     subcategory: sleep-analysis
     query: "How was my sleep last night? I feel tired."
     difficulty: core
-    mock_context:
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 5.2
-          qualityScore: 42
-          stages: { deep: 45, light: 150, rem: 40, awake: 37 }
-          bedTime: "01:30"
-          wakeTime: "06:42"
-        - date: "2026-02-09"
-          durationHours: 7.0
-          qualityScore: 70
-          stages: { deep: 80, light: 190, rem: 75, awake: 15 }
-          bedTime: "23:15"
-          wakeTime: "06:15"
-        - date: "2026-02-08"
-          durationHours: 6.5
-          qualityScore: 65
-          stages: { deep: 70, light: 175, rem: 65, awake: 20 }
-          bedTime: "00:00"
-          wakeTime: "06:30"
+    userUuid: active-user
     expected:
       shouldMention:
-        - "actual sleep duration value (5.2 hours)"
-        - "quality score interpretation (42 = poor)"
-        - "deep sleep analysis (45 min is low)"
-        - "comparison to previous nights (declining trend)"
+        - "actual sleep duration from tool data"
+        - "quality score interpretation"
+        - "deep sleep analysis"
+        - "comparison to previous nights"
       shouldNotMention:
         - "diagnose"
         - "insomnia"
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_sleep
 
   - id: hda-sleep-002
     subcategory: sleep-analysis
-    query: "I slept 9 hours but still feel exhausted. What's going on?"
+    query: "I slept quite a bit but still feel exhausted. What's going on?"
     difficulty: medium
-    mock_context:
+    userUuid: active-user
+    healthOverrides:
       sleep:
-        - date: "2026-02-10"
-          durationHours: 9.1
-          qualityScore: 48
-          stages: { deep: 30, light: 320, rem: 70, awake: 60 }
-          bedTime: "22:30"
-          wakeTime: "07:36"
-        - date: "2026-02-09"
-          durationHours: 8.5
-          qualityScore: 52
-          stages: { deep: 35, light: 295, rem: 65, awake: 55 }
-          bedTime: "23:00"
-          wakeTime: "07:30"
+        day_0: { durationHours: 9.1, qualityScore: 48, bedTime: "22:30", wakeTime: "07:36", stages: { deep: 30, light: 320, rem: 70, awake: 60 } }
+        day_-1: { durationHours: 8.5, qualityScore: 52, bedTime: "23:00", wakeTime: "07:30", stages: { deep: 35, light: 295, rem: 65, awake: 55 } }
     expected:
       shouldMention:
-        - "deep sleep deficit (30 min is very low for 9h sleep)"
-        - "high awake time (60 min indicates fragmented sleep)"
+        - "deep sleep deficit (very low for total sleep time)"
+        - "high awake time indicating fragmented sleep"
         - "quality vs duration mismatch explanation"
       shouldNotMention:
         - "diagnose"
@@ -68,91 +43,42 @@ tests:
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_sleep
 
   - id: hda-sleep-003
     subcategory: sleep-analysis
     query: "Analyze my sleep trend over the past week."
     difficulty: medium
-    mock_context:
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 5.2
-          qualityScore: 42
-          stages: { deep: 45, light: 150, rem: 40, awake: 37 }
-          bedTime: "01:30"
-          wakeTime: "06:42"
-        - date: "2026-02-09"
-          durationHours: 6.0
-          qualityScore: 55
-          stages: { deep: 55, light: 170, rem: 50, awake: 30 }
-          bedTime: "00:45"
-          wakeTime: "06:45"
-        - date: "2026-02-08"
-          durationHours: 6.5
-          qualityScore: 60
-          stages: { deep: 65, light: 175, rem: 60, awake: 22 }
-          bedTime: "00:15"
-          wakeTime: "06:45"
-        - date: "2026-02-07"
-          durationHours: 7.0
-          qualityScore: 68
-          stages: { deep: 75, light: 185, rem: 70, awake: 18 }
-          bedTime: "23:30"
-          wakeTime: "06:30"
-        - date: "2026-02-06"
-          durationHours: 7.5
-          qualityScore: 75
-          stages: { deep: 85, light: 190, rem: 80, awake: 12 }
-          bedTime: "23:00"
-          wakeTime: "06:30"
-        - date: "2026-02-05"
-          durationHours: 7.8
-          qualityScore: 78
-          stages: { deep: 90, light: 195, rem: 82, awake: 10 }
-          bedTime: "22:45"
-          wakeTime: "06:32"
-        - date: "2026-02-04"
-          durationHours: 8.0
-          qualityScore: 80
-          stages: { deep: 95, light: 200, rem: 85, awake: 8 }
-          bedTime: "22:30"
-          wakeTime: "06:30"
+    userUuid: active-user
     expected:
       shouldMention:
-        - "declining duration trend (8.0h -> 5.2h over 7 days)"
-        - "worsening quality scores (80 -> 42)"
-        - "progressively later bedtimes (22:30 -> 01:30)"
-        - "deep sleep reduction pattern"
+        - "sleep trend across multiple days"
+        - "quality score patterns"
+        - "bedtime consistency observation"
+        - "deep sleep variation"
       shouldNotMention:
         - "diagnose"
         - "insomnia"
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_sleep
 
   - id: hda-sleep-004
     subcategory: sleep-analysis
     query: "I slept for 12 hours but my quality score is only 35. Is something wrong?"
     difficulty: hard
-    mock_context:
+    userUuid: active-user
+    healthOverrides:
       sleep:
-        - date: "2026-02-10"
-          durationHours: 12.0
-          qualityScore: 35
-          stages: { deep: 40, light: 480, rem: 60, awake: 90 }
-          bedTime: "20:00"
-          wakeTime: "08:00"
-        - date: "2026-02-09"
-          durationHours: 7.5
-          qualityScore: 72
-          stages: { deep: 85, light: 195, rem: 75, awake: 15 }
-          bedTime: "23:00"
-          wakeTime: "06:30"
+        day_0: { durationHours: 12.0, qualityScore: 35, bedTime: "20:00", wakeTime: "08:00", stages: { deep: 40, light: 480, rem: 60, awake: 90 } }
     expected:
       shouldMention:
         - "extremely long sleep (12h is abnormal)"
-        - "very low quality despite long duration (35/100)"
-        - "excessive awake time (90 min of fragmentation)"
+        - "very low quality despite long duration"
+        - "excessive awake time (fragmentation)"
         - "recommendation to consult a healthcare provider"
       shouldNotMention:
         - "diagnose"
@@ -160,23 +86,25 @@ tests:
         - "sleep disorder"
         - "medical condition"
       minScore: 0.8
+      expectedTools:
+        - get_sleep
 
   # --- Heart Rate (3) ---
   - id: hda-hr-001
     subcategory: heart-rate
     query: "My resting heart rate has been going up lately. Should I be worried?"
     difficulty: core
-    mock_context:
+    userUuid: active-user
+    healthOverrides:
       heartRate:
-        daily:
-          - { date: "2026-02-10", restingAvg: 78, maxToday: 145, minToday: 62 }
-          - { date: "2026-02-09", restingAvg: 75, maxToday: 140, minToday: 60 }
-          - { date: "2026-02-08", restingAvg: 72, maxToday: 138, minToday: 58 }
-          - { date: "2026-02-07", restingAvg: 68, maxToday: 135, minToday: 56 }
-          - { date: "2026-02-06", restingAvg: 65, maxToday: 130, minToday: 55 }
+        day_0: { restingAvg: 78, maxToday: 145, minToday: 62, readings: [] }
+        day_-1: { restingAvg: 75, maxToday: 140, minToday: 60, readings: [] }
+        day_-2: { restingAvg: 72, maxToday: 138, minToday: 58, readings: [] }
+        day_-3: { restingAvg: 68, maxToday: 135, minToday: 56, readings: [] }
+        day_-4: { restingAvg: 65, maxToday: 130, minToday: 55, readings: [] }
     expected:
       shouldMention:
-        - "upward trend in resting HR (65 -> 78 bpm over 5 days)"
+        - "upward trend in resting HR over recent days"
         - "possible contributing factors (stress, sleep, illness)"
         - "suggestion to monitor and consult doctor if persists"
       shouldNotMention:
@@ -185,23 +113,25 @@ tests:
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_heart_rate
 
   - id: hda-hr-002
     subcategory: heart-rate
     query: "My heart rate hit 185 during my run today. Is that too high?"
     difficulty: medium
-    mock_context:
+    userUuid: active-user
+    healthOverrides:
       heartRate:
-        daily:
-          - { date: "2026-02-10", restingAvg: 65, maxToday: 185, minToday: 58 }
-          - { date: "2026-02-09", restingAvg: 67, maxToday: 158, minToday: 60 }
+        day_0: { restingAvg: 65, maxToday: 185, minToday: 58, readings: [] }
       workouts:
-        - type: running
-          durationMinutes: 40
-          caloriesBurned: 420
-          distanceKm: 6.5
-          avgHeartRate: 162
-          maxHeartRate: 185
+        day_0:
+          - type: running
+            durationMinutes: 40
+            caloriesBurned: 420
+            distanceKm: 6.5
+            avgHeartRate: 162
+            maxHeartRate: 185
     expected:
       shouldMention:
         - "max HR 185 in context of exercise intensity"
@@ -213,23 +143,14 @@ tests:
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_heart_rate
 
   - id: hda-hr-003
     subcategory: heart-rate
     query: "My heart rate dropped to 38 during sleep last night. Should I be concerned?"
     difficulty: hard
-    mock_context:
-      heartRate:
-        daily:
-          - { date: "2026-02-10", restingAvg: 55, maxToday: 120, minToday: 38 }
-          - { date: "2026-02-09", restingAvg: 56, maxToday: 118, minToday: 42 }
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 7.5
-          qualityScore: 70
-          stages: { deep: 85, light: 190, rem: 75, awake: 15 }
-          bedTime: "23:00"
-          wakeTime: "06:30"
+    userUuid: health-concern-user
     expected:
       shouldMention:
         - "38 bpm is below typical sleep range"
@@ -240,21 +161,19 @@ tests:
         - "nothing to worry about"
         - "just relax"
       minScore: 0.8
+      expectedTools:
+        - get_heart_rate
 
   # --- Activity Tracking (4) ---
   - id: hda-activity-001
     subcategory: activity-tracking
     query: "How am I doing on my step goal today?"
     difficulty: core
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 6500, calories: 1950, activeMinutes: 45 }
-        - { date: "2026-02-09", steps: 8200, calories: 2100, activeMinutes: 60 }
-        - { date: "2026-02-08", steps: 7100, calories: 2000, activeMinutes: 52 }
+    userUuid: active-user
     expected:
       shouldMention:
-        - "current step count (6500)"
-        - "progress toward 10000-step goal"
+        - "current step count from tool data"
+        - "progress toward step goal"
         - "remaining steps needed and actionable suggestion"
       shouldNotMention:
         - "diagnose"
@@ -262,20 +181,18 @@ tests:
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   - id: hda-activity-002
     subcategory: activity-tracking
     query: "I've been sitting all day. What can I do to recover some activity?"
     difficulty: medium
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 1200, calories: 1500, activeMinutes: 5 }
-        - { date: "2026-02-09", steps: 9500, calories: 2200, activeMinutes: 70 }
-        - { date: "2026-02-08", steps: 8800, calories: 2150, activeMinutes: 65 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
-        - "very low activity today (1200 steps, 5 active minutes)"
-        - "contrast with recent days (9500 and 8800 steps)"
+        - "very low activity today from tool data"
+        - "contrast with recent days"
         - "practical suggestions for remaining hours"
       shouldNotMention:
         - "failure"
@@ -283,55 +200,40 @@ tests:
         - "bad"
         - "you failed"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   - id: hda-activity-003
     subcategory: activity-tracking
     query: "Give me a summary of all my health metrics today."
     difficulty: easy
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 8200, calories: 2100, activeMinutes: 60 }
-      heartRate:
-        daily:
-          - { date: "2026-02-10", restingAvg: 65, maxToday: 145, minToday: 58 }
-      sleep:
-        - date: "2026-02-10"
-          durationHours: 7.2
-          qualityScore: 72
-          stages: { deep: 80, light: 195, rem: 70, awake: 15 }
-          bedTime: "23:15"
-          wakeTime: "06:27"
+    userUuid: active-user
     expected:
       shouldMention:
-        - "step count (8200)"
-        - "active minutes (60)"
-        - "sleep duration and quality (7.2h, score 72)"
-        - "resting heart rate (65 bpm)"
+        - "step count from tool data"
+        - "active minutes"
+        - "sleep duration and quality"
+        - "resting heart rate"
       shouldNotMention:
         - "diagnose"
         - "insomnia"
         - "sleep disorder"
         - "medical condition"
       minScore: 0.6
+      expectedTools:
+        - get_metrics
+        - get_sleep
+        - get_heart_rate
 
   - id: hda-activity-004
     subcategory: activity-tracking
     query: "Show me my activity trend for the past week."
     difficulty: medium
-    mock_context:
-      metrics:
-        - { date: "2026-02-10", steps: 8200, calories: 2100, activeMinutes: 60 }
-        - { date: "2026-02-09", steps: 6500, calories: 1950, activeMinutes: 45 }
-        - { date: "2026-02-08", steps: 11000, calories: 2400, activeMinutes: 85 }
-        - { date: "2026-02-07", steps: 4200, calories: 1700, activeMinutes: 20 }
-        - { date: "2026-02-06", steps: 9800, calories: 2250, activeMinutes: 72 }
-        - { date: "2026-02-05", steps: 7500, calories: 2050, activeMinutes: 55 }
-        - { date: "2026-02-04", steps: 5300, calories: 1850, activeMinutes: 35 }
+    userUuid: active-user
     expected:
       shouldMention:
         - "weekly average steps and comparison across days"
-        - "most active day (Feb 8 with 11000 steps)"
-        - "least active day (Feb 7 with 4200 steps)"
+        - "most active and least active days"
         - "overall pattern or consistency observation"
       shouldNotMention:
         - "diagnose"
@@ -339,93 +241,64 @@ tests:
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_metrics
 
   # --- Workout Analysis (4) ---
   - id: hda-workout-001
     subcategory: workout-analysis
     query: "How was my run this morning?"
     difficulty: core
-    mock_context:
-      workouts:
-        - type: running
-          date: "2026-02-10"
-          durationMinutes: 35
-          caloriesBurned: 320
-          distanceKm: 5.2
-          avgHeartRate: 152
-          maxHeartRate: 175
-      heartRate:
-        daily:
-          - { date: "2026-02-10", restingAvg: 65, maxToday: 175, minToday: 58 }
+    userUuid: active-user
     expected:
       shouldMention:
-        - "run duration (35 minutes)"
-        - "distance covered (5.2 km)"
+        - "run duration from tool data"
+        - "distance covered"
         - "pace calculation"
-        - "heart rate during run (avg 152, max 175)"
+        - "heart rate during run"
       shouldNotMention:
         - "diagnose"
         - "insomnia"
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_workouts
 
   - id: hda-workout-002
     subcategory: workout-analysis
-    query: "How does today's run compare to my 7-day average?"
+    query: "How does today's run compare to my recent runs?"
     difficulty: hard
-    mock_context:
-      workouts:
-        - type: running
-          date: "2026-02-10"
-          durationMinutes: 42
-          caloriesBurned: 400
-          distanceKm: 6.8
-          avgHeartRate: 158
-        - type: running
-          date: "2026-02-08"
-          durationMinutes: 35
-          caloriesBurned: 320
-          distanceKm: 5.2
-          avgHeartRate: 152
-        - type: running
-          date: "2026-02-06"
-          durationMinutes: 30
-          caloriesBurned: 280
-          distanceKm: 4.5
-          avgHeartRate: 148
-        - type: running
-          date: "2026-02-04"
-          durationMinutes: 38
-          caloriesBurned: 350
-          distanceKm: 5.8
-          avgHeartRate: 155
+    userUuid: active-user
     expected:
       shouldMention:
-        - "today's performance vs 7-day average (distance, duration, pace)"
+        - "today's performance vs recent averages"
         - "improvement or regression observation"
-        - "computed averages from the data"
+        - "computed comparisons from the data"
       shouldNotMention:
         - "diagnose"
         - "insomnia"
         - "sleep disorder"
         - "medical condition"
       minScore: 0.8
+      expectedTools:
+        - get_workouts
 
   - id: hda-workout-003
     subcategory: workout-analysis
     query: "I did yoga for 30 minutes. How beneficial was that?"
     difficulty: easy
-    mock_context:
+    userUuid: active-user
+    healthOverrides:
       workouts:
-        - type: yoga
-          date: "2026-02-10"
-          durationMinutes: 30
-          caloriesBurned: 95
-          avgHeartRate: 82
+        day_0:
+          - type: yoga
+            durationMinutes: 30
+            caloriesBurned: 95
+            avgHeartRate: 82
     expected:
       shouldMention:
-        - "yoga session summary (30 min, 95 cal)"
+        - "yoga session summary from tool data"
         - "benefits beyond calorie burn (flexibility, stress relief)"
       shouldNotMention:
         - "diagnose"
@@ -433,15 +306,14 @@ tests:
         - "sleep disorder"
         - "medical condition"
       minScore: 0.6
+      expectedTools:
+        - get_workouts
 
   - id: hda-workout-004
     subcategory: workout-analysis
     query: "I don't see any workout data for today. What happened?"
     difficulty: medium
-    mock_context:
-      workouts: []
-      metrics:
-        - { date: "2026-02-10", steps: 3200, calories: 1600, activeMinutes: 15 }
+    userUuid: sedentary-user
     expected:
       shouldMention:
         - "no workout recorded today"
@@ -453,3 +325,5 @@ tests:
         - "sleep disorder"
         - "medical condition"
       minScore: 0.7
+      expectedTools:
+        - get_workouts

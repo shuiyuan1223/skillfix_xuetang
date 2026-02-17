@@ -1,0 +1,125 @@
+id: health-concern-user
+uuid: benchmark-health-concern-user
+
+profile:
+  nickname: "老张"
+  gender: male
+  birthYear: 1961
+  height: 170
+  weight: 80
+  goals:
+    primary: "控制血压，保持健康"
+    dailySteps: 6000
+    sleepHours: 7
+    exercisePerWeek: 3
+
+memory: |
+  ## 2026-01 对话记录
+  - 用户 65 岁，退休人员
+  - 有轻度高血压病史
+  - 关注心率异常
+  - 正在尝试规律散步
+
+health_data:
+  metrics:
+    day_0: { steps: 3500, calories: 1600, activeMinutes: 15, distance: 2625 }
+    day_-1: { steps: 4500, calories: 1700, activeMinutes: 20, distance: 3375 }
+    day_-2: { steps: 3000, calories: 1550, activeMinutes: 12, distance: 2250 }
+    day_-3: { steps: 3200, calories: 1580, activeMinutes: 14, distance: 2400 }
+    day_-4: { steps: 5000, calories: 1800, activeMinutes: 25, distance: 3750 }
+    day_-5: { steps: 2800, calories: 1520, activeMinutes: 10, distance: 2100 }
+    day_-6: { steps: 4000, calories: 1650, activeMinutes: 18, distance: 3000 }
+  heartRate:
+    day_0:
+      restingAvg: 72
+      maxToday: 140
+      minToday: 55
+      readings:
+        - { time: "07:00", value: 68 }
+        - { time: "10:00", value: 78 }
+        - { time: "13:00", value: 82 }
+        - { time: "16:00", value: 75 }
+        - { time: "20:00", value: 70 }
+        - { time: "23:00", value: 62 }
+    day_-1:
+      restingAvg: 70
+      maxToday: 128
+      minToday: 56
+      readings:
+        - { time: "08:00", value: 72 }
+        - { time: "14:00", value: 80 }
+        - { time: "21:00", value: 65 }
+    day_-2:
+      restingAvg: 55
+      maxToday: 110
+      minToday: 38
+      readings:
+        - { time: "03:00", value: 38 }
+        - { time: "08:00", value: 60 }
+        - { time: "14:00", value: 75 }
+    day_-3:
+      restingAvg: 56
+      maxToday: 115
+      minToday: 42
+      readings: []
+    day_-4:
+      restingAvg: 68
+      maxToday: 130
+      minToday: 55
+      readings: []
+  sleep:
+    day_0:
+      durationHours: 7.0
+      qualityScore: 40
+      bedTime: "23:00"
+      wakeTime: "06:00"
+      stages: { deep: 30, light: 250, rem: 50, awake: 60 }
+    day_-1:
+      durationHours: 7.2
+      qualityScore: 42
+      bedTime: "23:15"
+      wakeTime: "06:27"
+      stages: { deep: 32, light: 255, rem: 52, awake: 58 }
+    day_-2:
+      durationHours: 7.5
+      qualityScore: 68
+      bedTime: "23:00"
+      wakeTime: "06:30"
+      stages: { deep: 80, light: 195, rem: 72, awake: 18 }
+    day_-3:
+      durationHours: 6.5
+      qualityScore: 55
+      bedTime: "23:30"
+      wakeTime: "06:00"
+      stages: { deep: 50, light: 180, rem: 55, awake: 35 }
+    day_-4:
+      durationHours: 7.0
+      qualityScore: 65
+      bedTime: "23:00"
+      wakeTime: "06:00"
+      stages: { deep: 70, light: 190, rem: 65, awake: 25 }
+    day_-5: null
+    day_-6:
+      durationHours: 6.8
+      qualityScore: 58
+      bedTime: "23:45"
+      wakeTime: "06:33"
+      stages: { deep: 55, light: 185, rem: 55, awake: 30 }
+  workouts:
+    day_0: []
+    day_-1:
+      - type: walking
+        durationMinutes: 30
+        caloriesBurned: 120
+        distanceKm: 2.0
+        avgHeartRate: 95
+    day_-2: []
+    day_-3: []
+    day_-4:
+      - type: walking
+        durationMinutes: 45
+        caloriesBurned: 180
+        distanceKm: 3.0
+        avgHeartRate: 100
+    day_-5: []
+    day_-6: []
