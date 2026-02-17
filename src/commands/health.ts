@@ -35,6 +35,7 @@ export function registerHealthCommand(program: Command): void {
       } else {
         await showDailySummary(dataSource, date, options.json);
       }
+      process.exit(0);
     });
 }
 

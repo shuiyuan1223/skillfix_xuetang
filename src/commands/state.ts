@@ -146,6 +146,7 @@ export function registerStateCommand(program: Command): void {
       }
       console.log(`  ${icons.arrow} Push state:   ${c.cyan("pha state push")}`);
       console.log(`  ${icons.arrow} Check status: ${c.cyan("pha state status")}`);
+      process.exit(0);
     });
 
   // pha state push [-m <message>]
@@ -184,7 +185,7 @@ export function registerStateCommand(program: Command): void {
             git(stateDir, "rev-parse --verify HEAD");
           } catch {
             console.log(`${c.red(icons.error)} No commits yet. Nothing to push.`);
-            return;
+            process.exit(1);
           }
 
           git(stateDir, "push -u origin HEAD:main");
@@ -199,6 +200,7 @@ export function registerStateCommand(program: Command): void {
           `${c.yellow(icons.warning)} No remote configured. Run ${c.cyan("pha state init --remote <url>")} to add one.`
         );
       }
+      process.exit(0);
     });
 
   // pha state pull
@@ -231,6 +233,7 @@ export function registerStateCommand(program: Command): void {
         console.log(`${c.red(icons.error)} Pull failed: ${msg}`);
         process.exit(1);
       }
+      process.exit(0);
     });
 
   // pha state status
@@ -294,5 +297,6 @@ export function registerStateCommand(program: Command): void {
         const msg = e instanceof Error ? e.message : String(e);
         console.log(`${c.red(icons.error)} ${msg}`);
       }
+      process.exit(0);
     });
 }

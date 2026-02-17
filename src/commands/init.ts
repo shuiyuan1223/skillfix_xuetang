@@ -48,5 +48,6 @@ export function registerInitCommand(program: Command): void {
       }
 
       console.log(`\n${c.green(icons.success)} Initialization complete`);
+      process.exit(0);
     });
 }

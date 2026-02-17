@@ -54,6 +54,7 @@ export function registerAuthCommand(program: Command): void {
       } else {
         await mcpAuthFlow(uuid, parseInt(options.timeout, 10));
       }
+      process.exit(0);
     });
 
   // Status subcommand
@@ -88,6 +89,7 @@ export function registerAuthCommand(program: Command): void {
       }
 
       console.log("");
+      process.exit(0);
     });
 }
 

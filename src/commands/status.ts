@@ -249,6 +249,7 @@ export function registerStatusCommand(program: Command): void {
         console.log(lastLines);
 
         console.log(`\n${c.dim("Tip: Use")} ${c.cyan("pha logs -f")} ${c.dim("to follow logs")}`);
+        process.exit(0);
       }
     });
 }

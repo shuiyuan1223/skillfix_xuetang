@@ -68,6 +68,7 @@ export function registerWebCommand(program: Command): void {
 
       info(`Opening ${c.cyan(url)}`);
       await openBrowser(url);
+      process.exit(0);
     });
 
   // pha dashboard — alias for pha web, opens browser
@@ -89,5 +90,6 @@ export function registerWebCommand(program: Command): void {
 
       info(`Opening dashboard ${c.cyan(url)}`);
       await openBrowser(url);
+      process.exit(0);
     });
 }

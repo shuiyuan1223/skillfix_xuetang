@@ -19,7 +19,7 @@ export function registerConfigCommand(program: Command): void {
   configCmd.action(() => {
     if (!isConfigured()) {
       console.log("\nNo configuration found. Run 'pha setup' first.\n");
-      return;
+      process.exit(1);
     }
 
     const config = loadConfig();
@@ -28,6 +28,7 @@ export function registerConfigCommand(program: Command): void {
     console.log("");
     console.log(JSON.stringify(config, null, 2));
     console.log("");
+    process.exit(0);
   });
 
   // config get <path>
@@ -41,6 +42,7 @@ export function registerConfigCommand(program: Command): void {
       } else {
         console.log(typeof value === "object" ? JSON.stringify(value, null, 2) : value);
       }
+      process.exit(0);
     });
 
   // config set <path> <value>
@@ -50,6 +52,7 @@ export function registerConfigCommand(program: Command): void {
     .action((path, value) => {
       setConfigValue(path, value);
       console.log(`Set ${path} = ${value}`);
+      process.exit(0);
     });
 
   // config unset <path>
@@ -59,6 +62,7 @@ export function registerConfigCommand(program: Command): void {
     .action((path) => {
       unsetConfigValue(path);
       console.log(`Removed ${path}`);
+      process.exit(0);
     });
 
   // config path - show config file path
@@ -67,6 +71,7 @@ export function registerConfigCommand(program: Command): void {
     .description("Show configuration file path")
     .action(() => {
       console.log(getConfigPath());
+      process.exit(0);
     });
 
   // config reset - reset to defaults
@@ -90,5 +95,6 @@ export function registerConfigCommand(program: Command): void {
         tui: { theme: "dark", showToolCalls: true },
       });
       console.log("Configuration reset to defaults.");
+      process.exit(0);
     });
 }

@@ -292,7 +292,7 @@ export function registerOnboardCommand(program: Command): void {
 
         if (action === "edit") {
           await editConfig(config);
-          return;
+          process.exit(0);
         }
 
         // Continue to full wizard for reset
@@ -300,6 +300,7 @@ export function registerOnboardCommand(program: Command): void {
 
       // Full setup wizard
       await runFullWizard();
+      process.exit(0);
     });
 }
 

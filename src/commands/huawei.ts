@@ -34,6 +34,7 @@ export function registerHuaweiCommand(program: Command): void {
     .description("Configure Huawei developer credentials")
     .action(async () => {
       await setupCredentials();
+      process.exit(0);
     });
 
   // Auth subcommand
@@ -45,6 +46,7 @@ export function registerHuaweiCommand(program: Command): void {
       // Use command line option if provided, otherwise read from config
       const redirectUri = options.redirectUri || getRedirectUri();
       await authorizeAccess(redirectUri);
+      process.exit(0);
     });
 
   // Status subcommand
@@ -53,6 +55,7 @@ export function registerHuaweiCommand(program: Command): void {
     .description("Check Huawei connection status")
     .action(async () => {
       await showStatus();
+      process.exit(0);
     });
 
   // Test subcommand
@@ -61,6 +64,7 @@ export function registerHuaweiCommand(program: Command): void {
     .description("Test Huawei API connection")
     .action(async () => {
       await testConnection();
+      process.exit(0);
     });
 
   // Logout subcommand
@@ -69,6 +73,7 @@ export function registerHuaweiCommand(program: Command): void {
     .description("Clear Huawei authorization")
     .action(async () => {
       await logout();
+      process.exit(0);
     });
 
   // Debug subcommand - explore available data types
@@ -85,6 +90,7 @@ export function registerHuaweiCommand(program: Command): void {
     .option("-l, --list", "List cached API responses")
     .action(async (options) => {
       await debugApi(options);
+      process.exit(0);
     });
 }
 
