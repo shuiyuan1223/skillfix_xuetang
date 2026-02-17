@@ -8,6 +8,8 @@
 
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { getDataSource } from "../tools/health-data.js";
+import { listPlans } from "../plans/store.js";
+import { getUserUuid } from "../utils/config.js";
 
 /**
  * Pre-compute a 7-day health context summary for the system prompt.
@@ -205,6 +207,25 @@ export async function preComputeHealthContext(dataSource?: HealthDataSource): Pr
 
     if (insights.length > 0) {
       result += `\n\n**Insights**: ${insights.join(" ")}`;
+    }
+
+    // --- Active Health Plans ---
+    try {
+      const uuid = getUserUuid();
+      const activePlans = listPlans(uuid, "active");
+      if (activePlans.length > 0) {
+        result += "\n\n## Active Health Plans\n";
+        for (const plan of activePlans) {
+          const done = plan.goals.filter((g) => g.status === "completed").length;
+          result += `\n- **${plan.name}** (${plan.startDate} ~ ${plan.endDate}): ${done}/${plan.goals.length} goals`;
+          for (const goal of plan.goals) {
+            result += `\n  - ${goal.label}: target ${goal.targetValue}${goal.unit}, current ${goal.currentValue ?? "?"}`;
+          }
+        }
+        result += "\n\nProactively check plan progress when discussing related health topics.";
+      }
+    } catch {
+      // Plans not available — ignore
     }
 
     return result;

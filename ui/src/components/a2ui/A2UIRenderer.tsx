@@ -46,6 +46,12 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   update_user_profile: "更新健康档案",
   complete_onboarding: "完成引导",
   present_insight: "健康洞察",
+  create_health_plan: "创建健康计划",
+  list_health_plans: "健康计划列表",
+  get_health_plan: "计划详情",
+  update_plan_progress: "更新进度",
+  adjust_health_plan: "调整计划",
+  update_plan_status: "更新计划状态",
 };
 
 export function A2UIRenderer({

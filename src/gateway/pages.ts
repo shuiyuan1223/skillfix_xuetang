@@ -8,6 +8,7 @@
 import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
 import { t } from "../locales/index.js";
 import type { UserProfile, MemorySearchResult } from "../memory/types.js";
+import type { HealthPlan, PlanStatus } from "../plans/types.js";
 import {
   buildRadarChartData,
   SHARP_CATEGORY_COLORS,
@@ -75,6 +76,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
     [
       { id: "chat", label: t("nav.chat"), icon: "chat" },
       { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
+      { id: "plans", label: t("nav.plans"), icon: "target" },
       { id: "memory", label: t("nav.memory"), icon: "brain" },
       { id: "evolution", label: t("nav.evolution"), icon: "flask" },
       { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
@@ -2759,6 +2761,255 @@ export function generateToast(
 }
 
 // ============================================================================
+// Plans Page Generator
+// ============================================================================
+
+const PLAN_STATUS_COLORS: Record<PlanStatus, string> = {
+  active: "#10b981",
+  paused: "#f59e0b",
+  completed: "#3b82f6",
+  archived: "#6b7280",
+};
+
+export function generatePlansPage(data: {
+  activeTab: "active" | "completed" | "archived";
+  plans: HealthPlan[];
+  loading?: boolean;
+}): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+
+  // Header
+  const title = ui.text(t("plans.title"), "h2");
+  const subtitle = ui.text(t("plans.subtitle"), "caption");
+  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+
+  // Loading skeleton
+  if (data.loading) {
+    const s1 = ui.skeleton({ variant: "rectangular", height: 120 });
+    const s2 = ui.skeleton({ variant: "rectangular", height: 120 });
+    const loadingContent = ui.column([s1, s2], { gap: 16, padding: 24 });
+    const root = ui.column([header, loadingContent], { gap: 0 });
+    return ui.build(root);
+  }
+
+  // Build tab content
+  const tabChildren: string[] = [];
+
+  if (data.plans.length === 0) {
+    const emptyIcon = ui.text("target", "caption");
+    const emptyText = ui.text(t("plans.noPlans"), "h3");
+    const emptyHint = ui.text(t("plans.askAgentHint"), "caption");
+    tabChildren.push(
+      ui.column([emptyIcon, emptyText, emptyHint], { gap: 8, align: "center", padding: 48 })
+    );
+  } else {
+    const cardIds: string[] = [];
+    for (const plan of data.plans) {
+      const goalsCompleted = plan.goals.filter((g) => g.status === "completed").length;
+      const totalGoals = plan.goals.length;
+      const progressPct = totalGoals > 0 ? Math.round((goalsCompleted / totalGoals) * 100) : 0;
+
+      // Days remaining
+      const now = new Date();
+      const end = new Date(plan.endDate);
+      const daysLeft = Math.max(
+        0,
+        Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      );
+
+      // Status badge
+      const statusLabel =
+        plan.status === "active"
+          ? t("plans.statusActive")
+          : plan.status === "paused"
+            ? t("plans.statusPaused")
+            : plan.status === "completed"
+              ? t("plans.statusCompleted")
+              : t("plans.statusArchived");
+      const badge = ui.badge(statusLabel, {
+        color: PLAN_STATUS_COLORS[plan.status],
+      });
+
+      // Plan name + description
+      const nameText = ui.text(plan.name, "h3");
+      const descText = ui.text(plan.description, "caption");
+      const headerRow = ui.row([nameText, badge], { justify: "between", align: "center" });
+
+      // Progress bar
+      const progressBar = ui.progress(progressPct, { maxValue: 100, color: "#10b981" });
+
+      // Stats row
+      const goalsLabel = ui.text(
+        `${goalsCompleted}/${totalGoals} ${t("plans.goalsCompleted")}`,
+        "caption"
+      );
+      const daysLabel =
+        plan.status === "active"
+          ? ui.text(`${daysLeft} ${t("plans.daysRemaining")}`, "caption")
+          : ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
+      const statsRow = ui.row([goalsLabel, daysLabel], { justify: "between" });
+
+      // View button
+      const viewBtn = ui.button(t("plans.viewDetails"), `view_plan:${plan.id}`, {
+        variant: "outline",
+        size: "sm",
+        icon: "chevron-right",
+      });
+
+      const cardContent = ui.column([headerRow, descText, progressBar, statsRow, viewBtn], {
+        gap: 8,
+      });
+      const card = ui.card([cardContent], { padding: 16 });
+      cardIds.push(card);
+    }
+    tabChildren.push(ui.column(cardIds, { gap: 12, padding: 16 }));
+  }
+
+  const tabContentIds: Record<string, string> = {};
+  tabContentIds[data.activeTab] = ui.column(tabChildren, { gap: 0, padding: 24 });
+
+  // Tabs
+  const tabs = ui.tabs(
+    [
+      { id: "active", label: t("plans.tabActive") },
+      { id: "completed", label: t("plans.tabCompleted") },
+      { id: "archived", label: t("plans.tabArchived") },
+    ],
+    data.activeTab,
+    tabContentIds
+  );
+
+  const root = ui.column([header, tabs], { gap: 0 });
+  return ui.build(root);
+}
+
+export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage {
+  const ui = new A2UIGenerator("modal");
+
+  // Title
+  const title = ui.text(plan.name, "h2");
+  const desc = ui.text(plan.description, "caption");
+  const headerSection = ui.column([title, desc], { gap: 4 });
+
+  const sections: string[] = [headerSection];
+
+  // Goals table
+  const goalRows = plan.goals.map((g) => {
+    const progress =
+      g.currentValue !== undefined && g.targetValue > 0
+        ? `${Math.round((g.currentValue / g.targetValue) * 100)}%`
+        : "-";
+    const statusLabel =
+      g.status === "completed"
+        ? "✓"
+        : g.status === "ahead"
+          ? "↑"
+          : g.status === "behind"
+            ? "↓"
+            : g.status === "missed"
+              ? "✗"
+              : "→";
+    return {
+      label: g.label,
+      target: `${g.targetValue} ${g.unit}`,
+      current: g.currentValue !== undefined ? `${g.currentValue} ${g.unit}` : "-",
+      progress,
+      status: statusLabel,
+    };
+  });
+
+  const goalsTable = ui.dataTable(
+    [
+      { key: "label", label: t("plans.goalLabel") },
+      { key: "target", label: t("plans.target") },
+      { key: "current", label: t("plans.current") },
+      { key: "progress", label: t("plans.progress") },
+      { key: "status", label: t("plans.status") },
+    ],
+    goalRows
+  );
+  const goalsCard = ui.card([goalsTable], { title: t("plans.goalLabel"), padding: 16 });
+  sections.push(goalsCard);
+
+  // Milestones (git_timeline)
+  if (plan.milestones.length > 0) {
+    const timelineEntries = plan.milestones.map((m) => ({
+      id: m.id,
+      type: "commit" as const,
+      label: m.label,
+      description: m.criteria,
+      timestamp: new Date(m.targetDate).getTime(),
+      status: m.completed ? ("success" as const) : ("pending" as const),
+    }));
+    const timeline = ui.gitTimeline(timelineEntries);
+    const msCard = ui.card([timeline], { title: t("plans.milestones"), padding: 16 });
+    sections.push(msCard);
+  }
+
+  // Adjustment history
+  if (plan.adjustments.length > 0) {
+    const adjRows = plan.adjustments.map((a) => ({
+      date: a.date.split("T")[0],
+      reason: a.reason,
+      changes: a.changes,
+    }));
+    const adjTable = ui.dataTable(
+      [
+        { key: "date", label: t("plans.date") },
+        { key: "reason", label: t("plans.reason") },
+        { key: "changes", label: t("plans.changes") },
+      ],
+      adjRows
+    );
+    const adjCard = ui.card([adjTable], { title: t("plans.adjustmentHistory"), padding: 16 });
+    sections.push(adjCard);
+  }
+
+  // Action buttons
+  const buttons: string[] = [];
+  if (plan.status === "active") {
+    buttons.push(
+      ui.button(t("plans.pause"), `update_plan_action:${plan.id}:paused`, {
+        variant: "outline",
+        size: "sm",
+        icon: "pause",
+      })
+    );
+    buttons.push(
+      ui.button(t("plans.complete"), `update_plan_action:${plan.id}:completed`, {
+        variant: "primary",
+        size: "sm",
+        icon: "check",
+      })
+    );
+  } else if (plan.status === "paused") {
+    buttons.push(
+      ui.button(t("plans.resume"), `update_plan_action:${plan.id}:active`, {
+        variant: "primary",
+        size: "sm",
+        icon: "play",
+      })
+    );
+  }
+  if (plan.status === "completed") {
+    buttons.push(
+      ui.button(t("plans.archive"), `update_plan_action:${plan.id}:archived`, {
+        variant: "outline",
+        size: "sm",
+        icon: "save",
+      })
+    );
+  }
+
+  if (buttons.length > 0) {
+    sections.push(ui.row(buttons, { gap: 8, justify: "end" }));
+  }
+
+  const root = ui.column(sections, { gap: 16, padding: 24 });
+  return ui.build(root);
+}
+
+// ============================================================================
 // Page Message Generator (combines sidebar + main)
 // ============================================================================
 
@@ -3297,9 +3548,56 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
       return generateNutritionCards(data);
     case "present_insight":
       return generateInsightCards(data);
+    case "create_health_plan":
+      return generateCreatePlanCards(data);
     default:
       return generateGenericToolCards(data);
   }
+}
+
+function generateCreatePlanCards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    success?: boolean;
+    name?: string;
+    goalsCount?: number;
+    startDate?: string;
+    endDate?: string;
+  };
+  if (!d?.success) return null;
+
+  const ui = new A2UIGenerator("ic-plan");
+
+  const nameCard = ui.statCard({
+    title: t("plans.title"),
+    value: d.name || "",
+    icon: "target",
+    color: "#10b981",
+  });
+
+  const goalsCard = ui.statCard({
+    title: t("plans.goalLabel"),
+    value: `${d.goalsCount || 0}`,
+    icon: "bar-chart",
+    color: "#3b82f6",
+  });
+
+  const dateCard = ui.statCard({
+    title: t("plans.daysRemaining"),
+    value: `${d.startDate} ~ ${d.endDate}`,
+    icon: "calendar",
+    color: "#8b5cf6",
+  });
+
+  const grid = ui.grid([nameCard, goalsCard, dateCard], { columns: 3, gap: 12 });
+
+  const viewBtn = ui.button(t("plans.viewDetails"), "navigate:plans", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
+
+  const root = ui.column([grid, viewBtn], { gap: 12 });
+  return ui.build(root);
 }
 
 function generateHealthDataCards(data: unknown): ToolCardResult | null {

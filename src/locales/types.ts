@@ -10,6 +10,7 @@ export interface LocaleMessages {
     health: string;
     sleep: string;
     activity: string;
+    plans: string;
     memory: string;
     prompts: string;
     skills: string;
@@ -668,6 +669,38 @@ export interface LocaleMessages {
     rawConfig: string;
     copyConfig: string;
     downloadConfig: string;
+  };
+
+  // Plans page
+  plans: {
+    title: string;
+    subtitle: string;
+    tabActive: string;
+    tabCompleted: string;
+    tabArchived: string;
+    statusActive: string;
+    statusPaused: string;
+    statusCompleted: string;
+    statusArchived: string;
+    goalsCompleted: string;
+    daysRemaining: string;
+    viewDetails: string;
+    noPlans: string;
+    askAgentHint: string;
+    goalLabel: string;
+    target: string;
+    current: string;
+    progress: string;
+    status: string;
+    milestones: string;
+    adjustmentHistory: string;
+    date: string;
+    reason: string;
+    changes: string;
+    pause: string;
+    resume: string;
+    complete: string;
+    archive: string;
   };
 
   // OAuth / Authorization

@@ -79,8 +79,12 @@ import {
   generateSystemAgentPage,
   generateLogsPage,
   generateSettingsPage,
+  generatePlansPage,
+  generatePlanDetailModal,
   type SettingsPageData,
 } from "./pages.js";
+import { listPlans, loadPlan, savePlan } from "../plans/store.js";
+import type { PlanStatus } from "../plans/types.js";
 import type { PartsChatMessage, MessagePart, AGUIEvent } from "./a2ui.js";
 
 /** Find the last text part index in a parts array (ES2022-safe replacement for findLastIndex). */
@@ -1004,6 +1008,9 @@ export class GatewaySession {
   private memorySearchQuery: string | undefined;
   private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
 
+  // Plans page state
+  private plansTab: "active" | "completed" | "archived" = "active";
+
   // Logs page state
   private logsTab: "system" | "llm" = "system";
   private logsLevelFilter: string | undefined;
@@ -1687,6 +1694,22 @@ export class GatewaySession {
 
         // Return early — progressive loader already sent the page
         return;
+      }
+
+      case "plans": {
+        const statusMap: Record<string, PlanStatus> = {
+          active: "active",
+          completed: "completed",
+          archived: "archived",
+        };
+        const filterStatus = statusMap[this.plansTab];
+        const uuid = this.userUuid || getUserUuid();
+        const plans = listPlans(uuid, filterStatus);
+        mainPage = generatePlansPage({
+          activeTab: this.plansTab,
+          plans,
+        });
+        break;
       }
 
       case "memory": {
@@ -2747,6 +2770,39 @@ export class GatewaySession {
       const view = action.replace("navigate:", "");
       await this.handleNavigate(view, send);
     }
+    // Plans actions
+    else if (action.startsWith("view_plan:")) {
+      const planId = action.replace("view_plan:", "");
+      const uuid = this.userUuid || getUserUuid();
+      const plan = loadPlan(uuid, planId);
+      if (plan) {
+        const modal = generatePlanDetailModal(plan);
+        send({ type: "modal", surface: { components: modal.components, root_id: modal.root_id } });
+      }
+    } else if (action.startsWith("update_plan_action:")) {
+      const parts = action.replace("update_plan_action:", "").split(":");
+      const planId = parts[0];
+      const newStatus = parts[1] as PlanStatus;
+      const uuid = this.userUuid || getUserUuid();
+      const plan = loadPlan(uuid, planId);
+      if (plan) {
+        plan.status = newStatus;
+        if (newStatus === "completed") {
+          for (const goal of plan.goals) {
+            if (goal.status !== "completed" && goal.status !== "missed") {
+              goal.status =
+                goal.currentValue && goal.currentValue >= goal.targetValue ? "completed" : "missed";
+            }
+          }
+        }
+        savePlan(uuid, plan);
+        send({ type: "modal_close" });
+        await this.handleNavigate("plans", send);
+      }
+    } else if (action === "plans_tab_change" && payload?.tab) {
+      this.plansTab = payload.tab as "active" | "completed" | "archived";
+      await this.handleNavigate("plans", send);
+    }
     // OAuth actions
     else if (action === "start_huawei_auth" || action === "start_reauth") {
       // Clear scope error cache so re-auth can fix them
@@ -3184,6 +3240,9 @@ export class GatewaySession {
         }
         this.memoryTab = tab as "profile" | "summary" | "logs" | "search" | "system-agent";
         await this.handleNavigate("memory", send);
+      } else if (this.currentView === "plans") {
+        this.plansTab = payload.tab as string as "active" | "completed" | "archived";
+        await this.handleNavigate("plans", send);
       } else if (this.currentView === "settings/prompts") {
         const tab = payload.tab as string;
         if (tab === "pha" || tab === "system") {

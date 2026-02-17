@@ -32,6 +32,7 @@ export type ToolCategory =
   | "config"
   | "profile"
   | "presentation"
+  | "planning"
   | "git"
   | "evolution"
   | "system"

@@ -21,6 +21,7 @@ const PHA_CATEGORIES = new Set<ToolCategory>([
   "config",
   "skill",
   "presentation",
+  "planning",
 ]);
 const SA_CATEGORIES = new Set<ToolCategory>(["git", "evolution", "system", "feedback", "skill"]);
 
