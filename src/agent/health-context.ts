@@ -6,9 +6,14 @@
  * without needing tool calls in the first turn.
  */
 
-import type { HealthDataSource } from "../data-sources/interface.js";
+import type {
+  HealthDataSource,
+  HealthMetrics,
+  BodyCompositionData,
+} from "../data-sources/interface.js";
 import { getDataSource } from "../tools/health-data.js";
-import { listPlans } from "../plans/store.js";
+import { listPlans, savePlan } from "../plans/store.js";
+import type { HealthPlan, GoalStatus } from "../plans/types.js";
 import { getUserUuid } from "../utils/config.js";
 
 /**
@@ -36,6 +41,8 @@ export async function preComputeHealthContext(
       todayBP,
       todayGlucose,
       todayTemp,
+      todayMetrics,
+      todayBodyComp,
     ] = await Promise.all([
       source.getWeeklySteps(today).catch(() => []),
       source.getWeeklySleep(today).catch(() => []),
@@ -46,6 +53,8 @@ export async function preComputeHealthContext(
       source.getBloodPressure?.(today).catch(() => null) ?? Promise.resolve(null),
       source.getBloodGlucose?.(today).catch(() => null) ?? Promise.resolve(null),
       source.getBodyTemperature?.(today).catch(() => null) ?? Promise.resolve(null),
+      source.getMetrics(today).catch(() => null),
+      source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
     ]);
 
     const sections: string[] = [];
@@ -213,20 +222,42 @@ export async function preComputeHealthContext(
       result += `\n\n**Insights**: ${insights.join(" ")}`;
     }
 
-    // --- Active Health Plans ---
+    // --- Active Health Plans (auto-sync + enhanced display) ---
     try {
       const uuid = userUuid || getUserUuid();
       const activePlans = listPlans(uuid, "active");
+
+      // Auto-sync plan progress with latest health data
+      if (activePlans.length > 0) {
+        autoSyncPlanProgress(activePlans, uuid, today, {
+          weeklySteps,
+          weeklySleep,
+          todayHR,
+          todayWorkouts,
+          todayMetrics,
+          todayBodyComp,
+        });
+      }
+
       if (activePlans.length > 0) {
         result += "\n\n## Active Health Plans\n";
         for (const plan of activePlans) {
           const done = plan.goals.filter((g) => g.status === "completed").length;
-          result += `\n- **${plan.name}** (${plan.startDate} ~ ${plan.endDate}): ${done}/${plan.goals.length} goals`;
+          result += `\n- **${plan.name}** (${plan.startDate} ~ ${plan.endDate}): ${done}/${plan.goals.length} goals completed`;
           for (const goal of plan.goals) {
-            result += `\n  - ${goal.label}: target ${goal.targetValue}${goal.unit}, current ${goal.currentValue ?? "?"}`;
+            const current = goal.currentValue;
+            const pct = current != null ? Math.round((current / goal.targetValue) * 100) : 0;
+            const arrow =
+              goal.status === "completed" || goal.status === "ahead"
+                ? "↑"
+                : goal.status === "behind"
+                  ? "↓"
+                  : "→";
+            result += `\n  - ${goal.label}: target ${goal.targetValue}${goal.unit}, current ${current ?? "?"}${goal.unit} (${pct}%) → ${goal.status} ${arrow}`;
           }
         }
-        result += "\n\nProactively check plan progress when discussing related health topics.";
+        result +=
+          "\n\nWhen discussing health topics related to an active plan, mention the user's plan progress.";
       }
     } catch {
       // Plans not available — ignore
@@ -237,4 +268,115 @@ export async function preComputeHealthContext(
     console.warn("[Health Context] Pre-computation failed:", e);
     return "";
   }
+}
+
+// ============================================================================
+// Auto-sync plan progress with latest health data
+// ============================================================================
+
+interface HealthSnapshot {
+  weeklySteps: Array<{ date: string; steps: number }>;
+  weeklySleep: Array<{ date: string; hours: number }>;
+  todayHR: { restingAvg: number } | null;
+  todayWorkouts: Array<{ durationMinutes: number }>;
+  todayMetrics: HealthMetrics | null;
+  todayBodyComp: BodyCompositionData | null;
+}
+
+function autoSyncPlanProgress(
+  plans: HealthPlan[],
+  uuid: string,
+  today: string,
+  data: HealthSnapshot
+): void {
+  for (const plan of plans) {
+    let changed = false;
+
+    for (const goal of plan.goals) {
+      // Skip custom metrics — need manual update
+      if (goal.metric === "custom") continue;
+
+      // Skip if today already has a progress entry for this goal
+      const alreadySynced = plan.progress.some((p) => p.goalId === goal.id && p.date === today);
+      if (alreadySynced) continue;
+
+      const value = resolveMetricValue(goal.metric, goal.frequency, data);
+      if (value == null) continue;
+
+      // Add progress entry
+      plan.progress.push({
+        date: today,
+        goalId: goal.id,
+        actualValue: value,
+        targetValue: goal.targetValue,
+        note: "auto-sync",
+      });
+
+      // Update current value and status
+      goal.currentValue = value;
+      goal.status = computeGoalStatus(value, goal.targetValue);
+      changed = true;
+    }
+
+    if (changed) {
+      savePlan(uuid, plan);
+    }
+  }
+}
+
+function resolveMetricValue(
+  metric: string,
+  frequency: "daily" | "weekly",
+  data: HealthSnapshot
+): number | null {
+  switch (metric) {
+    case "steps": {
+      if (data.weeklySteps.length === 0) return null;
+      if (frequency === "weekly") {
+        const total = data.weeklySteps.reduce((s, d) => s + d.steps, 0);
+        return Math.round(total / data.weeklySteps.length);
+      }
+      // daily: last entry (today or most recent)
+      return data.weeklySteps[data.weeklySteps.length - 1].steps;
+    }
+    case "sleep_hours": {
+      const sleepDays = data.weeklySleep.filter((d) => d.hours > 0);
+      if (sleepDays.length === 0) return null;
+      if (frequency === "weekly") {
+        return (
+          Math.round((sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length) * 10) / 10
+        );
+      }
+      return sleepDays[sleepDays.length - 1].hours;
+    }
+    case "exercise_count": {
+      if (frequency === "weekly") {
+        // Count workout days in the week (approximate from todayWorkouts only)
+        return data.todayWorkouts.length;
+      }
+      return data.todayWorkouts.length;
+    }
+    case "heart_rate_resting":
+      return data.todayHR?.restingAvg ?? null;
+    case "weight":
+      return data.todayBodyComp?.weight ?? null;
+    case "calories":
+      if (!data.todayMetrics) return null;
+      if (frequency === "weekly") return data.todayMetrics.calories; // best available
+      return data.todayMetrics.calories;
+    case "active_minutes":
+      if (!data.todayMetrics) return null;
+      if (frequency === "weekly") return data.todayMetrics.activeMinutes;
+      return data.todayMetrics.activeMinutes;
+    default:
+      return null;
+  }
+}
+
+function computeGoalStatus(currentValue: number, targetValue: number): GoalStatus {
+  const ratio = currentValue / targetValue;
+  if (ratio >= 1) return "completed";
+  if (ratio >= 0.9) return "ahead";
+  if (ratio >= 0.6) return "on_track";
+  return "behind";
 }

@@ -67,6 +67,18 @@ metadata:
    - 里程碑 2（第4周）：平均睡眠达到 7h
 4. 调用 `create_health_plan` 创建
 
+## 进度自动同步
+
+系统会在每次会话开始时自动同步活跃计划的进度：
+- steps、sleep_hours、exercise_count 等标准指标从健康数据自动更新
+- custom 类型的目标需要用户口述后手动调用 `update_plan_progress`
+- 你可以在系统提示词的 Health Context 中看到最新的计划进度
+
+你仍然可以调用 `update_plan_progress` 来：
+- 更新 custom 类型目标
+- 添加 note（进度备注）
+- 手动修正自动同步的数值
+
 ## 进度追踪策略
 
 ### 主动检查
@@ -76,10 +88,6 @@ metadata:
 - 用户问睡眠 → 如果有睡眠相关计划，对比计划目标
 - 用户问运动 → 如果有运动计划，检查进度
 - 不需要每次都提，相关时提即可
-
-### 自动更新
-
-当获取到新的健康数据时，如果数据与某个计划目标相关，调用 `update_plan_progress` 记录。
 
 ## 调整策略
 
