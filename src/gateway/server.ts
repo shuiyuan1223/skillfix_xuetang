@@ -1775,7 +1775,7 @@ export class GatewaySession {
             activeTab: this.memoryTab,
             profileCompleteness: mm.getProfileCompleteness(uuid),
             profile: mm.getProfile(uuid),
-            missingFields: mm.getAllMissingFields(uuid).map((f) => f.key),
+            missingFields: mm.getAllMissingProfileKeys(uuid),
             memorySummary: loadMemorySummary(uuid) || "",
             dailyLogs: getRecentDailyLogs(uuid, 7),
             searchQuery: this.memorySearchQuery,
@@ -5675,13 +5675,11 @@ export async function startGateway(
   const webDir = config.webDir;
 
   // Helper: get or create session by user UUID
-  // In single-user mode, always use the config's canonical UUID
-  const canonicalUuid = getUserUuid();
   function getOrCreateSession(userUuid?: string): GatewaySession {
-    const key = canonicalUuid;
+    const key = userUuid || crypto.randomUUID();
     let session = sessions.get(key);
     if (!session) {
-      session = new GatewaySession(config, key);
+      session = new GatewaySession(config, userUuid);
       sessions.set(key, session);
     }
     return session;
@@ -5817,13 +5815,13 @@ export async function startGateway(
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
           };
-          // Set session + user cookies (sync browser to canonical UUID)
-          const expires = new Date();
-          expires.setFullYear(expires.getFullYear() + 1);
-          const expStr = expires.toUTCString();
-          headers["Set-Cookie"] =
-            `pha_session_id=${session.getSessionId()}; Path=/; Expires=${expStr}; SameSite=Strict, ` +
-            `pha_user_id=${session.userUuid}; Path=/; Expires=${expStr}; SameSite=Strict`;
+          // Set session cookie
+          if (userUuid) {
+            const expires = new Date();
+            expires.setFullYear(expires.getFullYear() + 1);
+            headers["Set-Cookie"] =
+              `pha_session_id=${session.getSessionId()}; Path=/; Expires=${expires.toUTCString()}; SameSite=Strict`;
+          }
 
           return new Response(
             JSON.stringify({

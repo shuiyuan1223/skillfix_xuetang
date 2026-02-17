@@ -29,6 +29,7 @@ import { buildSkillRegistry } from "../agent/system-prompt.js";
 import {
   getNextMissingField,
   getAllMissingFields,
+  getAllMissingProfileKeys,
   getProfileCompleteness,
 } from "./info-collector.js";
 import { MemoryIndexManager } from "./memory-index.js";
@@ -156,6 +157,11 @@ export class MemoryManager {
   getAllMissingFields(uuid: string) {
     const profile = this.getProfile(uuid);
     return getAllMissingFields(profile);
+  }
+
+  getAllMissingProfileKeys(uuid: string): string[] {
+    const profile = this.getProfile(uuid);
+    return getAllMissingProfileKeys(profile);
   }
 
   getProfileCompleteness(uuid: string): number {
