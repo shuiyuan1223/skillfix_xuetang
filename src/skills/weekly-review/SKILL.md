@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "📅",
-      "requires": { "tools": ["get_weekly_summary", "get_health_data", "get_sleep", "get_heart_rate", "list_health_plans", "get_health_plan"] },
-      "triggers": ["weekly", "week", "this week", "last week", "weekly review", "weekly report", "7 days", "week summary", "这周", "本周", "上周", "一周", "周报", "这一周", "七天", "周总结", "回顾", "复盘"]
+      "requires": { "tools": ["get_weekly_summary", "get_health_data", "get_sleep", "get_heart_rate", "list_health_plans", "get_health_plan"] }
     }
   }
 ---

@@ -2,7 +2,7 @@
 name: evolution-playground
 description: "进化实验场工作流方法论 — 引导 Agent 完成 6 步进化闭环"
 metadata:
-  {"pha": {"emoji": "zap", "triggers": ["evolution cycle", "improve score", "evolution workflow", "playground", "optimize agent", "进化流程", "进化实验", "提升分数", "进化闭环", "优化Agent"], "config": {}}}
+  {"pha": {"emoji": "zap", "config": {}}}
 ---
 
 # 进化实验场工作流指南

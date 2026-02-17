@@ -2,7 +2,7 @@
 name: evolution-driver
 description: "Agent 自我进化方法论 — 驱动 benchmark、diagnose、propose、approve、apply、validate 六步流水线"
 metadata:
-  {"pha": {"emoji": "flask", "type": "system", "triggers": ["evolve", "improve", "self-improve", "evolution", "benchmark", "diagnose", "optimize agent", "进化", "自我改进", "优化", "基准测试", "自我进化", "迭代", "提升"], "config": {"pipeline": [{"step": "benchmark", "label": "基准测试", "icon": "test-tube"}, {"step": "diagnose", "label": "诊断分析", "icon": "search"}, {"step": "propose", "label": "方案提出", "icon": "lightbulb"}, {"step": "approve", "label": "用户审批", "icon": "check"}, {"step": "apply", "label": "执行变更", "icon": "zap"}, {"step": "validate", "label": "验证效果", "icon": "shield"}]}}}
+  {"pha": {"emoji": "flask", "type": "system", "config": {"pipeline": [{"step": "benchmark", "label": "基准测试", "icon": "test-tube"}, {"step": "diagnose", "label": "诊断分析", "icon": "search"}, {"step": "propose", "label": "方案提出", "icon": "lightbulb"}, {"step": "approve", "label": "用户审批", "icon": "check"}, {"step": "apply", "label": "执行变更", "icon": "zap"}, {"step": "validate", "label": "验证效果", "icon": "shield"}]}}}
 ---
 
 # 进化驱动器

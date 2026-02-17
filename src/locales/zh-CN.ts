@@ -207,7 +207,6 @@ export const zhCN: LocaleMessages = {
     skill: "技能",
     description: "描述",
     status: "状态",
-    triggers: "触发词",
     phaSkills: "PHA 技能",
     systemSkills: "系统技能",
     tabPha: "PHA 技能",

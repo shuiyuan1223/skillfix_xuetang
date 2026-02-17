@@ -249,7 +249,6 @@ export const listSkillsTool: PHATool<{ includeDisabled?: boolean }> = {
       enabled: boolean;
       path: string;
       emoji?: string;
-      triggers?: string[];
       type?: string;
     }> = [];
 
@@ -271,7 +270,6 @@ export const listSkillsTool: PHATool<{ includeDisabled?: boolean }> = {
         enabled: info.enabled,
         path: info.path,
         emoji: pha?.emoji as string | undefined,
-        triggers: pha?.triggers as string[] | undefined,
         type: (pha?.type as string) || "pha",
       });
     }
@@ -462,7 +460,6 @@ export const createSkillTool: PHATool<{
   name: string;
   description: string;
   emoji?: string;
-  triggers?: string[];
   content?: string;
 }> = {
   name: "create_skill",
@@ -486,11 +483,6 @@ export const createSkillTool: PHATool<{
         type: "string",
         description: "Emoji icon for the skill",
       },
-      triggers: {
-        type: "array",
-        items: { type: "string" },
-        description: "Keywords that trigger this skill",
-      },
       content: {
         type: "string",
         description: "Skill instructions (markdown body after frontmatter)",
@@ -502,7 +494,6 @@ export const createSkillTool: PHATool<{
     name: string;
     description: string;
     emoji?: string;
-    triggers?: string[];
     content?: string;
   }) => {
     const skillDir = join(getSkillsDir(), args.name);
@@ -523,11 +514,10 @@ export const createSkillTool: PHATool<{
       description: args.description,
     };
 
-    if (args.emoji || args.triggers) {
+    if (args.emoji) {
       frontmatter.metadata = {
         pha: {
-          ...(args.emoji && { emoji: args.emoji }),
-          ...(args.triggers && { triggers: args.triggers }),
+          emoji: args.emoji,
         },
       };
     }

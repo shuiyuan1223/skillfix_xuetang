@@ -970,7 +970,6 @@ interface SkillInfo {
   description?: string;
   enabled: boolean;
   emoji?: string;
-  triggers?: string[];
   type?: string;
   structure?: { files: string[]; hasReference: boolean; hasScripts: boolean };
 }
@@ -1040,14 +1039,12 @@ export function generateSkillsPage(data: {
       name: `${s.emoji || "🧩"} ${s.name}`,
       description: s.description || "-",
       status: s.enabled ? "enabled" : "disabled",
-      triggers: s.triggers?.join(", ") || "-",
     }));
     const skillsTable = ui.dataTable(
       [
         { key: "name", label: t("skills.skill"), sortable: true },
         { key: "description", label: t("skills.description") },
         { key: "status", label: t("skills.status"), render: "badge" },
-        { key: "triggers", label: t("skills.triggers") },
       ],
       skillRows,
       { onRowClick: "select_skill" }
@@ -1285,7 +1282,6 @@ export function generateSkillDetailModal(skill: {
   description: string;
   enabled: boolean;
   content: string;
-  triggers?: string[];
   emoji?: string;
 }): A2UIMessage {
   const ui = new A2UIGenerator("modal");
@@ -1299,14 +1295,6 @@ export function generateSkillDetailModal(skill: {
   if (skill.description) {
     const desc = ui.text(skill.description, "body");
     children.push(desc);
-  }
-
-  // Triggers
-  if (skill.triggers && skill.triggers.length > 0) {
-    const trigTitle = ui.text("Triggers", "h3");
-    children.push(trigTitle);
-    const trigText = ui.text(skill.triggers.join(", "), "caption");
-    children.push(trigText);
   }
 
   // Content preview (first ~2000 chars)
@@ -3588,21 +3576,16 @@ export function generateCreateSkillModal(): A2UIMessage {
     placeholder: "🎯",
   });
 
-  const triggersInput = ui.formInput("triggers", "text", {
-    label: "Triggers (comma-separated)",
-    placeholder: "keyword1, keyword2",
-  });
-
   const contentInput = ui.formInput("content", "textarea", {
     label: "Skill Instructions",
     placeholder: "Enter the skill instructions in markdown...",
   });
 
-  const form = ui.form(
-    [nameInput, descInput, emojiInput, triggersInput, contentInput],
-    "submit_create_skill",
-    { submitLabel: "Create Skill", cancelLabel: "Cancel", onCancel: "close_modal" }
-  );
+  const form = ui.form([nameInput, descInput, emojiInput, contentInput], "submit_create_skill", {
+    submitLabel: "Create Skill",
+    cancelLabel: "Cancel",
+    onCancel: "close_modal",
+  });
 
   const root = ui.modal("Create New Skill", [form], { size: "md" });
 

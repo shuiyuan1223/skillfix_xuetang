@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🌸",
-      "requires": { "tools": ["get_menstrual_cycle", "get_body_temperature", "get_emotion"] },
-      "triggers": ["period", "menstrual", "menstruation", "cycle", "ovulation", "PMS", "cramps", "经期", "月经", "生理期", "大姨妈", "排卵", "排卵期", "痛经", "经前", "经量", "闭经", "周期", "姨妈", "例假"]
+      "requires": { "tools": ["get_menstrual_cycle", "get_body_temperature", "get_emotion"] }
     }
   }
 ---

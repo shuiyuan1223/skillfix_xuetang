@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🎯",
-      "requires": { "tools": ["get_weekly_summary", "get_health_data", "memory_search", "memory_save"] },
-      "triggers": ["goal", "goals", "target", "plan", "habit", "motivation", "challenge", "resolution", "commit", "目标", "计划", "习惯", "挑战", "坚持", "动力", "自律", "打卡", "养成", "改变", "决心", "制定计划", "新年"]
+      "requires": { "tools": ["get_weekly_summary", "get_health_data", "memory_search", "memory_save"] }
     }
   }
 ---

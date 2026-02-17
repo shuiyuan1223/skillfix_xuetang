@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "⚖️",
-      "requires": { "tools": ["get_body_composition", "get_workouts", "get_nutrition"] },
-      "triggers": ["weight", "body fat", "BMI", "lose weight", "fat loss", "diet", "body composition", "muscle mass", "visceral fat", "metabolism", "体重", "减脂", "减肥", "体脂", "体脂率", "增肌", "身体成分", "内脏脂肪", "基础代谢", "瘦身", "塑形", "平台期", "反弹"]
+      "requires": { "tools": ["get_body_composition", "get_workouts", "get_nutrition"] }
     }
   }
 ---

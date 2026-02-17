@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🌙",
-      "requires": { "tools": ["get_sleep", "get_weekly_summary", "get_heart_rate", "get_spo2"] },
-      "triggers": ["sleep", "insomnia", "bedtime", "nap", "wake", "tired", "fatigue", "dream", "睡眠", "睡觉", "失眠", "睡不着", "睡不好", "入睡", "早醒", "困了", "疲劳", "做梦", "熬夜", "晚睡", "深睡", "浅睡", "午睡", "打盹", "助眠", "安眠", "嗜睡", "睡眠质量"]
+      "requires": { "tools": ["get_sleep", "get_weekly_summary", "get_heart_rate", "get_spo2"] }
     }
   }
 ---

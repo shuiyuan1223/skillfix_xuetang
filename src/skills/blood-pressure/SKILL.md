@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🩺",
-      "requires": { "tools": ["get_blood_pressure", "get_heart_rate"] },
-      "triggers": ["blood pressure", "BP", "hypertension", "hypotension", "systolic", "diastolic", "血压", "高血压", "低血压", "收缩压", "舒张压", "血压高", "血压低", "降压", "头晕", "脉压"]
+      "requires": { "tools": ["get_blood_pressure", "get_heart_rate"] }
     }
   }
 ---

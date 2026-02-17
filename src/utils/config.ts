@@ -241,6 +241,11 @@ export interface PHAConfig {
 
   /** Evolution apply engine */
   applyEngine?: "claude-code" | "pi-coding-agent";
+  /** Proactive trigger engine configuration */
+  proactive?: {
+    enabled?: boolean;
+    checkIntervalMinutes?: number;
+  };
   /** Plugin system configuration */
   plugins?: {
     enabled?: boolean;

@@ -208,7 +208,6 @@ export const en: LocaleMessages = {
     skill: "Skill",
     description: "Description",
     status: "Status",
-    triggers: "Triggers",
     phaSkills: "PHA Skills",
     systemSkills: "System Skills",
     tabPha: "PHA Skills",

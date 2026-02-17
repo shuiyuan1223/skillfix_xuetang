@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "📊",
-      "requires": { "tools": ["get_health_data", "get_weekly_summary", "get_workouts"] },
-      "triggers": ["steps", "calories", "activity", "overview", "summary", "progress", "步数", "步行", "走路", "卡路里", "热量", "活动", "运动量", "怎么样", "概览", "总结", "进度", "目标", "今天", "多少步", "消耗"]
+      "requires": { "tools": ["get_health_data", "get_weekly_summary", "get_workouts"] }
     }
   }
 ---

@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🔌",
-      "requires": { "tools": [] },
-      "triggers": []
+      "requires": { "tools": [] }
     }
   }
 ---

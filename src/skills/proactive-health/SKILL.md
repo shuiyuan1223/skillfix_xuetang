@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "💡",
-      "requires": { "tools": ["create_recommendation", "create_reminder", "create_calendar_event", "list_reminders", "list_calendar_events", "list_recommendations"] },
-      "triggers": ["推荐", "建议", "提醒", "待办", "日历", "安排", "提醒我", "帮我安排", "remind", "schedule", "calendar", "todo", "recommendation"]
+      "requires": { "tools": ["create_recommendation", "create_reminder", "create_calendar_event", "list_reminders", "list_calendar_events", "list_recommendations"] }
     }
   }
 ---

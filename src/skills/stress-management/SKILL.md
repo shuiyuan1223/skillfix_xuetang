@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🧘",
-      "requires": { "tools": ["get_heart_rate", "get_sleep", "get_weekly_summary", "get_stress", "get_hrv", "get_emotion"] },
-      "triggers": ["stress", "stressed", "anxious", "anxiety", "overwhelmed", "burnout", "tense", "pressure", "relax", "relaxation", "calm", "meditation", "breathing", "压力", "焦虑", "紧张", "烦躁", "崩溃", "放松", "冥想", "呼吸", "减压", "心烦", "烦恼", "情绪", "心情不好", "难受", "喘不过气", "疲惫"]
+      "requires": { "tools": ["get_heart_rate", "get_sleep", "get_weekly_summary", "get_stress", "get_hrv", "get_emotion"] }
     }
   }
 ---

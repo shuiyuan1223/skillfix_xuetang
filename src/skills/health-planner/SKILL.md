@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🎯",
-      "requires": { "tools": ["create_health_plan", "list_health_plans", "get_health_plan", "update_plan_progress", "adjust_health_plan", "update_plan_status"] },
-      "triggers": ["plan", "计划", "健康计划", "运动计划", "减肥计划", "睡眠计划", "制定计划", "定个计划", "目标", "挑战"]
+      "requires": { "tools": ["create_health_plan", "list_health_plans", "get_health_plan", "update_plan_progress", "adjust_health_plan", "update_plan_status"] }
     }
   }
 ---

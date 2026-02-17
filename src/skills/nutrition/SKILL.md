@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🥗",
-      "requires": { "tools": ["get_nutrition", "get_body_composition", "get_workouts"] },
-      "triggers": ["diet", "nutrition", "calorie", "calories", "protein", "carbs", "carbohydrate", "fat", "meal", "eating", "food", "饮食", "营养", "热量", "卡路里", "蛋白质", "碳水", "脂肪", "吃饭", "早餐", "午餐", "晚餐", "加餐", "控制饮食", "营养均衡", "膳食"]
+      "requires": { "tools": ["get_nutrition", "get_body_composition", "get_workouts"] }
     }
   }
 ---

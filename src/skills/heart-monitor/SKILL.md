@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "❤️",
-      "requires": { "tools": ["get_heart_rate", "get_hrv", "get_workouts"] },
-      "triggers": ["heart rate", "heartbeat", "pulse", "bpm", "resting heart rate", "cardio", "心率", "心跳", "脉搏", "心脏", "静息心率", "运动心率", "心血管", "心慌", "心悸", "房颤"]
+      "requires": { "tools": ["get_heart_rate", "get_hrv", "get_workouts"] }
     }
   }
 ---

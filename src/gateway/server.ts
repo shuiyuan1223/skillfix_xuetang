@@ -2986,7 +2986,6 @@ export class GatewaySession {
             description: result.description || "",
             enabled: result.enabled !== false,
             content: result.content || "",
-            triggers: result.metadata?.pha?.triggers,
             emoji: result.metadata?.pha?.emoji,
           });
           send({
@@ -3051,7 +3050,6 @@ export class GatewaySession {
             description: updated.description || "",
             enabled: updated.enabled !== false,
             content: updated.content || "",
-            triggers: updated.metadata?.pha?.triggers,
             emoji: updated.metadata?.pha?.emoji,
           });
           send({
@@ -3084,16 +3082,9 @@ export class GatewaySession {
       const name = payload.name as string;
       const description = payload.description as string;
       const emoji = payload.emoji as string | undefined;
-      const triggersStr = payload.triggers as string | undefined;
       const content = payload.content as string | undefined;
-      const triggers = triggersStr
-        ? triggersStr
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-        : undefined;
 
-      await createSkillTool.execute({ name, description, emoji, triggers, content });
+      await createSkillTool.execute({ name, description, emoji, content });
       send({ type: "clear_surface", surface_id: "modal" });
       await this.handleNavigate("settings/skills", send);
     }
@@ -3234,7 +3225,6 @@ export class GatewaySession {
             description: result.description || "",
             enabled: result.enabled !== false,
             content: result.content || "",
-            triggers: result.metadata?.pha?.triggers,
             emoji: result.metadata?.pha?.emoji,
           });
           send({
@@ -3259,7 +3249,6 @@ export class GatewaySession {
             description: result.description || "",
             enabled: result.enabled !== false,
             content: result.content || "",
-            triggers: result.metadata?.pha?.triggers,
             emoji: result.metadata?.pha?.emoji,
           });
           send({
@@ -5812,6 +5801,15 @@ export async function startGateway(
   }
   clearBenchmarkProgress();
   clearAllUiBenchmarkProgress();
+
+  // Start Proactive Trigger Engine
+  const { ProactiveTriggerEngine } = await import("../proactive/trigger-engine.js");
+  const triggerEngine = new ProactiveTriggerEngine(sseManager, {
+    intervalMinutes: phaConfig.proactive?.checkIntervalMinutes ?? 5,
+  });
+  if (phaConfig.proactive?.enabled !== false) {
+    triggerEngine.start();
+  }
 
   const server = Bun.serve({
     port,

@@ -2,7 +2,7 @@
 name: code-reviewer
 description: "代码审查专家 — 审查进化分支的代码变更，发现潜在问题和改进机会"
 metadata:
-  {"pha": {"emoji": "search", "type": "system", "triggers": ["review", "code review", "审查", "代码审查", "review code", "检查代码", "代码检视"]}}
+  {"pha": {"emoji": "search", "type": "system"}}
 ---
 
 # 代码审查专家

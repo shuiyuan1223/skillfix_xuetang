@@ -229,7 +229,6 @@ export interface LocaleMessages {
     skill: string;
     description: string;
     status: string;
-    triggers: string;
     phaSkills: string;
     systemSkills: string;
     tabPha: string;

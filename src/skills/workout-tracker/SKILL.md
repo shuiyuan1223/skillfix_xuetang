@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🏃",
-      "requires": { "tools": ["get_workouts", "get_weekly_summary", "get_heart_rate", "get_hrv"] },
-      "triggers": ["workout", "exercise", "fitness", "running", "training", "gym", "rest day", "recovery", "overtraining", "运动", "锻炼", "健身", "跑步", "训练", "健身房", "休息日", "恢复", "过度训练", "骑行", "游泳", "拉伸", "肌肉", "酸痛", "有氧", "无氧", "减脂"]
+      "requires": { "tools": ["get_workouts", "get_weekly_summary", "get_heart_rate", "get_hrv"] }
     }
   }
 ---

@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "💨",
-      "requires": { "tools": ["get_spo2", "get_sleep"] },
-      "triggers": ["blood oxygen", "SpO2", "oxygen saturation", "oxygen level", "hypoxia", "breathing", "respiratory", "血氧", "血氧饱和度", "缺氧", "呼吸", "喘", "憋气", "高原", "高海拔", "打鼾", "呼吸暂停", "胸闷"]
+      "requires": { "tools": ["get_spo2", "get_sleep"] }
     }
   }
 ---

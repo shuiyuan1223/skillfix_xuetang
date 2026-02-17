@@ -5,8 +5,7 @@ metadata:
   {
     "pha": {
       "emoji": "🌡️",
-      "requires": { "tools": ["get_body_temperature", "get_menstrual_cycle"] },
-      "triggers": ["body temperature", "temperature", "fever", "low-grade fever", "hypothermia", "体温", "发热", "发烧", "低热", "高热", "测温", "基础体温", "体温偏高", "体温偏低", "感冒", "着凉"]
+      "requires": { "tools": ["get_body_temperature", "get_menstrual_cycle"] }
     }
   }
 ---

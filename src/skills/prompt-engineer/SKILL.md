@@ -2,7 +2,7 @@
 name: prompt-engineer
 description: "提示词工程专家 — 分析和优化 SOUL.md 及 Skill 提示词，提升 Agent 表现"
 metadata:
-  {"pha": {"emoji": "sparkles", "type": "system", "triggers": ["prompt", "提示词", "优化提示", "prompt engineering", "改善提示词", "SOUL优化", "提示词优化"]}}
+  {"pha": {"emoji": "sparkles", "type": "system"}}
 ---
 
 # 提示词工程专家
