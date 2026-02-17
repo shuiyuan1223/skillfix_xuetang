@@ -5573,15 +5573,8 @@ export class GatewaySession {
         this.currentAssistantMsgId = null;
         this.lastStreamedText = "";
 
-        // AG-UI events
+        // AG-UI events — only TextMessageEnd here; RunFinished deferred to agent_end
         activeSend({ type: "TextMessageEnd", messageId: assistantMsg.id } satisfies AGUIEvent);
-        if (this.currentRunId) {
-          activeSend({
-            type: "RunFinished",
-            threadId: this.sessionId,
-            runId: this.currentRunId,
-          } satisfies AGUIEvent);
-        }
 
         this.sendChatUpdate(send);
         if (text.trim()) {
@@ -5700,6 +5693,16 @@ export class GatewaySession {
         this.isStreaming = false;
         this.currentAssistantMsgId = null;
         this.lastStreamedText = "";
+
+        // Send RunFinished only when the entire agent run completes
+        if (this.currentRunId) {
+          activeSend({
+            type: "RunFinished",
+            threadId: this.sessionId,
+            runId: this.currentRunId,
+          } satisfies AGUIEvent);
+        }
+
         this.sendChatUpdate(send);
         break;
     }

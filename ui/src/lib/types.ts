@@ -130,6 +130,7 @@ export type MessagePart =
       toolName: string;
       status: "running" | "completed" | "error";
       displayName?: string;
+      progressData?: { current: number; total: number };
     }
   | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
 
