@@ -24,6 +24,7 @@ export function registerGetCommand(program: Command): void {
       } else {
         printDefaultUid();
       }
+      process.exit(0);
     });
 }
 
