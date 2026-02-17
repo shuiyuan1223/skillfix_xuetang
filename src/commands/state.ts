@@ -60,7 +60,7 @@ export function registerStateCommand(program: Command): void {
     .command("init")
     .description("Initialize .pha/ as a git repository")
     .option("-r, --remote <url>", "Remote repository URL")
-    .action(async (options) => {
+    .action((options) => {
       const stateDir = getStateDir();
 
       if (!fs.existsSync(stateDir)) {
@@ -153,7 +153,7 @@ export function registerStateCommand(program: Command): void {
     .command("push")
     .description("Commit and push .pha/ state to remote")
     .option("-m, --message <msg>", "Commit message", "Update state")
-    .action(async (options) => {
+    .action((options) => {
       const stateDir = getStateDir();
 
       if (!isGitRepo(stateDir)) {
@@ -205,7 +205,7 @@ export function registerStateCommand(program: Command): void {
   state
     .command("pull")
     .description("Pull latest .pha/ state from remote")
-    .action(async () => {
+    .action(() => {
       const stateDir = getStateDir();
 
       if (!isGitRepo(stateDir)) {
@@ -237,7 +237,7 @@ export function registerStateCommand(program: Command): void {
   state
     .command("status")
     .description("Show .pha/ git status")
-    .action(async () => {
+    .action(() => {
       const stateDir = getStateDir();
 
       if (!isGitRepo(stateDir)) {
