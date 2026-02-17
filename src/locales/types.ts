@@ -732,6 +732,14 @@ export interface LocaleMessages {
     failed: string;
     closingWindow: string;
     closeWindow: string;
+    tagline: string;
+    featureDataTitle: string;
+    featureDataDesc: string;
+    featureAITitle: string;
+    featureAIDesc: string;
+    featureAdviceTitle: string;
+    featureAdviceDesc: string;
+    footer: string;
   };
 }
 

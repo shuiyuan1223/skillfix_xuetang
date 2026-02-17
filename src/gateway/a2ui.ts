@@ -54,7 +54,8 @@ export type A2UIComponentType =
   | "arena_mode_toggle"
   | "playground_fab"
   | "evolution_pipeline"
-  | "log_viewer";
+  | "log_viewer"
+  | "auth_page";
 
 // Base component interface
 export interface A2UIComponent {

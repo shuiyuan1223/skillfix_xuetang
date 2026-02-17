@@ -702,5 +702,13 @@ export const zhCN: LocaleMessages = {
     failed: "授权失败",
     closingWindow: "正在关闭窗口...",
     closeWindow: "关闭",
+    tagline: "AI 驱动的个人健康管理助手",
+    featureDataTitle: "健康数据",
+    featureDataDesc: "自动同步运动、睡眠、心率等数据",
+    featureAITitle: "AI 洞察",
+    featureAIDesc: "智能分析健康趋势，发现潜在问题",
+    featureAdviceTitle: "个性化建议",
+    featureAdviceDesc: "基于您的数据提供定制化健康方案",
+    footer: "连接健康账号后即可开始使用",
   },
 };

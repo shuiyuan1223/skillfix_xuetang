@@ -225,44 +225,23 @@ export function generateSystemAgentPage(state: {
 
 export function generateAuthRequiredPage(): A2UIMessage {
   const ui = new A2UIGenerator("main");
-
-  // Header
-  const title = ui.text(t("auth.required"), "h2");
-  const subtitle = ui.text(t("auth.requiredSubtitle"), "caption");
-  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
-
-  // Auth card with connect button
-  const iconId = `auth_icon_${Date.now()}`;
-  ui.addComponent(iconId, {
-    id: iconId,
-    type: "text",
-    text: "🔐",
-    variant: "h1",
+  const rootId = "auth_page_root";
+  ui.addComponent(rootId, {
+    id: rootId,
+    type: "auth_page" as any,
+    title: "PHA",
+    subtitle: "Personal Health Agent",
+    tagline: t("auth.tagline"),
+    buttonLabel: t("auth.connectHuawei"),
+    buttonAction: "start_huawei_auth",
+    features: [
+      { icon: "heart-pulse", title: t("auth.featureDataTitle"), desc: t("auth.featureDataDesc") },
+      { icon: "brain", title: t("auth.featureAITitle"), desc: t("auth.featureAIDesc") },
+      { icon: "sparkles", title: t("auth.featureAdviceTitle"), desc: t("auth.featureAdviceDesc") },
+    ],
+    footer: t("auth.footer"),
   });
-
-  const connectBtn = ui.button(t("auth.connectHuawei"), "start_huawei_auth", {
-    variant: "primary",
-    size: "lg",
-  });
-
-  const authContent = ui.column([iconId, connectBtn], {
-    gap: 24,
-    align: "center",
-    padding: 48,
-  });
-
-  const authCard = ui.card([authContent], { padding: 24 });
-
-  // Center the card
-  const centeredContent = ui.column([authCard], {
-    gap: 24,
-    padding: 24,
-    align: "center",
-  });
-
-  const root = ui.column([header, centeredContent], { gap: 0 });
-
-  return ui.build(root);
+  return ui.build(rootId);
 }
 
 // ============================================================================

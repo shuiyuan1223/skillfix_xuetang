@@ -711,5 +711,13 @@ export const en: LocaleMessages = {
     failed: "Authorization Failed",
     closingWindow: "Closing this window...",
     closeWindow: "Close",
+    tagline: "AI-Powered Personal Health Assistant",
+    featureDataTitle: "Health Data",
+    featureDataDesc: "Auto-sync activity, sleep, and heart rate data",
+    featureAITitle: "AI Insights",
+    featureAIDesc: "Smart analysis of health trends and patterns",
+    featureAdviceTitle: "Personalized",
+    featureAdviceDesc: "Tailored health recommendations for you",
+    footer: "Connect your health account to get started",
   },
 };

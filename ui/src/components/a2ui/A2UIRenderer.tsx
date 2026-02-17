@@ -119,6 +119,7 @@ export function A2UIRenderer({
       case "playground_fab": return renderPlaygroundFab(c, ctx);
       case "evolution_pipeline": return renderEvolutionPipeline(c, ctx);
       case "log_viewer": return renderLogViewer(c, ctx);
+      case "auth_page": return rcAuthPage(c);
       default:
         return <div className="text-text-muted text-xs p-2">[Unknown: {c.type}]</div>;
     }
@@ -200,6 +201,8 @@ export function A2UIRenderer({
     const color = (c.color as string) || "inherit";
     const weight = (c.weight as string) || "normal";
     const text = c.text as string;
+    const className = (c.className as string) || "";
+    const extraStyle = (c.style as string) || "";
     const textVariants: Record<string, string> = {
       h1: "text-[2rem] font-bold",
       h2: "text-2xl font-semibold",
@@ -210,7 +213,7 @@ export function A2UIRenderer({
     };
     const variantClass = textVariants[variant] || textVariants.body;
     return (
-      <span className={variantClass} style={{ color, fontWeight: weight }}>
+      <span className={`${variantClass} ${className}`} style={parseStyle(`color: ${color}; font-weight: ${weight}; ${extraStyle}`)}>
         {c.markdown ? <Markdown>{text}</Markdown> : text}
       </span>
     );
@@ -859,6 +862,148 @@ export function A2UIRenderer({
           }}
           dangerouslySetInnerHTML={{ __html: streaming ? (ICONS["square"] || "■") : ICONS["send"] }}
         />
+      </div>
+    );
+  }
+
+  function rcAuthPage(c: A2UIComponent) {
+    const title = c.title as string;
+    const subtitle = c.subtitle as string;
+    const tagline = c.tagline as string;
+    const buttonLabel = c.buttonLabel as string;
+    const buttonAction = c.buttonAction as string;
+    const features = c.features as Array<{ icon: string; title: string; desc: string }>;
+    const footer = c.footer as string;
+
+    return (
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 50,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "linear-gradient(135deg, #0f0a1a 0%, #1a0a2e 50%, #0a1628 100%)",
+          backgroundSize: "400% 400%",
+          animation: "auth-gradient 60s ease infinite",
+          overflow: "hidden",
+        }}
+      >
+        {/* Floating orbs */}
+        <div style={{
+          position: "absolute", width: 200, height: 200, borderRadius: "50%",
+          background: "rgba(255, 92, 92, 0.15)", filter: "blur(80px)",
+          top: "15%", left: "10%",
+          animation: "auth-orb 20s ease-in-out infinite",
+        }} />
+        <div style={{
+          position: "absolute", width: 150, height: 150, borderRadius: "50%",
+          background: "rgba(20, 184, 166, 0.1)", filter: "blur(60px)",
+          bottom: "20%", right: "15%",
+          animation: "auth-orb 25s ease-in-out infinite reverse",
+        }} />
+
+        {/* Glass card */}
+        <div style={{
+          position: "relative", zIndex: 1,
+          maxWidth: 480, width: "90%",
+          padding: "48px 40px",
+          background: "rgba(255, 255, 255, 0.05)",
+          backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+          borderRadius: 24,
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          boxShadow: "0 32px 64px rgba(0, 0, 0, 0.4)",
+          animation: "auth-card-enter 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards",
+          textAlign: "center",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+        }}>
+          {/* Logo */}
+          <div style={{
+            width: 64, height: 64,
+            borderRadius: 16,
+            background: "linear-gradient(135deg, rgb(255, 92, 92), rgb(20, 184, 166))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            animation: "auth-float 3s ease-in-out infinite",
+            boxShadow: "0 8px 32px rgba(255, 92, 92, 0.3)",
+            marginBottom: 8,
+          }}>
+            <span style={{ color: "#fff" }} className="[&>svg]:w-8 [&>svg]:h-8" dangerouslySetInnerHTML={{ __html: getIcon("heart-pulse") }} />
+          </div>
+
+          {/* Title with shimmer */}
+          <h1 style={{
+            fontSize: "2.5rem", fontWeight: 800, letterSpacing: "-0.04em",
+            background: "linear-gradient(90deg, #ff5c5c, #14b8a6, #ff5c5c)",
+            backgroundSize: "200% auto",
+            WebkitBackgroundClip: "text", backgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            animation: "auth-shimmer 4s linear infinite",
+            margin: 0, lineHeight: 1.2,
+          }}>{title}</h1>
+
+          {/* Subtitle */}
+          <p style={{
+            fontSize: "1rem", color: "rgba(255, 255, 255, 0.7)",
+            fontWeight: 500, margin: 0, letterSpacing: "-0.01em",
+            animationDelay: "0.1s",
+          }}>{subtitle}</p>
+
+          {/* Tagline */}
+          <p style={{
+            fontSize: "0.85rem", color: "rgba(255, 255, 255, 0.4)",
+            margin: "4px 0 16px", lineHeight: 1.5,
+          }}>{tagline}</p>
+
+          {/* Features */}
+          {features && features.length > 0 && (
+            <div style={{
+              display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 12, width: "100%", marginBottom: 24,
+            }}>
+              {features.map((f, i) => (
+                <div key={i} style={{
+                  padding: "16px 12px", borderRadius: 16,
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                  animation: `auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.3 + i * 0.1}s backwards`,
+                }}>
+                  <span style={{ color: "rgba(255, 255, 255, 0.6)" }} className="[&>svg]:w-5 [&>svg]:h-5" dangerouslySetInnerHTML={{ __html: getIcon(f.icon) }} />
+                  <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(255, 255, 255, 0.85)" }}>{f.title}</span>
+                  <span style={{ fontSize: "0.7rem", color: "rgba(255, 255, 255, 0.4)", lineHeight: 1.4 }}>{f.desc}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Auth button */}
+          <button
+            onClick={() => sendAction(buttonAction)}
+            style={{
+              width: "100%", padding: "14px 24px",
+              border: "none", borderRadius: 14, cursor: "pointer",
+              fontSize: "0.95rem", fontWeight: 600, fontFamily: "inherit",
+              color: "#fff", letterSpacing: "-0.01em",
+              background: "linear-gradient(135deg, rgb(255, 92, 92), rgb(20, 184, 166))",
+              boxShadow: "0 0 24px rgba(255, 92, 92, 0.25)",
+              animation: "glow-pulse 3s ease-in-out infinite, auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s backwards",
+              transition: "transform 0.2s ease, box-shadow 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.transform = "scale(1.02)";
+              (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px rgba(255, 92, 92, 0.4)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+              (e.currentTarget as HTMLElement).style.boxShadow = "0 0 24px rgba(255, 92, 92, 0.25)";
+            }}
+          >{buttonLabel}</button>
+
+          {/* Footer */}
+          {footer && (
+            <p style={{
+              fontSize: "0.75rem", color: "rgba(255, 255, 255, 0.3)",
+              margin: "12px 0 0",
+            }}>{footer}</p>
+          )}
+        </div>
       </div>
     );
   }
