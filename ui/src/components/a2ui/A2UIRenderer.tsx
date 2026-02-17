@@ -721,6 +721,9 @@ export function A2UIRenderer({
             );
             const isActiveMsg = streaming && mi === messages.length - 1;
 
+            // Skip empty assistant messages that aren't actively streaming
+            if (!isActiveMsg && !hasVisibleParts) return null;
+
             return (
               <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
                 <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
