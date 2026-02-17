@@ -2821,9 +2821,6 @@ export class GatewaySession {
         send({ type: "modal_close" });
         await this.handleNavigate("plans", send);
       }
-    } else if (action === "plans_tab_change" && payload?.tab) {
-      this.plansTab = payload.tab as "active" | "completed" | "archived";
-      await this.handleNavigate("plans", send);
     }
     // Proactive actions
     else if (action.startsWith("rec_dismiss:")) {
@@ -2856,9 +2853,6 @@ export class GatewaySession {
         saveReminder(uuid, rem);
         await this.handleNavigate("proactive", send);
       }
-    } else if (action === "proactive_tab_change" && payload?.tab) {
-      (this as any).proactiveTab = payload.tab;
-      await this.handleNavigate("proactive", send);
     }
     // OAuth actions
     else if (action === "start_huawei_auth" || action === "start_reauth") {
@@ -3360,6 +3354,9 @@ export class GatewaySession {
       } else if (this.currentView === "settings/logs") {
         this.logsTab = payload.tab as "system" | "llm";
         await this.handleNavigate("settings/logs", send);
+      } else if (this.currentView === "proactive") {
+        (this as any).proactiveTab = payload.tab as "recommendations" | "reminders" | "calendar";
+        await this.handleNavigate("proactive", send);
       } else {
         type EvolutionTab =
           | "overview"
