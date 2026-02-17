@@ -724,6 +724,13 @@ export function createGatewayApp() {
       // Use Huawei user ID as the primary user identifier (fallback to request UUID)
       const userId = huaweiUserId || uuid;
 
+      if (!userId) {
+        return c.json(
+          { success: false, error: "Could not determine user ID from token or request" },
+          400
+        );
+      }
+
       const userStore = getUserStore();
       userStore.saveToken(userId, tokenData);
 
