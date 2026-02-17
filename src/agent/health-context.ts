@@ -15,8 +15,12 @@ import { getUserUuid } from "../utils/config.js";
  * Pre-compute a 7-day health context summary for the system prompt.
  * Best-effort: returns empty string if data fetching fails.
  * @param dataSource - Optional user-specific data source; falls back to global.
+ * @param userUuid - Optional user UUID for plan lookup; falls back to getUserUuid().
  */
-export async function preComputeHealthContext(dataSource?: HealthDataSource): Promise<string> {
+export async function preComputeHealthContext(
+  dataSource?: HealthDataSource,
+  userUuid?: string
+): Promise<string> {
   try {
     const source = dataSource || getDataSource();
     const today = new Date().toISOString().split("T")[0];
@@ -211,7 +215,7 @@ export async function preComputeHealthContext(dataSource?: HealthDataSource): Pr
 
     // --- Active Health Plans ---
     try {
-      const uuid = getUserUuid();
+      const uuid = userUuid || getUserUuid();
       const activePlans = listPlans(uuid, "active");
       if (activePlans.length > 0) {
         result += "\n\n## Active Health Plans\n";

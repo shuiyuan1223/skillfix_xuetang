@@ -10,6 +10,7 @@ import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { PHATool, ToolCategory, MCPToolResult } from "./types.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { createHealthTools } from "./health-data.js";
+import { runWithUserUuid } from "../utils/config.js";
 
 // Derive agent assignment from category
 // PHA Agent: health/memory/profile/config/skill (面向用户的健康助手)
@@ -209,6 +210,21 @@ export class ToolRegistry {
       }
     }
 
+    return newRegistry;
+  }
+
+  /**
+   * Create a new registry where all tool executions run within a user UUID scope.
+   * Tools calling getUserUuid() inside will get this UUID.
+   */
+  withUserUuid(uuid: string): ToolRegistry {
+    const newRegistry = new ToolRegistry();
+    for (const tool of this.getAll()) {
+      newRegistry.register({
+        ...tool,
+        execute: (args: any) => runWithUserUuid(uuid, () => tool.execute(args)),
+      });
+    }
     return newRegistry;
   }
 }

@@ -154,9 +154,15 @@ export class PHAAgent {
     );
 
     // Use per-session tools when a user-specific data source is provided
-    const registry = config.dataSource
+    let registry = config.dataSource
       ? globalRegistry.withDataSource(config.dataSource)
       : globalRegistry;
+
+    // Bind session user UUID to all tools so getUserUuid() returns the correct UUID
+    if (this.userUuid) {
+      registry = registry.withUserUuid(this.userUuid);
+    }
+
     const baseTools =
       config.tools ||
       registry.toAgentToolsByCategories([
@@ -410,7 +416,7 @@ export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAg
   }
 
   // Pre-compute recent health data context (best-effort, use user-specific source if available)
-  const healthContext = await preComputeHealthContext(config.dataSource);
+  const healthContext = await preComputeHealthContext(config.dataSource, config.userUuid);
 
   return new PHAAgent(config, healthContext);
 }

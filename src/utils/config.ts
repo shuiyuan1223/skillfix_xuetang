@@ -11,9 +11,21 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 /** Fallback user UUID (used only if config has no userUuid) */
 const FALLBACK_USER_UUID = "a755451c-938e-4cea-b7a6-b66b205949cf";
+
+// Session-scoped user UUID (set during tool execution via runWithUserUuid)
+const userUuidStore = new AsyncLocalStorage<string>();
+
+/**
+ * Run a function with a specific user UUID in scope.
+ * Tools calling getUserUuid() inside will get this UUID.
+ */
+export function runWithUserUuid<T>(uuid: string, fn: () => T): T {
+  return userUuidStore.run(uuid, fn);
+}
 
 // ============================================================================
 // Unified LLM Provider types & constants
@@ -1048,9 +1060,14 @@ export function isConfigured(): boolean {
 }
 
 /**
- * Get the user UUID from config, falling back to the built-in default
+ * Get the user UUID from config, falling back to the built-in default.
+ * Priority: AsyncLocalStorage (session-scoped) > config file > fallback.
  */
 export function getUserUuid(): string {
+  // 1. AsyncLocalStorage (session-scoped, highest priority)
+  const alsUuid = userUuidStore.getStore();
+  if (alsUuid) return alsUuid;
+  // 2. Config file
   const config = loadConfig();
   return config.userUuid || FALLBACK_USER_UUID;
 }
