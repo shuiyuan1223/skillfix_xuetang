@@ -516,31 +516,43 @@ export function formatProfileForPrompt(profile: UserProfile): string {
   if (profile.allergies?.length) lines.push(`- Allergies: ${profile.allergies.join(", ")}`);
   if (profile.goals?.primary) lines.push(`- Health goal: ${profile.goals.primary}`);
 
-  // Missing fields
-  const coreMissing: string[] = [];
-  if (!profile.gender) coreMissing.push("gender");
-  if (!profile.birthYear) coreMissing.push("birthYear");
-  if (!profile.height) coreMissing.push("height");
-  if (!profile.weight) coreMissing.push("weight");
+  // Missing fields — explain WHY each matters for health interpretation
+  const missingWithReason: string[] = [];
+  if (!profile.gender)
+    missingWithReason.push(
+      "- **gender**: 心率/血压/体脂的参考范围因性别不同，缺失时无法给出准确的健康评估"
+    );
+  if (!profile.birthYear)
+    missingWithReason.push(
+      "- **birthYear**: 目标心率区间、血压标准、代谢率都依赖年龄，缺失时只能给出笼统建议"
+    );
+  if (!profile.height)
+    missingWithReason.push("- **height**: 计算 BMI、基础代谢率、体重评估都需要身高");
+  if (!profile.weight)
+    missingWithReason.push("- **weight**: 计算 BMI、运动消耗、营养建议都需要体重");
 
   const optionalMissing: string[] = [];
   if (!profile.goals?.primary) optionalMissing.push("goals.primary");
   if (!profile.conditions) optionalMissing.push("conditions");
 
-  if (coreMissing.length > 0 || optionalMissing.length > 0) {
+  if (missingWithReason.length > 0 || optionalMissing.length > 0) {
     lines.push("");
     lines.push("### Missing Profile Fields");
-    if (coreMissing.length > 0) {
+    if (missingWithReason.length > 0) {
+      lines.push("");
       lines.push(
-        `**Core (MUST collect in the next 2-3 conversations):** ${coreMissing.join(", ")}`
+        "以下字段缺失会影响健康数据解读的准确性。" +
+          "当用户询问相关健康话题时，你应该说明「为了更准确地解读你的数据，我需要知道…」，" +
+          "然后自然地询问。不要审讯式连续追问。"
       );
-      lines.push(
-        "Weave these questions naturally into the conversation — don't interrogate. For example, relate to health topics being discussed."
-      );
+      lines.push("");
+      lines.push(missingWithReason.join("\n"));
     }
     if (optionalMissing.length > 0) {
+      lines.push("");
       lines.push(`**Optional (collect over time):** ${optionalMissing.join(", ")}`);
     }
+    lines.push("");
     lines.push("When you learn any of these, call `update_user_profile` immediately to save.");
   }
 
