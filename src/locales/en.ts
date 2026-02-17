@@ -17,6 +17,7 @@ export const en: LocaleMessages = {
     tools: "Tools",
     evolution: "Evolution",
     integrations: "Integrations",
+    proactive: "Proactive",
     systemAgent: "System Agent",
     logs: "Logs",
     settings: "Settings",
@@ -682,6 +683,23 @@ export const en: LocaleMessages = {
     resume: "Resume",
     complete: "Complete",
     archive: "Archive",
+  },
+
+  proactive: {
+    title: "Proactive Health",
+    subtitle: "Recommendations, reminders, and schedule",
+    tabRecommendations: "Recommendations",
+    tabReminders: "Reminders",
+    tabCalendar: "Calendar",
+    noRecommendations: "No recommendations",
+    noReminders: "No reminders",
+    noEvents: "No events",
+    dismiss: "Dismiss",
+    complete: "Complete",
+    acted: "Acted",
+    expires: "Expires",
+    repeats: "Repeats",
+    askAgentHint: "Ask the Agent in chat to create recommendations, reminders, or events",
   },
 
   auth: {

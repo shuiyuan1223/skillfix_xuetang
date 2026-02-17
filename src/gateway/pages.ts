@@ -9,6 +9,7 @@ import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
 import { t } from "../locales/index.js";
 import type { UserProfile, MemorySearchResult } from "../memory/types.js";
 import type { HealthPlan, PlanStatus } from "../plans/types.js";
+import type { Recommendation, Reminder, CalendarEvent } from "../proactive/types.js";
 import {
   buildRadarChartData,
   SHARP_CATEGORY_COLORS,
@@ -77,6 +78,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
       { id: "chat", label: t("nav.chat"), icon: "chat" },
       { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
       { id: "plans", label: t("nav.plans"), icon: "target" },
+      { id: "proactive", label: t("nav.proactive"), icon: "sparkles" },
       { id: "memory", label: t("nav.memory"), icon: "brain" },
       { id: "evolution", label: t("nav.evolution"), icon: "flask" },
       { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
@@ -4439,4 +4441,195 @@ export function mergePendingCards(
     components: [...allComponents, ...built.components],
     root_id: built.root_id,
   };
+}
+
+// ============================================================================
+// Proactive Health Page
+// ============================================================================
+
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: "#ef4444",
+  high: "#f97316",
+  medium: "#3b82f6",
+  low: "#6b7280",
+};
+
+const CATEGORY_ICONS: Record<string, string> = {
+  medication: "heart-pulse",
+  exercise: "footprints",
+  sleep: "moon",
+  hydration: "wind",
+  meal: "flame",
+  checkup: "stethoscope",
+  workout: "activity",
+  custom: "star",
+};
+
+export function generateProactivePage(data: {
+  activeTab: "recommendations" | "reminders" | "calendar";
+  recommendations: Recommendation[];
+  reminders: Reminder[];
+  events: CalendarEvent[];
+  loading?: boolean;
+}): A2UIMessage {
+  const ui = new A2UIGenerator("main");
+
+  // Header
+  const title = ui.text(t("proactive.title"), "h2");
+  const subtitle = ui.text(t("proactive.subtitle"), "caption");
+  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+
+  if (data.loading) {
+    const s1 = ui.skeleton({ variant: "rectangular", height: 100 });
+    const s2 = ui.skeleton({ variant: "rectangular", height: 100 });
+    const loadingContent = ui.column([s1, s2], { gap: 16, padding: 24 });
+    return ui.build(ui.column([header, loadingContent], { gap: 0 }));
+  }
+
+  const tabContentIds: Record<string, string> = {};
+
+  // --- Recommendations Tab ---
+  {
+    const children: string[] = [];
+    if (data.recommendations.length === 0) {
+      const emptyText = ui.text(t("proactive.noRecommendations"), "h3");
+      const hint = ui.text(t("proactive.askAgentHint"), "caption");
+      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+    } else {
+      const cards: string[] = [];
+      for (const rec of data.recommendations) {
+        const icon = rec.icon || "sparkles";
+        const badge = ui.badge(rec.type, { color: PRIORITY_COLORS[rec.priority] || "#3b82f6" });
+        const titleText = ui.text(rec.title, "h3");
+        const headerRow = ui.row([titleText, badge], { justify: "between", align: "center" });
+        const body = ui.text(rec.body, "body");
+
+        const btnIds: string[] = [];
+        btnIds.push(
+          ui.button(t("proactive.acted"), `rec_act:${rec.id}`, {
+            variant: "primary",
+            size: "sm",
+            icon: "check",
+          })
+        );
+        btnIds.push(
+          ui.button(t("proactive.dismiss"), `rec_dismiss:${rec.id}`, {
+            variant: "outline",
+            size: "sm",
+            icon: "x",
+          })
+        );
+        const btnRow = ui.row(btnIds, { gap: 8 });
+
+        const cardContent = ui.column([headerRow, body, btnRow], { gap: 8 });
+        cards.push(ui.card([cardContent], { padding: 16 }));
+      }
+      children.push(ui.column(cards, { gap: 12 }));
+    }
+    tabContentIds["recommendations"] = ui.column(children, { gap: 0, padding: 24 });
+  }
+
+  // --- Reminders Tab ---
+  {
+    const children: string[] = [];
+    if (data.reminders.length === 0) {
+      const emptyText = ui.text(t("proactive.noReminders"), "h3");
+      const hint = ui.text(t("proactive.askAgentHint"), "caption");
+      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+    } else {
+      const cards: string[] = [];
+      for (const rem of data.reminders) {
+        const icon = CATEGORY_ICONS[rem.category] || "timer";
+        const titleText = ui.text(rem.title, "h3");
+        const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
+        const timeText = ui.text(time, "caption");
+        const headerRow = ui.row([titleText, timeText], { justify: "between", align: "center" });
+
+        const details: string[] = [];
+        if (rem.body) details.push(ui.text(rem.body, "body"));
+        if (rem.repeatRule !== "none") {
+          details.push(
+            ui.badge(`${t("proactive.repeats")}: ${rem.repeatRule}`, { color: "#8b5cf6" })
+          );
+        }
+        const statusBadge = ui.badge(rem.status, {
+          color:
+            rem.status === "completed"
+              ? "#10b981"
+              : rem.status === "pending"
+                ? "#3b82f6"
+                : "#6b7280",
+        });
+
+        const btnIds: string[] = [];
+        if (rem.status === "pending") {
+          btnIds.push(
+            ui.button(t("proactive.complete"), `rem_complete:${rem.id}`, {
+              variant: "primary",
+              size: "sm",
+              icon: "check",
+            })
+          );
+        }
+        const infoRow = ui.row([statusBadge, ...btnIds], { gap: 8 });
+
+        const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
+        cards.push(ui.card([cardContent], { padding: 16 }));
+      }
+      children.push(ui.column(cards, { gap: 12 }));
+    }
+    tabContentIds["reminders"] = ui.column(children, { gap: 0, padding: 24 });
+  }
+
+  // --- Calendar Tab ---
+  {
+    const children: string[] = [];
+    if (data.events.length === 0) {
+      const emptyText = ui.text(t("proactive.noEvents"), "h3");
+      const hint = ui.text(t("proactive.askAgentHint"), "caption");
+      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+    } else {
+      const cards: string[] = [];
+      for (const evt of data.events) {
+        const titleText = ui.text(evt.title, "h3");
+        const date = evt.startTime.split("T")[0];
+        const time = evt.startTime.split("T")[1]?.slice(0, 5) || "";
+        const dateText = ui.text(`${date} ${time}`, "caption");
+        const headerRow = ui.row([titleText, dateText], { justify: "between", align: "center" });
+
+        const details: string[] = [];
+        if (evt.description) details.push(ui.text(evt.description, "body"));
+        const catBadge = ui.badge(evt.category, {
+          color: "#8b5cf6",
+        });
+        const statusBadge = ui.badge(evt.status, {
+          color:
+            evt.status === "completed"
+              ? "#10b981"
+              : evt.status === "cancelled"
+                ? "#ef4444"
+                : "#3b82f6",
+        });
+        const infoRow = ui.row([catBadge, statusBadge], { gap: 8 });
+
+        const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
+        cards.push(ui.card([cardContent], { padding: 16 }));
+      }
+      children.push(ui.column(cards, { gap: 12 }));
+    }
+    tabContentIds["calendar"] = ui.column(children, { gap: 0, padding: 24 });
+  }
+
+  const tabs = ui.tabs(
+    [
+      { id: "recommendations", label: t("proactive.tabRecommendations") },
+      { id: "reminders", label: t("proactive.tabReminders") },
+      { id: "calendar", label: t("proactive.tabCalendar") },
+    ],
+    data.activeTab,
+    tabContentIds
+  );
+
+  const root = ui.column([header, tabs], { gap: 0 });
+  return ui.build(root);
 }

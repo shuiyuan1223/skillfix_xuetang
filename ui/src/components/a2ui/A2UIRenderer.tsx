@@ -52,6 +52,17 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   update_plan_progress: "更新进度",
   adjust_health_plan: "调整计划",
   update_plan_status: "更新计划状态",
+  create_recommendation: "健康推荐",
+  list_recommendations: "推荐列表",
+  dismiss_recommendation: "关闭推荐",
+  create_reminder: "创建提醒",
+  list_reminders: "提醒列表",
+  complete_reminder: "完成提醒",
+  delete_reminder: "删除提醒",
+  create_calendar_event: "创建日历事件",
+  list_calendar_events: "日历事件列表",
+  update_calendar_event: "更新日历事件",
+  delete_calendar_event: "删除日历事件",
 };
 
 export function A2UIRenderer({

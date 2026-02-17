@@ -33,6 +33,7 @@ export type ToolCategory =
   | "profile"
   | "presentation"
   | "planning"
+  | "proactive"
   | "git"
   | "evolution"
   | "system"

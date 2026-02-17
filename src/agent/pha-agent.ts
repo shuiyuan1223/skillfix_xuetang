@@ -173,6 +173,7 @@ export class PHAAgent {
         "skill",
         "presentation",
         "planning",
+        "proactive",
       ]);
     const tools =
       config.extraTools && config.extraTools.length > 0

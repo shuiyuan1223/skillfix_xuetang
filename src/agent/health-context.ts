@@ -14,6 +14,7 @@ import type {
 import { getDataSource } from "../tools/health-data.js";
 import { listPlans, savePlan } from "../plans/store.js";
 import type { HealthPlan, GoalStatus } from "../plans/types.js";
+import { listRecommendations, listReminders, listCalendarEvents } from "../proactive/store.js";
 import { getUserUuid } from "../utils/config.js";
 
 /**
@@ -261,6 +262,52 @@ export async function preComputeHealthContext(
       }
     } catch {
       // Plans not available — ignore
+    }
+
+    // --- Proactive Items (recommendations, reminders, calendar) ---
+    try {
+      const uuid = userUuid || getUserUuid();
+      const activeRecs = listRecommendations(uuid, "active");
+      const pendingReminders = listReminders(uuid, "pending");
+      const now = new Date().toISOString();
+      const weekLater = new Date(Date.now() + 7 * 86400000).toISOString();
+      const upcomingEvents = listCalendarEvents(uuid, {
+        from: now,
+        to: weekLater,
+        status: "scheduled",
+      });
+
+      if (activeRecs.length > 0 || pendingReminders.length > 0 || upcomingEvents.length > 0) {
+        result += "\n\n## Proactive Items\n";
+
+        if (activeRecs.length > 0) {
+          result += `\n**Recommendations** (${activeRecs.length} active):`;
+          for (const rec of activeRecs.slice(0, 5)) {
+            result += `\n- [${rec.priority}] ${rec.title}: ${rec.body}`;
+          }
+        }
+
+        if (pendingReminders.length > 0) {
+          result += `\n**Reminders** (${pendingReminders.length} pending):`;
+          for (const rem of pendingReminders.slice(0, 5)) {
+            const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
+            result += `\n- ${rem.title} @ ${time} (${rem.repeatRule})`;
+          }
+        }
+
+        if (upcomingEvents.length > 0) {
+          result += `\n**Upcoming Events** (next 7 days):`;
+          for (const evt of upcomingEvents.slice(0, 5)) {
+            const date = evt.startTime.split("T")[0];
+            const time = evt.startTime.split("T")[1]?.slice(0, 5) || "";
+            result += `\n- ${evt.title} — ${date} ${time}`;
+          }
+        }
+
+        result += "\n\nReference these proactive items when relevant to the conversation.";
+      }
+    } catch {
+      // Proactive items not available — ignore
     }
 
     return result;

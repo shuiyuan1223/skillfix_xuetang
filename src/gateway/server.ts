@@ -81,10 +81,20 @@ import {
   generateSettingsPage,
   generatePlansPage,
   generatePlanDetailModal,
+  generateProactivePage,
   type SettingsPageData,
 } from "./pages.js";
 import { listPlans, loadPlan, savePlan } from "../plans/store.js";
 import type { PlanStatus } from "../plans/types.js";
+import {
+  listRecommendations,
+  saveRecommendation,
+  getRecommendation,
+  listReminders as listRemindersStore,
+  saveReminder,
+  getReminder,
+  listCalendarEvents,
+} from "../proactive/store.js";
 import type { PartsChatMessage, MessagePart, AGUIEvent } from "./a2ui.js";
 
 /** Find the last text part index in a parts array (ES2022-safe replacement for findLastIndex). */
@@ -1712,6 +1722,18 @@ export class GatewaySession {
         break;
       }
 
+      case "proactive": {
+        const uuid = this.userUuid || getUserUuid();
+        const proactiveTab = (this as any).proactiveTab || "recommendations";
+        mainPage = generateProactivePage({
+          activeTab: proactiveTab,
+          recommendations: listRecommendations(uuid, "active"),
+          reminders: listRemindersStore(uuid),
+          events: listCalendarEvents(uuid),
+        });
+        break;
+      }
+
       case "memory": {
         // Send loading page immediately
         send(
@@ -2802,6 +2824,41 @@ export class GatewaySession {
     } else if (action === "plans_tab_change" && payload?.tab) {
       this.plansTab = payload.tab as "active" | "completed" | "archived";
       await this.handleNavigate("plans", send);
+    }
+    // Proactive actions
+    else if (action.startsWith("rec_dismiss:")) {
+      const recId = action.replace("rec_dismiss:", "");
+      const uuid = this.userUuid || getUserUuid();
+      const rec = getRecommendation(uuid, recId);
+      if (rec) {
+        rec.status = "dismissed";
+        rec.dismissedAt = new Date().toISOString();
+        saveRecommendation(uuid, rec);
+        await this.handleNavigate("proactive", send);
+      }
+    } else if (action.startsWith("rec_act:")) {
+      const recId = action.replace("rec_act:", "");
+      const uuid = this.userUuid || getUserUuid();
+      const rec = getRecommendation(uuid, recId);
+      if (rec) {
+        rec.status = "acted";
+        rec.dismissedAt = new Date().toISOString();
+        saveRecommendation(uuid, rec);
+        await this.handleNavigate("proactive", send);
+      }
+    } else if (action.startsWith("rem_complete:")) {
+      const remId = action.replace("rem_complete:", "");
+      const uuid = this.userUuid || getUserUuid();
+      const rem = getReminder(uuid, remId);
+      if (rem) {
+        rem.status = "completed";
+        rem.completedAt = new Date().toISOString();
+        saveReminder(uuid, rem);
+        await this.handleNavigate("proactive", send);
+      }
+    } else if (action === "proactive_tab_change" && payload?.tab) {
+      (this as any).proactiveTab = payload.tab;
+      await this.handleNavigate("proactive", send);
     }
     // OAuth actions
     else if (action === "start_huawei_auth" || action === "start_reauth") {

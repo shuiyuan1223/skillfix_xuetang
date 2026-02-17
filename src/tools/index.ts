@@ -19,6 +19,7 @@ import { toolFeedbackTools } from "./tool-feedback.js";
 import { skillsHubTools } from "./skillshub-tools.js";
 import { presentationTools } from "./presentation-tools.js";
 import { planTools } from "./plan-tools.js";
+import { proactiveTools } from "./proactive-tools.js";
 
 // ===========================================================================
 // Global Registry — single source of truth for all tools
@@ -38,6 +39,7 @@ globalRegistry.registerAll([
   ...skillsHubTools,
   ...presentationTools,
   ...planTools,
+  ...proactiveTools,
 ]);
 
 // ===========================================================================
@@ -57,5 +59,6 @@ export * from "./tool-feedback.js";
 export * from "./skillshub-tools.js";
 export * from "./presentation-tools.js";
 export * from "./plan-tools.js";
+export * from "./proactive-tools.js";
 export * from "./types.js";
 export { ToolRegistry, categoryToAgent } from "./registry.js";

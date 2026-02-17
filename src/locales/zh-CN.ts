@@ -17,6 +17,7 @@ export const zhCN: LocaleMessages = {
     tools: "工具",
     evolution: "进化",
     integrations: "集成",
+    proactive: "主动健康",
     systemAgent: "系统 Agent",
     logs: "日志",
     settings: "设置",
@@ -673,6 +674,23 @@ export const zhCN: LocaleMessages = {
     resume: "恢复",
     complete: "完成",
     archive: "归档",
+  },
+
+  proactive: {
+    title: "主动健康",
+    subtitle: "推荐、提醒和日程管理",
+    tabRecommendations: "推荐",
+    tabReminders: "提醒",
+    tabCalendar: "日历",
+    noRecommendations: "暂无推荐",
+    noReminders: "暂无提醒",
+    noEvents: "暂无日程",
+    dismiss: "忽略",
+    complete: "完成",
+    acted: "已采纳",
+    expires: "过期时间",
+    repeats: "重复",
+    askAgentHint: "在聊天中让 Agent 帮你创建推荐、提醒或日程",
   },
 
   auth: {

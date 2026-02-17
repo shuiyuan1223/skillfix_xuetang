@@ -17,6 +17,7 @@ export interface LocaleMessages {
     tools: string;
     evolution: string;
     integrations: string;
+    proactive: string;
     systemAgent: string;
     logs: string;
     settings: string;
@@ -701,6 +702,24 @@ export interface LocaleMessages {
     resume: string;
     complete: string;
     archive: string;
+  };
+
+  // Proactive page
+  proactive: {
+    title: string;
+    subtitle: string;
+    tabRecommendations: string;
+    tabReminders: string;
+    tabCalendar: string;
+    noRecommendations: string;
+    noReminders: string;
+    noEvents: string;
+    dismiss: string;
+    complete: string;
+    acted: string;
+    expires: string;
+    repeats: string;
+    askAgentHint: string;
   };
 
   // OAuth / Authorization
