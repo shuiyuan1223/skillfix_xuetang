@@ -1,0 +1,302 @@
+category: personalization-memory
+
+tests:
+  # --- User Profile (2) ---
+  - id: pm-profile-001
+    subcategory: user-profile
+    query: "Based on what you know about me, what should I focus on this week?"
+    difficulty: core
+    mock_context:
+      metrics:
+        - { date: "2026-02-10", steps: 7000, calories: 2000, activeMinutes: 40 }
+        - { date: "2026-02-09", steps: 6500, calories: 1950, activeMinutes: 35 }
+      sleep:
+        - date: "2026-02-10"
+          durationHours: 6.5
+          qualityScore: 55
+          bedTime: "00:30"
+          wakeTime: "07:00"
+        - date: "2026-02-09"
+          durationHours: 6.0
+          qualityScore: 50
+          bedTime: "01:00"
+          wakeTime: "07:00"
+      conversation_history:
+        - role: user
+          content: "I'm a 35-year-old office worker. I sit most of the day."
+          timestamp: 1707321600000
+        - role: assistant
+          content: "Thanks for sharing! As an office worker, we should focus on breaking up sedentary time and improving your sleep schedule."
+          timestamp: 1707321700000
+        - role: user
+          content: "My main goal is to be more active and sleep better."
+          timestamp: 1707321800000
+        - role: assistant
+          content: "Great goals! Let's start with increasing your daily steps and establishing a consistent bedtime."
+          timestamp: 1707321900000
+    expected:
+      shouldMention:
+        - "reference user's office worker context and sedentary lifestyle"
+        - "sleep improvement priority (6-6.5h, late bedtimes)"
+        - "personalized activity suggestions for office setting"
+      shouldNotMention:
+        - "overweight"
+        - "obese"
+        - "fat"
+        - "elderly"
+        - "too old"
+      minScore: 0.7
+
+  - id: pm-profile-002
+    subcategory: user-profile
+    query: "You know I'm training for a 5K. How should I adjust my routine this week?"
+    difficulty: medium
+    mock_context:
+      workouts:
+        - type: running
+          date: "2026-02-10"
+          durationMinutes: 25
+          caloriesBurned: 250
+          distanceKm: 3.2
+          avgHeartRate: 155
+        - type: running
+          date: "2026-02-08"
+          durationMinutes: 22
+          caloriesBurned: 220
+          distanceKm: 2.8
+          avgHeartRate: 158
+      conversation_history:
+        - role: user
+          content: "I signed up for a 5K race in 6 weeks!"
+          timestamp: 1707062400000
+        - role: assistant
+          content: "That's exciting! Based on your current fitness, we can build a progressive training plan. Let's start with 3 runs per week."
+          timestamp: 1707062500000
+        - role: user
+          content: "Sounds good. I can run about 2.5km comfortably right now."
+          timestamp: 1707062600000
+    expected:
+      shouldMention:
+        - "reference the 5K training goal from prior conversation"
+        - "progress from 2.5km baseline to current 3.2km"
+        - "week-specific training adjustment recommendation"
+      shouldNotMention:
+        - "overweight"
+        - "obese"
+        - "fat"
+        - "elderly"
+        - "too old"
+      minScore: 0.7
+
+  # --- Memory Recall (3) ---
+  - id: pm-memory-001
+    subcategory: memory-recall
+    query: "Last time we talked about my sleep issues. Has anything improved?"
+    difficulty: core
+    mock_context:
+      sleep:
+        - date: "2026-02-10"
+          durationHours: 7.2
+          qualityScore: 68
+          bedTime: "23:15"
+          wakeTime: "06:27"
+        - date: "2026-02-09"
+          durationHours: 7.0
+          qualityScore: 65
+          bedTime: "23:30"
+          wakeTime: "06:30"
+        - date: "2026-02-08"
+          durationHours: 6.8
+          qualityScore: 62
+          bedTime: "23:45"
+          wakeTime: "06:33"
+      conversation_history:
+        - role: user
+          content: "I've been having trouble sleeping lately. Only getting about 5 hours."
+          timestamp: 1707148800000
+        - role: assistant
+          content: "I can see your sleep has been short. Your awake time during sleep has been high too. Let's work on a bedtime routine -- try going to bed by 23:00 and avoiding screens after 22:00."
+          timestamp: 1707148900000
+        - role: user
+          content: "OK I'll try that. My bedtime has been around 1am."
+          timestamp: 1707149000000
+    expected:
+      shouldMention:
+        - "reference previous sleep discussion (was ~5h, now 7.2h)"
+        - "acknowledge improvement in duration and quality"
+        - "earlier bedtime shift (from ~1am to ~23:15)"
+      shouldNotMention:
+        - "overweight"
+        - "obese"
+        - "fat"
+        - "elderly"
+        - "too old"
+      minScore: 0.7
+
+  - id: pm-memory-002
+    subcategory: memory-recall
+    query: "Remember when I told you about my knee injury? I want to start running again."
+    difficulty: hard
+    mock_context:
+      metrics:
+        - { date: "2026-02-10", steps: 6000, calories: 1900, activeMinutes: 35 }
+      conversation_history:
+        - role: user
+          content: "I hurt my knee playing basketball last month. Doctor said to rest for 4 weeks."
+          timestamp: 1706544000000
+        - role: assistant
+          content: "I'm sorry to hear about your knee! Please follow your doctor's advice on the 4-week rest period. We can focus on upper body and low-impact activities in the meantime."
+          timestamp: 1706544100000
+        - role: user
+          content: "It's been about 5 weeks now and the knee feels much better."
+          timestamp: 1707408000000
+    expected:
+      shouldMention:
+        - "reference the knee injury from prior conversation"
+        - "acknowledge the ~5 week recovery timeline"
+        - "recommend medical clearance before resuming running"
+        - "suggest gradual return-to-running plan if cleared"
+      shouldNotMention:
+        - "overweight"
+        - "obese"
+        - "fat"
+        - "elderly"
+        - "too old"
+      minScore: 0.8
+
+  - id: pm-memory-003
+    subcategory: memory-recall
+    query: "What goals did we discuss last month? How am I doing?"
+    difficulty: hard
+    mock_context:
+      metrics:
+        - { date: "2026-02-10", steps: 9500, calories: 2200, activeMinutes: 68 }
+        - { date: "2026-02-05", steps: 8800, calories: 2150, activeMinutes: 62 }
+        - { date: "2026-02-01", steps: 7500, calories: 2050, activeMinutes: 50 }
+      sleep:
+        - date: "2026-02-10"
+          durationHours: 7.5
+          qualityScore: 75
+          bedTime: "23:00"
+          wakeTime: "06:30"
+      conversation_history:
+        - role: user
+          content: "I want to set some health goals for the new year."
+          timestamp: 1706140800000
+        - role: assistant
+          content: "Let's set three goals: (1) Reach 10,000 steps daily, (2) Sleep 7+ hours consistently, (3) Exercise 3 times per week."
+          timestamp: 1706140900000
+        - role: user
+          content: "Those sound perfect. I'm at about 5000 steps and 6 hours sleep now."
+          timestamp: 1706141000000
+    expected:
+      shouldMention:
+        - "recall the three specific goals from last month"
+        - "progress on steps (5000 -> 9500, close to 10K target)"
+        - "progress on sleep (6h -> 7.5h, exceeding 7h goal)"
+        - "assessment of each goal with data-backed evidence"
+      shouldNotMention:
+        - "overweight"
+        - "obese"
+        - "fat"
+        - "elderly"
+        - "too old"
+      minScore: 0.8
+
+  # --- Context Awareness (3) ---
+  - id: pm-context-001
+    subcategory: context-awareness
+    query: "And what about my heart rate during that run?"
+    difficulty: core
+    mock_context:
+      heartRate:
+        daily:
+          - { date: "2026-02-10", restingAvg: 65, maxToday: 175, minToday: 58 }
+      workouts:
+        - type: running
+          date: "2026-02-10"
+          durationMinutes: 40
+          caloriesBurned: 380
+          distanceKm: 5.8
+          avgHeartRate: 155
+          maxHeartRate: 175
+      conversation_history:
+        - role: user
+          content: "How was my run today?"
+          timestamp: 1707580800000
+        - role: assistant
+          content: "Great run! You covered 5.8km in 40 minutes at a pace of 6:54/km. You burned 380 calories."
+          timestamp: 1707580900000
+    expected:
+      shouldMention:
+        - "resolve 'that run' to today's 5.8km run from conversation"
+        - "average heart rate during run (155 bpm)"
+        - "max heart rate (175 bpm)"
+      shouldNotMention:
+        - "overweight"
+        - "obese"
+        - "fat"
+        - "elderly"
+        - "too old"
+      minScore: 0.7
+
+  - id: pm-context-002
+    subcategory: context-awareness
+    query: "Is that better or worse than usual?"
+    difficulty: hard
+    mock_context:
+      metrics:
+        - { date: "2026-02-10", steps: 9500, calories: 2200, activeMinutes: 68 }
+        - { date: "2026-02-09", steps: 7800, calories: 2050, activeMinutes: 55 }
+        - { date: "2026-02-08", steps: 8200, calories: 2100, activeMinutes: 60 }
+      conversation_history:
+        - role: user
+          content: "How many steps did I do today?"
+          timestamp: 1707580800000
+        - role: assistant
+          content: "You've logged 9,500 steps today with 68 active minutes. That's a solid day!"
+          timestamp: 1707580900000
+    expected:
+      shouldMention:
+        - "resolve 'that' to today's 9500 steps from conversation"
+        - "compare to recent average (7800 and 8200 = ~8000 avg)"
+        - "today is above typical performance"
+      shouldNotMention:
+        - "overweight"
+        - "obese"
+        - "fat"
+        - "elderly"
+        - "too old"
+      minScore: 0.8
+
+  - id: pm-context-003
+    subcategory: context-awareness
+    query: "Can you explain that in simpler terms? I don't understand all the numbers."
+    difficulty: medium
+    mock_context:
+      sleep:
+        - date: "2026-02-10"
+          durationHours: 6.5
+          qualityScore: 55
+          stages: { deep: 50, light: 180, rem: 55, awake: 35 }
+          bedTime: "00:30"
+          wakeTime: "07:00"
+      conversation_history:
+        - role: user
+          content: "How was my sleep?"
+          timestamp: 1707580800000
+        - role: assistant
+          content: "You slept 6.5 hours with a quality score of 55/100. Your sleep stages: 50 min deep sleep (12.8%), 180 min light sleep (46.2%), 55 min REM (14.1%), and 35 min awake (9.0%). Your sleep efficiency was 91%."
+          timestamp: 1707580900000
+    expected:
+      shouldMention:
+        - "simplified explanation of previous technical response"
+        - "use everyday language instead of percentages"
+        - "key takeaway: sleep was shorter than ideal and quality could improve"
+      shouldNotMention:
+        - "overweight"
+        - "obese"
+        - "fat"
+        - "elderly"
+        - "too old"
+      minScore: 0.7
