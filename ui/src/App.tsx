@@ -806,12 +806,20 @@ export function App() {
         return;
       }
 
-      const { sessionId, updates } = (await initRes.json()) as {
+      const { sessionId, userUuid: serverUuid, updates } = (await initRes.json()) as {
         sessionId: string;
         userUuid?: string;
         updates: unknown[];
       };
       sessionIdRef.current = sessionId;
+
+      // Adopt server's canonical userUuid if available
+      if (serverUuid && serverUuid !== userUuidRef.current) {
+        userUuidRef.current = serverUuid;
+        const expires = new Date();
+        expires.setFullYear(expires.getFullYear() + 1);
+        document.cookie = `pha_user_id=${serverUuid}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
+      }
 
       // Process initial page state
       for (const msg of updates) {

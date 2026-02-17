@@ -5675,11 +5675,13 @@ export async function startGateway(
   const webDir = config.webDir;
 
   // Helper: get or create session by user UUID
+  // In single-user mode, always use the config's canonical UUID
+  const canonicalUuid = getUserUuid();
   function getOrCreateSession(userUuid?: string): GatewaySession {
-    const key = userUuid || crypto.randomUUID();
+    const key = canonicalUuid;
     let session = sessions.get(key);
     if (!session) {
-      session = new GatewaySession(config, userUuid);
+      session = new GatewaySession(config, key);
       sessions.set(key, session);
     }
     return session;
@@ -5815,13 +5817,13 @@ export async function startGateway(
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
           };
-          // Set session cookie
-          if (userUuid) {
-            const expires = new Date();
-            expires.setFullYear(expires.getFullYear() + 1);
-            headers["Set-Cookie"] =
-              `pha_session_id=${session.getSessionId()}; Path=/; Expires=${expires.toUTCString()}; SameSite=Strict`;
-          }
+          // Set session + user cookies (sync browser to canonical UUID)
+          const expires = new Date();
+          expires.setFullYear(expires.getFullYear() + 1);
+          const expStr = expires.toUTCString();
+          headers["Set-Cookie"] =
+            `pha_session_id=${session.getSessionId()}; Path=/; Expires=${expStr}; SameSite=Strict, ` +
+            `pha_user_id=${session.userUuid}; Path=/; Expires=${expStr}; SameSite=Strict`;
 
           return new Response(
             JSON.stringify({

@@ -47,9 +47,11 @@ describe("Session", () => {
     expect(first.sessionId).toBe(second.sessionId);
   });
 
-  test("different uuid creates different session", async () => {
+  test("single-user mode: all sessions use canonical uuid", async () => {
     const first = await initSession(ctx.baseUrl);
     const second = await initSession(ctx.baseUrl);
-    expect(first.sessionId).not.toBe(second.sessionId);
+    // In single-user mode, all sessions map to the config's canonical UUID
+    expect(first.sessionId).toBe(second.sessionId);
+    expect(first.userUuid).toBe(second.userUuid);
   });
 });
