@@ -674,6 +674,7 @@ export const zhCN: LocaleMessages = {
     resume: "恢复",
     complete: "完成",
     archive: "归档",
+    baseline: "基线",
   },
 
   proactive: {

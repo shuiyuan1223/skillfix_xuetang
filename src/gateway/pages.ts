@@ -3031,18 +3031,30 @@ export function generatePlansPage(data: {
 export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage {
   const ui = new A2UIGenerator("modal");
 
-  // Title
-  const title = ui.text(plan.name, "h2");
+  // Description + date range
   const desc = ui.text(plan.description, "caption");
-  const headerSection = ui.column([title, desc], { gap: 4 });
+  const dateRange = ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
+  const statusBadge = ui.badge(
+    plan.status === "active"
+      ? t("plans.statusActive")
+      : plan.status === "paused"
+        ? t("plans.statusPaused")
+        : plan.status === "completed"
+          ? t("plans.statusCompleted")
+          : t("plans.statusArchived"),
+    { color: PLAN_STATUS_COLORS[plan.status] }
+  );
+  const infoRow = ui.row([statusBadge, dateRange], { gap: 8, align: "center" });
 
-  const sections: string[] = [headerSection];
+  const sections: string[] = [desc, infoRow];
 
   // Goals table
   const goalRows = plan.goals.map((g) => {
+    const currentVal = g.currentValue;
+    const baseVal = g.baselineValue;
     const progress =
-      g.currentValue !== undefined && g.targetValue > 0
-        ? `${Math.round((g.currentValue / g.targetValue) * 100)}%`
+      currentVal !== undefined && g.targetValue > 0
+        ? `${Math.round((currentVal / g.targetValue) * 100)}%`
         : "-";
     const statusLabel =
       g.status === "completed"
@@ -3054,10 +3066,19 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage {
             : g.status === "missed"
               ? "✗"
               : "→";
+    // Show current value, or baseline as fallback reference
+    let currentDisplay: string;
+    if (currentVal !== undefined) {
+      currentDisplay = `${currentVal} ${g.unit}`;
+    } else if (baseVal !== undefined) {
+      currentDisplay = `${baseVal} ${g.unit} (${t("plans.baseline")})`;
+    } else {
+      currentDisplay = "-";
+    }
     return {
       label: g.label,
       target: `${g.targetValue} ${g.unit}`,
-      current: g.currentValue !== undefined ? `${g.currentValue} ${g.unit}` : "-",
+      current: currentDisplay,
       progress,
       status: statusLabel,
     };
@@ -3150,7 +3171,8 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage {
     sections.push(ui.row(buttons, { gap: 8, justify: "end" }));
   }
 
-  const root = ui.column(sections, { gap: 16, padding: 24 });
+  const body = ui.column(sections, { gap: 16 });
+  const root = ui.modal(plan.name, [body], { size: "lg" });
   return ui.build(root);
 }
 

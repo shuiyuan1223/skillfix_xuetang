@@ -683,6 +683,7 @@ export const en: LocaleMessages = {
     resume: "Resume",
     complete: "Complete",
     archive: "Archive",
+    baseline: "baseline",
   },
 
   proactive: {

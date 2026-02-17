@@ -702,6 +702,7 @@ export interface LocaleMessages {
     resume: string;
     complete: string;
     archive: string;
+    baseline: string;
   };
 
   // Proactive page

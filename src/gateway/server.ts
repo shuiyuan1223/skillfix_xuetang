@@ -95,6 +95,7 @@ import {
   getReminder,
   listCalendarEvents,
 } from "../proactive/store.js";
+import { autoSyncPlanProgress, type HealthSnapshot } from "../agent/health-context.js";
 import type { PartsChatMessage, MessagePart, AGUIEvent } from "./a2ui.js";
 
 /** Find the last text part index in a parts array (ES2022-safe replacement for findLastIndex). */
@@ -2791,6 +2792,31 @@ export class GatewaySession {
       const uuid = this.userUuid || getUserUuid();
       const plan = loadPlan(uuid, planId);
       if (plan) {
+        // Sync latest health data into plan goals before displaying
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          const source = this.dataSource;
+          const [weeklySteps, weeklySleep, todayHR, todayWorkouts, todayMetrics, todayBodyComp] =
+            await Promise.all([
+              source.getWeeklySteps(today).catch(() => []),
+              source.getWeeklySleep(today).catch(() => []),
+              source.getHeartRate(today).catch(() => null),
+              source.getWorkouts(today).catch(() => []),
+              source.getMetrics(today).catch(() => null),
+              source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
+            ]);
+          const snapshot: HealthSnapshot = {
+            weeklySteps,
+            weeklySleep,
+            todayHR,
+            todayWorkouts,
+            todayMetrics,
+            todayBodyComp,
+          };
+          autoSyncPlanProgress([plan], uuid, today, snapshot);
+        } catch {
+          // Sync failed — show plan with existing data
+        }
         const modal = generatePlanDetailModal(plan);
         send({
           type: "a2ui",

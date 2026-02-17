@@ -321,7 +321,7 @@ export async function preComputeHealthContext(
 // Auto-sync plan progress with latest health data
 // ============================================================================
 
-interface HealthSnapshot {
+export interface HealthSnapshot {
   weeklySteps: Array<{ date: string; steps: number }>;
   weeklySleep: Array<{ date: string; hours: number }>;
   todayHR: { restingAvg: number } | null;
@@ -330,7 +330,7 @@ interface HealthSnapshot {
   todayBodyComp: BodyCompositionData | null;
 }
 
-function autoSyncPlanProgress(
+export function autoSyncPlanProgress(
   plans: HealthPlan[],
   uuid: string,
   today: string,
