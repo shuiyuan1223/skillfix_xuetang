@@ -2595,9 +2595,10 @@ export class GatewaySession {
                 content: text,
               });
             }
-            this.systemAgentStreaming = false;
+            // NOTE: Do NOT clear systemAgentStreaming here.
+            // message_end fires after each LLM turn, but the agent may still
+            // have more tool calls coming. Only agent_end means the task is done.
             this.systemAgentStreamingContent = "";
-            this.saCurrentAssistantMsgId = null;
             this.saLastStreamedText = "";
             this.sendEvolutionLabUpdate(send);
           }

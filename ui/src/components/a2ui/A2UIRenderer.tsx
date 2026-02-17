@@ -691,14 +691,21 @@ export function A2UIRenderer({
             : <span className="text-success [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
         const displayName = part.displayName || TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
         const progress = part.progressData;
+        const pct = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
         return (
           <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[70%]">
             <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />
             <span className="truncate">{displayName}</span>
             {progress && progress.total > 0 && (
-              <span className="text-text-muted tabular-nums shrink-0">
-                {progress.current}/{progress.total}
-              </span>
+              <div className="flex items-center gap-1.5 shrink-0 min-w-[100px]">
+                <div className="h-1.5 bg-surface rounded-full overflow-hidden flex-1">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${status === "running" ? "bg-primary animate-status-pulse" : status === "error" ? "bg-error" : "bg-success"}`}
+                    style={{ width: `${Math.max(pct, 3)}%` }}
+                  />
+                </div>
+                <span className="tabular-nums text-[10px] w-[3ch] text-right">{pct}%</span>
+              </div>
             )}
             {statusIcon}
           </div>
