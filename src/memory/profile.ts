@@ -531,12 +531,17 @@ export function formatProfileForPrompt(profile: UserProfile): string {
     lines.push("");
     lines.push("### Missing Profile Fields");
     if (coreMissing.length > 0) {
-      lines.push(`**Core (collect when natural):** ${coreMissing.join(", ")}`);
+      lines.push(
+        `**Core (MUST collect in the next 2-3 conversations):** ${coreMissing.join(", ")}`
+      );
+      lines.push(
+        "Weave these questions naturally into the conversation — don't interrogate. For example, relate to health topics being discussed."
+      );
     }
     if (optionalMissing.length > 0) {
       lines.push(`**Optional (collect over time):** ${optionalMissing.join(", ")}`);
     }
-    lines.push("When you learn any of these, call `update_user_profile` to save.");
+    lines.push("When you learn any of these, call `update_user_profile` immediately to save.");
   }
 
   if (lines.length === 0) {

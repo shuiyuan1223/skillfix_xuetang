@@ -159,7 +159,14 @@ export class PHAAgent {
       : globalRegistry;
     const baseTools =
       config.tools ||
-      registry.toAgentToolsByCategories(["health", "memory", "profile", "config", "skill"]);
+      registry.toAgentToolsByCategories([
+        "health",
+        "memory",
+        "profile",
+        "config",
+        "skill",
+        "presentation",
+      ]);
     const tools =
       config.extraTools && config.extraTools.length > 0
         ? [...baseTools, ...config.extraTools]

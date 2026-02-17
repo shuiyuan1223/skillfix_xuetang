@@ -14,7 +14,14 @@ import { createHealthTools } from "./health-data.js";
 // Derive agent assignment from category
 // PHA Agent: health/memory/profile/config/skill (面向用户的健康助手)
 // System Agent: git/evolution/system/feedback/skill (面向开发者的系统进化)
-const PHA_CATEGORIES = new Set<ToolCategory>(["health", "memory", "profile", "config", "skill"]);
+const PHA_CATEGORIES = new Set<ToolCategory>([
+  "health",
+  "memory",
+  "profile",
+  "config",
+  "skill",
+  "presentation",
+]);
 const SA_CATEGORIES = new Set<ToolCategory>(["git", "evolution", "system", "feedback", "skill"]);
 
 export function categoryToAgent(category: ToolCategory): string {

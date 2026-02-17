@@ -31,6 +31,7 @@ export type ToolCategory =
   | "skill"
   | "config"
   | "profile"
+  | "presentation"
   | "git"
   | "evolution"
   | "system"

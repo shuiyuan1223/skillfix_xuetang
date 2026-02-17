@@ -3295,6 +3295,8 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
       return generateBloodGlucoseCards(data);
     case "get_nutrition":
       return generateNutritionCards(data);
+    case "present_insight":
+      return generateInsightCards(data);
     default:
       return generateGenericToolCards(data);
   }
@@ -3957,6 +3959,91 @@ function generateNutritionCards(data: unknown): ToolCardResult | null {
   }
 
   const root = ui.column(children, { gap: 12 });
+  return ui.build(root);
+}
+
+/**
+ * Insight card generator for present_insight tool.
+ * Renders structured health analysis results as rich cards.
+ */
+function generateInsightCards(data: unknown): ToolCardResult | null {
+  const d = data as {
+    type?: string;
+    title?: string;
+    highlights?: Array<{ label: string; value: string; unit?: string; status?: string }>;
+    insights?: string[];
+    recommendations?: string[];
+    next_steps?: Array<{ label: string; action?: string }>;
+  };
+  if (!d || !d.title) return null;
+
+  const ui = new A2UIGenerator("ic-insight");
+  const children: string[] = [];
+
+  // Title with type-based icon
+  const iconMap: Record<string, string> = {
+    health_summary: "heart",
+    recommendation: "lightbulb",
+    comparison: "bar-chart",
+    progress: "trending-up",
+    alert: "alert-triangle",
+  };
+  const titleIcon = iconMap[d.type || "health_summary"] || "sparkles";
+  const titleText = ui.text(`${d.title}`, "h3");
+  children.push(titleText);
+
+  // Highlights as stat cards in a grid
+  if (d.highlights && d.highlights.length > 0) {
+    const statusColorMap: Record<string, string> = {
+      good: "#10b981",
+      caution: "#f59e0b",
+      attention: "#ef4444",
+    };
+    const statCards = d.highlights.map((h) => {
+      const color = statusColorMap[h.status || "good"] || "#6366f1";
+      return ui.statCard({
+        title: h.label,
+        value: h.value,
+        subtitle: h.unit,
+        icon: titleIcon,
+        color,
+      });
+    });
+    const cols = Math.min(statCards.length, 3);
+    children.push(ui.grid(statCards, { columns: cols, gap: 12 }));
+  }
+
+  // Insights list
+  if (d.insights && d.insights.length > 0) {
+    children.push(ui.text("洞察", "label"));
+    for (const insight of d.insights) {
+      children.push(ui.text(`- ${insight}`, "body"));
+    }
+  }
+
+  // Recommendations list
+  if (d.recommendations && d.recommendations.length > 0) {
+    children.push(ui.text("建议", "label"));
+    for (const rec of d.recommendations) {
+      children.push(ui.text(`- ${rec}`, "body"));
+    }
+  }
+
+  // Next steps as buttons
+  if (d.next_steps && d.next_steps.length > 0) {
+    const buttons = d.next_steps.map((step) =>
+      ui.button(step.label, step.action || "noop", {
+        variant: "outline",
+        size: "sm",
+        icon: "chevron-right",
+      })
+    );
+    children.push(ui.row(buttons, { gap: 8 }));
+  }
+
+  // Wrap everything in a card
+  const cardContent = ui.column(children, { gap: 8 });
+  const root = ui.card([cardContent], { padding: 16 });
   return ui.build(root);
 }
 
