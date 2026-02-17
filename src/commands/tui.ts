@@ -727,10 +727,11 @@ In page views, type a number to trigger an action.`
 
   try {
     // 1. Call /api/a2ui/init to get session and initial page state
+    const defaultUserId = config.userUuid || undefined;
     const initRes = await fetch(`${baseUrl}/api/a2ui/init`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ uuid: defaultUserId }),
       signal: AbortSignal.timeout(5000),
     });
 

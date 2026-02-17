@@ -1685,6 +1685,26 @@ export class GatewaySession {
 
     this.currentView = view;
 
+    // === Global auth check (all views except settings/*) ===
+    const authExemptViews = [
+      "settings/general",
+      "settings/integrations",
+      "settings/prompts",
+      "settings/skills",
+      "settings/tools",
+      "settings/logs",
+      "settings/evolution",
+      "settings/evolution-legacy",
+    ];
+    const authConfig = loadConfig();
+    if (authConfig.dataSources.type === "huawei" && !this.isUserAuthenticated()) {
+      if (!authExemptViews.some((v) => view.startsWith(v))) {
+        const mainPage = generateAuthRequiredPage();
+        send(generatePage("auth", mainPage));
+        return;
+      }
+    }
+
     let mainPage;
 
     switch (view) {
@@ -1708,13 +1728,6 @@ export class GatewaySession {
       case "health":
       case "sleep":
       case "activity": {
-        // Check if user needs to authenticate (only for Huawei data source)
-        const config = loadConfig();
-        if (config.dataSources.type === "huawei" && !this.isUserAuthenticated()) {
-          mainPage = generateAuthRequiredPage();
-          break;
-        }
-
         // Map legacy views to dashboard tabs
         if (view === "health") this.dashboardTab = "vitals";
         else if (view === "sleep") this.dashboardTab = "sleep";
@@ -5798,8 +5811,16 @@ export async function startGateway(
   const sseManager = new SSEConnectionManager();
   const webDir = config.webDir;
 
-  // Run state directory migration (moves files from old layout to new layout)
+  // Run state directory migration (creates db/, users/system/, etc.)
   migrateStateDir();
+
+  // Seed benchmark test users (ensures they exist for benchmark runs)
+  try {
+    const { seedAllTestUsers } = await import("../evolution/test-user-seeder.js");
+    seedAllTestUsers();
+  } catch {
+    // Ignore — test user fixtures may not exist in all environments
+  }
 
   // Clean up old LLM logs (older than 30 days)
   cleanupOldLlmLogs();

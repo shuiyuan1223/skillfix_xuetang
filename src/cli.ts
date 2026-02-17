@@ -22,6 +22,7 @@ import { registerHuaweiCommand } from "./commands/huawei.js";
 import { registerAuthCommand } from "./commands/auth.js";
 import { registerWebCommand } from "./commands/web.js";
 import { registerStateCommand } from "./commands/state.js";
+import { registerInitCommand } from "./commands/init.js";
 
 const program = new Command();
 
@@ -91,5 +92,6 @@ registerWebCommand(program);
 
 // State management
 registerStateCommand(program);
+registerInitCommand(program);
 
 program.parse();
