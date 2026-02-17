@@ -9,8 +9,9 @@
  */
 
 import { execSync } from "child_process";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
+import { createLogger } from "../utils/logger.js";
 import {
   insertEvolutionVersion,
   updateEvolutionVersion,
@@ -18,6 +19,7 @@ import {
   listEvolutionVersions,
 } from "../memory/db.js";
 
+const log = createLogger("Evolution/Version");
 const WORKTREE_DIR = ".worktrees";
 const BRANCH_PREFIX = "evo/v";
 
@@ -116,6 +118,7 @@ export function createWorktree(
 
   // Clean up stale worktree if directory already exists (e.g. from a previous failed run)
   if (existsSync(worktreePath)) {
+    log.warn("Stale worktree directory found, cleaning up", { worktreePath, branchName });
     try {
       execSync(`git worktree remove "${worktreePath}" --force`, {
         cwd: root,
@@ -124,7 +127,6 @@ export function createWorktree(
       });
     } catch {
       /* directory may not be a registered worktree — remove manually */
-      const { rmSync } = require("fs");
       try {
         rmSync(worktreePath, { recursive: true, force: true });
       } catch {
