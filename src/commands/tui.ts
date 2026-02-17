@@ -727,7 +727,7 @@ In page views, type a number to trigger an action.`
 
   try {
     // 1. Call /api/a2ui/init to get session and initial page state
-    const defaultUserId = config.userUuid || undefined;
+    const defaultUserId = config.uid || undefined;
     const initRes = await fetch(`${baseUrl}/api/a2ui/init`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -742,7 +742,7 @@ In page views, type a number to trigger an action.`
 
     const initData = (await initRes.json()) as {
       sessionId: string;
-      userUuid: string;
+      uid: string;
       updates: unknown[];
     };
     sessionId = initData.sessionId;

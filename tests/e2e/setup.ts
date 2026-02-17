@@ -217,7 +217,7 @@ async function _startTestServer(): Promise<TestContext> {
 export async function initSession(
   baseUrl: string,
   uuid?: string
-): Promise<{ sessionId: string; userUuid: string; updates: unknown[] }> {
+): Promise<{ sessionId: string; uid: string; updates: unknown[] }> {
   const res = await fetch(`${baseUrl}/api/a2ui/init`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -18,7 +18,7 @@ describe("Session", () => {
   test("POST /api/a2ui/init returns sessionId and updates", async () => {
     const result = await initSession(ctx.baseUrl);
     expect(result.sessionId).toBeTruthy();
-    expect(result.userUuid).toBeTruthy();
+    expect(result.uid).toBeTruthy();
     expect(Array.isArray(result.updates)).toBe(true);
     expect(result.updates.length).toBeGreaterThan(0);
   });

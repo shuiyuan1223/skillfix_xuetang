@@ -12,23 +12,23 @@ import { A2UIRenderer } from "./components/a2ui/A2UIRenderer";
 function setUserIdCookie(userId: string): void {
   const expires = new Date();
   expires.setFullYear(expires.getFullYear() + 1);
-  document.cookie = `pha_user_id=${userId}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
+  document.cookie = `pha_uid=${userId}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
 }
 
 function getUserId(): string | null {
-  // 1. URL ?user_id=xxx (for debugging, also accepts legacy ?uuid=xxx)
+  // 1. URL ?uid=xxx (also accepts legacy ?user_id=xxx and ?uuid=xxx)
   const urlParams = new URLSearchParams(window.location.search);
-  const urlUserId = urlParams.get("user_id") || urlParams.get("uuid");
+  const urlUserId = urlParams.get("uid") || urlParams.get("user_id") || urlParams.get("uuid");
   if (urlUserId) {
     setUserIdCookie(urlUserId);
     return urlUserId;
   }
 
-  // 2. Cookie pha_user_id (set after OAuth)
+  // 2. Cookie pha_uid (set after OAuth; also check legacy pha_user_id)
   const cookies = document.cookie.split(";");
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split("=");
-    if (name === "pha_user_id" && value) {
+    if ((name === "pha_uid" || name === "pha_user_id") && value) {
       return value;
     }
   }
@@ -95,7 +95,7 @@ export function App() {
   // --- Refs ----------------------------------------------------------------
   const sessionIdRef = useRef<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
-  const userUuidRef = useRef<string | null>(null);
+  const uidRef = useRef<string | null>(null);
   const chatAutoScrollRef = useRef(true);
   const isAutoScrollingRef = useRef(false);
   const extensionDetectedRef = useRef(false);
@@ -308,7 +308,7 @@ export function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const uuid = userUuidRef.current || "anonymous";
+    const uuid = uidRef.current || "anonymous";
 
     fetch("/api/ag-ui", {
       method: "POST",
@@ -388,7 +388,7 @@ export function App() {
         const exchangeResponse = await fetch("/auth/huawei/exchange", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: result.code, uuid: userUuidRef.current }),
+          body: JSON.stringify({ code: result.code, uuid: uidRef.current }),
         });
         if (!exchangeResponse.ok) {
           const text = await exchangeResponse.text();
@@ -401,7 +401,7 @@ export function App() {
           // Store the Huawei user ID returned by the server
           if (exchangeResult.userId) {
             setUserIdCookie(exchangeResult.userId);
-            userUuidRef.current = exchangeResult.userId;
+            uidRef.current = exchangeResult.userId;
           }
           sendActionRaw("auth_complete", { userId: exchangeResult.userId });
         } else {
@@ -426,7 +426,7 @@ export function App() {
       const response = await fetch("/auth/huawei/mcp-flow", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid: userUuidRef.current }),
+        body: JSON.stringify({ uuid: uidRef.current }),
       });
       if (!response.ok) {
         const text = await response.text();
@@ -439,7 +439,7 @@ export function App() {
         // Store the Huawei user ID returned by the server
         if (result.userId) {
           setUserIdCookie(result.userId);
-          userUuidRef.current = result.userId;
+          uidRef.current = result.userId;
         }
         sendActionRaw("auth_complete", { userId: result.userId });
       } else {
@@ -800,7 +800,7 @@ export function App() {
   const connect = useCallback(async () => {
     try {
       // 1. HTTP init — get session + initial page state
-      const uuid = userUuidRef.current;
+      const uuid = uidRef.current;
       const initRes = await fetch("/api/a2ui/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -815,7 +815,7 @@ export function App() {
 
       const { sessionId, updates } = (await initRes.json()) as {
         sessionId: string;
-        userUuid?: string;
+        uid?: string;
         updates: unknown[];
       };
       sessionIdRef.current = sessionId;
@@ -881,7 +881,7 @@ export function App() {
     document.documentElement.classList.toggle("light", !isDark);
 
     // Get user UUID
-    userUuidRef.current = getUserId();
+    uidRef.current = getUserId();
 
     // Connect via HTTP+SSE
     connect();

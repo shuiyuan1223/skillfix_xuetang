@@ -196,8 +196,8 @@ export interface EmbeddingConfig {
 }
 
 export interface PHAConfig {
-  /** User UUID for memory/profile isolation */
-  userUuid?: string;
+  /** User ID (Huawei openID) for memory/profile isolation */
+  uid?: string;
   gateway: {
     port: number;
     autoStart: boolean;
@@ -1075,7 +1075,7 @@ export function getUserId(): string | null {
   if (alsId) return alsId;
   // 2. Config file
   const config = loadConfig();
-  return config.userUuid || null;
+  return config.uid || null;
 }
 
 /**

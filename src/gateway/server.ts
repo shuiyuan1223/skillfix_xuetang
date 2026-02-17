@@ -2201,7 +2201,7 @@ export class GatewaySession {
           judgeModelId: judge.modelId || "",
           judgeLabel: judge.label || "",
           benchmarkModels,
-          userId: this.userUuid || config.userUuid || "",
+          userId: this.userUuid || config.uid || "",
           huaweiScopes: scopesArray,
           chromeMcpCommand: chromeMcp.command || "npx",
           chromeMcpArgs: (chromeMcp.args || []).join(", "),
@@ -2930,14 +2930,17 @@ export class GatewaySession {
       send({
         type: "auth_start",
         provider: "huawei",
-        userUuid: this.userUuid,
+        uid: this.userUuid,
       });
-    } else if (action === "set_user_uuid" && payload?.uuid) {
-      // Update the session's user UUID (sent from frontend after generating/loading from cookie)
-      this.userUuid = payload.uuid as string;
+    } else if (
+      (action === "set_uid" || action === "set_user_uuid") &&
+      (payload?.uid || payload?.uuid)
+    ) {
+      // Update the session's user ID (sent from frontend after generating/loading from cookie)
+      this.userUuid = (payload.uid || payload.uuid) as string;
       // Reset agent so it gets recreated with memory context on next message
       this.agent = null;
-      send({ type: "user_uuid_set", uuid: this.userUuid });
+      send({ type: "uid_set", uid: this.userUuid });
     } else if (action === "auth_complete") {
       // User completed OAuth — migrate session to authenticated user
       if (payload?.userId) {
@@ -5844,10 +5847,11 @@ export async function startGateway(
     return session;
   }
 
-  // Helper: extract user ID from request cookie
+  // Helper: extract user ID from request cookie (pha_uid preferred, pha_user_id legacy fallback)
   function extractUserId(req: Request): string | undefined {
     const cookieHeader = req.headers.get("cookie") || "";
-    const match = cookieHeader.match(/pha_user_id=([^;]+)/);
+    const match =
+      cookieHeader.match(/pha_uid=([^;]+)/) || cookieHeader.match(/pha_user_id=([^;]+)/);
     return match ? match[1] : undefined;
   }
 
@@ -5994,7 +5998,7 @@ export async function startGateway(
           return new Response(
             JSON.stringify({
               sessionId: session.getSessionId(),
-              userUuid: session.userUuid,
+              uid: session.userUuid,
               updates,
             }),
             { headers }
