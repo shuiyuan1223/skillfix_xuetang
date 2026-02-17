@@ -939,6 +939,8 @@ export class GatewaySession {
   private config: GatewayConfig;
   private sessionId: string;
   private saSessionId: string; // Separate session ID for System Agent persistence
+  // System Agent sessions are global (not per-user) — use a fixed UUID for storage
+  private static readonly SA_GLOBAL_UUID = "system";
   private dataSource: HealthDataSource;
 
   // User identification (from cookie)
@@ -1092,10 +1094,11 @@ export class GatewaySession {
    * Two channels: "chat" → {sessionId}.jsonl, "system-agent" → sa-{sessionId}.jsonl
    */
   private persistMessage(channel: "chat" | "system-agent", entry: SessionEntry): void {
-    if (!this.userUuid) return;
     const sid = channel === "chat" ? this.sessionId : `sa-${this.saSessionId}`;
+    const uuid = channel === "system-agent" ? GatewaySession.SA_GLOBAL_UUID : this.userUuid;
+    if (!uuid) return;
     try {
-      appendToSession(this.userUuid, sid, [entry]);
+      appendToSession(uuid, sid, [entry]);
     } catch (err) {
       logSession.warn("Failed to persist message", { error: err });
     }
@@ -1106,26 +1109,27 @@ export class GatewaySession {
    * Reuses the session ID if the last message is within 24 hours.
    */
   private loadPersistedMessages(): void {
-    if (!this.userUuid) return;
     try {
-      // Load main chat
-      const chatSession = loadLatestSession(this.userUuid);
-      if (chatSession && chatSession.entries.length > 0) {
-        const lastTs = chatSession.entries[chatSession.entries.length - 1].timestamp;
-        if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
-          this.sessionId = chatSession.sessionId;
-          this.chatMessages = chatSession.entries
-            .filter((e) => e.role === "user" || e.role === "assistant")
-            .map((e) => ({
-              id: crypto.randomUUID(),
-              role: e.role as "user" | "assistant",
-              parts: [{ type: "text" as const, content: e.content }],
-            }));
+      // Load main chat (per-user)
+      if (this.userUuid) {
+        const chatSession = loadLatestSession(this.userUuid);
+        if (chatSession && chatSession.entries.length > 0) {
+          const lastTs = chatSession.entries[chatSession.entries.length - 1].timestamp;
+          if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
+            this.sessionId = chatSession.sessionId;
+            this.chatMessages = chatSession.entries
+              .filter((e) => e.role === "user" || e.role === "assistant")
+              .map((e) => ({
+                id: crypto.randomUUID(),
+                role: e.role as "user" | "assistant",
+                parts: [{ type: "text" as const, content: e.content }],
+              }));
+          }
         }
       }
 
-      // Load system agent chat (sa- prefix)
-      const saSession = loadLatestSession(this.userUuid, { prefix: "sa-" });
+      // Load system agent chat (sa- prefix) — global, not per-user
+      const saSession = loadLatestSession(GatewaySession.SA_GLOBAL_UUID, { prefix: "sa-" });
       if (saSession && saSession.entries.length > 0) {
         const lastTs = saSession.entries[saSession.entries.length - 1].timestamp;
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
@@ -1224,7 +1228,6 @@ export class GatewaySession {
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
             dataSource: new BenchMockDS(),
-            isolateMemory: true,
           });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
@@ -1297,7 +1300,6 @@ export class GatewaySession {
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
             dataSource: new BenchMockDS(),
-            isolateMemory: true,
           });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`
@@ -2718,7 +2720,7 @@ export class GatewaySession {
       this.saCurrentAssistantMsgId = null;
       this.saLastStreamedText = "";
       this.saSessionId = crypto.randomUUID(); // New SA session so old messages won't reload
-      if (this.userUuid) touchSession(this.userUuid, `sa-${this.saSessionId}`); // Create empty file as "latest"
+      touchSession(GatewaySession.SA_GLOBAL_UUID, `sa-${this.saSessionId}`); // Create empty file as "latest"
       this.sendEvolutionLabUpdate(send);
     } else if (action === "send_message" && payload?.content) {
       // Chat message from UI
@@ -5180,7 +5182,6 @@ export class GatewaySession {
             modelId: agentModelId,
             baseUrl: agentBaseUrl,
             dataSource: new AgentMockDS(),
-            isolateMemory: true,
           });
           const enriched = mockContext
             ? `[Health Data Context]\n${JSON.stringify(mockContext, null, 2)}\n\n[User Query]\n${query}`

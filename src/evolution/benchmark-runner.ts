@@ -81,11 +81,11 @@ ${rubricJson}
 **User Query**:
 ${testCase.query}
 
-**Ground Truth Health Data** (from tool calls — use as ground truth for accuracy):
-${toolCalls?.length ? JSON.stringify(toolCalls, null, 2) : "None"}
-
-**Expected Context** (reference scenario):
+**Injected Health Data Context** (this data was provided directly to the agent as part of the input — treat as ground truth for accuracy):
 ${JSON.stringify(testCase.mock_context || {}, null, 2)}
+
+**Tool Call Results** (if the agent also called tools, their results appear here):
+${toolCalls?.length ? JSON.stringify(toolCalls, null, 2) : "None (agent used the injected health data context above instead of calling tools — this is expected and correct)"}
 
 ## AI Response
 
