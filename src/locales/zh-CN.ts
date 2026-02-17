@@ -10,7 +10,7 @@ export const zhCN: LocaleMessages = {
     health: "健康",
     sleep: "睡眠",
     activity: "运动",
-    plans: "计划",
+    plans: "计划与提醒",
     memory: "记忆",
     prompts: "提示词",
     skills: "技能",
@@ -646,8 +646,8 @@ export const zhCN: LocaleMessages = {
   },
 
   plans: {
-    title: "健康计划",
-    subtitle: "AI 个性化健康计划管理",
+    title: "计划与提醒",
+    subtitle: "健康计划、推荐、提醒和日程管理",
     tabActive: "进行中",
     tabCompleted: "已完成",
     tabArchived: "已归档",

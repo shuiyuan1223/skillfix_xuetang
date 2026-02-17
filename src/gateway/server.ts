@@ -81,7 +81,7 @@ import {
   generateSettingsPage,
   generatePlansPage,
   generatePlanDetailModal,
-  generateProactivePage,
+  type PlansPageTab,
   type SettingsPageData,
 } from "./pages.js";
 import { listPlans, loadPlan, savePlan } from "../plans/store.js";
@@ -1019,7 +1019,7 @@ export class GatewaySession {
   private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
 
   // Plans page state
-  private plansTab: "active" | "completed" | "archived" = "active";
+  private plansTab: PlansPageTab = "active";
 
   // Logs page state
   private logsTab: "system" | "llm" = "system";
@@ -1707,29 +1707,22 @@ export class GatewaySession {
       }
 
       case "plans": {
-        const statusMap: Record<string, PlanStatus> = {
+        const uuid = this.userUuid || getUserUuid();
+        const tab = this.plansTab;
+        const planStatusMap: Record<string, PlanStatus> = {
           active: "active",
           completed: "completed",
           archived: "archived",
         };
-        const filterStatus = statusMap[this.plansTab];
-        const uuid = this.userUuid || getUserUuid();
-        const plans = listPlans(uuid, filterStatus);
+        const filterStatus = planStatusMap[tab];
+        const plans = filterStatus ? listPlans(uuid, filterStatus) : [];
         mainPage = generatePlansPage({
-          activeTab: this.plansTab,
+          activeTab: tab,
           plans,
-        });
-        break;
-      }
-
-      case "proactive": {
-        const uuid = this.userUuid || getUserUuid();
-        const proactiveTab = (this as any).proactiveTab || "recommendations";
-        mainPage = generateProactivePage({
-          activeTab: proactiveTab,
-          recommendations: listRecommendations(uuid, "active"),
-          reminders: listRemindersStore(uuid),
-          events: listCalendarEvents(uuid),
+          recommendations:
+            tab === "recommendations" ? listRecommendations(uuid, "active") : undefined,
+          reminders: tab === "reminders" ? listRemindersStore(uuid) : undefined,
+          events: tab === "calendar" ? listCalendarEvents(uuid) : undefined,
         });
         break;
       }
@@ -2799,7 +2792,12 @@ export class GatewaySession {
       const plan = loadPlan(uuid, planId);
       if (plan) {
         const modal = generatePlanDetailModal(plan);
-        send({ type: "modal", surface: { components: modal.components, root_id: modal.root_id } });
+        send({
+          type: "a2ui",
+          surface_id: "modal",
+          components: modal.components,
+          root_id: modal.root_id,
+        });
       }
     } else if (action.startsWith("update_plan_action:")) {
       const parts = action.replace("update_plan_action:", "").split(":");
@@ -2818,7 +2816,7 @@ export class GatewaySession {
           }
         }
         savePlan(uuid, plan);
-        send({ type: "modal_close" });
+        send({ type: "clear_surface", surface_id: "modal" });
         await this.handleNavigate("plans", send);
       }
     }
@@ -2831,7 +2829,7 @@ export class GatewaySession {
         rec.status = "dismissed";
         rec.dismissedAt = new Date().toISOString();
         saveRecommendation(uuid, rec);
-        await this.handleNavigate("proactive", send);
+        await this.handleNavigate("plans", send);
       }
     } else if (action.startsWith("rec_act:")) {
       const recId = action.replace("rec_act:", "");
@@ -2841,7 +2839,7 @@ export class GatewaySession {
         rec.status = "acted";
         rec.dismissedAt = new Date().toISOString();
         saveRecommendation(uuid, rec);
-        await this.handleNavigate("proactive", send);
+        await this.handleNavigate("plans", send);
       }
     } else if (action.startsWith("rem_complete:")) {
       const remId = action.replace("rem_complete:", "");
@@ -2851,7 +2849,7 @@ export class GatewaySession {
         rem.status = "completed";
         rem.completedAt = new Date().toISOString();
         saveReminder(uuid, rem);
-        await this.handleNavigate("proactive", send);
+        await this.handleNavigate("plans", send);
       }
     }
     // OAuth actions
@@ -3292,7 +3290,7 @@ export class GatewaySession {
         this.memoryTab = tab as "profile" | "summary" | "logs" | "search" | "system-agent";
         await this.handleNavigate("memory", send);
       } else if (this.currentView === "plans") {
-        this.plansTab = payload.tab as string as "active" | "completed" | "archived";
+        this.plansTab = payload.tab as PlansPageTab;
         await this.handleNavigate("plans", send);
       } else if (this.currentView === "settings/prompts") {
         const tab = payload.tab as string;
@@ -3354,9 +3352,6 @@ export class GatewaySession {
       } else if (this.currentView === "settings/logs") {
         this.logsTab = payload.tab as "system" | "llm";
         await this.handleNavigate("settings/logs", send);
-      } else if (this.currentView === "proactive") {
-        (this as any).proactiveTab = payload.tab as "recommendations" | "reminders" | "calendar";
-        await this.handleNavigate("proactive", send);
       } else {
         type EvolutionTab =
           | "overview"

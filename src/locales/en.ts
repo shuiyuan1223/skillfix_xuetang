@@ -10,7 +10,7 @@ export const en: LocaleMessages = {
     health: "Health",
     sleep: "Sleep",
     activity: "Activity",
-    plans: "Plans",
+    plans: "Plans & Reminders",
     memory: "Memory",
     prompts: "Prompts",
     skills: "Skills",
@@ -655,8 +655,8 @@ export const en: LocaleMessages = {
   },
 
   plans: {
-    title: "Health Plans",
-    subtitle: "AI-personalized health plan management",
+    title: "Plans & Reminders",
+    subtitle: "Health plans, recommendations, reminders, and schedule",
     tabActive: "Active",
     tabCompleted: "Completed",
     tabArchived: "Archived",

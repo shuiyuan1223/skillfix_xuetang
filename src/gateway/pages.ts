@@ -78,7 +78,6 @@ export function generateSidebar(activeView: string): A2UIMessage {
       { id: "chat", label: t("nav.chat"), icon: "chat" },
       { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
       { id: "plans", label: t("nav.plans"), icon: "target" },
-      { id: "proactive", label: t("nav.proactive"), icon: "sparkles" },
       { id: "memory", label: t("nav.memory"), icon: "brain" },
       { id: "evolution", label: t("nav.evolution"), icon: "flask" },
       { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
@@ -2773,9 +2772,20 @@ const PLAN_STATUS_COLORS: Record<PlanStatus, string> = {
   archived: "#6b7280",
 };
 
+export type PlansPageTab =
+  | "active"
+  | "completed"
+  | "archived"
+  | "recommendations"
+  | "reminders"
+  | "calendar";
+
 export function generatePlansPage(data: {
-  activeTab: "active" | "completed" | "archived";
+  activeTab: PlansPageTab;
   plans: HealthPlan[];
+  recommendations?: Recommendation[];
+  reminders?: Reminder[];
+  events?: CalendarEvent[];
   loading?: boolean;
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
@@ -2794,81 +2804,211 @@ export function generatePlansPage(data: {
     return ui.build(root);
   }
 
-  // Build tab content
-  const tabChildren: string[] = [];
+  const tabContentIds: Record<string, string> = {};
 
-  if (data.plans.length === 0) {
-    const emptyIcon = ui.text("target", "caption");
-    const emptyText = ui.text(t("plans.noPlans"), "h3");
-    const emptyHint = ui.text(t("plans.askAgentHint"), "caption");
-    tabChildren.push(
-      ui.column([emptyIcon, emptyText, emptyHint], { gap: 8, align: "center", padding: 48 })
-    );
-  } else {
-    const cardIds: string[] = [];
-    for (const plan of data.plans) {
-      const goalsCompleted = plan.goals.filter((g) => g.status === "completed").length;
-      const totalGoals = plan.goals.length;
-      const progressPct = totalGoals > 0 ? Math.round((goalsCompleted / totalGoals) * 100) : 0;
+  // --- Plans tabs (active / completed / archived) ---
+  if (
+    data.activeTab === "active" ||
+    data.activeTab === "completed" ||
+    data.activeTab === "archived"
+  ) {
+    const tabChildren: string[] = [];
 
-      // Days remaining
-      const now = new Date();
-      const end = new Date(plan.endDate);
-      const daysLeft = Math.max(
-        0,
-        Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    if (data.plans.length === 0) {
+      const emptyIcon = ui.text("target", "caption");
+      const emptyText = ui.text(t("plans.noPlans"), "h3");
+      const emptyHint = ui.text(t("plans.askAgentHint"), "caption");
+      tabChildren.push(
+        ui.column([emptyIcon, emptyText, emptyHint], { gap: 8, align: "center", padding: 48 })
       );
+    } else {
+      const cardIds: string[] = [];
+      for (const plan of data.plans) {
+        const goalsCompleted = plan.goals.filter((g) => g.status === "completed").length;
+        const totalGoals = plan.goals.length;
+        const progressPct = totalGoals > 0 ? Math.round((goalsCompleted / totalGoals) * 100) : 0;
 
-      // Status badge
-      const statusLabel =
-        plan.status === "active"
-          ? t("plans.statusActive")
-          : plan.status === "paused"
-            ? t("plans.statusPaused")
-            : plan.status === "completed"
-              ? t("plans.statusCompleted")
-              : t("plans.statusArchived");
-      const badge = ui.badge(statusLabel, {
-        color: PLAN_STATUS_COLORS[plan.status],
-      });
+        // Days remaining
+        const now = new Date();
+        const end = new Date(plan.endDate);
+        const daysLeft = Math.max(
+          0,
+          Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        );
 
-      // Plan name + description
-      const nameText = ui.text(plan.name, "h3");
-      const descText = ui.text(plan.description, "caption");
-      const headerRow = ui.row([nameText, badge], { justify: "between", align: "center" });
+        // Status badge
+        const statusLabel =
+          plan.status === "active"
+            ? t("plans.statusActive")
+            : plan.status === "paused"
+              ? t("plans.statusPaused")
+              : plan.status === "completed"
+                ? t("plans.statusCompleted")
+                : t("plans.statusArchived");
+        const badge = ui.badge(statusLabel, {
+          color: PLAN_STATUS_COLORS[plan.status],
+        });
 
-      // Progress bar
-      const progressBar = ui.progress(progressPct, { maxValue: 100, color: "#10b981" });
+        // Plan name + description
+        const nameText = ui.text(plan.name, "h3");
+        const descText = ui.text(plan.description, "caption");
+        const headerRow = ui.row([nameText, badge], { justify: "between", align: "center" });
 
-      // Stats row
-      const goalsLabel = ui.text(
-        `${goalsCompleted}/${totalGoals} ${t("plans.goalsCompleted")}`,
-        "caption"
-      );
-      const daysLabel =
-        plan.status === "active"
-          ? ui.text(`${daysLeft} ${t("plans.daysRemaining")}`, "caption")
-          : ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
-      const statsRow = ui.row([goalsLabel, daysLabel], { justify: "between" });
+        // Progress bar
+        const progressBar = ui.progress(progressPct, { maxValue: 100, color: "#10b981" });
 
-      // View button
-      const viewBtn = ui.button(t("plans.viewDetails"), `view_plan:${plan.id}`, {
-        variant: "outline",
-        size: "sm",
-        icon: "chevron-right",
-      });
+        // Stats row
+        const goalsLabel = ui.text(
+          `${goalsCompleted}/${totalGoals} ${t("plans.goalsCompleted")}`,
+          "caption"
+        );
+        const daysLabel =
+          plan.status === "active"
+            ? ui.text(`${daysLeft} ${t("plans.daysRemaining")}`, "caption")
+            : ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
+        const statsRow = ui.row([goalsLabel, daysLabel], { justify: "between" });
 
-      const cardContent = ui.column([headerRow, descText, progressBar, statsRow, viewBtn], {
-        gap: 8,
-      });
-      const card = ui.card([cardContent], { padding: 16 });
-      cardIds.push(card);
+        // View button
+        const viewBtn = ui.button(t("plans.viewDetails"), `view_plan:${plan.id}`, {
+          variant: "outline",
+          size: "sm",
+          icon: "chevron-right",
+        });
+
+        const cardContent = ui.column([headerRow, descText, progressBar, statsRow, viewBtn], {
+          gap: 8,
+        });
+        const card = ui.card([cardContent], { padding: 16 });
+        cardIds.push(card);
+      }
+      tabChildren.push(ui.column(cardIds, { gap: 12, padding: 16 }));
     }
-    tabChildren.push(ui.column(cardIds, { gap: 12, padding: 16 }));
+    tabContentIds[data.activeTab] = ui.column(tabChildren, { gap: 0, padding: 24 });
   }
 
-  const tabContentIds: Record<string, string> = {};
-  tabContentIds[data.activeTab] = ui.column(tabChildren, { gap: 0, padding: 24 });
+  // --- Recommendations tab ---
+  if (data.activeTab === "recommendations") {
+    const children: string[] = [];
+    const recs = data.recommendations || [];
+    if (recs.length === 0) {
+      const emptyText = ui.text(t("proactive.noRecommendations"), "h3");
+      const hint = ui.text(t("proactive.askAgentHint"), "caption");
+      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+    } else {
+      const cards: string[] = [];
+      for (const rec of recs) {
+        const badge = ui.badge(rec.type, { color: PRIORITY_COLORS[rec.priority] || "#3b82f6" });
+        const titleText = ui.text(rec.title, "h3");
+        const headerRow = ui.row([titleText, badge], { justify: "between", align: "center" });
+        const body = ui.text(rec.body, "body");
+        const btnIds: string[] = [];
+        btnIds.push(
+          ui.button(t("proactive.acted"), `rec_act:${rec.id}`, {
+            variant: "primary",
+            size: "sm",
+            icon: "check",
+          })
+        );
+        btnIds.push(
+          ui.button(t("proactive.dismiss"), `rec_dismiss:${rec.id}`, {
+            variant: "outline",
+            size: "sm",
+            icon: "x",
+          })
+        );
+        const btnRow = ui.row(btnIds, { gap: 8 });
+        const cardContent = ui.column([headerRow, body, btnRow], { gap: 8 });
+        cards.push(ui.card([cardContent], { padding: 16 }));
+      }
+      children.push(ui.column(cards, { gap: 12 }));
+    }
+    tabContentIds["recommendations"] = ui.column(children, { gap: 0, padding: 24 });
+  }
+
+  // --- Reminders tab ---
+  if (data.activeTab === "reminders") {
+    const children: string[] = [];
+    const rems = data.reminders || [];
+    if (rems.length === 0) {
+      const emptyText = ui.text(t("proactive.noReminders"), "h3");
+      const hint = ui.text(t("proactive.askAgentHint"), "caption");
+      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+    } else {
+      const cards: string[] = [];
+      for (const rem of rems) {
+        const titleText = ui.text(rem.title, "h3");
+        const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
+        const timeText = ui.text(time, "caption");
+        const headerRow = ui.row([titleText, timeText], { justify: "between", align: "center" });
+        const details: string[] = [];
+        if (rem.body) details.push(ui.text(rem.body, "body"));
+        if (rem.repeatRule !== "none") {
+          details.push(
+            ui.badge(`${t("proactive.repeats")}: ${rem.repeatRule}`, { color: "#8b5cf6" })
+          );
+        }
+        const statusBadge = ui.badge(rem.status, {
+          color:
+            rem.status === "completed"
+              ? "#10b981"
+              : rem.status === "pending"
+                ? "#3b82f6"
+                : "#6b7280",
+        });
+        const btnIds: string[] = [];
+        if (rem.status === "pending") {
+          btnIds.push(
+            ui.button(t("proactive.complete"), `rem_complete:${rem.id}`, {
+              variant: "primary",
+              size: "sm",
+              icon: "check",
+            })
+          );
+        }
+        const infoRow = ui.row([statusBadge, ...btnIds], { gap: 8 });
+        const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
+        cards.push(ui.card([cardContent], { padding: 16 }));
+      }
+      children.push(ui.column(cards, { gap: 12 }));
+    }
+    tabContentIds["reminders"] = ui.column(children, { gap: 0, padding: 24 });
+  }
+
+  // --- Calendar tab ---
+  if (data.activeTab === "calendar") {
+    const children: string[] = [];
+    const evts = data.events || [];
+    if (evts.length === 0) {
+      const emptyText = ui.text(t("proactive.noEvents"), "h3");
+      const hint = ui.text(t("proactive.askAgentHint"), "caption");
+      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+    } else {
+      const cards: string[] = [];
+      for (const evt of evts) {
+        const titleText = ui.text(evt.title, "h3");
+        const date = evt.startTime.split("T")[0];
+        const time = evt.startTime.split("T")[1]?.slice(0, 5) || "";
+        const dateText = ui.text(`${date} ${time}`, "caption");
+        const headerRow = ui.row([titleText, dateText], { justify: "between", align: "center" });
+        const details: string[] = [];
+        if (evt.description) details.push(ui.text(evt.description, "body"));
+        const catBadge = ui.badge(evt.category, { color: "#8b5cf6" });
+        const statusBadge = ui.badge(evt.status, {
+          color:
+            evt.status === "completed"
+              ? "#10b981"
+              : evt.status === "cancelled"
+                ? "#ef4444"
+                : "#3b82f6",
+        });
+        const infoRow = ui.row([catBadge, statusBadge], { gap: 8 });
+        const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
+        cards.push(ui.card([cardContent], { padding: 16 }));
+      }
+      children.push(ui.column(cards, { gap: 12 }));
+    }
+    tabContentIds["calendar"] = ui.column(children, { gap: 0, padding: 24 });
+  }
 
   // Tabs
   const tabs = ui.tabs(
@@ -2876,6 +3016,9 @@ export function generatePlansPage(data: {
       { id: "active", label: t("plans.tabActive") },
       { id: "completed", label: t("plans.tabCompleted") },
       { id: "archived", label: t("plans.tabArchived") },
+      { id: "recommendations", label: t("proactive.tabRecommendations") },
+      { id: "reminders", label: t("proactive.tabReminders") },
+      { id: "calendar", label: t("proactive.tabCalendar") },
     ],
     data.activeTab,
     tabContentIds
@@ -4443,193 +4586,10 @@ export function mergePendingCards(
   };
 }
 
-// ============================================================================
-// Proactive Health Page
-// ============================================================================
-
+// PRIORITY_COLORS used in plans page recommendations tab
 const PRIORITY_COLORS: Record<string, string> = {
   urgent: "#ef4444",
   high: "#f97316",
   medium: "#3b82f6",
   low: "#6b7280",
 };
-
-const CATEGORY_ICONS: Record<string, string> = {
-  medication: "heart-pulse",
-  exercise: "footprints",
-  sleep: "moon",
-  hydration: "wind",
-  meal: "flame",
-  checkup: "stethoscope",
-  workout: "activity",
-  custom: "star",
-};
-
-export function generateProactivePage(data: {
-  activeTab: "recommendations" | "reminders" | "calendar";
-  recommendations: Recommendation[];
-  reminders: Reminder[];
-  events: CalendarEvent[];
-  loading?: boolean;
-}): A2UIMessage {
-  const ui = new A2UIGenerator("main");
-
-  // Header
-  const title = ui.text(t("proactive.title"), "h2");
-  const subtitle = ui.text(t("proactive.subtitle"), "caption");
-  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
-
-  if (data.loading) {
-    const s1 = ui.skeleton({ variant: "rectangular", height: 100 });
-    const s2 = ui.skeleton({ variant: "rectangular", height: 100 });
-    const loadingContent = ui.column([s1, s2], { gap: 16, padding: 24 });
-    return ui.build(ui.column([header, loadingContent], { gap: 0 }));
-  }
-
-  const tabContentIds: Record<string, string> = {};
-
-  // --- Recommendations Tab ---
-  {
-    const children: string[] = [];
-    if (data.recommendations.length === 0) {
-      const emptyText = ui.text(t("proactive.noRecommendations"), "h3");
-      const hint = ui.text(t("proactive.askAgentHint"), "caption");
-      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
-    } else {
-      const cards: string[] = [];
-      for (const rec of data.recommendations) {
-        const icon = rec.icon || "sparkles";
-        const badge = ui.badge(rec.type, { color: PRIORITY_COLORS[rec.priority] || "#3b82f6" });
-        const titleText = ui.text(rec.title, "h3");
-        const headerRow = ui.row([titleText, badge], { justify: "between", align: "center" });
-        const body = ui.text(rec.body, "body");
-
-        const btnIds: string[] = [];
-        btnIds.push(
-          ui.button(t("proactive.acted"), `rec_act:${rec.id}`, {
-            variant: "primary",
-            size: "sm",
-            icon: "check",
-          })
-        );
-        btnIds.push(
-          ui.button(t("proactive.dismiss"), `rec_dismiss:${rec.id}`, {
-            variant: "outline",
-            size: "sm",
-            icon: "x",
-          })
-        );
-        const btnRow = ui.row(btnIds, { gap: 8 });
-
-        const cardContent = ui.column([headerRow, body, btnRow], { gap: 8 });
-        cards.push(ui.card([cardContent], { padding: 16 }));
-      }
-      children.push(ui.column(cards, { gap: 12 }));
-    }
-    tabContentIds["recommendations"] = ui.column(children, { gap: 0, padding: 24 });
-  }
-
-  // --- Reminders Tab ---
-  {
-    const children: string[] = [];
-    if (data.reminders.length === 0) {
-      const emptyText = ui.text(t("proactive.noReminders"), "h3");
-      const hint = ui.text(t("proactive.askAgentHint"), "caption");
-      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
-    } else {
-      const cards: string[] = [];
-      for (const rem of data.reminders) {
-        const icon = CATEGORY_ICONS[rem.category] || "timer";
-        const titleText = ui.text(rem.title, "h3");
-        const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
-        const timeText = ui.text(time, "caption");
-        const headerRow = ui.row([titleText, timeText], { justify: "between", align: "center" });
-
-        const details: string[] = [];
-        if (rem.body) details.push(ui.text(rem.body, "body"));
-        if (rem.repeatRule !== "none") {
-          details.push(
-            ui.badge(`${t("proactive.repeats")}: ${rem.repeatRule}`, { color: "#8b5cf6" })
-          );
-        }
-        const statusBadge = ui.badge(rem.status, {
-          color:
-            rem.status === "completed"
-              ? "#10b981"
-              : rem.status === "pending"
-                ? "#3b82f6"
-                : "#6b7280",
-        });
-
-        const btnIds: string[] = [];
-        if (rem.status === "pending") {
-          btnIds.push(
-            ui.button(t("proactive.complete"), `rem_complete:${rem.id}`, {
-              variant: "primary",
-              size: "sm",
-              icon: "check",
-            })
-          );
-        }
-        const infoRow = ui.row([statusBadge, ...btnIds], { gap: 8 });
-
-        const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
-        cards.push(ui.card([cardContent], { padding: 16 }));
-      }
-      children.push(ui.column(cards, { gap: 12 }));
-    }
-    tabContentIds["reminders"] = ui.column(children, { gap: 0, padding: 24 });
-  }
-
-  // --- Calendar Tab ---
-  {
-    const children: string[] = [];
-    if (data.events.length === 0) {
-      const emptyText = ui.text(t("proactive.noEvents"), "h3");
-      const hint = ui.text(t("proactive.askAgentHint"), "caption");
-      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
-    } else {
-      const cards: string[] = [];
-      for (const evt of data.events) {
-        const titleText = ui.text(evt.title, "h3");
-        const date = evt.startTime.split("T")[0];
-        const time = evt.startTime.split("T")[1]?.slice(0, 5) || "";
-        const dateText = ui.text(`${date} ${time}`, "caption");
-        const headerRow = ui.row([titleText, dateText], { justify: "between", align: "center" });
-
-        const details: string[] = [];
-        if (evt.description) details.push(ui.text(evt.description, "body"));
-        const catBadge = ui.badge(evt.category, {
-          color: "#8b5cf6",
-        });
-        const statusBadge = ui.badge(evt.status, {
-          color:
-            evt.status === "completed"
-              ? "#10b981"
-              : evt.status === "cancelled"
-                ? "#ef4444"
-                : "#3b82f6",
-        });
-        const infoRow = ui.row([catBadge, statusBadge], { gap: 8 });
-
-        const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
-        cards.push(ui.card([cardContent], { padding: 16 }));
-      }
-      children.push(ui.column(cards, { gap: 12 }));
-    }
-    tabContentIds["calendar"] = ui.column(children, { gap: 0, padding: 24 });
-  }
-
-  const tabs = ui.tabs(
-    [
-      { id: "recommendations", label: t("proactive.tabRecommendations") },
-      { id: "reminders", label: t("proactive.tabReminders") },
-      { id: "calendar", label: t("proactive.tabCalendar") },
-    ],
-    data.activeTab,
-    tabContentIds
-  );
-
-  const root = ui.column([header, tabs], { gap: 0 });
-  return ui.build(root);
-}
