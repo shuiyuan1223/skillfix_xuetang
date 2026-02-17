@@ -227,14 +227,15 @@ export class HuaweiAuth {
 
   /**
    * Exchange authorization code for tokens (for specific user)
-   * Does not store token - returns it for caller to store in UserStore
+   * Does not store token - returns it for caller to store in UserStore.
+   * Also extracts Huawei user ID from id_token if present.
    */
   async exchangeCodeForUser(
     code: string,
     clientId: string,
     clientSecret: string,
     redirectUri: string
-  ): Promise<TokenData> {
+  ): Promise<{ tokenData: TokenData; huaweiUserId?: string }> {
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       code,
@@ -257,7 +258,19 @@ export class HuaweiAuth {
     }
 
     const data = (await response.json()) as HuaweiTokenResponse;
-    return this.tokenResponseToData(data);
+    const tokenData = this.tokenResponseToData(data);
+
+    // Extract Huawei user ID from id_token (best-effort)
+    let huaweiUserId: string | undefined;
+    if (data.id_token) {
+      try {
+        huaweiUserId = decodeIdToken(data.id_token);
+      } catch {
+        // id_token decode failed — continue without user ID
+      }
+    }
+
+    return { tokenData, huaweiUserId };
   }
 
   /**
@@ -344,6 +357,20 @@ export class HuaweiAuth {
     const store = userStore || getUserStore();
     return store.isAuthenticated(uuid);
   }
+}
+
+/**
+ * Decode a JWT id_token and extract the `sub` claim (Huawei user ID).
+ * Only decodes the payload (no signature verification — token comes from trusted HTTPS exchange).
+ */
+export function decodeIdToken(idToken: string): string {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) throw new Error("Invalid id_token format");
+  const payload = JSON.parse(
+    Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8")
+  );
+  if (!payload.sub) throw new Error("id_token missing sub claim");
+  return payload.sub;
 }
 
 // Default instance

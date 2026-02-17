@@ -13,19 +13,19 @@ import * as fs from "fs";
 import * as path from "path";
 import { AsyncLocalStorage } from "node:async_hooks";
 
-/** Fallback user UUID (used only if config has no userUuid) */
-const FALLBACK_USER_UUID = "a755451c-938e-4cea-b7a6-b66b205949cf";
-
-// Session-scoped user UUID (set during tool execution via runWithUserUuid)
-const userUuidStore = new AsyncLocalStorage<string>();
+// Session-scoped user ID (set during tool execution via runWithUserId)
+const userIdStore = new AsyncLocalStorage<string>();
 
 /**
- * Run a function with a specific user UUID in scope.
- * Tools calling getUserUuid() inside will get this UUID.
+ * Run a function with a specific user ID in scope.
+ * Tools calling getUserId() inside will get this ID.
  */
-export function runWithUserUuid<T>(uuid: string, fn: () => T): T {
-  return userUuidStore.run(uuid, fn);
+export function runWithUserId<T>(userId: string, fn: () => T): T {
+  return userIdStore.run(userId, fn);
 }
+
+/** @deprecated Use runWithUserId */
+export const runWithUserUuid = runWithUserId;
 
 // ============================================================================
 // Unified LLM Provider types & constants
@@ -1065,16 +1065,27 @@ export function isConfigured(): boolean {
 }
 
 /**
- * Get the user UUID from config, falling back to the built-in default.
- * Priority: AsyncLocalStorage (session-scoped) > config file > fallback.
+ * Get the user ID (Huawei user ID or legacy UUID).
+ * Priority: AsyncLocalStorage (session-scoped) > config file > null.
+ * Returns null when no user is authenticated (anonymous state).
  */
-export function getUserUuid(): string {
+export function getUserId(): string | null {
   // 1. AsyncLocalStorage (session-scoped, highest priority)
-  const alsUuid = userUuidStore.getStore();
-  if (alsUuid) return alsUuid;
+  const alsId = userIdStore.getStore();
+  if (alsId) return alsId;
   // 2. Config file
   const config = loadConfig();
-  return config.userUuid || FALLBACK_USER_UUID;
+  return config.userUuid || null;
+}
+
+/**
+ * @deprecated Use getUserId(). This wrapper throws if no user ID is available.
+ * Safe to call from tools running within runWithUserId() context.
+ */
+export function getUserUuid(): string {
+  const id = getUserId();
+  if (!id) throw new Error("No user ID available. Please authenticate first.");
+  return id;
 }
 
 /**

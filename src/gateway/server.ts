@@ -22,6 +22,7 @@ import type { HealthDataSource } from "../data-sources/interface.js";
 import {
   loadConfig,
   saveConfig,
+  getUserId,
   getUserUuid,
   getStateDir,
   getBenchmarkModels,
@@ -575,11 +576,6 @@ export function createGatewayApp() {
    * Start OAuth flow - redirect to Huawei authorization page
    */
   app.get("/auth/huawei/start", (c) => {
-    const uuid = c.req.query("uuid");
-    if (!uuid) {
-      return c.json({ error: "Missing UUID" }, 400);
-    }
-
     const config = loadConfig();
     const huaweiConfig = config.dataSources.huawei;
 
@@ -593,9 +589,10 @@ export function createGatewayApp() {
     const port = config.gateway.port || 8000;
     const redirectUri = huaweiConfig.redirectUri || `http://localhost:${port}/auth/huawei/callback`;
 
-    // Get auth URL with state parameter for CSRF protection and UUID passing
+    // Use a CSRF nonce as state (user ID comes from id_token after exchange)
+    const nonce = crypto.randomUUID();
     const authUrl = huaweiAuth.getAuthUrl(huaweiConfig.clientId, redirectUri);
-    const urlWithState = `${authUrl}&state=${encodeURIComponent(uuid)}`;
+    const urlWithState = `${authUrl}&state=${encodeURIComponent(nonce)}`;
 
     return c.redirect(urlWithState);
   });
@@ -605,17 +602,10 @@ export function createGatewayApp() {
    */
   app.get("/auth/huawei/callback", async (c) => {
     const code = c.req.query("code");
-    const state = c.req.query("state"); // UUID passed via state
 
     if (!code) {
       return c.html(generateOAuthErrorPage("Missing authorization code"));
     }
-
-    if (!state) {
-      return c.html(generateOAuthErrorPage("Missing state parameter"));
-    }
-
-    const uuid = decodeURIComponent(state);
 
     try {
       const config = loadConfig();
@@ -629,19 +619,27 @@ export function createGatewayApp() {
       const redirectUri =
         huaweiConfig.redirectUri || `http://localhost:${port}/auth/huawei/callback`;
 
-      // Exchange code for token
-      const token = await huaweiAuth.exchangeCodeForUser(
+      // Exchange code for token + extract Huawei user ID from id_token
+      const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         code,
         huaweiConfig.clientId,
         huaweiConfig.clientSecret,
         redirectUri
       );
 
-      // Store token in user store (SQLite)
-      const userStore = getUserStore();
-      userStore.saveToken(uuid, token);
+      if (!huaweiUserId) {
+        return c.html(
+          generateOAuthErrorPage(
+            "Could not extract user ID from id_token. Ensure 'openid' scope is requested."
+          )
+        );
+      }
 
-      return c.html(generateOAuthSuccessPage());
+      // Store token in user store (SQLite) using Huawei user ID
+      const userStore = getUserStore();
+      userStore.saveToken(huaweiUserId, tokenData);
+
+      return c.html(generateOAuthSuccessPage(huaweiUserId));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       return c.html(generateOAuthErrorPage(message));
@@ -652,19 +650,19 @@ export function createGatewayApp() {
    * Check OAuth status for a user
    */
   app.get("/auth/huawei/status", (c) => {
-    const uuid = c.req.query("uuid");
-    if (!uuid) {
+    const userId = c.req.query("user_id") || c.req.query("uuid");
+    if (!userId) {
       return c.json({ authenticated: false });
     }
 
     const userStore = getUserStore();
-    const authenticated = userStore.isAuthenticated(uuid);
-    const token = userStore.getToken(uuid);
+    const authenticated = userStore.isAuthenticated(userId);
+    const token = userStore.getToken(userId);
 
     return c.json({
       authenticated,
       expiresAt: token?.expiresAt,
-      needsRefresh: authenticated ? userStore.needsRefresh(uuid) : undefined,
+      needsRefresh: authenticated ? userStore.needsRefresh(userId) : undefined,
     });
   });
 
@@ -673,11 +671,6 @@ export function createGatewayApp() {
    * Returns the Huawei OAuth URL that the extension should open
    */
   app.get("/auth/huawei/get-auth-url", (c) => {
-    const uuid = c.req.query("uuid");
-    if (!uuid) {
-      return c.json({ error: "Missing UUID" }, 400);
-    }
-
     const config = loadConfig();
     const huaweiConfig = config.dataSources.huawei;
 
@@ -685,7 +678,9 @@ export function createGatewayApp() {
       return c.json({ error: "Huawei client ID not configured" }, 400);
     }
 
-    const authUrl = getHuaweiAuthUrl(uuid);
+    // Use a CSRF nonce as state (no longer carries user UUID)
+    const nonce = crypto.randomUUID();
+    const authUrl = getHuaweiAuthUrl(nonce);
     return c.json({ authUrl });
   });
 
@@ -696,8 +691,8 @@ export function createGatewayApp() {
     const body = await c.req.json().catch(() => ({}));
     const { code, uuid } = body;
 
-    if (!code || !uuid) {
-      return c.json({ success: false, error: "Missing code or uuid" }, 400);
+    if (!code) {
+      return c.json({ success: false, error: "Missing authorization code" }, 400);
     }
 
     const config = loadConfig();
@@ -710,18 +705,21 @@ export function createGatewayApp() {
     try {
       const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
 
-      const token = await huaweiAuth.exchangeCodeForUser(
+      const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         code,
         huaweiConfig.clientId,
         huaweiConfig.clientSecret,
         redirectUri
       );
 
-      const userStore = getUserStore();
-      userStore.saveToken(uuid, token);
+      // Use Huawei user ID as the primary user identifier (fallback to request UUID)
+      const userId = huaweiUserId || uuid;
 
-      logOAuth.info("Extension: successfully authenticated user", { uuid: uuid.slice(0, 8) });
-      return c.json({ success: true });
+      const userStore = getUserStore();
+      userStore.saveToken(userId, tokenData);
+
+      logOAuth.info("Extension: successfully authenticated user", { userId: userId.slice(0, 8) });
+      return c.json({ success: true, userId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logOAuth.error("Extension: token exchange failed", { error: message });
@@ -740,13 +738,6 @@ export function createGatewayApp() {
    * 5. Exchanges code for token and stores it
    */
   app.post("/auth/huawei/mcp-flow", async (c) => {
-    const body = await c.req.json().catch(() => ({}));
-    const uuid = body.uuid;
-
-    if (!uuid) {
-      return c.json({ success: false, error: "Missing UUID" }, 400);
-    }
-
     const config = loadConfig();
     const huaweiConfig = config.dataSources.huawei;
 
@@ -760,9 +751,10 @@ export function createGatewayApp() {
       );
     }
 
-    // Generate auth URL with state parameter
-    const authUrl = getHuaweiAuthUrl(uuid);
-    logOAuth.info("MCP: starting Chrome flow", { uuid: uuid.slice(0, 8) });
+    // Generate auth URL with CSRF nonce as state
+    const nonce = crypto.randomUUID();
+    const authUrl = getHuaweiAuthUrl(nonce);
+    logOAuth.info("MCP: starting Chrome flow");
     logOAuth.debug("MCP: auth URL", { url: authUrl.slice(0, 100) });
 
     try {
@@ -777,19 +769,24 @@ export function createGatewayApp() {
       // Exchange code for token directly (no session needed for MCP flow)
       const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
 
-      const token = await huaweiAuth.exchangeCodeForUser(
+      const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         result.code,
         huaweiConfig.clientId,
         huaweiConfig.clientSecret,
         redirectUri
       );
 
-      // Store token in user store (SQLite)
-      const userStore = getUserStore();
-      userStore.saveToken(uuid, token);
+      if (!huaweiUserId) {
+        logOAuth.error("MCP: no user ID in id_token");
+        return c.json({ success: false, error: "Could not extract user ID from id_token" }, 400);
+      }
 
-      logOAuth.info("MCP: successfully authenticated user", { uuid: uuid.slice(0, 8) });
-      return c.json({ success: true });
+      // Store token in user store (SQLite) using Huawei user ID
+      const userStore = getUserStore();
+      userStore.saveToken(huaweiUserId, tokenData);
+
+      logOAuth.info("MCP: successfully authenticated user", { userId: huaweiUserId.slice(0, 8) });
+      return c.json({ success: true, userId: huaweiUserId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logOAuth.error("MCP: token exchange failed", { error: message });
@@ -803,7 +800,14 @@ export function createGatewayApp() {
 /**
  * Generate OAuth success HTML page
  */
-function generateOAuthSuccessPage(): string {
+function generateOAuthSuccessPage(userId?: string): string {
+  // Escape userId for safe embedding in HTML/JS
+  const safeUserId = userId
+    ? userId.replace(
+        /[&<>"']/g,
+        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] || c
+      )
+    : "";
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -849,6 +853,18 @@ function generateOAuthSuccessPage(): string {
     <p>Closing this window...</p>
   </div>
   <script>
+    // Pass userId back to opener window if available
+    ${
+      safeUserId
+        ? `
+    try {
+      if (window.opener) {
+        window.opener.postMessage({ type: "PHA_OAUTH_COMPLETE", userId: "${safeUserId}" }, "*");
+      }
+    } catch(e) {}
+    `
+        : ""
+    }
     setTimeout(() => window.close(), 1500);
   </script>
 </body>
@@ -1067,19 +1083,17 @@ export class GatewaySession {
     this.config = config;
     this.sessionId = crypto.randomUUID();
     this.saSessionId = crypto.randomUUID();
-    this.userUuid = userUuid || getUserUuid();
+    this.userUuid = userUuid || null;
 
     // Use user-specific data source if userUuid is provided
     if (userUuid) {
       this.dataSource = createDataSourceForUser(userUuid);
+      ensureUserDir(userUuid);
     } else {
       this.dataSource = getDataSource();
     }
 
-    // Ensure all OpenClaw user-level files exist for this user + system agent
-    if (this.userUuid) {
-      ensureUserDir(this.userUuid);
-    }
+    // Ensure system agent files exist
     ensureSystemAgentFiles();
 
     // Load persisted chat history from JSONL
@@ -1541,7 +1555,7 @@ export class GatewaySession {
     if (this.promptsScope === "system") {
       userDir = join(getStateDir(), "system-agent");
     } else {
-      const uuid = this.userUuid || getUserUuid();
+      const uuid = this.userUuid || getUserId() || "anonymous";
       userDir = getUserDir(uuid);
     }
 
@@ -1648,7 +1662,7 @@ export class GatewaySession {
     if (this.promptsScope === "system") {
       dir = join(getStateDir(), "system-agent");
     } else {
-      const uuid = this.userUuid || getUserUuid();
+      const uuid = this.userUuid || getUserId() || "anonymous";
       if (!uuid) return null;
       dir = getUserDir(uuid);
     }
@@ -1720,7 +1734,7 @@ export class GatewaySession {
       }
 
       case "plans": {
-        const uuid = this.userUuid || getUserUuid();
+        const uuid = this.userUuid || getUserId() || "anonymous";
         const tab = this.plansTab;
         const planStatusMap: Record<string, PlanStatus> = {
           active: "active",
@@ -1759,7 +1773,7 @@ export class GatewaySession {
 
         // Load data async and re-send
         const mm = getMemoryManager();
-        const uuid = this.userUuid || getUserUuid();
+        const uuid = this.userUuid || getUserId() || "anonymous";
         try {
           // Load system-agent memory files if on that tab
           let saMemoryFiles:
@@ -2173,7 +2187,7 @@ export class GatewaySession {
           judgeModelId: judge.modelId || "",
           judgeLabel: judge.label || "",
           benchmarkModels,
-          userUuid: config.userUuid || "",
+          userId: this.userUuid || config.userUuid || "",
           huaweiScopes: scopesArray,
           chromeMcpCommand: chromeMcp.command || "npx",
           chromeMcpArgs: (chromeMcp.args || []).join(", "),
@@ -2802,7 +2816,7 @@ export class GatewaySession {
     // Plans actions
     else if (action.startsWith("view_plan:")) {
       const planId = action.replace("view_plan:", "");
-      const uuid = this.userUuid || getUserUuid();
+      const uuid = this.userUuid || getUserId() || "anonymous";
       const plan = loadPlan(uuid, planId);
       if (plan) {
         // Sync latest health data into plan goals before displaying
@@ -2842,7 +2856,7 @@ export class GatewaySession {
       const parts = action.replace("update_plan_action:", "").split(":");
       const planId = parts[0];
       const newStatus = parts[1] as PlanStatus;
-      const uuid = this.userUuid || getUserUuid();
+      const uuid = this.userUuid || getUserId() || "anonymous";
       const plan = loadPlan(uuid, planId);
       if (plan) {
         plan.status = newStatus;
@@ -2862,7 +2876,7 @@ export class GatewaySession {
     // Proactive actions
     else if (action.startsWith("rec_dismiss:")) {
       const recId = action.replace("rec_dismiss:", "");
-      const uuid = this.userUuid || getUserUuid();
+      const uuid = this.userUuid || getUserId() || "anonymous";
       const rec = getRecommendation(uuid, recId);
       if (rec) {
         rec.status = "dismissed";
@@ -2872,7 +2886,7 @@ export class GatewaySession {
       }
     } else if (action.startsWith("rec_act:")) {
       const recId = action.replace("rec_act:", "");
-      const uuid = this.userUuid || getUserUuid();
+      const uuid = this.userUuid || getUserId() || "anonymous";
       const rec = getRecommendation(uuid, recId);
       if (rec) {
         rec.status = "acted";
@@ -2882,7 +2896,7 @@ export class GatewaySession {
       }
     } else if (action.startsWith("rem_complete:")) {
       const remId = action.replace("rem_complete:", "");
-      const uuid = this.userUuid || getUserUuid();
+      const uuid = this.userUuid || getUserId() || "anonymous";
       const rem = getReminder(uuid, remId);
       if (rem) {
         rem.status = "completed";
@@ -2911,7 +2925,16 @@ export class GatewaySession {
       this.agent = null;
       send({ type: "user_uuid_set", uuid: this.userUuid });
     } else if (action === "auth_complete") {
-      // User completed OAuth — full reset: clear all caches and re-fetch from scratch
+      // User completed OAuth — migrate session to authenticated user
+      if (payload?.userId) {
+        const newUserId = payload.userId as string;
+        this.userUuid = newUserId;
+        this.dataSource = createDataSourceForUser(newUserId);
+        ensureUserDir(newUserId);
+        // Reset agent so it gets recreated with new user context
+        this.agent = null;
+      }
+      // Full reset: clear all caches and re-fetch from scratch
       const { clearMemoryCache } = await import("../data-sources/huawei/api-cache.js");
       const { clearMissingScopeErrors } = await import("../data-sources/huawei/huawei-api.js");
       clearMemoryCache();
@@ -2923,7 +2946,7 @@ export class GatewaySession {
     // Memory search action
     else if (action === "memory_search_submit" && payload?.query) {
       const mm = getMemoryManager();
-      const uuid = this.userUuid || getUserUuid();
+      const uuid = this.userUuid || getUserId() || "anonymous";
       this.memorySearchQuery = payload.query as string;
       this.memorySearchResults = await mm.searchAsync(uuid, this.memorySearchQuery);
       await this.handleNavigate("memory", send);
@@ -5774,19 +5797,27 @@ export async function startGateway(
   const sseManager = new SSEConnectionManager();
   const webDir = config.webDir;
 
-  // Helper: get or create session by user UUID
-  function getOrCreateSession(userUuid?: string): GatewaySession {
-    const key = userUuid || crypto.randomUUID();
-    let session = sessions.get(key);
+  // Helper: get or create session by user ID
+  function getOrCreateSession(userId?: string): GatewaySession {
+    if (!userId) {
+      // Anonymous session — shared, no user directory
+      let session = sessions.get("__anonymous__");
+      if (!session) {
+        session = new GatewaySession(config);
+        sessions.set("__anonymous__", session);
+      }
+      return session;
+    }
+    let session = sessions.get(userId);
     if (!session) {
-      session = new GatewaySession(config, userUuid);
-      sessions.set(key, session);
+      session = new GatewaySession(config, userId);
+      sessions.set(userId, session);
     }
     return session;
   }
 
-  // Helper: extract user UUID from request cookie
-  function extractUserUuid(req: Request): string | undefined {
+  // Helper: extract user ID from request cookie
+  function extractUserId(req: Request): string | undefined {
     const cookieHeader = req.headers.get("cookie") || "";
     const match = cookieHeader.match(/pha_user_id=([^;]+)/);
     return match ? match[1] : undefined;
@@ -5915,8 +5946,8 @@ export async function startGateway(
       if (url.pathname === "/api/a2ui/init" && req.method === "POST") {
         try {
           const body = (await req.json().catch(() => ({}))) as { uuid?: string };
-          const userUuid = body.uuid || extractUserUuid(req);
-          const session = getOrCreateSession(userUuid);
+          const userId = body.uuid || extractUserId(req);
+          const session = getOrCreateSession(userId);
 
           const updates = await session.getFullPageState();
 
@@ -5925,7 +5956,7 @@ export async function startGateway(
             "Access-Control-Allow-Origin": "*",
           };
           // Set session cookie
-          if (userUuid) {
+          if (userId) {
             const expires = new Date();
             expires.setFullYear(expires.getFullYear() + 1);
             headers["Set-Cookie"] =
@@ -5959,8 +5990,8 @@ export async function startGateway(
             sessionId?: string;
           };
 
-          const userUuid = extractUserUuid(req);
-          const session = getOrCreateSession(userUuid);
+          const userId = extractUserId(req);
+          const session = getOrCreateSession(userId);
 
           const result = await session.handleHTTPRequest(body);
 
@@ -5981,8 +6012,8 @@ export async function startGateway(
       // GET /api/a2ui/events — SSE long-lived connection for push updates
       if (url.pathname === "/api/a2ui/events" && req.method === "GET") {
         const sessionId = url.searchParams.get("sessionId");
-        const userUuid = extractUserUuid(req);
-        const session = getOrCreateSession(userUuid);
+        const userId = extractUserId(req);
+        const session = getOrCreateSession(userId);
 
         const result = sseManager.createConnection(session.getSessionId());
         if (!result) {

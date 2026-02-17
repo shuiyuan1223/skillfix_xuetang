@@ -9,18 +9,22 @@ import { A2UIRenderer } from "./components/a2ui/A2UIRenderer";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getUserUuid(): string {
-  // Check URL query param first (for debugging: ?uuid=xxx)
+function setUserIdCookie(userId: string): void {
+  const expires = new Date();
+  expires.setFullYear(expires.getFullYear() + 1);
+  document.cookie = `pha_user_id=${userId}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
+}
+
+function getUserId(): string | null {
+  // 1. URL ?user_id=xxx (for debugging, also accepts legacy ?uuid=xxx)
   const urlParams = new URLSearchParams(window.location.search);
-  const urlUuid = urlParams.get("uuid");
-  if (urlUuid) {
-    const expires = new Date();
-    expires.setFullYear(expires.getFullYear() + 1);
-    document.cookie = `pha_user_id=${urlUuid}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
-    return urlUuid;
+  const urlUserId = urlParams.get("user_id") || urlParams.get("uuid");
+  if (urlUserId) {
+    setUserIdCookie(urlUserId);
+    return urlUserId;
   }
 
-  // Check cookie
+  // 2. Cookie pha_user_id (set after OAuth)
   const cookies = document.cookie.split(";");
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split("=");
@@ -29,12 +33,8 @@ function getUserUuid(): string {
     }
   }
 
-  // Generate new UUID and save to cookie
-  const uuid = generateUUID();
-  const expires = new Date();
-  expires.setFullYear(expires.getFullYear() + 1);
-  document.cookie = `pha_user_id=${uuid}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
-  return uuid;
+  // 3. Not authenticated — return null (no random UUID generation)
+  return null;
 }
 
 /** Send an action to the A2UI HTTP endpoint and process response updates. */
@@ -369,9 +369,7 @@ export function App() {
     sendActionRaw("show_toast", { message: "Opening authorization page...", variant: "info" });
 
     try {
-      const urlResponse = await fetch(
-        `/auth/huawei/get-auth-url?uuid=${encodeURIComponent(userUuidRef.current!)}`,
-      );
+      const urlResponse = await fetch("/auth/huawei/get-auth-url");
       if (!urlResponse.ok) {
         const text = await urlResponse.text();
         console.error("[OAuth] get-auth-url failed:", urlResponse.status, text.slice(0, 200));
@@ -400,7 +398,12 @@ export function App() {
         const exchangeResult = await exchangeResponse.json();
         if (exchangeResult.success) {
           console.log("[OAuth] Authentication successful!");
-          sendActionRaw("auth_complete");
+          // Store the Huawei user ID returned by the server
+          if (exchangeResult.userId) {
+            setUserIdCookie(exchangeResult.userId);
+            userUuidRef.current = exchangeResult.userId;
+          }
+          sendActionRaw("auth_complete", { userId: exchangeResult.userId });
         } else {
           throw new Error(exchangeResult.error || "Failed to exchange code");
         }
@@ -433,7 +436,12 @@ export function App() {
       const result = await response.json();
       if (result.success) {
         console.log("[OAuth] Authentication successful!");
-        sendActionRaw("auth_complete");
+        // Store the Huawei user ID returned by the server
+        if (result.userId) {
+          setUserIdCookie(result.userId);
+          userUuidRef.current = result.userId;
+        }
+        sendActionRaw("auth_complete", { userId: result.userId });
       } else {
         console.error("[OAuth] MCP flow failed:", result.error);
         if (
@@ -462,7 +470,6 @@ export function App() {
   }, [sendActionRaw]);
 
   const startHuaweiAuth = useCallback(async () => {
-    userUuidRef.current = getUserUuid();
     console.log("[OAuth] Starting authentication...");
     const hasExtension = await checkExtension();
     if (hasExtension) {
@@ -874,7 +881,7 @@ export function App() {
     document.documentElement.classList.toggle("light", !isDark);
 
     // Get user UUID
-    userUuidRef.current = getUserUuid();
+    userUuidRef.current = getUserId();
 
     // Connect via HTTP+SSE
     connect();

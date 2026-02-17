@@ -4,8 +4,9 @@
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { MemoryManager } from "./memory-manager.js";
-import { existsSync, rmSync, mkdirSync } from "fs";
+import { existsSync, rmSync, mkdirSync, readdirSync } from "fs";
 import { join } from "path";
+import { getStateDir } from "../utils/config.js";
 
 // Use a test-specific directory
 const TEST_STATE_DIR = join(import.meta.dir, "../../.pha-test");
@@ -28,6 +29,15 @@ describe("MemoryManager", () => {
     // Clean up test directory
     if (existsSync(TEST_STATE_DIR)) {
       rmSync(TEST_STATE_DIR, { recursive: true, force: true });
+    }
+    // Clean up test user directories leaked into .pha/users/
+    const usersDir = join(getStateDir(), "users");
+    if (existsSync(usersDir)) {
+      for (const entry of readdirSync(usersDir)) {
+        if (entry.startsWith("test-user-") || entry.startsWith("new-user-")) {
+          rmSync(join(usersDir, entry), { recursive: true, force: true });
+        }
+      }
     }
   });
 

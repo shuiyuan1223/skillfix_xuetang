@@ -2015,8 +2015,8 @@ export interface SettingsPageData {
   judgeModelId: string;
   judgeLabel: string;
   benchmarkModels: Array<{ key: string; provider: string; modelId: string; label: string }>;
-  // User UUID
-  userUuid: string;
+  // User ID (Huawei user ID or legacy UUID)
+  userId: string;
   huaweiScopes: string[];
   // MCP structured fields
   chromeMcpCommand: string;
@@ -2045,7 +2045,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   // Header
   const title = ui.text(t("settings.title"), "h2");
   const subtitle = ui.text(t("settings.subtitle"), "caption");
-  const uuidText = ui.text(`${t("settings.userUuid")}: ${data.userUuid || "—"}`, "caption");
+  const uuidText = ui.text(`${t("settings.userId")}: ${data.userId || "—"}`, "caption");
   const header = ui.column([title, subtitle, uuidText], { gap: 4 });
 
   // ---- Model Repository Section ----

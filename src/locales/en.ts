@@ -609,7 +609,7 @@ export const en: LocaleMessages = {
     judgeLabel: "Display Name",
     benchmarkModelsJson: "Model Config (JSON)",
     benchmarkModelsJsonDesc: "Benchmark model list in JSON format",
-    userUuid: "User UUID",
+    userId: "User ID",
     huaweiScopes: "OAuth Scopes",
     huaweiScopesDesc: "Huawei Health authorization scopes, JSON array format",
     scopesPerLine: "OAuth Scopes",

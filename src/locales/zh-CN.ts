@@ -600,7 +600,7 @@ export const zhCN: LocaleMessages = {
     judgeLabel: "显示名称",
     benchmarkModelsJson: "模型配置 (JSON)",
     benchmarkModelsJsonDesc: "基准测试使用的模型列表，JSON 格式",
-    userUuid: "用户 UUID",
+    userId: "用户 ID",
     huaweiScopes: "OAuth Scopes",
     huaweiScopesDesc: "华为健康授权范围，JSON 数组格式",
     scopesPerLine: "OAuth Scopes",

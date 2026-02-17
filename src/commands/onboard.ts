@@ -520,19 +520,14 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
 async function runFullWizard(): Promise<void> {
   ensureConfigDir();
 
-  // Preserve existing userUuid or generate a new one
-  const existingConfig = isConfigured() ? loadConfig() : null;
-  const userUuid = existingConfig?.userUuid || crypto.randomUUID();
-
   const config: PHAConfig = {
-    userUuid,
     gateway: { port: 8000, autoStart: false },
     llm: { provider: "anthropic" },
     dataSources: { type: "mock" },
     tui: { theme: "dark", showToolCalls: true },
   };
 
-  p.log.info(`User ID: ${userUuid.slice(0, 8)}...`);
+  p.log.info("User ID will be set after Huawei OAuth authorization");
 
   // Step 1: LLM Provider
   p.log.step("Step 1/4: LLM Provider");
@@ -725,7 +720,6 @@ async function runFullWizard(): Promise<void> {
   // Summary
   p.note(
     [
-      `User ID: ${config.userUuid?.slice(0, 8)}...`,
       `Provider: ${providerCfg.name}`,
       `Model: ${config.llm.modelId}`,
       `Gateway: http://localhost:${config.gateway.port}`,

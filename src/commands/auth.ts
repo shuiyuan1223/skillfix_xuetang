@@ -134,20 +134,23 @@ async function mcpAuthFlow(uuid: string, timeout: number): Promise<void> {
     exchangeSpinner.start();
 
     const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
-    const token = await huaweiAuth.exchangeCodeForUser(
+    const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
       result.code,
       huaweiConfig.clientId,
       huaweiConfig.clientSecret,
       redirectUri
     );
 
+    // Use Huawei user ID as primary identifier (fallback to config UUID)
+    const userId = huaweiUserId || uuid;
+
     // Store token for this user
     const userStore = getUserStore();
-    userStore.saveToken(uuid, token);
+    userStore.saveToken(userId, tokenData);
 
     exchangeSpinner.stop("success");
     console.log(`\n  ${c.green("✓")} Authentication successful!`);
-    console.log(`  ${c.dim("User:")} ${uuid.slice(0, 8)}...`);
+    console.log(`  ${c.dim("User:")} ${userId.slice(0, 8)}...`);
     console.log(`\n  ${c.dim("Test with:")} ${c.cyan("pha health")}`);
     console.log("");
   } catch (error) {
@@ -204,19 +207,22 @@ async function manualAuthFlow(uuid: string): Promise<void> {
     spinner.start();
 
     try {
-      const token = await huaweiAuth.exchangeCodeForUser(
+      const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         code.trim(),
         huaweiConfig.clientId,
         huaweiConfig.clientSecret,
         redirectUri
       );
 
+      // Use Huawei user ID as primary identifier (fallback to config UUID)
+      const userId = huaweiUserId || uuid;
+
       const userStore = getUserStore();
-      userStore.saveToken(uuid, token);
+      userStore.saveToken(userId, tokenData);
 
       spinner.stop("success");
       console.log(`\n  ${c.green("✓")} Authentication successful!`);
-      console.log(`  ${c.dim("User:")} ${uuid.slice(0, 8)}...`);
+      console.log(`  ${c.dim("User:")} ${userId.slice(0, 8)}...`);
       console.log(`\n  ${c.dim("Test with:")} ${c.cyan("pha health")}`);
     } catch (error) {
       spinner.stop("error");

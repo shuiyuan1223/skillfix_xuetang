@@ -15,7 +15,7 @@ import { globalRegistry } from "../tools/index.js";
 import { getMemoryManager } from "../memory/index.js";
 import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/compaction.js";
 import {
-  getUserUuid,
+  getUserId,
   type LLMProvider,
   DEFAULT_MODELS,
   ENV_KEY_MAP,
@@ -65,7 +65,7 @@ export class PHAAgent {
 
   constructor(config: PHAAgentConfig = {}, healthContext?: string) {
     this.config = config;
-    this.userUuid = config.userUuid || getUserUuid();
+    this.userUuid = config.userUuid || getUserId() || undefined;
 
     const provider = config.provider || "anthropic";
     const modelId = config.modelId || DEFAULT_MODELS[provider];
@@ -128,8 +128,12 @@ export class PHAAgent {
 
     // Build system prompt with user profile + memory
     const memoryManager = getMemoryManager();
-    memoryManager.ensureUser(this.userUuid);
-    const systemPrompt = memoryManager.buildSystemPrompt(this.userUuid, healthContext);
+    if (this.userUuid) {
+      memoryManager.ensureUser(this.userUuid);
+    }
+    const systemPrompt = this.userUuid
+      ? memoryManager.buildSystemPrompt(this.userUuid, healthContext)
+      : memoryManager.buildSystemPrompt("anonymous", healthContext);
 
     // Build LLM config for compaction summarization
     const llmConfig: LLMSummarizationConfig = {
@@ -148,7 +152,7 @@ export class PHAAgent {
         flushThreshold: 4000,
       },
       memoryManager,
-      this.userUuid,
+      this.userUuid || "anonymous",
       llmConfig,
       config.sessionId
     );

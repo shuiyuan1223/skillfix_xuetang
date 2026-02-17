@@ -627,7 +627,7 @@ export interface LocaleMessages {
     judgeLabel: string;
     benchmarkModelsJson: string;
     benchmarkModelsJsonDesc: string;
-    userUuid: string;
+    userId: string;
     huaweiScopes: string;
     huaweiScopesDesc: string;
     scopesPerLine: string;
