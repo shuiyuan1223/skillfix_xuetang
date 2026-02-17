@@ -721,13 +721,10 @@ export function createGatewayApp() {
         redirectUri
       );
 
-      // Use Huawei user ID as the primary user identifier (fallback to request UUID, then generate)
-      const userId = huaweiUserId || uuid || crypto.randomUUID();
-      if (!huaweiUserId) {
-        logOAuth.warn("Extension: no id_token from Huawei, using fallback ID", {
-          userId: userId.slice(0, 8),
-          hadUuid: !!uuid,
-        });
+      // Use Huawei user ID (from id_token or UserInfo), fallback to request UUID
+      const userId = huaweiUserId || uuid;
+      if (!userId) {
+        return c.json({ success: false, error: "Could not determine user ID from Huawei" }, 400);
       }
 
       const userStore = getUserStore();

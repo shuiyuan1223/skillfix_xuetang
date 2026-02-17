@@ -260,13 +260,20 @@ export class HuaweiAuth {
     const data = (await response.json()) as HuaweiTokenResponse;
     const tokenData = this.tokenResponseToData(data);
 
-    // Extract Huawei user ID from id_token (best-effort)
+    // Extract Huawei user ID: try id_token first, then UserInfo endpoint
     let huaweiUserId: string | undefined;
     if (data.id_token) {
       try {
         huaweiUserId = decodeIdToken(data.id_token);
       } catch {
-        // id_token decode failed — continue without user ID
+        // id_token decode failed — fall through to UserInfo
+      }
+    }
+    if (!huaweiUserId) {
+      try {
+        huaweiUserId = await fetchUserInfoSub(tokenData.accessToken);
+      } catch {
+        // UserInfo also failed — continue without user ID
       }
     }
 
@@ -371,6 +378,29 @@ export function decodeIdToken(idToken: string): string {
   );
   if (!payload.sub) throw new Error("id_token missing sub claim");
   return payload.sub;
+}
+
+/**
+ * Fetch user ID from Huawei OIDC UserInfo endpoint using access_token.
+ * Fallback when id_token is not present in the token response.
+ */
+async function fetchUserInfoSub(accessToken: string): Promise<string> {
+  const config = loadConfig();
+  const baseUrl = config.dataSources.huawei?.authUrl || DEFAULT_AUTH_URL;
+  // Derive userinfo URL from auth URL base (same host)
+  const url = new URL(baseUrl);
+  url.pathname = "/oauth2/v3/userinfo";
+
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) {
+    throw new Error(`UserInfo request failed: ${response.status}`);
+  }
+  const data = (await response.json()) as { sub?: string; openID?: string };
+  const sub = data.sub || data.openID;
+  if (!sub) throw new Error("UserInfo response missing sub/openID");
+  return sub;
 }
 
 // Default instance
