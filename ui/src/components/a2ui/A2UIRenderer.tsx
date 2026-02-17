@@ -880,22 +880,20 @@ export function A2UIRenderer({
         style={{
           position: "fixed", inset: 0, zIndex: 50,
           display: "flex", alignItems: "center", justifyContent: "center",
-          background: "linear-gradient(135deg, #0f0a1a 0%, #1a0a2e 50%, #0a1628 100%)",
-          backgroundSize: "400% 400%",
-          animation: "auth-gradient 60s ease infinite",
+          background: "rgb(var(--color-bg))",
           overflow: "hidden",
         }}
       >
-        {/* Floating orbs */}
+        {/* Floating orbs — using design system primary & accent-2 */}
         <div style={{
           position: "absolute", width: 200, height: 200, borderRadius: "50%",
-          background: "rgba(255, 92, 92, 0.15)", filter: "blur(80px)",
+          background: "rgb(var(--color-primary) / 0.12)", filter: "blur(80px)",
           top: "15%", left: "10%",
           animation: "auth-orb 20s ease-in-out infinite",
         }} />
         <div style={{
           position: "absolute", width: 150, height: 150, borderRadius: "50%",
-          background: "rgba(20, 184, 166, 0.1)", filter: "blur(60px)",
+          background: "rgb(var(--color-accent-2) / 0.08)", filter: "blur(60px)",
           bottom: "20%", right: "15%",
           animation: "auth-orb 25s ease-in-out infinite reverse",
         }} />
@@ -905,11 +903,11 @@ export function A2UIRenderer({
           position: "relative", zIndex: 1,
           maxWidth: 480, width: "90%",
           padding: "48px 40px",
-          background: "rgba(255, 255, 255, 0.05)",
+          background: "var(--color-surface-card)",
           backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
           borderRadius: 24,
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          boxShadow: "0 32px 64px rgba(0, 0, 0, 0.4)",
+          border: "1px solid rgb(var(--color-border))",
+          boxShadow: "var(--shadow-xl)",
           animation: "auth-card-enter 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards",
           textAlign: "center",
           display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
@@ -918,19 +916,19 @@ export function A2UIRenderer({
           <div style={{
             width: 64, height: 64,
             borderRadius: 16,
-            background: "linear-gradient(135deg, rgb(255, 92, 92), rgb(20, 184, 166))",
+            background: "linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))",
             display: "flex", alignItems: "center", justifyContent: "center",
             animation: "auth-float 3s ease-in-out infinite",
-            boxShadow: "0 8px 32px rgba(255, 92, 92, 0.3)",
+            boxShadow: "var(--shadow-glow)",
             marginBottom: 8,
           }}>
-            <span style={{ color: "#fff" }} className="[&>svg]:w-8 [&>svg]:h-8" dangerouslySetInnerHTML={{ __html: getIcon("heart-pulse") }} />
+            <span style={{ color: "rgb(var(--color-primary-fg))" }} className="[&>svg]:w-8 [&>svg]:h-8" dangerouslySetInnerHTML={{ __html: getIcon("heart-pulse") }} />
           </div>
 
           {/* Title with shimmer */}
           <h1 style={{
             fontSize: "2.5rem", fontWeight: 800, letterSpacing: "-0.04em",
-            background: "linear-gradient(90deg, #ff5c5c, #14b8a6, #ff5c5c)",
+            background: "linear-gradient(90deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)), rgb(var(--color-primary)))",
             backgroundSize: "200% auto",
             WebkitBackgroundClip: "text", backgroundClip: "text",
             WebkitTextFillColor: "transparent",
@@ -940,14 +938,13 @@ export function A2UIRenderer({
 
           {/* Subtitle */}
           <p style={{
-            fontSize: "1rem", color: "rgba(255, 255, 255, 0.7)",
+            fontSize: "1rem", color: "rgb(var(--color-text))",
             fontWeight: 500, margin: 0, letterSpacing: "-0.01em",
-            animationDelay: "0.1s",
           }}>{subtitle}</p>
 
           {/* Tagline */}
           <p style={{
-            fontSize: "0.85rem", color: "rgba(255, 255, 255, 0.4)",
+            fontSize: "0.85rem", color: "rgb(var(--color-text-muted))",
             margin: "4px 0 16px", lineHeight: 1.5,
           }}>{tagline}</p>
 
@@ -960,14 +957,14 @@ export function A2UIRenderer({
               {features.map((f, i) => (
                 <div key={i} style={{
                   padding: "16px 12px", borderRadius: 16,
-                  background: "rgba(255, 255, 255, 0.03)",
-                  border: "1px solid rgba(255, 255, 255, 0.06)",
+                  background: "var(--color-surface-hover)",
+                  border: "1px solid rgb(var(--color-border))",
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
                   animation: `auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.3 + i * 0.1}s backwards`,
                 }}>
-                  <span style={{ color: "rgba(255, 255, 255, 0.6)" }} className="[&>svg]:w-5 [&>svg]:h-5" dangerouslySetInnerHTML={{ __html: getIcon(f.icon) }} />
-                  <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(255, 255, 255, 0.85)" }}>{f.title}</span>
-                  <span style={{ fontSize: "0.7rem", color: "rgba(255, 255, 255, 0.4)", lineHeight: 1.4 }}>{f.desc}</span>
+                  <span style={{ color: "rgb(var(--color-text-secondary))" }} className="[&>svg]:w-5 [&>svg]:h-5" dangerouslySetInnerHTML={{ __html: getIcon(f.icon) }} />
+                  <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgb(var(--color-text-strong))" }}>{f.title}</span>
+                  <span style={{ fontSize: "0.7rem", color: "rgb(var(--color-text-muted))", lineHeight: 1.4 }}>{f.desc}</span>
                 </div>
               ))}
             </div>
@@ -980,26 +977,26 @@ export function A2UIRenderer({
               width: "100%", padding: "14px 24px",
               border: "none", borderRadius: 14, cursor: "pointer",
               fontSize: "0.95rem", fontWeight: 600, fontFamily: "inherit",
-              color: "#fff", letterSpacing: "-0.01em",
-              background: "linear-gradient(135deg, rgb(255, 92, 92), rgb(20, 184, 166))",
-              boxShadow: "0 0 24px rgba(255, 92, 92, 0.25)",
+              color: "rgb(var(--color-primary-fg))", letterSpacing: "-0.01em",
+              background: "linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))",
+              boxShadow: "var(--shadow-glow)",
               animation: "glow-pulse 3s ease-in-out infinite, auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s backwards",
               transition: "transform 0.2s ease, box-shadow 0.2s ease",
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLElement).style.transform = "scale(1.02)";
-              (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px rgba(255, 92, 92, 0.4)";
+              (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px var(--color-accent-glow)";
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.transform = "scale(1)";
-              (e.currentTarget as HTMLElement).style.boxShadow = "0 0 24px rgba(255, 92, 92, 0.25)";
+              (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-glow)";
             }}
           >{buttonLabel}</button>
 
           {/* Footer */}
           {footer && (
             <p style={{
-              fontSize: "0.75rem", color: "rgba(255, 255, 255, 0.3)",
+              fontSize: "0.75rem", color: "rgb(var(--color-text-muted))",
               margin: "12px 0 0",
             }}>{footer}</p>
           )}

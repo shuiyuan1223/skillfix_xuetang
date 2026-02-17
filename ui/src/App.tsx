@@ -970,12 +970,16 @@ export function App() {
   // JSX — Grid Shell Layout (Topbar + Sidebar + Content)
   // ---------------------------------------------------------------------------
 
+  // Detect if we're showing the auth page (hide shell chrome)
+  const isAuthPage = mainData?.components.some((c) => c.type === "auth_page") ?? false;
+
   return (
-    <div className="shell">
+    <div className={isAuthPage ? "" : "shell"}>
       {/* Decorative grid */}
-      <div className="shell-grid-bg" />
+      {!isAuthPage && <div className="shell-grid-bg" />}
 
       {/* ===== Topbar ===== */}
+      {!isAuthPage && (
       <header className="topbar">
         <div className="topbar-left">
           <button
@@ -990,9 +994,10 @@ export function App() {
         </div>
         <div className="topbar-right" />
       </header>
+      )}
 
       {/* Mobile sidebar overlay */}
-      {mobileSidebarOpen ? (
+      {!isAuthPage && mobileSidebarOpen ? (
         <div
           className={`mobile-overlay md:!hidden transition-opacity duration-normal ${
             mobileSidebarVisible ? "opacity-100" : "opacity-0"
@@ -1002,6 +1007,7 @@ export function App() {
       ) : null}
 
       {/* ===== Sidebar ===== */}
+      {!isAuthPage && (
       <aside
         className={`sidebar ${
           mobileSidebarOpen && mobileSidebarVisible ? "mobile-open" : ""
@@ -1036,9 +1042,10 @@ export function App() {
           </div>
         </div>
       </aside>
+      )}
 
       {/* ===== Main Content ===== */}
-      <main className="main-area">
+      <main className={isAuthPage ? "" : "main-area"}>
         {progressData ? (
           <div className="shrink-0 border-b border-border bg-primary/5 z-10">
             <A2UIRenderer
