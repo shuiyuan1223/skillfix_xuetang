@@ -640,6 +640,14 @@ export function createGatewayApp() {
       const userStore = getUserStore();
       userStore.saveToken(huaweiUserId, tokenData);
 
+      // Set pha_uid cookie so frontend picks up the real Huawei user ID
+      const expires = new Date();
+      expires.setFullYear(expires.getFullYear() + 1);
+      c.header(
+        "Set-Cookie",
+        `pha_uid=${huaweiUserId}; Path=/; Expires=${expires.toUTCString()}; SameSite=Strict`
+      );
+
       return c.html(generateOAuthSuccessPage(huaweiUserId));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";

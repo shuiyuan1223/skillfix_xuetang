@@ -883,12 +883,23 @@ export function App() {
     // Get user UUID
     uidRef.current = getUserId();
 
+    // Listen for OAuth completion from callback popup/tab
+    const oauthHandler = (event: MessageEvent) => {
+      if (event.data?.type === "PHA_OAUTH_COMPLETE" && event.data.userId) {
+        setUserIdCookie(event.data.userId);
+        uidRef.current = event.data.userId;
+        sendActionRaw("auth_complete", { userId: event.data.userId });
+      }
+    };
+    window.addEventListener("message", oauthHandler);
+
     // Connect via HTTP+SSE
     connect();
 
     // Cleanup
     return () => {
       eventSourceRef.current?.close();
+      window.removeEventListener("message", oauthHandler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
