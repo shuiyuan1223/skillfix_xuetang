@@ -8,6 +8,7 @@ export interface UserProfile {
   birthYear?: number;
   height?: number; // cm
   weight?: number; // kg
+  location?: string; // city name for weather/seasonal advice
   conditions?: string[]; // chronic conditions
   allergies?: string[];
   medications?: string[];

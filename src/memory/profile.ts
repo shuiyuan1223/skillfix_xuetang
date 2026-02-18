@@ -403,6 +403,12 @@ function parseProfileMd(content: string): UserProfile {
     profile.weight = parseFloat(weightMatch[1]);
   }
 
+  // Location
+  const locationMatch = content.match(/所在城市:\s*(.+)/);
+  if (locationMatch && !locationMatch[1].includes("{待收集}")) {
+    profile.location = locationMatch[1].trim();
+  }
+
   // Conditions
   const conditionsMatch = content.match(/慢性病:\s*(.+)/);
   if (conditionsMatch && conditionsMatch[1] !== "无" && !conditionsMatch[1].includes("{")) {
@@ -468,6 +474,7 @@ function generateProfileMd(profile: UserProfile): string {
     `- 出生年份: ${profile.birthYear || "{待收集}"}`,
     `- 身高: ${profile.height ? `${profile.height}cm` : "{待收集}"}`,
     `- 体重: ${profile.weight ? `${profile.weight}kg` : "{待收集}"}`,
+    `- 所在城市: ${profile.location || "{待收集}"}`,
     "",
     "## 健康状况",
     `- 慢性病: ${profile.conditions?.length ? profile.conditions.join(", ") : "{待收集}"}`,
@@ -512,6 +519,7 @@ export function formatProfileForPrompt(profile: UserProfile): string {
     const bmi = profile.weight / Math.pow(profile.height / 100, 2);
     lines.push(`- BMI: ${bmi.toFixed(1)}`);
   }
+  if (profile.location) lines.push(`- Location: ${profile.location}`);
   if (profile.conditions?.length) lines.push(`- Conditions: ${profile.conditions.join(", ")}`);
   if (profile.allergies?.length) lines.push(`- Allergies: ${profile.allergies.join(", ")}`);
   if (profile.goals?.primary) lines.push(`- Health goal: ${profile.goals.primary}`);
@@ -549,34 +557,34 @@ export function formatProfileForPrompt(profile: UserProfile): string {
 
 // ============ BOOTSTRAP ============
 
-const BOOTSTRAP_TEMPLATE = `# BOOTSTRAP.md - 你好，新朋友
+const BOOTSTRAP_TEMPLATE = `# BOOTSTRAP.md — 新用户首次引导
 
-你刚和一位新用户开始第一次对话。
+**优先级: 最高。在收集到基础信息之前，你无法给出个性化健康建议。**
 
-## 对话引导
+## 第一条回复
 
-不要审讯。不要机械。就像认识一个新朋友一样自然聊天。
+简短介绍自己（1-2 句），然后问用户怎么称呼。例如：
+"你好！我是你的 AI 健康助手，可以帮你分析健康数据、制定计划。怎么称呼你比较好？"
 
-先简单介绍自己，然后在对话中自然地了解：
+## 需要收集的信息（按优先级）
 
-1. **他们叫什么** — 怎么称呼比较好？
-2. **基本信息** — 性别、年龄（大概就行）
-3. **身体指标** — 身高、体重（方便计算 BMI 等）
-4. **健康目标** — 想改善什么？睡眠？运动？减重？
-5. **数据连接** — 是否已连接华为健康等数据源
+1. **称呼** — 怎么称呼？
+2. **性别** — 男/女
+3. **出生年份** — 用于计算心率区间等
+4. **身高 + 体重** — 用于 BMI 等指标
+5. **所在城市** — 用于天气和季节性建议（可选）
+6. **健康目标** — 想改善什么？（可选）
 
-不用一次全问完。自然地聊，分几轮收集。
+## 收集规则
 
-## 收集到信息后
+- **一次只问一个问题**，不要同时问多个
+- 自然融入对话，不要像填表
+- 如果用户主动问健康问题，先简短回答，然后自然引回收集："对了，我还不知道你的基本情况，方便告诉我……吗？"
+- 每收集到一条信息，**立即**调用 \`update_user_profile\` 保存
 
-用 \`update_user_profile\` 工具保存每一条收集到的信息。
+## 引导完成
 
-## 引导完成后
-
-当你收集到至少 4 个核心字段（性别、年龄、身高、体重）后，
-用 \`complete_onboarding\` 工具完成引导。这会删除本文件。
-
-之后就可以正常提供健康服务了。
+当收集到至少 4 个核心字段（性别、出生年份、身高、体重）后，调用 \`complete_onboarding\` 完成引导。
 `;
 
 /**

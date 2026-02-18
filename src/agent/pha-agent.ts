@@ -24,7 +24,7 @@ import {
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Agent/PHA");
-import { preComputeHealthContext } from "./health-context.js";
+import { preComputeHealthContext, fetchWeatherContext } from "./health-context.js";
 // Skill loading is now LLM-driven via system prompt skill registry + get_skill tool.
 // No regex trigger injection.
 import { sessionToAgentMessages } from "../memory/session-store.js";
@@ -63,7 +63,7 @@ export class PHAAgent {
   private config: PHAAgentConfig;
   private userUuid?: string;
 
-  constructor(config: PHAAgentConfig = {}, healthContext?: string) {
+  constructor(config: PHAAgentConfig = {}, healthContext?: string, weatherContext?: string) {
     this.config = config;
     this.userUuid = config.userUuid || getUserId() || undefined;
 
@@ -132,8 +132,8 @@ export class PHAAgent {
       memoryManager.ensureUser(this.userUuid);
     }
     const systemPrompt = this.userUuid
-      ? memoryManager.buildSystemPrompt(this.userUuid, healthContext)
-      : memoryManager.buildSystemPrompt("anonymous", healthContext);
+      ? memoryManager.buildSystemPrompt(this.userUuid, healthContext, weatherContext)
+      : memoryManager.buildSystemPrompt("anonymous", healthContext, weatherContext);
 
     // Build LLM config for compaction summarization
     const llmConfig: LLMSummarizationConfig = {
@@ -428,8 +428,11 @@ export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAg
     }
   }
 
-  // Pre-compute recent health data context (best-effort, use user-specific source if available)
-  const healthContext = await preComputeHealthContext(config.dataSource, config.userUuid);
+  // Pre-compute health data + weather context in parallel
+  const [healthContext, weatherContext] = await Promise.all([
+    preComputeHealthContext(config.dataSource, config.userUuid),
+    fetchWeatherContext(config.userUuid),
+  ]);
 
-  return new PHAAgent(config, healthContext);
+  return new PHAAgent(config, healthContext, weatherContext);
 }

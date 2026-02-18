@@ -98,6 +98,7 @@ const ALL_PROFILE_FIELDS: Array<{ key: string; getter: (p: UserProfile) => unkno
   { key: "birthYear", getter: (p) => p.birthYear },
   { key: "height", getter: (p) => p.height },
   { key: "weight", getter: (p) => p.weight },
+  { key: "location", getter: (p) => p.location },
   { key: "conditions", getter: (p) => p.conditions },
   { key: "allergies", getter: (p) => p.allergies },
   { key: "medications", getter: (p) => p.medications },

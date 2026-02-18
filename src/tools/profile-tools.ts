@@ -16,6 +16,7 @@ export interface UpdateProfileParams {
   birthYear?: number;
   height?: number;
   weight?: number;
+  location?: string;
   conditions?: string;
   allergies?: string;
   primaryGoal?: string;
@@ -40,6 +41,7 @@ export const updateUserProfileTool: PHATool<UpdateProfileParams> = {
       birthYear: { type: "number", description: "Birth year (e.g. 1990)" },
       height: { type: "number", description: "Height in cm" },
       weight: { type: "number", description: "Weight in kg" },
+      location: { type: "string", description: "City name (e.g. '北京', 'Shanghai')" },
       conditions: { type: "string", description: "Health conditions (comma-separated)" },
       allergies: { type: "string", description: "Allergies (comma-separated)" },
       primaryGoal: { type: "string", description: "Primary health goal" },
@@ -76,6 +78,10 @@ export const updateUserProfileTool: PHATool<UpdateProfileParams> = {
     if (params.weight !== undefined) {
       updates.weight = params.weight;
       updatedFields.push("weight");
+    }
+    if (params.location !== undefined) {
+      updates.location = params.location;
+      updatedFields.push("location");
     }
     if (params.conditions !== undefined) {
       updates.conditions = params.conditions.split(/[,，]/).map((s) => s.trim());

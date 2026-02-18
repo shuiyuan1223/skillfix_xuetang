@@ -241,6 +241,13 @@ export interface PHAConfig {
 
   /** Evolution apply engine */
   applyEngine?: "claude-code" | "pi-coding-agent";
+  /** Session context configuration */
+  context?: {
+    /** Default location for weather (city name) */
+    location?: string;
+    /** Hemisphere for season calculation (default: "north") */
+    hemisphere?: "north" | "south";
+  };
   /** Proactive trigger engine configuration */
   proactive?: {
     enabled?: boolean;

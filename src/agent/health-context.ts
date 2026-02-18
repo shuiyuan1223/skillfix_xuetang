@@ -15,7 +15,8 @@ import { getDataSource } from "../tools/health-data.js";
 import { listPlans, savePlan } from "../plans/store.js";
 import type { HealthPlan, GoalStatus } from "../plans/types.js";
 import { listRecommendations, listReminders, listCalendarEvents } from "../proactive/store.js";
-import { getUserUuid } from "../utils/config.js";
+import { getUserUuid, loadConfig } from "../utils/config.js";
+import { loadProfileFromFile } from "../memory/profile.js";
 
 /**
  * Pre-compute a 7-day health context summary for the system prompt.
@@ -313,6 +314,60 @@ export async function preComputeHealthContext(
     return result;
   } catch (e) {
     console.warn("[Health Context] Pre-computation failed:", e);
+    return "";
+  }
+}
+
+// ============================================================================
+// Weather Context (optional, best-effort)
+// ============================================================================
+
+/**
+ * Fetch weather context from wttr.in (free, no API key).
+ * Returns a formatted string like `- **天气**: 5°C，多云，湿度 65%`
+ * or empty string on failure. 3 second timeout.
+ */
+export async function fetchWeatherContext(userUuid?: string): Promise<string> {
+  try {
+    // Resolve location: user profile → config → skip
+    let location: string | undefined;
+
+    if (userUuid) {
+      try {
+        const profile = loadProfileFromFile(userUuid);
+        if (profile.location) location = profile.location;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (!location) {
+      const config = loadConfig();
+      location = (config as any).context?.location;
+    }
+
+    if (!location) return "";
+
+    const url = `https://wttr.in/${encodeURIComponent(location)}?format=j1`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!resp.ok) return "";
+
+    const data = (await resp.json()) as any;
+    const current = data?.current_condition?.[0];
+    if (!current) return "";
+
+    const tempC = current.temp_C;
+    const desc = current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value || "";
+    const humidity = current.humidity;
+
+    return `- **天气**: ${tempC}°C，${desc}，湿度 ${humidity}%`;
+  } catch {
+    // Network error, timeout, parse error — all silently degrade
     return "";
   }
 }
