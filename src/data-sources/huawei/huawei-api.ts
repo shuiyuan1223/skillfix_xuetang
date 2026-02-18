@@ -50,7 +50,7 @@ const DATA_TYPE_NAMES: Record<number, string> = {
   [HuaweiDataType.STEPS]: "com.huawei.continuous.steps.delta",
   [HuaweiDataType.DISTANCE]: "com.huawei.continuous.distance.delta",
   [HuaweiDataType.CALORIES]: "com.huawei.continuous.calories.burnt",
-  [HuaweiDataType.ACTIVE_MINUTES]: "com.huawei.continuous.exercise_intensity",
+  // ACTIVE_MINUTES: fetched from dailyActivitySummary (activeHours), not polymerize
 };
 
 // Additional data type names for other health metrics
@@ -225,9 +225,15 @@ export class HuaweiHealthApi {
     distance: number;
   }> {
     const accessToken = await this.getAccessToken();
+    // API requires timeZone in +/-HHMM format (e.g. "+0800")
+    const offsetMin = -new Date().getTimezoneOffset();
+    const sign = offsetMin >= 0 ? "+" : "-";
+    const hh = String(Math.floor(Math.abs(offsetMin) / 60)).padStart(2, "0");
+    const mm = String(Math.abs(offsetMin) % 60).padStart(2, "0");
+    const timeZone = `${sign}${hh}${mm}`;
 
-    const startTime = new Date(`${date}T00:00:00`).getTime();
-    const endTime = new Date(`${date}T23:59:59.999`).getTime();
+    // API requires date in YYYYMMDD format (no dashes)
+    const dayStr = date.replace(/-/g, "");
 
     const config = loadConfig();
     const clientId = config.dataSources.huawei?.clientId || "";
@@ -242,25 +248,41 @@ export class HuaweiHealthApi {
         "x-client-id": clientId,
       },
       body: JSON.stringify({
-        startTime,
-        endTime,
+        startDay: dayStr,
+        endDay: dayStr,
+        timeZone,
       }),
     });
 
     if (!response.ok) {
-      log.warn("dailyActivitySummary failed", { status: response.status });
+      const errBody = await response.text().catch(() => "");
+      log.warn("dailyActivitySummary failed", { status: response.status, body: errBody });
       return { calories: 0, activeMinutes: 0, steps: 0, distance: 0 };
     }
 
     const json = (await response.json()) as any;
 
-    // Parse response - structure may vary
-    const summary = json.dailyActivitySummary?.[0] || json.data?.[0] || json;
+    // Parse the value array from dailyActivitySummary response
+    const summary = json.dailyActivitySummary?.[0];
+    if (!summary?.value) {
+      return { calories: 0, activeMinutes: 0, steps: 0, distance: 0 };
+    }
+
+    // Extract fields from value array: [{fieldName: "steps", integerValue: 6000}, ...]
+    const fields: Record<string, number> = {};
+    for (const v of summary.value) {
+      if (v.fieldName && (v.integerValue !== undefined || v.floatValue !== undefined)) {
+        fields[v.fieldName] = v.integerValue ?? v.floatValue ?? 0;
+      }
+    }
+
+    // activeHours is in hours — convert to minutes for consistency with our data model
+    const activeHours = fields.activeHours || 0;
     return {
-      calories: summary.calories || summary.totalCalories || 0,
-      activeMinutes: summary.activeMinutes || summary.totalActiveMinutes || 0,
-      steps: summary.steps || summary.totalSteps || 0,
-      distance: summary.distance || summary.totalDistance || 0,
+      calories: fields.activeCalories || 0,
+      activeMinutes: activeHours * 60,
+      steps: fields.steps || 0,
+      distance: 0,
     };
   }
 
