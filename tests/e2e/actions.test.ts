@@ -37,7 +37,7 @@ describe("Actions", () => {
     expect(findPageUpdate(navResult.updates)).toBeTruthy();
 
     // Then switch tab — this triggers a re-render of dashboard
-    const result = await sendAction(ctx.baseUrl, "change_tab", { tab: "vitals" });
+    const result = await sendAction(ctx.baseUrl, "tab_change", { tab: "vitals" });
     expect(result.updates).toBeTruthy();
     expect(Array.isArray(result.updates)).toBe(true);
     // Dashboard uses progressive loading, so updates should contain page data
@@ -47,7 +47,7 @@ describe("Actions", () => {
   test("memory tab switch returns updates", async () => {
     await navigate(ctx.baseUrl, "memory");
 
-    const result = await sendAction(ctx.baseUrl, "change_tab", { tab: "profile" });
+    const result = await sendAction(ctx.baseUrl, "tab_change", { tab: "profile" });
     expect(result.updates).toBeTruthy();
     expect(Array.isArray(result.updates)).toBe(true);
     // Memory tab switch triggers system-agent interaction, returns a2ui surface updates

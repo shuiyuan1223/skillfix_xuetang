@@ -3177,10 +3177,17 @@ export class GatewaySession {
         this.evolutionLabDiffContent = null;
         this.sendEvolutionLabUpdate(send);
       }
-    } else if (action === "evo_timeline_click" && payload?.id) {
-      const eventId = payload.id as string;
+    } else if (action === "evo_timeline_click" && (payload?.id || payload?.eventId)) {
+      const eventId = (payload.id || payload.eventId) as string;
       if (eventId.startsWith("ver_")) {
-        const branch = payload.branch as string | undefined;
+        // Resolve branch: from payload or by looking up version by ID
+        let branch = payload.branch as string | undefined;
+        if (!branch) {
+          const versionId = eventId.replace("ver_", "");
+          const versions = listEvolutionVersions();
+          const ver = versions.find((v) => v.id === versionId);
+          branch = ver?.branch_name;
+        }
         if (branch) {
           this.evolutionSelectedVersion = branch;
           this.evolutionInspectedBranch = branch;
@@ -4400,10 +4407,9 @@ export class GatewaySession {
         send(generateToast(t("settings.saveError"), "error"));
       }
     }
-    // Default - pass to agent
+    // Default - log unhandled action (do NOT forward to agent as chat message)
     else {
-      const message = `[Action: ${action}] ${payload ? JSON.stringify(payload) : ""}`;
-      await this.handleUserMessage(message, send);
+      log.warn("Unhandled action", { action, payload });
     }
   }
 
