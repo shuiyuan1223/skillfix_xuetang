@@ -229,6 +229,17 @@ export const RUN_COLORS = [
   "rgb(16, 185, 129)",
 ];
 
+/** Consistent model display: always show modelId, prefix with presetName if available */
+function formatModelDisplay(presetName?: string, modelId?: string): string {
+  if (!modelId) return presetName || "-";
+  // Extract short model name from full ID (e.g. "anthropic/claude-opus-4.6" → "claude-opus-4.6")
+  const shortModel = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
+  if (presetName && presetName !== shortModel && presetName !== modelId) {
+    return `${presetName} (${shortModel})`;
+  }
+  return shortModel;
+}
+
 function getScoreColor(score: number): string {
   if (score >= 0.9) return "#4ade80";
   if (score >= 0.7) return "#fbbf24";
@@ -620,7 +631,10 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       type: "arena_run_picker",
       runs: recentRuns.map((r) => ({
         id: r.id,
-        label: r.presetName || r.modelId?.split("/").pop() || r.version_tag || r.id.slice(0, 8),
+        label:
+          formatModelDisplay(r.presetName, r.modelId) !== "-"
+            ? formatModelDisplay(r.presetName, r.modelId)
+            : r.version_tag || r.id.slice(0, 8),
         selected: selectedIds.has(r.id),
         color: selectedIds.has(r.id)
           ? RUN_COLORS[selectedOrder.indexOf(r.id) % RUN_COLORS.length]
@@ -752,7 +766,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         version_tag: r.version_tag || "-",
         score: scoreDisplay,
         passed: `${r.passed_count}/${r.total_test_cases}`,
-        model: r.presetName || r.modelId || "-",
+        model: formatModelDisplay(r.presetName, r.modelId),
         profile: r.profile,
         duration:
           r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
@@ -890,7 +904,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
         version_tag: r.version_tag || "-",
         score: scoreDisplay,
         passed: `${r.passed_count}/${r.total_test_cases}`,
-        model: r.presetName || r.modelId || "-",
+        model: formatModelDisplay(r.presetName, r.modelId),
         profile: r.profile,
         duration:
           r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
