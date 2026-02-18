@@ -45,6 +45,7 @@ export type A2UIComponentType =
   | "git_timeline"
   | "step_indicator"
   | "file_tree"
+  | "version_list"
   // Arena dashboard components
   | "arena_pills"
   | "arena_score_table"
@@ -355,6 +356,22 @@ export interface FileTreeComponent extends A2UIComponent {
   onFileSelect?: string;
 }
 
+// Version List Component (Vercel Deployments style)
+export interface VersionListComponent extends A2UIComponent {
+  type: "version_list";
+  versions: {
+    id: string;
+    branch: string;
+    status: "active" | "merged" | "abandoned";
+    trigger?: string;
+    scoreDelta?: number | null;
+    filesChanged?: number;
+    createdAt: number;
+  }[];
+  selectedBranch?: string;
+  onVersionClick?: string;
+}
+
 // Modal Component
 export interface ModalComponent extends A2UIComponent {
   type: "modal";
@@ -636,6 +653,15 @@ export class A2UIGenerator {
   fileTree(files: FileTreeComponent["files"], opts: Partial<FileTreeComponent> = {}): string {
     const id = this.nextId("ftree");
     this.components.set(id, { id, type: "file_tree", files, ...opts });
+    return id;
+  }
+
+  versionList(
+    versions: VersionListComponent["versions"],
+    opts: Partial<VersionListComponent> = {}
+  ): string {
+    const id = this.nextId("vlist");
+    this.components.set(id, { id, type: "version_list", versions, ...opts });
     return id;
   }
 

@@ -127,6 +127,8 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderStepIndicator(comp, ctx);
     case "file_tree":
       return renderFileTree(comp, ctx);
+    case "version_list":
+      return renderVersionList(comp, ctx);
     case "diff_view":
       return renderDiffView(comp, ctx);
     case "code_editor":
@@ -770,6 +772,66 @@ function renderFileTree(comp: A2UIComponent, ctx: RenderContext): string[] {
     const statsStr = stats.length > 0 ? " " + stats.join(" ") : "";
 
     lines.push(indent(ctx, `${statusColor(statusChar)} ${f.path}${statsStr}`));
+  }
+
+  return lines;
+}
+
+function renderVersionList(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const versions =
+    (comp.versions as Array<{
+      id: string;
+      branch: string;
+      status: string;
+      trigger?: string;
+      scoreDelta?: number | null;
+      filesChanged?: number;
+      createdAt: number;
+    }>) || [];
+  const onVersionClick = comp.onVersionClick as string | undefined;
+  const selectedBranch = comp.selectedBranch as string | undefined;
+  const lines: string[] = [];
+
+  if (versions.length === 0) {
+    lines.push(indent(ctx, ansi.dim("  No versions yet")));
+    return lines;
+  }
+
+  for (const v of versions) {
+    const statusIcon =
+      v.status === "active"
+        ? ansi.yellow("●")
+        : v.status === "merged"
+          ? ansi.green("●")
+          : ansi.dim("●");
+
+    const deltaStr =
+      v.scoreDelta != null
+        ? v.scoreDelta > 0
+          ? ansi.green(` +${v.scoreDelta.toFixed(1)}`)
+          : v.scoreDelta < 0
+            ? ansi.red(` ${v.scoreDelta.toFixed(1)}`)
+            : ""
+        : "";
+
+    const selected = v.branch === selectedBranch;
+    const marker = selected ? ansi.cyan("▸ ") : "  ";
+    const branchStr = selected ? ansi.bold(v.branch) : v.branch;
+    const statusStr = ansi.dim(`[${v.status}]`);
+
+    let prefix = marker;
+    if (onVersionClick) {
+      ctx.actionCounter++;
+      ctx.actions.push({
+        number: ctx.actionCounter,
+        label: v.branch,
+        action: onVersionClick,
+        payload: { branch: v.branch },
+      });
+      prefix = `${ansi.cyan(`[${ctx.actionCounter}]`)} `;
+    }
+
+    lines.push(indent(ctx, `${prefix}${statusIcon} ${branchStr}  ${statusStr}${deltaStr}`));
   }
 
   return lines;

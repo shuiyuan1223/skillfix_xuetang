@@ -991,74 +991,72 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     )
   );
 
-  // Left-right layout: GitLens timeline + detail panel
-  const leftChildren: string[] = [];
+  // Left panel: version list (compact Vercel-style)
+  const versionListData = (data.versions || []).map((v) => ({
+    id: v.id.slice(0, 8),
+    branch: v.branchName,
+    status: v.status as "active" | "merged" | "abandoned",
+    trigger: v.triggerMode || undefined,
+    scoreDelta: v.scoreDelta,
+    filesChanged: v.filesChanged.length,
+    createdAt: v.createdAt,
+  }));
+
+  const leftPanel = ui.column(
+    [
+      ui.versionList(versionListData, {
+        selectedBranch: data.selectedVersion,
+        onVersionClick: "view_version_from_list",
+      }),
+    ],
+    { gap: 8 }
+  );
+
+  // Right panel: detail cards
   const rightChildren: string[] = [];
+  const selectedInfo = data.selectedVersion
+    ? data.versions?.find((v) => v.branchName === data.selectedVersion)
+    : null;
 
-  // GitLens-style vertical timeline
-  if (data.timelineEvents && data.timelineEvents.length > 0) {
-    const timelineLabel = ui.text(t("evolution.timeline"), "label");
-    leftChildren.push(timelineLabel);
-
-    const timeline = ui.gitTimeline(data.timelineEvents, {
-      activeBranch: data.activeVersionBranch || undefined,
-      onEventClick: "evo_timeline_click",
-      onContextAction: "evo_timeline_context",
-      selectedEventId: data.selectedTimelineEvent,
+  if (data.selectedVersion && selectedInfo) {
+    // Version info card
+    const branchBadge = ui.badge(selectedInfo.branchName, { variant: "info" });
+    const statusBadge = ui.badge(selectedInfo.status, {
+      variant:
+        selectedInfo.status === "active"
+          ? "warning"
+          : selectedInfo.status === "merged"
+            ? "success"
+            : "default",
     });
-    leftChildren.push(timeline);
-  } else {
-    leftChildren.push(
-      ui.column([ui.text(t("evolution.noVersions"), "caption")], { padding: 32, align: "center" })
-    );
-  }
-
-  // Version detail panel (right side)
-  if (data.selectedVersion) {
-    const selectedInfo = data.versions?.find((v) => v.branchName === data.selectedVersion);
-
-    const detailLabel = ui.text(t("evolution.versionDetail"), "label");
-    rightChildren.push(detailLabel);
-
-    if (selectedInfo) {
-      const branchBadge = ui.badge(selectedInfo.branchName, { variant: "info" });
-      const statusBadge = ui.badge(selectedInfo.status, {
-        variant:
-          selectedInfo.status === "active"
-            ? "warning"
-            : selectedInfo.status === "merged"
-              ? "success"
-              : "default",
-      });
-      rightChildren.push(ui.row([branchBadge, statusBadge], { gap: 8 }));
-
-      if (selectedInfo.triggerMode) {
-        const triggerText = ui.text(
-          `${t("evolution.versionTrigger")}: ${selectedInfo.triggerMode} ${selectedInfo.triggerRef || ""}`,
-          "caption"
-        );
-        rightChildren.push(triggerText);
-      }
-
-      if (selectedInfo.scoreDelta != null) {
-        const sign = selectedInfo.scoreDelta > 0 ? "+" : "";
-        const deltaText = ui.text(
-          `${t("evolution.scoreDelta")}: ${sign}${selectedInfo.scoreDelta.toFixed(1)}`,
-          "caption"
-        );
-        rightChildren.push(deltaText);
-      }
+    const infoDetails: string[] = [];
+    if (selectedInfo.triggerMode) {
+      infoDetails.push(selectedInfo.triggerMode);
     }
+    if (selectedInfo.scoreDelta != null) {
+      const sign = selectedInfo.scoreDelta > 0 ? "+" : "";
+      infoDetails.push(`${sign}${selectedInfo.scoreDelta.toFixed(1)}`);
+    }
+    infoDetails.push(new Date(selectedInfo.createdAt).toLocaleString());
+    const infoCardChildren = [
+      ui.row([branchBadge, statusBadge], { gap: 8 }),
+      ui.text(infoDetails.join(" · "), "caption"),
+    ];
+    rightChildren.push(ui.card(infoCardChildren, { padding: 16 }));
 
-    // Changed files (file tree)
+    // Changed files card (file_tree wrapped in card)
     if (data.changedFiles && data.changedFiles.length > 0) {
+      const statsLabel = ui.text(
+        `${data.changedFiles.length} ${t("evolution.filesChanged")}`,
+        "label"
+      );
       const fileTreeId = ui.fileTree(data.changedFiles, {
         selectedPath: data.diffContent?.path,
         onFileSelect: "evo_file_select",
       });
-      rightChildren.push(fileTreeId);
+      rightChildren.push(ui.card([statsLabel, fileTreeId], { padding: 16 }));
 
-      // Diff view
+      // Diff card
       if (data.diffContent) {
         const diffId = ui.diffView(data.diffContent.before, data.diffContent.after, {
           title: data.diffContent.path,
@@ -1068,12 +1066,20 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       }
     } else {
       rightChildren.push(
-        ui.column([ui.text(t("evolution.noChanges"), "caption")], { padding: 32, align: "center" })
+        ui.card(
+          [
+            ui.column([ui.text(t("evolution.noChanges"), "caption")], {
+              padding: 16,
+              align: "center",
+            }),
+          ],
+          { padding: 16 }
+        )
       );
     }
 
     // Action buttons
-    if (selectedInfo && selectedInfo.status === "active") {
+    if (selectedInfo.status === "active") {
       const switchBtn = ui.button(t("evolution.switchVersion"), "switch_version", {
         variant: "outline",
         size: "sm",
@@ -1091,164 +1097,25 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       });
       rightChildren.push(ui.row([switchBtn, mergeBtn, abandonBtn], { gap: 12 }));
     }
-  } else if (data.selectedTimelineEvent) {
-    // Show selected commit detail
-    const selectedEvt = data.timelineEvents?.find((e) => e.id === data.selectedTimelineEvent);
-    if (selectedEvt) {
-      const commitLabel = ui.text(t("evolution.commitDetail"), "label");
-      rightChildren.push(commitLabel);
-
-      const typeBadge = ui.badge(selectedEvt.type, { variant: "info" });
-      const hashCode = selectedEvt.hash
-        ? ui.badge(selectedEvt.hash.slice(0, 7), { variant: "default" })
-        : null;
-      const badges = [typeBadge];
-      if (hashCode) badges.push(hashCode);
-      if (selectedEvt.status) {
-        badges.push(
-          ui.badge(selectedEvt.status, {
-            variant:
-              selectedEvt.status === "success"
-                ? "success"
-                : selectedEvt.status === "failed"
-                  ? "error"
-                  : selectedEvt.status === "active"
-                    ? "warning"
-                    : "default",
-          })
-        );
-      }
-      rightChildren.push(ui.row(badges, { gap: 8 }));
-
-      rightChildren.push(ui.text(selectedEvt.label, "body"));
-
-      if (selectedEvt.description) {
-        rightChildren.push(ui.text(selectedEvt.description, "caption"));
-      }
-
-      if (selectedEvt.author) {
-        rightChildren.push(
-          ui.text(`${t("evolution.commitAuthor")}: ${selectedEvt.author}`, "caption")
-        );
-      }
-
-      if (selectedEvt.filesChanged) {
-        const stats: string[] = [`${selectedEvt.filesChanged} ${t("evolution.filesChanged")}`];
-        if (selectedEvt.additions) stats.push(`+${selectedEvt.additions}`);
-        if (selectedEvt.deletions) stats.push(`-${selectedEvt.deletions}`);
-        rightChildren.push(ui.text(stats.join("  "), "caption"));
-      }
-
-      if (selectedEvt.branch) {
-        rightChildren.push(
-          ui.text(`${t("evolution.versionBranch")}: ${selectedEvt.branch}`, "caption")
-        );
-      }
-
-      if (selectedEvt.tags && selectedEvt.tags.length > 0) {
-        const tagBadges = selectedEvt.tags.map((tag) => ui.badge(tag, { variant: "info" }));
-        rightChildren.push(ui.row(tagBadges, { gap: 4 }));
-      }
-
-      // Context action buttons
-      const contextBtns: string[] = [];
-      if (selectedEvt.type === "commit" || selectedEvt.type === "merge") {
-        contextBtns.push(
-          ui.button(t("evolution.viewDiff"), "evo_timeline_context", {
-            variant: "outline",
-            size: "sm",
-            icon: "search",
-            payload: { eventId: selectedEvt.id, action: "view_diff" },
-          })
-        );
-        contextBtns.push(
-          ui.button(t("evolution.cherryPick"), "evo_timeline_context", {
-            variant: "outline",
-            size: "sm",
-            icon: "git-commit",
-            payload: { eventId: selectedEvt.id, action: "cherry_pick" },
-          })
-        );
-        contextBtns.push(
-          ui.button(t("evolution.revertCommit"), "evo_timeline_context", {
-            variant: "ghost",
-            size: "sm",
-            icon: "alert-triangle",
-            payload: { eventId: selectedEvt.id, action: "revert" },
-          })
-        );
-      }
-      if (selectedEvt.type === "branch") {
-        contextBtns.push(
-          ui.button(t("evolution.switchVersion"), "switch_version", {
-            variant: "outline",
-            size: "sm",
-            payload: { branch: selectedEvt.branch },
-          })
-        );
-        contextBtns.push(
-          ui.button(t("evolution.mergeVersion"), "merge_version", {
-            variant: "primary",
-            size: "sm",
-            payload: { branch: selectedEvt.branch },
-          })
-        );
-      }
-      if (selectedEvt.type === "benchmark" && selectedEvt.score !== undefined) {
-        contextBtns.push(
-          ui.button(t("evolution.viewDetails"), "view_benchmark_run", {
-            variant: "outline",
-            size: "sm",
-            icon: "bar-chart",
-            payload: { eventId: selectedEvt.id },
-          })
-        );
-      }
-      if (contextBtns.length > 0) {
-        rightChildren.push(ui.row(contextBtns, { gap: 8, wrap: true } as any));
-      }
-    }
   } else {
-    rightChildren.push(ui.text(t("evolution.selectCommitToView"), "caption"));
+    // Empty state: select a version
+    rightChildren.push(
+      ui.column([ui.text(t("evolution.selectVersionToView"), "caption")], {
+        padding: 32,
+        align: "center",
+      })
+    );
   }
 
-  // Two-column layout: timeline (left) + detail (right)
-  const leftPanel = ui.column(leftChildren, { gap: 8 });
   const rightPanel = ui.column(rightChildren, { gap: 12 });
 
+  // Two-column layout (no bottom table)
   const twoCol = ui.row([leftPanel, rightPanel], {
     gap: 16,
     style: "align-items: flex-start;",
   } as any);
 
   children.push(twoCol);
-
-  // Versions table (always shown)
-  if (data.versions && data.versions.length > 0) {
-    const versionRows = data.versions.map((v) => ({
-      id: v.id.slice(0, 8),
-      branch: v.branchName,
-      status: v.status,
-      trigger: v.triggerMode || "-",
-      scoreDelta:
-        v.scoreDelta != null ? `${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(1)}` : "-",
-      files: v.filesChanged.length > 0 ? `${v.filesChanged.length} files` : "-",
-      created: new Date(v.createdAt).toLocaleString(),
-    }));
-    const versionsTable = ui.dataTable(
-      [
-        { key: "branch", label: t("evolution.versionBranch") },
-        { key: "status", label: t("evolution.versionStatus"), render: "badge" },
-        { key: "trigger", label: t("evolution.versionTrigger"), render: "badge" },
-        { key: "scoreDelta", label: t("evolution.scoreDelta") },
-        { key: "files", label: t("evolution.filesChanged") },
-        { key: "created", label: t("evolution.time"), sortable: true },
-      ],
-      versionRows,
-      { onRowClick: "view_version" }
-    );
-    children.push(versionsTable);
-  }
 
   return ui.column(children, { gap: 16, padding: 16 });
 }

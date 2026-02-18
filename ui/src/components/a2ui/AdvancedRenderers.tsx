@@ -882,6 +882,75 @@ export function renderLogViewer(c: A2UIComponent, _ctx: RenderContext) {
   );
 }
 
+// ---- Version List (Vercel Deployments style) ----
+export function renderVersionList(c: A2UIComponent, ctx: RenderContext) {
+  const versions = (c.versions as any[]) || [];
+  const selectedBranch = c.selectedBranch as string | undefined;
+  const onVersionClick = c.onVersionClick as string | undefined;
+
+  const statusColors: Record<string, string> = {
+    active: "rgb(var(--color-primary))",
+    merged: "rgb(var(--color-success))",
+    abandoned: "rgb(var(--color-text-muted))",
+  };
+
+  const relativeTime = (ts: number) => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  };
+
+  if (versions.length === 0) {
+    return (
+      <div className="flex flex-col items-center py-12 text-text-muted">
+        <span className="w-8 h-8 mb-3 opacity-40" dangerouslySetInnerHTML={{ __html: getIcon("git-branch") }} />
+        <span className="text-sm">No versions yet</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {versions.map((v: any, i: number) => {
+        const selected = v.branch === selectedBranch;
+        return (
+          <div
+            key={i}
+            className={`flex flex-col gap-0.5 px-3 py-2.5 rounded-lg cursor-pointer transition-colors
+              ${selected ? "bg-primary/8 border-l-2 border-l-primary" : "hover:bg-surface-hover border-l-2 border-l-transparent"}`}
+            onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: statusColors[v.status as string] || statusColors.abandoned }} />
+              <span className="text-sm font-medium font-mono text-text flex-1 truncate">{v.branch}</span>
+              <span className="text-[11px] text-text-muted shrink-0">{relativeTime(v.createdAt as number)}</span>
+            </div>
+            <div className="flex items-center gap-2 ml-[18px] text-xs text-text-muted">
+              <span>{v.status}</span>
+              {v.trigger && <><span>·</span><span>{v.trigger}</span></>}
+              {v.scoreDelta != null && (
+                <>
+                  <span>·</span>
+                  <span className={v.scoreDelta > 0 ? "text-emerald-400" : v.scoreDelta < 0 ? "text-red-400" : ""}>
+                    {v.scoreDelta > 0 ? "+" : ""}{Number(v.scoreDelta).toFixed(1)}
+                  </span>
+                </>
+              )}
+              {v.filesChanged > 0 && <><span>·</span><span>{v.filesChanged} files</span></>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---- Evolution Pipeline ----
 export function renderEvolutionPipeline(c: A2UIComponent, ctx: RenderContext) {
   const cycles = (c.cycles as any[]) || [];

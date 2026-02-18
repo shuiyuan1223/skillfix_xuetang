@@ -15,6 +15,7 @@ import {
   renderArenaPills, renderArenaScoreTable, renderArenaCategoryCard,
   renderRadarChart, renderArenaRunPicker, renderArenaModeToggle,
   renderPlaygroundFab, renderEvolutionPipeline, renderLogViewer,
+  renderVersionList,
 } from "./AdvancedRenderers";
 
 export interface RenderContext {
@@ -117,6 +118,7 @@ export function A2UIRenderer({
       case "arena_run_picker": return renderArenaRunPicker(c, ctx);
       case "arena_mode_toggle": return renderArenaModeToggle(c, ctx);
       case "playground_fab": return renderPlaygroundFab(c, ctx);
+      case "version_list": return renderVersionList(c, ctx);
       case "evolution_pipeline": return renderEvolutionPipeline(c, ctx);
       case "log_viewer": return renderLogViewer(c, ctx);
       case "auth_page": return rcAuthPage(c);

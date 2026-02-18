@@ -397,6 +397,7 @@ export const zhCN: LocaleMessages = {
     cherryPick: "拣选提交",
     revertCommit: "回退提交",
     selectCommitToView: "选择提交查看详情",
+    selectVersionToView: "选择版本查看详情",
     timeAgo: "前",
     // Data labels
     latestRun: "最新运行",

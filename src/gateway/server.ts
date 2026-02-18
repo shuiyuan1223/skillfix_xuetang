@@ -3177,6 +3177,11 @@ export class GatewaySession {
         this.evolutionLabDiffContent = null;
         this.sendEvolutionLabUpdate(send);
       }
+    } else if (action === "view_version_from_list" && payload?.branch) {
+      this.evolutionSelectedVersion = payload.branch as string;
+      this.evolutionInspectedBranch = payload.branch as string;
+      this.evolutionLabDiffContent = null;
+      this.sendEvolutionLabUpdate(send);
     } else if (action === "evo_timeline_click" && (payload?.id || payload?.eventId)) {
       const eventId = (payload.id || payload.eventId) as string;
       if (eventId.startsWith("ver_")) {

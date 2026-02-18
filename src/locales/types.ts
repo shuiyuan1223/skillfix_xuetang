@@ -421,6 +421,7 @@ export interface LocaleMessages {
     cherryPick: string;
     revertCommit: string;
     selectCommitToView: string;
+    selectVersionToView: string;
     timeAgo: string;
     // Data labels
     latestRun: string;

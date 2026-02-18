@@ -404,6 +404,7 @@ export const en: LocaleMessages = {
     cherryPick: "Cherry-Pick",
     revertCommit: "Revert Commit",
     selectCommitToView: "Select a commit to view details",
+    selectVersionToView: "Select a version to view details",
     timeAgo: "ago",
     // Data labels
     latestRun: "Latest Run",
