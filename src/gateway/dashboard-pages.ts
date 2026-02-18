@@ -277,22 +277,11 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     ],
   });
 
-  // Quick stats next to rings
-  const quickSteps = ui.text(
-    `${currentSteps.toLocaleString()} / ${stepsGoal.toLocaleString()} ${t("activity.steps")}`,
-    "body"
-  );
-  const quickActive = ui.text(
-    `${currentActiveMin} / ${activeMinGoal} ${t("sleep.minutes")} ${t("activity.activeTime")}`,
-    "body"
-  );
-  const quickCal = ui.text(`${currentCalories} / ${caloriesGoal} kcal`, "body");
-  const yesterdayHint = data.metricsIsYesterday
-    ? ui.badge(t("dashboard.yesterdayData"), { variant: "info" })
-    : null;
-
-  const quickStatsChildren = [gauge, quickSteps, quickActive, quickCal];
-  if (yesterdayHint) quickStatsChildren.push(yesterdayHint);
+  // Health score column (gauge only — ring legends already show percentages)
+  const quickStatsChildren: string[] = [gauge];
+  if (data.metricsIsYesterday) {
+    quickStatsChildren.push(ui.badge(t("dashboard.yesterdayData"), { variant: "info" }));
+  }
   const quickStatsCol = ui.column(quickStatsChildren, { gap: 8, align: "center" });
 
   const heroRow = ui.row([rings, quickStatsCol], { gap: 32, justify: "center", align: "center" });

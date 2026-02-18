@@ -188,7 +188,7 @@ export function A2UIRenderer({
     const minColWidth = columns >= 4 ? 160 : columns >= 3 ? 200 : 240;
     return (
       <div className="grid stagger-children"
-           style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${minColWidth}px, 100%), 1fr))`, gap }}>
+           style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${minColWidth}px, 100%), 1fr))`, gap }}>
         {(c.children || []).map((id, index) => (
           <div key={id} style={{ "--stagger-index": index } as React.CSSProperties}>{renderComponent(id)}</div>
         ))}

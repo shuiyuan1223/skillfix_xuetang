@@ -50,7 +50,7 @@ const DATA_TYPE_NAMES: Record<number, string> = {
   [HuaweiDataType.STEPS]: "com.huawei.continuous.steps.delta",
   [HuaweiDataType.DISTANCE]: "com.huawei.continuous.distance.delta",
   [HuaweiDataType.CALORIES]: "com.huawei.continuous.calories.burnt",
-  // Note: activity_minutes not supported via REST API
+  [HuaweiDataType.ACTIVE_MINUTES]: "com.huawei.continuous.exercise_intensity",
 };
 
 // Additional data type names for other health metrics
@@ -196,6 +196,18 @@ export class HuaweiHealthApi {
       }
     }
 
+    // Fallback: compute active minutes from activity records (workouts)
+    if (aggregated.activeMinutes === 0) {
+      try {
+        const records = await this.getActivityRecords(date, date);
+        if (records.length > 0) {
+          aggregated.activeMinutes = records.reduce((sum, r) => sum + (r.duration || 0), 0);
+        }
+      } catch (e) {
+        log.warn("Failed to get activity records for activeMinutes fallback", e);
+      }
+    }
+
     // Save to cache
     saveToMemoryCache(cacheKey, cacheParams, aggregated);
     saveToFileCache(cacheKey, cacheParams, aggregated);
@@ -265,6 +277,8 @@ export class HuaweiHealthApi {
       startTime: startTime.toString(),
       endTime: endTime.toString(),
     });
+    const config = loadConfig();
+    const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/activityRecords?${params}`;
 
     const response = await fetch(url, {
@@ -272,6 +286,7 @@ export class HuaweiHealthApi {
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
+        "x-client-id": clientId,
       },
     });
 
