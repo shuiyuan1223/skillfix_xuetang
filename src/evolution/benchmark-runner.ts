@@ -34,6 +34,7 @@ import { loadConfig, getStateDir } from "../utils/config.js";
 import { aggregateByCategory, computeOverallScore } from "./category-scorer.js";
 import { Semaphore } from "../utils/semaphore.js";
 import { createLogger } from "../utils/logger.js";
+import { loadTestUserFixture } from "./test-user-seeder.js";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
@@ -74,6 +75,43 @@ function buildSharpEvalPrompt(
     ? `\n**Expected Tool Calls**: ${expectedTools.join(", ")}\nIf the agent did NOT call these tools, Data Source Adherence MUST be 0.0.`
     : "";
 
+  // Build user profile section from test fixture
+  let userProfileSection = "";
+  try {
+    const fixture = loadTestUserFixture(testCase.userUuid);
+    const p = fixture.profile;
+    const age = p.birthYear ? new Date().getFullYear() - p.birthYear : "unknown";
+    userProfileSection = `## User Profile & Context
+
+The agent has access to the following user profile and memory. Data from these sources is NOT fabricated — the agent is expected to use this information for personalization.
+
+**Profile:**
+Nickname: ${p.nickname || "N/A"}
+Age: ${age} (birthYear: ${p.birthYear || "N/A"})
+Gender: ${p.gender || "N/A"}
+Height: ${p.height ? p.height + "cm" : "N/A"}
+Weight: ${p.weight ? p.weight + "kg" : "N/A"}
+Goal: ${p.goals?.primary || "N/A"}
+
+**Memory:**
+${fixture.memory?.trim() || "(no memory)"}
+`;
+  } catch {
+    // Fixture not found — skip user profile section
+  }
+
+  // Build session context if multi-turn
+  let sessionSection = "";
+  if (testCase.sessionMessages?.length) {
+    const msgs = testCase.sessionMessages.map((m) => `[${m.role}]: ${m.content}`).join("\n");
+    sessionSection = `## Conversation History
+
+Prior messages in this session (the agent can reference these):
+
+${msgs}
+`;
+  }
+
   return `You are an expert evaluator for a Personal Health Agent (PHA). You must evaluate the AI's response using the SHARP 2.0 framework with 16 sub-components.
 
 ## SHARP 2.0 Rubric
@@ -88,9 +126,9 @@ ${rubricJson}
 **User Query**:
 ${testCase.query}
 
-## Ground Truth: Tool Call Results
+${userProfileSection}${sessionSection}## Ground Truth: Tool Call Results
 
-The agent retrieved its data by calling tools. The tool call results below are the **sole ground truth** for evaluating Data Source Adherence. Any data in the response that does NOT come from these tool results is fabricated.
+The agent can reference data from three legitimate sources: (1) Tool call results below, (2) User Profile & Memory above, (3) Values explicitly stated in the User Query. Data from any of these sources is NOT fabricated. Only data that cannot be traced to ANY of these three sources should be considered fabricated for Data Source Adherence scoring.
 
 ${toolCalls?.length ? JSON.stringify(toolCalls, null, 2) : "No tool calls were made."}
 ${expectedToolsSection}
