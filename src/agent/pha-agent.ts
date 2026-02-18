@@ -415,6 +415,71 @@ export class PHAAgent {
 }
 
 /**
+ * Activity-based timeout for streaming LLM calls.
+ * Resets inactivity timer on every AgentEvent.
+ * Only times out when the agent goes silent for `inactivityMs`.
+ * Hard max as final safety net.
+ */
+export async function withActivityTimeout<T>(
+  agent: PHAAgent,
+  operation: () => Promise<T>,
+  opts?: { inactivityMs?: number; hardMaxMs?: number }
+): Promise<T> {
+  const inactivityMs = opts?.inactivityMs ?? 60_000;
+  const hardMaxMs = opts?.hardMaxMs ?? 300_000;
+
+  return new Promise<T>((resolve, reject) => {
+    let inactivityTimer: ReturnType<typeof setTimeout>;
+    let hardTimer: ReturnType<typeof setTimeout>;
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(inactivityTimer);
+      clearTimeout(hardTimer);
+      unsubscribe();
+    };
+
+    const fail = (reason: string) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      agent.abort();
+      reject(new Error(reason));
+    };
+
+    const resetInactivity = () => {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(
+        () => fail(`Agent inactivity timeout (no events for ${inactivityMs / 1000}s)`),
+        inactivityMs
+      );
+    };
+
+    const unsubscribe = agent.subscribe(() => {
+      resetInactivity();
+    });
+
+    resetInactivity();
+    hardTimer = setTimeout(() => fail(`Agent hard timeout (${hardMaxMs / 1000}s max)`), hardMaxMs);
+
+    operation().then(
+      (result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      }
+    );
+  });
+}
+
+/**
  * Create a PHA Agent instance with environment-based configuration.
  * Pre-computes health context for immediate availability in first turn.
  */

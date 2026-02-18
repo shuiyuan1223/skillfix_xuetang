@@ -32,7 +32,7 @@ import {
   getRecentRuns,
 } from "../evolution/version-tracker.js";
 import type { BenchmarkCategory, AutoLoopConfig, BenchmarkProfile } from "../evolution/types.js";
-import { createPHAAgent } from "../agent/index.js";
+import { createPHAAgent, withActivityTimeout } from "../agent/index.js";
 import {
   loadConfig,
   getBenchmarkModels,
@@ -617,8 +617,6 @@ export function registerEvalCommand(program: Command): void {
         };
       }
 
-      const AGENT_TIMEOUT_MS = 120_000;
-
       const spinner = new Spinner("Running diagnose pipeline...");
       spinner.start();
 
@@ -649,16 +647,9 @@ export function registerEvalCommand(program: Command): void {
                 dataSource,
                 sessionMessages: testCase.sessionMessages,
               });
-              const response = await Promise.race([
-                testAgent.chatAndWaitWithTools(query),
-                new Promise<{
-                  response: string;
-                  toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
-                }>((_, reject) =>
-                  setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
-                ),
-              ]);
-              return response;
+              return await withActivityTimeout(testAgent, () =>
+                testAgent.chatAndWaitWithTools(query)
+              );
             },
             llmCall: rawLLMCall,
             onProgress: (current, total, testCase) => {
@@ -862,7 +853,6 @@ export function registerEvalCommand(program: Command): void {
 
       const isMulti = modelEntries.length > 1;
       const isParallel = options.parallel && isMulti;
-      const AGENT_TIMEOUT_MS = 120_000;
 
       // Shared judge config (one judge for all models)
       const judgeConfig = getJudgeModel();
@@ -941,19 +931,9 @@ export function registerEvalCommand(program: Command): void {
               dataSource,
               sessionMessages: testCase.sessionMessages,
             });
-            const result = await Promise.race([
-              testAgent.chatAndWaitWithTools(query),
-              new Promise<{
-                response: string;
-                toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
-              }>((_, reject) =>
-                setTimeout(
-                  () => reject(new Error("Agent call timed out after 2 minutes")),
-                  AGENT_TIMEOUT_MS
-                )
-              ),
-            ]);
-            return result;
+            return await withActivityTimeout(testAgent, () =>
+              testAgent.chatAndWaitWithTools(query)
+            );
           },
           llmCall: rawLLMCall,
           onProgress: (current, total, testCase) => {

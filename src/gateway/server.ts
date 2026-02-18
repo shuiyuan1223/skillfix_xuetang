@@ -13,7 +13,7 @@ import { mcpHandler } from "./mcp.js";
 import { SSEConnectionManager } from "./sse-manager.js";
 import { handleMCPRequest } from "./mcp-server.js";
 import { generateAgentCard, handleA2ARequest } from "./a2a.js";
-import { createPHAAgent, type PHAAgent } from "../agent/pha-agent.js";
+import { createPHAAgent, withActivityTimeout, type PHAAgent } from "../agent/pha-agent.js";
 import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
 import { getDataSource } from "../tools/health-data.js";
 import { createDataSourceForUser } from "../data-sources/index.js";
@@ -1247,7 +1247,6 @@ export class GatewaySession {
 
       // Configure evolution tools: create fresh agents per call for concurrency safety
       // (shared agent + concurrent reset = race condition → empty responses)
-      const AGENT_TIMEOUT_MS = 120_000;
       const sessionConfig = this.config;
       setEvolutionRunnerConfig({
         agentCall: async (query: string, testCase) => {
@@ -1267,16 +1266,7 @@ export class GatewaySession {
             dataSource,
             sessionMessages: testCase.sessionMessages,
           });
-          const result = await Promise.race([
-            testAgent.chatAndWaitWithTools(query),
-            new Promise<{
-              response: string;
-              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
-            }>((_, reject) =>
-              setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-          return result;
+          return await withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
         },
         llmCall: async (prompt: string) => {
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
@@ -1287,13 +1277,7 @@ export class GatewaySession {
             baseUrl: sessionConfig.baseUrl,
             dataSource: new JudgeMockDS(),
           });
-          const result = await Promise.race([
-            judgeAgent.chatAndWait(prompt),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error("LLM call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-          return result;
+          return await withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
         },
         concurrency: getBenchmarkConcurrency(),
       });
@@ -1322,7 +1306,6 @@ export class GatewaySession {
 
       // Configure evolution tools: create fresh agents per call for concurrency safety
       // (NOT the system agent — otherwise responses leak into system agent chat)
-      const AGENT_TIMEOUT_MS = 120_000;
       // Capture session reference for onProgress callback
       const session = this;
       const sessionConfig = this.config;
@@ -1342,16 +1325,7 @@ export class GatewaySession {
             dataSource,
             sessionMessages: testCase.sessionMessages,
           });
-          const result = await Promise.race([
-            testAgent.chatAndWaitWithTools(query),
-            new Promise<{
-              response: string;
-              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
-            }>((_, reject) =>
-              setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-          return result;
+          return await withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
         },
         llmCall: async (prompt: string) => {
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
@@ -1362,13 +1336,7 @@ export class GatewaySession {
             baseUrl: sessionConfig.baseUrl,
             dataSource: new JudgeMockDS(),
           });
-          const result = await Promise.race([
-            judgeAgent.chatAndWait(prompt),
-            new Promise<string>((_, reject) =>
-              setTimeout(() => reject(new Error("LLM call timed out")), AGENT_TIMEOUT_MS)
-            ),
-          ]);
-          return result;
+          return await withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
         },
         concurrency: getBenchmarkConcurrency(),
         onProgress: (current, total, _testCase) => {
@@ -5222,8 +5190,6 @@ export class GatewaySession {
     // Refresh evolution lab to show running state in table
     this.sendEvolutionLabUpdate(liveSend());
 
-    const AGENT_TIMEOUT_MS = 120_000; // 2 minutes per test case
-
     try {
       // Resolve agent config: use override model or default session config
       const agentApiKey = modelConfig?.apiKey || this.config.apiKey;
@@ -5253,19 +5219,7 @@ export class GatewaySession {
             dataSource,
             sessionMessages: testCase.sessionMessages,
           });
-          const result = await Promise.race([
-            testAgent.chatAndWaitWithTools(query),
-            new Promise<{
-              response: string;
-              toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
-            }>((_, reject) =>
-              setTimeout(
-                () => reject(new Error("Agent call timed out after 2 minutes")),
-                AGENT_TIMEOUT_MS
-              )
-            ),
-          ]);
-          return result;
+          return await withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
         },
         llmCall: async (prompt: string) => {
           // Create fresh judge agent per evaluation for concurrency safety
@@ -5277,16 +5231,7 @@ export class GatewaySession {
             baseUrl: judgeBaseUrl,
             dataSource: new JudgeMockDS(),
           });
-          const result = await Promise.race([
-            judgeAgent.chatAndWait(prompt),
-            new Promise<string>((_, reject) =>
-              setTimeout(
-                () => reject(new Error("Judge LLM call timed out after 2 minutes")),
-                AGENT_TIMEOUT_MS
-              )
-            ),
-          ]);
-          return result;
+          return await withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
         },
         onProgress: (current, total, testCase) => {
           // Update per-run progress file
@@ -5364,7 +5309,6 @@ export class GatewaySession {
       const { BenchmarkRunner } = await import("../evolution/benchmark-runner.js");
 
       const agent = await this.getAgent();
-      const AGENT_TIMEOUT_MS = 120_000;
 
       // Create dedicated judge agent for diagnose evaluation
       const djConfig = getJudgeModel();
@@ -5404,25 +5348,15 @@ export class GatewaySession {
               dataSource,
               sessionMessages: testCase.sessionMessages,
             });
-            const res = await Promise.race([
-              testAgent.chatAndWaitWithTools(query),
-              new Promise<{
-                response: string;
-                toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
-              }>((_, reject) =>
-                setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
-              ),
-            ]);
-            return res;
+            return await withActivityTimeout(testAgent, () =>
+              testAgent.chatAndWaitWithTools(query)
+            );
           },
           llmCall: async (prompt: string) => {
             if (typeof diagnoseJudge.reset === "function") diagnoseJudge.reset();
-            return await Promise.race([
-              diagnoseJudge.chatAndWait(prompt),
-              new Promise<string>((_, reject) =>
-                setTimeout(() => reject(new Error("Judge LLM call timed out")), AGENT_TIMEOUT_MS)
-              ),
-            ]);
+            return await withActivityTimeout(diagnoseJudge, () =>
+              diagnoseJudge.chatAndWait(prompt)
+            );
           },
         },
         onProgress: (msg: string) => {
