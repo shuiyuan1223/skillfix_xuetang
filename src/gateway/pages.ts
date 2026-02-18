@@ -3630,6 +3630,36 @@ export function generatePromptRevertModal(
 }
 
 // ============================================================================
+// Merge Confirmation Modal
+// ============================================================================
+
+export function generateMergeConfirmModal(
+  branch: string,
+  changedFiles: { path: string; status: string }[]
+): A2UIMessage {
+  const ui = new A2UIGenerator("modal");
+
+  const warning = ui.text(t("evolution.mergeConfirmDesc", { branch }), "body");
+  const fileTree = ui.fileTree(
+    changedFiles.map((f) => ({
+      path: f.path,
+      status: (f.status || "modified") as "added" | "modified" | "deleted" | "renamed",
+    })),
+    {}
+  );
+  const confirmBtn = ui.button(t("evolution.confirmMerge"), "confirm_merge", {
+    variant: "primary",
+    payload: { branch },
+  });
+  const cancelBtn = ui.button(t("common.cancel"), "close_modal", { variant: "ghost" });
+  const actions = ui.row([cancelBtn, confirmBtn], { gap: 12, justify: "end" });
+  const content = ui.column([warning, fileTree, actions], { gap: 16 });
+  const root = ui.modal(t("evolution.mergeConfirmTitle"), [content], { size: "md" });
+
+  return ui.build(root);
+}
+
+// ============================================================================
 // Tool Card Generators — Inline cards for chat messages
 // ============================================================================
 

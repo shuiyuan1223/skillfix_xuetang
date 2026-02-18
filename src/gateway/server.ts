@@ -71,6 +71,7 @@ import {
   generateCreateTestCaseModal,
   generateCreateSkillModal,
   generatePromptRevertModal,
+  generateMergeConfirmModal,
   generateAuthRequiredPage,
   generateBenchmarkModelSelectorModal,
   generateToolCards,
@@ -168,7 +169,9 @@ import {
 import { listEvolutionVersions, getEvolutionVersionByBranch } from "../memory/db.js";
 import {
   readFileFromBranch,
+  readFileFromRef,
   getChangedFilesOnBranch,
+  getChangedFilesForVersion,
   mergeVersion,
   abandonVersion,
   getWorktreePath,
@@ -3191,7 +3194,18 @@ export class GatewaySession {
         try {
           const filePath = payload.path as string;
           const afterContent = readFileFromBranch(inspectBranch, filePath) || "";
-          const beforeContent = readFileFromBranch("main", filePath) || "";
+
+          // For merged versions, use saved mergeBase as the "before" ref
+          let beforeContent: string;
+          const version = getEvolutionVersionByBranch(inspectBranch);
+          if (version?.status === "merged") {
+            const meta = version.metadata ? JSON.parse(version.metadata) : {};
+            const base = meta.mergeBase || "main";
+            beforeContent = readFileFromRef(base, filePath) || "";
+          } else {
+            beforeContent = readFileFromBranch("main", filePath) || "";
+          }
+
           this.evolutionLabDiffContent = {
             before: beforeContent,
             after: afterContent,
@@ -3761,7 +3775,34 @@ export class GatewaySession {
         });
       }
     } else if (action === "merge_version" && payload?.branch) {
+      // Show confirmation modal instead of merging directly
       try {
+        const branch = payload.branch as string;
+        const filePaths = getChangedFilesForVersion(branch);
+        const changedFiles = filePaths.map((p) => ({ path: p, status: "modified" }));
+        const modal = generateMergeConfirmModal(branch, changedFiles);
+        send({
+          type: "a2ui",
+          surface_id: "modal",
+          components: modal.components,
+          root_id: modal.root_id,
+        });
+      } catch (error) {
+        const toast = generateToast(
+          `Failed to prepare merge: ${error instanceof Error ? error.message : String(error)}`,
+          "error"
+        );
+        send({
+          type: "a2ui",
+          surface_id: "toast",
+          components: toast.components,
+          root_id: toast.root_id,
+        });
+      }
+    } else if (action === "confirm_merge" && payload?.branch) {
+      // Actually execute the merge after user confirmation
+      try {
+        send({ type: "clear_surface", surface_id: "modal" });
         mergeVersion(payload.branch as string);
         this.switchAgentVersion(null); // Reset to main after merge
         const toast = generateToast(t("evolution.versionMerged"), "success");
@@ -4758,7 +4799,7 @@ export class GatewaySession {
       const inspectBranch = this.evolutionSelectedVersion || this.evolutionInspectedBranch;
       if (inspectBranch) {
         try {
-          const filePaths = getChangedFilesOnBranch(inspectBranch);
+          const filePaths = getChangedFilesForVersion(inspectBranch);
           changedFiles = filePaths.map((filePath) => ({
             path: filePath,
             status: "modified" as const,

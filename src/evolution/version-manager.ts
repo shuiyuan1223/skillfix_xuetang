@@ -298,6 +298,19 @@ export function mergeVersion(branchName: string): { success: boolean; error?: st
   const parentBranch = version?.parent_branch || "main";
 
   try {
+    // Record merge-base before merging (so we can diff after merge)
+    let mergeBase: string | undefined;
+    try {
+      mergeBase = execSync(`git merge-base "${parentBranch}" "${branchName}"`, {
+        cwd: root,
+        encoding: "utf-8",
+        timeout: 10000,
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    } catch {
+      // If merge-base fails, proceed without it
+    }
+
     // First remove the worktree so the branch isn't "checked out"
     removeWorktree(branchName);
 
@@ -309,9 +322,13 @@ export function mergeVersion(branchName: string): { success: boolean; error?: st
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    // Update status
+    // Update status with mergeBase in metadata
     if (version) {
-      updateEvolutionVersion(version.id, { status: "merged" });
+      const existingMeta = version.metadata ? JSON.parse(version.metadata) : {};
+      updateEvolutionVersion(version.id, {
+        status: "merged",
+        metadata: { ...existingMeta, mergeBase },
+      });
     }
 
     return { success: true };
@@ -321,6 +338,51 @@ export function mergeVersion(branchName: string): { success: boolean; error?: st
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/**
+ * Read a file from an arbitrary git ref (commit hash or branch name)
+ */
+export function readFileFromRef(ref: string, filePath: string): string | null {
+  try {
+    return execSync(`git show "${ref}:${filePath}"`, {
+      cwd: getProjectRoot(),
+      encoding: "utf-8",
+      timeout: 10000,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Get changed files for a version, handling merged versions via saved mergeBase
+ */
+export function getChangedFilesForVersion(branchName: string): string[] {
+  const version = getEvolutionVersionByBranch(branchName);
+  if (!version) return [];
+
+  // Merged version: use saved mergeBase for diff
+  if (version.status === "merged") {
+    const meta = version.metadata ? JSON.parse(version.metadata) : {};
+    if (meta.mergeBase) {
+      try {
+        const output = execSync(`git diff --name-only "${meta.mergeBase}" "${branchName}"`, {
+          cwd: getProjectRoot(),
+          encoding: "utf-8",
+          timeout: 10000,
+        }).trim();
+        return output ? output.split("\n").filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    }
+    return []; // No mergeBase saved (old data)
+  }
+
+  // Active/other versions: use existing three-dot diff
+  return getChangedFilesOnBranch(branchName);
 }
 
 /**

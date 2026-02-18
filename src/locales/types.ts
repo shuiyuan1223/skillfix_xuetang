@@ -481,6 +481,10 @@ export interface LocaleMessages {
     iterationHistory: string;
     cycleSummary: string;
     noDetailData: string;
+    // Merge confirmation
+    mergeConfirmTitle: string;
+    mergeConfirmDesc: string;
+    confirmMerge: string;
   };
 
   // Memory page

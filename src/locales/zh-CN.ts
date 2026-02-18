@@ -458,6 +458,10 @@ export const zhCN: LocaleMessages = {
     iterationHistory: "迭代历史",
     cycleSummary: "摘要",
     noDetailData: "该历史步骤的详细数据不可用。后续迭代将自动保存完整步骤数据。",
+    // Merge confirmation
+    mergeConfirmTitle: "确认合并到主分支",
+    mergeConfirmDesc: "以下文件将合并到主分支（{branch}）：",
+    confirmMerge: "确认合并",
   },
 
   memory: {

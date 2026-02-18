@@ -467,6 +467,10 @@ export const en: LocaleMessages = {
     cycleSummary: "Summary",
     noDetailData:
       "Detailed data not available for this historical step. Future iterations will preserve full step data.",
+    // Merge confirmation
+    mergeConfirmTitle: "Confirm Merge to Main",
+    mergeConfirmDesc: "The following files from {branch} will be merged to main:",
+    confirmMerge: "Confirm Merge",
   },
 
   memory: {

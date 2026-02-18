@@ -343,7 +343,8 @@ export const gitCommitTool: PHATool<{ files: string[]; message: string; cwd?: st
 
 export const gitMergeTool: PHATool<{ branch: string }> = {
   name: "git_merge",
-  description: "将进化分支合并到父分支（通常是 main）",
+  description:
+    "将进化分支合并到父分支（通常是 main）。重要：调用前必须先向用户展示变更内容（git_diff）并获得明确确认。",
   displayName: "合并分支",
   category: "git" as const,
   icon: "git-merge",
