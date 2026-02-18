@@ -1501,6 +1501,32 @@ select:focus {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ========== Agent Breathing Light (Active Reply) ========== */
+@keyframes agent-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgb(var(--color-primary) / 0.4),
+                0 0 0 0 rgb(var(--color-primary) / 0.1);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgb(var(--color-primary) / 0.3),
+                0 0 24px 8px rgb(var(--color-primary) / 0.08);
+  }
+}
+
+@keyframes agent-breathe-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* ========== Mobile Responsive Fixes ========== */
+@media (max-width: 767px) {
+  .chat-scroll-container { padding: 12px; gap: 16px; }
+  .arena-criterion-name { width: 100px; font-size: 0.75rem; }
+  .arena-criterion-bar { margin: 0 6px; }
+  .arena-criterion-scores { gap: 6px; }
+  .arena-criterion-score { font-size: 0.75rem; min-width: 32px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

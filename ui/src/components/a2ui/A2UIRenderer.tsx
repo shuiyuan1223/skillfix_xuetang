@@ -185,8 +185,10 @@ export function A2UIRenderer({
   function rcGrid(c: A2UIComponent) {
     const columns = (c.columns as number) || 2;
     const gap = (c.gap as number) || 16;
+    const minColWidth = columns >= 4 ? 160 : columns >= 3 ? 200 : 240;
     return (
-      <div className="grid stagger-children" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)`, gap }}>
+      <div className="grid stagger-children"
+           style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${minColWidth}px, 100%), 1fr))`, gap }}>
         {(c.children || []).map((id, index) => (
           <div key={id} style={{ "--stagger-index": index } as React.CSSProperties}>{renderComponent(id)}</div>
         ))}
@@ -632,7 +634,7 @@ export function A2UIRenderer({
     }
 
     const avatarBase = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4";
-    const msgBubble = "max-w-[70%] px-5 py-3.5 rounded-2xl leading-relaxed text-[13.5px]";
+    const msgBubble = "max-w-[85%] sm:max-w-[70%] px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl leading-relaxed text-[13.5px]";
 
     // Normalize messages to Parts format
     interface NormalizedMsg {
@@ -696,7 +698,7 @@ export function A2UIRenderer({
         const progress = part.progressData;
         const pct = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
         return (
-          <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[70%]">
+          <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[90%] sm:max-w-[70%]">
             <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />
             <span className="truncate">{displayName}</span>
             {progress && progress.total > 0 && (
@@ -716,7 +718,7 @@ export function A2UIRenderer({
       }
       if (part.type === "tool_result" && part.cards) {
         return (
-          <div key={partIdx} className="max-w-[70%]">
+          <div key={partIdx} className="max-w-[90%] sm:max-w-[70%]">
             {renderInline(part.cards as { components: A2UIComponent[]; root_id: string })}
           </div>
         );
@@ -760,7 +762,15 @@ export function A2UIRenderer({
 
             return (
               <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-                <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+                <div className="relative self-start shrink-0">
+                  {isActiveMsg && (
+                    <div className="absolute inset-0 rounded-lg bg-primary/20"
+                         style={{ animation: "agent-breathe-ring 2s ease-out infinite" }} />
+                  )}
+                  <div className={`${avatarBase} bg-primary`}
+                       style={isActiveMsg ? { animation: "agent-breathe 2.5s ease-in-out infinite" } : undefined}
+                       dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+                </div>
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
                   {msg.parts.map((part, pi) => {
                     // Add stream-border-pulse to actively streaming text part
