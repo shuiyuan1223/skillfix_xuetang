@@ -6,6 +6,8 @@
 
 import { getUserUuid } from "../utils/config.js";
 import { savePlan, loadPlan, listPlans } from "../plans/store.js";
+import { saveReminder, saveCalendarEvent } from "../proactive/store.js";
+import type { ReminderCategory } from "../proactive/types.js";
 import type {
   HealthPlan,
   PlanGoal,
@@ -15,6 +17,35 @@ import type {
   GoalStatus,
 } from "../plans/types.js";
 import type { PHATool } from "./types.js";
+
+// ============================================================================
+// Goal → Reminder template mapping
+// ============================================================================
+
+interface GoalReminderTemplate {
+  title: string;
+  time: string; // HH:MM
+  category: ReminderCategory;
+  icon: string;
+}
+
+const GOAL_REMINDER_TEMPLATES: Partial<Record<GoalMetric, GoalReminderTemplate>> = {
+  steps: {
+    title: "今日步数目标: {target}{unit}",
+    time: "20:00",
+    category: "exercise",
+    icon: "footprints",
+  },
+  sleep_hours: {
+    title: "准备入睡，目标睡{target}{unit}",
+    time: "22:30",
+    category: "sleep",
+    icon: "moon",
+  },
+  exercise_count: { title: "运动时间到！", time: "18:00", category: "exercise", icon: "activity" },
+  weight: { title: "记录今日体重", time: "08:00", category: "checkup", icon: "trending-up" },
+  calories: { title: "注意今日热量摄入", time: "12:00", category: "meal", icon: "flame" },
+};
 
 // ============================================================================
 // create_health_plan
@@ -135,12 +166,53 @@ const createHealthPlanTool: PHATool<CreatePlanParams> = {
 
     savePlan(uuid, plan);
 
+    // Auto-create reminders based on goal metrics
+    const today = new Date().toISOString().split("T")[0];
+    let remindersCreated = 0;
+    for (const goal of goals) {
+      const template = GOAL_REMINDER_TEMPLATES[goal.metric];
+      if (!template) continue;
+      const title = template.title
+        .replace("{target}", String(goal.targetValue))
+        .replace("{unit}", goal.unit);
+      saveReminder(uuid, {
+        id: `rem_${planId}_${goal.id}`,
+        title,
+        scheduledAt: `${today}T${template.time}:00`,
+        repeatRule: "daily",
+        category: template.category,
+        icon: template.icon,
+        relatedPlanId: planId,
+        status: "pending",
+        createdAt: now,
+      });
+      remindersCreated++;
+    }
+
+    // Auto-create calendar events from milestones
+    let eventsCreated = 0;
+    for (const ms of milestones) {
+      saveCalendarEvent(uuid, {
+        id: `cal_${planId}_${ms.id}`,
+        title: ms.label,
+        startTime: `${ms.targetDate}T00:00:00`,
+        allDay: true,
+        category: "custom",
+        relatedPlanId: planId,
+        status: "scheduled",
+        createdAt: now,
+      });
+      eventsCreated++;
+    }
+
     return {
       success: true,
       planId: plan.id,
       name: plan.name,
       goalsCount: goals.length,
       milestonesCount: milestones.length,
+      remindersCreated,
+      eventsCreated,
       startDate: plan.startDate,
       endDate: plan.endDate,
     };
