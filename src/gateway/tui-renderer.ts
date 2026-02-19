@@ -781,6 +781,15 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
   const mainBranch = comp.mainBranch as
     | { name: string; latestScore?: number | null; benchmarkCount: number }
     | undefined;
+  const mainCommits =
+    (comp.mainCommits as Array<{
+      hash: string;
+      shortHash: string;
+      message: string;
+      date: string;
+      benchmarkScore?: number | null;
+      benchmarkTag?: string;
+    }>) || [];
   const versions =
     (comp.versions as Array<{
       id: string;
@@ -797,42 +806,74 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
   const selectedBranch = comp.selectedBranch as string | undefined;
   const lines: string[] = [];
 
-  // Main branch node
+  // Main branch HEAD node
   const mainName = mainBranch?.name || "main";
   const mainScore = mainBranch?.latestScore;
-  const mainCount = mainBranch?.benchmarkCount || 0;
-  const mainScoreStr = mainScore != null ? ansi.bold(mainScore.toFixed(2)) : "";
-  const mainMeta =
-    mainCount > 0
-      ? ansi.dim(`latest benchmark · ${mainCount} runs`)
-      : ansi.dim("no benchmark runs");
+  const mainScoreStr = mainScore != null ? "  " + ansi.bold(mainScore.toFixed(2)) : "";
 
-  lines.push(
-    indent(
-      ctx,
-      `${ansi.bold("●")} ${ansi.bold(mainName)} (HEAD)${mainScoreStr ? "  " + mainScoreStr : ""}`
-    )
-  );
-  lines.push(indent(ctx, `│  ${mainMeta}`));
+  lines.push(indent(ctx, `${ansi.bold("●")} ${ansi.bold(mainName)} (HEAD)${mainScoreStr}`));
 
-  if (versions.length === 0) {
+  // Build interleaved timeline (same logic as React renderer)
+  type TimelineItem =
+    | { kind: "commit"; commit: (typeof mainCommits)[0] }
+    | { kind: "branch"; version: (typeof versions)[0] };
+
+  const timeline: TimelineItem[] = [];
+  if (mainCommits.length > 0) {
+    let vIdx = 0;
+    const sortedVersions = [...versions].sort((a, b) => b.createdAt - a.createdAt);
+    for (const cm of mainCommits) {
+      const commitTime = new Date(cm.date).getTime();
+      while (vIdx < sortedVersions.length && sortedVersions[vIdx].createdAt >= commitTime) {
+        timeline.push({ kind: "branch", version: sortedVersions[vIdx] });
+        vIdx++;
+      }
+      timeline.push({ kind: "commit", commit: cm });
+    }
+    while (vIdx < sortedVersions.length) {
+      timeline.push({ kind: "branch", version: sortedVersions[vIdx] });
+      vIdx++;
+    }
+  } else {
+    versions.forEach((v) => timeline.push({ kind: "branch", version: v }));
+  }
+
+  if (timeline.length === 0) {
     lines.push(indent(ctx, ansi.dim("│")));
     lines.push(indent(ctx, ansi.dim("  No evolution versions yet")));
     return lines;
   }
 
-  for (let i = 0; i < versions.length; i++) {
-    const v = versions[i];
-    const isLast = i === versions.length - 1;
-    const connector = isLast ? "└" : "├";
+  for (let i = 0; i < timeline.length; i++) {
+    const item = timeline[i];
+    const isLast = i === timeline.length - 1;
 
+    if (item.kind === "commit") {
+      const cm = item.commit;
+      const trunk = isLast ? " " : "│";
+      const dot = cm.benchmarkScore != null ? "○" : "·";
+      let scoreStr = "";
+      if (cm.benchmarkScore != null) {
+        const sColor =
+          cm.benchmarkScore >= 0.9 ? ansi.green : cm.benchmarkScore >= 0.7 ? ansi.yellow : ansi.red;
+        scoreStr = "  " + sColor(cm.benchmarkScore.toFixed(2));
+      }
+      const msg = cm.message.length > 40 ? cm.message.slice(0, 40) + "…" : cm.message;
+      lines.push(
+        indent(ctx, `${trunk} ${ansi.dim(dot)} ${ansi.dim(cm.shortHash)} ${msg}${scoreStr}`)
+      );
+      continue;
+    }
+
+    // Branch (evo version)
+    const v = item.version;
+    const connector = isLast ? "└" : "├";
     const statusIcon =
       v.status === "active"
         ? ansi.blue("●")
         : v.status === "merged"
           ? ansi.green("●")
           : ansi.dim("●");
-
     const statusSuffix =
       v.status === "merged"
         ? ansi.green(" → merged")
@@ -840,7 +881,6 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
           ? ansi.dim(" ✕")
           : ansi.blue(" [active]");
 
-    // Score display
     let scoreStr = "";
     if (v.latestScore != null) {
       const scoreColor =

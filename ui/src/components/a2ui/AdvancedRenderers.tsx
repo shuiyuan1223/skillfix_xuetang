@@ -885,12 +885,14 @@ export function renderLogViewer(c: A2UIComponent, _ctx: RenderContext) {
 // ---- Version Graph (Git Graph style tree) ----
 export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
   const mainBranch = c.mainBranch as { name: string; latestScore?: number | null; benchmarkCount: number } | undefined;
+  const mainCommits = (c.mainCommits as any[]) || [];
   const versions = (c.versions as any[]) || [];
   const selectedBranch = c.selectedBranch as string | undefined;
   const onVersionClick = c.onVersionClick as string | undefined;
 
-  const relativeTime = (ts: number) => {
-    const diff = Date.now() - ts;
+  const relativeTime = (ts: number | string) => {
+    const d = typeof ts === "string" ? new Date(ts).getTime() : ts;
+    const diff = Date.now() - d;
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return "just now";
     if (mins < 60) return `${mins}m ago`;
@@ -901,119 +903,200 @@ export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
     return `${Math.floor(days / 30)}mo ago`;
   };
 
+  const scoreColor = (s: number) => s >= 0.9 ? "#4ade80" : s >= 0.7 ? "#fbbf24" : "#f87171";
+
   const mainName = mainBranch?.name || "main";
   const mainScore = mainBranch?.latestScore;
-  const mainCount = mainBranch?.benchmarkCount || 0;
   const isMainSelected = selectedBranch === "main";
 
+  // TRUNK_W = width of the trunk gutter column (dot + vertical line)
+  const TRUNK_W = "w-6"; // 24px
+
+  // Build interleaved timeline: merge main commits with evo branch fork points
+  // Each item is either a "commit" (main commit) or a "branch" (evo version)
+  type TimelineItem =
+    | { kind: "commit"; commit: any; index: number }
+    | { kind: "branch"; version: any; index: number };
+
+  const timeline: TimelineItem[] = [];
+
+  if (mainCommits.length > 0) {
+    // Main commits are sorted newest-first from git log
+    // Versions have createdAt timestamps
+    // Interleave: walk commits and insert version forks at the right position
+    let vIdx = 0;
+    const sortedVersions = [...versions].sort((a, b) => b.createdAt - a.createdAt);
+
+    for (let ci = 0; ci < mainCommits.length; ci++) {
+      const commitTime = new Date(mainCommits[ci].date).getTime();
+      // Insert any versions whose createdAt is newer than this commit
+      while (vIdx < sortedVersions.length && sortedVersions[vIdx].createdAt >= commitTime) {
+        timeline.push({ kind: "branch", version: sortedVersions[vIdx], index: vIdx });
+        vIdx++;
+      }
+      timeline.push({ kind: "commit", commit: mainCommits[ci], index: ci });
+    }
+    // Remaining versions older than all commits
+    while (vIdx < sortedVersions.length) {
+      timeline.push({ kind: "branch", version: sortedVersions[vIdx], index: vIdx });
+      vIdx++;
+    }
+  } else {
+    // No main commits — just show versions flat
+    versions.forEach((v: any, i: number) => {
+      timeline.push({ kind: "branch", version: v, index: i });
+    });
+  }
+
+  // Gutter width in px — all trunk elements are positioned inside this
+  const G = 28;
+  const dotCx = G / 2; // center X of trunk line
+  // Trunk line color — slightly brighter than border for visibility
+  const trunkColor = "rgb(var(--color-text-muted) / 0.4)";
+
   return (
-    <div className="flex flex-col font-mono text-sm">
-      {/* Main branch node */}
+    <div className="flex flex-col font-mono text-[13px]" style={{ paddingLeft: 8 }}>
+      {/* Main branch HEAD node */}
       <div
-        className={`flex items-start gap-0 cursor-pointer rounded-lg transition-colors px-2 py-2
+        className={`flex items-center cursor-pointer rounded-lg transition-colors py-1.5 pr-2
           ${isMainSelected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
         onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: "main" })}
+        style={{ paddingLeft: 0 }}
       >
-        <div className="flex flex-col items-center w-8 shrink-0">
-          <div className="w-3.5 h-3.5 rounded-full bg-text border-2 border-text shrink-0" />
-          {versions.length > 0 && <div className="w-0.5 flex-1 bg-border min-h-[8px] mt-1" />}
+        {/* Gutter: HEAD dot + start of trunk line below */}
+        <div className="shrink-0 relative" style={{ width: G, minHeight: 28 }}>
+          {/* HEAD dot */}
+          <div className="absolute rounded-full" style={{ width: 12, height: 12, left: dotCx - 6, top: 8, background: "rgb(var(--color-text))", border: "2px solid rgb(var(--color-text))" }} />
+          {/* Trunk line below dot (only if timeline has items) */}
+          {timeline.length > 0 && (
+            <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 22, bottom: 0, background: trunkColor }} />
+          )}
         </div>
         <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
-          <div>
+          <div className="flex items-center gap-2">
             <span className="font-semibold text-text">{mainName}</span>
-            <span className="text-[11px] text-text-muted ml-2">HEAD</span>
-            <div className="text-[11px] text-text-muted mt-0.5">
-              {mainCount > 0 ? `latest benchmark · ${mainCount} runs` : "no benchmark runs"}
-            </div>
+            <span className="text-[10px] px-1 py-0.5 rounded bg-text/10 text-text-muted">HEAD</span>
           </div>
           {mainScore != null && (
-            <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: mainScore >= 0.9 ? "#4ade80" : mainScore >= 0.7 ? "#fbbf24" : "#f87171" }}>
+            <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: scoreColor(mainScore) }}>
               {mainScore.toFixed(2)}
             </span>
           )}
         </div>
       </div>
 
-      {/* Version nodes */}
-      {versions.length === 0 ? (
-        <div className="flex items-center gap-0 px-2 py-3">
-          <div className="w-8 shrink-0" />
-          <span className="text-xs text-text-muted">No evolution versions yet</span>
+      {/* Timeline items */}
+      {timeline.length === 0 && (
+        <div className="flex items-center py-3 pr-2">
+          <div className="shrink-0" style={{ width: G }} />
+          <span className="text-xs text-text-muted italic">No commits or evolution versions</span>
         </div>
-      ) : (
-        versions.map((v: any, i: number) => {
-          const selected = v.branch === selectedBranch;
-          const isLast = i === versions.length - 1;
-          const status = v.status as string;
-          const dotColor = status === "active" ? "rgb(var(--color-primary))"
-            : status === "merged" ? "rgb(var(--color-success))"
-            : "rgb(var(--color-text-muted))";
-          const dotBorder = status === "active" ? "border-primary"
-            : status === "merged" ? "border-success"
-            : "border-text-muted";
+      )}
 
+      {timeline.map((item, ti) => {
+        const isLast = ti === timeline.length - 1;
+
+        if (item.kind === "commit") {
+          const cm = item.commit;
+          const hasBenchmark = cm.benchmarkScore != null;
+          const dotSize = hasBenchmark ? 8 : 6;
           return (
-            <div key={i} className="flex items-stretch">
-              {/* Tree connector */}
-              <div className="flex flex-col items-center w-8 shrink-0 px-2">
-                {/* Vertical trunk line */}
-                <div className={`w-0.5 h-3 ${isLast ? "bg-border" : "bg-border"}`} />
-                {/* Horizontal branch + dot */}
-                <div className="flex items-center self-stretch">
-                  <div className="w-0.5 h-0.5" />
-                  <div className="h-0.5 flex-1 bg-border" />
-                </div>
-                {/* Continue trunk below */}
-                {!isLast && <div className="w-0.5 flex-1 bg-border min-h-[8px]" />}
+            <div key={`c-${ti}`} className="flex items-center" style={{ minHeight: 28 }}>
+              {/* Gutter: trunk line + commit dot */}
+              <div className="shrink-0 relative" style={{ width: G, alignSelf: "stretch" }}>
+                {/* Continuous trunk line — full height */}
+                <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? "50%" : 0, background: trunkColor }} />
+                {/* Commit dot centered vertically */}
+                <div className="absolute rounded-full" style={{
+                  width: dotSize, height: dotSize,
+                  left: dotCx - dotSize / 2, top: "50%", transform: "translateY(-50%)",
+                  background: "rgb(var(--color-text-muted))",
+                }} />
               </div>
-
-              {/* Version content */}
-              <div
-                className={`flex-1 min-w-0 flex flex-col gap-0.5 px-2 py-2 rounded-lg cursor-pointer transition-colors -ml-1
-                  ${selected ? "bg-primary/8 border-l-2 border-l-primary" : "hover:bg-surface-hover border-l-2 border-l-transparent"}`}
-                onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 border-2 ${dotBorder}`} style={{ background: dotColor }} />
-                    <span className={`text-sm font-medium truncate ${status === "abandoned" ? "text-text-muted" : "text-text"}`}>
-                      {v.branch}
-                    </span>
-                    {status === "merged" && (
-                      <span className="text-[10px] text-emerald-400 shrink-0">→ merged</span>
-                    )}
-                    {status === "abandoned" && (
-                      <span className="text-[10px] text-text-muted shrink-0">✕</span>
-                    )}
-                    {status === "active" && (
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary shrink-0">active</span>
-                    )}
-                  </div>
-                  {/* Score display */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {v.latestScore != null && (
-                      <span className="text-sm font-semibold tabular-nums" style={{ color: v.latestScore >= 0.9 ? "#4ade80" : v.latestScore >= 0.7 ? "#fbbf24" : "#f87171" }}>
-                        {v.latestScore.toFixed(2)}
-                      </span>
-                    )}
-                    {v.scoreDelta != null && v.scoreDelta !== 0 && (
-                      <span className={`text-[11px] font-medium tabular-nums ${v.scoreDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                        ({v.scoreDelta > 0 ? "+" : ""}{Number(v.scoreDelta).toFixed(2)})
-                      </span>
-                    )}
-                  </div>
+              {/* Commit content */}
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-2 py-0.5 pr-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[11px] text-text-muted font-mono shrink-0">{cm.shortHash}</span>
+                  <span className="text-[12px] text-text-secondary truncate">{cm.message}</span>
                 </div>
-                <div className="flex items-center gap-2 ml-[18px] text-[11px] text-text-muted">
-                  {v.trigger && <span>{v.trigger}</span>}
-                  {v.trigger && v.filesChanged > 0 && <span>·</span>}
-                  {v.filesChanged > 0 && <span>{v.filesChanged} files</span>}
-                  <span className="ml-auto">{relativeTime(v.createdAt as number)}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {hasBenchmark && (
+                    <span className="text-[11px] font-semibold tabular-nums" style={{ color: scoreColor(cm.benchmarkScore) }}>
+                      {cm.benchmarkScore.toFixed(2)}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-text-muted whitespace-nowrap">{relativeTime(cm.date)}</span>
                 </div>
               </div>
             </div>
           );
-        })
-      )}
+        }
+
+        // Branch (evo version)
+        const v = item.version;
+        const selected = v.branch === selectedBranch;
+        const status = v.status as string;
+        const dotColor = status === "active" ? "rgb(var(--color-primary))"
+          : status === "merged" ? "rgb(var(--color-success))"
+          : "rgb(var(--color-text-muted))";
+
+        return (
+          <div key={`v-${ti}`} className="flex items-stretch">
+            {/* Gutter: trunk line + horizontal branch connector */}
+            <div className="shrink-0 relative" style={{ width: G }}>
+              {/* Continuous trunk line */}
+              <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? "50%" : 0, background: trunkColor }} />
+              {/* Horizontal branch-off line from trunk center to right edge */}
+              <div className="absolute" style={{ height: 2, left: dotCx, right: 0, top: "50%", transform: "translateY(-50%)", background: dotColor }} />
+              {/* Small dot at the fork point on the trunk */}
+              <div className="absolute rounded-full" style={{ width: 6, height: 6, left: dotCx - 3, top: "50%", transform: "translateY(-50%)", background: dotColor }} />
+            </div>
+
+            {/* Version content with colored dot */}
+            <div
+              className={`flex-1 min-w-0 flex flex-col gap-0.5 py-1.5 pr-2 rounded-r-lg cursor-pointer transition-colors
+                ${selected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
+              onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor }} />
+                  <span className={`text-[13px] font-medium truncate ${status === "abandoned" ? "text-text-muted line-through" : "text-text"}`}>
+                    {v.branch}
+                  </span>
+                  {status === "merged" && (
+                    <span className="text-[10px] text-emerald-400 shrink-0">→ merged</span>
+                  )}
+                  {status === "abandoned" && (
+                    <span className="text-[10px] text-text-muted shrink-0">✕</span>
+                  )}
+                  {status === "active" && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary shrink-0">active</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {v.latestScore != null && (
+                    <span className="text-[13px] font-semibold tabular-nums" style={{ color: scoreColor(v.latestScore) }}>
+                      {v.latestScore.toFixed(2)}
+                    </span>
+                  )}
+                  {v.scoreDelta != null && v.scoreDelta !== 0 && (
+                    <span className={`text-[10px] font-medium tabular-nums ${v.scoreDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      ({v.scoreDelta > 0 ? "+" : ""}{Number(v.scoreDelta).toFixed(2)})
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 ml-4 text-[10px] text-text-muted">
+                {v.trigger && <span>{v.trigger}</span>}
+                {v.trigger && v.filesChanged > 0 && <span>·</span>}
+                {v.filesChanged > 0 && <span>{v.filesChanged} files</span>}
+                <span className="ml-auto">{relativeTime(v.createdAt as number)}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

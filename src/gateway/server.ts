@@ -175,6 +175,7 @@ import {
   mergeVersion,
   abandonVersion,
   getWorktreePath,
+  getGitLog,
 } from "../evolution/version-manager.js";
 import { setSkillsDir, getSkillsDir } from "../tools/skill-tools.js";
 // skill-trigger.ts removed — skill loading is now LLM-driven
@@ -4750,8 +4751,38 @@ export class GatewaySession {
 
     // Versions: timeline events + version list + inspector data
     let changedFiles: EvolutionLabData["changedFiles"];
+    let mainCommits: EvolutionLabData["mainCommits"];
     const diffContent = this.evolutionLabDiffContent || undefined;
     if (activeTab === "versions") {
+      // Fetch recent main branch commits for the version graph
+      try {
+        const gitCommits = getGitLog({ limit: 15, branch: "main" });
+        mainCommits = gitCommits.map((c) => {
+          // Match benchmark run to commit by version_tag containing the short hash
+          const matchedRun = benchmarkRunsList?.find(
+            (r) =>
+              r.status === "completed" &&
+              r.overall_score > 0 &&
+              (r.version_tag === c.shortHash ||
+                r.version_tag?.includes(c.shortHash) ||
+                c.message.includes(r.version_tag || "__none__"))
+          );
+          return {
+            hash: c.hash,
+            shortHash: c.shortHash,
+            message: c.message,
+            date: c.date,
+            benchmarkScore: matchedRun
+              ? matchedRun.overall_score <= 1
+                ? matchedRun.overall_score
+                : matchedRun.overall_score / 100
+              : null,
+            benchmarkTag: matchedRun?.version_tag || undefined,
+          };
+        });
+      } catch {
+        // git log may fail
+      }
       try {
         const versionRows = listEvolutionVersions({ limit: 20 });
         versions = versionRows.map((v) => ({
@@ -4898,6 +4929,7 @@ export class GatewaySession {
       externalProgressMap,
       // Versions
       versions,
+      mainCommits,
       timelineEvents: timelineEvents.length > 0 ? timelineEvents : undefined,
       selectedVersion: this.evolutionSelectedVersion || undefined,
       changedFiles,

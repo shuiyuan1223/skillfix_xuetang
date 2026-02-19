@@ -165,6 +165,14 @@ export interface EvolutionLabData {
   externalProgressMap?: Record<string, ExternalProgressInfo>;
   // Versions
   versions?: VersionInfo[];
+  mainCommits?: {
+    hash: string;
+    shortHash: string;
+    message: string;
+    date: string;
+    benchmarkScore?: number | null;
+    benchmarkTag?: string;
+  }[];
   timelineEvents?: TimelineEvent[];
   selectedVersion?: string;
   selectedTimelineEvent?: string;
@@ -1036,6 +1044,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         { name: "main", latestScore: mainLatestScore, benchmarkCount: mainRuns.length },
         versionGraphData,
         {
+          mainCommits: data.mainCommits,
           selectedBranch: data.selectedVersion,
           onVersionClick: "view_version_from_list",
         }

@@ -364,6 +364,14 @@ export interface VersionGraphComponent extends A2UIComponent {
     latestScore?: number | null;
     benchmarkCount: number;
   };
+  mainCommits?: {
+    hash: string;
+    shortHash: string;
+    message: string;
+    date: string;
+    benchmarkScore?: number | null;
+    benchmarkTag?: string;
+  }[];
   versions: {
     id: string;
     branch: string;
@@ -374,6 +382,7 @@ export interface VersionGraphComponent extends A2UIComponent {
     latestScore?: number | null;
     filesChanged?: number;
     createdAt: number;
+    forkCommit?: string; // short hash of the commit this version forked from
   }[];
   selectedBranch?: string;
   onVersionClick?: string;
@@ -669,7 +678,13 @@ export class A2UIGenerator {
     opts: Partial<VersionGraphComponent> = {}
   ): string {
     const id = this.nextId("vgraph");
-    this.components.set(id, { id, type: "version_graph", mainBranch, versions, ...opts });
+    this.components.set(id, {
+      id,
+      type: "version_graph",
+      mainBranch,
+      versions,
+      ...opts,
+    });
     return id;
   }
 
