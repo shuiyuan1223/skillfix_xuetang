@@ -1015,9 +1015,13 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
   // Build version data with parent branch and latest score
   const versionGraphData = (data.versions || []).map((v) => {
+    // Match benchmark runs to this version by branch name (try multiple formats)
+    const branchNorm = v.branchName.replace(/\//g, "-"); // evo/v1 → evo-v1
     const runs = (data.benchmarkRuns || []).filter(
       (r) =>
-        r.status === "completed" && r.overall_score > 0 && r.version_tag?.includes(v.branchName)
+        r.status === "completed" &&
+        r.overall_score > 0 &&
+        (r.version_tag?.includes(v.branchName) || r.version_tag?.includes(branchNorm))
     );
     const latestScore =
       runs.length > 0

@@ -1001,7 +1001,12 @@ export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
           const hasBenchmark = cm.benchmarkScore != null;
           const dotSize = hasBenchmark ? 8 : 6;
           return (
-            <div key={`c-${ti}`} className="flex items-center" style={{ minHeight: 28 }}>
+            <div
+              key={`c-${ti}`}
+              className="flex items-center cursor-pointer hover:bg-surface-hover rounded-lg transition-colors"
+              style={{ minHeight: 28 }}
+              onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: "main", commit: cm.shortHash })}
+            >
               {/* Gutter: trunk line + commit dot */}
               <div className="shrink-0 relative" style={{ width: G, alignSelf: "stretch" }}>
                 {/* Continuous trunk line — full height */}
@@ -1032,32 +1037,35 @@ export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
           );
         }
 
-        // Branch (evo version)
+        // Branch (evo version) — use fixed top offset (16px = first line center) not 50%
         const v = item.version;
         const selected = v.branch === selectedBranch;
         const status = v.status as string;
         const dotColor = status === "active" ? "rgb(var(--color-primary))"
           : status === "merged" ? "rgb(var(--color-success))"
           : "rgb(var(--color-text-muted))";
+        // First-line center offset: py-1.5 (6px) + half line-height (~10px) = 16px
+        const branchY = 16;
 
         return (
-          <div key={`v-${ti}`} className="flex items-stretch">
+          <div
+            key={`v-${ti}`}
+            className={`flex items-stretch cursor-pointer rounded-lg transition-colors
+              ${selected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
+            onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
+          >
             {/* Gutter: trunk line + horizontal branch connector */}
             <div className="shrink-0 relative" style={{ width: G }}>
               {/* Continuous trunk line */}
-              <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? "50%" : 0, background: trunkColor }} />
+              <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? branchY : 0, background: trunkColor }} />
               {/* Horizontal branch-off line from trunk center to right edge */}
-              <div className="absolute" style={{ height: 2, left: dotCx, right: 0, top: "50%", transform: "translateY(-50%)", background: dotColor }} />
+              <div className="absolute" style={{ height: 2, left: dotCx, right: 0, top: branchY, background: dotColor }} />
               {/* Small dot at the fork point on the trunk */}
-              <div className="absolute rounded-full" style={{ width: 6, height: 6, left: dotCx - 3, top: "50%", transform: "translateY(-50%)", background: dotColor }} />
+              <div className="absolute rounded-full" style={{ width: 6, height: 6, left: dotCx - 3, top: branchY - 3, background: dotColor }} />
             </div>
 
             {/* Version content with colored dot */}
-            <div
-              className={`flex-1 min-w-0 flex flex-col gap-0.5 py-1.5 pr-2 rounded-r-lg cursor-pointer transition-colors
-                ${selected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
-              onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
-            >
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-1.5 pr-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor }} />

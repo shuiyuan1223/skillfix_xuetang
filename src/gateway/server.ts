@@ -1951,6 +1951,7 @@ export class GatewaySession {
 
       case "evolution": {
         // Evolution Lab — dual-panel layout with Agent chat + context panel
+        this.currentView = "evolution";
         try {
           const labData = this.buildEvolutionLabData();
           const labPage = generateEvolutionLab(labData);
@@ -4757,16 +4758,35 @@ export class GatewaySession {
       // Fetch recent main branch commits for the version graph
       try {
         const gitCommits = getGitLog({ limit: 15, branch: "main" });
+        // Build a lookup: for each commit, find the best matching benchmark run
+        // Strategy: 1) version_tag contains short hash, 2) closest timestamp match
+        const completedRuns = (benchmarkRunsList || []).filter(
+          (r) => r.status === "completed" && r.overall_score > 0
+        );
+        const usedRunIds = new Set<string>();
+
         mainCommits = gitCommits.map((c) => {
-          // Match benchmark run to commit by version_tag containing the short hash
-          const matchedRun = benchmarkRunsList?.find(
+          const commitTime = new Date(c.date).getTime();
+          // First try: version_tag contains the short hash (e.g. "96f102b-dirty")
+          let matchedRun = completedRuns.find(
             (r) =>
-              r.status === "completed" &&
-              r.overall_score > 0 &&
-              (r.version_tag === c.shortHash ||
-                r.version_tag?.includes(c.shortHash) ||
-                c.message.includes(r.version_tag || "__none__"))
+              !usedRunIds.has(r.id) &&
+              (r.version_tag === c.shortHash || r.version_tag?.includes(c.shortHash))
           );
+          // Second try: find the closest run AFTER this commit (within 1 hour)
+          if (!matchedRun) {
+            let bestDelta = Infinity;
+            for (const r of completedRuns) {
+              if (usedRunIds.has(r.id)) continue;
+              const delta = r.timestamp - commitTime;
+              // Run must be after the commit, within 1 hour
+              if (delta >= 0 && delta < 3600000 && delta < bestDelta) {
+                bestDelta = delta;
+                matchedRun = r;
+              }
+            }
+          }
+          if (matchedRun) usedRunIds.add(matchedRun.id);
           return {
             hash: c.hash,
             shortHash: c.shortHash,
