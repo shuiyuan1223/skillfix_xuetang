@@ -2271,6 +2271,7 @@ export class GatewaySession {
             workspace: p.workspace || "",
             sessionPath: p.sessionPath || "",
             toolCategories: p.tools.categories as string[],
+            skillsTags: (p.skills?.tags || []).join(", "),
             skillsInclude: (p.skills?.include || []).join(", "),
             skillsExclude: (p.skills?.exclude ?? p.skills?.excludeTypes ?? []).join(", "),
             contextBootstrap: p.context.bootstrap !== false,
@@ -4230,6 +4231,7 @@ export class GatewaySession {
       action === "settings_save_benchmark" ||
       action === "settings_save_benchmark_v2" ||
       action === "settings_save_benchmark_v3" ||
+      action === "settings_save_benchmark_v4" ||
       action === "settings_save_benchmark_models" ||
       action === "settings_save_benchmark_models_v2" ||
       action === "settings_save_mcp" ||
@@ -4355,6 +4357,14 @@ export class GatewaySession {
             }
           }
           config.benchmark.models = selectedRefs;
+        } else if (action === "settings_save_benchmark_v4") {
+          // Benchmark v4: judge model + concurrency + applyEngine (simplified)
+          if (!config.benchmark) config.benchmark = {};
+          config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
+          if (formData.applyEngine)
+            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
+          if (!config.orchestrator) config.orchestrator = {};
+          config.orchestrator.judge = String(formData.benchmarkJudgeModel || "") || undefined;
         } else if (action === "settings_save_model_repository") {
           // Parse mp__<key>__* fields to rebuild models.providers
           if (!config.models) config.models = { providers: {} };
@@ -4494,11 +4504,18 @@ export class GatewaySession {
             } else {
               delete ap.tools;
             }
-            // Skills include/exclude (comma-separated)
+            // Skills tags + include/exclude (comma-separated)
+            const tagsStr = String(formData[`${pfx}skills_tags`] || "").trim();
             const includeStr = String(formData[`${pfx}skills_include`] || "").trim();
             const excludeStr = String(formData[`${pfx}skills_exclude`] || "").trim();
-            if (includeStr || excludeStr) {
+            if (tagsStr || includeStr || excludeStr) {
               ap.skills = {};
+              if (tagsStr) {
+                ap.skills.tags = tagsStr
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+              }
               if (includeStr) {
                 ap.skills.include = includeStr
                   .split(",")

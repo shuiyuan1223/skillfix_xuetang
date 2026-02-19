@@ -94,6 +94,14 @@ const BUILTIN_PROFILES: Record<string, AgentProfile> = {
     context: { bootstrap: true },
     skillHint: "legacy-streaming",
   },
+  sa: {
+    id: "sa",
+    workspace: "users/system",
+    sessionPath: "users/system/sessions/sa",
+    tools: { categories: ["git", "evolution", "skill", "config"] as ToolCategory[] },
+    skills: { tags: ["sa"] },
+    context: { bootstrap: true },
+  },
 };
 
 /**

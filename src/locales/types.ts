@@ -684,9 +684,14 @@ export interface LocaleMessages {
     agentCtxMemory: string;
     agentCtxProfile: string;
     agentTools: string;
+    agentSkillsTags: string;
+    agentSkillsSection: string;
+    agentAdvancedSkills: string;
     agentSkillsInclude: string;
     agentSkillsExclude: string;
     agentSkillHint: string;
+    agentPaths: string;
+    agentAdvanced: string;
     agentWorkspace: string;
     agentSessionPath: string;
     defaultModelFallback: string;

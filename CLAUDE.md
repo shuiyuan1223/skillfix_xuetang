@@ -460,7 +460,7 @@ user, bot, send, heart-pulse, stethoscope, wind, flame, timer,
 footprints, bed, star, zap, bar-chart, calendar, search, save,
 test-tube, lightbulb, target, link, shield, trending-up,
 trending-down, sparkles, info, settings, hospital, loader,
-check, x, alert-triangle, chevron-left, chevron-right,
+check, x, plus, alert-triangle, chevron-left, chevron-right,
 git-branch, git-merge, git-commit, menu, play, pause,
 skip-forward, refresh-cw, square, sun
 ```

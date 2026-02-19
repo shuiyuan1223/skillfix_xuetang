@@ -1988,6 +1988,7 @@ export interface SettingsPageData {
     workspace: string;
     sessionPath: string;
     toolCategories: string[];
+    skillsTags: string;
     skillsInclude: string;
     skillsExclude: string;
     contextBootstrap: boolean;
@@ -2089,17 +2090,23 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         label: t("settings.modelLabel"),
         value: m.label,
       });
-      const mDeleteBtn = ui.button(t("settings.deleteModel"), "settings_provider_model_delete", {
-        variant: "danger",
+      const mDeleteBtn = ui.button("", "settings_provider_model_delete", {
+        icon: "x",
+        variant: "ghost",
+        tooltip: t("settings.deleteModel"),
         payload: { provider: mp.key, index: idx },
       });
       modelRows.push(ui.row([mName, mModel, mLabel, mDeleteBtn], { gap: 8, align: "end" }));
     });
     const addModelBtn = ui.button(t("settings.addModel"), "settings_provider_model_add", {
+      icon: "plus",
+      variant: "outline",
       payload: { provider: mp.key },
     });
-    const deleteProviderBtn = ui.button(t("settings.deleteProvider"), "settings_provider_delete", {
-      variant: "danger",
+    const deleteProviderBtn = ui.button("", "settings_provider_delete", {
+      icon: "x",
+      variant: "ghost",
+      tooltip: t("settings.deleteProvider"),
       payload: { provider: mp.key },
     });
     const providerContent = [
@@ -2113,7 +2120,10 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const repoForm = ui.form(repoChildren, "settings_save_model_repository", {
     submitLabel: t("settings.saveRepository"),
   });
-  const addProviderBtn = ui.button(t("settings.addProvider"), "settings_provider_add");
+  const addProviderBtn = ui.button(t("settings.addProvider"), "settings_provider_add", {
+    icon: "plus",
+    variant: "outline",
+  });
   const repoCard = ui.card([repoForm, addProviderBtn], {
     title: t("settings.sectionModelRepository"),
     padding: 20,
@@ -2124,14 +2134,12 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     { value: "", label: t("settings.defaultModelFallback") },
     ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
   ];
-  const boolOptions = [
-    { value: "true", label: t("common.enable") },
-    { value: "false", label: t("common.disable") },
-  ];
   const agentSections: string[] = [];
   for (const profile of data.agentProfiles) {
     const pfx = `ap__${profile.id}__`;
     const fields: string[] = [];
+    // Agent ID title
+    fields.push(ui.text(profile.id, "h3"));
     // Model
     fields.push(
       ui.formInput(`${pfx}model`, "select", {
@@ -2140,22 +2148,54 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         value: profile.model,
       })
     );
-    // Workspace / Session path
+    // Skills Tags (primary config, replaces include/exclude for most users)
     fields.push(
+      ui.formInput(`${pfx}skills_tags`, "text", {
+        label: t("settings.agentSkillsTags"),
+        value: profile.skillsTags,
+        placeholder: "pha, sa, pha-markdown",
+      })
+    );
+    // Paths (collapsed)
+    const pathFields: string[] = [];
+    pathFields.push(
       ui.formInput(`${pfx}workspace`, "text", {
         label: t("settings.agentWorkspace"),
         value: profile.workspace,
         placeholder: "users/{uid}",
       })
     );
-    fields.push(
+    pathFields.push(
       ui.formInput(`${pfx}session_path`, "text", {
         label: t("settings.agentSessionPath"),
         value: profile.sessionPath,
         placeholder: "users/{uid}/sessions/pha",
       })
     );
-    // Tool categories (checkboxes)
+    fields.push(ui.collapsible(t("settings.agentPaths"), pathFields, { expanded: false }));
+    // Skills advanced (collapsed)
+    const skillsAdvancedFields: string[] = [];
+    skillsAdvancedFields.push(
+      ui.formInput(`${pfx}skills_include`, "text", {
+        label: t("settings.agentSkillsInclude"),
+        value: profile.skillsInclude,
+        placeholder: "health-coaching, sleep",
+      })
+    );
+    skillsAdvancedFields.push(
+      ui.formInput(`${pfx}skills_exclude`, "text", {
+        label: t("settings.agentSkillsExclude"),
+        value: profile.skillsExclude,
+        placeholder: "evolution-driver, code-reviewer",
+      })
+    );
+    const skillsAdvanced = ui.collapsible(t("settings.agentAdvancedSkills"), skillsAdvancedFields, {
+      expanded: false,
+    });
+    fields.push(
+      ui.collapsible(t("settings.agentSkillsSection"), [skillsAdvanced], { expanded: false })
+    );
+    // Tool categories (collapsed)
     const toolCheckboxes: string[] = [];
     for (const cat of data.allToolCategories) {
       toolCheckboxes.push(
@@ -2166,21 +2206,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       );
     }
     fields.push(ui.collapsible(t("settings.agentTools"), toolCheckboxes, { expanded: false }));
-    // Skills include/exclude
-    fields.push(
-      ui.formInput(`${pfx}skills_include`, "text", {
-        label: t("settings.agentSkillsInclude"),
-        value: profile.skillsInclude,
-        placeholder: "health-coaching, sleep",
-      })
-    );
-    fields.push(
-      ui.formInput(`${pfx}skills_exclude`, "text", {
-        label: t("settings.agentSkillsExclude"),
-        value: profile.skillsExclude,
-        placeholder: "evolution-driver, code-reviewer",
-      })
-    );
     // Context flags (checkboxes)
     fields.push(
       ui.formInput(`${pfx}ctx_bootstrap`, "checkbox", {
@@ -2200,50 +2225,23 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         value: String(profile.contextProfile),
       })
     );
-    // Skill hint
-    fields.push(
+    // Advanced settings (collapsed)
+    const advancedFields: string[] = [];
+    advancedFields.push(
       ui.formInput(`${pfx}skill_hint`, "text", {
         label: t("settings.agentSkillHint"),
         value: profile.skillHint,
       })
     );
-    agentSections.push(ui.collapsible(profile.label, fields, { expanded: true }));
+    fields.push(ui.collapsible(t("settings.agentAdvanced"), advancedFields, { expanded: false }));
+    // Only expand "pha" by default
+    agentSections.push(ui.collapsible(profile.id, fields, { expanded: profile.id === "pha" }));
   }
   const agentsForm = ui.form(agentSections, "settings_save_agents", {
     submitLabel: t("settings.saveAgents"),
   });
   const agentsCard = ui.card([agentsForm], {
     title: t("settings.sectionAgents"),
-    padding: 20,
-  });
-
-  // ---- Infrastructure Models Section (SA/Judge/Embedding) ----
-  const modelRefOptions = [
-    { value: "", label: t("settings.noneSelected") },
-    ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
-  ];
-  const systemAgentModelSelect = ui.formInput("orchestratorSa", "select", {
-    label: t("settings.systemAgentModelSelect"),
-    options: modelRefOptions,
-    value: data.orchestratorSa,
-  });
-  const judgeModelSelect = ui.formInput("orchestratorJudge", "select", {
-    label: t("settings.judgeModelSelect"),
-    options: modelRefOptions,
-    value: data.orchestratorJudge,
-  });
-  const embeddingModelSelect = ui.formInput("orchestratorEmbedding", "select", {
-    label: t("settings.embeddingModelSelect"),
-    options: modelRefOptions,
-    value: data.orchestratorEmbedding,
-  });
-  const infraModelsForm = ui.form(
-    [systemAgentModelSelect, judgeModelSelect, embeddingModelSelect],
-    "settings_save_infra_models",
-    { submitLabel: t("settings.saveInfraModels") }
-  );
-  const infraModelsCard = ui.card([infraModelsForm], {
-    title: t("settings.sectionInfraModels"),
     padding: 20,
   });
 
@@ -2323,26 +2321,31 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const dsForm = ui.form(dsInputs, "settings_save_datasource", { submitLabel: saveLabel });
   const dsCard = ui.card([dsForm], { title: t("settings.sectionData"), padding: 20 });
 
-  // ---- OAuth Scopes Section (structured list, only when huawei) ----
+  // ---- OAuth Scopes Section (badge chips, only when huawei) ----
   let scopesCard: string | null = null;
   if (data.dataSourceType === "huawei") {
-    const scopeFormInputs: string[] = [];
+    const scopeChildren: string[] = [];
+    const badgePairs: string[] = [];
     data.huaweiScopes.forEach((scope, idx) => {
-      const scopeInput = ui.formInput(`scope__${idx}`, "text", {
-        label: `Scope ${idx + 1}`,
-        value: scope,
-      });
-      const scopeDeleteBtn = ui.button(t("settings.deleteScope"), "settings_scope_delete", {
-        variant: "danger",
+      const badge = ui.badge(scope, { variant: "default", size: "sm" });
+      const xBtn = ui.button("", "settings_scope_delete", {
+        icon: "x",
+        variant: "ghost",
+        tooltip: t("settings.deleteScope"),
         payload: { index: idx },
       });
-      scopeFormInputs.push(ui.row([scopeInput, scopeDeleteBtn], { gap: 8, align: "end" }));
+      badgePairs.push(ui.row([badge, xBtn], { gap: 2, align: "center" }));
     });
-    const scopesForm = ui.form(scopeFormInputs, "settings_save_scopes", {
-      submitLabel: t("settings.saveAll"),
-    });
-    const scopeAddBtn = ui.button(t("settings.addScope"), "settings_scope_add");
-    scopesCard = ui.card([scopesForm, scopeAddBtn], {
+    if (badgePairs.length > 0) {
+      scopeChildren.push(ui.row(badgePairs, { gap: 6, wrap: true }));
+    }
+    scopeChildren.push(
+      ui.button(t("settings.addScope"), "settings_scope_add", {
+        icon: "plus",
+        variant: "outline",
+      })
+    );
+    scopesCard = ui.card(scopeChildren, {
       title: t("settings.scopesPerLine"),
       padding: 20,
     });
@@ -2391,7 +2394,16 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  // ---- Benchmark & Evolution Section (concurrency + applyEngine + model selection) ----
+  // ---- Benchmark & Evolution Section (judge model + concurrency + applyEngine) ----
+  const allModelRefOptions = [
+    { value: "", label: t("settings.noneSelected") },
+    ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
+  ];
+  const judgeSelect = ui.formInput("benchmarkJudgeModel", "select", {
+    label: t("settings.judgeModelSelect"),
+    options: allModelRefOptions,
+    value: data.orchestratorJudge,
+  });
   const concurrencyInput = ui.formInput("benchmarkConcurrency", "text", {
     label: t("settings.benchmarkConcurrency"),
     value: String(data.benchmarkConcurrency),
@@ -2404,28 +2416,9 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ],
     value: data.applyEngine,
   });
-  // Benchmark model checkboxes from model repository
-  const bmCheckboxes: string[] = [];
-  for (const ref of data.allModelRefs) {
-    const isChecked = data.benchmarkModelRefs.includes(ref);
-    bmCheckboxes.push(
-      ui.formInput(`bm_ref__${ref}`, "select", {
-        label: ref,
-        options: [
-          { value: "true", label: t("common.enable") },
-          { value: "false", label: t("common.disable") },
-        ],
-        value: String(isChecked),
-      })
-    );
-  }
-  const bmSelectGroup =
-    bmCheckboxes.length > 0
-      ? [ui.text(t("settings.benchmarkModelsSelect"), "body"), ...bmCheckboxes]
-      : [];
   const benchmarkForm = ui.form(
-    [concurrencyInput, applyEngineSelect, ...bmSelectGroup],
-    "settings_save_benchmark_v3",
+    [judgeSelect, concurrencyInput, applyEngineSelect],
+    "settings_save_benchmark_v4",
     { submitLabel: saveLabel }
   );
   const benchmarkCard = ui.card([benchmarkForm], {
@@ -2487,8 +2480,10 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       ],
       value: String(srv.enabled),
     });
-    const sDeleteBtn = ui.button(t("settings.deleteServer"), "settings_mcp_delete", {
-      variant: "danger",
+    const sDeleteBtn = ui.button("", "settings_mcp_delete", {
+      icon: "x",
+      variant: "ghost",
+      tooltip: t("settings.deleteServer"),
       payload: { key: srv.key },
     });
     remoteFormInputs.push(
@@ -2504,7 +2499,10 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const mcpRemoteForm = ui.form(remoteFormInputs, "settings_save_mcp_remote", {
     submitLabel: t("settings.saveAll"),
   });
-  const mcpRemoteAddBtn = ui.button(t("settings.addServer"), "settings_mcp_add");
+  const mcpRemoteAddBtn = ui.button(t("settings.addServer"), "settings_mcp_add", {
+    icon: "plus",
+    variant: "outline",
+  });
   mcpChildren.push(ui.collapsible(t("settings.remoteServers"), [mcpRemoteForm, mcpRemoteAddBtn]));
 
   const mcpCard = ui.card(mcpChildren, {
@@ -2604,15 +2602,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  const cards: string[] = [
-    header,
-    repoCard,
-    agentsCard,
-    infraModelsCard,
-    gatewayCard,
-    contextCard,
-    dsCard,
-  ];
+  const cards: string[] = [header, repoCard, agentsCard, gatewayCard, contextCard, dsCard];
   if (scopesCard) cards.push(scopesCard);
   cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
   const root = ui.column(cards, { gap: 16, padding: 24 });
