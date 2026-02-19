@@ -1970,6 +1970,8 @@ export interface SettingsPageData {
   orchestratorSa: string;
   orchestratorJudge: string;
   orchestratorEmbedding: string;
+  /** Agent profiles for per-agent model config */
+  agentProfiles: Array<{ id: string; label: string; model: string }>;
   benchmarkModelRefs: string[];
   // Gateway
   gatewayPort: number;
@@ -2087,16 +2089,34 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  // ---- Model Assignments Section ----
+  // ---- Agent Models Section (per-agent model config) ----
+  const agentModelRefOptions = [
+    { value: "", label: t("settings.defaultModelFallback") },
+    ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
+  ];
+  const agentModelInputs: string[] = [];
+  for (const profile of data.agentProfiles) {
+    agentModelInputs.push(
+      ui.formInput(`agent_model__${profile.id}`, "select", {
+        label: `${profile.label} — ${t("settings.agentModelLabel")}`,
+        options: agentModelRefOptions,
+        value: profile.model,
+      })
+    );
+  }
+  const agentModelsForm = ui.form(agentModelInputs, "settings_save_agent_models", {
+    submitLabel: t("settings.saveAgentModels"),
+  });
+  const agentModelsCard = ui.card([agentModelsForm], {
+    title: t("settings.sectionAgentModels"),
+    padding: 20,
+  });
+
+  // ---- Infrastructure Models Section (SA/Judge/Embedding) ----
   const modelRefOptions = [
     { value: "", label: t("settings.noneSelected") },
     ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
   ];
-  const agentModelSelect = ui.formInput("orchestratorPha", "select", {
-    label: t("settings.agentModelSelect"),
-    options: modelRefOptions,
-    value: data.orchestratorPha,
-  });
   const systemAgentModelSelect = ui.formInput("orchestratorSa", "select", {
     label: t("settings.systemAgentModelSelect"),
     options: modelRefOptions,
@@ -2112,15 +2132,27 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     options: modelRefOptions,
     value: data.orchestratorEmbedding,
   });
-  const assignmentsForm = ui.form(
-    [agentModelSelect, systemAgentModelSelect, judgeModelSelect, embeddingModelSelect],
-    "settings_save_model_assignments",
-    { submitLabel: t("settings.saveAssignments") }
+  const infraModelsForm = ui.form(
+    [systemAgentModelSelect, judgeModelSelect, embeddingModelSelect],
+    "settings_save_infra_models",
+    { submitLabel: t("settings.saveInfraModels") }
   );
-  const assignmentsCard = ui.card([assignmentsForm], {
-    title: t("settings.sectionModelAssignments"),
+  const infraModelsCard = ui.card([infraModelsForm], {
+    title: t("settings.sectionInfraModels"),
     padding: 20,
   });
+
+  // ---- Legacy Model Assignments (backward compat) ----
+  const agentModelSelect = ui.formInput("orchestratorPha", "select", {
+    label: t("settings.agentModelSelect"),
+    options: modelRefOptions,
+    value: data.orchestratorPha,
+  });
+  const assignmentsForm = ui.form([agentModelSelect], "settings_save_model_assignments", {
+    submitLabel: t("settings.saveAssignments"),
+  });
+  // Hidden: kept for backward compat but not rendered in the main layout
+  void assignmentsForm;
 
   // ---- Gateway Section ----
   const portInput = ui.formInput("port", "text", {
@@ -2447,7 +2479,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  const cards: string[] = [header, repoCard, assignmentsCard, gatewayCard, dsCard];
+  const cards: string[] = [header, repoCard, agentModelsCard, infraModelsCard, gatewayCard, dsCard];
   if (scopesCard) cards.push(scopesCard);
   cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
   const root = ui.column(cards, { gap: 16, padding: 24 });

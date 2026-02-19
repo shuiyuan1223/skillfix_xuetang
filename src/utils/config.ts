@@ -271,6 +271,8 @@ export interface PHAConfig {
 
 /** Agent profile as stored in config.json (relaxed types for JSON serialization) */
 export interface AgentProfileConfig {
+  /** Per-agent model ref: "provider/name" (overrides orchestrator.pha fallback) */
+  model?: string;
   tools?: { categories?: string[] };
   skills?: { excludeTypes?: string[] };
   context?: { health?: boolean; weather?: boolean; bootstrap?: boolean };

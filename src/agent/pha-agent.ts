@@ -20,6 +20,7 @@ import {
   DEFAULT_MODELS,
   ENV_KEY_MAP,
   BUILTIN_PROVIDERS,
+  type ResolvedModel,
 } from "../utils/config.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -30,12 +31,19 @@ import { preComputeHealthContext, fetchWeatherContext } from "./health-context.j
 import { sessionToAgentMessages } from "../memory/session-store.js";
 
 export type { LLMProvider } from "../utils/config.js";
-import { loadConfig, type AgentProfileConfig } from "../utils/config.js";
+import {
+  loadConfig,
+  resolveModel,
+  resolveAgentModel,
+  type AgentProfileConfig,
+} from "../utils/config.js";
 import type { ToolCategory } from "../tools/types.js";
 
 /** Declarative agent configuration profile (runtime, fully typed) */
 export interface AgentProfile {
   id: string;
+  /** Per-agent model ref: "provider/name" (overrides orchestrator.pha fallback) */
+  model?: string;
   tools: { categories: ToolCategory[] };
   skills?: { excludeTypes?: string[] };
   context: {
@@ -92,6 +100,7 @@ export function getAgentProfile(id: string): AgentProfile {
   const base = builtin || { id, tools: { categories: PHA_TOOL_CATEGORIES }, context: {} };
   return {
     id,
+    model: override.model ?? base.model,
     tools: {
       categories: (override.tools?.categories as ToolCategory[]) || base.tools.categories,
     },
@@ -109,6 +118,27 @@ export function getAgentProfileIds(): string[] {
     for (const k of Object.keys(config.agents)) ids.add(k);
   }
   return [...ids];
+}
+
+/**
+ * Resolve model for an agent profile.
+ * Priority: agents.{id}.model > orchestrator.pha > llm (legacy)
+ */
+export function resolveAgentProfileModel(agentId: string): ResolvedModel {
+  const profile = getAgentProfile(agentId);
+  const config = loadConfig();
+
+  // 1. Agent-specific model ref
+  if (profile.model && config.models?.providers) {
+    try {
+      return resolveModel(profile.model, config);
+    } catch {
+      // fall through to global fallback
+    }
+  }
+
+  // 2. Fall back to resolveAgentModel() (orchestrator.pha > llm)
+  return resolveAgentModel(config);
 }
 
 /** @deprecated Use getAgentProfile() — kept for backward compat during migration */

@@ -17,6 +17,8 @@ import {
   createPHAAgent,
   withActivityTimeout,
   getAgentProfile,
+  getAgentProfileIds,
+  resolveAgentProfileModel,
   type PHAAgent,
 } from "../agent/pha-agent.js";
 import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
@@ -1278,13 +1280,9 @@ export class GatewaySession {
     }));
   }
 
-  /** Common config fields shared between main and legacy agents */
+  /** Common config fields shared between main and legacy agents (model resolved per-agent) */
   private baseAgentConfig() {
     return {
-      apiKey: this.config.apiKey,
-      provider: this.config.provider,
-      modelId: this.config.modelId,
-      baseUrl: this.config.baseUrl,
       userUuid: this.userUuid || undefined,
       dataSource: this.dataSource,
     };
@@ -1311,9 +1309,14 @@ export class GatewaySession {
   private async getAgent(): Promise<PHAAgent> {
     if (!this.agent) {
       const extraTools = await this.ensureExtraTools();
+      const model = resolveAgentProfileModel("pha");
 
       this.agent = await createPHAAgent({
         ...this.baseAgentConfig(),
+        apiKey: model.apiKey,
+        provider: model.provider as any,
+        modelId: model.modelId,
+        baseUrl: model.baseUrl,
         profile: getAgentProfile("pha"),
         sessionId: this.sessionId,
         sessionMessages: this.toSessionMessages(this.chatMessages),
@@ -1373,8 +1376,13 @@ export class GatewaySession {
       const extraTools = await this.ensureExtraTools();
 
       // Cheap creation: ~150ms (skips 2-5s health/weather fetch via cachedContext)
+      const legacyModel = resolveAgentProfileModel("pha4old");
       this.legacyChatAgent = await createPHAAgent({
         ...this.baseAgentConfig(),
+        apiKey: legacyModel.apiKey,
+        provider: legacyModel.provider as any,
+        modelId: legacyModel.modelId,
+        baseUrl: legacyModel.baseUrl,
         profile: getAgentProfile("pha4old"),
         sessionId: this.legacyChatSessionId,
         sessionMessages: this.toSessionMessages(this.legacyChatMessages),
@@ -2262,6 +2270,13 @@ export class GatewaySession {
 
         const scopesArray = huawei.scopes || [];
 
+        // Build agent profiles for per-agent model config
+        const profileIds = getAgentProfileIds();
+        const agentProfiles = profileIds.map((id) => {
+          const p = getAgentProfile(id);
+          return { id, label: id, model: p.model || "" };
+        });
+
         mainPage = generateSettingsPage({
           provider: config.llm.provider,
           providers,
@@ -2274,6 +2289,7 @@ export class GatewaySession {
           orchestratorSa: config.orchestrator?.sa || "",
           orchestratorJudge: config.orchestrator?.judge || "",
           orchestratorEmbedding: config.orchestrator?.embedding || "",
+          agentProfiles,
           benchmarkModelRefs: config.benchmark?.models || [],
           gatewayPort: config.gateway?.port || 8000,
           gatewayAutoStart: config.gateway?.autoStart ?? false,
@@ -4218,6 +4234,8 @@ export class GatewaySession {
       action === "settings_save_judge" ||
       action === "settings_save_model_repository" ||
       action === "settings_save_model_assignments" ||
+      action === "settings_save_agent_models" ||
+      action === "settings_save_infra_models" ||
       action === "settings_provider_add" ||
       action === "settings_provider_delete" ||
       action === "settings_provider_model_add" ||
@@ -4424,6 +4442,27 @@ export class GatewaySession {
               }
             }
           }
+        } else if (action === "settings_save_agent_models") {
+          // Save per-agent model assignments
+          if (!config.agents) config.agents = {};
+          for (const key of Object.keys(formData)) {
+            if (key.startsWith("agent_model__")) {
+              const agentId = key.replace("agent_model__", "");
+              const modelRef = String(formData[key]) || undefined;
+              if (!config.agents[agentId]) config.agents[agentId] = {};
+              if (modelRef) {
+                config.agents[agentId].model = modelRef;
+              } else {
+                delete config.agents[agentId].model;
+              }
+            }
+          }
+        } else if (action === "settings_save_infra_models") {
+          // Save infrastructure model assignments (SA/Judge/Embedding)
+          if (!config.orchestrator) config.orchestrator = {};
+          config.orchestrator.sa = String(formData.orchestratorSa || "") || undefined;
+          config.orchestrator.judge = String(formData.orchestratorJudge || "") || undefined;
+          config.orchestrator.embedding = String(formData.orchestratorEmbedding || "") || undefined;
         } else if (action === "settings_provider_add") {
           // Add a new empty provider
           if (!config.models) config.models = { providers: {} };

@@ -670,6 +670,12 @@ export interface LocaleMessages {
     benchmarkModelsSelect: string;
     saveRepository: string;
     saveAssignments: string;
+    sectionAgentModels: string;
+    sectionInfraModels: string;
+    agentModelLabel: string;
+    defaultModelFallback: string;
+    saveAgentModels: string;
+    saveInfraModels: string;
     noneSelected: string;
     saveAll: string;
     rawConfig: string;
