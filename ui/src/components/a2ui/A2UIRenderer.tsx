@@ -306,6 +306,7 @@ export function A2UIRenderer({
     const gap = (c.gap as number) || 0;
     const rawJustify = (c.justify as string) || "start";
     const align = (c.align as string) || "center";
+    const wrap = c.wrap as boolean;
     const className = (c.className as string) || "";
     const extraStyle = (c.style as string) || "";
     // Map shorthand values to valid CSS
@@ -315,7 +316,7 @@ export function A2UIRenderer({
     };
     const justify = justifyMap[rawJustify] || rawJustify;
     return (
-      <div className={`flex flex-row ${className}`} style={parseStyle(`gap: ${gap}px; justify-content: ${justify}; align-items: ${align}; ${extraStyle}`)}>
+      <div className={`flex flex-row ${wrap ? "flex-wrap" : ""} ${className}`} style={parseStyle(`gap: ${gap}px; justify-content: ${justify}; align-items: ${align}; ${extraStyle}`)}>
         {renderChildren(c.children)}
       </div>
     );

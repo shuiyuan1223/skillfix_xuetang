@@ -2043,7 +2043,15 @@ export interface SettingsPageData {
   // Plugins structured fields
   pluginEnabled: boolean;
   pluginPaths: string;
-  pluginEntries: Array<{ id: string; enabled: boolean; config: string }>;
+  pluginEntries: Array<{
+    id: string;
+    name: string;
+    description: string;
+    version: string;
+    origin: string;
+    enabled: boolean;
+    config: string;
+  }>;
   // Context & Proactive
   contextLocation: string;
   contextHemisphere: string;
@@ -2138,8 +2146,15 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   for (const profile of data.agentProfiles) {
     const pfx = `ap__${profile.id}__`;
     const fields: string[] = [];
-    // Agent ID title
-    fields.push(ui.text(profile.id, "h3"));
+    // Agent ID title + delete button
+    const agentTitle = ui.text(profile.id, "h3");
+    const agentDeleteBtn = ui.button("", "settings_agent_delete", {
+      icon: "x",
+      variant: "ghost",
+      tooltip: t("settings.deleteAgent"),
+      payload: { agentId: profile.id },
+    });
+    fields.push(ui.row([agentTitle, agentDeleteBtn], { justify: "between", align: "center" }));
     // Model
     fields.push(
       ui.formInput(`${pfx}model`, "select", {
@@ -2240,7 +2255,11 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const agentsForm = ui.form(agentSections, "settings_save_agents", {
     submitLabel: t("settings.saveAgents"),
   });
-  const agentsCard = ui.card([agentsForm], {
+  const addAgentBtn = ui.button(t("settings.addAgent"), "settings_agent_add", {
+    icon: "plus",
+    variant: "outline",
+  });
+  const agentsCard = ui.card([agentsForm, addAgentBtn], {
     title: t("settings.sectionAgents"),
     padding: 20,
   });
@@ -2531,10 +2550,29 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   );
   pluginsChildren.push(pluginsMainForm);
 
-  // Per-plugin entries
+  // Per-plugin entries (with auto-discovery info)
+  if (data.pluginEntries.length === 0) {
+    pluginsChildren.push(ui.text(t("settings.noPluginsFound"), "caption"));
+  }
   for (const entry of data.pluginEntries) {
+    const originLabel =
+      entry.origin === "workspace"
+        ? t("settings.pluginOriginWorkspace")
+        : t("settings.pluginOriginConfig");
+    const titleLabel = entry.name + (entry.version ? ` v${entry.version}` : "");
+    const pluginContent: string[] = [];
+    if (entry.description) {
+      pluginContent.push(ui.text(entry.description, "caption"));
+    }
+    const originBadge = ui.badge(originLabel, { variant: "info", size: "sm" });
+    pluginContent.push(
+      ui.row([ui.text(t("settings.pluginOrigin") + ":", "caption"), originBadge], {
+        gap: 6,
+        align: "center",
+      })
+    );
     const peEnabled = ui.formInput(`plugin__${entry.id}__enabled`, "select", {
-      label: "Enabled",
+      label: t("common.enable"),
       options: [
         { value: "true", label: t("common.enable") },
         { value: "false", label: t("common.disable") },
@@ -2545,7 +2583,8 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       label: "Config",
       value: entry.config,
     });
-    pluginsChildren.push(ui.collapsible(entry.id, [peEnabled, peConfig]));
+    pluginContent.push(peEnabled, peConfig);
+    pluginsChildren.push(ui.collapsible(titleLabel, pluginContent));
   }
   const pluginsCard = ui.card(pluginsChildren, {
     title: t("settings.sectionPlugins"),
@@ -2605,7 +2644,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const cards: string[] = [header, repoCard, agentsCard, gatewayCard, contextCard, dsCard];
   if (scopesCard) cards.push(scopesCard);
   cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
-  const root = ui.column(cards, { gap: 16, padding: 24 });
+  const root = ui.column(cards, { gap: 24, padding: 24 });
 
   // Add some bottom padding to avoid content being cut off
   const rootComp = ui["components"].get(root);

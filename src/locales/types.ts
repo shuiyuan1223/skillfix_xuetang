@@ -706,6 +706,15 @@ export interface LocaleMessages {
     proactiveEnabled: string;
     proactiveInterval: string;
     saveContext: string;
+    addAgent: string;
+    deleteAgent: string;
+    pluginName: string;
+    pluginVersion: string;
+    pluginOrigin: string;
+    pluginDescription: string;
+    pluginOriginWorkspace: string;
+    pluginOriginConfig: string;
+    noPluginsFound: string;
     saveAll: string;
     rawConfig: string;
     copyConfig: string;
