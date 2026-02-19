@@ -243,15 +243,17 @@ export class MemoryManager {
     uuid: string,
     healthContext?: string,
     weatherContext?: string,
-    skillOptions?: { excludeTypes?: string[] }
+    skillOptions?: { excludeTypes?: string[] },
+    contextOptions?: { memory?: boolean; profile?: boolean; bootstrap?: boolean }
   ): string {
     const soul = this.getSoulPrompt(uuid);
-    const profile = this.getProfile(uuid);
-    const memorySummary = loadMemorySummary(uuid);
-    const bootstrap = loadBootstrap(uuid);
+    const profile = contextOptions?.profile !== false ? this.getProfile(uuid) : null;
+    const memorySummary = contextOptions?.memory !== false ? loadMemorySummary(uuid) : null;
+    const bootstrap = contextOptions?.bootstrap !== false ? loadBootstrap(uuid) : null;
 
-    const profileSection = formatProfileForPrompt(profile);
-    const memorySection = memorySummary || "No historical memory yet";
+    const profileSection = profile ? formatProfileForPrompt(profile) : null;
+    const memorySection =
+      memorySummary || (contextOptions?.memory !== false ? "No historical memory yet" : null);
     const skillRegistry = buildSkillRegistry(skillOptions);
 
     const sessionContext = buildSessionContext(weatherContext);
@@ -260,6 +262,11 @@ export class MemoryManager {
       ? `\n## ⚠️ 新用户首次对话 — 必须执行引导\n\n**请严格遵循以下引导流程。这是最高优先级任务。**\n\n${bootstrap}\n`
       : "";
 
+    const profileBlock = profileSection
+      ? `\n## Current User Information\n\n${profileSection}\n`
+      : "";
+    const memoryBlock = memorySection ? `\n## User Memory\n\n${memorySection}\n` : "";
+
     const prompt = `${soul}
 
 ---
@@ -267,15 +274,7 @@ export class MemoryManager {
 ## Session Context
 
 ${sessionContext}
-${bootstrapSection}
-## Current User Information
-
-${profileSection}
-
-## User Memory
-
-${memorySection}
-${healthContext || ""}
+${bootstrapSection}${profileBlock}${memoryBlock}${healthContext || ""}
 ${skillRegistry}
 ---
 
@@ -283,7 +282,7 @@ Based on the information above, provide personalized health services.`;
 
     const est = (s: string) => Math.ceil(s.length / 4);
     log.debug(
-      `Token distribution: soul=${est(soul)} profile=${est(profileSection)} memory=${est(memorySection)} health=${est(healthContext || "")} skills=${est(skillRegistry)} bootstrap=${est(bootstrapSection)} total≈${est(prompt)}`
+      `Token distribution: soul=${est(soul)} profile=${est(profileBlock)} memory=${est(memoryBlock)} health=${est(healthContext || "")} skills=${est(skillRegistry)} bootstrap=${est(bootstrapSection)} total≈${est(prompt)}`
     );
 
     return prompt;

@@ -2284,6 +2284,8 @@ export class GatewaySession {
             contextHealth: p.context.health !== false,
             contextWeather: p.context.weather !== false,
             contextBootstrap: p.context.bootstrap !== false,
+            contextMemory: p.context.memory !== false,
+            contextProfile: p.context.profile !== false,
             skillHint: p.skillHint || "",
           };
         });
@@ -2332,6 +2334,10 @@ export class GatewaySession {
           pluginEnabled: pluginsConfig.enabled ?? true,
           pluginPaths: (pluginsConfig.paths || []).join(", "),
           pluginEntries,
+          contextLocation: config.context?.location || "",
+          contextHemisphere: config.context?.hemisphere || "north",
+          proactiveEnabled: config.proactive?.enabled !== false,
+          proactiveCheckInterval: config.proactive?.checkIntervalMinutes ?? 5,
           rawConfigJson: JSON.stringify(stripLegacyFieldsForSave(config), null, 2),
         });
         break;
@@ -4247,6 +4253,7 @@ export class GatewaySession {
       action === "settings_save_model_repository" ||
       action === "settings_save_model_assignments" ||
       action === "settings_save_agents" ||
+      action === "settings_save_context" ||
       action === "settings_save_infra_models" ||
       action === "settings_provider_add" ||
       action === "settings_provider_delete" ||
@@ -4506,6 +4513,10 @@ export class GatewaySession {
               ctx.weather = formData[`${pfx}ctx_weather`] === "true";
             if (formData[`${pfx}ctx_bootstrap`] !== undefined)
               ctx.bootstrap = formData[`${pfx}ctx_bootstrap`] === "true";
+            if (formData[`${pfx}ctx_memory`] !== undefined)
+              ctx.memory = formData[`${pfx}ctx_memory`] === "true";
+            if (formData[`${pfx}ctx_profile`] !== undefined)
+              ctx.profile = formData[`${pfx}ctx_profile`] === "true";
             ap.context = ctx;
             // Skill hint
             const hint = String(formData[`${pfx}skill_hint`] || "").trim() || undefined;
@@ -4515,6 +4526,15 @@ export class GatewaySession {
               delete ap.skillHint;
             }
           }
+        } else if (action === "settings_save_context") {
+          // Save context & proactive configuration
+          if (!config.context) config.context = {};
+          config.context.location = String(formData.contextLocation || "").trim() || undefined;
+          config.context.hemisphere = formData.contextHemisphere === "south" ? "south" : "north";
+          if (!config.proactive) config.proactive = {};
+          config.proactive.enabled = formData.proactiveEnabled === "true";
+          config.proactive.checkIntervalMinutes =
+            parseInt(String(formData.proactiveCheckInterval)) || 5;
         } else if (action === "settings_save_infra_models") {
           // Save infrastructure model assignments (SA/Judge/Embedding)
           if (!config.orchestrator) config.orchestrator = {};

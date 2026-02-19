@@ -1980,6 +1980,8 @@ export interface SettingsPageData {
     contextHealth: boolean;
     contextWeather: boolean;
     contextBootstrap: boolean;
+    contextMemory: boolean;
+    contextProfile: boolean;
     skillHint: string;
   }>;
   /** All available tool categories for multi-select */
@@ -2030,6 +2032,11 @@ export interface SettingsPageData {
   pluginEnabled: boolean;
   pluginPaths: string;
   pluginEntries: Array<{ id: string; enabled: boolean; config: string }>;
+  // Context & Proactive
+  contextLocation: string;
+  contextHemisphere: string;
+  proactiveEnabled: boolean;
+  proactiveCheckInterval: number;
   // Raw config
   rawConfigJson: string;
 }
@@ -2162,6 +2169,20 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         label: t("settings.agentCtxBootstrap"),
         options: boolOptions,
         value: String(profile.contextBootstrap),
+      })
+    );
+    fields.push(
+      ui.formInput(`${pfx}ctx_memory`, "select", {
+        label: t("settings.agentCtxMemory"),
+        options: boolOptions,
+        value: String(profile.contextMemory),
+      })
+    );
+    fields.push(
+      ui.formInput(`${pfx}ctx_profile`, "select", {
+        label: t("settings.agentCtxProfile"),
+        options: boolOptions,
+        value: String(profile.contextProfile),
       })
     );
     // Skill hint
@@ -2518,6 +2539,39 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
+  // ---- Context & Proactive Section ----
+  const ctxLocationInput = ui.formInput("contextLocation", "text", {
+    label: t("settings.contextLocation"),
+    value: data.contextLocation,
+    placeholder: "Beijing",
+  });
+  const ctxHemisphereSelect = ui.formInput("contextHemisphere", "select", {
+    label: t("settings.contextHemisphere"),
+    options: [
+      { value: "north", label: t("settings.hemisphereNorth") },
+      { value: "south", label: t("settings.hemisphereSouth") },
+    ],
+    value: data.contextHemisphere,
+  });
+  const proactiveEnabledSelect = ui.formInput("proactiveEnabled", "select", {
+    label: t("settings.proactiveEnabled"),
+    options: boolOptions,
+    value: String(data.proactiveEnabled),
+  });
+  const proactiveIntervalInput = ui.formInput("proactiveCheckInterval", "text", {
+    label: t("settings.proactiveInterval"),
+    value: String(data.proactiveCheckInterval),
+  });
+  const contextForm = ui.form(
+    [ctxLocationInput, ctxHemisphereSelect, proactiveEnabledSelect, proactiveIntervalInput],
+    "settings_save_context",
+    { submitLabel: t("settings.saveContext") }
+  );
+  const contextCard = ui.card([contextForm], {
+    title: t("settings.sectionContext"),
+    padding: 20,
+  });
+
   // ---- Raw Config Viewer ----
   const rawEditor = ui.codeEditor(data.rawConfigJson, {
     language: "json",
@@ -2536,7 +2590,15 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  const cards: string[] = [header, repoCard, agentsCard, infraModelsCard, gatewayCard, dsCard];
+  const cards: string[] = [
+    header,
+    repoCard,
+    agentsCard,
+    infraModelsCard,
+    gatewayCard,
+    contextCard,
+    dsCard,
+  ];
   if (scopesCard) cards.push(scopesCard);
   cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
   const root = ui.column(cards, { gap: 16, padding: 24 });

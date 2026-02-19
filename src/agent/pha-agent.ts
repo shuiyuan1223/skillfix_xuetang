@@ -50,6 +50,8 @@ export interface AgentProfile {
     health?: boolean;
     weather?: boolean;
     bootstrap?: boolean;
+    memory?: boolean;
+    profile?: boolean;
   };
   skillHint?: string;
 }
@@ -262,9 +264,28 @@ export class PHAAgent {
     const skillOptions = config.profile?.skills?.excludeTypes
       ? { excludeTypes: config.profile.skills.excludeTypes }
       : undefined;
+    const contextOptions = config.profile
+      ? {
+          memory: config.profile.context.memory,
+          profile: config.profile.context.profile,
+          bootstrap: config.profile.context.bootstrap,
+        }
+      : undefined;
     const systemPrompt = this.userUuid
-      ? memoryManager.buildSystemPrompt(this.userUuid, healthContext, weatherContext, skillOptions)
-      : memoryManager.buildSystemPrompt("anonymous", healthContext, weatherContext, skillOptions);
+      ? memoryManager.buildSystemPrompt(
+          this.userUuid,
+          healthContext,
+          weatherContext,
+          skillOptions,
+          contextOptions
+        )
+      : memoryManager.buildSystemPrompt(
+          "anonymous",
+          healthContext,
+          weatherContext,
+          skillOptions,
+          contextOptions
+        );
 
     // Build LLM config for compaction summarization
     const llmConfig: LLMSummarizationConfig = {

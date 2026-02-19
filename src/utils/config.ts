@@ -275,7 +275,13 @@ export interface AgentProfileConfig {
   model?: string;
   tools?: { categories?: string[] };
   skills?: { excludeTypes?: string[] };
-  context?: { health?: boolean; weather?: boolean; bootstrap?: boolean };
+  context?: {
+    health?: boolean;
+    weather?: boolean;
+    bootstrap?: boolean;
+    memory?: boolean;
+    profile?: boolean;
+  };
   skillHint?: string;
 }
 

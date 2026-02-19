@@ -676,6 +676,8 @@ export interface LocaleMessages {
     agentCtxHealth: string;
     agentCtxWeather: string;
     agentCtxBootstrap: string;
+    agentCtxMemory: string;
+    agentCtxProfile: string;
     agentTools: string;
     agentSkillsExclude: string;
     agentSkillHint: string;
@@ -683,6 +685,14 @@ export interface LocaleMessages {
     saveAgents: string;
     saveInfraModels: string;
     noneSelected: string;
+    sectionContext: string;
+    contextLocation: string;
+    contextHemisphere: string;
+    hemisphereNorth: string;
+    hemisphereSouth: string;
+    proactiveEnabled: string;
+    proactiveInterval: string;
+    saveContext: string;
     saveAll: string;
     rawConfig: string;
     copyConfig: string;
