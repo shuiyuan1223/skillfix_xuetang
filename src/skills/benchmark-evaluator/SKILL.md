@@ -5,6 +5,8 @@ metadata:
   {
     "pha": {
       "emoji": "🧬",
+      "category": "evolution",
+      "tags": ["benchmark", "evaluation", "quality"],
       "type": "system",
       "requires": { "tools": ["run_benchmark", "list_evaluations"] },
       "config": {

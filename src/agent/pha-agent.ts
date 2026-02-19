@@ -25,9 +25,8 @@ import {
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Agent/PHA");
-import { preComputeHealthContext, fetchWeatherContext } from "./health-context.js";
-// Skill loading is now LLM-driven via system prompt skill registry + get_skill tool.
-// No regex trigger injection.
+// Health/weather context is now tool-based (get_weather, health tools).
+// No pre-computation into system prompt.
 import { sessionToAgentMessages } from "../memory/session-store.js";
 
 export type { LLMProvider } from "../utils/config.js";
@@ -44,11 +43,18 @@ export interface AgentProfile {
   id: string;
   /** Per-agent model ref: "provider/name" (overrides orchestrator.pha fallback) */
   model?: string;
+  /** Workspace path template relative to .pha/ (e.g. "users/{uid}") */
+  workspace?: string;
+  /** Session path template relative to .pha/ (e.g. "users/{uid}/sessions/pha") */
+  sessionPath?: string;
   tools: { categories: ToolCategory[] };
-  skills?: { excludeTypes?: string[] };
+  skills?: {
+    include?: string[];
+    exclude?: string[];
+    /** @deprecated Use include/exclude */
+    excludeTypes?: string[];
+  };
   context: {
-    health?: boolean;
-    weather?: boolean;
     bootstrap?: boolean;
     memory?: boolean;
     profile?: boolean;
@@ -72,14 +78,29 @@ const PHA_TOOL_CATEGORIES: ToolCategory[] = [
 const BUILTIN_PROFILES: Record<string, AgentProfile> = {
   pha: {
     id: "pha",
+    workspace: "users/{uid}",
+    sessionPath: "users/{uid}/sessions/pha",
     tools: { categories: PHA_TOOL_CATEGORIES },
-    context: { health: true, weather: true, bootstrap: true },
+    context: { bootstrap: true },
   },
   pha4old: {
     id: "pha4old",
+    workspace: "users/{uid}",
+    sessionPath: "users/{uid}/sessions/pha4old",
     tools: { categories: PHA_TOOL_CATEGORIES },
-    skills: { excludeTypes: ["system"] },
-    context: { health: true, weather: true, bootstrap: true },
+    skills: {
+      exclude: [
+        "evolution-driver",
+        "benchmark-evaluator",
+        "diagnose-analyst",
+        "regression-detective",
+        "evolution-playground",
+        "code-reviewer",
+        "prompt-engineer",
+        "tool-architect",
+      ],
+    },
+    context: { bootstrap: true },
     skillHint: "legacy-streaming",
   },
 };
@@ -103,10 +124,18 @@ export function getAgentProfile(id: string): AgentProfile {
   return {
     id,
     model: override.model ?? base.model,
+    workspace: override.workspace ?? base.workspace,
+    sessionPath: override.sessionPath ?? base.sessionPath,
     tools: {
       categories: (override.tools?.categories as ToolCategory[]) || base.tools.categories,
     },
-    skills: override.skills || base.skills,
+    skills: override.skills
+      ? {
+          include: override.skills.include,
+          exclude: override.skills.exclude ?? override.skills.excludeTypes,
+          excludeTypes: override.skills.excludeTypes,
+        }
+      : base.skills,
     context: { ...base.context, ...override.context },
     skillHint: override.skillHint ?? base.skillHint,
   };
@@ -178,8 +207,6 @@ export interface PHAAgentConfig {
   sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>;
   /** Agent profile for configurable composition */
   profile?: AgentProfile;
-  /** Pre-computed expensive contexts, skip re-computation if provided */
-  cachedContext?: { healthContext?: string; weatherContext?: string };
 }
 
 // LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
@@ -188,14 +215,10 @@ export class PHAAgent {
   private agent: Agent;
   private config: PHAAgentConfig;
   private userUuid?: string;
-  private _cachedHealthContext?: string;
-  private _cachedWeatherContext?: string;
 
-  constructor(config: PHAAgentConfig = {}, healthContext?: string, weatherContext?: string) {
+  constructor(config: PHAAgentConfig = {}) {
     this.config = config;
     this.userUuid = config.userUuid || getUserId() || undefined;
-    this._cachedHealthContext = healthContext;
-    this._cachedWeatherContext = weatherContext;
 
     const provider = config.provider || "anthropic";
     const modelId = config.modelId || DEFAULT_MODELS[provider];
@@ -261,8 +284,11 @@ export class PHAAgent {
     if (this.userUuid) {
       memoryManager.ensureUser(this.userUuid);
     }
-    const skillOptions = config.profile?.skills?.excludeTypes
-      ? { excludeTypes: config.profile.skills.excludeTypes }
+    const skillOptions = config.profile?.skills
+      ? {
+          include: config.profile.skills.include,
+          exclude: config.profile.skills.exclude ?? config.profile.skills.excludeTypes,
+        }
       : undefined;
     const contextOptions = config.profile
       ? {
@@ -271,21 +297,11 @@ export class PHAAgent {
           bootstrap: config.profile.context.bootstrap,
         }
       : undefined;
-    const systemPrompt = this.userUuid
-      ? memoryManager.buildSystemPrompt(
-          this.userUuid,
-          healthContext,
-          weatherContext,
-          skillOptions,
-          contextOptions
-        )
-      : memoryManager.buildSystemPrompt(
-          "anonymous",
-          healthContext,
-          weatherContext,
-          skillOptions,
-          contextOptions
-        );
+    const systemPrompt = memoryManager.buildSystemPrompt(
+      this.userUuid || "anonymous",
+      skillOptions,
+      contextOptions
+    );
 
     // Build LLM config for compaction summarization
     const llmConfig: LLMSummarizationConfig = {
@@ -358,16 +374,6 @@ export class PHAAgent {
    */
   getUserUuid(): string | undefined {
     return this.userUuid;
-  }
-
-  /**
-   * Get the cached health/weather context for reuse by other agent instances.
-   */
-  getCachedContext(): { healthContext?: string; weatherContext?: string } {
-    return {
-      healthContext: this._cachedHealthContext,
-      weatherContext: this._cachedWeatherContext,
-    };
   }
 
   /**
@@ -651,7 +657,7 @@ export async function withActivityTimeout<T>(
 
 /**
  * Create a PHA Agent instance with environment-based configuration.
- * Pre-computes health context for immediate availability in first turn.
+ * No longer pre-computes health/weather — those are now tools.
  */
 export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAgent> {
   // Try to get API key from environment if not provided
@@ -663,23 +669,5 @@ export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAg
     }
   }
 
-  let healthContext: string | undefined;
-  let weatherContext: string | undefined;
-
-  if (config.cachedContext) {
-    // Fast path: reuse cached context (~0ms)
-    healthContext = config.cachedContext.healthContext;
-    weatherContext = config.cachedContext.weatherContext;
-  } else {
-    // Slow path: compute from scratch (2-5s)
-    const profile = config.profile;
-    const needsHealth = profile ? profile.context.health !== false : true;
-    const needsWeather = profile ? profile.context.weather !== false : true;
-    [healthContext, weatherContext] = await Promise.all([
-      needsHealth ? preComputeHealthContext(config.dataSource, config.userUuid) : undefined,
-      needsWeather ? fetchWeatherContext(config.userUuid) : undefined,
-    ]);
-  }
-
-  return new PHAAgent(config, healthContext, weatherContext);
+  return new PHAAgent(config);
 }

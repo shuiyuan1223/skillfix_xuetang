@@ -5,6 +5,8 @@ metadata:
   {
     "pha": {
       "emoji": "💨",
+      "category": "health-coaching",
+      "tags": ["blood-oxygen", "spo2", "data-analysis"],
       "requires": { "tools": ["get_spo2", "get_sleep"] }
     }
   }

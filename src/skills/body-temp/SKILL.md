@@ -5,6 +5,8 @@ metadata:
   {
     "pha": {
       "emoji": "🌡️",
+      "category": "health-coaching",
+      "tags": ["body-temperature", "fever", "data-analysis"],
       "requires": { "tools": ["get_body_temperature", "get_menstrual_cycle"] }
     }
   }

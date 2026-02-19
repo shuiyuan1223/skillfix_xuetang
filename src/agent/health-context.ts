@@ -19,7 +19,12 @@ import { getUserUuid, loadConfig } from "../utils/config.js";
 import { loadProfileFromFile } from "../memory/profile.js";
 
 /**
- * Pre-compute a 7-day health context summary for the system prompt.
+ * @deprecated Health context is no longer injected into the system prompt.
+ * The agent now uses health tools on demand. This function is kept for
+ * backward compatibility (e.g., plan auto-sync) but should not be called
+ * for system prompt construction.
+ *
+ * Pre-compute a 7-day health context summary.
  * Best-effort: returns empty string if data fetching fails.
  * @param dataSource - Optional user-specific data source; falls back to global.
  * @param userUuid - Optional user UUID for plan lookup; falls back to getUserUuid().

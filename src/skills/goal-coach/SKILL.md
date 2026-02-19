@@ -5,6 +5,8 @@ metadata:
   {
     "pha": {
       "emoji": "🎯",
+      "category": "health-management",
+      "tags": ["goals", "behavior-change", "tracking"],
       "requires": { "tools": ["get_weekly_summary", "get_health_data", "memory_search", "memory_save"] }
     }
   }

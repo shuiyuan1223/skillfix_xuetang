@@ -5,6 +5,8 @@ metadata:
   {
     "pha": {
       "emoji": "📅",
+      "category": "health-management",
+      "tags": ["weekly-review", "trends", "report"],
       "requires": { "tools": ["get_weekly_summary", "get_health_data", "get_sleep", "get_heart_rate", "list_health_plans", "get_health_plan"] }
     }
   }

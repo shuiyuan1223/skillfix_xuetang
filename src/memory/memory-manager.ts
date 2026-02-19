@@ -241,9 +241,7 @@ export class MemoryManager {
 
   buildSystemPrompt(
     uuid: string,
-    healthContext?: string,
-    weatherContext?: string,
-    skillOptions?: { excludeTypes?: string[] },
+    skillOptions?: { include?: string[]; exclude?: string[] },
     contextOptions?: { memory?: boolean; profile?: boolean; bootstrap?: boolean }
   ): string {
     const soul = this.getSoulPrompt(uuid);
@@ -256,7 +254,7 @@ export class MemoryManager {
       memorySummary || (contextOptions?.memory !== false ? "No historical memory yet" : null);
     const skillRegistry = buildSkillRegistry(skillOptions);
 
-    const sessionContext = buildSessionContext(weatherContext);
+    const sessionContext = buildSessionContext();
 
     const bootstrapSection = bootstrap
       ? `\n## ⚠️ 新用户首次对话 — 必须执行引导\n\n**请严格遵循以下引导流程。这是最高优先级任务。**\n\n${bootstrap}\n`
@@ -274,7 +272,7 @@ export class MemoryManager {
 ## Session Context
 
 ${sessionContext}
-${bootstrapSection}${profileBlock}${memoryBlock}${healthContext || ""}
+${bootstrapSection}${profileBlock}${memoryBlock}
 ${skillRegistry}
 ---
 
@@ -282,7 +280,7 @@ Based on the information above, provide personalized health services.`;
 
     const est = (s: string) => Math.ceil(s.length / 4);
     log.debug(
-      `Token distribution: soul=${est(soul)} profile=${est(profileBlock)} memory=${est(memoryBlock)} health=${est(healthContext || "")} skills=${est(skillRegistry)} bootstrap=${est(bootstrapSection)} total≈${est(prompt)}`
+      `Token distribution: soul=${est(soul)} profile=${est(profileBlock)} memory=${est(memoryBlock)} skills=${est(skillRegistry)} bootstrap=${est(bootstrapSection)} total≈${est(prompt)}`
     );
 
     return prompt;
@@ -351,9 +349,10 @@ function getSeason(month: number, hemisphere: "north" | "south" = "north"): stri
 }
 
 /**
- * Build rich session context with date, time, timezone, season, and optional weather.
+ * Build rich session context with date, time, timezone, and season.
+ * Weather is now a tool (get_weather), not injected here.
  */
-function buildSessionContext(weatherContext?: string): string {
+function buildSessionContext(): string {
   const now = new Date();
   const dateStr = now.toISOString().split("T")[0];
   const weekday = WEEKDAYS_ZH[now.getDay()];
@@ -389,10 +388,6 @@ function buildSessionContext(weatherContext?: string): string {
     `- **时区**: ${tzDisplay}`,
     `- **季节**: ${season}`,
   ];
-
-  if (weatherContext) {
-    lines.push(weatherContext);
-  }
 
   return lines.join("\n");
 }

@@ -250,6 +250,8 @@ export const listSkillsTool: PHATool<{ includeDisabled?: boolean }> = {
       path: string;
       emoji?: string;
       type?: string;
+      category?: string;
+      tags?: string[];
     }> = [];
 
     const entries = readdirSync(dir, { withFileTypes: true });
@@ -271,6 +273,8 @@ export const listSkillsTool: PHATool<{ includeDisabled?: boolean }> = {
         path: info.path,
         emoji: pha?.emoji as string | undefined,
         type: (pha?.type as string) || "pha",
+        category: pha?.category as string | undefined,
+        tags: pha?.tags as string[] | undefined,
       });
     }
 

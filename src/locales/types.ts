@@ -234,6 +234,11 @@ export interface LocaleMessages {
     systemSkills: string;
     tabPha: string;
     tabSystem: string;
+    skillCatHealthCoaching: string;
+    skillCatHealthManagement: string;
+    skillCatEvolution: string;
+    skillCatDevelopment: string;
+    skillCatUtility: string;
   };
 
   // Evolution page
@@ -679,8 +684,11 @@ export interface LocaleMessages {
     agentCtxMemory: string;
     agentCtxProfile: string;
     agentTools: string;
+    agentSkillsInclude: string;
     agentSkillsExclude: string;
     agentSkillHint: string;
+    agentWorkspace: string;
+    agentSessionPath: string;
     defaultModelFallback: string;
     saveAgents: string;
     saveInfraModels: string;

@@ -64,6 +64,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   list_calendar_events: "日历事件列表",
   update_calendar_event: "更新日历事件",
   delete_calendar_event: "删除日历事件",
+  get_weather: "天气查询",
 };
 
 // ---- ThinkingMessage: collapsible thinking block for thinking-mode chat ----

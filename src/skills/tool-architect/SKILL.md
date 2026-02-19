@@ -2,7 +2,7 @@
 name: tool-architect
 description: "工具架构师 — 分析工具使用模式，设计新工具方案，维护工具改进清单"
 metadata:
-  {"pha": {"emoji": "puzzle", "type": "system"}}
+  {"pha": {"emoji": "puzzle", "category": "development", "tags": ["tool-design", "architecture", "mcp"], "type": "system"}}
 ---
 
 # 工具架构师

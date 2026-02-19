@@ -273,11 +273,27 @@ export interface PHAConfig {
 export interface AgentProfileConfig {
   /** Per-agent model ref: "provider/name" (overrides orchestrator.pha fallback) */
   model?: string;
-  tools?: { categories?: string[] };
-  skills?: { excludeTypes?: string[] };
+  /** Workspace path template relative to .pha/ (e.g. "users/{uid}") */
+  workspace?: string;
+  /** Session path template relative to .pha/ (e.g. "users/{uid}/sessions/pha") */
+  sessionPath?: string;
+  tools?: {
+    /** Whitelist: tool names or categories. Empty = no restriction */
+    include?: string[];
+    /** Blacklist: tool names or categories */
+    exclude?: string[];
+    /** @deprecated Use include/exclude instead */
+    categories?: string[];
+  };
+  skills?: {
+    /** Whitelist: skill names or tags. Empty = no restriction */
+    include?: string[];
+    /** Blacklist: skill names or tags */
+    exclude?: string[];
+    /** @deprecated Use include/exclude instead */
+    excludeTypes?: string[];
+  };
   context?: {
-    health?: boolean;
-    weather?: boolean;
     bootstrap?: boolean;
     memory?: boolean;
     profile?: boolean;

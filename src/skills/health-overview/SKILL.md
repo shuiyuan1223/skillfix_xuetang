@@ -5,6 +5,8 @@ metadata:
   {
     "pha": {
       "emoji": "📊",
+      "category": "health-management",
+      "tags": ["overview", "dashboard", "daily-summary"],
       "requires": { "tools": ["get_health_data", "get_weekly_summary", "get_workouts"] }
     }
   }

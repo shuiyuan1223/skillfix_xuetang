@@ -1003,8 +1003,6 @@ export class GatewaySession {
   public _sseMode = false;
   private _chatLock = false;
 
-  // Foundation cache (computed once by main agent, reused for legacy-chat agent)
-  private agentFoundation: { healthContext?: string; weatherContext?: string } | null = null;
   private extraToolsCache: import("@mariozechner/pi-agent-core").AgentTool<any>[] | null = null;
 
   // Legacy-chat independent state
@@ -1030,7 +1028,7 @@ export class GatewaySession {
   // Scope state for Prompts and Skills pages (PHA ↔ System Agent)
   private promptsScope: "pha" | "system" = "pha";
   private selectedPromptSource: "system" | "user" = "system";
-  private skillsScope: "pha" | "system" = "pha";
+  private skillsCategory: string = "health-coaching";
   private toolsCategory: string = "all";
 
   // Memory system-agent sub-state
@@ -1324,9 +1322,6 @@ export class GatewaySession {
         extraTools,
       });
 
-      // Cache foundation context for cheap creation of legacy-chat agent
-      this.agentFoundation = this.agent.getCachedContext();
-
       // Configure evolution tools: create fresh agents per call for concurrency safety
       // (shared agent + concurrent reset = race condition → empty responses)
       const sessionConfig = this.config;
@@ -1369,14 +1364,9 @@ export class GatewaySession {
 
   private async getLegacyChatAgent(): Promise<PHAAgent> {
     if (!this.legacyChatAgent) {
-      // Ensure foundation context is cached (triggers main agent creation if needed)
-      if (!this.agentFoundation) {
-        await this.getAgent();
-      }
-
       const extraTools = await this.ensureExtraTools();
 
-      // Cheap creation: ~150ms (skips 2-5s health/weather fetch via cachedContext)
+      // Independent creation: ~150ms (no pre-computation needed)
       const legacyModel = resolveAgentProfileModel("pha4old");
       this.legacyChatAgent = await createPHAAgent({
         ...this.baseAgentConfig(),
@@ -1388,7 +1378,6 @@ export class GatewaySession {
         sessionId: this.legacyChatSessionId,
         sessionMessages: this.toSessionMessages(this.legacyChatMessages),
         extraTools,
-        cachedContext: this.agentFoundation!,
       });
     }
     return this.legacyChatAgent;
@@ -1988,7 +1977,7 @@ export class GatewaySession {
               skills: [],
               editing: false,
               loading: true,
-              scope: this.skillsScope,
+              category: this.skillsCategory,
             })
           )
         );
@@ -2031,7 +2020,7 @@ export class GatewaySession {
                 content,
                 language,
                 editing: this.editingSkill,
-                scope: this.skillsScope,
+                category: this.skillsCategory,
               })
             )
           );
@@ -2279,10 +2268,11 @@ export class GatewaySession {
             id,
             label: id,
             model: p.model || "",
+            workspace: p.workspace || "",
+            sessionPath: p.sessionPath || "",
             toolCategories: p.tools.categories as string[],
-            skillsExcludeTypes: (p.skills?.excludeTypes || []).join(", "),
-            contextHealth: p.context.health !== false,
-            contextWeather: p.context.weather !== false,
+            skillsInclude: (p.skills?.include || []).join(", "),
+            skillsExclude: (p.skills?.exclude ?? p.skills?.excludeTypes ?? []).join(", "),
             contextBootstrap: p.context.bootstrap !== false,
             contextMemory: p.context.memory !== false,
             contextProfile: p.context.profile !== false,
@@ -3637,14 +3627,12 @@ export class GatewaySession {
         }
       } else if (this.currentView === "settings/skills") {
         const tab = payload.tab as string;
-        if (tab === "pha" || tab === "system") {
-          this.skillsScope = tab;
-          this.selectedSkill = null;
-          this.selectedSkillFile = "SKILL.md";
-          this.editingSkill = false;
-          this.editBuffer = null;
-          await this.handleNavigate("settings/skills", send);
-        }
+        this.skillsCategory = tab;
+        this.selectedSkill = null;
+        this.selectedSkillFile = "SKILL.md";
+        this.editingSkill = false;
+        this.editBuffer = null;
+        await this.handleNavigate("settings/skills", send);
       } else if (this.currentView === "settings/tools") {
         this.toolsCategory = (payload.tab as string) || "all";
         await this.handleNavigate("settings/tools", send);
@@ -4481,10 +4469,23 @@ export class GatewaySession {
             } else {
               delete ap.model;
             }
+            // Workspace & session path
+            const workspace = String(formData[`${pfx}workspace`] || "").trim() || undefined;
+            if (workspace) {
+              ap.workspace = workspace;
+            } else {
+              delete ap.workspace;
+            }
+            const sessionPath = String(formData[`${pfx}session_path`] || "").trim() || undefined;
+            if (sessionPath) {
+              ap.sessionPath = sessionPath;
+            } else {
+              delete ap.sessionPath;
+            }
             // Tool categories (from tool__<cat> checkboxes)
             const cats: string[] = [];
             for (const [k, v] of Object.entries(formData)) {
-              if (k.startsWith(`${pfx}tool__`) && v === "true") {
+              if (k.startsWith(`${pfx}tool__`) && (v === "true" || v === true)) {
                 cats.push(k.replace(`${pfx}tool__`, ""));
               }
             }
@@ -4493,30 +4494,38 @@ export class GatewaySession {
             } else {
               delete ap.tools;
             }
-            // Skills exclude types (comma-separated)
+            // Skills include/exclude (comma-separated)
+            const includeStr = String(formData[`${pfx}skills_include`] || "").trim();
             const excludeStr = String(formData[`${pfx}skills_exclude`] || "").trim();
-            if (excludeStr) {
-              ap.skills = {
-                excludeTypes: excludeStr
+            if (includeStr || excludeStr) {
+              ap.skills = {};
+              if (includeStr) {
+                ap.skills.include = includeStr
                   .split(",")
                   .map((s) => s.trim())
-                  .filter(Boolean),
-              };
+                  .filter(Boolean);
+              }
+              if (excludeStr) {
+                ap.skills.exclude = excludeStr
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean);
+              }
             } else {
               delete ap.skills;
             }
-            // Context flags
-            const ctx = ap.context || {};
-            if (formData[`${pfx}ctx_health`] !== undefined)
-              ctx.health = formData[`${pfx}ctx_health`] === "true";
-            if (formData[`${pfx}ctx_weather`] !== undefined)
-              ctx.weather = formData[`${pfx}ctx_weather`] === "true";
+            // Context flags (checkbox boolean)
+            const ctx: Record<string, boolean> = {};
             if (formData[`${pfx}ctx_bootstrap`] !== undefined)
-              ctx.bootstrap = formData[`${pfx}ctx_bootstrap`] === "true";
+              ctx.bootstrap =
+                formData[`${pfx}ctx_bootstrap`] === "true" ||
+                formData[`${pfx}ctx_bootstrap`] === true;
             if (formData[`${pfx}ctx_memory`] !== undefined)
-              ctx.memory = formData[`${pfx}ctx_memory`] === "true";
+              ctx.memory =
+                formData[`${pfx}ctx_memory`] === "true" || formData[`${pfx}ctx_memory`] === true;
             if (formData[`${pfx}ctx_profile`] !== undefined)
-              ctx.profile = formData[`${pfx}ctx_profile`] === "true";
+              ctx.profile =
+                formData[`${pfx}ctx_profile`] === "true" || formData[`${pfx}ctx_profile`] === true;
             ap.context = ctx;
             // Skill hint
             const hint = String(formData[`${pfx}skill_hint`] || "").trim() || undefined;
@@ -4532,7 +4541,8 @@ export class GatewaySession {
           config.context.location = String(formData.contextLocation || "").trim() || undefined;
           config.context.hemisphere = formData.contextHemisphere === "south" ? "south" : "north";
           if (!config.proactive) config.proactive = {};
-          config.proactive.enabled = formData.proactiveEnabled === "true";
+          config.proactive.enabled =
+            formData.proactiveEnabled === "true" || formData.proactiveEnabled === true;
           config.proactive.checkIntervalMinutes =
             parseInt(String(formData.proactiveCheckInterval)) || 5;
         } else if (action === "settings_save_infra_models") {

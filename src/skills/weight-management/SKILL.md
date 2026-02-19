@@ -5,6 +5,8 @@ metadata:
   {
     "pha": {
       "emoji": "⚖️",
+      "category": "health-coaching",
+      "tags": ["weight", "body-composition", "data-analysis"],
       "requires": { "tools": ["get_body_composition", "get_workouts", "get_nutrition"] }
     }
   }

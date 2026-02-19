@@ -460,15 +460,28 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
       );
       break;
     }
-    case "checkbox":
+    case "checkbox": {
+      const checked = value === true || value === "true";
       return (
-        <div className="flex flex-col gap-1.5">
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-text">
-            <input type="checkbox" className="w-4 h-4 rounded border-primary/30 bg-surface text-primary focus:ring-primary/20" name={name} defaultChecked={value === true} onChange={handleChange} />
-            <span>{label}</span>
+        <div className="flex items-center justify-between py-1.5">
+          <span className="text-sm text-text">{label}</span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="hidden" name={name} defaultValue={checked ? "true" : "false"} />
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              defaultChecked={checked}
+              onChange={(e) => {
+                const hidden = e.currentTarget.previousElementSibling as HTMLInputElement;
+                if (hidden) hidden.value = e.currentTarget.checked ? "true" : "false";
+                if (onChange) ctx.sendAction(onChange, { name, value: String(e.currentTarget.checked) });
+              }}
+            />
+            <div className="w-9 h-5 bg-border rounded-full peer peer-checked:bg-primary peer-focus:ring-4 peer-focus:ring-primary/10 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
           </label>
         </div>
       );
+    }
     case "number":
       input = <input type="number" className={inputCls} name={name} placeholder={placeholder} defaultValue={value ?? ""} required={required} onChange={handleChange} />;
       break;

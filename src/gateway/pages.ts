@@ -953,8 +953,19 @@ interface SkillInfo {
   enabled: boolean;
   emoji?: string;
   type?: string;
+  category?: string;
+  tags?: string[];
   structure?: { files: string[]; hasReference: boolean; hasScripts: boolean };
 }
+
+/** Skill category tab definitions */
+const SKILL_CATEGORY_TABS = [
+  { id: "health-coaching", label: "skillCatHealthCoaching", icon: "heart" as const },
+  { id: "health-management", label: "skillCatHealthManagement", icon: "activity" as const },
+  { id: "evolution", label: "skillCatEvolution", icon: "flask" as const },
+  { id: "development", label: "skillCatDevelopment", icon: "settings" as const },
+  { id: "utility", label: "skillCatUtility", icon: "puzzle" as const },
+];
 
 export function generateSkillsPage(data: {
   skills: SkillInfo[];
@@ -964,58 +975,55 @@ export function generateSkillsPage(data: {
   language?: string;
   editing?: boolean;
   loading?: boolean;
-  scope?: "pha" | "system";
+  category?: string;
 }): A2UIMessage {
   const ui = new A2UIGenerator("main");
-  const scope = data.scope || "pha";
+  const category = data.category || "health-coaching";
 
   // Header
   const title = ui.text(t("skills.title"), "h2");
   const subtitle = ui.text(t("skills.subtitle"), "caption");
 
   const headerChildren = [ui.column([title, subtitle], { gap: 4 })];
-  // Only show create button for PHA scope
-  if (scope === "pha") {
-    const createBtn = ui.button("", "create_skill", {
-      variant: "primary",
-      size: "sm",
-      icon: "sparkles",
-      tooltip: t("skills.newSkill"),
-    } as any);
-    headerChildren.push(createBtn);
-  }
+  const createBtn = ui.button("", "create_skill", {
+    variant: "primary",
+    size: "sm",
+    icon: "sparkles",
+    tooltip: t("skills.newSkill"),
+  } as any);
+  headerChildren.push(createBtn);
   const headerRow = ui.row(headerChildren, {
     justify: "between",
     align: "start",
   });
   const header = ui.column([headerRow], { padding: 24 });
 
+  // Build tab definitions with i18n labels
+  const tabDefs = SKILL_CATEGORY_TABS.map((tab) => ({
+    id: tab.id,
+    label: t(`skills.${tab.label}` as any) || tab.id,
+    icon: tab.icon,
+  }));
+
   // Loading skeleton — early return before building tabs
   if (data.loading) {
-    const scopeTabContentIds: Record<string, string> = {};
+    const tabContentIds: Record<string, string> = {};
     const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
-    scopeTabContentIds[scope] = ui.column([s1], { gap: 16, padding: 24 });
-    const scopeTabs = ui.tabs(
-      [
-        { id: "pha", label: t("skills.tabPha"), icon: "heart" },
-        { id: "system", label: t("skills.tabSystem"), icon: "bot" },
-      ],
-      scope,
-      scopeTabContentIds
-    );
-    const root = ui.column([header, scopeTabs], { gap: 0 });
+    tabContentIds[category] = ui.column([s1], { gap: 16, padding: 24 });
+    const tabs = ui.tabs(tabDefs, category, tabContentIds);
+    const root = ui.column([header, tabs], { gap: 0 });
     return ui.build(root);
   }
 
-  // Filter skills by current scope
-  const filteredSkills =
-    scope === "system"
-      ? data.skills.filter((s) => s.type === "system")
-      : data.skills.filter((s) => s.type !== "system");
+  // Filter skills by current category
+  const filteredSkills = data.skills.filter((s) => {
+    const skillCat = s.category || (s.type === "system" ? "evolution" : "utility");
+    return skillCat === category;
+  });
 
   const children: string[] = [];
 
-  // Skills list for current scope
+  // Skills list for current category
   if (filteredSkills.length > 0) {
     const skillRows = filteredSkills.map((s) => ({
       name: `${s.emoji || "🧩"} ${s.name}`,
@@ -1102,18 +1110,11 @@ export function generateSkillsPage(data: {
   }
 
   // Wrap content as tab content so tabs component renders it
-  const scopeTabContentIds: Record<string, string> = {};
-  scopeTabContentIds[scope] = ui.column(children, { gap: 24, padding: 24 });
-  const scopeTabs = ui.tabs(
-    [
-      { id: "pha", label: t("skills.tabPha"), icon: "heart" },
-      { id: "system", label: t("skills.tabSystem"), icon: "bot" },
-    ],
-    scope,
-    scopeTabContentIds
-  );
+  const tabContentIds: Record<string, string> = {};
+  tabContentIds[category] = ui.column(children, { gap: 24, padding: 24 });
+  const tabs = ui.tabs(tabDefs, category, tabContentIds);
 
-  const root = ui.column([header, scopeTabs], { gap: 0 });
+  const root = ui.column([header, tabs], { gap: 0 });
 
   return ui.build(root);
 }
@@ -1975,10 +1976,11 @@ export interface SettingsPageData {
     id: string;
     label: string;
     model: string;
+    workspace: string;
+    sessionPath: string;
     toolCategories: string[];
-    skillsExcludeTypes: string;
-    contextHealth: boolean;
-    contextWeather: boolean;
+    skillsInclude: string;
+    skillsExclude: string;
     contextBootstrap: boolean;
     contextMemory: boolean;
     contextProfile: boolean;
@@ -2129,59 +2131,63 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         value: profile.model,
       })
     );
+    // Workspace / Session path
+    fields.push(
+      ui.formInput(`${pfx}workspace`, "text", {
+        label: t("settings.agentWorkspace"),
+        value: profile.workspace,
+        placeholder: "users/{uid}",
+      })
+    );
+    fields.push(
+      ui.formInput(`${pfx}session_path`, "text", {
+        label: t("settings.agentSessionPath"),
+        value: profile.sessionPath,
+        placeholder: "users/{uid}/sessions/pha",
+      })
+    );
     // Tool categories (checkboxes)
     const toolCheckboxes: string[] = [];
     for (const cat of data.allToolCategories) {
       toolCheckboxes.push(
-        ui.formInput(`${pfx}tool__${cat}`, "select", {
+        ui.formInput(`${pfx}tool__${cat}`, "checkbox", {
           label: cat,
-          options: boolOptions,
           value: String(profile.toolCategories.includes(cat)),
         })
       );
     }
     fields.push(ui.collapsible(t("settings.agentTools"), toolCheckboxes, { expanded: false }));
-    // Skills exclude types
+    // Skills include/exclude
+    fields.push(
+      ui.formInput(`${pfx}skills_include`, "text", {
+        label: t("settings.agentSkillsInclude"),
+        value: profile.skillsInclude,
+        placeholder: "health-coaching, sleep",
+      })
+    );
     fields.push(
       ui.formInput(`${pfx}skills_exclude`, "text", {
         label: t("settings.agentSkillsExclude"),
-        value: profile.skillsExcludeTypes,
-        placeholder: "system, deprecated",
+        value: profile.skillsExclude,
+        placeholder: "evolution-driver, code-reviewer",
       })
     );
-    // Context flags
+    // Context flags (checkboxes)
     fields.push(
-      ui.formInput(`${pfx}ctx_health`, "select", {
-        label: t("settings.agentCtxHealth"),
-        options: boolOptions,
-        value: String(profile.contextHealth),
-      })
-    );
-    fields.push(
-      ui.formInput(`${pfx}ctx_weather`, "select", {
-        label: t("settings.agentCtxWeather"),
-        options: boolOptions,
-        value: String(profile.contextWeather),
-      })
-    );
-    fields.push(
-      ui.formInput(`${pfx}ctx_bootstrap`, "select", {
+      ui.formInput(`${pfx}ctx_bootstrap`, "checkbox", {
         label: t("settings.agentCtxBootstrap"),
-        options: boolOptions,
         value: String(profile.contextBootstrap),
       })
     );
     fields.push(
-      ui.formInput(`${pfx}ctx_memory`, "select", {
+      ui.formInput(`${pfx}ctx_memory`, "checkbox", {
         label: t("settings.agentCtxMemory"),
-        options: boolOptions,
         value: String(profile.contextMemory),
       })
     );
     fields.push(
-      ui.formInput(`${pfx}ctx_profile`, "select", {
+      ui.formInput(`${pfx}ctx_profile`, "checkbox", {
         label: t("settings.agentCtxProfile"),
-        options: boolOptions,
         value: String(profile.contextProfile),
       })
     );
@@ -2553,9 +2559,8 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ],
     value: data.contextHemisphere,
   });
-  const proactiveEnabledSelect = ui.formInput("proactiveEnabled", "select", {
+  const proactiveEnabledSelect = ui.formInput("proactiveEnabled", "checkbox", {
     label: t("settings.proactiveEnabled"),
-    options: boolOptions,
     value: String(data.proactiveEnabled),
   });
   const proactiveIntervalInput = ui.formInput("proactiveCheckInterval", "text", {

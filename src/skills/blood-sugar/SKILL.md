@@ -5,6 +5,8 @@ metadata:
   {
     "pha": {
       "emoji": "🩸",
+      "category": "health-coaching",
+      "tags": ["blood-sugar", "diabetes", "data-analysis"],
       "requires": { "tools": ["get_blood_glucose", "get_nutrition"] }
     }
   }
