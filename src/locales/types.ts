@@ -21,6 +21,7 @@ export interface LocaleMessages {
     systemAgent: string;
     logs: string;
     settings: string;
+    legacyChat: string;
   };
 
   // System Agent
@@ -725,6 +726,15 @@ export interface LocaleMessages {
     expires: string;
     repeats: string;
     askAgentHint: string;
+  };
+
+  // Legacy Chat (边想边搜)
+  legacyChat: {
+    title: string;
+    subtitle: string;
+    placeholder: string;
+    thinking: string;
+    searching: string;
   };
 
   // OAuth / Authorization

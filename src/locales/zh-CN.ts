@@ -21,6 +21,7 @@ export const zhCN: LocaleMessages = {
     systemAgent: "系统 Agent",
     logs: "日志",
     settings: "设置",
+    legacyChat: "边想边搜",
   },
 
   systemAgent: {
@@ -696,6 +697,14 @@ export const zhCN: LocaleMessages = {
     expires: "过期时间",
     repeats: "重复",
     askAgentHint: "在聊天中让 Agent 帮你创建推荐、提醒或日程",
+  },
+
+  legacyChat: {
+    title: "边想边搜",
+    subtitle: "兼容模式 — 结构化思考 + 数据检索",
+    placeholder: "输入健康问题...",
+    thinking: "思考中",
+    searching: "搜索中",
   },
 
   auth: {

@@ -20,4 +20,11 @@ export const i18n = {
   evolution: {
     playgroundChatPlaceholder: "Waiting for messages...",
   },
+  legacyChat: {
+    title: "边想边搜",
+    subtitle: "兼容模式 — 结构化思考 + 数据检索",
+    placeholder: "输入健康问题...",
+    thinking: "思考中",
+    searching: "搜索中",
+  },
 };

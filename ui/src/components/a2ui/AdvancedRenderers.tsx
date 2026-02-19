@@ -1,7 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import type { A2UIComponent } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
 import type { RenderContext } from "./A2UIRenderer";
+import { Markdown } from "../../lib/markdown";
+import { i18n } from "../../lib/i18n";
 import {
   ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, Legend,
 } from "recharts";
@@ -1171,6 +1173,116 @@ export function renderEvolutionPipeline(c: A2UIComponent, ctx: RenderContext) {
               </div>
             )}
           </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---- Thinking Chat (边想边搜) ----
+
+interface ThinkingChatMsg {
+  id: string;
+  role: "user" | "assistant";
+  reasoningPhases: string[];
+  content: string;
+}
+
+function ThinkingPhase({ text, defaultExpanded }: { text: string; defaultExpanded: boolean }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  if (!text.trim()) return null;
+
+  return (
+    <div className="mb-2">
+      <button
+        className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" className={`transition-transform ${expanded ? "rotate-90" : ""}`}>
+          <path d="M3 1 L7 5 L3 9" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        </svg>
+        <span>{i18n.legacyChat?.thinking || "思考中"}</span>
+      </button>
+      {expanded && (
+        <div className="mt-1 ml-3 pl-3 border-l-2 border-text-muted/20 text-sm text-text-secondary opacity-80">
+          <Markdown content={text} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function renderThinkingChat(c: A2UIComponent, _ctx: RenderContext) {
+  const messages = (c.messages as ThinkingChatMsg[]) || [];
+  const streaming = c.streaming as boolean;
+  const streamingPhase = c.streamingPhase as string | undefined;
+
+  return (
+    <div className="flex flex-col gap-4 p-4 overflow-y-auto flex-1">
+      {messages.length === 0 && !streaming && (
+        <div className="flex flex-col items-center justify-center flex-1 text-text-muted py-16">
+          <div className="text-4xl mb-3">{getIcon("search", 48)}</div>
+          <div className="text-lg font-medium">{i18n.legacyChat?.title || "边想边搜"}</div>
+          <div className="text-sm mt-1">{i18n.legacyChat?.subtitle || "兼容模式 — 结构化思考 + 数据检索"}</div>
+        </div>
+      )}
+
+      {messages.map((msg, idx) => {
+        const isLast = idx === messages.length - 1;
+        const isStreamingAssistant = isLast && streaming && msg.role === "assistant";
+
+        if (msg.role === "user") {
+          return (
+            <div key={msg.id} className="flex justify-end">
+              <div className="max-w-[80%] bg-accent/10 text-text rounded-2xl rounded-br-md px-4 py-2.5">
+                <Markdown content={msg.content} />
+              </div>
+            </div>
+          );
+        }
+
+        // Assistant message
+        return (
+          <div key={msg.id} className="flex flex-col gap-1">
+            {/* Reasoning phases */}
+            {msg.reasoningPhases.map((phase, pi) => (
+              <ThinkingPhase
+                key={pi}
+                text={phase}
+                defaultExpanded={isStreamingAssistant && pi === msg.reasoningPhases.length - 1}
+              />
+            ))}
+
+            {/* Searching indicator */}
+            {isStreamingAssistant && streamingPhase === "searching" && (
+              <div className="flex items-center gap-2 text-xs text-accent py-1 ml-3">
+                <span className="inline-block w-2 h-2 rounded-full bg-accent animate-pulse" />
+                <span>{i18n.legacyChat?.searching || "搜索中"}</span>
+              </div>
+            )}
+
+            {/* Thinking indicator (when reasoning but no content yet) */}
+            {isStreamingAssistant && streamingPhase === "reasoning" && msg.reasoningPhases.length === 0 && (
+              <div className="flex items-center gap-2 text-xs text-text-muted py-1 ml-3">
+                <span className="inline-block w-2 h-2 rounded-full bg-text-muted animate-pulse" />
+                <span>{i18n.legacyChat?.thinking || "思考中"}</span>
+              </div>
+            )}
+
+            {/* Final content */}
+            {msg.content && (
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <Markdown content={msg.content} />
+              </div>
+            )}
+
+            {/* Content streaming indicator */}
+            {isStreamingAssistant && streamingPhase === "content" && !msg.content && (
+              <div className="flex items-center gap-2 text-xs text-text-muted py-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-text-muted animate-pulse" />
+              </div>
+            )}
+          </div>
         );
       })}
     </div>

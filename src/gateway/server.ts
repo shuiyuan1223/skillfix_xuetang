@@ -55,6 +55,8 @@ import { getUserStore } from "../data-sources/huawei/user-store.js";
 import { getHuaweiAuthUrl } from "../services/huawei-oauth-service.js";
 import { runOAuthFlowWithChrome } from "../services/chrome-mcp-client.js";
 import { getRemoteMCPTools } from "../services/remote-mcp-client.js";
+import { LegacyProtocolAdapter, type LegacySSEEvent } from "./legacy-protocol.js";
+import type { ThinkingChatMessage } from "./a2ui.js";
 import {
   generateChatPage,
   generateMemoryPage,
@@ -84,6 +86,7 @@ import {
   generateSettingsPage,
   generatePlansPage,
   generatePlanDetailModal,
+  generateThinkingChatPage,
   type PlansPageTab,
   type SettingsPageData,
 } from "./pages.js";
@@ -1065,6 +1068,11 @@ export class GatewaySession {
   private llmProviderFilter: string | undefined;
   private llmModelFilter: string | undefined;
   private llmPage: number = 0;
+
+  // Legacy chat (边想边搜) state
+  private legacyChatMessages: ThinkingChatMessage[] = [];
+  private legacyChatStreaming = false;
+  private legacyChatStreamingPhase: "reasoning" | "content" | "searching" | undefined;
   private llmSelectedId: number | undefined;
 
   // Evolution version state
@@ -1708,6 +1716,14 @@ export class GatewaySession {
           chatMessages: this.systemAgentChatMessages,
           streaming: this.systemAgentStreaming,
           streamingContent: this.systemAgentStreamingContent,
+        });
+        break;
+
+      case "legacy-chat":
+        mainPage = generateThinkingChatPage({
+          messages: this.legacyChatMessages,
+          streaming: this.legacyChatStreaming,
+          streamingPhase: this.legacyChatStreamingPhase,
         });
         break;
 
@@ -2750,6 +2766,15 @@ export class GatewaySession {
     } else if (action === "send_message" && payload?.content) {
       // Chat message from UI
       await this.handleUserMessage(payload.content as string, send);
+    } else if (action === "legacy_send_message" && payload?.content) {
+      // Legacy chat (边想边搜) message from UI
+      await this.handleLegacyChatMessage(payload.content as string, send);
+    } else if (action === "legacy_clear_chat") {
+      // Clear legacy chat
+      this.legacyChatMessages = [];
+      this.legacyChatStreaming = false;
+      this.legacyChatStreamingPhase = undefined;
+      this.sendLegacyChatUpdate(send);
     } else if (action === "stop_generation") {
       // Stop PHA Agent streaming
       if (this.isStreaming && this.agent) {
@@ -5515,6 +5540,183 @@ export class GatewaySession {
   /**
    * Get or create the current assistant message in chatMessages.
    */
+  // ========================================================================
+  // Legacy Chat (边想边搜) — UI-driven via A2UI action
+  // ========================================================================
+
+  private sendLegacyChatUpdate(send: (msg: unknown) => void): void {
+    const activeSend = this.getSend(send);
+    if (this._sseMode) return;
+    if (this.currentView === "legacy-chat") {
+      const page = generateThinkingChatPage({
+        messages: this.legacyChatMessages,
+        streaming: this.legacyChatStreaming,
+        streamingPhase: this.legacyChatStreamingPhase,
+      });
+      activeSend({
+        type: "a2ui",
+        surface_id: "main",
+        components: page.components,
+        root_id: page.root_id,
+      });
+    }
+  }
+
+  private async handleLegacyChatMessage(
+    content: string,
+    send: (msg: unknown) => void
+  ): Promise<void> {
+    // Add user message
+    this.legacyChatMessages.push({
+      id: crypto.randomUUID(),
+      role: "user",
+      reasoningPhases: [],
+      content,
+    });
+
+    this.legacyChatStreaming = true;
+    this.legacyChatStreamingPhase = "reasoning";
+    this.sendLegacyChatUpdate(send);
+
+    // Create assistant message placeholder
+    const assistantMsg: ThinkingChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      reasoningPhases: [],
+      content: "",
+    };
+    this.legacyChatMessages.push(assistantMsg);
+
+    let currentReasoningText = "";
+
+    try {
+      const agent = await this.getAgent();
+
+      const adapter = new LegacyProtocolAdapter((event: LegacySSEEvent) => {
+        // Map protocol events to UI state updates
+        if (event.event === "rag_status" && event.content === "start_search") {
+          this.legacyChatStreamingPhase = "reasoning";
+        } else if (event.event === "data" && event.content_type === "reasoning") {
+          currentReasoningText += event.content || "";
+          // Update the last reasoning phase
+          if (assistantMsg.reasoningPhases.length === 0) {
+            assistantMsg.reasoningPhases.push(currentReasoningText);
+          } else {
+            assistantMsg.reasoningPhases[assistantMsg.reasoningPhases.length - 1] =
+              currentReasoningText;
+          }
+          this.sendLegacyChatUpdate(send);
+        } else if (event.event === "rag_status" && event.content === "search_with_think") {
+          this.legacyChatStreamingPhase = "content";
+        } else if (event.event === "data" && !event.content_type) {
+          assistantMsg.content = event.content || "";
+          this.sendLegacyChatUpdate(send);
+        }
+      });
+
+      const unsubscribe = agent.subscribe((event) => {
+        adapter.handleAgentEvent(event);
+
+        // Track searching phase for UI indicator
+        if (event.type === "tool_execution_start") {
+          this.legacyChatStreamingPhase = "searching";
+          this.sendLegacyChatUpdate(send);
+        } else if (event.type === "tool_execution_end") {
+          this.legacyChatStreamingPhase = "reasoning";
+          // Start new reasoning phase for next tool interpretation
+          currentReasoningText = "";
+          assistantMsg.reasoningPhases.push("");
+          this.sendLegacyChatUpdate(send);
+        }
+      });
+
+      try {
+        await agent.chatWithSkill(content, "legacy-streaming");
+        await agent.getAgent().waitForIdle();
+      } finally {
+        unsubscribe();
+      }
+
+      this.legacyChatStreaming = false;
+      this.legacyChatStreamingPhase = undefined;
+      this.sendLegacyChatUpdate(send);
+    } catch (error) {
+      this.legacyChatStreaming = false;
+      this.legacyChatStreamingPhase = undefined;
+
+      const isAbort =
+        error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
+      if (!isAbort) {
+        assistantMsg.content = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      }
+      this.sendLegacyChatUpdate(send);
+    }
+  }
+
+  // ========================================================================
+  // Legacy Chat SSE — External API endpoint (/api/legacy-chat)
+  // ========================================================================
+
+  async handleLegacyChatSSE(
+    content: string,
+    writer: WritableStreamDefaultWriter<Uint8Array>,
+    encoder: TextEncoder
+  ): Promise<void> {
+    let streamClosed = false;
+    const safeWrite = (data: string) => {
+      if (streamClosed) return;
+      try {
+        writer.write(encoder.encode(data)).catch(() => {
+          streamClosed = true;
+        });
+      } catch {
+        streamClosed = true;
+      }
+    };
+    const safeClose = () => {
+      if (streamClosed) return;
+      streamClosed = true;
+      try {
+        writer.close().catch(() => {});
+      } catch {}
+    };
+
+    const sseSend = (event: LegacySSEEvent) => {
+      safeWrite(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    try {
+      const agent = await this.getAgent();
+      const adapter = new LegacyProtocolAdapter(sseSend);
+
+      const unsubscribe = agent.subscribe((event) => {
+        adapter.handleAgentEvent(event);
+      });
+
+      try {
+        await agent.chatWithSkill(content, "legacy-streaming");
+        await agent.getAgent().waitForIdle();
+
+        // Ensure agent_end was processed — force it if needed
+        adapter.handleAgentEvent({ type: "agent_end" });
+      } finally {
+        unsubscribe();
+      }
+    } catch (error) {
+      const isAbort =
+        error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
+      if (!isAbort) {
+        sseSend({
+          event: "data",
+          content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        });
+        sseSend({ event: "finish" });
+      }
+    } finally {
+      safeClose();
+    }
+  }
+
   private getOrCreateAssistantMsg(): PartsChatMessage {
     if (this.currentAssistantMsgId) {
       const existing = this.chatMessages.find((m) => m.id === this.currentAssistantMsgId);
@@ -6007,6 +6209,58 @@ export async function startGateway(
             } catch {
               /* noop */
             }
+          });
+
+          return new Response(readable, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: String(e) }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      // ================================================================
+      // Legacy Chat SSE (边想边搜 external API)
+      // ================================================================
+
+      if (url.pathname === "/api/legacy-chat" && req.method === "POST") {
+        try {
+          const body = (await req.json()) as {
+            message?: string;
+            user_id?: string;
+            session_id?: string;
+          };
+
+          if (!body.message) {
+            return new Response(JSON.stringify({ error: "No message" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+
+          const key = body.user_id || body.session_id || crypto.randomUUID();
+          let session = sessions.get(key);
+          if (!session) {
+            session = new GatewaySession(config, key);
+            sessions.set(key, session);
+          }
+
+          const { readable, writable } = new TransformStream<Uint8Array>();
+          const writer = writable.getWriter();
+          const encoder = new TextEncoder();
+
+          session.handleLegacyChatSSE(body.message, writer, encoder).catch(() => {
+            try {
+              writer.close().catch(() => {});
+            } catch {}
           });
 
           return new Response(readable, {

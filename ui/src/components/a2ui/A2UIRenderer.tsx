@@ -15,7 +15,7 @@ import {
   renderArenaPills, renderArenaScoreTable, renderArenaCategoryCard,
   renderRadarChart, renderArenaRunPicker, renderArenaModeToggle,
   renderPlaygroundFab, renderEvolutionPipeline, renderLogViewer,
-  renderVersionGraph,
+  renderVersionGraph, renderThinkingChat,
 } from "./AdvancedRenderers";
 
 export interface RenderContext {
@@ -121,6 +121,7 @@ export function A2UIRenderer({
       case "version_graph": return renderVersionGraph(c, ctx);
       case "evolution_pipeline": return renderEvolutionPipeline(c, ctx);
       case "log_viewer": return renderLogViewer(c, ctx);
+      case "thinking_chat": return renderThinkingChat(c, ctx);
       case "auth_page": return rcAuthPage(c);
       default:
         return <div className="text-text-muted text-xs p-2">[Unknown: {c.type}]</div>;

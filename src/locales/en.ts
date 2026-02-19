@@ -21,6 +21,7 @@ export const en: LocaleMessages = {
     systemAgent: "System Agent",
     logs: "Logs",
     settings: "Settings",
+    legacyChat: "Think & Search",
   },
 
   systemAgent: {
@@ -705,6 +706,14 @@ export const en: LocaleMessages = {
     expires: "Expires",
     repeats: "Repeats",
     askAgentHint: "Ask the Agent in chat to create recommendations, reminders, or events",
+  },
+
+  legacyChat: {
+    title: "Think & Search",
+    subtitle: "Structured reasoning + data retrieval",
+    placeholder: "Ask a health question...",
+    thinking: "Thinking",
+    searching: "Searching",
   },
 
   auth: {
