@@ -1221,7 +1221,7 @@ export function renderThinkingChat(c: A2UIComponent, _ctx: RenderContext) {
     <div className="flex flex-col gap-4 p-4 overflow-y-auto flex-1">
       {messages.length === 0 && !streaming && (
         <div className="flex flex-col items-center justify-center flex-1 text-text-muted py-16">
-          <div className="text-4xl mb-3">{getIcon("search", 48)}</div>
+          <div className="mb-3 w-12 h-12 text-text-muted [&>svg]:w-12 [&>svg]:h-12" dangerouslySetInnerHTML={{ __html: getIcon("search") }} />
           <div className="text-lg font-medium">{i18n.legacyChat?.title || "边想边搜"}</div>
           <div className="text-sm mt-1">{i18n.legacyChat?.subtitle || "兼容模式 — 结构化思考 + 数据检索"}</div>
         </div>
