@@ -14,7 +14,7 @@ import { getSkillsDir } from "../tools/skill-tools.js";
  * Build a skill registry section for the system prompt.
  * Agent scans descriptions and calls `get_skill` when relevant.
  */
-export function buildSkillRegistry(): string {
+export function buildSkillRegistry(options?: { excludeTypes?: string[] }): string {
   const skillsDir = getSkillsDir();
   if (!existsSync(skillsDir)) {
     return "";
@@ -32,6 +32,13 @@ export function buildSkillRegistry(): string {
       if (!existsSync(skillFile)) continue;
 
       const content = readFileSync(skillFile, "utf-8");
+
+      // Filter by type if excludeTypes specified
+      if (options?.excludeTypes?.length) {
+        const typeMatch = content.match(/"type"\s*:\s*"([^"]+)"/);
+        const skillType = typeMatch?.[1];
+        if (skillType && options.excludeTypes.includes(skillType)) continue;
+      }
 
       const nameMatch = content.match(/^name:\s*(.+)$/m);
       const descMatch = content.match(/^description:\s*"?([^"]+)"?$/m);

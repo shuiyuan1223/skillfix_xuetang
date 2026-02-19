@@ -30,6 +30,61 @@ import { preComputeHealthContext, fetchWeatherContext } from "./health-context.j
 import { sessionToAgentMessages } from "../memory/session-store.js";
 
 export type { LLMProvider } from "../utils/config.js";
+import type { ToolCategory } from "../tools/types.js";
+
+/** Declarative agent configuration profile */
+export interface AgentProfile {
+  id: string;
+  memory: { pathTemplate: string };
+  tools: { categories: ToolCategory[] };
+  skills?: { excludeTypes?: string[] };
+  context: {
+    health?: boolean;
+    weather?: boolean;
+    bootstrap?: boolean;
+  };
+  skillHint?: string;
+}
+
+/** Built-in agent profiles */
+export const AGENT_PROFILES: Record<string, AgentProfile> = {
+  pha: {
+    id: "pha",
+    memory: { pathTemplate: ".pha/users/{uid}" },
+    tools: {
+      categories: [
+        "health",
+        "memory",
+        "profile",
+        "config",
+        "skill",
+        "presentation",
+        "planning",
+        "proactive",
+      ],
+    },
+    context: { health: true, weather: true, bootstrap: true },
+  },
+  pha4old: {
+    id: "pha4old",
+    memory: { pathTemplate: ".pha/users/{uid}" },
+    tools: {
+      categories: [
+        "health",
+        "memory",
+        "profile",
+        "config",
+        "skill",
+        "presentation",
+        "planning",
+        "proactive",
+      ],
+    },
+    skills: { excludeTypes: ["system"] },
+    context: { health: true, weather: true, bootstrap: true },
+    skillHint: "legacy-streaming",
+  },
+};
 
 export interface PHAAgentConfig {
   /** LLM provider (default: "anthropic") */
@@ -54,6 +109,10 @@ export interface PHAAgentConfig {
   agentOptions?: Partial<AgentOptions>;
   /** Prior chat messages to restore context after restart */
   sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>;
+  /** Agent profile for configurable composition */
+  profile?: AgentProfile;
+  /** Pre-computed expensive contexts, skip re-computation if provided */
+  cachedContext?: { healthContext?: string; weatherContext?: string };
 }
 
 // LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
@@ -62,10 +121,14 @@ export class PHAAgent {
   private agent: Agent;
   private config: PHAAgentConfig;
   private userUuid?: string;
+  private _cachedHealthContext?: string;
+  private _cachedWeatherContext?: string;
 
   constructor(config: PHAAgentConfig = {}, healthContext?: string, weatherContext?: string) {
     this.config = config;
     this.userUuid = config.userUuid || getUserId() || undefined;
+    this._cachedHealthContext = healthContext;
+    this._cachedWeatherContext = weatherContext;
 
     const provider = config.provider || "anthropic";
     const modelId = config.modelId || DEFAULT_MODELS[provider];
@@ -131,9 +194,12 @@ export class PHAAgent {
     if (this.userUuid) {
       memoryManager.ensureUser(this.userUuid);
     }
+    const skillOptions = config.profile?.skills?.excludeTypes
+      ? { excludeTypes: config.profile.skills.excludeTypes }
+      : undefined;
     const systemPrompt = this.userUuid
-      ? memoryManager.buildSystemPrompt(this.userUuid, healthContext, weatherContext)
-      : memoryManager.buildSystemPrompt("anonymous", healthContext, weatherContext);
+      ? memoryManager.buildSystemPrompt(this.userUuid, healthContext, weatherContext, skillOptions)
+      : memoryManager.buildSystemPrompt("anonymous", healthContext, weatherContext, skillOptions);
 
     // Build LLM config for compaction summarization
     const llmConfig: LLMSummarizationConfig = {
@@ -167,18 +233,19 @@ export class PHAAgent {
       registry = registry.withUserUuid(this.userUuid);
     }
 
+    const defaultCategories: ToolCategory[] = [
+      "health",
+      "memory",
+      "profile",
+      "config",
+      "skill",
+      "presentation",
+      "planning",
+      "proactive",
+    ];
     const baseTools =
       config.tools ||
-      registry.toAgentToolsByCategories([
-        "health",
-        "memory",
-        "profile",
-        "config",
-        "skill",
-        "presentation",
-        "planning",
-        "proactive",
-      ]);
+      registry.toAgentToolsByCategories(config.profile?.tools.categories || defaultCategories);
     const tools =
       config.extraTools && config.extraTools.length > 0
         ? [...baseTools, ...config.extraTools]
@@ -205,6 +272,23 @@ export class PHAAgent {
    */
   getUserUuid(): string | undefined {
     return this.userUuid;
+  }
+
+  /**
+   * Get the cached health/weather context for reuse by other agent instances.
+   */
+  getCachedContext(): { healthContext?: string; weatherContext?: string } {
+    return {
+      healthContext: this._cachedHealthContext,
+      weatherContext: this._cachedWeatherContext,
+    };
+  }
+
+  /**
+   * Get the skill hint from the agent's profile, if any.
+   */
+  getSkillHint(): string | undefined {
+    return this.config.profile?.skillHint;
   }
 
   /**
@@ -493,11 +577,23 @@ export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAg
     }
   }
 
-  // Pre-compute health data + weather context in parallel
-  const [healthContext, weatherContext] = await Promise.all([
-    preComputeHealthContext(config.dataSource, config.userUuid),
-    fetchWeatherContext(config.userUuid),
-  ]);
+  let healthContext: string | undefined;
+  let weatherContext: string | undefined;
+
+  if (config.cachedContext) {
+    // Fast path: reuse cached context (~0ms)
+    healthContext = config.cachedContext.healthContext;
+    weatherContext = config.cachedContext.weatherContext;
+  } else {
+    // Slow path: compute from scratch (2-5s)
+    const profile = config.profile;
+    const needsHealth = profile ? profile.context.health !== false : true;
+    const needsWeather = profile ? profile.context.weather !== false : true;
+    [healthContext, weatherContext] = await Promise.all([
+      needsHealth ? preComputeHealthContext(config.dataSource, config.userUuid) : undefined,
+      needsWeather ? fetchWeatherContext(config.userUuid) : undefined,
+    ]);
+  }
 
   return new PHAAgent(config, healthContext, weatherContext);
 }

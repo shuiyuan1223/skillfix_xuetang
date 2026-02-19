@@ -13,7 +13,12 @@ import { mcpHandler } from "./mcp.js";
 import { SSEConnectionManager } from "./sse-manager.js";
 import { handleMCPRequest } from "./mcp-server.js";
 import { generateAgentCard, handleA2ARequest } from "./a2a.js";
-import { createPHAAgent, withActivityTimeout, type PHAAgent } from "../agent/pha-agent.js";
+import {
+  createPHAAgent,
+  withActivityTimeout,
+  AGENT_PROFILES,
+  type PHAAgent,
+} from "../agent/pha-agent.js";
 import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
 import { getDataSource } from "../tools/health-data.js";
 import { createDataSourceForUser } from "../data-sources/index.js";
@@ -995,6 +1000,22 @@ export class GatewaySession {
   public _sseMode = false;
   private _chatLock = false;
 
+  // Foundation cache (computed once by main agent, reused for legacy-chat agent)
+  private agentFoundation: { healthContext?: string; weatherContext?: string } | null = null;
+  private extraToolsCache: import("@mariozechner/pi-agent-core").AgentTool<any>[] | null = null;
+
+  // Legacy-chat independent state
+  private legacyChatMessages: PartsChatMessage[] = [];
+  private legacyChatStreaming = false;
+  private legacyChatStreamingContent = "";
+  private legacyChatCurrentAssistantMsgId: string | null = null;
+  private legacyChatCurrentRunId: string | null = null;
+  private legacyChatLastStreamedText = "";
+  private legacyChatSessionId: string = crypto.randomUUID();
+  private legacyChatAgent: PHAAgent | null = null;
+  // Tracks which chat channel is active during handleUserMessage / handleAgentEvent
+  private _chatChannel: "main" | "legacy" = "main";
+
   // Settings state
   private selectedPrompt: string | null = null;
   private selectedSkill: string | null = null;
@@ -1129,8 +1150,16 @@ export class GatewaySession {
    * Persist a single message to the JSONL session file.
    * Two channels: "chat" → {sessionId}.jsonl, "system-agent" → sa-{sessionId}.jsonl
    */
-  private persistMessage(channel: "chat" | "system-agent", entry: SessionEntry): void {
-    const sid = channel === "chat" ? this.sessionId : `sa-${this.saSessionId}`;
+  private persistMessage(
+    channel: "chat" | "legacy-chat" | "system-agent",
+    entry: SessionEntry
+  ): void {
+    const sid =
+      channel === "chat"
+        ? this.sessionId
+        : channel === "legacy-chat"
+          ? `legacy-${this.legacyChatSessionId}`
+          : `sa-${this.saSessionId}`;
     const uuid = channel === "system-agent" ? GatewaySession.SA_GLOBAL_UUID : this.userUuid;
     if (!uuid) return;
     try {
@@ -1154,6 +1183,24 @@ export class GatewaySession {
           if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
             this.sessionId = chatSession.sessionId;
             this.chatMessages = chatSession.entries
+              .filter((e) => e.role === "user" || e.role === "assistant")
+              .map((e) => ({
+                id: crypto.randomUUID(),
+                role: e.role as "user" | "assistant",
+                parts: [{ type: "text" as const, content: e.content }],
+              }));
+          }
+        }
+      }
+
+      // Load legacy-chat (per-user, legacy- prefix)
+      if (this.userUuid) {
+        const legacySession = loadLatestSession(this.userUuid, { prefix: "legacy-" });
+        if (legacySession && legacySession.entries.length > 0) {
+          const lastTs = legacySession.entries[legacySession.entries.length - 1].timestamp;
+          if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
+            this.legacyChatSessionId = legacySession.sessionId.replace(/^legacy-/, "");
+            this.legacyChatMessages = legacySession.entries
               .filter((e) => e.role === "user" || e.role === "assistant")
               .map((e) => ({
                 id: crypto.randomUUID(),
@@ -1219,9 +1266,35 @@ export class GatewaySession {
     return huaweiAuth.isUserAuthenticated(this.userUuid);
   }
 
-  private async getAgent(): Promise<PHAAgent> {
-    if (!this.agent) {
-      // Collect plugin tools + remote MCP tools
+  /** Convert PartsChatMessage[] to session messages for agent context recovery */
+  private toSessionMessages(msgs: PartsChatMessage[]): Array<{ role: string; content: string }> {
+    return msgs.map((m) => ({
+      role: m.role,
+      content:
+        m.parts
+          .filter((p) => p.type === "text")
+          .map((p) => (p as { type: "text"; content: string }).content)
+          .join("") || "",
+    }));
+  }
+
+  /** Common config fields shared between main and legacy agents */
+  private baseAgentConfig() {
+    return {
+      apiKey: this.config.apiKey,
+      provider: this.config.provider,
+      modelId: this.config.modelId,
+      baseUrl: this.config.baseUrl,
+      userUuid: this.userUuid || undefined,
+      dataSource: this.dataSource,
+    };
+  }
+
+  /** Ensure extra tools (plugin + remote MCP) are loaded and cached */
+  private async ensureExtraTools(): Promise<
+    import("@mariozechner/pi-agent-core").AgentTool<any>[]
+  > {
+    if (!this.extraToolsCache) {
       const pluginReg = getGlobalPluginRegistry();
       const pluginTools = pluginReg?.tools.map((r) => r.tool) || [];
       let remoteMcpTools: import("@mariozechner/pi-agent-core").AgentTool<any>[] = [];
@@ -1230,26 +1303,25 @@ export class GatewaySession {
       } catch (err) {
         log.error("Failed to load remote MCP tools", { error: err });
       }
-      const extraTools = [...pluginTools, ...remoteMcpTools];
+      this.extraToolsCache = [...pluginTools, ...remoteMcpTools];
+    }
+    return this.extraToolsCache;
+  }
+
+  private async getAgent(): Promise<PHAAgent> {
+    if (!this.agent) {
+      const extraTools = await this.ensureExtraTools();
 
       this.agent = await createPHAAgent({
-        apiKey: this.config.apiKey,
-        provider: this.config.provider,
-        modelId: this.config.modelId,
-        baseUrl: this.config.baseUrl,
-        userUuid: this.userUuid || undefined,
+        ...this.baseAgentConfig(),
+        profile: AGENT_PROFILES.pha,
         sessionId: this.sessionId,
-        dataSource: this.dataSource,
-        sessionMessages: this.chatMessages.map((m) => ({
-          role: m.role,
-          content:
-            m.parts
-              .filter((p) => p.type === "text")
-              .map((p) => (p as { type: "text"; content: string }).content)
-              .join("") || "",
-        })),
+        sessionMessages: this.toSessionMessages(this.chatMessages),
         extraTools,
       });
+
+      // Cache foundation context for cheap creation of legacy-chat agent
+      this.agentFoundation = this.agent.getCachedContext();
 
       // Configure evolution tools: create fresh agents per call for concurrency safety
       // (shared agent + concurrent reset = race condition → empty responses)
@@ -1289,6 +1361,28 @@ export class GatewaySession {
       });
     }
     return this.agent;
+  }
+
+  private async getLegacyChatAgent(): Promise<PHAAgent> {
+    if (!this.legacyChatAgent) {
+      // Ensure foundation context is cached (triggers main agent creation if needed)
+      if (!this.agentFoundation) {
+        await this.getAgent();
+      }
+
+      const extraTools = await this.ensureExtraTools();
+
+      // Cheap creation: ~150ms (skips 2-5s health/weather fetch via cachedContext)
+      this.legacyChatAgent = await createPHAAgent({
+        ...this.baseAgentConfig(),
+        profile: AGENT_PROFILES.pha4old,
+        sessionId: this.legacyChatSessionId,
+        sessionMessages: this.toSessionMessages(this.legacyChatMessages),
+        extraTools,
+        cachedContext: this.agentFoundation!,
+      });
+    }
+    return this.legacyChatAgent;
   }
 
   private async getSystemAgent(): Promise<SystemAgent> {
@@ -1715,9 +1809,9 @@ export class GatewaySession {
 
       case "legacy-chat":
         mainPage = generateChatPage({
-          messages: this.chatMessages,
-          streaming: this.isStreaming,
-          streamingContent: this.streamingContent,
+          messages: this.legacyChatMessages,
+          streaming: this.legacyChatStreaming,
+          streamingContent: this.legacyChatStreamingContent,
           thinkingMode: true,
         });
         break;
@@ -2227,35 +2321,54 @@ export class GatewaySession {
   }
 
   private async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
-    // Add user message to chat history
-    this.chatMessages.push({
+    // Route to the correct channel based on current view
+    const isLegacy = this.currentView === "legacy-chat";
+    this._chatChannel = isLegacy ? "legacy" : "main";
+
+    // Select the correct state based on channel
+    const messages = isLegacy ? this.legacyChatMessages : this.chatMessages;
+    const persistChannel = isLegacy ? ("legacy-chat" as const) : ("chat" as const);
+    const sessionId = isLegacy ? this.legacyChatSessionId : this.sessionId;
+
+    // Add user message to the correct chat history
+    messages.push({
       id: crypto.randomUUID(),
       role: "user",
       parts: [{ type: "text", content }],
     });
-    this.persistMessage("chat", { timestamp: Date.now(), role: "user", content });
+    this.persistMessage(persistChannel, { timestamp: Date.now(), role: "user", content });
 
     // Trigger message_received hook
     const hr = getGlobalHookRunner();
     if (hr) {
       hr.runMessageReceived(
         { from: this.userUuid || "unknown", content, timestamp: Date.now() },
-        { channelId: "http", conversationId: this.sessionId }
+        { channelId: "http", conversationId: sessionId }
       ).catch((err) => log.warn("Hook message_received error", { error: err }));
     }
-    this.isStreaming = true;
-    this.streamingContent = "";
-    this.currentAssistantMsgId = null;
-    this.currentRunId = null;
-    this.lastStreamedText = "";
+
+    // Set streaming state on the correct channel
+    if (isLegacy) {
+      this.legacyChatStreaming = true;
+      this.legacyChatStreamingContent = "";
+      this.legacyChatCurrentAssistantMsgId = null;
+      this.legacyChatCurrentRunId = null;
+      this.legacyChatLastStreamedText = "";
+    } else {
+      this.isStreaming = true;
+      this.streamingContent = "";
+      this.currentAssistantMsgId = null;
+      this.currentRunId = null;
+      this.lastStreamedText = "";
+    }
 
     // Send updated chat UI immediately
     this.sendChatUpdate(send);
 
-    const chatMsgCountBefore = this.chatMessages.length;
+    const chatMsgCountBefore = messages.length;
 
     try {
-      const agent = await this.getAgent();
+      const agent = isLegacy ? await this.getLegacyChatAgent() : await this.getAgent();
 
       // Subscribe to agent events
       const unsubscribe = agent.subscribe((event) => {
@@ -2263,9 +2376,10 @@ export class GatewaySession {
       });
 
       try {
-        // Legacy chat view forces the legacy-streaming skill
-        if (this.currentView === "legacy-chat") {
-          await agent.chatWithSkill(content, "legacy-streaming");
+        // Legacy chat agent has skillHint in profile; main chat uses direct chat
+        const skillHint = agent.getSkillHint();
+        if (skillHint) {
+          await agent.chatWithSkill(content, skillHint);
         } else {
           await agent.chat(content);
         }
@@ -2273,7 +2387,7 @@ export class GatewaySession {
 
         // Fallback: if handleAgentEvent didn't produce any assistant message,
         // check the agent's internal messages for LLM errors
-        const hasNewAssistant = this.chatMessages
+        const hasNewAssistant = messages
           .slice(chatMsgCountBefore)
           .some((m) => m.role === "assistant");
         if (!hasNewAssistant) {
@@ -2281,12 +2395,12 @@ export class GatewaySession {
           const lastAgentMsg = agentMsgs[agentMsgs.length - 1] as any;
           if (lastAgentMsg?.stopReason === "error" && lastAgentMsg?.errorMessage) {
             const errContent = `⚠️ ${lastAgentMsg.errorMessage}`;
-            this.chatMessages.push({
+            messages.push({
               id: crypto.randomUUID(),
               role: "assistant",
               parts: [{ type: "text", content: errContent }],
             });
-            this.persistMessage("chat", {
+            this.persistMessage(persistChannel, {
               timestamp: Date.now(),
               role: "assistant",
               content: errContent,
@@ -2298,11 +2412,19 @@ export class GatewaySession {
         }
 
         // Ensure streaming state is always cleaned up
-        if (this.isStreaming) {
-          this.isStreaming = false;
-          this.streamingContent = "";
-          this.currentAssistantMsgId = null;
-          this.lastStreamedText = "";
+        const stillStreaming = isLegacy ? this.legacyChatStreaming : this.isStreaming;
+        if (stillStreaming) {
+          if (isLegacy) {
+            this.legacyChatStreaming = false;
+            this.legacyChatStreamingContent = "";
+            this.legacyChatCurrentAssistantMsgId = null;
+            this.legacyChatLastStreamedText = "";
+          } else {
+            this.isStreaming = false;
+            this.streamingContent = "";
+            this.currentAssistantMsgId = null;
+            this.lastStreamedText = "";
+          }
           this.sendChatUpdate(send);
         }
 
@@ -2310,14 +2432,14 @@ export class GatewaySession {
         if (this.userUuid) {
           try {
             const mm = getMemoryManager();
-            const lastAssistant = this.chatMessages.filter((m) => m.role === "assistant").pop();
+            const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
             if (lastAssistant) {
               const assistantText = lastAssistant.parts
                 .filter((p): p is { type: "text"; content: string } => p.type === "text")
                 .map((p) => p.content)
                 .join("");
               const exchangeText = `User: ${content}\nAssistant: ${assistantText}`;
-              mm.appendSessionTranscript(this.userUuid, this.sessionId, exchangeText);
+              mm.appendSessionTranscript(this.userUuid, sessionId, exchangeText);
             }
           } catch {
             // Indexing is best-effort
@@ -2328,8 +2450,13 @@ export class GatewaySession {
       }
     } catch (error) {
       // If already handled by stop_generation (streaming flag cleared), skip error handling
-      if (!this.isStreaming) return;
-      this.isStreaming = false;
+      const stillStreaming = isLegacy ? this.legacyChatStreaming : this.isStreaming;
+      if (!stillStreaming) return;
+      if (isLegacy) {
+        this.legacyChatStreaming = false;
+      } else {
+        this.isStreaming = false;
+      }
 
       // Abort errors are expected when user clicks stop — not an actual error
       const isAbort =
@@ -2340,19 +2467,19 @@ export class GatewaySession {
       }
 
       const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
-      this.chatMessages.push({
+      messages.push({
         id: crypto.randomUUID(),
         role: "assistant",
         parts: [{ type: "text", content: errorContent }],
       });
-      this.persistMessage("chat", {
+      this.persistMessage(persistChannel, {
         timestamp: Date.now(),
         role: "assistant",
         content: errorContent,
       });
       this.sendChatUpdate(send);
 
-      logAgent.error("Agent error", { sessionId: this.sessionId, error });
+      logAgent.error("Agent error", { sessionId, error });
 
       send({
         type: "error",
@@ -2366,11 +2493,12 @@ export class GatewaySession {
     const activeSend = this.getSend(send);
     if (this._sseMode) return; // SSE mode: client manages chat state
     if (this.currentView === "chat" || this.currentView === "legacy-chat") {
+      const isLegacy = this.currentView === "legacy-chat";
       const chatPage = generateChatPage({
-        messages: this.chatMessages,
-        streaming: this.isStreaming,
-        streamingContent: this.streamingContent,
-        ...(this.currentView === "legacy-chat" ? { thinkingMode: true } : {}),
+        messages: isLegacy ? this.legacyChatMessages : this.chatMessages,
+        streaming: isLegacy ? this.legacyChatStreaming : this.isStreaming,
+        streamingContent: isLegacy ? this.legacyChatStreamingContent : this.streamingContent,
+        ...(isLegacy ? { thinkingMode: true } : {}),
       });
       activeSend({
         type: "a2ui",
@@ -2744,15 +2872,26 @@ export class GatewaySession {
   ): Promise<void> {
     // Handle UI actions (button clicks, form submissions, etc.)
     if (action === "clear_chat") {
-      // Clear PHA chat history and start a new session
-      this.chatMessages = [];
-      this.isStreaming = false;
-      this.streamingContent = "";
-      this.currentAssistantMsgId = null;
-      this.lastStreamedText = "";
-      this.sessionId = crypto.randomUUID(); // New session so old messages won't reload
-      if (this.userUuid) touchSession(this.userUuid, this.sessionId); // Create empty file as "latest"
-      this.agent = null; // Force agent rebuild without old history
+      // Clear chat history based on current view (main or legacy-chat)
+      if (this.currentView === "legacy-chat") {
+        this.legacyChatMessages = [];
+        this.legacyChatStreaming = false;
+        this.legacyChatStreamingContent = "";
+        this.legacyChatCurrentAssistantMsgId = null;
+        this.legacyChatLastStreamedText = "";
+        this.legacyChatSessionId = crypto.randomUUID();
+        if (this.userUuid) touchSession(this.userUuid, `legacy-${this.legacyChatSessionId}`);
+        this.legacyChatAgent = null; // Force agent rebuild without old history
+      } else {
+        this.chatMessages = [];
+        this.isStreaming = false;
+        this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
+        this.sessionId = crypto.randomUUID(); // New session so old messages won't reload
+        if (this.userUuid) touchSession(this.userUuid, this.sessionId); // Create empty file as "latest"
+        this.agent = null; // Force agent rebuild without old history
+      }
       this.sendChatUpdate(send);
     } else if (action === "sa_clear_chat") {
       // Clear System Agent chat history and start a new session
@@ -2768,34 +2907,62 @@ export class GatewaySession {
       // Chat message from UI
       await this.handleUserMessage(payload.content as string, send);
     } else if (action === "stop_generation") {
-      // Stop PHA Agent streaming
-      if (this.isStreaming && this.agent) {
-        this.agent.abort();
-        // Save partial response if any — finalize the current assistant message
-        if (this.streamingContent.trim() && this.currentAssistantMsgId) {
-          // The assistant message is already in chatMessages with parts; just persist text
-          this.persistMessage("chat", {
-            timestamp: Date.now(),
-            role: "assistant",
-            content: this.streamingContent,
-          });
-        } else if (this.streamingContent.trim()) {
-          this.chatMessages.push({
-            id: crypto.randomUUID(),
-            role: "assistant",
-            parts: [{ type: "text", content: this.streamingContent }],
-          });
-          this.persistMessage("chat", {
-            timestamp: Date.now(),
-            role: "assistant",
-            content: this.streamingContent,
-          });
+      // Stop streaming based on current view (main or legacy-chat)
+      if (this.currentView === "legacy-chat") {
+        if (this.legacyChatStreaming && this.legacyChatAgent) {
+          this.legacyChatAgent.abort();
+          if (this.legacyChatStreamingContent.trim() && this.legacyChatCurrentAssistantMsgId) {
+            this.persistMessage("legacy-chat", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: this.legacyChatStreamingContent,
+            });
+          } else if (this.legacyChatStreamingContent.trim()) {
+            this.legacyChatMessages.push({
+              id: crypto.randomUUID(),
+              role: "assistant",
+              parts: [{ type: "text", content: this.legacyChatStreamingContent }],
+            });
+            this.persistMessage("legacy-chat", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: this.legacyChatStreamingContent,
+            });
+          }
+          this.legacyChatStreaming = false;
+          this.legacyChatStreamingContent = "";
+          this.legacyChatCurrentAssistantMsgId = null;
+          this.legacyChatLastStreamedText = "";
+          this.sendChatUpdate(send);
         }
-        this.isStreaming = false;
-        this.streamingContent = "";
-        this.currentAssistantMsgId = null;
-        this.lastStreamedText = "";
-        this.sendChatUpdate(send);
+      } else {
+        // Main chat stop
+        if (this.isStreaming && this.agent) {
+          this.agent.abort();
+          if (this.streamingContent.trim() && this.currentAssistantMsgId) {
+            this.persistMessage("chat", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: this.streamingContent,
+            });
+          } else if (this.streamingContent.trim()) {
+            this.chatMessages.push({
+              id: crypto.randomUUID(),
+              role: "assistant",
+              parts: [{ type: "text", content: this.streamingContent }],
+            });
+            this.persistMessage("chat", {
+              timestamp: Date.now(),
+              role: "assistant",
+              content: this.streamingContent,
+            });
+          }
+          this.isStreaming = false;
+          this.streamingContent = "";
+          this.currentAssistantMsgId = null;
+          this.lastStreamedText = "";
+          this.sendChatUpdate(send);
+        }
       }
     } else if (action === "sa_stop_generation") {
       // Stop System Agent streaming
@@ -5565,7 +5732,7 @@ export class GatewaySession {
     };
 
     try {
-      const agent = await this.getAgent();
+      const agent = await this.getLegacyChatAgent();
       const adapter = new LegacyProtocolAdapter(sseSend);
 
       const unsubscribe = agent.subscribe((event) => {
@@ -5573,7 +5740,12 @@ export class GatewaySession {
       });
 
       try {
-        await agent.chatWithSkill(content, "legacy-streaming");
+        const skillHint = agent.getSkillHint();
+        if (skillHint) {
+          await agent.chatWithSkill(content, skillHint);
+        } else {
+          await agent.chatWithSkill(content, "legacy-streaming");
+        }
         await agent.getAgent().waitForIdle();
 
         // Ensure agent_end was processed — force it if needed
@@ -5597,8 +5769,14 @@ export class GatewaySession {
   }
 
   private getOrCreateAssistantMsg(): PartsChatMessage {
-    if (this.currentAssistantMsgId) {
-      const existing = this.chatMessages.find((m) => m.id === this.currentAssistantMsgId);
+    const isLegacy = this._chatChannel === "legacy";
+    const messages = isLegacy ? this.legacyChatMessages : this.chatMessages;
+    const currentMsgId = isLegacy
+      ? this.legacyChatCurrentAssistantMsgId
+      : this.currentAssistantMsgId;
+
+    if (currentMsgId) {
+      const existing = messages.find((m) => m.id === currentMsgId);
       if (existing) return existing;
     }
     const msg: PartsChatMessage = {
@@ -5606,8 +5784,12 @@ export class GatewaySession {
       role: "assistant",
       parts: [],
     };
-    this.chatMessages.push(msg);
-    this.currentAssistantMsgId = msg.id;
+    messages.push(msg);
+    if (isLegacy) {
+      this.legacyChatCurrentAssistantMsgId = msg.id;
+    } else {
+      this.currentAssistantMsgId = msg.id;
+    }
     return msg;
   }
 
@@ -5622,6 +5804,9 @@ export class GatewaySession {
   private _handleAgentEventInner(event: any, send: (msg: unknown) => void): void {
     // In AG-UI SSE mode, use the provided send directly (write to SSE writer)
     const activeSend = this._sseMode ? send : this.getSend(send);
+    const isLegacy = this._chatChannel === "legacy";
+    const persistChannel = isLegacy ? ("legacy-chat" as const) : ("chat" as const);
+    const sessionId = isLegacy ? this.legacyChatSessionId : this.sessionId;
 
     switch (event.type) {
       case "message_start": {
@@ -5634,7 +5819,12 @@ export class GatewaySession {
         }
 
         // Create new run + assistant message
-        this.currentRunId = crypto.randomUUID();
+        const runId = crypto.randomUUID();
+        if (isLegacy) {
+          this.legacyChatCurrentRunId = runId;
+        } else {
+          this.currentRunId = runId;
+        }
         const assistantMsg = this.getOrCreateAssistantMsg();
 
         // Push initial text part
@@ -5642,14 +5832,19 @@ export class GatewaySession {
           assistantMsg.parts.push({ type: "text", content: text });
         }
 
-        this.streamingContent = text;
-        this.lastStreamedText = text;
+        if (isLegacy) {
+          this.legacyChatStreamingContent = text;
+          this.legacyChatLastStreamedText = text;
+        } else {
+          this.streamingContent = text;
+          this.lastStreamedText = text;
+        }
 
         // AG-UI events
         activeSend({
           type: "RunStarted",
-          threadId: this.sessionId,
-          runId: this.currentRunId,
+          threadId: sessionId,
+          runId,
         } satisfies AGUIEvent);
         activeSend({
           type: "TextMessageStart",
@@ -5680,7 +5875,11 @@ export class GatewaySession {
           if (block.type === "text") text += block.text;
         }
 
-        this.streamingContent = text;
+        if (isLegacy) {
+          this.legacyChatStreamingContent = text;
+        } else {
+          this.streamingContent = text;
+        }
 
         // Update the last text part in the assistant message
         const assistantMsg = this.getOrCreateAssistantMsg();
@@ -5692,7 +5891,8 @@ export class GatewaySession {
         }
 
         // AG-UI delta
-        const delta = text.slice(this.lastStreamedText.length);
+        const prevText = isLegacy ? this.legacyChatLastStreamedText : this.lastStreamedText;
+        const delta = text.slice(prevText.length);
         if (delta) {
           activeSend({
             type: "TextMessageContent",
@@ -5700,7 +5900,11 @@ export class GatewaySession {
             delta,
           } satisfies AGUIEvent);
         }
-        this.lastStreamedText = text;
+        if (isLegacy) {
+          this.legacyChatLastStreamedText = text;
+        } else {
+          this.lastStreamedText = text;
+        }
 
         // Legacy compat
         activeSend({ type: "agent_text", content: text, is_final: false });
@@ -5736,23 +5940,31 @@ export class GatewaySession {
             assistantMsg.parts.push({ type: "text", content: errContent });
           }
 
-          this.persistMessage("chat", {
+          this.persistMessage(persistChannel, {
             timestamp: Date.now(),
             role: "assistant",
             content: errContent,
           });
-          this.isStreaming = false;
-          this.streamingContent = "";
-          this.currentAssistantMsgId = null;
-          this.lastStreamedText = "";
+          if (isLegacy) {
+            this.legacyChatStreaming = false;
+            this.legacyChatStreamingContent = "";
+            this.legacyChatCurrentAssistantMsgId = null;
+            this.legacyChatLastStreamedText = "";
+          } else {
+            this.isStreaming = false;
+            this.streamingContent = "";
+            this.currentAssistantMsgId = null;
+            this.lastStreamedText = "";
+          }
 
           // AG-UI events
           activeSend({ type: "TextMessageEnd", messageId: assistantMsg.id } satisfies AGUIEvent);
-          if (this.currentRunId) {
+          const currentRunId = isLegacy ? this.legacyChatCurrentRunId : this.currentRunId;
+          if (currentRunId) {
             activeSend({
               type: "RunFinished",
-              threadId: this.sessionId,
-              runId: this.currentRunId,
+              threadId: sessionId,
+              runId: currentRunId,
             } satisfies AGUIEvent);
           }
 
@@ -5770,17 +5982,24 @@ export class GatewaySession {
             assistantMsg.parts.push({ type: "text", content: text });
           }
 
-          this.persistMessage("chat", {
+          this.persistMessage(persistChannel, {
             timestamp: Date.now(),
             role: "assistant",
             content: text,
           });
         }
 
-        this.isStreaming = false;
-        this.streamingContent = "";
-        this.currentAssistantMsgId = null;
-        this.lastStreamedText = "";
+        if (isLegacy) {
+          this.legacyChatStreaming = false;
+          this.legacyChatStreamingContent = "";
+          this.legacyChatCurrentAssistantMsgId = null;
+          this.legacyChatLastStreamedText = "";
+        } else {
+          this.isStreaming = false;
+          this.streamingContent = "";
+          this.currentAssistantMsgId = null;
+          this.lastStreamedText = "";
+        }
 
         // AG-UI events — only TextMessageEnd here; RunFinished deferred to agent_end
         activeSend({ type: "TextMessageEnd", messageId: assistantMsg.id } satisfies AGUIEvent);
@@ -5834,9 +6053,11 @@ export class GatewaySession {
       }
 
       case "tool_execution_end": {
-        const assistantMsg = this.currentAssistantMsgId
-          ? this.chatMessages.find((m) => m.id === this.currentAssistantMsgId)
-          : null;
+        const messages = isLegacy ? this.legacyChatMessages : this.chatMessages;
+        const currentMsgId = isLegacy
+          ? this.legacyChatCurrentAssistantMsgId
+          : this.currentAssistantMsgId;
+        const assistantMsg = currentMsgId ? messages.find((m) => m.id === currentMsgId) : null;
 
         if (assistantMsg) {
           // Find the last running tool_use part matching this tool name
@@ -5891,7 +6112,11 @@ export class GatewaySession {
 
           // After tool finishes, push a new empty text part for the next text stream
           assistantMsg.parts.push({ type: "text", content: "" });
-          this.lastStreamedText = "";
+          if (isLegacy) {
+            this.legacyChatLastStreamedText = "";
+          } else {
+            this.lastStreamedText = "";
+          }
         }
 
         this.sendChatUpdate(send);
@@ -5899,17 +6124,26 @@ export class GatewaySession {
       }
 
       case "agent_end":
-        this.isStreaming = false;
-        this.currentAssistantMsgId = null;
-        this.lastStreamedText = "";
+        if (isLegacy) {
+          this.legacyChatStreaming = false;
+          this.legacyChatCurrentAssistantMsgId = null;
+          this.legacyChatLastStreamedText = "";
+        } else {
+          this.isStreaming = false;
+          this.currentAssistantMsgId = null;
+          this.lastStreamedText = "";
+        }
 
         // Send RunFinished only when the entire agent run completes
-        if (this.currentRunId) {
-          activeSend({
-            type: "RunFinished",
-            threadId: this.sessionId,
-            runId: this.currentRunId,
-          } satisfies AGUIEvent);
+        {
+          const currentRunId = isLegacy ? this.legacyChatCurrentRunId : this.currentRunId;
+          if (currentRunId) {
+            activeSend({
+              type: "RunFinished",
+              threadId: sessionId,
+              runId: currentRunId,
+            } satisfies AGUIEvent);
+          }
         }
 
         this.sendChatUpdate(send);

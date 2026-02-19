@@ -239,7 +239,12 @@ export class MemoryManager {
 
   // ============ System Prompt Building ============
 
-  buildSystemPrompt(uuid: string, healthContext?: string, weatherContext?: string): string {
+  buildSystemPrompt(
+    uuid: string,
+    healthContext?: string,
+    weatherContext?: string,
+    skillOptions?: { excludeTypes?: string[] }
+  ): string {
     const soul = this.getSoulPrompt(uuid);
     const profile = this.getProfile(uuid);
     const memorySummary = loadMemorySummary(uuid);
@@ -247,7 +252,7 @@ export class MemoryManager {
 
     const profileSection = formatProfileForPrompt(profile);
     const memorySection = memorySummary || "No historical memory yet";
-    const skillRegistry = buildSkillRegistry();
+    const skillRegistry = buildSkillRegistry(skillOptions);
 
     const sessionContext = buildSessionContext(weatherContext);
 
