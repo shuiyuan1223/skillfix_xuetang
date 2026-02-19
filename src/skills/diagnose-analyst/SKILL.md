@@ -2,7 +2,7 @@
 name: diagnose-analyst
 description: "基准测试诊断分析师 — 分析基准测试结果中的薄弱大类，生成可操作的改进建议"
 metadata:
-  {"pha": {"emoji": "search", "category": "evolution", "tags": ["diagnosis", "benchmark", "analysis"], "type": "system", "requires": {"tools": ["run_diagnose", "list_benchmark_runs", "get_benchmark_run_details"]}, "config": {"weaknessThreshold": 0.7}}}
+  {"pha": {"emoji": "search", "category": "evolution", "tags": ["sa", "diagnosis", "benchmark", "analysis"], "type": "system", "requires": {"tools": ["run_diagnose", "list_benchmark_runs", "get_benchmark_run_details"]}, "config": {"weaknessThreshold": 0.7}}}
 ---
 
 # 诊断分析师

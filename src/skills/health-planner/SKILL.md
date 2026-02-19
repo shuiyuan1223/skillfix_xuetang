@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "🎯",
       "category": "health-management",
-      "tags": ["planning", "health-plan", "goal-setting"],
+      "tags": ["pha", "planning", "health-plan", "goal-setting"],
       "requires": { "tools": ["create_health_plan", "list_health_plans", "get_health_plan", "update_plan_progress", "adjust_health_plan", "update_plan_status"] }
     }
   }

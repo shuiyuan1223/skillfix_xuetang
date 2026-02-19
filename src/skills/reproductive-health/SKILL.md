@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "🌸",
       "category": "health-coaching",
-      "tags": ["reproductive-health", "menstrual-cycle", "data-analysis"],
+      "tags": ["pha", "reproductive-health", "menstrual-cycle", "data-analysis"],
       "requires": { "tools": ["get_menstrual_cycle", "get_body_temperature", "get_emotion"] }
     }
   }

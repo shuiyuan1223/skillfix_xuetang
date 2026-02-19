@@ -84,6 +84,7 @@ function matchesFilter(skill: SkillEntry, filters: string[]): boolean {
  * Output is grouped by category.
  */
 export function buildSkillRegistry(options?: {
+  tags?: string[];
   include?: string[];
   exclude?: string[];
   /** @deprecated Use exclude instead */
@@ -122,6 +123,11 @@ export function buildSkillRegistry(options?: {
         category: metadata.category,
         tags: metadata.tags,
       };
+
+      // Tags filter: if set, skill must have at least one matching tag
+      if (options?.tags?.length) {
+        if (!metadata.tags?.some((t) => options.tags!.includes(t))) continue;
+      }
 
       // Include filter: if set, skill must match at least one
       if (options?.include?.length) {

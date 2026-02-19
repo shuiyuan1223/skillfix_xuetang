@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "🧘",
       "category": "health-coaching",
-      "tags": ["stress", "mental-health", "data-analysis"],
+      "tags": ["pha", "stress", "mental-health", "data-analysis"],
       "requires": { "tools": ["get_heart_rate", "get_sleep", "get_weekly_summary", "get_stress", "get_hrv", "get_emotion"] }
     }
   }

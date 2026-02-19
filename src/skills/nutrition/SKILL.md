@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "🥗",
       "category": "health-coaching",
-      "tags": ["nutrition", "diet", "data-analysis"],
+      "tags": ["pha", "nutrition", "diet", "data-analysis"],
       "requires": { "tools": ["get_nutrition", "get_body_composition", "get_workouts"] }
     }
   }

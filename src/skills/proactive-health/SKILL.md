@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "💡",
       "category": "health-management",
-      "tags": ["proactive", "reminders", "recommendations"],
+      "tags": ["pha", "proactive", "reminders", "recommendations"],
       "requires": { "tools": ["create_recommendation", "create_reminder", "create_calendar_event", "list_reminders", "list_calendar_events", "list_recommendations"] }
     }
   }

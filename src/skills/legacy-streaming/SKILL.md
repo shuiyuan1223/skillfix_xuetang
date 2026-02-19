@@ -2,7 +2,7 @@
 name: legacy-streaming
 description: "边想边搜模式 — 结构化思考 + 工具调用 + 清晰 Markdown 回答"
 metadata:
-  {"pha": {"emoji": "search", "category": "utility", "tags": ["streaming", "search", "reasoning"], "type": "system"}}
+  {"pha": {"emoji": "search", "category": "utility", "tags": ["pha-markdown", "streaming", "search", "reasoning"], "type": "system"}}
 ---
 
 # 边想边搜模式

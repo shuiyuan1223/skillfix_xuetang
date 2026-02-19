@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "📅",
       "category": "utility",
-      "tags": ["time", "parsing", "date-range"],
+      "tags": ["pha", "time", "parsing", "date-range"],
       "requires": { "tools": [] }
     }
   }

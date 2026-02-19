@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "🌙",
       "category": "health-coaching",
-      "tags": ["sleep", "data-analysis"],
+      "tags": ["pha", "sleep", "data-analysis"],
       "requires": { "tools": ["get_sleep", "get_weekly_summary", "get_heart_rate", "get_spo2"] }
     }
   }

@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "🔌",
       "category": "health-management",
-      "tags": ["api", "data-source", "integration"],
+      "tags": ["pha", "api", "data-source", "integration"],
       "requires": { "tools": [] }
     }
   }

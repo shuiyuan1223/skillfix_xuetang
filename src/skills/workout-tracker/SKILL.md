@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "🏃",
       "category": "health-coaching",
-      "tags": ["workout", "exercise", "data-analysis"],
+      "tags": ["pha", "workout", "exercise", "data-analysis"],
       "requires": { "tools": ["get_workouts", "get_weekly_summary", "get_heart_rate", "get_hrv"] }
     }
   }

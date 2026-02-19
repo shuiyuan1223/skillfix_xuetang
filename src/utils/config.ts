@@ -286,6 +286,8 @@ export interface AgentProfileConfig {
     categories?: string[];
   };
   skills?: {
+    /** Tag-based filter: skill must have at least one matching tag */
+    tags?: string[];
     /** Whitelist: skill names or tags. Empty = no restriction */
     include?: string[];
     /** Blacklist: skill names or tags */

@@ -6,7 +6,7 @@ metadata:
     "pha": {
       "emoji": "🩺",
       "category": "health-coaching",
-      "tags": ["blood-pressure", "cardiovascular", "data-analysis"],
+      "tags": ["pha", "blood-pressure", "cardiovascular", "data-analysis"],
       "requires": { "tools": ["get_blood_pressure", "get_heart_rate"] }
     }
   }

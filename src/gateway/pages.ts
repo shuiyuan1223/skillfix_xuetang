@@ -10,7 +10,6 @@ import { t } from "../locales/index.js";
 import type { UserProfile, MemorySearchResult } from "../memory/types.js";
 import type { HealthPlan, PlanStatus } from "../plans/types.js";
 import type { Recommendation, Reminder, CalendarEvent } from "../proactive/types.js";
-import { getAgentProfile, getAgentProfileIds } from "../agent/pha-agent.js";
 import {
   buildRadarChartData,
   SHARP_CATEGORY_COLORS,
@@ -959,28 +958,11 @@ interface SkillInfo {
   structure?: { files: string[]; hasReference: boolean; hasScripts: boolean };
 }
 
-/** Compute which agent profiles will load a given skill */
+const AGENT_TAGS = new Set(["pha", "sa", "pha-markdown", "pha-a2ui"]);
+
+/** Read agent tags directly from skill metadata */
 function skillAgentTags(skill: SkillInfo): string {
-  const tags: string[] = [];
-  for (const id of getAgentProfileIds()) {
-    const profile = getAgentProfile(id);
-    // include filter: non-empty means skill must match
-    if (profile.skills?.include?.length) {
-      const matches = profile.skills.include.some(
-        (f) => skill.name === f || skill.category === f || skill.tags?.includes(f)
-      );
-      if (!matches) continue;
-    }
-    // exclude filter: match means skip
-    if (profile.skills?.exclude?.length) {
-      const excluded = profile.skills.exclude.some(
-        (f) => skill.name === f || skill.category === f || skill.tags?.includes(f)
-      );
-      if (excluded) continue;
-    }
-    tags.push(id);
-  }
-  return tags.join(", ");
+  return (skill.tags || []).filter((t) => AGENT_TAGS.has(t)).join(", ") || "pha";
 }
 
 /** Skill category tab definitions */

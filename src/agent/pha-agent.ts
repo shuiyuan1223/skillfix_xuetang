@@ -49,6 +49,7 @@ export interface AgentProfile {
   sessionPath?: string;
   tools: { categories: ToolCategory[] };
   skills?: {
+    tags?: string[];
     include?: string[];
     exclude?: string[];
     /** @deprecated Use include/exclude */
@@ -81,6 +82,7 @@ const BUILTIN_PROFILES: Record<string, AgentProfile> = {
     workspace: "users/{uid}",
     sessionPath: "users/{uid}/sessions/pha",
     tools: { categories: PHA_TOOL_CATEGORIES },
+    skills: { tags: ["pha"] },
     context: { bootstrap: true },
   },
   pha4old: {
@@ -88,18 +90,7 @@ const BUILTIN_PROFILES: Record<string, AgentProfile> = {
     workspace: "users/{uid}",
     sessionPath: "users/{uid}/sessions/pha4old",
     tools: { categories: PHA_TOOL_CATEGORIES },
-    skills: {
-      exclude: [
-        "evolution-driver",
-        "benchmark-evaluator",
-        "diagnose-analyst",
-        "regression-detective",
-        "evolution-playground",
-        "code-reviewer",
-        "prompt-engineer",
-        "tool-architect",
-      ],
-    },
+    skills: { tags: ["pha", "pha-markdown"] },
     context: { bootstrap: true },
     skillHint: "legacy-streaming",
   },
@@ -131,6 +122,7 @@ export function getAgentProfile(id: string): AgentProfile {
     },
     skills: override.skills
       ? {
+          tags: override.skills.tags,
           include: override.skills.include,
           exclude: override.skills.exclude ?? override.skills.excludeTypes,
           excludeTypes: override.skills.excludeTypes,
@@ -286,6 +278,7 @@ export class PHAAgent {
     }
     const skillOptions = config.profile?.skills
       ? {
+          tags: config.profile.skills.tags,
           include: config.profile.skills.include,
           exclude: config.profile.skills.exclude ?? config.profile.skills.excludeTypes,
         }
