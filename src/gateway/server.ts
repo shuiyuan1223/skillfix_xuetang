@@ -2283,16 +2283,8 @@ export class GatewaySession {
             id,
             label: id,
             model: p.model || "",
-            workspace: p.workspace || "",
-            sessionPath: p.sessionPath || "",
             toolCategories: p.tools.categories as string[],
             skillsTags: (p.skills?.tags || []).join(", "),
-            skillsInclude: (p.skills?.include || []).join(", "),
-            skillsExclude: (p.skills?.exclude ?? p.skills?.excludeTypes ?? []).join(", "),
-            contextBootstrap: p.context.bootstrap !== false,
-            contextMemory: p.context.memory !== false,
-            contextProfile: p.context.profile !== false,
-            skillHint: p.skillHint || "",
           };
         });
 
@@ -4477,9 +4469,8 @@ export class GatewaySession {
             }
           }
         } else if (action === "settings_save_agents") {
-          // Save full per-agent configuration
+          // Save per-agent configuration: model + skills tags + tool categories
           if (!config.agents) config.agents = {};
-          // Collect agent IDs from form fields: ap__<id>__<field>
           const agentIds = new Set<string>();
           for (const key of Object.keys(formData)) {
             const m = key.match(/^ap__(.+?)__/);
@@ -4496,19 +4487,6 @@ export class GatewaySession {
             } else {
               delete ap.model;
             }
-            // Workspace & session path
-            const workspace = String(formData[`${pfx}workspace`] || "").trim() || undefined;
-            if (workspace) {
-              ap.workspace = workspace;
-            } else {
-              delete ap.workspace;
-            }
-            const sessionPath = String(formData[`${pfx}session_path`] || "").trim() || undefined;
-            if (sessionPath) {
-              ap.sessionPath = sessionPath;
-            } else {
-              delete ap.sessionPath;
-            }
             // Tool categories (from tool__<cat> checkboxes)
             const cats: string[] = [];
             for (const [k, v] of Object.entries(formData)) {
@@ -4521,52 +4499,17 @@ export class GatewaySession {
             } else {
               delete ap.tools;
             }
-            // Skills tags + include/exclude (comma-separated)
+            // Skills tags
             const tagsStr = String(formData[`${pfx}skills_tags`] || "").trim();
-            const includeStr = String(formData[`${pfx}skills_include`] || "").trim();
-            const excludeStr = String(formData[`${pfx}skills_exclude`] || "").trim();
-            if (tagsStr || includeStr || excludeStr) {
-              ap.skills = {};
-              if (tagsStr) {
-                ap.skills.tags = tagsStr
+            if (tagsStr) {
+              ap.skills = {
+                tags: tagsStr
                   .split(",")
                   .map((s) => s.trim())
-                  .filter(Boolean);
-              }
-              if (includeStr) {
-                ap.skills.include = includeStr
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
-              }
-              if (excludeStr) {
-                ap.skills.exclude = excludeStr
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean);
-              }
+                  .filter(Boolean),
+              };
             } else {
               delete ap.skills;
-            }
-            // Context flags (checkbox boolean)
-            const ctx: Record<string, boolean> = {};
-            if (formData[`${pfx}ctx_bootstrap`] !== undefined)
-              ctx.bootstrap =
-                formData[`${pfx}ctx_bootstrap`] === "true" ||
-                formData[`${pfx}ctx_bootstrap`] === true;
-            if (formData[`${pfx}ctx_memory`] !== undefined)
-              ctx.memory =
-                formData[`${pfx}ctx_memory`] === "true" || formData[`${pfx}ctx_memory`] === true;
-            if (formData[`${pfx}ctx_profile`] !== undefined)
-              ctx.profile =
-                formData[`${pfx}ctx_profile`] === "true" || formData[`${pfx}ctx_profile`] === true;
-            ap.context = ctx;
-            // Skill hint
-            const hint = String(formData[`${pfx}skill_hint`] || "").trim() || undefined;
-            if (hint) {
-              ap.skillHint = hint;
-            } else {
-              delete ap.skillHint;
             }
           }
         } else if (action === "settings_save_context") {

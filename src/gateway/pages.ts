@@ -1985,16 +1985,8 @@ export interface SettingsPageData {
     id: string;
     label: string;
     model: string;
-    workspace: string;
-    sessionPath: string;
     toolCategories: string[];
     skillsTags: string;
-    skillsInclude: string;
-    skillsExclude: string;
-    contextBootstrap: boolean;
-    contextMemory: boolean;
-    contextProfile: boolean;
-    skillHint: string;
   }>;
   /** All available tool categories for multi-select */
   allToolCategories: string[];
@@ -2163,52 +2155,13 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         value: profile.model,
       })
     );
-    // Skills Tags (primary config, replaces include/exclude for most users)
+    // Skills Tags
     fields.push(
       ui.formInput(`${pfx}skills_tags`, "text", {
         label: t("settings.agentSkillsTags"),
         value: profile.skillsTags,
         placeholder: "pha, sa, pha-markdown",
       })
-    );
-    // Paths (collapsed)
-    const pathFields: string[] = [];
-    pathFields.push(
-      ui.formInput(`${pfx}workspace`, "text", {
-        label: t("settings.agentWorkspace"),
-        value: profile.workspace,
-        placeholder: "users/{uid}",
-      })
-    );
-    pathFields.push(
-      ui.formInput(`${pfx}session_path`, "text", {
-        label: t("settings.agentSessionPath"),
-        value: profile.sessionPath,
-        placeholder: "users/{uid}/sessions/pha",
-      })
-    );
-    fields.push(ui.collapsible(t("settings.agentPaths"), pathFields, { expanded: false }));
-    // Skills advanced (collapsed)
-    const skillsAdvancedFields: string[] = [];
-    skillsAdvancedFields.push(
-      ui.formInput(`${pfx}skills_include`, "text", {
-        label: t("settings.agentSkillsInclude"),
-        value: profile.skillsInclude,
-        placeholder: "health-coaching, sleep",
-      })
-    );
-    skillsAdvancedFields.push(
-      ui.formInput(`${pfx}skills_exclude`, "text", {
-        label: t("settings.agentSkillsExclude"),
-        value: profile.skillsExclude,
-        placeholder: "evolution-driver, code-reviewer",
-      })
-    );
-    const skillsAdvanced = ui.collapsible(t("settings.agentAdvancedSkills"), skillsAdvancedFields, {
-      expanded: false,
-    });
-    fields.push(
-      ui.collapsible(t("settings.agentSkillsSection"), [skillsAdvanced], { expanded: false })
     );
     // Tool categories (collapsed)
     const toolCheckboxes: string[] = [];
@@ -2221,33 +2174,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       );
     }
     fields.push(ui.collapsible(t("settings.agentTools"), toolCheckboxes, { expanded: false }));
-    // Advanced settings (collapsed) — includes context flags + skill hint
-    const advancedFields: string[] = [];
-    advancedFields.push(
-      ui.formInput(`${pfx}ctx_bootstrap`, "checkbox", {
-        label: t("settings.agentCtxBootstrap"),
-        value: String(profile.contextBootstrap),
-      })
-    );
-    advancedFields.push(
-      ui.formInput(`${pfx}ctx_memory`, "checkbox", {
-        label: t("settings.agentCtxMemory"),
-        value: String(profile.contextMemory),
-      })
-    );
-    advancedFields.push(
-      ui.formInput(`${pfx}ctx_profile`, "checkbox", {
-        label: t("settings.agentCtxProfile"),
-        value: String(profile.contextProfile),
-      })
-    );
-    advancedFields.push(
-      ui.formInput(`${pfx}skill_hint`, "text", {
-        label: t("settings.agentSkillHint"),
-        value: profile.skillHint,
-      })
-    );
-    fields.push(ui.collapsible(t("settings.agentAdvanced"), advancedFields, { expanded: false }));
     // Only expand "pha" by default
     agentSections.push(ui.collapsible(profile.id, fields, { expanded: profile.id === "pha" }));
   }

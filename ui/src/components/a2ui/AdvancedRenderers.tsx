@@ -351,7 +351,7 @@ export function renderCollapsible(c: A2UIComponent, ctx: RenderContext) {
         <span className="text-text-muted transition-transform duration-normal [.is-open>button>&]:rotate-90">▶</span>
       </button>
       <div className="collapsible-grid pl-4">
-        <div className="flex flex-col gap-3 py-1">{ctx.renderChildren(c.children)}</div>
+        <div className="flex flex-col gap-3">{ctx.renderChildren(c.children)}</div>
       </div>
     </div>
   );
