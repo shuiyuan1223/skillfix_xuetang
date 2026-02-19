@@ -267,6 +267,8 @@ export interface PHAConfig {
   };
   /** Agent profiles — declarative composition of tools, skills, context per agent instance */
   agents?: Record<string, AgentProfileConfig>;
+  /** Master tag list for agent tool/skill tag pickers */
+  tags?: string[];
 }
 
 /** Agent profile as stored in config.json (relaxed types for JSON serialization) */

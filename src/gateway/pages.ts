@@ -1990,8 +1990,8 @@ export interface SettingsPageData {
     toolTags: string[];
     skillTags: string[];
   }>;
-  /** All available tags discovered from agents + SKILL.md files */
-  allTags: string[];
+  /** Master tag list from config.tags */
+  configTags: string[];
   /** Which agent collapsible to expand (after tag add/delete) */
   expandedAgentId?: string;
   benchmarkModelRefs: string[];
@@ -2180,7 +2180,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       ui.tagPicker({
         label: t("settings.agentToolTags"),
         selected: profile.toolTags,
-        options: data.allTags,
+        options: data.configTags,
         onToggle: "settings_agent_tag_toggle",
         payload: { agentId: profile.id, kind: "tool" },
         placeholder: t("settings.addTag"),
@@ -2192,7 +2192,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       ui.tagPicker({
         label: t("settings.agentSkillsTags"),
         selected: profile.skillTags,
-        options: data.allTags,
+        options: data.configTags,
         onToggle: "settings_agent_tag_toggle",
         payload: { agentId: profile.id, kind: "skill" },
         placeholder: t("settings.addTag"),
@@ -2211,6 +2211,19 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   });
   const agentsCard = ui.card([...agentSections, addAgentBtn], {
     title: t("settings.sectionAgents"),
+    padding: 20,
+  });
+
+  // ---- Tags Collection Section ----
+  const tagsDesc = ui.text(t("settings.sectionTagsDesc"), "caption");
+  const tagsPicker = ui.tagPicker({
+    selected: data.configTags,
+    options: data.configTags,
+    onToggle: "settings_tags_toggle",
+    placeholder: t("settings.addTag"),
+  });
+  const tagsCard = ui.card([tagsDesc, tagsPicker], {
+    title: t("settings.sectionTags"),
     padding: 20,
   });
 
@@ -2290,32 +2303,16 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const dsForm = ui.form(dsInputs, "settings_save_datasource", { submitLabel: saveLabel });
   const dsCard = ui.card([dsForm], { title: t("settings.sectionData"), padding: 20 });
 
-  // ---- OAuth Scopes Section (badge chips, only when huawei) ----
+  // ---- OAuth Scopes Section (tag_picker, only when huawei) ----
   let scopesCard: string | null = null;
   if (data.dataSourceType === "huawei") {
-    const scopeChildren: string[] = [];
-    const badgePairs: string[] = [];
-    data.huaweiScopes.forEach((scope, idx) => {
-      const badge = ui.badge(scope, { variant: "default", size: "sm" });
-      const xBtn = ui.button("", "settings_scope_delete", {
-        icon: "x",
-        variant: "ghost",
-        tooltip: t("settings.deleteScope"),
-        payload: { index: idx },
-      });
-      badgePairs.push(ui.row([badge, xBtn], { gap: 2, align: "center" }));
+    const scopePicker = ui.tagPicker({
+      selected: data.huaweiScopes,
+      options: data.huaweiScopes, // existing scopes as preset options
+      onToggle: "settings_scope_toggle",
+      placeholder: t("settings.addScope"),
     });
-    if (badgePairs.length > 0) {
-      scopeChildren.push(ui.row(badgePairs, { gap: 6, wrap: true }));
-    }
-    scopeChildren.push(
-      ui.form(
-        [ui.formInput("new_scope", "text", { placeholder: "openid, profile, ..." })],
-        "settings_scope_add",
-        { submitLabel: t("settings.addScope") }
-      )
-    );
-    scopesCard = ui.card(scopeChildren, {
+    scopesCard = ui.card([scopePicker], {
       title: t("settings.scopesPerLine"),
       padding: 20,
     });
@@ -2592,7 +2589,15 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  const cards: string[] = [header, repoCard, agentsCard, gatewayCard, contextCard, dsCard];
+  const cards: string[] = [
+    header,
+    repoCard,
+    agentsCard,
+    tagsCard,
+    gatewayCard,
+    contextCard,
+    dsCard,
+  ];
   if (scopesCard) cards.push(scopesCard);
   cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
   const root = ui.column(cards, { gap: 24, padding: 24 });

@@ -2315,22 +2315,28 @@ export class GatewaySession {
           };
         });
 
-        // Collect all unique tags from SKILL.md + agent profiles
-        let allTags: string[] = [];
-        try {
-          const skillsResult = (await listSkillsTool.execute({})) as any;
+        // Use master tag list from config.tags; auto-seed if empty
+        let configTags = config.tags || [];
+        if (configTags.length === 0) {
+          // Seed from SKILL.md tags + agent profile tags
           const tagSet = new Set<string>();
-          for (const s of skillsResult.skills || []) {
-            for (const tag of s.tags || []) tagSet.add(tag);
+          try {
+            const skillsResult = (await listSkillsTool.execute({})) as any;
+            for (const s of skillsResult.skills || []) {
+              for (const tag of s.tags || []) tagSet.add(tag);
+            }
+          } catch {
+            tagSet.add("pha");
+            tagSet.add("sa");
           }
-          // Also include tags from agent profiles
           for (const ap of agentProfiles) {
             for (const t2 of ap.toolTags) tagSet.add(t2);
             for (const t2 of ap.skillTags) tagSet.add(t2);
           }
-          allTags = [...tagSet].sort();
-        } catch {
-          allTags = ["pha", "sa", "pha-markdown"];
+          configTags = [...tagSet].sort();
+          // Persist the seeded tags
+          config.tags = configTags;
+          saveConfig(config);
         }
 
         mainPage = generateSettingsPage({
@@ -2346,7 +2352,7 @@ export class GatewaySession {
           orchestratorJudge: config.orchestrator?.judge || "",
           orchestratorEmbedding: config.orchestrator?.embedding || "",
           agentProfiles,
-          allTags,
+          configTags,
           expandedAgentId: this._settingsExpandedAgent,
           benchmarkModelRefs: config.benchmark?.models || [],
           gatewayPort: config.gateway?.port || 8000,
@@ -4317,11 +4323,11 @@ export class GatewaySession {
       action === "settings_mcp_add" ||
       action === "settings_mcp_delete" ||
       action === "settings_save_scopes" ||
-      action === "settings_scope_add" ||
-      action === "settings_scope_delete" ||
+      action === "settings_scope_toggle" ||
       action === "settings_agent_add" ||
       action === "settings_agent_delete" ||
       action === "settings_agent_tag_toggle" ||
+      action === "settings_tags_toggle" ||
       action === "settings_copy_config" ||
       action === "settings_download_config"
     ) {
@@ -4763,21 +4769,20 @@ export class GatewaySession {
             }
           }
           config.dataSources.huawei.scopes = scopes;
-        } else if (action === "settings_scope_add") {
-          // Add scope from form input
-          const newScope = String(formData?.new_scope || "").trim();
-          if (newScope) {
+        } else if (action === "settings_scope_toggle") {
+          // Unified scope toggle from tag_picker: { tag, action: "add"|"remove" }
+          const scope = String(formData?.tag || "").trim();
+          const scopeAction = String(formData?.action || "");
+          if (scope) {
             if (!config.dataSources.huawei) config.dataSources.huawei = {};
             if (!config.dataSources.huawei.scopes) config.dataSources.huawei.scopes = [];
-            if (!config.dataSources.huawei.scopes.includes(newScope)) {
-              config.dataSources.huawei.scopes.push(newScope);
+            const scopes = config.dataSources.huawei.scopes;
+            if (scopeAction === "add" && !scopes.includes(scope)) {
+              scopes.push(scope);
+            } else if (scopeAction === "remove") {
+              const idx = scopes.indexOf(scope);
+              if (idx >= 0) scopes.splice(idx, 1);
             }
-          }
-        } else if (action === "settings_scope_delete") {
-          // Delete scope by index
-          const idx = Number(formData?.index ?? -1);
-          if (idx >= 0 && config.dataSources.huawei?.scopes) {
-            config.dataSources.huawei.scopes.splice(idx, 1);
           }
         } else if (action === "settings_agent_add") {
           // Add a new agent with default config
@@ -4795,6 +4800,7 @@ export class GatewaySession {
           }
         } else if (action === "settings_agent_tag_toggle") {
           // Unified tag toggle from tag_picker: { agentId, kind: "tool"|"skill", tag, action: "add"|"remove" }
+          // Read from MERGED profile (built-in + config) so we don't lose built-in tags
           const agentId = String(formData?.agentId || "");
           const tag = String(formData?.tag || "");
           const kind = String(formData?.kind || "");
@@ -4803,8 +4809,9 @@ export class GatewaySession {
             if (!config.agents) config.agents = {};
             if (!config.agents[agentId]) config.agents[agentId] = {};
             const ap = config.agents[agentId];
+            const merged = getAgentProfile(agentId);
             if (kind === "tool") {
-              const tags = (ap.tools?.tags as string[]) || [];
+              const tags = [...(merged.tools.tags || [])];
               if (tagAction === "add" && !tags.includes(tag)) tags.push(tag);
               else if (tagAction === "remove") {
                 const idx = tags.indexOf(tag);
@@ -4812,7 +4819,7 @@ export class GatewaySession {
               }
               ap.tools = { ...ap.tools, tags };
             } else if (kind === "skill") {
-              const tags = ap.skills?.tags || [];
+              const tags = [...(merged.skills?.tags || [])];
               if (tagAction === "add" && !tags.includes(tag)) tags.push(tag);
               else if (tagAction === "remove") {
                 const idx = tags.indexOf(tag);
@@ -4822,6 +4829,19 @@ export class GatewaySession {
             }
             this._settingsExpandedAgent = agentId;
           }
+        } else if (action === "settings_tags_toggle") {
+          // Unified toggle for master tags collection: { tag, action: "add"|"remove" }
+          const tag = String(formData?.tag || "").trim();
+          const tagAction = String(formData?.action || "");
+          if (tag) {
+            if (!config.tags) config.tags = [];
+            if (tagAction === "add" && !config.tags.includes(tag)) {
+              config.tags.push(tag);
+            } else if (tagAction === "remove") {
+              const idx = config.tags.indexOf(tag);
+              if (idx >= 0) config.tags.splice(idx, 1);
+            }
+          }
         } else if (action === "settings_copy_config" || action === "settings_download_config") {
           // Handled on frontend — just send toast
           send(generateToast(t("settings.saved"), "success"));
@@ -4829,8 +4849,11 @@ export class GatewaySession {
         }
 
         saveConfig(config);
-        // Don't show "saved" toast for add/delete tag operations (the badge update is sufficient feedback)
-        const isTagOp = action === "settings_agent_tag_toggle";
+        // Don't show "saved" toast for tag/scope toggle operations (the badge update is sufficient feedback)
+        const isTagOp =
+          action === "settings_agent_tag_toggle" ||
+          action === "settings_tags_toggle" ||
+          action === "settings_scope_toggle";
         if (!isTagOp) {
           send(generateToast(t("settings.saved"), "success"));
         }

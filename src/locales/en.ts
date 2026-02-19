@@ -693,6 +693,8 @@ export const en: LocaleMessages = {
     addTag: "Add",
     selectPresetTag: "Select preset...",
     agentToolTags: "Tool Tags",
+    sectionTags: "Tags",
+    sectionTagsDesc: "Define available tags for Agent tool/skill filtering",
     pluginName: "Name",
     pluginVersion: "Version",
     pluginOrigin: "Origin",

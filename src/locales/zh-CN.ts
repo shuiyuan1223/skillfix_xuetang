@@ -684,6 +684,8 @@ export const zhCN: LocaleMessages = {
     addTag: "添加",
     selectPresetTag: "选择预设标签...",
     agentToolTags: "工具标签",
+    sectionTags: "标签集合",
+    sectionTagsDesc: "定义可用标签，用于 Agent 工具/技能标签筛选",
     pluginName: "插件名称",
     pluginVersion: "版本",
     pluginOrigin: "来源",

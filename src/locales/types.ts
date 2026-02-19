@@ -711,6 +711,8 @@ export interface LocaleMessages {
     addTag: string;
     selectPresetTag: string;
     agentToolTags: string;
+    sectionTags: string;
+    sectionTagsDesc: string;
     pluginName: string;
     pluginVersion: string;
     pluginOrigin: string;
