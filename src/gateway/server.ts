@@ -1718,6 +1718,7 @@ export class GatewaySession {
           messages: this.chatMessages,
           streaming: this.isStreaming,
           streamingContent: this.streamingContent,
+          thinkingMode: true,
         });
         break;
 
@@ -2369,6 +2370,7 @@ export class GatewaySession {
         messages: this.chatMessages,
         streaming: this.isStreaming,
         streamingContent: this.streamingContent,
+        ...(this.currentView === "legacy-chat" ? { thinkingMode: true } : {}),
       });
       activeSend({
         type: "a2ui",

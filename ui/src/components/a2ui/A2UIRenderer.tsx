@@ -66,6 +66,142 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   delete_calendar_event: "删除日历事件",
 };
 
+// ---- ThinkingMessage: collapsible thinking block for thinking-mode chat ----
+
+function ThinkingMessage({
+  parts,
+  isActiveMsg,
+  renderPartFn,
+  msgBubble,
+}: {
+  parts: MessagePart[];
+  isActiveMsg: boolean;
+  renderPartFn: (part: MessagePart, idx: number) => React.ReactNode;
+  msgBubble: string;
+}) {
+  // Find the split point: last tool_use / tool_result index
+  let lastToolIdx = -1;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].type === "tool_use" || parts[i].type === "tool_result") {
+      lastToolIdx = i;
+      break;
+    }
+  }
+
+  const hasToolCalls = lastToolIdx >= 0;
+  const thinkingParts = hasToolCalls ? parts.slice(0, lastToolIdx + 1) : [];
+  const answerParts = hasToolCalls ? parts.slice(lastToolIdx + 1) : parts;
+  const hasAnswer = answerParts.some(
+    (p) => p.type === "text" && p.content?.trim()
+  );
+  const toolCount = thinkingParts.filter((p) => p.type === "tool_use").length;
+
+  // Start expanded; auto-collapse when streaming ends and answer exists
+  const [expanded, setExpanded] = React.useState(true);
+  React.useEffect(() => {
+    if (!isActiveMsg && hasAnswer) setExpanded(false);
+    if (isActiveMsg) setExpanded(true);
+  }, [isActiveMsg, hasAnswer]);
+
+  // If no tool calls, render parts normally (no thinking/answer split)
+  if (!hasToolCalls) {
+    return (
+      <>
+        {parts.map((part, pi) => {
+          if (
+            isActiveMsg && part.type === "text" && part.content?.trim() &&
+            pi === parts.length - 1
+          ) {
+            return (
+              <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+                <Markdown>{part.content}</Markdown>
+              </div>
+            );
+          }
+          return renderPartFn(part, pi);
+        })}
+        {isActiveMsg && !parts.some((p) => (p.type === "text" && p.content?.trim()) || p.type === "tool_use" || p.type === "tool_result") && (
+          <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
+            <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+            <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+            <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // Collapsible thinking + answer
+  const isThinking = isActiveMsg && !hasAnswer;
+  const headerLabel = isThinking
+    ? "思考中"
+    : expanded
+      ? "思考过程"
+      : `已搜索 ${toolCount} 项数据`;
+
+  return (
+    <>
+      {/* Collapsible thinking header */}
+      <button
+        className="flex items-center gap-2 text-xs text-text-muted py-1 cursor-pointer hover:text-text transition-colors select-none"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className="text-[10px]">{expanded ? "\u25BE" : "\u25B8"}</span>
+        <span>{headerLabel}</span>
+        {isThinking && (
+          <span className="inline-flex gap-1 items-center">
+            <span className="w-1 h-1 rounded-full bg-primary/70 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+            <span className="w-1 h-1 rounded-full bg-primary/70 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.15s" }} />
+            <span className="w-1 h-1 rounded-full bg-primary/70 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.3s" }} />
+          </span>
+        )}
+      </button>
+
+      {/* Thinking parts (collapsible) */}
+      {expanded && (
+        <div className="border-l-2 border-border/50 pl-3 flex flex-col gap-1.5 ml-1">
+          {thinkingParts.map((part, pi) => {
+            if (part.type === "text") {
+              if (!part.content?.trim()) return null;
+              return (
+                <div key={pi} className="text-xs text-text-secondary opacity-80 leading-relaxed">
+                  <Markdown>{part.content}</Markdown>
+                </div>
+              );
+            }
+            return renderPartFn(part, pi);
+          })}
+        </div>
+      )}
+
+      {/* Answer parts */}
+      {answerParts.map((part, pi) => {
+        const realIdx = lastToolIdx + 1 + pi;
+        if (
+          isActiveMsg && part.type === "text" && part.content?.trim() &&
+          realIdx === parts.length - 1
+        ) {
+          return (
+            <div key={realIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+              <Markdown>{part.content}</Markdown>
+            </div>
+          );
+        }
+        return renderPartFn(part, realIdx);
+      })}
+
+      {/* Typing indicator when streaming but no answer yet */}
+      {isActiveMsg && !hasAnswer && thinkingParts.length > 0 && (
+        <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+        </div>
+      )}
+    </>
+  );
+}
+
 export function A2UIRenderer({
   data, sendAction, sendNavigate, chatAutoScrollRef, isAutoScrollingRef,
 }: A2UIRendererProps) {
@@ -762,6 +898,9 @@ export function A2UIRenderer({
             // Skip empty assistant messages that aren't actively streaming
             if (!isActiveMsg && !hasVisibleParts) return null;
 
+            const thinkingMode = c.thinkingMode as boolean;
+            const hasToolCalls = msg.parts.some((p) => p.type === "tool_use");
+
             return (
               <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
                 <div className="relative self-start shrink-0">
@@ -774,27 +913,38 @@ export function A2UIRenderer({
                        dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
                 </div>
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
-                  {msg.parts.map((part, pi) => {
-                    // Add stream-border-pulse to actively streaming text part
-                    if (
-                      isActiveMsg && part.type === "text" && part.content?.trim() &&
-                      pi === msg.parts.length - 1
-                    ) {
-                      return (
-                        <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
-                          <Markdown>{part.content}</Markdown>
+                  {thinkingMode && hasToolCalls ? (
+                    <ThinkingMessage
+                      parts={msg.parts}
+                      isActiveMsg={isActiveMsg}
+                      renderPartFn={renderPart}
+                      msgBubble={msgBubble}
+                    />
+                  ) : (
+                    <>
+                      {msg.parts.map((part, pi) => {
+                        // Add stream-border-pulse to actively streaming text part
+                        if (
+                          isActiveMsg && part.type === "text" && part.content?.trim() &&
+                          pi === msg.parts.length - 1
+                        ) {
+                          return (
+                            <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+                              <Markdown>{part.content}</Markdown>
+                            </div>
+                          );
+                        }
+                        return renderPart(part, pi);
+                      })}
+                      {/* Typing indicator when assistant message has no visible parts yet */}
+                      {isActiveMsg && !hasVisibleParts && (
+                        <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
+                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
                         </div>
-                      );
-                    }
-                    return renderPart(part, pi);
-                  })}
-                  {/* Typing indicator when assistant message has no visible parts yet */}
-                  {isActiveMsg && !hasVisibleParts && (
-                    <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
-                      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
-                      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
-                      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
-                    </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

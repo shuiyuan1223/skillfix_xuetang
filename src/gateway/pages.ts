@@ -50,6 +50,7 @@ interface ChatState {
   streaming: boolean;
   streamingContent: string;
   quickReplies?: QuickReply[];
+  thinkingMode?: boolean;
 }
 
 interface HealthMetric {
@@ -125,6 +126,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
     streaming: state.streaming,
     streamingContent: state.streamingContent,
     ...(state.quickReplies?.length ? { quickReplies: state.quickReplies } : {}),
+    ...(state.thinkingMode ? { thinkingMode: true } : {}),
   });
 
   // Chat input component
