@@ -596,6 +596,7 @@ export function A2UIRenderer({
         : {};
     return (
       <button
+        type="button"
         className={`${btnBase} ${btnVariants[variant] || btnVariants.primary}`}
         style={accentStyle}
         disabled={disabled}

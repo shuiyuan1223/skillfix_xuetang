@@ -2181,17 +2181,14 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         placeholder: "pha, sa, pha-markdown",
       })
     );
-    // Tool categories (collapsed)
-    const toolCheckboxes: string[] = [];
-    for (const cat of data.allToolCategories) {
-      toolCheckboxes.push(
-        ui.formInput(`${pfx}tool__${cat}`, "checkbox", {
-          label: cat,
-          value: String(profile.toolCategories.includes(cat)),
-        })
-      );
-    }
-    fields.push(ui.collapsible(t("settings.agentTools"), toolCheckboxes, { expanded: false }));
+    // Tool categories (comma-separated text, like skills tags)
+    fields.push(
+      ui.formInput(`${pfx}tool_categories`, "text", {
+        label: t("settings.agentTools"),
+        value: profile.toolCategories.join(", "),
+        placeholder: data.allToolCategories.join(", "),
+      })
+    );
     // Only expand "pha" by default
     agentSections.push(ui.collapsible(profile.id, fields, { expanded: profile.id === "pha" }));
   }

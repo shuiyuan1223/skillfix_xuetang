@@ -4537,14 +4537,13 @@ export class GatewaySession {
             } else {
               delete ap.sessionPath;
             }
-            // Tool categories (from tool__<cat> checkboxes)
-            const cats: string[] = [];
-            for (const [k, v] of Object.entries(formData)) {
-              if (k.startsWith(`${pfx}tool__`) && (v === "true" || v === true)) {
-                cats.push(k.replace(`${pfx}tool__`, ""));
-              }
-            }
-            if (cats.length > 0) {
+            // Tool categories (comma-separated text)
+            const catsStr = String(formData[`${pfx}tool_categories`] || "").trim();
+            if (catsStr) {
+              const cats = catsStr
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean);
               ap.tools = { categories: cats };
             } else {
               delete ap.tools;
