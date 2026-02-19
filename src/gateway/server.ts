@@ -2576,46 +2576,75 @@ export class GatewaySession {
       }
     };
 
+    // Route to correct channel based on currentView
+    const isLegacy = this.currentView === "legacy-chat";
+    this._chatChannel = isLegacy ? "legacy" : "main";
+    const messages = isLegacy ? this.legacyChatMessages : this.chatMessages;
+    const persistChannel = isLegacy ? ("legacy-chat" as const) : ("chat" as const);
+    const sessionId = isLegacy ? this.legacyChatSessionId : this.sessionId;
+
     try {
-      // Add user message
-      this.chatMessages.push({
+      // Add user message to the correct channel
+      messages.push({
         id: crypto.randomUUID(),
         role: "user",
         parts: [{ type: "text", content }],
       });
-      this.persistMessage("chat", { timestamp: Date.now(), role: "user", content });
+      this.persistMessage(persistChannel, { timestamp: Date.now(), role: "user", content });
 
-      this.isStreaming = true;
-      this.streamingContent = "";
-      this.currentAssistantMsgId = null;
-      this.currentRunId = null;
-      this.lastStreamedText = "";
+      if (isLegacy) {
+        this.legacyChatStreaming = true;
+        this.legacyChatStreamingContent = "";
+        this.legacyChatCurrentAssistantMsgId = null;
+        this.legacyChatCurrentRunId = null;
+        this.legacyChatLastStreamedText = "";
+      } else {
+        this.isStreaming = true;
+        this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.currentRunId = null;
+        this.lastStreamedText = "";
+      }
 
-      const agent = await this.getAgent();
+      const agent = isLegacy ? await this.getLegacyChatAgent() : await this.getAgent();
       const unsubscribe = agent.subscribe((event) => {
         this.handleAgentEvent(event, sseSend);
       });
 
       try {
-        await agent.chat(content);
+        const skillHint = agent.getSkillHint();
+        if (skillHint) {
+          await agent.chatWithSkill(content, skillHint);
+        } else {
+          await agent.chat(content);
+        }
         await agent.getAgent().waitForIdle();
       } finally {
         unsubscribe();
       }
 
       // Ensure streaming state is cleaned up
-      if (this.isStreaming) {
-        this.isStreaming = false;
-        this.streamingContent = "";
-        this.currentAssistantMsgId = null;
-        this.lastStreamedText = "";
+      if (isLegacy) {
+        if (this.legacyChatStreaming) {
+          this.legacyChatStreaming = false;
+          this.legacyChatStreamingContent = "";
+          this.legacyChatCurrentAssistantMsgId = null;
+          this.legacyChatLastStreamedText = "";
+        }
+      } else {
+        if (this.isStreaming) {
+          this.isStreaming = false;
+          this.streamingContent = "";
+          this.currentAssistantMsgId = null;
+          this.lastStreamedText = "";
+        }
       }
 
       // Index exchange for memory search
       if (this.userUuid) {
         try {
           const mm = getMemoryManager();
-          const lastAssistant = this.chatMessages.filter((m) => m.role === "assistant").pop();
+          const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
           if (lastAssistant) {
             const assistantText = lastAssistant.parts
               .filter((p): p is { type: "text"; content: string } => p.type === "text")
@@ -2623,7 +2652,7 @@ export class GatewaySession {
               .join("");
             mm.appendSessionTranscript(
               this.userUuid,
-              this.sessionId,
+              sessionId,
               `User: ${content}\nAssistant: ${assistantText}`
             );
           }
@@ -2642,10 +2671,17 @@ export class GatewaySession {
         });
         safeWrite(`data: ${errEvent}\n\n`);
       }
-      this.isStreaming = false;
-      this.streamingContent = "";
-      this.currentAssistantMsgId = null;
-      this.lastStreamedText = "";
+      if (isLegacy) {
+        this.legacyChatStreaming = false;
+        this.legacyChatStreamingContent = "";
+        this.legacyChatCurrentAssistantMsgId = null;
+        this.legacyChatLastStreamedText = "";
+      } else {
+        this.isStreaming = false;
+        this.streamingContent = "";
+        this.currentAssistantMsgId = null;
+        this.lastStreamedText = "";
+      }
     } finally {
       this._sseMode = false;
       this._chatLock = false;
