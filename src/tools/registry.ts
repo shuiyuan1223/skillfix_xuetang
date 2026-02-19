@@ -36,6 +36,15 @@ export function categoryToAgent(category: ToolCategory): string {
   return "PHA";
 }
 
+export function categoryToAgentTags(category: ToolCategory): string[] {
+  const tags: string[] = [];
+  const inPHA = PHA_CATEGORIES.has(category);
+  const inSA = SA_CATEGORIES.has(category);
+  if (inPHA) tags.push("pha", "pha4old");
+  if (inSA) tags.push("sa");
+  return tags.length > 0 ? tags : ["pha"];
+}
+
 export class ToolRegistry {
   private tools = new Map<string, PHATool<any>>();
 
@@ -170,7 +179,7 @@ export class ToolRegistry {
     displayName: string;
     description: string;
     category: ToolCategory;
-    agent: string;
+    tags: string[];
     icon?: string;
     companionSkill?: string;
     inputSchema?: Record<string, unknown>;
@@ -180,7 +189,7 @@ export class ToolRegistry {
       displayName: t.displayName,
       description: t.description,
       category: t.category,
-      agent: categoryToAgent(t.category),
+      tags: categoryToAgentTags(t.category),
       icon: t.icon,
       companionSkill: t.companionSkill,
       inputSchema: t.inputSchema,

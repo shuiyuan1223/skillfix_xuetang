@@ -10,6 +10,7 @@ import { t } from "../locales/index.js";
 import type { UserProfile, MemorySearchResult } from "../memory/types.js";
 import type { HealthPlan, PlanStatus } from "../plans/types.js";
 import type { Recommendation, Reminder, CalendarEvent } from "../proactive/types.js";
+import { getAgentProfile, getAgentProfileIds } from "../agent/pha-agent.js";
 import {
   buildRadarChartData,
   SHARP_CATEGORY_COLORS,
@@ -958,6 +959,30 @@ interface SkillInfo {
   structure?: { files: string[]; hasReference: boolean; hasScripts: boolean };
 }
 
+/** Compute which agent profiles will load a given skill */
+function skillAgentTags(skill: SkillInfo): string {
+  const tags: string[] = [];
+  for (const id of getAgentProfileIds()) {
+    const profile = getAgentProfile(id);
+    // include filter: non-empty means skill must match
+    if (profile.skills?.include?.length) {
+      const matches = profile.skills.include.some(
+        (f) => skill.name === f || skill.category === f || skill.tags?.includes(f)
+      );
+      if (!matches) continue;
+    }
+    // exclude filter: match means skip
+    if (profile.skills?.exclude?.length) {
+      const excluded = profile.skills.exclude.some(
+        (f) => skill.name === f || skill.category === f || skill.tags?.includes(f)
+      );
+      if (excluded) continue;
+    }
+    tags.push(id);
+  }
+  return tags.join(", ");
+}
+
 /** Skill category tab definitions */
 const SKILL_CATEGORY_TABS = [
   { id: "health-coaching", label: "skillCatHealthCoaching", icon: "heart" as const },
@@ -1028,12 +1053,14 @@ export function generateSkillsPage(data: {
     const skillRows = filteredSkills.map((s) => ({
       name: `${s.emoji || "🧩"} ${s.name}`,
       description: s.description || "-",
+      tags: skillAgentTags(s),
       status: s.enabled ? "enabled" : "disabled",
     }));
     const skillsTable = ui.dataTable(
       [
         { key: "name", label: t("skills.skill"), sortable: true },
         { key: "description", label: t("skills.description") },
+        { key: "tags", label: "Tags", render: "badge" },
         { key: "status", label: t("skills.status"), render: "badge" },
       ],
       skillRows,
@@ -1128,7 +1155,7 @@ export interface ToolPageEntry {
   displayName: string;
   description: string;
   category: string;
-  agent: string; // "PHA" | "System" | "PHA / System"
+  tags: string[];
   icon?: string;
   companionSkill?: string;
   inputSchema?: Record<string, unknown>;
@@ -1166,7 +1193,7 @@ export function generateToolsPage(data: {
     displayName: t.displayName,
     description: t.description,
     category: t.category,
-    agent: t.agent,
+    tags: t.tags.join(", "),
     skill: t.companionSkill || "-",
   }));
 
@@ -1176,7 +1203,7 @@ export function generateToolsPage(data: {
       { key: "displayName", label: "Display Name", sortable: true },
       { key: "description", label: "Description" },
       { key: "category", label: "Category", render: "badge" },
-      { key: "agent", label: "Agent", render: "badge" },
+      { key: "tags", label: "Tags", render: "badge" },
       { key: "skill", label: "Skill", render: "link" as const, action: "view_skill_from_table" },
     ],
     rows,
@@ -1207,12 +1234,12 @@ export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
   const descText = ui.text(tool.description, "body");
   children.push(descText);
 
-  // Category + Agent + Skill
+  // Category + Tags + Skill
   const metaItems: string[] = [];
   const catLabel = ui.text(`Category: ${tool.category}`, "caption");
   metaItems.push(catLabel);
-  const agentLabel = ui.text(`Agent: ${tool.agent}`, "caption");
-  metaItems.push(agentLabel);
+  const tagsLabel = ui.text(`Tags: ${tool.tags.join(", ")}`, "caption");
+  metaItems.push(tagsLabel);
   if (tool.companionSkill) {
     const skillBtn = ui.button(`Companion Skill: ${tool.companionSkill}`, "view_skill_from_tool", {
       variant: "ghost",

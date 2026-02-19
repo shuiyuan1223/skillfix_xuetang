@@ -64,4 +64,4 @@ export * from "./plan-tools.js";
 export * from "./proactive-tools.js";
 export * from "./weather-tool.js";
 export * from "./types.js";
-export { ToolRegistry, categoryToAgent } from "./registry.js";
+export { ToolRegistry, categoryToAgent, categoryToAgentTags } from "./registry.js";
