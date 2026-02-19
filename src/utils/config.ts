@@ -265,6 +265,16 @@ export interface PHAConfig {
       }
     >;
   };
+  /** Agent profiles — declarative composition of tools, skills, context per agent instance */
+  agents?: Record<string, AgentProfileConfig>;
+}
+
+/** Agent profile as stored in config.json (relaxed types for JSON serialization) */
+export interface AgentProfileConfig {
+  tools?: { categories?: string[] };
+  skills?: { excludeTypes?: string[] };
+  context?: { health?: boolean; weather?: boolean; bootstrap?: boolean };
+  skillHint?: string;
 }
 
 // Provider display configurations

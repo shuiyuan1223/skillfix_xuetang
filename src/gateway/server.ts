@@ -16,7 +16,7 @@ import { generateAgentCard, handleA2ARequest } from "./a2a.js";
 import {
   createPHAAgent,
   withActivityTimeout,
-  AGENT_PROFILES,
+  getAgentProfile,
   type PHAAgent,
 } from "../agent/pha-agent.js";
 import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
@@ -1314,7 +1314,7 @@ export class GatewaySession {
 
       this.agent = await createPHAAgent({
         ...this.baseAgentConfig(),
-        profile: AGENT_PROFILES.pha,
+        profile: getAgentProfile("pha"),
         sessionId: this.sessionId,
         sessionMessages: this.toSessionMessages(this.chatMessages),
         extraTools,
@@ -1375,7 +1375,7 @@ export class GatewaySession {
       // Cheap creation: ~150ms (skips 2-5s health/weather fetch via cachedContext)
       this.legacyChatAgent = await createPHAAgent({
         ...this.baseAgentConfig(),
-        profile: AGENT_PROFILES.pha4old,
+        profile: getAgentProfile("pha4old"),
         sessionId: this.legacyChatSessionId,
         sessionMessages: this.toSessionMessages(this.legacyChatMessages),
         extraTools,

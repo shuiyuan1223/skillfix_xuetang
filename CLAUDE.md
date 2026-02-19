@@ -68,7 +68,17 @@ pha tui           # 终端聊天界面
     "modelId": "anthropic/claude-opus-4.6"
   },
   "dataSources": { "type": "huawei" },
-  "embedding": { "enabled": true, "model": "openai/text-embedding-3-small" }
+  "embedding": { "enabled": true, "model": "openai/text-embedding-3-small" },
+  "agents": {                     // Agent 配置化（可选，有内置默认值）
+    "pha": {                      // 主聊天 agent
+      "tools": { "categories": ["health","memory","profile","config","skill","presentation","planning","proactive"] },
+      "context": { "health": true, "weather": true, "bootstrap": true }
+    },
+    "pha4old": {                  // 边想边搜 agent
+      "skills": { "excludeTypes": ["system"] },
+      "skillHint": "legacy-streaming"
+    }
+  }
 }
 ```
 

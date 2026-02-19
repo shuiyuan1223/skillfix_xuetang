@@ -30,12 +30,12 @@ import { preComputeHealthContext, fetchWeatherContext } from "./health-context.j
 import { sessionToAgentMessages } from "../memory/session-store.js";
 
 export type { LLMProvider } from "../utils/config.js";
+import { loadConfig, type AgentProfileConfig } from "../utils/config.js";
 import type { ToolCategory } from "../tools/types.js";
 
-/** Declarative agent configuration profile */
+/** Declarative agent configuration profile (runtime, fully typed) */
 export interface AgentProfile {
   id: string;
-  memory: { pathTemplate: string };
   tools: { categories: ToolCategory[] };
   skills?: { excludeTypes?: string[] };
   context: {
@@ -46,45 +46,80 @@ export interface AgentProfile {
   skillHint?: string;
 }
 
-/** Built-in agent profiles */
-export const AGENT_PROFILES: Record<string, AgentProfile> = {
+/** Default tool categories shared across PHA agents */
+const PHA_TOOL_CATEGORIES: ToolCategory[] = [
+  "health",
+  "memory",
+  "profile",
+  "config",
+  "skill",
+  "presentation",
+  "planning",
+  "proactive",
+];
+
+/** Built-in agent profile defaults (used when config.json has no overrides) */
+const BUILTIN_PROFILES: Record<string, AgentProfile> = {
   pha: {
     id: "pha",
-    memory: { pathTemplate: ".pha/users/{uid}" },
-    tools: {
-      categories: [
-        "health",
-        "memory",
-        "profile",
-        "config",
-        "skill",
-        "presentation",
-        "planning",
-        "proactive",
-      ],
-    },
+    tools: { categories: PHA_TOOL_CATEGORIES },
     context: { health: true, weather: true, bootstrap: true },
   },
   pha4old: {
     id: "pha4old",
-    memory: { pathTemplate: ".pha/users/{uid}" },
-    tools: {
-      categories: [
-        "health",
-        "memory",
-        "profile",
-        "config",
-        "skill",
-        "presentation",
-        "planning",
-        "proactive",
-      ],
-    },
+    tools: { categories: PHA_TOOL_CATEGORIES },
     skills: { excludeTypes: ["system"] },
     context: { health: true, weather: true, bootstrap: true },
     skillHint: "legacy-streaming",
   },
 };
+
+/**
+ * Resolve an agent profile by ID.
+ * Priority: config.json agents.{id} (merged over built-in) > built-in default.
+ */
+export function getAgentProfile(id: string): AgentProfile {
+  const builtin = BUILTIN_PROFILES[id];
+  const config = loadConfig();
+  const override = config.agents?.[id];
+
+  if (!override) {
+    // No config override — use built-in (or synthesize a minimal one)
+    return builtin || { id, tools: { categories: PHA_TOOL_CATEGORIES }, context: {} };
+  }
+
+  // Merge: config override wins per-field, built-in is fallback
+  const base = builtin || { id, tools: { categories: PHA_TOOL_CATEGORIES }, context: {} };
+  return {
+    id,
+    tools: {
+      categories: (override.tools?.categories as ToolCategory[]) || base.tools.categories,
+    },
+    skills: override.skills || base.skills,
+    context: { ...base.context, ...override.context },
+    skillHint: override.skillHint ?? base.skillHint,
+  };
+}
+
+/** Convenience: get all known profile IDs (built-in + config) */
+export function getAgentProfileIds(): string[] {
+  const config = loadConfig();
+  const ids = new Set(Object.keys(BUILTIN_PROFILES));
+  if (config.agents) {
+    for (const k of Object.keys(config.agents)) ids.add(k);
+  }
+  return [...ids];
+}
+
+/** @deprecated Use getAgentProfile() — kept for backward compat during migration */
+export const AGENT_PROFILES = new Proxy({} as Record<string, AgentProfile>, {
+  get(_target, prop: string) {
+    return getAgentProfile(prop);
+  },
+  has(_target, prop: string) {
+    return prop in BUILTIN_PROFILES || !!loadConfig().agents?.[prop as string];
+  },
+});
 
 export interface PHAAgentConfig {
   /** LLM provider (default: "anthropic") */
