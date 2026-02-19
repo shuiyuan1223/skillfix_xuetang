@@ -4326,6 +4326,7 @@ export class GatewaySession {
       action === "settings_scope_toggle" ||
       action === "settings_agent_add" ||
       action === "settings_agent_delete" ||
+      action === "settings_agent_restore" ||
       action === "settings_agent_tag_toggle" ||
       action === "settings_tags_toggle" ||
       action === "settings_copy_config" ||
@@ -4797,6 +4798,13 @@ export class GatewaySession {
           const agentId = String(formData?.agentId || "");
           if (agentId && config.agents) {
             delete config.agents[agentId];
+          }
+        } else if (action === "settings_agent_restore") {
+          // Restore agent to built-in defaults by removing config override
+          const agentId = String(formData?.agentId || "");
+          if (agentId && config.agents) {
+            delete config.agents[agentId];
+            this._settingsExpandedAgent = agentId;
           }
         } else if (action === "settings_agent_tag_toggle") {
           // Unified tag toggle from tag_picker: { agentId, kind: "tool"|"skill", tag, action: "add"|"remove" }

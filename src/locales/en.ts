@@ -690,6 +690,7 @@ export const en: LocaleMessages = {
     saveContext: "Save Context Config",
     addAgent: "Add Agent",
     deleteAgent: "Delete Agent",
+    restoreDefaults: "Restore Defaults",
     addTag: "Add",
     selectPresetTag: "Select preset...",
     agentToolTags: "Tool Tags",

@@ -681,6 +681,7 @@ export const zhCN: LocaleMessages = {
     saveContext: "保存上下文配置",
     addAgent: "添加 Agent",
     deleteAgent: "删除 Agent",
+    restoreDefaults: "恢复默认配置",
     addTag: "添加",
     selectPresetTag: "选择预设标签...",
     agentToolTags: "工具标签",

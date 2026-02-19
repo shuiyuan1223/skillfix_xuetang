@@ -417,6 +417,7 @@ export interface FormComponent extends A2UIComponent {
   type: "form";
   onSubmit: string; // Action name
   submitLabel?: string;
+  submitIcon?: string; // Icon name — renders icon-only submit button (e.g. "save")
   cancelLabel?: string;
   onCancel?: string; // Action name
 }

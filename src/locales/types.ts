@@ -708,6 +708,7 @@ export interface LocaleMessages {
     saveContext: string;
     addAgent: string;
     deleteAgent: string;
+    restoreDefaults: string;
     addTag: string;
     selectPresetTag: string;
     agentToolTags: string;

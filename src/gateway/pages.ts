@@ -2059,7 +2059,7 @@ export interface SettingsPageData {
 
 export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const ui = new A2UIGenerator("main");
-  const saveLabel = t("settings.saveButton");
+  const saveIcon = { submitIcon: "save", submitTooltip: t("settings.saveButton") };
 
   // Header
   const title = ui.text(t("settings.title"), "h2");
@@ -2121,9 +2121,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ];
     repoChildren.push(ui.collapsible(mp.key, providerContent, { expanded: true }));
   }
-  const repoForm = ui.form(repoChildren, "settings_save_model_repository", {
-    submitLabel: t("settings.saveRepository"),
-  });
+  const repoForm = ui.form(repoChildren, "settings_save_model_repository", saveIcon);
   const addProviderBtn = ui.button(t("settings.addProvider"), "settings_provider_add", {
     icon: "plus",
     variant: "outline",
@@ -2153,7 +2151,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     });
     children.push(ui.row([agentTitle, agentDeleteBtn], { justify: "between", align: "center" }));
 
-    // Form: model, workspace, sessionPath
+    // Form: model, workspace, sessionPath + tag pickers + save/restore at bottom-right
     const formFields = [
       ui.formInput(`${pfx}model`, "select", {
         label: t("settings.agentModelLabel"),
@@ -2170,13 +2168,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         value: profile.sessionPath,
         placeholder: "users/{uid}/sessions/pha",
       }),
-    ];
-    children.push(
-      ui.form(formFields, "settings_save_agents", { submitLabel: t("settings.saveAgents") })
-    );
-
-    // ---- Tool Tags (tag picker) ----
-    children.push(
+      // Tag pickers inside form (their buttons are type="button", won't trigger submit)
       ui.tagPicker({
         label: t("settings.agentToolTags"),
         selected: profile.toolTags,
@@ -2184,11 +2176,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         onToggle: "settings_agent_tag_toggle",
         payload: { agentId: profile.id, kind: "tool" },
         placeholder: t("settings.addTag"),
-      })
-    );
-
-    // ---- Skill Tags (tag picker) ----
-    children.push(
+      }),
       ui.tagPicker({
         label: t("settings.agentSkillsTags"),
         selected: profile.skillTags,
@@ -2196,8 +2184,16 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         onToggle: "settings_agent_tag_toggle",
         payload: { agentId: profile.id, kind: "skill" },
         placeholder: t("settings.addTag"),
-      })
-    );
+      }),
+      // Restore defaults button (rendered inside form but type="button", won't trigger submit)
+      ui.button("", "settings_agent_restore", {
+        icon: "refresh-cw",
+        variant: "ghost",
+        tooltip: t("settings.restoreDefaults"),
+        payload: { agentId: profile.id },
+      }),
+    ];
+    children.push(ui.form(formFields, "settings_save_agents", saveIcon));
 
     // Expand based on expandedAgentId or default to "pha"
     const shouldExpand = data.expandedAgentId
@@ -2240,9 +2236,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ],
     value: String(data.gatewayAutoStart),
   });
-  const gatewayForm = ui.form([portInput, autoStartSelect], "settings_save_gateway", {
-    submitLabel: saveLabel,
-  });
+  const gatewayForm = ui.form([portInput, autoStartSelect], "settings_save_gateway", saveIcon);
   const gatewayCard = ui.card([gatewayForm], { title: t("settings.sectionGateway"), padding: 20 });
 
   // ---- Data Source Section ----
@@ -2300,7 +2294,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     );
   }
 
-  const dsForm = ui.form(dsInputs, "settings_save_datasource", { submitLabel: saveLabel });
+  const dsForm = ui.form(dsInputs, "settings_save_datasource", saveIcon);
   const dsCard = ui.card([dsForm], { title: t("settings.sectionData"), padding: 20 });
 
   // ---- OAuth Scopes Section (tag_picker, only when huawei) ----
@@ -2335,9 +2329,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ],
     value: String(data.tuiShowToolCalls),
   });
-  const tuiForm = ui.form([tuiThemeSelect, tuiToolCallsSelect], "settings_save_tui", {
-    submitLabel: saveLabel,
-  });
+  const tuiForm = ui.form([tuiThemeSelect, tuiToolCallsSelect], "settings_save_tui", saveIcon);
   const tuiCard = ui.card([tuiForm], { title: t("settings.sectionTui"), padding: 20 });
 
   // ---- Embedding Section ----
@@ -2353,9 +2345,11 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     label: t("settings.embeddingModel"),
     value: data.embeddingModel,
   });
-  const embeddingForm = ui.form([embeddingToggle, embeddingModelInput], "settings_save_embedding", {
-    submitLabel: saveLabel,
-  });
+  const embeddingForm = ui.form(
+    [embeddingToggle, embeddingModelInput],
+    "settings_save_embedding",
+    saveIcon
+  );
   const embeddingCard = ui.card([embeddingForm], {
     title: t("settings.sectionEmbedding"),
     padding: 20,
@@ -2386,7 +2380,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const benchmarkForm = ui.form(
     [judgeSelect, concurrencyInput, applyEngineSelect],
     "settings_save_benchmark_v4",
-    { submitLabel: saveLabel }
+    saveIcon
   );
   const benchmarkCard = ui.card([benchmarkForm], {
     title: t("settings.sectionBenchmark"),
@@ -2419,7 +2413,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const chromeMcpForm = ui.form(
     [chromeCmdInput, chromeArgsInput, chromeBrowserUrlInput, chromeWsInput],
     "settings_save_mcp_chrome",
-    { submitLabel: saveLabel }
+    saveIcon
   );
   mcpChildren.push(ui.collapsible("Chrome DevTools", [chromeMcpForm], { expanded: true }));
 
@@ -2463,9 +2457,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       ])
     );
   }
-  const mcpRemoteForm = ui.form(remoteFormInputs, "settings_save_mcp_remote", {
-    submitLabel: t("settings.saveAll"),
-  });
+  const mcpRemoteForm = ui.form(remoteFormInputs, "settings_save_mcp_remote", saveIcon);
   const mcpRemoteAddBtn = ui.button(t("settings.addServer"), "settings_mcp_add", {
     icon: "plus",
     variant: "outline",
@@ -2494,7 +2486,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const pluginsMainForm = ui.form(
     [pluginEnabledSelect, pluginPathsInput],
     "settings_save_plugins_v2",
-    { submitLabel: saveLabel }
+    saveIcon
   );
   pluginsChildren.push(pluginsMainForm);
 
@@ -2564,7 +2556,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const contextForm = ui.form(
     [ctxLocationInput, ctxHemisphereSelect, proactiveEnabledSelect, proactiveIntervalInput],
     "settings_save_context",
-    { submitLabel: t("settings.saveContext") }
+    saveIcon
   );
   const contextCard = ui.card([contextForm], {
     title: t("settings.sectionContext"),
