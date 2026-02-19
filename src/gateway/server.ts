@@ -4757,6 +4757,7 @@ export class GatewaySession {
         versions = versionRows.map((v) => ({
           id: v.id,
           branchName: v.branch_name,
+          parentBranch: v.parent_branch || "main",
           status: v.status || "active",
           triggerMode: v.trigger_mode || "",
           triggerRef: v.trigger_ref || "",
@@ -5107,6 +5108,7 @@ export class GatewaySession {
       versions = versionRows.map((v) => ({
         id: v.id,
         branchName: v.branch_name,
+        parentBranch: v.parent_branch || "main",
         status: v.status || "active",
         triggerMode: v.trigger_mode || "",
         triggerRef: v.trigger_ref || "",

@@ -127,10 +127,12 @@ interface ExternalProgressInfo {
 interface VersionInfo {
   id: string;
   branchName: string;
+  parentBranch: string;
   status: string;
   triggerMode: string;
   triggerRef: string;
   scoreDelta: number | null;
+  latestScore?: number | null;
   filesChanged: string[];
   createdAt: number;
 }
@@ -991,23 +993,53 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     )
   );
 
-  // Left panel: version list (compact Vercel-style)
-  const versionListData = (data.versions || []).map((v) => ({
-    id: v.id.slice(0, 8),
-    branch: v.branchName,
-    status: v.status as "active" | "merged" | "abandoned",
-    trigger: v.triggerMode || undefined,
-    scoreDelta: v.scoreDelta,
-    filesChanged: v.filesChanged.length,
-    createdAt: v.createdAt,
-  }));
+  // Left panel: version graph (Git Graph style)
+  // Compute main branch score from benchmark runs
+  const mainRuns = (data.benchmarkRuns || []).filter(
+    (r) => r.status === "completed" && r.overall_score > 0 && !r.version_tag?.startsWith("evo/")
+  );
+  const mainLatestScore =
+    mainRuns.length > 0
+      ? mainRuns[0].overall_score <= 1
+        ? mainRuns[0].overall_score
+        : mainRuns[0].overall_score / 100
+      : null;
+
+  // Build version data with parent branch and latest score
+  const versionGraphData = (data.versions || []).map((v) => {
+    const runs = (data.benchmarkRuns || []).filter(
+      (r) =>
+        r.status === "completed" && r.overall_score > 0 && r.version_tag?.includes(v.branchName)
+    );
+    const latestScore =
+      runs.length > 0
+        ? runs[0].overall_score <= 1
+          ? runs[0].overall_score
+          : runs[0].overall_score / 100
+        : null;
+    return {
+      id: v.id.slice(0, 8),
+      branch: v.branchName,
+      parentBranch: v.parentBranch || "main",
+      status: v.status as "active" | "merged" | "abandoned",
+      trigger: v.triggerMode || undefined,
+      scoreDelta: v.scoreDelta,
+      latestScore,
+      filesChanged: v.filesChanged.length,
+      createdAt: v.createdAt,
+    };
+  });
 
   const leftPanel = ui.column(
     [
-      ui.versionList(versionListData, {
-        selectedBranch: data.selectedVersion,
-        onVersionClick: "view_version_from_list",
-      }),
+      ui.versionGraph(
+        { name: "main", latestScore: mainLatestScore, benchmarkCount: mainRuns.length },
+        versionGraphData,
+        {
+          selectedBranch: data.selectedVersion,
+          onVersionClick: "view_version_from_list",
+        }
+      ),
     ],
     { gap: 8 }
   );

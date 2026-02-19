@@ -127,8 +127,8 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderStepIndicator(comp, ctx);
     case "file_tree":
       return renderFileTree(comp, ctx);
-    case "version_list":
-      return renderVersionList(comp, ctx);
+    case "version_graph":
+      return renderVersionGraph(comp, ctx);
     case "diff_view":
       return renderDiffView(comp, ctx);
     case "code_editor":
@@ -777,14 +777,19 @@ function renderFileTree(comp: A2UIComponent, ctx: RenderContext): string[] {
   return lines;
 }
 
-function renderVersionList(comp: A2UIComponent, ctx: RenderContext): string[] {
+function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const mainBranch = comp.mainBranch as
+    | { name: string; latestScore?: number | null; benchmarkCount: number }
+    | undefined;
   const versions =
     (comp.versions as Array<{
       id: string;
       branch: string;
+      parentBranch: string;
       status: string;
       trigger?: string;
       scoreDelta?: number | null;
+      latestScore?: number | null;
       filesChanged?: number;
       createdAt: number;
     }>) || [];
@@ -792,34 +797,65 @@ function renderVersionList(comp: A2UIComponent, ctx: RenderContext): string[] {
   const selectedBranch = comp.selectedBranch as string | undefined;
   const lines: string[] = [];
 
+  // Main branch node
+  const mainName = mainBranch?.name || "main";
+  const mainScore = mainBranch?.latestScore;
+  const mainCount = mainBranch?.benchmarkCount || 0;
+  const mainScoreStr = mainScore != null ? ansi.bold(mainScore.toFixed(2)) : "";
+  const mainMeta =
+    mainCount > 0
+      ? ansi.dim(`latest benchmark · ${mainCount} runs`)
+      : ansi.dim("no benchmark runs");
+
+  lines.push(
+    indent(
+      ctx,
+      `${ansi.bold("●")} ${ansi.bold(mainName)} (HEAD)${mainScoreStr ? "  " + mainScoreStr : ""}`
+    )
+  );
+  lines.push(indent(ctx, `│  ${mainMeta}`));
+
   if (versions.length === 0) {
-    lines.push(indent(ctx, ansi.dim("  No versions yet")));
+    lines.push(indent(ctx, ansi.dim("│")));
+    lines.push(indent(ctx, ansi.dim("  No evolution versions yet")));
     return lines;
   }
 
-  for (const v of versions) {
+  for (let i = 0; i < versions.length; i++) {
+    const v = versions[i];
+    const isLast = i === versions.length - 1;
+    const connector = isLast ? "└" : "├";
+
     const statusIcon =
       v.status === "active"
-        ? ansi.yellow("●")
+        ? ansi.blue("●")
         : v.status === "merged"
           ? ansi.green("●")
           : ansi.dim("●");
 
-    const deltaStr =
-      v.scoreDelta != null
-        ? v.scoreDelta > 0
-          ? ansi.green(` +${v.scoreDelta.toFixed(1)}`)
-          : v.scoreDelta < 0
-            ? ansi.red(` ${v.scoreDelta.toFixed(1)}`)
-            : ""
-        : "";
+    const statusSuffix =
+      v.status === "merged"
+        ? ansi.green(" → merged")
+        : v.status === "abandoned"
+          ? ansi.dim(" ✕")
+          : ansi.blue(" [active]");
+
+    // Score display
+    let scoreStr = "";
+    if (v.latestScore != null) {
+      const scoreColor =
+        v.latestScore >= 0.9 ? ansi.green : v.latestScore >= 0.7 ? ansi.yellow : ansi.red;
+      scoreStr = "  " + scoreColor(v.latestScore.toFixed(2));
+      if (v.scoreDelta != null && v.scoreDelta !== 0) {
+        const deltaColor = v.scoreDelta > 0 ? ansi.green : ansi.red;
+        scoreStr += " " + deltaColor(`(${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(2)})`);
+      }
+    }
 
     const selected = v.branch === selectedBranch;
-    const marker = selected ? ansi.cyan("▸ ") : "  ";
-    const branchStr = selected ? ansi.bold(v.branch) : v.branch;
-    const statusStr = ansi.dim(`[${v.status}]`);
+    const branchStr = selected ? ansi.bold(ansi.cyan(v.branch)) : v.branch;
 
-    let prefix = marker;
+    let prefix = "";
     if (onVersionClick) {
       ctx.actionCounter++;
       ctx.actions.push({
@@ -831,7 +867,9 @@ function renderVersionList(comp: A2UIComponent, ctx: RenderContext): string[] {
       prefix = `${ansi.cyan(`[${ctx.actionCounter}]`)} `;
     }
 
-    lines.push(indent(ctx, `${prefix}${statusIcon} ${branchStr}  ${statusStr}${deltaStr}`));
+    lines.push(
+      indent(ctx, `${prefix}${connector}── ${statusIcon} ${branchStr}${statusSuffix}${scoreStr}`)
+    );
   }
 
   return lines;

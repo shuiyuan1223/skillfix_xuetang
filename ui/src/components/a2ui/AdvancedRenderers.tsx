@@ -882,17 +882,12 @@ export function renderLogViewer(c: A2UIComponent, _ctx: RenderContext) {
   );
 }
 
-// ---- Version List (Vercel Deployments style) ----
-export function renderVersionList(c: A2UIComponent, ctx: RenderContext) {
+// ---- Version Graph (Git Graph style tree) ----
+export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
+  const mainBranch = c.mainBranch as { name: string; latestScore?: number | null; benchmarkCount: number } | undefined;
   const versions = (c.versions as any[]) || [];
   const selectedBranch = c.selectedBranch as string | undefined;
   const onVersionClick = c.onVersionClick as string | undefined;
-
-  const statusColors: Record<string, string> = {
-    active: "rgb(var(--color-primary))",
-    merged: "rgb(var(--color-success))",
-    abandoned: "rgb(var(--color-text-muted))",
-  };
 
   const relativeTime = (ts: number) => {
     const diff = Date.now() - ts;
@@ -906,47 +901,119 @@ export function renderVersionList(c: A2UIComponent, ctx: RenderContext) {
     return `${Math.floor(days / 30)}mo ago`;
   };
 
-  if (versions.length === 0) {
-    return (
-      <div className="flex flex-col items-center py-12 text-text-muted">
-        <span className="w-8 h-8 mb-3 opacity-40" dangerouslySetInnerHTML={{ __html: getIcon("git-branch") }} />
-        <span className="text-sm">No versions yet</span>
-      </div>
-    );
-  }
+  const mainName = mainBranch?.name || "main";
+  const mainScore = mainBranch?.latestScore;
+  const mainCount = mainBranch?.benchmarkCount || 0;
+  const isMainSelected = selectedBranch === "main";
 
   return (
-    <div className="flex flex-col gap-1">
-      {versions.map((v: any, i: number) => {
-        const selected = v.branch === selectedBranch;
-        return (
-          <div
-            key={i}
-            className={`flex flex-col gap-0.5 px-3 py-2.5 rounded-lg cursor-pointer transition-colors
-              ${selected ? "bg-primary/8 border-l-2 border-l-primary" : "hover:bg-surface-hover border-l-2 border-l-transparent"}`}
-            onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: statusColors[v.status as string] || statusColors.abandoned }} />
-              <span className="text-sm font-medium font-mono text-text flex-1 truncate">{v.branch}</span>
-              <span className="text-[11px] text-text-muted shrink-0">{relativeTime(v.createdAt as number)}</span>
-            </div>
-            <div className="flex items-center gap-2 ml-[18px] text-xs text-text-muted">
-              <span>{v.status}</span>
-              {v.trigger && <><span>·</span><span>{v.trigger}</span></>}
-              {v.scoreDelta != null && (
-                <>
-                  <span>·</span>
-                  <span className={v.scoreDelta > 0 ? "text-emerald-400" : v.scoreDelta < 0 ? "text-red-400" : ""}>
-                    {v.scoreDelta > 0 ? "+" : ""}{Number(v.scoreDelta).toFixed(1)}
-                  </span>
-                </>
-              )}
-              {v.filesChanged > 0 && <><span>·</span><span>{v.filesChanged} files</span></>}
+    <div className="flex flex-col font-mono text-sm">
+      {/* Main branch node */}
+      <div
+        className={`flex items-start gap-0 cursor-pointer rounded-lg transition-colors px-2 py-2
+          ${isMainSelected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
+        onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: "main" })}
+      >
+        <div className="flex flex-col items-center w-8 shrink-0">
+          <div className="w-3.5 h-3.5 rounded-full bg-text border-2 border-text shrink-0" />
+          {versions.length > 0 && <div className="w-0.5 flex-1 bg-border min-h-[8px] mt-1" />}
+        </div>
+        <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+          <div>
+            <span className="font-semibold text-text">{mainName}</span>
+            <span className="text-[11px] text-text-muted ml-2">HEAD</span>
+            <div className="text-[11px] text-text-muted mt-0.5">
+              {mainCount > 0 ? `latest benchmark · ${mainCount} runs` : "no benchmark runs"}
             </div>
           </div>
-        );
-      })}
+          {mainScore != null && (
+            <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: mainScore >= 0.9 ? "#4ade80" : mainScore >= 0.7 ? "#fbbf24" : "#f87171" }}>
+              {mainScore.toFixed(2)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Version nodes */}
+      {versions.length === 0 ? (
+        <div className="flex items-center gap-0 px-2 py-3">
+          <div className="w-8 shrink-0" />
+          <span className="text-xs text-text-muted">No evolution versions yet</span>
+        </div>
+      ) : (
+        versions.map((v: any, i: number) => {
+          const selected = v.branch === selectedBranch;
+          const isLast = i === versions.length - 1;
+          const status = v.status as string;
+          const dotColor = status === "active" ? "rgb(var(--color-primary))"
+            : status === "merged" ? "rgb(var(--color-success))"
+            : "rgb(var(--color-text-muted))";
+          const dotBorder = status === "active" ? "border-primary"
+            : status === "merged" ? "border-success"
+            : "border-text-muted";
+
+          return (
+            <div key={i} className="flex items-stretch">
+              {/* Tree connector */}
+              <div className="flex flex-col items-center w-8 shrink-0 px-2">
+                {/* Vertical trunk line */}
+                <div className={`w-0.5 h-3 ${isLast ? "bg-border" : "bg-border"}`} />
+                {/* Horizontal branch + dot */}
+                <div className="flex items-center self-stretch">
+                  <div className="w-0.5 h-0.5" />
+                  <div className="h-0.5 flex-1 bg-border" />
+                </div>
+                {/* Continue trunk below */}
+                {!isLast && <div className="w-0.5 flex-1 bg-border min-h-[8px]" />}
+              </div>
+
+              {/* Version content */}
+              <div
+                className={`flex-1 min-w-0 flex flex-col gap-0.5 px-2 py-2 rounded-lg cursor-pointer transition-colors -ml-1
+                  ${selected ? "bg-primary/8 border-l-2 border-l-primary" : "hover:bg-surface-hover border-l-2 border-l-transparent"}`}
+                onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 border-2 ${dotBorder}`} style={{ background: dotColor }} />
+                    <span className={`text-sm font-medium truncate ${status === "abandoned" ? "text-text-muted" : "text-text"}`}>
+                      {v.branch}
+                    </span>
+                    {status === "merged" && (
+                      <span className="text-[10px] text-emerald-400 shrink-0">→ merged</span>
+                    )}
+                    {status === "abandoned" && (
+                      <span className="text-[10px] text-text-muted shrink-0">✕</span>
+                    )}
+                    {status === "active" && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary shrink-0">active</span>
+                    )}
+                  </div>
+                  {/* Score display */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {v.latestScore != null && (
+                      <span className="text-sm font-semibold tabular-nums" style={{ color: v.latestScore >= 0.9 ? "#4ade80" : v.latestScore >= 0.7 ? "#fbbf24" : "#f87171" }}>
+                        {v.latestScore.toFixed(2)}
+                      </span>
+                    )}
+                    {v.scoreDelta != null && v.scoreDelta !== 0 && (
+                      <span className={`text-[11px] font-medium tabular-nums ${v.scoreDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        ({v.scoreDelta > 0 ? "+" : ""}{Number(v.scoreDelta).toFixed(2)})
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 ml-[18px] text-[11px] text-text-muted">
+                  {v.trigger && <span>{v.trigger}</span>}
+                  {v.trigger && v.filesChanged > 0 && <span>·</span>}
+                  {v.filesChanged > 0 && <span>{v.filesChanged} files</span>}
+                  <span className="ml-auto">{relativeTime(v.createdAt as number)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

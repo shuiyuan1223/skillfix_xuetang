@@ -45,7 +45,7 @@ export type A2UIComponentType =
   | "git_timeline"
   | "step_indicator"
   | "file_tree"
-  | "version_list"
+  | "version_graph"
   // Arena dashboard components
   | "arena_pills"
   | "arena_score_table"
@@ -356,15 +356,22 @@ export interface FileTreeComponent extends A2UIComponent {
   onFileSelect?: string;
 }
 
-// Version List Component (Vercel Deployments style)
-export interface VersionListComponent extends A2UIComponent {
-  type: "version_list";
+// Version Graph Component (Git Graph style tree)
+export interface VersionGraphComponent extends A2UIComponent {
+  type: "version_graph";
+  mainBranch: {
+    name: string;
+    latestScore?: number | null;
+    benchmarkCount: number;
+  };
   versions: {
     id: string;
     branch: string;
+    parentBranch: string;
     status: "active" | "merged" | "abandoned";
     trigger?: string;
     scoreDelta?: number | null;
+    latestScore?: number | null;
     filesChanged?: number;
     createdAt: number;
   }[];
@@ -656,12 +663,13 @@ export class A2UIGenerator {
     return id;
   }
 
-  versionList(
-    versions: VersionListComponent["versions"],
-    opts: Partial<VersionListComponent> = {}
+  versionGraph(
+    mainBranch: VersionGraphComponent["mainBranch"],
+    versions: VersionGraphComponent["versions"],
+    opts: Partial<VersionGraphComponent> = {}
   ): string {
-    const id = this.nextId("vlist");
-    this.components.set(id, { id, type: "version_list", versions, ...opts });
+    const id = this.nextId("vgraph");
+    this.components.set(id, { id, type: "version_graph", mainBranch, versions, ...opts });
     return id;
   }
 
