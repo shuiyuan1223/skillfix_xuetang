@@ -2136,10 +2136,10 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     { value: "", label: t("settings.defaultModelFallback") },
     ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
   ];
-  const agentSections: string[] = [];
+  // Build collapsibles for each agent (no per-agent form — one form wraps all)
+  const agentFormChildren: string[] = [];
   for (const profile of data.agentProfiles) {
     const pfx = `ap__${profile.id}__`;
-    const children: string[] = [];
 
     // Agent ID title + delete button
     const agentTitle = ui.text(profile.id, "h3");
@@ -2149,63 +2149,61 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       tooltip: t("settings.deleteAgent"),
       payload: { agentId: profile.id },
     });
-    children.push(ui.row([agentTitle, agentDeleteBtn], { justify: "between", align: "center" }));
+    const titleRow = ui.row([agentTitle, agentDeleteBtn], { justify: "between", align: "center" });
 
-    // Form: model, workspace, sessionPath + tag pickers + save/restore at bottom-right
-    const formFields = [
-      ui.formInput(`${pfx}model`, "select", {
-        label: t("settings.agentModelLabel"),
-        options: agentModelRefOptions,
-        value: profile.model,
-      }),
-      ui.formInput(`${pfx}workspace`, "text", {
-        label: t("settings.agentWorkspace"),
-        value: profile.workspace,
-        placeholder: "users/{uid}",
-      }),
-      ui.formInput(`${pfx}sessionPath`, "text", {
-        label: t("settings.agentSessionPath"),
-        value: profile.sessionPath,
-        placeholder: "users/{uid}/sessions/pha",
-      }),
-      // Tag pickers inside form (their buttons are type="button", won't trigger submit)
-      ui.tagPicker({
-        label: t("settings.agentToolTags"),
-        selected: profile.toolTags,
-        options: data.configTags,
-        onToggle: "settings_agent_tag_toggle",
-        payload: { agentId: profile.id, kind: "tool" },
-        placeholder: t("settings.addTag"),
-      }),
-      ui.tagPicker({
-        label: t("settings.agentSkillsTags"),
-        selected: profile.skillTags,
-        options: data.configTags,
-        onToggle: "settings_agent_tag_toggle",
-        payload: { agentId: profile.id, kind: "skill" },
-        placeholder: t("settings.addTag"),
-      }),
-      // Restore defaults button (rendered inside form but type="button", won't trigger submit)
-      ui.button("", "settings_agent_restore", {
-        icon: "refresh-cw",
-        variant: "ghost",
-        tooltip: t("settings.restoreDefaults"),
-        payload: { agentId: profile.id },
-      }),
-    ];
-    children.push(ui.form(formFields, "settings_save_agents", saveIcon));
+    // Form inputs (collected by the outer form on submit)
+    const modelInput = ui.formInput(`${pfx}model`, "select", {
+      label: t("settings.agentModelLabel"),
+      options: agentModelRefOptions,
+      value: profile.model,
+    });
+    const workspaceInput = ui.formInput(`${pfx}workspace`, "text", {
+      label: t("settings.agentWorkspace"),
+      value: profile.workspace,
+      placeholder: "users/{uid}",
+    });
+    const sessionPathInput = ui.formInput(`${pfx}sessionPath`, "text", {
+      label: t("settings.agentSessionPath"),
+      value: profile.sessionPath,
+      placeholder: "users/{uid}/sessions/pha",
+    });
 
-    // Expand based on expandedAgentId or default to "pha"
+    // Tag pickers (their buttons are type="button", won't trigger form submit)
+    const toolTagPicker = ui.tagPicker({
+      label: t("settings.agentToolTags"),
+      selected: profile.toolTags,
+      options: data.configTags,
+      onToggle: "settings_agent_tag_toggle",
+      payload: { agentId: profile.id, kind: "tool" },
+      placeholder: t("settings.addTag"),
+    });
+    const skillTagPicker = ui.tagPicker({
+      label: t("settings.agentSkillsTags"),
+      selected: profile.skillTags,
+      options: data.configTags,
+      onToggle: "settings_agent_tag_toggle",
+      payload: { agentId: profile.id, kind: "skill" },
+      placeholder: t("settings.addTag"),
+    });
+
     const shouldExpand = data.expandedAgentId
       ? profile.id === data.expandedAgentId
       : profile.id === "pha";
-    agentSections.push(ui.collapsible(profile.id, children, { expanded: shouldExpand }));
+    agentFormChildren.push(
+      ui.collapsible(
+        profile.id,
+        [titleRow, modelInput, workspaceInput, sessionPathInput, toolTagPicker, skillTagPicker],
+        { expanded: shouldExpand }
+      )
+    );
   }
+  // One form wrapping all agent collapsibles — single save button at bottom
+  const agentsForm = ui.form(agentFormChildren, "settings_save_agents", saveIcon);
   const addAgentBtn = ui.button(t("settings.addAgent"), "settings_agent_add", {
     icon: "plus",
     variant: "outline",
   });
-  const agentsCard = ui.card([...agentSections, addAgentBtn], {
+  const agentsCard = ui.card([agentsForm, addAgentBtn], {
     title: t("settings.sectionAgents"),
     padding: 20,
   });

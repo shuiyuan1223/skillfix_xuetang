@@ -259,7 +259,7 @@ export function A2UIRenderer({
       case "evolution_pipeline": return renderEvolutionPipeline(c, ctx);
       case "log_viewer": return renderLogViewer(c, ctx);
       case "auth_page": return rcAuthPage(c);
-      case "tag_picker": return rcTagPicker(c);
+      case "tag_picker": return <TagPickerComponent key={c.id} c={c} sendAction={sendAction} />;
       default:
         return <div className="text-text-muted text-xs p-2">[Unknown: {c.type}]</div>;
     }
@@ -615,83 +615,7 @@ export function A2UIRenderer({
     );
   }
 
-  function rcTagPicker(c: A2UIComponent) {
-    const selected = (c.selected as string[]) || [];
-    const options = (c.options as string[]) || [];
-    const onToggle = c.onToggle as string;
-    const basePayload = (c.payload as Record<string, unknown>) || {};
-    const placeholder = (c.placeholder as string) || "...";
-    const label = (c.label as string) || "";
-    const [open, setOpen] = React.useState(false);
-    const [customVal, setCustomVal] = React.useState("");
-    const dropRef = React.useRef<HTMLDivElement>(null);
-
-    // Close on outside click
-    React.useEffect(() => {
-      if (!open) return;
-      const handler = (e: MouseEvent) => {
-        if (dropRef.current && !dropRef.current.contains(e.target as Node)) setOpen(false);
-      };
-      document.addEventListener("mousedown", handler);
-      return () => document.removeEventListener("mousedown", handler);
-    }, [open]);
-
-    const allTags = [...new Set([...options, ...selected])].sort();
-    const handleToggle = (tag: string) => {
-      const isSelected = selected.includes(tag);
-      sendAction(onToggle, { ...basePayload, tag, action: isSelected ? "remove" : "add" });
-    };
-    const handleCustomAdd = () => {
-      const v = customVal.trim();
-      if (v && !selected.includes(v)) {
-        sendAction(onToggle, { ...basePayload, tag: v, action: "add" });
-      }
-      setCustomVal("");
-    };
-
-    return (
-      <div ref={dropRef} className="relative">
-        {label && <div className="text-xs text-text-muted mb-1">{label}</div>}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {selected.map((tag) => (
-            <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-medium">
-              {tag}
-              <button type="button" className="hover:text-red-500 transition-colors cursor-pointer bg-transparent border-none p-0 text-current" onClick={() => handleToggle(tag)}>
-                <span className="text-[10px]">×</span>
-              </button>
-            </span>
-          ))}
-          <button type="button" className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-border text-xs text-text-muted cursor-pointer bg-transparent hover:border-primary hover:text-primary transition-colors" onClick={() => setOpen(!open)}>
-            <span className="text-[11px]">+</span> {placeholder}
-          </button>
-        </div>
-        {open && (
-          <div className="absolute z-50 mt-1 w-64 bg-surface border border-border rounded-lg shadow-lg overflow-hidden" style={{ boxShadow: "var(--shadow-lg)" }}>
-            <div className="p-2 border-b border-border">
-              <input type="text" value={customVal} onChange={(e) => setCustomVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCustomAdd(); } }} placeholder={placeholder} className="w-full px-2 py-1.5 text-xs rounded-md border border-border bg-surface-hover text-text outline-none focus:border-primary" />
-            </div>
-            <div className="max-h-48 overflow-y-auto p-1">
-              {allTags.map((tag) => {
-                const checked = selected.includes(tag);
-                return (
-                  <label key={tag} className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer hover:bg-surface-hover transition-colors">
-                    <input type="checkbox" checked={checked} onChange={() => handleToggle(tag)} className="accent-[rgb(var(--color-primary))]" />
-                    <span className={checked ? "text-text font-medium" : "text-text-muted"}>{tag}</span>
-                  </label>
-                );
-              })}
-              {customVal.trim() && !allTags.includes(customVal.trim()) && (
-                <label className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer hover:bg-surface-hover transition-colors text-primary" onClick={handleCustomAdd}>
-                  <span>+</span>
-                  <span>"{customVal.trim()}"</span>
-                </label>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+  // rcTagPicker extracted to standalone TagPickerComponent (see below)
 
   function rcNav(c: A2UIComponent) {
     const items = c.items as { id: string; label: string; icon?: string }[];
@@ -1263,4 +1187,144 @@ function parseStyle(styleStr: string): React.CSSProperties {
     }
   }
   return style as React.CSSProperties;
+}
+
+// ============================================================================
+// TagPickerComponent — standalone React component (proper hooks support)
+// ============================================================================
+function TagPickerComponent({
+  c,
+  sendAction,
+}: {
+  c: A2UIComponent;
+  sendAction: (action: string, payload?: Record<string, unknown>) => void;
+}) {
+  const selected = (c.selected as string[]) || [];
+  const options = (c.options as string[]) || [];
+  const onToggle = c.onToggle as string;
+  const basePayload = (c.payload as Record<string, unknown>) || {};
+  const placeholder = (c.placeholder as string) || "...";
+  const label = (c.label as string) || "";
+  const [open, setOpen] = React.useState(false);
+  const [customVal, setCustomVal] = React.useState("");
+  const dropRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const allTags = React.useMemo(
+    () => [...new Set([...options, ...selected])].sort(),
+    [options, selected],
+  );
+
+  const handleToggle = (tag: string) => {
+    const isSelected = selected.includes(tag);
+    sendAction(onToggle, { ...basePayload, tag, action: isSelected ? "remove" : "add" });
+  };
+  const handleCustomAdd = () => {
+    const v = customVal.trim();
+    if (v && !selected.includes(v)) {
+      sendAction(onToggle, { ...basePayload, tag: v, action: "add" });
+    }
+    setCustomVal("");
+  };
+
+  // Custom check icon SVG
+  const checkSvg = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+  return (
+    <div ref={dropRef} className="relative">
+      {label && <div className="text-xs text-text-muted mb-1">{label}</div>}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {selected.map((tag) => (
+          <span
+            key={tag}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-medium"
+          >
+            {tag}
+            <button
+              type="button"
+              className="hover:text-red-500 transition-colors cursor-pointer bg-transparent border-none p-0 text-current"
+              onClick={() => handleToggle(tag)}
+            >
+              <span className="text-[10px]">&times;</span>
+            </button>
+          </span>
+        ))}
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-border text-xs text-text-muted cursor-pointer bg-transparent hover:border-primary hover:text-primary transition-colors"
+          onClick={() => setOpen(!open)}
+        >
+          <span className="text-[11px]">+</span> {placeholder}
+        </button>
+      </div>
+      {open && (
+        <div
+          className="absolute z-50 mt-1 w-64 bg-surface border border-border rounded-lg shadow-lg overflow-hidden"
+          style={{ boxShadow: "var(--shadow-lg)" }}
+        >
+          <div className="p-2 border-b border-border">
+            <input
+              type="text"
+              value={customVal}
+              onChange={(e) => setCustomVal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleCustomAdd();
+                }
+              }}
+              placeholder={placeholder}
+              className="w-full px-2 py-1.5 text-xs rounded-md border border-border bg-surface-hover text-text outline-none focus:border-primary"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto p-1">
+            {allTags.map((tag) => {
+              const checked = selected.includes(tag);
+              return (
+                <div
+                  key={tag}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer transition-colors ${checked ? "bg-primary/8" : "hover:bg-surface-hover"}`}
+                  onClick={() => handleToggle(tag)}
+                >
+                  <span
+                    className={`inline-flex items-center justify-center w-4 h-4 rounded border transition-all duration-150 ${checked ? "bg-primary border-primary text-white" : "border-border bg-transparent"}`}
+                  >
+                    {checked && (
+                      <span dangerouslySetInnerHTML={{ __html: checkSvg }} />
+                    )}
+                  </span>
+                  <span
+                    className={
+                      checked ? "text-text font-medium" : "text-text-muted"
+                    }
+                  >
+                    {tag}
+                  </span>
+                </div>
+              );
+            })}
+            {customVal.trim() && !allTags.includes(customVal.trim()) && (
+              <div
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer hover:bg-surface-hover transition-colors text-primary"
+                onClick={handleCustomAdd}
+              >
+                <span>+</span>
+                <span>&ldquo;{customVal.trim()}&rdquo;</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
