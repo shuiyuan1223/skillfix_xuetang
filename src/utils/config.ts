@@ -284,6 +284,8 @@ export interface AgentProfileConfig {
     exclude?: string[];
     /** @deprecated Use include/exclude instead */
     categories?: string[];
+    /** Agent-level tags (e.g. "pha", "sa") */
+    tags?: string[];
   };
   skills?: {
     /** Tag-based filter: skill must have at least one matching tag */

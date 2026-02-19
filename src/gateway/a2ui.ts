@@ -56,7 +56,8 @@ export type A2UIComponentType =
   | "playground_fab"
   | "evolution_pipeline"
   | "log_viewer"
-  | "auth_page";
+  | "auth_page"
+  | "tag_picker";
 
 // Base component interface
 export interface A2UIComponent {
@@ -642,6 +643,23 @@ export class A2UIGenerator {
   ): string {
     const id = this.nextId("input");
     this.components.set(id, { id, type: "form_input", name, inputType, ...opts });
+    return id;
+  }
+
+  /**
+   * Tag picker: dropdown with checkboxes + custom input.
+   * Displays selected tags as badge chips; dropdown allows toggle + custom add.
+   */
+  tagPicker(opts: {
+    selected: string[];
+    options: string[];
+    onToggle: string;
+    payload?: Record<string, unknown>;
+    placeholder?: string;
+    label?: string;
+  }): string {
+    const id = this.nextId("tagpick");
+    this.components.set(id, { id, type: "tag_picker", ...opts });
     return id;
   }
 

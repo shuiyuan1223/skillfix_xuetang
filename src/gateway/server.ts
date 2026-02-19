@@ -22,7 +22,6 @@ import {
   type PHAAgent,
 } from "../agent/pha-agent.js";
 import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
-import { ALL_TOOL_CATEGORIES } from "../tools/types.js";
 import { getDataSource } from "../tools/health-data.js";
 import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
@@ -2311,22 +2310,27 @@ export class GatewaySession {
             model: p.model || "",
             workspace: p.workspace || "",
             sessionPath: p.sessionPath || "",
-            toolCategories: p.tools.categories as string[],
+            toolTags: p.tools.tags || [],
             skillTags: p.skills?.tags || [],
           };
         });
 
-        // Collect all unique skill tags from SKILL.md files
-        let allSkillTags: string[] = [];
+        // Collect all unique tags from SKILL.md + agent profiles
+        let allTags: string[] = [];
         try {
           const skillsResult = (await listSkillsTool.execute({})) as any;
           const tagSet = new Set<string>();
           for (const s of skillsResult.skills || []) {
             for (const tag of s.tags || []) tagSet.add(tag);
           }
-          allSkillTags = [...tagSet].sort();
+          // Also include tags from agent profiles
+          for (const ap of agentProfiles) {
+            for (const t2 of ap.toolTags) tagSet.add(t2);
+            for (const t2 of ap.skillTags) tagSet.add(t2);
+          }
+          allTags = [...tagSet].sort();
         } catch {
-          allSkillTags = ["pha", "sa", "pha-markdown"];
+          allTags = ["pha", "sa", "pha-markdown"];
         }
 
         mainPage = generateSettingsPage({
@@ -2342,8 +2346,7 @@ export class GatewaySession {
           orchestratorJudge: config.orchestrator?.judge || "",
           orchestratorEmbedding: config.orchestrator?.embedding || "",
           agentProfiles,
-          allToolCategories: ALL_TOOL_CATEGORIES as string[],
-          allSkillTags,
+          allTags,
           expandedAgentId: this._settingsExpandedAgent,
           benchmarkModelRefs: config.benchmark?.models || [],
           gatewayPort: config.gateway?.port || 8000,
@@ -4318,9 +4321,7 @@ export class GatewaySession {
       action === "settings_scope_delete" ||
       action === "settings_agent_add" ||
       action === "settings_agent_delete" ||
-      action === "settings_agent_tag_add" ||
-      action === "settings_agent_tag_add_custom" ||
-      action === "settings_agent_tag_delete" ||
+      action === "settings_agent_tag_toggle" ||
       action === "settings_copy_config" ||
       action === "settings_download_config"
     ) {
@@ -4783,7 +4784,8 @@ export class GatewaySession {
           if (!config.agents) config.agents = {};
           const newId = `agent-${Date.now()}`;
           config.agents[newId] = {
-            tools: { categories: ["health", "memory", "profile"] },
+            tools: { categories: ["health", "memory", "profile"], tags: [] },
+            skills: { tags: [] },
           };
         } else if (action === "settings_agent_delete") {
           // Delete an agent by ID
@@ -4791,60 +4793,32 @@ export class GatewaySession {
           if (agentId && config.agents) {
             delete config.agents[agentId];
           }
-        } else if (action === "settings_agent_tag_add") {
-          // Add predefined tag via select onChange: { name: "ap__{id}__{tool|skill}_preset", value }
-          const name = String(formData?.name || "");
-          const value = String(formData?.value || "").trim();
-          const m = name.match(/^ap__(.+?)__(tool|skill)_preset$/);
-          if (m && value) {
-            const [, agentId, kind] = m;
+        } else if (action === "settings_agent_tag_toggle") {
+          // Unified tag toggle from tag_picker: { agentId, kind: "tool"|"skill", tag, action: "add"|"remove" }
+          const agentId = String(formData?.agentId || "");
+          const tag = String(formData?.tag || "");
+          const kind = String(formData?.kind || "");
+          const tagAction = String(formData?.action || "");
+          if (agentId && tag) {
             if (!config.agents) config.agents = {};
             if (!config.agents[agentId]) config.agents[agentId] = {};
             const ap = config.agents[agentId];
             if (kind === "tool") {
-              const cats = (ap.tools?.categories as string[]) || [];
-              if (!cats.includes(value)) cats.push(value);
-              ap.tools = { ...ap.tools, categories: cats };
-            } else {
-              const tags = ap.skills?.tags || [];
-              if (!tags.includes(value)) tags.push(value);
-              ap.skills = { ...ap.skills, tags };
-            }
-            this._settingsExpandedAgent = agentId;
-          }
-        } else if (action === "settings_agent_tag_add_custom") {
-          // Add custom tag via mini form: field name "ap__{id}__{tool|skill}_custom"
-          if (!config.agents) config.agents = {};
-          for (const [key, val] of Object.entries(formData)) {
-            const m2 = key.match(/^ap__(.+?)__(tool|skill)_custom$/);
-            const tagVal = String(val || "").trim();
-            if (m2 && tagVal) {
-              const [, agentId, kind] = m2;
-              if (!config.agents[agentId]) config.agents[agentId] = {};
-              const ap = config.agents[agentId];
-              if (kind === "tool") {
-                const cats = (ap.tools?.categories as string[]) || [];
-                if (!cats.includes(tagVal)) cats.push(tagVal);
-                ap.tools = { ...ap.tools, categories: cats };
-              } else {
-                const tags = ap.skills?.tags || [];
-                if (!tags.includes(tagVal)) tags.push(tagVal);
-                ap.skills = { ...ap.skills, tags };
+              const tags = (ap.tools?.tags as string[]) || [];
+              if (tagAction === "add" && !tags.includes(tag)) tags.push(tag);
+              else if (tagAction === "remove") {
+                const idx = tags.indexOf(tag);
+                if (idx >= 0) tags.splice(idx, 1);
               }
-              this._settingsExpandedAgent = agentId;
-            }
-          }
-        } else if (action === "settings_agent_tag_delete") {
-          // Delete a tag: payload { agentId, tag, kind: "tool"|"skill" }
-          const agentId = String(formData?.agentId || "");
-          const tag = String(formData?.tag || "");
-          const kind = String(formData?.kind || "");
-          if (agentId && tag && config.agents?.[agentId]) {
-            const ap = config.agents[agentId];
-            if (kind === "tool" && ap.tools?.categories) {
-              ap.tools.categories = (ap.tools.categories as string[]).filter((c) => c !== tag);
-            } else if (kind === "skill" && ap.skills?.tags) {
-              ap.skills.tags = ap.skills.tags.filter((t2) => t2 !== tag);
+              ap.tools = { ...ap.tools, tags };
+            } else if (kind === "skill") {
+              const tags = ap.skills?.tags || [];
+              if (tagAction === "add" && !tags.includes(tag)) tags.push(tag);
+              else if (tagAction === "remove") {
+                const idx = tags.indexOf(tag);
+                if (idx >= 0) tags.splice(idx, 1);
+              }
+              ap.skills = { ...ap.skills, tags };
             }
             this._settingsExpandedAgent = agentId;
           }
@@ -4856,10 +4830,7 @@ export class GatewaySession {
 
         saveConfig(config);
         // Don't show "saved" toast for add/delete tag operations (the badge update is sufficient feedback)
-        const isTagOp =
-          action === "settings_agent_tag_add" ||
-          action === "settings_agent_tag_add_custom" ||
-          action === "settings_agent_tag_delete";
+        const isTagOp = action === "settings_agent_tag_toggle";
         if (!isTagOp) {
           send(generateToast(t("settings.saved"), "success"));
         }

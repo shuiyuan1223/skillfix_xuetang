@@ -47,7 +47,7 @@ export interface AgentProfile {
   workspace?: string;
   /** Session path template relative to .pha/ (e.g. "users/{uid}/sessions/pha") */
   sessionPath?: string;
-  tools: { categories: ToolCategory[] };
+  tools: { categories: ToolCategory[]; tags?: string[] };
   skills?: {
     tags?: string[];
     include?: string[];
@@ -81,7 +81,7 @@ const BUILTIN_PROFILES: Record<string, AgentProfile> = {
     id: "pha",
     workspace: "users/{uid}",
     sessionPath: "users/{uid}/sessions/pha",
-    tools: { categories: PHA_TOOL_CATEGORIES },
+    tools: { categories: PHA_TOOL_CATEGORIES, tags: ["pha"] },
     skills: { tags: ["pha"] },
     context: { bootstrap: true },
   },
@@ -89,7 +89,7 @@ const BUILTIN_PROFILES: Record<string, AgentProfile> = {
     id: "pha4old",
     workspace: "users/{uid}",
     sessionPath: "users/{uid}/sessions/pha4old",
-    tools: { categories: PHA_TOOL_CATEGORIES },
+    tools: { categories: PHA_TOOL_CATEGORIES, tags: ["pha"] },
     skills: { tags: ["pha", "pha-markdown"] },
     context: { bootstrap: true },
     skillHint: "legacy-streaming",
@@ -98,7 +98,7 @@ const BUILTIN_PROFILES: Record<string, AgentProfile> = {
     id: "sa",
     workspace: "users/system",
     sessionPath: "users/system/sessions/sa",
-    tools: { categories: ["git", "evolution", "skill", "config"] as ToolCategory[] },
+    tools: { categories: ["git", "evolution", "skill", "config"] as ToolCategory[], tags: ["sa"] },
     skills: { tags: ["sa"] },
     context: { bootstrap: true },
   },
@@ -127,6 +127,7 @@ export function getAgentProfile(id: string): AgentProfile {
     sessionPath: override.sessionPath ?? base.sessionPath,
     tools: {
       categories: (override.tools?.categories as ToolCategory[]) || base.tools.categories,
+      tags: override.tools?.tags || base.tools.tags,
     },
     skills: override.skills
       ? {

@@ -1987,13 +1987,11 @@ export interface SettingsPageData {
     model: string;
     workspace: string;
     sessionPath: string;
-    toolCategories: string[];
+    toolTags: string[];
     skillTags: string[];
   }>;
-  /** All available tool categories for multi-select */
-  allToolCategories: string[];
-  /** All available skill tags discovered from SKILL.md files */
-  allSkillTags: string[];
+  /** All available tags discovered from agents + SKILL.md files */
+  allTags: string[];
   /** Which agent collapsible to expand (after tag add/delete) */
   expandedAgentId?: string;
   benchmarkModelRefs: string[];
@@ -2177,85 +2175,29 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       ui.form(formFields, "settings_save_agents", { submitLabel: t("settings.saveAgents") })
     );
 
-    // ---- Tool Tags (badge chips) ----
-    children.push(ui.text(t("settings.agentToolTags"), "caption"));
-    const toolBadgePairs: string[] = [];
-    for (const cat of profile.toolCategories) {
-      const badge = ui.badge(cat, { variant: "default", size: "sm" });
-      const xBtn = ui.button("", "settings_agent_tag_delete", {
-        icon: "x",
-        variant: "ghost",
-        payload: { agentId: profile.id, tag: cat, kind: "tool" },
-      });
-      toolBadgePairs.push(ui.row([badge, xBtn], { gap: 2, align: "center" }));
-    }
-    if (toolBadgePairs.length > 0) {
-      children.push(ui.row(toolBadgePairs, { gap: 6, wrap: true }));
-    }
-    // Select for predefined tool tags + mini form for custom
-    const availableTools = data.allToolCategories.filter(
-      (c) => !profile.toolCategories.includes(c)
+    // ---- Tool Tags (tag picker) ----
+    children.push(
+      ui.tagPicker({
+        label: t("settings.agentToolTags"),
+        selected: profile.toolTags,
+        options: data.allTags,
+        onToggle: "settings_agent_tag_toggle",
+        payload: { agentId: profile.id, kind: "tool" },
+        placeholder: t("settings.addTag"),
+      })
     );
-    const toolAddRow: string[] = [];
-    if (availableTools.length > 0) {
-      toolAddRow.push(
-        ui.formInput(`${pfx}tool_preset`, "select", {
-          options: [
-            { value: "", label: t("settings.selectPresetTag") },
-            ...availableTools.map((c) => ({ value: c, label: c })),
-          ],
-          value: "",
-          onChange: "settings_agent_tag_add",
-        })
-      );
-    }
-    toolAddRow.push(
-      ui.form(
-        [ui.formInput(`${pfx}tool_custom`, "text", { placeholder: "custom-tag" })],
-        "settings_agent_tag_add_custom",
-        { submitLabel: t("settings.addTag") }
-      )
-    );
-    children.push(ui.row(toolAddRow, { gap: 8, align: "end" }));
 
-    // ---- Skill Tags (badge chips) ----
-    children.push(ui.text(t("settings.agentSkillsTags"), "caption"));
-    const skillBadgePairs: string[] = [];
-    for (const tag of profile.skillTags) {
-      const badge = ui.badge(tag, { variant: "default", size: "sm" });
-      const xBtn = ui.button("", "settings_agent_tag_delete", {
-        icon: "x",
-        variant: "ghost",
-        payload: { agentId: profile.id, tag, kind: "skill" },
-      });
-      skillBadgePairs.push(ui.row([badge, xBtn], { gap: 2, align: "center" }));
-    }
-    if (skillBadgePairs.length > 0) {
-      children.push(ui.row(skillBadgePairs, { gap: 6, wrap: true }));
-    }
-    // Select for predefined skill tags + mini form for custom
-    const availableSkills = data.allSkillTags.filter((t2) => !profile.skillTags.includes(t2));
-    const skillAddRow: string[] = [];
-    if (availableSkills.length > 0) {
-      skillAddRow.push(
-        ui.formInput(`${pfx}skill_preset`, "select", {
-          options: [
-            { value: "", label: t("settings.selectPresetTag") },
-            ...availableSkills.map((s) => ({ value: s, label: s })),
-          ],
-          value: "",
-          onChange: "settings_agent_tag_add",
-        })
-      );
-    }
-    skillAddRow.push(
-      ui.form(
-        [ui.formInput(`${pfx}skill_custom`, "text", { placeholder: "custom-tag" })],
-        "settings_agent_tag_add_custom",
-        { submitLabel: t("settings.addTag") }
-      )
+    // ---- Skill Tags (tag picker) ----
+    children.push(
+      ui.tagPicker({
+        label: t("settings.agentSkillsTags"),
+        selected: profile.skillTags,
+        options: data.allTags,
+        onToggle: "settings_agent_tag_toggle",
+        payload: { agentId: profile.id, kind: "skill" },
+        placeholder: t("settings.addTag"),
+      })
     );
-    children.push(ui.row(skillAddRow, { gap: 8, align: "end" }));
 
     // Expand based on expandedAgentId or default to "pha"
     const shouldExpand = data.expandedAgentId
