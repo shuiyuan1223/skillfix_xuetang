@@ -1027,6 +1027,8 @@ export class GatewaySession {
   private editingPrompt = false;
   private editingSkill = false;
   private editBuffer: string | null = null;
+  // Track which agent collapsible to expand after tag operations
+  private _settingsExpandedAgent: string | undefined;
 
   // Scope state for Prompts and Skills pages (PHA ↔ System Agent)
   private promptsScope: "pha" | "system" = "pha";
@@ -2310,9 +2312,22 @@ export class GatewaySession {
             workspace: p.workspace || "",
             sessionPath: p.sessionPath || "",
             toolCategories: p.tools.categories as string[],
-            skillsTags: (p.skills?.tags || []).join(", "),
+            skillTags: p.skills?.tags || [],
           };
         });
+
+        // Collect all unique skill tags from SKILL.md files
+        let allSkillTags: string[] = [];
+        try {
+          const skillsResult = (await listSkillsTool.execute({})) as any;
+          const tagSet = new Set<string>();
+          for (const s of skillsResult.skills || []) {
+            for (const tag of s.tags || []) tagSet.add(tag);
+          }
+          allSkillTags = [...tagSet].sort();
+        } catch {
+          allSkillTags = ["pha", "sa", "pha-markdown"];
+        }
 
         mainPage = generateSettingsPage({
           provider: config.llm.provider,
@@ -2328,6 +2343,8 @@ export class GatewaySession {
           orchestratorEmbedding: config.orchestrator?.embedding || "",
           agentProfiles,
           allToolCategories: ALL_TOOL_CATEGORIES as string[],
+          allSkillTags,
+          expandedAgentId: this._settingsExpandedAgent,
           benchmarkModelRefs: config.benchmark?.models || [],
           gatewayPort: config.gateway?.port || 8000,
           gatewayAutoStart: config.gateway?.autoStart ?? false,
@@ -4301,6 +4318,9 @@ export class GatewaySession {
       action === "settings_scope_delete" ||
       action === "settings_agent_add" ||
       action === "settings_agent_delete" ||
+      action === "settings_agent_tag_add" ||
+      action === "settings_agent_tag_add_custom" ||
+      action === "settings_agent_tag_delete" ||
       action === "settings_copy_config" ||
       action === "settings_download_config"
     ) {
@@ -4537,29 +4557,8 @@ export class GatewaySession {
             } else {
               delete ap.sessionPath;
             }
-            // Tool categories (comma-separated text)
-            const catsStr = String(formData[`${pfx}tool_categories`] || "").trim();
-            if (catsStr) {
-              const cats = catsStr
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean);
-              ap.tools = { categories: cats };
-            } else {
-              delete ap.tools;
-            }
-            // Skills tags
-            const tagsStr = String(formData[`${pfx}skills_tags`] || "").trim();
-            if (tagsStr) {
-              ap.skills = {
-                tags: tagsStr
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-              };
-            } else {
-              delete ap.skills;
-            }
+            // Tool categories and skill tags are managed separately via badge actions
+            // (settings_agent_tag_add / settings_agent_tag_delete)
           }
         } else if (action === "settings_save_context") {
           // Save context & proactive configuration
@@ -4764,10 +4763,15 @@ export class GatewaySession {
           }
           config.dataSources.huawei.scopes = scopes;
         } else if (action === "settings_scope_add") {
-          // Add an empty scope entry
-          if (!config.dataSources.huawei) config.dataSources.huawei = {};
-          if (!config.dataSources.huawei.scopes) config.dataSources.huawei.scopes = [];
-          config.dataSources.huawei.scopes.push("");
+          // Add scope from form input
+          const newScope = String(formData?.new_scope || "").trim();
+          if (newScope) {
+            if (!config.dataSources.huawei) config.dataSources.huawei = {};
+            if (!config.dataSources.huawei.scopes) config.dataSources.huawei.scopes = [];
+            if (!config.dataSources.huawei.scopes.includes(newScope)) {
+              config.dataSources.huawei.scopes.push(newScope);
+            }
+          }
         } else if (action === "settings_scope_delete") {
           // Delete scope by index
           const idx = Number(formData?.index ?? -1);
@@ -4787,6 +4791,63 @@ export class GatewaySession {
           if (agentId && config.agents) {
             delete config.agents[agentId];
           }
+        } else if (action === "settings_agent_tag_add") {
+          // Add predefined tag via select onChange: { name: "ap__{id}__{tool|skill}_preset", value }
+          const name = String(formData?.name || "");
+          const value = String(formData?.value || "").trim();
+          const m = name.match(/^ap__(.+?)__(tool|skill)_preset$/);
+          if (m && value) {
+            const [, agentId, kind] = m;
+            if (!config.agents) config.agents = {};
+            if (!config.agents[agentId]) config.agents[agentId] = {};
+            const ap = config.agents[agentId];
+            if (kind === "tool") {
+              const cats = (ap.tools?.categories as string[]) || [];
+              if (!cats.includes(value)) cats.push(value);
+              ap.tools = { ...ap.tools, categories: cats };
+            } else {
+              const tags = ap.skills?.tags || [];
+              if (!tags.includes(value)) tags.push(value);
+              ap.skills = { ...ap.skills, tags };
+            }
+            this._settingsExpandedAgent = agentId;
+          }
+        } else if (action === "settings_agent_tag_add_custom") {
+          // Add custom tag via mini form: field name "ap__{id}__{tool|skill}_custom"
+          if (!config.agents) config.agents = {};
+          for (const [key, val] of Object.entries(formData)) {
+            const m2 = key.match(/^ap__(.+?)__(tool|skill)_custom$/);
+            const tagVal = String(val || "").trim();
+            if (m2 && tagVal) {
+              const [, agentId, kind] = m2;
+              if (!config.agents[agentId]) config.agents[agentId] = {};
+              const ap = config.agents[agentId];
+              if (kind === "tool") {
+                const cats = (ap.tools?.categories as string[]) || [];
+                if (!cats.includes(tagVal)) cats.push(tagVal);
+                ap.tools = { ...ap.tools, categories: cats };
+              } else {
+                const tags = ap.skills?.tags || [];
+                if (!tags.includes(tagVal)) tags.push(tagVal);
+                ap.skills = { ...ap.skills, tags };
+              }
+              this._settingsExpandedAgent = agentId;
+            }
+          }
+        } else if (action === "settings_agent_tag_delete") {
+          // Delete a tag: payload { agentId, tag, kind: "tool"|"skill" }
+          const agentId = String(formData?.agentId || "");
+          const tag = String(formData?.tag || "");
+          const kind = String(formData?.kind || "");
+          if (agentId && tag && config.agents?.[agentId]) {
+            const ap = config.agents[agentId];
+            if (kind === "tool" && ap.tools?.categories) {
+              ap.tools.categories = (ap.tools.categories as string[]).filter((c) => c !== tag);
+            } else if (kind === "skill" && ap.skills?.tags) {
+              ap.skills.tags = ap.skills.tags.filter((t2) => t2 !== tag);
+            }
+            this._settingsExpandedAgent = agentId;
+          }
         } else if (action === "settings_copy_config" || action === "settings_download_config") {
           // Handled on frontend — just send toast
           send(generateToast(t("settings.saved"), "success"));
@@ -4794,8 +4855,16 @@ export class GatewaySession {
         }
 
         saveConfig(config);
-        send(generateToast(t("settings.saved"), "success"));
+        // Don't show "saved" toast for add/delete tag operations (the badge update is sufficient feedback)
+        const isTagOp =
+          action === "settings_agent_tag_add" ||
+          action === "settings_agent_tag_add_custom" ||
+          action === "settings_agent_tag_delete";
+        if (!isTagOp) {
+          send(generateToast(t("settings.saved"), "success"));
+        }
         await this.handleNavigate("settings/general", send);
+        this._settingsExpandedAgent = undefined;
       } catch (e) {
         send(generateToast(t("settings.saveError"), "error"));
       }

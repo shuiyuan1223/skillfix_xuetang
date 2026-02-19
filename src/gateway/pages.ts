@@ -1988,10 +1988,14 @@ export interface SettingsPageData {
     workspace: string;
     sessionPath: string;
     toolCategories: string[];
-    skillsTags: string;
+    skillTags: string[];
   }>;
   /** All available tool categories for multi-select */
   allToolCategories: string[];
+  /** All available skill tags discovered from SKILL.md files */
+  allSkillTags: string[];
+  /** Which agent collapsible to expand (after tag add/delete) */
+  expandedAgentId?: string;
   benchmarkModelRefs: string[];
   // Gateway
   gatewayPort: number;
@@ -2139,7 +2143,8 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const agentSections: string[] = [];
   for (const profile of data.agentProfiles) {
     const pfx = `ap__${profile.id}__`;
-    const fields: string[] = [];
+    const children: string[] = [];
+
     // Agent ID title + delete button
     const agentTitle = ui.text(profile.id, "h3");
     const agentDeleteBtn = ui.button("", "settings_agent_delete", {
@@ -2148,58 +2153,121 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       tooltip: t("settings.deleteAgent"),
       payload: { agentId: profile.id },
     });
-    fields.push(ui.row([agentTitle, agentDeleteBtn], { justify: "between", align: "center" }));
-    // Model
-    fields.push(
+    children.push(ui.row([agentTitle, agentDeleteBtn], { justify: "between", align: "center" }));
+
+    // Form: model, workspace, sessionPath
+    const formFields = [
       ui.formInput(`${pfx}model`, "select", {
         label: t("settings.agentModelLabel"),
         options: agentModelRefOptions,
         value: profile.model,
-      })
-    );
-    // Workspace Path
-    fields.push(
+      }),
       ui.formInput(`${pfx}workspace`, "text", {
         label: t("settings.agentWorkspace"),
         value: profile.workspace,
         placeholder: "users/{uid}",
-      })
-    );
-    // Session Path
-    fields.push(
+      }),
       ui.formInput(`${pfx}sessionPath`, "text", {
         label: t("settings.agentSessionPath"),
         value: profile.sessionPath,
         placeholder: "users/{uid}/sessions/pha",
-      })
+      }),
+    ];
+    children.push(
+      ui.form(formFields, "settings_save_agents", { submitLabel: t("settings.saveAgents") })
     );
-    // Skills Tags
-    fields.push(
-      ui.formInput(`${pfx}skills_tags`, "text", {
-        label: t("settings.agentSkillsTags"),
-        value: profile.skillsTags,
-        placeholder: "pha, sa, pha-markdown",
-      })
+
+    // ---- Tool Tags (badge chips) ----
+    children.push(ui.text(t("settings.agentToolTags"), "caption"));
+    const toolBadgePairs: string[] = [];
+    for (const cat of profile.toolCategories) {
+      const badge = ui.badge(cat, { variant: "default", size: "sm" });
+      const xBtn = ui.button("", "settings_agent_tag_delete", {
+        icon: "x",
+        variant: "ghost",
+        payload: { agentId: profile.id, tag: cat, kind: "tool" },
+      });
+      toolBadgePairs.push(ui.row([badge, xBtn], { gap: 2, align: "center" }));
+    }
+    if (toolBadgePairs.length > 0) {
+      children.push(ui.row(toolBadgePairs, { gap: 6, wrap: true }));
+    }
+    // Select for predefined tool tags + mini form for custom
+    const availableTools = data.allToolCategories.filter(
+      (c) => !profile.toolCategories.includes(c)
     );
-    // Tool categories (comma-separated text, like skills tags)
-    fields.push(
-      ui.formInput(`${pfx}tool_categories`, "text", {
-        label: t("settings.agentTools"),
-        value: profile.toolCategories.join(", "),
-        placeholder: data.allToolCategories.join(", "),
-      })
+    const toolAddRow: string[] = [];
+    if (availableTools.length > 0) {
+      toolAddRow.push(
+        ui.formInput(`${pfx}tool_preset`, "select", {
+          options: [
+            { value: "", label: t("settings.selectPresetTag") },
+            ...availableTools.map((c) => ({ value: c, label: c })),
+          ],
+          value: "",
+          onChange: "settings_agent_tag_add",
+        })
+      );
+    }
+    toolAddRow.push(
+      ui.form(
+        [ui.formInput(`${pfx}tool_custom`, "text", { placeholder: "custom-tag" })],
+        "settings_agent_tag_add_custom",
+        { submitLabel: t("settings.addTag") }
+      )
     );
-    // Only expand "pha" by default
-    agentSections.push(ui.collapsible(profile.id, fields, { expanded: profile.id === "pha" }));
+    children.push(ui.row(toolAddRow, { gap: 8, align: "end" }));
+
+    // ---- Skill Tags (badge chips) ----
+    children.push(ui.text(t("settings.agentSkillsTags"), "caption"));
+    const skillBadgePairs: string[] = [];
+    for (const tag of profile.skillTags) {
+      const badge = ui.badge(tag, { variant: "default", size: "sm" });
+      const xBtn = ui.button("", "settings_agent_tag_delete", {
+        icon: "x",
+        variant: "ghost",
+        payload: { agentId: profile.id, tag, kind: "skill" },
+      });
+      skillBadgePairs.push(ui.row([badge, xBtn], { gap: 2, align: "center" }));
+    }
+    if (skillBadgePairs.length > 0) {
+      children.push(ui.row(skillBadgePairs, { gap: 6, wrap: true }));
+    }
+    // Select for predefined skill tags + mini form for custom
+    const availableSkills = data.allSkillTags.filter((t2) => !profile.skillTags.includes(t2));
+    const skillAddRow: string[] = [];
+    if (availableSkills.length > 0) {
+      skillAddRow.push(
+        ui.formInput(`${pfx}skill_preset`, "select", {
+          options: [
+            { value: "", label: t("settings.selectPresetTag") },
+            ...availableSkills.map((s) => ({ value: s, label: s })),
+          ],
+          value: "",
+          onChange: "settings_agent_tag_add",
+        })
+      );
+    }
+    skillAddRow.push(
+      ui.form(
+        [ui.formInput(`${pfx}skill_custom`, "text", { placeholder: "custom-tag" })],
+        "settings_agent_tag_add_custom",
+        { submitLabel: t("settings.addTag") }
+      )
+    );
+    children.push(ui.row(skillAddRow, { gap: 8, align: "end" }));
+
+    // Expand based on expandedAgentId or default to "pha"
+    const shouldExpand = data.expandedAgentId
+      ? profile.id === data.expandedAgentId
+      : profile.id === "pha";
+    agentSections.push(ui.collapsible(profile.id, children, { expanded: shouldExpand }));
   }
-  const agentsForm = ui.form(agentSections, "settings_save_agents", {
-    submitLabel: t("settings.saveAgents"),
-  });
   const addAgentBtn = ui.button(t("settings.addAgent"), "settings_agent_add", {
     icon: "plus",
     variant: "outline",
   });
-  const agentsCard = ui.card([agentsForm, addAgentBtn], {
+  const agentsCard = ui.card([...agentSections, addAgentBtn], {
     title: t("settings.sectionAgents"),
     padding: 20,
   });
@@ -2299,10 +2367,11 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       scopeChildren.push(ui.row(badgePairs, { gap: 6, wrap: true }));
     }
     scopeChildren.push(
-      ui.button(t("settings.addScope"), "settings_scope_add", {
-        icon: "plus",
-        variant: "outline",
-      })
+      ui.form(
+        [ui.formInput("new_scope", "text", { placeholder: "openid, profile, ..." })],
+        "settings_scope_add",
+        { submitLabel: t("settings.addScope") }
+      )
     );
     scopesCard = ui.card(scopeChildren, {
       title: t("settings.scopesPerLine"),
