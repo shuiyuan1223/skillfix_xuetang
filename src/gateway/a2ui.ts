@@ -56,8 +56,7 @@ export type A2UIComponentType =
   | "playground_fab"
   | "evolution_pipeline"
   | "log_viewer"
-  | "auth_page"
-  | "thinking_chat";
+  | "auth_page";
 
 // Base component interface
 export interface A2UIComponent {
@@ -436,21 +435,6 @@ export interface LogViewerComponent extends A2UIComponent {
   activeSubsystem?: string;
 }
 
-// Thinking Chat Component (边想边搜)
-export interface ThinkingChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  reasoningPhases: string[];
-  content: string;
-}
-
-export interface ThinkingChatComponent extends A2UIComponent {
-  type: "thinking_chat";
-  messages: ThinkingChatMessage[];
-  streaming: boolean;
-  streamingPhase?: "reasoning" | "content" | "searching";
-}
-
 // A2UI Message format
 export interface A2UIMessage {
   type: "a2ui";
@@ -710,12 +694,6 @@ export class A2UIGenerator {
   ): string {
     const id = this.nextId("logviewer");
     this.components.set(id, { id, type: "log_viewer", entries, ...opts });
-    return id;
-  }
-
-  thinkingChat(messages: ThinkingChatMessage[], opts: Partial<ThinkingChatComponent> = {}): string {
-    const id = this.nextId("tchat");
-    this.components.set(id, { id, type: "thinking_chat", messages, streaming: false, ...opts });
     return id;
   }
 

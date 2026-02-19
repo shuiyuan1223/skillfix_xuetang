@@ -56,7 +56,6 @@ import { getHuaweiAuthUrl } from "../services/huawei-oauth-service.js";
 import { runOAuthFlowWithChrome } from "../services/chrome-mcp-client.js";
 import { getRemoteMCPTools } from "../services/remote-mcp-client.js";
 import { LegacyProtocolAdapter, type LegacySSEEvent } from "./legacy-protocol.js";
-import type { ThinkingChatMessage } from "./a2ui.js";
 import {
   generateChatPage,
   generateMemoryPage,
@@ -86,7 +85,6 @@ import {
   generateSettingsPage,
   generatePlansPage,
   generatePlanDetailModal,
-  generateThinkingChatPage,
   type PlansPageTab,
   type SettingsPageData,
 } from "./pages.js";
@@ -1069,10 +1067,6 @@ export class GatewaySession {
   private llmModelFilter: string | undefined;
   private llmPage: number = 0;
 
-  // Legacy chat (边想边搜) state
-  private legacyChatMessages: ThinkingChatMessage[] = [];
-  private legacyChatStreaming = false;
-  private legacyChatStreamingPhase: "reasoning" | "content" | "searching" | undefined;
   private llmSelectedId: number | undefined;
 
   // Evolution version state
@@ -1720,10 +1714,10 @@ export class GatewaySession {
         break;
 
       case "legacy-chat":
-        mainPage = generateThinkingChatPage({
-          messages: this.legacyChatMessages,
-          streaming: this.legacyChatStreaming,
-          streamingPhase: this.legacyChatStreamingPhase,
+        mainPage = generateChatPage({
+          messages: this.chatMessages,
+          streaming: this.isStreaming,
+          streamingContent: this.streamingContent,
         });
         break;
 
@@ -2268,7 +2262,12 @@ export class GatewaySession {
       });
 
       try {
-        await agent.chat(content);
+        // Legacy chat view forces the legacy-streaming skill
+        if (this.currentView === "legacy-chat") {
+          await agent.chatWithSkill(content, "legacy-streaming");
+        } else {
+          await agent.chat(content);
+        }
         await agent.getAgent().waitForIdle();
 
         // Fallback: if handleAgentEvent didn't produce any assistant message,
@@ -2365,7 +2364,7 @@ export class GatewaySession {
   private sendChatUpdate(send: (msg: unknown) => void): void {
     const activeSend = this.getSend(send);
     if (this._sseMode) return; // SSE mode: client manages chat state
-    if (this.currentView === "chat") {
+    if (this.currentView === "chat" || this.currentView === "legacy-chat") {
       const chatPage = generateChatPage({
         messages: this.chatMessages,
         streaming: this.isStreaming,
@@ -2766,15 +2765,6 @@ export class GatewaySession {
     } else if (action === "send_message" && payload?.content) {
       // Chat message from UI
       await this.handleUserMessage(payload.content as string, send);
-    } else if (action === "legacy_send_message" && payload?.content) {
-      // Legacy chat (边想边搜) message from UI
-      await this.handleLegacyChatMessage(payload.content as string, send);
-    } else if (action === "legacy_clear_chat") {
-      // Clear legacy chat
-      this.legacyChatMessages = [];
-      this.legacyChatStreaming = false;
-      this.legacyChatStreamingPhase = undefined;
-      this.sendLegacyChatUpdate(send);
     } else if (action === "stop_generation") {
       // Stop PHA Agent streaming
       if (this.isStreaming && this.agent) {
@@ -5540,119 +5530,6 @@ export class GatewaySession {
   /**
    * Get or create the current assistant message in chatMessages.
    */
-  // ========================================================================
-  // Legacy Chat (边想边搜) — UI-driven via A2UI action
-  // ========================================================================
-
-  private sendLegacyChatUpdate(send: (msg: unknown) => void): void {
-    const activeSend = this.getSend(send);
-    if (this._sseMode) return;
-    if (this.currentView === "legacy-chat") {
-      const page = generateThinkingChatPage({
-        messages: this.legacyChatMessages,
-        streaming: this.legacyChatStreaming,
-        streamingPhase: this.legacyChatStreamingPhase,
-      });
-      activeSend({
-        type: "a2ui",
-        surface_id: "main",
-        components: page.components,
-        root_id: page.root_id,
-      });
-    }
-  }
-
-  private async handleLegacyChatMessage(
-    content: string,
-    send: (msg: unknown) => void
-  ): Promise<void> {
-    // Add user message
-    this.legacyChatMessages.push({
-      id: crypto.randomUUID(),
-      role: "user",
-      reasoningPhases: [],
-      content,
-    });
-
-    this.legacyChatStreaming = true;
-    this.legacyChatStreamingPhase = "reasoning";
-    this.sendLegacyChatUpdate(send);
-
-    // Create assistant message placeholder
-    const assistantMsg: ThinkingChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      reasoningPhases: [],
-      content: "",
-    };
-    this.legacyChatMessages.push(assistantMsg);
-
-    let currentReasoningText = "";
-
-    try {
-      const agent = await this.getAgent();
-
-      const adapter = new LegacyProtocolAdapter((event: LegacySSEEvent) => {
-        // Map protocol events to UI state updates
-        if (event.event === "rag_status" && event.content === "start_search") {
-          this.legacyChatStreamingPhase = "reasoning";
-        } else if (event.event === "data" && event.content_type === "reasoning") {
-          currentReasoningText += event.content || "";
-          // Update the last reasoning phase
-          if (assistantMsg.reasoningPhases.length === 0) {
-            assistantMsg.reasoningPhases.push(currentReasoningText);
-          } else {
-            assistantMsg.reasoningPhases[assistantMsg.reasoningPhases.length - 1] =
-              currentReasoningText;
-          }
-          this.sendLegacyChatUpdate(send);
-        } else if (event.event === "rag_status" && event.content === "search_with_think") {
-          this.legacyChatStreamingPhase = "content";
-        } else if (event.event === "data" && !event.content_type) {
-          assistantMsg.content = event.content || "";
-          this.sendLegacyChatUpdate(send);
-        }
-      });
-
-      const unsubscribe = agent.subscribe((event) => {
-        adapter.handleAgentEvent(event);
-
-        // Track searching phase for UI indicator
-        if (event.type === "tool_execution_start") {
-          this.legacyChatStreamingPhase = "searching";
-          this.sendLegacyChatUpdate(send);
-        } else if (event.type === "tool_execution_end") {
-          this.legacyChatStreamingPhase = "reasoning";
-          // Start new reasoning phase for next tool interpretation
-          currentReasoningText = "";
-          assistantMsg.reasoningPhases.push("");
-          this.sendLegacyChatUpdate(send);
-        }
-      });
-
-      try {
-        await agent.chatWithSkill(content, "legacy-streaming");
-        await agent.getAgent().waitForIdle();
-      } finally {
-        unsubscribe();
-      }
-
-      this.legacyChatStreaming = false;
-      this.legacyChatStreamingPhase = undefined;
-      this.sendLegacyChatUpdate(send);
-    } catch (error) {
-      this.legacyChatStreaming = false;
-      this.legacyChatStreamingPhase = undefined;
-
-      const isAbort =
-        error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
-      if (!isAbort) {
-        assistantMsg.content = `Error: ${error instanceof Error ? error.message : String(error)}`;
-      }
-      this.sendLegacyChatUpdate(send);
-    }
-  }
-
   // ========================================================================
   // Legacy Chat SSE — External API endpoint (/api/legacy-chat)
   // ========================================================================

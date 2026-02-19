@@ -153,8 +153,6 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
       return renderActivityRings(comp, ctx);
     case "log_viewer":
       return renderLogViewer(comp, ctx);
-    case "thinking_chat":
-      return renderThinkingChat(comp, ctx);
     case "skeleton":
       return [indent(ctx, ansi.dim("Loading..."))];
     case "divider":
@@ -1390,56 +1388,6 @@ export function renderNavBar(currentView: string, views: string[]): string {
     return ansi.dim(v);
   });
   return parts.join(ansi.dim(" │ "));
-}
-
-function renderThinkingChat(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const messages =
-    (comp.messages as Array<{
-      id: string;
-      role: "user" | "assistant";
-      reasoningPhases: string[];
-      content: string;
-    }>) || [];
-  const streaming = comp.streaming as boolean;
-  const streamingPhase = comp.streamingPhase as string | undefined;
-  const lines: string[] = [];
-
-  for (const msg of messages) {
-    if (msg.role === "user") {
-      lines.push(indent(ctx, ansi.cyan(`> ${msg.content}`)));
-      lines.push("");
-    } else {
-      // Reasoning phases
-      for (const phase of msg.reasoningPhases) {
-        if (phase.trim()) {
-          for (const line of phase.split("\n")) {
-            lines.push(indent(ctx, ansi.dim(`[思考] ${line}`)));
-          }
-        }
-      }
-      // Final content
-      if (msg.content) {
-        lines.push("");
-        for (const line of msg.content.split("\n")) {
-          lines.push(indent(ctx, line));
-        }
-      }
-      lines.push("");
-    }
-  }
-
-  // Streaming indicators
-  if (streaming) {
-    if (streamingPhase === "searching") {
-      lines.push(indent(ctx, ansi.yellow("[搜索中...]")));
-    } else if (streamingPhase === "reasoning") {
-      lines.push(indent(ctx, ansi.dim("[思考中...]")));
-    } else if (streamingPhase === "content") {
-      lines.push(indent(ctx, ansi.dim("...")));
-    }
-  }
-
-  return lines;
 }
 
 /**

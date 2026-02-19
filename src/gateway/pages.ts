@@ -5,7 +5,7 @@
  * Agent calls these to render pages.
  */
 
-import { A2UIGenerator, type A2UIMessage, type ThinkingChatMessage } from "./a2ui.js";
+import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
 import { t } from "../locales/index.js";
 import type { UserProfile, MemorySearchResult } from "../memory/types.js";
 import type { HealthPlan, PlanStatus } from "../plans/types.js";
@@ -142,52 +142,6 @@ export function generateChatPage(state: ChatState): A2UIMessage {
   const root = ui.column([messagesId, inputId], { gap: 0 });
 
   // Make the column fill the height
-  const rootComponent = ui["components"].get(root);
-  if (rootComponent) {
-    rootComponent["style"] = "height: 100%;";
-  }
-
-  return ui.build(root);
-}
-
-// ============================================================================
-// Thinking Chat Page Generator (边想边搜)
-// ============================================================================
-
-export interface ThinkingChatState {
-  messages: ThinkingChatMessage[];
-  streaming: boolean;
-  streamingPhase?: "reasoning" | "content" | "searching";
-}
-
-export function generateThinkingChatPage(state: ThinkingChatState): A2UIMessage {
-  const ui = new A2UIGenerator("main");
-
-  // Thinking chat component (stable ID)
-  const chatId = "thinking_chat_msgs";
-  ui.addComponent(chatId, {
-    id: chatId,
-    type: "thinking_chat",
-    messages: state.messages,
-    streaming: state.streaming,
-    streamingPhase: state.streamingPhase,
-  });
-
-  // Chat input
-  const inputId = "thinking_chat_input";
-  ui.addComponent(inputId, {
-    id: inputId,
-    type: "chat_input",
-    action: "legacy_send_message",
-    clearAction: "legacy_clear_chat",
-    disabled: state.streaming,
-    streaming: state.streaming,
-    placeholder: t("legacyChat.placeholder"),
-  });
-
-  const root = ui.column([chatId, inputId], { gap: 0 });
-
-  // Fill height
   const rootComponent = ui["components"].get(root);
   if (rootComponent) {
     rootComponent["style"] = "height: 100%;";
