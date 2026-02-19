@@ -2270,11 +2270,18 @@ export class GatewaySession {
 
         const scopesArray = huawei.scopes || [];
 
-        // Build agent profiles for per-agent model config
+        // Build agent profiles for per-agent configuration
         const profileIds = getAgentProfileIds();
         const agentProfiles = profileIds.map((id) => {
           const p = getAgentProfile(id);
-          return { id, label: id, model: p.model || "" };
+          return {
+            id,
+            label: id,
+            model: p.model || "",
+            contextHealth: p.context.health !== false,
+            contextWeather: p.context.weather !== false,
+            contextBootstrap: p.context.bootstrap !== false,
+          };
         });
 
         mainPage = generateSettingsPage({
@@ -4234,7 +4241,7 @@ export class GatewaySession {
       action === "settings_save_judge" ||
       action === "settings_save_model_repository" ||
       action === "settings_save_model_assignments" ||
-      action === "settings_save_agent_models" ||
+      action === "settings_save_agents" ||
       action === "settings_save_infra_models" ||
       action === "settings_provider_add" ||
       action === "settings_provider_delete" ||
@@ -4442,20 +4449,34 @@ export class GatewaySession {
               }
             }
           }
-        } else if (action === "settings_save_agent_models") {
-          // Save per-agent model assignments
+        } else if (action === "settings_save_agents") {
+          // Save per-agent configuration (model, context flags, etc.)
           if (!config.agents) config.agents = {};
+          // Collect agent IDs from form fields: ap__<id>__<field>
+          const agentIds = new Set<string>();
           for (const key of Object.keys(formData)) {
-            if (key.startsWith("agent_model__")) {
-              const agentId = key.replace("agent_model__", "");
-              const modelRef = String(formData[key]) || undefined;
-              if (!config.agents[agentId]) config.agents[agentId] = {};
-              if (modelRef) {
-                config.agents[agentId].model = modelRef;
-              } else {
-                delete config.agents[agentId].model;
-              }
+            const m = key.match(/^ap__(.+?)__/);
+            if (m) agentIds.add(m[1]);
+          }
+          for (const agentId of agentIds) {
+            if (!config.agents[agentId]) config.agents[agentId] = {};
+            const pfx = `ap__${agentId}__`;
+            // Model
+            const modelRef = String(formData[`${pfx}model`] || "") || undefined;
+            if (modelRef) {
+              config.agents[agentId].model = modelRef;
+            } else {
+              delete config.agents[agentId].model;
             }
+            // Context flags
+            const ctx = config.agents[agentId].context || {};
+            if (formData[`${pfx}ctx_health`] !== undefined)
+              ctx.health = formData[`${pfx}ctx_health`] === "true";
+            if (formData[`${pfx}ctx_weather`] !== undefined)
+              ctx.weather = formData[`${pfx}ctx_weather`] === "true";
+            if (formData[`${pfx}ctx_bootstrap`] !== undefined)
+              ctx.bootstrap = formData[`${pfx}ctx_bootstrap`] === "true";
+            config.agents[agentId].context = ctx;
           }
         } else if (action === "settings_save_infra_models") {
           // Save infrastructure model assignments (SA/Judge/Embedding)

@@ -670,11 +670,14 @@ export interface LocaleMessages {
     benchmarkModelsSelect: string;
     saveRepository: string;
     saveAssignments: string;
-    sectionAgentModels: string;
+    sectionAgents: string;
     sectionInfraModels: string;
     agentModelLabel: string;
+    agentCtxHealth: string;
+    agentCtxWeather: string;
+    agentCtxBootstrap: string;
     defaultModelFallback: string;
-    saveAgentModels: string;
+    saveAgents: string;
     saveInfraModels: string;
     noneSelected: string;
     saveAll: string;

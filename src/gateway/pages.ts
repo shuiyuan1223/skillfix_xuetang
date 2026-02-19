@@ -1970,8 +1970,15 @@ export interface SettingsPageData {
   orchestratorSa: string;
   orchestratorJudge: string;
   orchestratorEmbedding: string;
-  /** Agent profiles for per-agent model config */
-  agentProfiles: Array<{ id: string; label: string; model: string }>;
+  /** Agent profiles for per-agent configuration */
+  agentProfiles: Array<{
+    id: string;
+    label: string;
+    model: string;
+    contextHealth: boolean;
+    contextWeather: boolean;
+    contextBootstrap: boolean;
+  }>;
   benchmarkModelRefs: string[];
   // Gateway
   gatewayPort: number;
@@ -2089,26 +2096,49 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  // ---- Agent Models Section (per-agent model config) ----
+  // ---- Agents Configuration Section ----
   const agentModelRefOptions = [
     { value: "", label: t("settings.defaultModelFallback") },
     ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
   ];
-  const agentModelInputs: string[] = [];
+  const boolOptions = [
+    { value: "true", label: t("common.enable") },
+    { value: "false", label: t("common.disable") },
+  ];
+  const agentSections: string[] = [];
   for (const profile of data.agentProfiles) {
-    agentModelInputs.push(
-      ui.formInput(`agent_model__${profile.id}`, "select", {
-        label: `${profile.label} — ${t("settings.agentModelLabel")}`,
-        options: agentModelRefOptions,
-        value: profile.model,
+    const pfx = `ap__${profile.id}__`;
+    const modelSelect = ui.formInput(`${pfx}model`, "select", {
+      label: t("settings.agentModelLabel"),
+      options: agentModelRefOptions,
+      value: profile.model,
+    });
+    const ctxHealth = ui.formInput(`${pfx}ctx_health`, "select", {
+      label: t("settings.agentCtxHealth"),
+      options: boolOptions,
+      value: String(profile.contextHealth),
+    });
+    const ctxWeather = ui.formInput(`${pfx}ctx_weather`, "select", {
+      label: t("settings.agentCtxWeather"),
+      options: boolOptions,
+      value: String(profile.contextWeather),
+    });
+    const ctxBootstrap = ui.formInput(`${pfx}ctx_bootstrap`, "select", {
+      label: t("settings.agentCtxBootstrap"),
+      options: boolOptions,
+      value: String(profile.contextBootstrap),
+    });
+    agentSections.push(
+      ui.collapsible(profile.label, [modelSelect, ctxHealth, ctxWeather, ctxBootstrap], {
+        expanded: true,
       })
     );
   }
-  const agentModelsForm = ui.form(agentModelInputs, "settings_save_agent_models", {
-    submitLabel: t("settings.saveAgentModels"),
+  const agentsForm = ui.form(agentSections, "settings_save_agents", {
+    submitLabel: t("settings.saveAgents"),
   });
-  const agentModelsCard = ui.card([agentModelsForm], {
-    title: t("settings.sectionAgentModels"),
+  const agentsCard = ui.card([agentsForm], {
+    title: t("settings.sectionAgents"),
     padding: 20,
   });
 
@@ -2141,18 +2171,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     title: t("settings.sectionInfraModels"),
     padding: 20,
   });
-
-  // ---- Legacy Model Assignments (backward compat) ----
-  const agentModelSelect = ui.formInput("orchestratorPha", "select", {
-    label: t("settings.agentModelSelect"),
-    options: modelRefOptions,
-    value: data.orchestratorPha,
-  });
-  const assignmentsForm = ui.form([agentModelSelect], "settings_save_model_assignments", {
-    submitLabel: t("settings.saveAssignments"),
-  });
-  // Hidden: kept for backward compat but not rendered in the main layout
-  void assignmentsForm;
 
   // ---- Gateway Section ----
   const portInput = ui.formInput("port", "text", {
@@ -2479,7 +2497,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     padding: 20,
   });
 
-  const cards: string[] = [header, repoCard, agentModelsCard, infraModelsCard, gatewayCard, dsCard];
+  const cards: string[] = [header, repoCard, agentsCard, infraModelsCard, gatewayCard, dsCard];
   if (scopesCard) cards.push(scopesCard);
   cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
   const root = ui.column(cards, { gap: 16, padding: 24 });
