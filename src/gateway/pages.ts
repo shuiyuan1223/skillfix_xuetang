@@ -1975,10 +1975,15 @@ export interface SettingsPageData {
     id: string;
     label: string;
     model: string;
+    toolCategories: string[];
+    skillsExcludeTypes: string;
     contextHealth: boolean;
     contextWeather: boolean;
     contextBootstrap: boolean;
+    skillHint: string;
   }>;
+  /** All available tool categories for multi-select */
+  allToolCategories: string[];
   benchmarkModelRefs: string[];
   // Gateway
   gatewayPort: number;
@@ -2108,31 +2113,65 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const agentSections: string[] = [];
   for (const profile of data.agentProfiles) {
     const pfx = `ap__${profile.id}__`;
-    const modelSelect = ui.formInput(`${pfx}model`, "select", {
-      label: t("settings.agentModelLabel"),
-      options: agentModelRefOptions,
-      value: profile.model,
-    });
-    const ctxHealth = ui.formInput(`${pfx}ctx_health`, "select", {
-      label: t("settings.agentCtxHealth"),
-      options: boolOptions,
-      value: String(profile.contextHealth),
-    });
-    const ctxWeather = ui.formInput(`${pfx}ctx_weather`, "select", {
-      label: t("settings.agentCtxWeather"),
-      options: boolOptions,
-      value: String(profile.contextWeather),
-    });
-    const ctxBootstrap = ui.formInput(`${pfx}ctx_bootstrap`, "select", {
-      label: t("settings.agentCtxBootstrap"),
-      options: boolOptions,
-      value: String(profile.contextBootstrap),
-    });
-    agentSections.push(
-      ui.collapsible(profile.label, [modelSelect, ctxHealth, ctxWeather, ctxBootstrap], {
-        expanded: true,
+    const fields: string[] = [];
+    // Model
+    fields.push(
+      ui.formInput(`${pfx}model`, "select", {
+        label: t("settings.agentModelLabel"),
+        options: agentModelRefOptions,
+        value: profile.model,
       })
     );
+    // Tool categories (checkboxes)
+    const toolCheckboxes: string[] = [];
+    for (const cat of data.allToolCategories) {
+      toolCheckboxes.push(
+        ui.formInput(`${pfx}tool__${cat}`, "select", {
+          label: cat,
+          options: boolOptions,
+          value: String(profile.toolCategories.includes(cat)),
+        })
+      );
+    }
+    fields.push(ui.collapsible(t("settings.agentTools"), toolCheckboxes, { expanded: false }));
+    // Skills exclude types
+    fields.push(
+      ui.formInput(`${pfx}skills_exclude`, "text", {
+        label: t("settings.agentSkillsExclude"),
+        value: profile.skillsExcludeTypes,
+        placeholder: "system, deprecated",
+      })
+    );
+    // Context flags
+    fields.push(
+      ui.formInput(`${pfx}ctx_health`, "select", {
+        label: t("settings.agentCtxHealth"),
+        options: boolOptions,
+        value: String(profile.contextHealth),
+      })
+    );
+    fields.push(
+      ui.formInput(`${pfx}ctx_weather`, "select", {
+        label: t("settings.agentCtxWeather"),
+        options: boolOptions,
+        value: String(profile.contextWeather),
+      })
+    );
+    fields.push(
+      ui.formInput(`${pfx}ctx_bootstrap`, "select", {
+        label: t("settings.agentCtxBootstrap"),
+        options: boolOptions,
+        value: String(profile.contextBootstrap),
+      })
+    );
+    // Skill hint
+    fields.push(
+      ui.formInput(`${pfx}skill_hint`, "text", {
+        label: t("settings.agentSkillHint"),
+        value: profile.skillHint,
+      })
+    );
+    agentSections.push(ui.collapsible(profile.label, fields, { expanded: true }));
   }
   const agentsForm = ui.form(agentSections, "settings_save_agents", {
     submitLabel: t("settings.saveAgents"),

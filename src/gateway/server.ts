@@ -22,6 +22,7 @@ import {
   type PHAAgent,
 } from "../agent/pha-agent.js";
 import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
+import { ALL_TOOL_CATEGORIES } from "../tools/types.js";
 import { getDataSource } from "../tools/health-data.js";
 import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
@@ -2278,9 +2279,12 @@ export class GatewaySession {
             id,
             label: id,
             model: p.model || "",
+            toolCategories: p.tools.categories as string[],
+            skillsExcludeTypes: (p.skills?.excludeTypes || []).join(", "),
             contextHealth: p.context.health !== false,
             contextWeather: p.context.weather !== false,
             contextBootstrap: p.context.bootstrap !== false,
+            skillHint: p.skillHint || "",
           };
         });
 
@@ -2297,6 +2301,7 @@ export class GatewaySession {
           orchestratorJudge: config.orchestrator?.judge || "",
           orchestratorEmbedding: config.orchestrator?.embedding || "",
           agentProfiles,
+          allToolCategories: ALL_TOOL_CATEGORIES as string[],
           benchmarkModelRefs: config.benchmark?.models || [],
           gatewayPort: config.gateway?.port || 8000,
           gatewayAutoStart: config.gateway?.autoStart ?? false,
@@ -4450,7 +4455,7 @@ export class GatewaySession {
             }
           }
         } else if (action === "settings_save_agents") {
-          // Save per-agent configuration (model, context flags, etc.)
+          // Save full per-agent configuration
           if (!config.agents) config.agents = {};
           // Collect agent IDs from form fields: ap__<id>__<field>
           const agentIds = new Set<string>();
@@ -4460,23 +4465,55 @@ export class GatewaySession {
           }
           for (const agentId of agentIds) {
             if (!config.agents[agentId]) config.agents[agentId] = {};
+            const ap = config.agents[agentId];
             const pfx = `ap__${agentId}__`;
             // Model
             const modelRef = String(formData[`${pfx}model`] || "") || undefined;
             if (modelRef) {
-              config.agents[agentId].model = modelRef;
+              ap.model = modelRef;
             } else {
-              delete config.agents[agentId].model;
+              delete ap.model;
+            }
+            // Tool categories (from tool__<cat> checkboxes)
+            const cats: string[] = [];
+            for (const [k, v] of Object.entries(formData)) {
+              if (k.startsWith(`${pfx}tool__`) && v === "true") {
+                cats.push(k.replace(`${pfx}tool__`, ""));
+              }
+            }
+            if (cats.length > 0) {
+              ap.tools = { categories: cats };
+            } else {
+              delete ap.tools;
+            }
+            // Skills exclude types (comma-separated)
+            const excludeStr = String(formData[`${pfx}skills_exclude`] || "").trim();
+            if (excludeStr) {
+              ap.skills = {
+                excludeTypes: excludeStr
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              };
+            } else {
+              delete ap.skills;
             }
             // Context flags
-            const ctx = config.agents[agentId].context || {};
+            const ctx = ap.context || {};
             if (formData[`${pfx}ctx_health`] !== undefined)
               ctx.health = formData[`${pfx}ctx_health`] === "true";
             if (formData[`${pfx}ctx_weather`] !== undefined)
               ctx.weather = formData[`${pfx}ctx_weather`] === "true";
             if (formData[`${pfx}ctx_bootstrap`] !== undefined)
               ctx.bootstrap = formData[`${pfx}ctx_bootstrap`] === "true";
-            config.agents[agentId].context = ctx;
+            ap.context = ctx;
+            // Skill hint
+            const hint = String(formData[`${pfx}skill_hint`] || "").trim() || undefined;
+            if (hint) {
+              ap.skillHint = hint;
+            } else {
+              delete ap.skillHint;
+            }
           }
         } else if (action === "settings_save_infra_models") {
           // Save infrastructure model assignments (SA/Judge/Embedding)

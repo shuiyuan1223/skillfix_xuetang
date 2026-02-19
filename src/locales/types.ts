@@ -676,6 +676,9 @@ export interface LocaleMessages {
     agentCtxHealth: string;
     agentCtxWeather: string;
     agentCtxBootstrap: string;
+    agentTools: string;
+    agentSkillsExclude: string;
+    agentSkillHint: string;
     defaultModelFallback: string;
     saveAgents: string;
     saveInfraModels: string;

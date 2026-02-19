@@ -39,6 +39,22 @@ export type ToolCategory =
   | "system"
   | "feedback";
 
+/** All known tool categories (for UI enumeration) */
+export const ALL_TOOL_CATEGORIES: ToolCategory[] = [
+  "health",
+  "memory",
+  "skill",
+  "config",
+  "profile",
+  "presentation",
+  "planning",
+  "proactive",
+  "git",
+  "evolution",
+  "system",
+  "feedback",
+];
+
 export interface MCPToolResult {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;

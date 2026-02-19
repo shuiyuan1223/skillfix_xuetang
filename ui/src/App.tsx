@@ -619,6 +619,10 @@ export function App() {
       mainContentRef.current.scrollTop = 0;
     }
 
+    // Reset chat state so the new page's messages are picked up from server
+    chatInitializedRef.current = false;
+    setChatMessages([]);
+
     postAction({ type: "navigate", view }, handleMessageRef.current);
   }, []);
 
