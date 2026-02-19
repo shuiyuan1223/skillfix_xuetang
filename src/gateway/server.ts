@@ -52,6 +52,7 @@ import { getMemoryManager } from "../memory/index.js";
 import {
   appendToSession,
   loadLatestSession,
+  resolveSessionPath,
   touchSession,
   type SessionEntry,
 } from "../memory/session-store.js";
@@ -1166,7 +1167,14 @@ export class GatewaySession {
     const uuid = channel === "system-agent" ? GatewaySession.SA_GLOBAL_UUID : this.userUuid;
     if (!uuid) return;
     try {
-      appendToSession(uuid, sid, [entry]);
+      // Resolve session directory from agent profile
+      const profileId = channel === "chat" ? "pha" : channel === "legacy-chat" ? "pha4old" : "sa";
+      const profile = getAgentProfile(profileId);
+      const uidForPath = channel === "system-agent" ? "system" : uuid;
+      const sessionDir = profile.sessionPath
+        ? resolveSessionPath(profile.sessionPath, uidForPath)
+        : undefined;
+      appendToSession(uuid, sid, [entry], sessionDir);
     } catch (err) {
       logSession.warn("Failed to persist message", { error: err });
     }
@@ -1178,9 +1186,17 @@ export class GatewaySession {
    */
   private loadPersistedMessages(): void {
     try {
-      // Load main chat (per-user)
+      // Resolve session directories from agent profiles
+      const phaProfile = getAgentProfile("pha");
+      const pha4oldProfile = getAgentProfile("pha4old");
+      const saProfile = getAgentProfile("sa");
+
+      // Load main chat (per-user) — use pha agent's sessionPath
       if (this.userUuid) {
-        const chatSession = loadLatestSession(this.userUuid);
+        const phaSessionDir = phaProfile.sessionPath
+          ? resolveSessionPath(phaProfile.sessionPath, this.userUuid)
+          : undefined;
+        const chatSession = loadLatestSession(this.userUuid, { sessionDir: phaSessionDir });
         if (chatSession && chatSession.entries.length > 0) {
           const lastTs = chatSession.entries[chatSession.entries.length - 1].timestamp;
           if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
@@ -1196,9 +1212,12 @@ export class GatewaySession {
         }
       }
 
-      // Load legacy-chat (per-user, legacy- prefix)
+      // Load legacy-chat (per-user) — use pha4old agent's sessionPath
       if (this.userUuid) {
-        const legacySession = loadLatestSession(this.userUuid, { prefix: "legacy-" });
+        const pha4oldSessionDir = pha4oldProfile.sessionPath
+          ? resolveSessionPath(pha4oldProfile.sessionPath, this.userUuid)
+          : undefined;
+        const legacySession = loadLatestSession(this.userUuid, { sessionDir: pha4oldSessionDir });
         if (legacySession && legacySession.entries.length > 0) {
           const lastTs = legacySession.entries[legacySession.entries.length - 1].timestamp;
           if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
@@ -1214,12 +1233,17 @@ export class GatewaySession {
         }
       }
 
-      // Load system agent chat (sa- prefix) — global, not per-user
-      const saSession = loadLatestSession(GatewaySession.SA_GLOBAL_UUID, { prefix: "sa-" });
+      // Load system agent chat — use sa agent's sessionPath
+      const saSessionDir = saProfile.sessionPath
+        ? resolveSessionPath(saProfile.sessionPath, "system")
+        : undefined;
+      const saSession = loadLatestSession(GatewaySession.SA_GLOBAL_UUID, {
+        prefix: "sa-",
+        sessionDir: saSessionDir,
+      });
       if (saSession && saSession.entries.length > 0) {
         const lastTs = saSession.entries[saSession.entries.length - 1].timestamp;
         if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
-          // Extract saSessionId from the persisted file name (strip "sa-" prefix)
           this.saSessionId = saSession.sessionId.replace(/^sa-/, "");
           this.systemAgentChatMessages = saSession.entries
             .filter((e) => e.role === "user" || e.role === "assistant")
@@ -2283,6 +2307,8 @@ export class GatewaySession {
             id,
             label: id,
             model: p.model || "",
+            workspace: p.workspace || "",
+            sessionPath: p.sessionPath || "",
             toolCategories: p.tools.categories as string[],
             skillsTags: (p.skills?.tags || []).join(", "),
           };
@@ -2948,7 +2974,11 @@ export class GatewaySession {
         this.legacyChatCurrentAssistantMsgId = null;
         this.legacyChatLastStreamedText = "";
         this.legacyChatSessionId = crypto.randomUUID();
-        if (this.userUuid) touchSession(this.userUuid, `legacy-${this.legacyChatSessionId}`);
+        if (this.userUuid) {
+          const p = getAgentProfile("pha4old");
+          const dir = p.sessionPath ? resolveSessionPath(p.sessionPath, this.userUuid) : undefined;
+          touchSession(this.userUuid, `legacy-${this.legacyChatSessionId}`, dir);
+        }
         this.legacyChatAgent = null; // Force agent rebuild without old history
       } else {
         this.chatMessages = [];
@@ -2956,8 +2986,12 @@ export class GatewaySession {
         this.streamingContent = "";
         this.currentAssistantMsgId = null;
         this.lastStreamedText = "";
-        this.sessionId = crypto.randomUUID(); // New session so old messages won't reload
-        if (this.userUuid) touchSession(this.userUuid, this.sessionId); // Create empty file as "latest"
+        this.sessionId = crypto.randomUUID();
+        if (this.userUuid) {
+          const p = getAgentProfile("pha");
+          const dir = p.sessionPath ? resolveSessionPath(p.sessionPath, this.userUuid) : undefined;
+          touchSession(this.userUuid, this.sessionId, dir);
+        }
         this.agent = null; // Force agent rebuild without old history
       }
       this.sendChatUpdate(send);
@@ -2968,8 +3002,10 @@ export class GatewaySession {
       this.systemAgentStreamingContent = "";
       this.saCurrentAssistantMsgId = null;
       this.saLastStreamedText = "";
-      this.saSessionId = crypto.randomUUID(); // New SA session so old messages won't reload
-      touchSession(GatewaySession.SA_GLOBAL_UUID, `sa-${this.saSessionId}`); // Create empty file as "latest"
+      this.saSessionId = crypto.randomUUID();
+      const saP = getAgentProfile("sa");
+      const saDir = saP.sessionPath ? resolveSessionPath(saP.sessionPath, "system") : undefined;
+      touchSession(GatewaySession.SA_GLOBAL_UUID, `sa-${this.saSessionId}`, saDir);
       this.sendEvolutionLabUpdate(send);
     } else if (action === "send_message" && payload?.content) {
       // Chat message from UI
@@ -4486,6 +4522,20 @@ export class GatewaySession {
               ap.model = modelRef;
             } else {
               delete ap.model;
+            }
+            // Workspace path
+            const workspace = String(formData[`${pfx}workspace`] || "").trim() || undefined;
+            if (workspace) {
+              ap.workspace = workspace;
+            } else {
+              delete ap.workspace;
+            }
+            // Session path
+            const sessionPath = String(formData[`${pfx}sessionPath`] || "").trim() || undefined;
+            if (sessionPath) {
+              ap.sessionPath = sessionPath;
+            } else {
+              delete ap.sessionPath;
             }
             // Tool categories (from tool__<cat> checkboxes)
             const cats: string[] = [];

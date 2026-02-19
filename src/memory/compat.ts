@@ -7,7 +7,7 @@
 
 import { Database } from "bun:sqlite";
 import path from "node:path";
-import { findProjectRoot } from "../utils/config.js";
+import { findProjectRoot, getStateDir } from "../utils/config.js";
 
 // ============ SQLite Adapter ============
 // OpenClaw uses node:sqlite DatabaseSync; PHA uses bun:sqlite Database.
@@ -24,7 +24,20 @@ export type { SubsystemLogger } from "../utils/logger.js";
 
 // ============ Path Adapter ============
 
-export function resolveAgentWorkspaceDir(_cfg: unknown, agentId: string): string {
+/**
+ * Resolve agent workspace directory.
+ * @param _cfg Unused (OpenClaw compat)
+ * @param agentId User UUID (used as {uid} in template)
+ * @param workspaceTemplate Optional workspace template from AgentProfile (e.g. "users/{uid}")
+ */
+export function resolveAgentWorkspaceDir(
+  _cfg: unknown,
+  agentId: string,
+  workspaceTemplate?: string
+): string {
+  if (workspaceTemplate) {
+    return path.join(getStateDir(), workspaceTemplate.replace(/\{uid\}/g, agentId));
+  }
   return path.join(findProjectRoot(), ".pha", "users", agentId);
 }
 
@@ -32,7 +45,18 @@ export function resolveAgentDir(_cfg: unknown, agentId: string): string {
   return path.join(findProjectRoot(), ".pha", "users", agentId);
 }
 
-export function resolveSessionTranscriptsDirForAgent(agentId: string): string {
+/**
+ * Resolve session transcripts directory for an agent.
+ * @param agentId User UUID (used as {uid} in template)
+ * @param sessionPathTemplate Optional session path template from AgentProfile (e.g. "users/{uid}/sessions/pha")
+ */
+export function resolveSessionTranscriptsDirForAgent(
+  agentId: string,
+  sessionPathTemplate?: string
+): string {
+  if (sessionPathTemplate) {
+    return path.join(getStateDir(), sessionPathTemplate.replace(/\{uid\}/g, agentId));
+  }
   return path.join(findProjectRoot(), ".pha", "users", agentId || "default", "sessions");
 }
 

@@ -1985,6 +1985,8 @@ export interface SettingsPageData {
     id: string;
     label: string;
     model: string;
+    workspace: string;
+    sessionPath: string;
     toolCategories: string[];
     skillsTags: string;
   }>;
@@ -2153,6 +2155,22 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
         label: t("settings.agentModelLabel"),
         options: agentModelRefOptions,
         value: profile.model,
+      })
+    );
+    // Workspace Path
+    fields.push(
+      ui.formInput(`${pfx}workspace`, "text", {
+        label: t("settings.agentWorkspace"),
+        value: profile.workspace,
+        placeholder: "users/{uid}",
+      })
+    );
+    // Session Path
+    fields.push(
+      ui.formInput(`${pfx}sessionPath`, "text", {
+        label: t("settings.agentSessionPath"),
+        value: profile.sessionPath,
+        placeholder: "users/{uid}/sessions/pha",
       })
     );
     // Skills Tags
