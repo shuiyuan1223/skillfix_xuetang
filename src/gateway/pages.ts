@@ -2069,7 +2069,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   const title = ui.text(t("settings.title"), "h2");
   const subtitle = ui.text(t("settings.subtitle"), "caption");
   const uuidText = ui.text(`${t("settings.userId")}: ${data.userId || "—"}`, "caption");
-  const header = ui.column([title, subtitle, uuidText], { gap: 4 });
+  const header = ui.column([title, subtitle, uuidText], { gap: 6, style: "margin-bottom: 8px;" });
 
   // ---- Model Repository Section ----
   const repoChildren: string[] = [];
@@ -2221,27 +2221,26 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       );
     }
     fields.push(ui.collapsible(t("settings.agentTools"), toolCheckboxes, { expanded: false }));
-    // Context flags (checkboxes)
-    fields.push(
+    // Advanced settings (collapsed) — includes context flags + skill hint
+    const advancedFields: string[] = [];
+    advancedFields.push(
       ui.formInput(`${pfx}ctx_bootstrap`, "checkbox", {
         label: t("settings.agentCtxBootstrap"),
         value: String(profile.contextBootstrap),
       })
     );
-    fields.push(
+    advancedFields.push(
       ui.formInput(`${pfx}ctx_memory`, "checkbox", {
         label: t("settings.agentCtxMemory"),
         value: String(profile.contextMemory),
       })
     );
-    fields.push(
+    advancedFields.push(
       ui.formInput(`${pfx}ctx_profile`, "checkbox", {
         label: t("settings.agentCtxProfile"),
         value: String(profile.contextProfile),
       })
     );
-    // Advanced settings (collapsed)
-    const advancedFields: string[] = [];
     advancedFields.push(
       ui.formInput(`${pfx}skill_hint`, "text", {
         label: t("settings.agentSkillHint"),
