@@ -2793,6 +2793,21 @@ export class GatewaySession {
     return msg;
   }
 
+  /**
+   * Fire-and-forget wrapper: starts SA processing in background,
+   * sends initial streaming UI update immediately, and returns.
+   * This prevents the action lock from being held during LLM inference.
+   */
+  private fireSystemAgentMessage(content: string, send: (msg: unknown) => void): void {
+    // Use SSE send if available (preferred over HTTP collector)
+    const sseSend = this.getSend(send);
+    this.handleSystemAgentMessage(content, sseSend).catch((err: unknown) => {
+      logEvolution.error("SA message failed", { error: err });
+    });
+    // Send initial UI update to show streaming state
+    this.sendEvolutionLabUpdate(send);
+  }
+
   private async handleSystemAgentMessage(
     content: string,
     send: (msg: unknown) => void
@@ -3474,11 +3489,11 @@ export class GatewaySession {
     // System Agent action
     else if (action === "sa_send_message" && (payload?.content || payload?.value)) {
       const content = (payload.content || payload.value) as string;
-      await this.handleSystemAgentMessage(content, send);
+      this.fireSystemAgentMessage(content, send);
     }
     // Evolution Lab actions
     else if (action === "evo_send_message" && payload?.value) {
-      await this.handleSystemAgentMessage(payload.value as string, send);
+      this.fireSystemAgentMessage(payload.value as string, send);
     } else if (action === "evo_tab_change" && payload?.tab) {
       this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
       this.sendEvolutionLabUpdate(send);
@@ -3547,21 +3562,21 @@ export class GatewaySession {
     }
     // Evolution Lab: Approve/Reject proposal
     else if (action === "evo_approve") {
-      await this.handleSystemAgentMessage(
+      this.fireSystemAgentMessage(
         "I approve this proposal. Please proceed with applying the changes.",
         send
       );
     } else if (action === "evo_reject") {
-      await this.handleSystemAgentMessage(
+      this.fireSystemAgentMessage(
         "I reject this proposal. Please revise the plan and propose again.",
         send
       );
     }
     // Playground actions (simplified — SystemAgent drives the flow)
     else if (action === "pg_send_message" && payload?.value) {
-      await this.handleSystemAgentMessage(payload.value as string, send);
+      this.fireSystemAgentMessage(payload.value as string, send);
     } else if (action === "pg_start_auto") {
-      await this.handleSystemAgentMessage(
+      this.fireSystemAgentMessage(
         "Start a full evolution cycle: benchmark, diagnose, propose improvements, and wait for my approval before applying.",
         send
       );
