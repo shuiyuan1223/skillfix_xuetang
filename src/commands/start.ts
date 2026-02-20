@@ -183,6 +183,7 @@ export function registerStartCommand(program: Command): void {
           env: {
             ...process.env,
             PHA_API_KEY: apiKey,
+            CLAUDECODE: undefined,
           },
         });
 
