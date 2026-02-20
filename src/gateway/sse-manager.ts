@@ -95,10 +95,9 @@ export class SSEConnection {
   }
 
   /**
-   * Detach: stop heartbeat but do NOT close the writer.
-   * Prevents reconnection cascade — the old stream dies naturally
-   * when the client disconnects instead of triggering an immediate
-   * EventSource reconnect.
+   * Detach: stop heartbeat and close the writer after a short delay.
+   * The delay prevents reconnection cascade — the new connection has
+   * time to establish before the old stream terminates cleanly.
    */
   detach(): void {
     if (this.closed) return;
@@ -107,7 +106,13 @@ export class SSEConnection {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
-    // Intentionally NOT closing writer
+    // Close writer after delay to avoid reconnection cascade
+    // while still properly terminating the chunked response
+    setTimeout(() => {
+      this.writer.close().catch(() => {
+        /* already closed or errored */
+      });
+    }, 3000);
   }
 
   /** Close the underlying stream. */

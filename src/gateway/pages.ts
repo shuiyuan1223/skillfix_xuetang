@@ -3831,8 +3831,16 @@ interface ToolCardResult {
  * `result` is an AgentToolResult: { content, details: { success, data } }
  */
 export function generateToolCards(toolName: string, result: unknown): ToolCardResult | null {
-  // AgentToolResult wraps data in details.data
-  const details = (result as { details?: { data?: unknown } })?.details;
+  // AgentToolResult wraps data in details.data (health tools)
+  // or details directly (git tools, etc.)
+  const details = (result as { details?: Record<string, unknown> })?.details;
+  if (!details) return null;
+
+  // Git tools: details has diff/branch/etc. directly (no .data wrapper)
+  if (toolName === "git_diff") {
+    return generateGitDiffCards(details);
+  }
+
   const data = details?.data;
   if (!data) return null;
 
@@ -3868,6 +3876,22 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
     default:
       return generateGenericToolCards(data);
   }
+}
+
+function generateGitDiffCards(details: Record<string, unknown>): ToolCardResult | null {
+  const diff = details.diff as string | undefined;
+  if (!diff || diff === "(no differences)") return null;
+
+  const branch = (details.branch as string) || "";
+  const baseBranch = (details.baseBranch as string) || "main";
+
+  const ui = new A2UIGenerator("ic-diff");
+  const diffId = ui.diffView("", "", {
+    title: `${baseBranch} ← ${branch}`,
+    unifiedDiff: diff,
+  });
+  const root = ui.column([diffId], { gap: 0 });
+  return ui.build(root);
 }
 
 function generateCreatePlanCards(data: unknown): ToolCardResult | null {
