@@ -1,4 +1,5 @@
 import React from "react";
+import ReactDOM from "react-dom";
 import type { A2UIComponent, A2UISurfaceData, MessagePart } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
 import { Markdown } from "../../lib/markdown";
@@ -1208,16 +1209,29 @@ function TagPickerComponent({
   const [open, setOpen] = React.useState(false);
   const [customVal, setCustomVal] = React.useState("");
   const dropRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const [dropPos, setDropPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
   React.useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
+      if (
+        dropRef.current && !dropRef.current.contains(e.target as Node) &&
+        triggerRef.current && !triggerRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Calculate dropdown position when opening
+  React.useEffect(() => {
+    if (open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom + 4, left: rect.left });
+    }
   }, [open]);
 
   const allTags = React.useMemo(
@@ -1241,7 +1255,7 @@ function TagPickerComponent({
   const checkSvg = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
   return (
-    <div ref={dropRef} className="relative">
+    <div className="relative">
       {label && <div className="text-xs text-text-muted mb-1">{label}</div>}
       <div className="flex flex-wrap items-center gap-1.5">
         {selected.map((tag) => (
@@ -1260,6 +1274,7 @@ function TagPickerComponent({
           </span>
         ))}
         <button
+          ref={triggerRef}
           type="button"
           className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-border text-xs text-text-muted cursor-pointer bg-transparent hover:border-primary hover:text-primary transition-colors"
           onClick={() => setOpen(!open)}
@@ -1267,10 +1282,11 @@ function TagPickerComponent({
           <span className="text-[11px]">+</span> {placeholder}
         </button>
       </div>
-      {open && (
+      {open && ReactDOM.createPortal(
         <div
-          className="absolute z-50 mt-1 w-64 bg-surface border border-border rounded-lg shadow-lg overflow-hidden"
-          style={{ boxShadow: "var(--shadow-lg)" }}
+          ref={dropRef}
+          className="fixed z-[9999] w-64 bg-surface border border-border rounded-lg shadow-lg overflow-hidden"
+          style={{ top: dropPos.top, left: dropPos.left, boxShadow: "var(--shadow-lg)" }}
         >
           <div className="p-2 border-b border-border">
             <input
@@ -1323,7 +1339,8 @@ function TagPickerComponent({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
