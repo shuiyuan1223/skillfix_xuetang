@@ -386,13 +386,16 @@ export function renderForm(c: A2UIComponent, ctx: RenderContext) {
   const submitIcon = c.submitIcon as string | undefined;
   const cancelLabel = c.cancelLabel as string | undefined;
   const onCancel = c.onCancel as string | undefined;
+  const footerExtra = c.footerExtra as string[] | undefined;
   const btnBase = "px-5 py-2.5 rounded-[10px] text-sm font-medium cursor-pointer transition-all duration-fast border-none";
   const iconBtnCls = "inline-flex items-center justify-center w-9 h-9 rounded-lg cursor-pointer border-none transition-all duration-150 active:scale-[0.93] [&>svg]:w-4 [&>svg]:h-4";
   const isIconOnly = submitIcon && !submitLabel;
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const formData = new FormData(form); const data: Record<string, unknown> = {}; formData.forEach((v, k) => { data[k] = v; }); ctx.sendAction(onSubmit, data); }}>
       {ctx.renderChildren(c.children)}
-      <div className="flex gap-3 justify-end mt-2">
+      <div className="flex items-center gap-3 mt-2">
+        {footerExtra && <div className="flex gap-2">{ctx.renderChildren(footerExtra)}</div>}
+        <div className="flex-1" />
         {cancelLabel && onCancel && <button type="button" className={`${btnBase} bg-transparent text-text-secondary hover:bg-primary/10 hover:text-text`} onClick={() => ctx.sendAction(onCancel)}>{cancelLabel}</button>}
         {isIconOnly ? (
           <button type="submit" title={c.submitTooltip as string || undefined} className={`${iconBtnCls} bg-gradient-to-br from-primary to-accent text-white hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(102,126,234,0.4)]`}><span dangerouslySetInnerHTML={{ __html: getIcon(submitIcon) }} /></button>

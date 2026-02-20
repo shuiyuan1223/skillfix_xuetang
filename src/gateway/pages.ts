@@ -2121,12 +2121,15 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     ];
     repoChildren.push(ui.collapsible(mp.key, providerContent, { expanded: true }));
   }
-  const repoForm = ui.form(repoChildren, "settings_save_model_repository", saveIcon);
   const addProviderBtn = ui.button(t("settings.addProvider"), "settings_provider_add", {
     icon: "plus",
     variant: "outline",
   });
-  const repoCard = ui.card([repoForm, addProviderBtn], {
+  const repoForm = ui.form(repoChildren, "settings_save_model_repository", {
+    ...saveIcon,
+    footerExtra: [addProviderBtn],
+  });
+  const repoCard = ui.card([repoForm], {
     title: t("settings.sectionModelRepository"),
     padding: 20,
   });
@@ -2176,6 +2179,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       onToggle: "settings_agent_tag_toggle",
       payload: { agentId: profile.id, kind: "tool" },
       placeholder: t("settings.addTag"),
+      stableKey: `tp_${profile.id}_tool`,
     });
     const skillTagPicker = ui.tagPicker({
       label: t("settings.agentSkillsTags"),
@@ -2184,6 +2188,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       onToggle: "settings_agent_tag_toggle",
       payload: { agentId: profile.id, kind: "skill" },
       placeholder: t("settings.addTag"),
+      stableKey: `tp_${profile.id}_skill`,
     });
 
     const shouldExpand = data.expandedAgentId
@@ -2197,13 +2202,16 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       )
     );
   }
-  // One form wrapping all agent collapsibles — single save button at bottom
-  const agentsForm = ui.form(agentFormChildren, "settings_save_agents", saveIcon);
+  // One form wrapping all agent collapsibles — add + save on same row
   const addAgentBtn = ui.button(t("settings.addAgent"), "settings_agent_add", {
     icon: "plus",
     variant: "outline",
   });
-  const agentsCard = ui.card([agentsForm, addAgentBtn], {
+  const agentsForm = ui.form(agentFormChildren, "settings_save_agents", {
+    ...saveIcon,
+    footerExtra: [addAgentBtn],
+  });
+  const agentsCard = ui.card([agentsForm], {
     title: t("settings.sectionAgents"),
     padding: 20,
   });
@@ -2215,6 +2223,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
     options: data.configTags,
     onToggle: "settings_tags_toggle",
     placeholder: t("settings.addTag"),
+    stableKey: "tp_config_tags",
   });
   const tagsCard = ui.card([tagsDesc, tagsPicker], {
     title: t("settings.sectionTags"),
@@ -2303,6 +2312,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       options: data.huaweiScopes, // existing scopes as preset options
       onToggle: "settings_scope_toggle",
       placeholder: t("settings.addScope"),
+      stableKey: "tp_huawei_scopes",
     });
     scopesCard = ui.card([scopePicker], {
       title: t("settings.scopesPerLine"),
@@ -2455,12 +2465,15 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
       ])
     );
   }
-  const mcpRemoteForm = ui.form(remoteFormInputs, "settings_save_mcp_remote", saveIcon);
   const mcpRemoteAddBtn = ui.button(t("settings.addServer"), "settings_mcp_add", {
     icon: "plus",
     variant: "outline",
   });
-  mcpChildren.push(ui.collapsible(t("settings.remoteServers"), [mcpRemoteForm, mcpRemoteAddBtn]));
+  const mcpRemoteForm = ui.form(remoteFormInputs, "settings_save_mcp_remote", {
+    ...saveIcon,
+    footerExtra: [mcpRemoteAddBtn],
+  });
+  mcpChildren.push(ui.collapsible(t("settings.remoteServers"), [mcpRemoteForm]));
 
   const mcpCard = ui.card(mcpChildren, {
     title: t("settings.sectionMcp"),

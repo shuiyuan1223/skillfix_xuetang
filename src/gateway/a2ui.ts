@@ -420,6 +420,7 @@ export interface FormComponent extends A2UIComponent {
   submitIcon?: string; // Icon name — renders icon-only submit button (e.g. "save")
   cancelLabel?: string;
   onCancel?: string; // Action name
+  footerExtra?: string[]; // Extra component IDs rendered left of submit button (same row)
 }
 
 // Log Viewer Component
@@ -658,6 +659,7 @@ export class A2UIGenerator {
     payload?: Record<string, unknown>;
     placeholder?: string;
     label?: string;
+    stableKey?: string; // Stable React key to prevent remount on re-render
   }): string {
     const id = this.nextId("tagpick");
     this.components.set(id, { id, type: "tag_picker", ...opts });

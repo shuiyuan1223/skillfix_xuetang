@@ -259,7 +259,7 @@ export function A2UIRenderer({
       case "evolution_pipeline": return renderEvolutionPipeline(c, ctx);
       case "log_viewer": return renderLogViewer(c, ctx);
       case "auth_page": return rcAuthPage(c);
-      case "tag_picker": return <TagPickerComponent key={c.id} c={c} sendAction={sendAction} />;
+      case "tag_picker": return <TagPickerComponent key={(c.stableKey as string) || c.id} c={c} sendAction={sendAction} />;
       default:
         return <div className="text-text-muted text-xs p-2">[Unknown: {c.type}]</div>;
     }
