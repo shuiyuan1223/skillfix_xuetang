@@ -667,7 +667,16 @@ export function loadConfig(): PHAConfig {
   try {
     const content = fs.readFileSync(configPath, "utf-8");
     const loaded = JSON.parse(content);
-    const config = { ...DEFAULT_CONFIG, ...loaded };
+    // Deep-merge known nested sections so partial user configs
+    // (e.g. { gateway: { port: 9000 } }) don't lose defaults like autoStart.
+    const config = {
+      ...DEFAULT_CONFIG,
+      ...loaded,
+      gateway: { ...DEFAULT_CONFIG.gateway, ...loaded.gateway },
+      llm: { ...DEFAULT_CONFIG.llm, ...loaded.llm },
+      dataSources: { ...DEFAULT_CONFIG.dataSources, ...loaded.dataSources },
+      tui: { ...DEFAULT_CONFIG.tui, ...loaded.tui },
+    };
     // Auto-migrate old format to new
     let needsSave = migrateConfig(config);
     // Check if file still has legacy fields that should be stripped
