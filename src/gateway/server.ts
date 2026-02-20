@@ -5483,7 +5483,7 @@ export class GatewaySession {
         this.sendEvolutionLabUpdate(this._throttlePendingSend);
         this._throttlePendingSend = null;
       }
-    }, 500);
+    }, 100);
   }
 
   /**

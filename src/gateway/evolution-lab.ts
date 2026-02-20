@@ -193,8 +193,6 @@ export function getDefaultPipelineSteps(currentStep?: string): PipelineStep[] {
   const stepsConfig = [
     { id: "benchmark", label: t("evolution.pipelineBenchmark"), icon: "test-tube" },
     { id: "diagnose", label: t("evolution.pipelineDiagnose"), icon: "search" },
-    { id: "propose", label: t("evolution.pipelinePropose"), icon: "lightbulb" },
-    { id: "approve", label: t("evolution.pipelineApprove"), icon: "check" },
     { id: "apply", label: t("evolution.pipelineApply"), icon: "zap" },
     { id: "validate", label: t("evolution.pipelineValidate"), icon: "shield" },
   ];
