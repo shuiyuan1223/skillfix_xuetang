@@ -23,11 +23,13 @@ llm-logs/
 
 /**
  * Run a git command inside the .pha/ directory
+ * @param timeout — milliseconds (default 10s, use longer for network ops)
  */
-function git(stateDir: string, args: string): string {
+function git(stateDir: string, args: string, timeout = 10_000): string {
   return execSync(`git -C "${stateDir}" ${args}`, {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
+    timeout,
   }).trim();
 }
 
@@ -50,6 +52,27 @@ function hasRemote(stateDir: string): boolean {
   }
 }
 
+/**
+ * Stage all and create initial commit (if there are uncommitted files)
+ */
+function initCommit(stateDir: string): void {
+  try {
+    git(stateDir, "add -A");
+    const status = git(stateDir, "status --porcelain");
+    if (status.length > 0) {
+      git(stateDir, 'commit -m "Initial state snapshot"');
+      console.log(`${c.green(icons.success)} Created initial commit`);
+    } else {
+      console.log(`${c.dim(`${icons.info} Nothing to commit`)}`);
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!msg.includes("nothing to commit")) {
+      console.log(`${c.yellow(icons.warning)} Commit: ${msg}`);
+    }
+  }
+}
+
 export function registerStateCommand(program: Command): void {
   const state = program
     .command("state")
@@ -58,10 +81,13 @@ export function registerStateCommand(program: Command): void {
   // pha state init [--remote <url>]
   state
     .command("init")
-    .description("Initialize .pha/ as a git repository")
+    .description(
+      "Initialize .pha/ as a git repository (with --remote: reset local to match remote)"
+    )
     .option("-r, --remote <url>", "Remote repository URL")
     .action((options) => {
       const stateDir = getStateDir();
+      const NET_TIMEOUT = 30_000; // 30s for network operations
 
       if (!fs.existsSync(stateDir)) {
         console.log(`${c.red(icons.error)} State directory not found: ${stateDir}`);
@@ -71,7 +97,7 @@ export function registerStateCommand(program: Command): void {
 
       // 1. Init git repo if needed
       if (isGitRepo(stateDir)) {
-        console.log(`${c.yellow(icons.warning)} Already a git repo: ${stateDir}`);
+        console.log(`${c.dim(`${icons.info} Already a git repo: ${stateDir}`)}`);
       } else {
         git(stateDir, "init");
         console.log(`${c.green(icons.success)} Initialized git repo in ${stateDir}`);
@@ -86,9 +112,10 @@ export function registerStateCommand(program: Command): void {
         console.log(`${c.dim(`${icons.info} .pha/.gitignore already exists`)}`);
       }
 
-      // 3. Add remote if provided
+      // 3. Handle remote
       if (options.remote) {
         try {
+          // Set remote URL
           if (hasRemote(stateDir)) {
             git(stateDir, `remote set-url origin "${options.remote}"`);
             console.log(`${c.green(icons.success)} Updated remote origin: ${options.remote}`);
@@ -97,44 +124,53 @@ export function registerStateCommand(program: Command): void {
             console.log(`${c.green(icons.success)} Added remote origin: ${options.remote}`);
           }
 
-          // Try to pull existing content
+          // Fetch from remote
+          console.log(`${c.dim(`${icons.info} Fetching from remote...`)}`);
+          git(stateDir, "fetch origin", NET_TIMEOUT);
+
+          // Check if remote has a main branch
+          let remoteHasMain = false;
           try {
-            git(stateDir, "fetch origin");
-            // Check if remote has main branch
+            git(stateDir, "rev-parse --verify origin/main");
+            remoteHasMain = true;
+          } catch {
+            // Remote is empty
+          }
+
+          if (remoteHasMain) {
+            // Reset local to match remote exactly (overwrite semantics)
+            // Ensure we have a local branch to reset
             try {
-              git(stateDir, "rev-parse --verify origin/main");
-              git(stateDir, "pull origin main --rebase --allow-unrelated-histories");
-              console.log(`${c.green(icons.success)} Pulled existing content from remote`);
+              git(stateDir, "rev-parse --verify HEAD");
             } catch {
-              // Remote is empty, that's fine
+              // No commits yet — create an orphan branch so reset works
+              git(stateDir, "checkout --orphan main");
             }
-          } catch (e) {
+            git(stateDir, "reset --hard origin/main");
+            // Clean untracked files that are NOT in .gitignore
+            git(stateDir, "clean -fd");
+            console.log(`${c.green(icons.success)} Local state reset to match remote`);
+          } else {
             console.log(
-              `${c.yellow(icons.warning)} Could not fetch from remote (will push on first 'pha state push')`
+              `${c.dim(`${icons.info} Remote is empty, will push on first 'pha state push'`)}`
             );
+            // Initial commit for local content
+            initCommit(stateDir);
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          console.log(`${c.red(icons.error)} Failed to configure remote: ${msg}`);
+          if (msg.includes("timed out") || msg.includes("ETIMEDOUT")) {
+            console.log(
+              `${c.red(icons.error)} Fetch timed out (30s). Check your network or remote URL.`
+            );
+          } else {
+            console.log(`${c.red(icons.error)} Failed to sync with remote: ${msg}`);
+          }
+          process.exit(1);
         }
-      }
-
-      // 4. Initial commit (if there are files to commit)
-      try {
-        git(stateDir, "add -A");
-        const status = git(stateDir, "status --porcelain");
-        if (status.length > 0) {
-          git(stateDir, 'commit -m "Initial state snapshot"');
-          console.log(`${c.green(icons.success)} Created initial commit`);
-        } else {
-          console.log(`${c.dim(`${icons.info} Nothing to commit`)}`);
-        }
-      } catch (e) {
-        // May fail if already committed — that's ok
-        const msg = e instanceof Error ? e.message : String(e);
-        if (!msg.includes("nothing to commit")) {
-          console.log(`${c.yellow(icons.warning)} Commit: ${msg}`);
-        }
+      } else {
+        // No remote — just commit local content
+        initCommit(stateDir);
       }
 
       console.log("");
@@ -188,7 +224,7 @@ export function registerStateCommand(program: Command): void {
             process.exit(1);
           }
 
-          git(stateDir, "push -u origin HEAD:main");
+          git(stateDir, "push -u origin HEAD:main", 30_000);
           console.log(`${c.green(icons.success)} Pushed to remote`);
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
@@ -223,7 +259,7 @@ export function registerStateCommand(program: Command): void {
       }
 
       try {
-        const output = git(stateDir, "pull --rebase origin main");
+        const output = git(stateDir, "pull --rebase origin main", 30_000);
         console.log(`${c.green(icons.success)} Pulled latest state`);
         if (output && output !== "Already up to date.") {
           console.log(c.dim(output));
