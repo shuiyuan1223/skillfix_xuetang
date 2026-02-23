@@ -5,7 +5,7 @@
  * Uses Agent from pi-agent-core directly — NOT PHAAgent.
  *
  * Key differences from PHAAgent:
- * - Own system prompt loaded from src/prompts/system-agent/SOUL.md
+ * - Own system prompt loaded from src/prompts/system-agent/ (SOUL.md + AGENTS.md)
  * - Own memory system (.pha/system-agent/)
  * - File operation tools (read, grep, find, bash) for lightweight inspection
  * - Tool feedback mechanism for identifying capability gaps
@@ -15,22 +15,14 @@
 
 import { Agent, type AgentEvent, type AgentMessage } from "@mariozechner/pi-agent-core";
 import { getModel, type Model } from "@mariozechner/pi-ai";
-import { Type } from "@sinclair/typebox";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { readFileSync, existsSync } from "fs";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import { readFileSync, existsSync, readdirSync } from "fs";
 import { join } from "path";
-import { gitAgentTools } from "./git-agent-tools.js";
+import { globalRegistry } from "../tools/index.js";
+import { buildSkillRegistry } from "./system-prompt.js";
 import { claudeCodeAgentTool } from "./claude-code-tool.js";
-import { getSkillAgentTool } from "./tools.js";
 import { fileAgentTools } from "./file-tools.js";
-import { enrichWithForcedSkill, enrichWithSkills } from "./skill-trigger.js";
-import {
-  systemMemoryReadTool,
-  systemMemoryWriteTool,
-  systemMemoryAppendTool,
-  systemMemorySearchTool,
-} from "../tools/system-memory-tools.js";
-import { suggestToolImprovementTool, listToolWishlistTool } from "../tools/tool-feedback.js";
+// Skill loading is now LLM-driven via system prompt skill registry + get_skill tool.
 import { sessionToAgentMessages } from "../memory/session-store.js";
 import { createSACompactionFlush } from "../memory/compaction.js";
 import { readMemoryFile, appendMemoryFile } from "../tools/system-memory-tools.js";
@@ -59,19 +51,47 @@ export interface SystemAgentConfig {
 const FALLBACK_PROMPT = `你是 PHA 系统 Agent，负责管理和进化 PHA 系统。始终使用中文回复。`;
 
 /**
- * Load SystemAgent system prompt from src/prompts/system-agent/SOUL.md
+ * Load all SystemAgent prompt files from src/prompts/system-agent/
+ * Priority order: SOUL.md, AGENTS.md, then alphabetical.
  */
 function loadSystemAgentPrompt(): string {
-  const soulPath = join("src", "prompts", "system-agent", "SOUL.md");
+  const dir = join("src", "prompts", "system-agent");
   try {
-    if (existsSync(soulPath)) {
-      return readFileSync(soulPath, "utf-8").trim();
+    if (!existsSync(dir)) {
+      log.warn("system-agent prompts dir not found, using fallback");
+      return FALLBACK_PROMPT;
     }
+
+    const ordered = ["SOUL.md", "IDENTITY.md", "AGENTS.md", "TOOLS.md", "HEARTBEAT.md"];
+    const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
+    const sections: string[] = [];
+
+    // Load priority files first
+    for (const name of ordered) {
+      if (files.includes(name)) {
+        const content = readFileSync(join(dir, name), "utf-8").trim();
+        if (content) sections.push(content);
+      }
+    }
+
+    // Load remaining files alphabetically
+    for (const file of files.sort()) {
+      if (!ordered.includes(file)) {
+        const content = readFileSync(join(dir, file), "utf-8").trim();
+        if (content) sections.push(content);
+      }
+    }
+
+    if (sections.length === 0) {
+      log.warn("No prompt files found, using fallback");
+      return FALLBACK_PROMPT;
+    }
+
+    return sections.join("\n\n---\n\n");
   } catch {
-    // Fall through to fallback
+    log.warn("Failed to load system-agent prompts, using fallback");
+    return FALLBACK_PROMPT;
   }
-  log.warn("SOUL.md not found, using fallback prompt");
-  return FALLBACK_PROMPT;
 }
 
 /** Memory budget: max characters per memory file */
@@ -88,6 +108,7 @@ const SA_MEMORY_BUDGET = {
  */
 function buildSASystemPrompt(): string {
   const soul = loadSystemAgentPrompt();
+  const skillRegistry = buildSkillRegistry();
 
   // Load memory files (tail to get most recent content)
   const memoryRaw = readMemoryFile("memory.md");
@@ -103,9 +124,6 @@ function buildSASystemPrompt(): string {
   const evolution = tailSlice(evolutionRaw, SA_MEMORY_BUDGET.evolutionLog);
   const experience = tailSlice(experienceRaw, SA_MEMORY_BUDGET.experience);
 
-  const hasMemory = memory || evolution || experience;
-  if (!hasMemory) return soul;
-
   const today = new Date().toISOString().split("T")[0];
   const sections: string[] = [soul, "\n---\n", `## Session Context\n\n- **Date**: ${today}\n`];
 
@@ -118,142 +136,24 @@ function buildSASystemPrompt(): string {
   if (experience) {
     sections.push(`## Recent Experience\n\n${experience}\n`);
   }
+  if (skillRegistry) {
+    sections.push(skillRegistry);
+  }
 
   const prompt = sections.join("\n");
 
   // Token distribution report (debug)
   const est = (s: string) => Math.ceil(s.length / 4);
   log.debug(
-    `Token distribution: soul=${est(soul)} memory=${est(memory)} evolution=${est(evolution)} experience=${est(experience)} total≈${est(prompt)}`
+    `Token distribution: soul=${est(soul)} memory=${est(memory)} evolution=${est(evolution)} experience=${est(experience)} skills=${est(skillRegistry)} total≈${est(prompt)}`
   );
 
   return prompt;
 }
 
 // ========================================================================
-// AgentTool adapters for system memory tools
+// No more hand-written AgentTool adapters — globalRegistry auto-derives them
 // ========================================================================
-
-const toResult = (data: unknown): AgentToolResult<unknown> => ({
-  content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-  details: data,
-});
-
-const MemoryReadSchema = Type.Object({
-  file: Type.String({
-    description: "Memory file name: 'memory', 'evolution-log', 'tool-wishlist', or 'experience'",
-  }),
-});
-
-const MemoryWriteSchema = Type.Object({
-  file: Type.String({
-    description: "Memory file name: 'memory', 'evolution-log', 'tool-wishlist', or 'experience'",
-  }),
-  content: Type.String({ description: "Full content to write" }),
-});
-
-const MemoryAppendSchema = Type.Object({
-  file: Type.String({
-    description: "Memory file name: 'memory', 'evolution-log', 'tool-wishlist', or 'experience'",
-  }),
-  entry: Type.String({ description: "Content to append (will be prefixed with timestamp)" }),
-});
-
-const MemorySearchSchema = Type.Object({
-  query: Type.String({ description: "Search keyword or phrase" }),
-});
-
-const systemMemoryReadAgentTool: AgentTool<typeof MemoryReadSchema> = {
-  name: systemMemoryReadTool.name,
-  description: systemMemoryReadTool.description,
-  label: "Read System Memory",
-  parameters: MemoryReadSchema,
-  execute: async (_id: string, params: { file: string }) =>
-    toResult(await systemMemoryReadTool.execute(params)),
-};
-
-const systemMemoryWriteAgentTool: AgentTool<typeof MemoryWriteSchema> = {
-  name: systemMemoryWriteTool.name,
-  description: systemMemoryWriteTool.description,
-  label: "Write System Memory",
-  parameters: MemoryWriteSchema,
-  execute: async (_id: string, params: { file: string; content: string }) =>
-    toResult(await systemMemoryWriteTool.execute(params)),
-};
-
-const systemMemoryAppendAgentTool: AgentTool<typeof MemoryAppendSchema> = {
-  name: systemMemoryAppendTool.name,
-  description: systemMemoryAppendTool.description,
-  label: "Append System Memory",
-  parameters: MemoryAppendSchema,
-  execute: async (_id: string, params: { file: string; entry: string }) =>
-    toResult(await systemMemoryAppendTool.execute(params)),
-};
-
-const systemMemorySearchAgentTool: AgentTool<typeof MemorySearchSchema> = {
-  name: systemMemorySearchTool.name,
-  description: systemMemorySearchTool.description,
-  label: "Search System Memory",
-  parameters: MemorySearchSchema,
-  execute: async (_id: string, params: { query: string }) =>
-    toResult(await systemMemorySearchTool.execute(params)),
-};
-
-// ========================================================================
-// AgentTool adapters for tool feedback tools
-// ========================================================================
-
-const SuggestToolSchema = Type.Object({
-  toolName: Type.String({
-    description: "Tool name to improve or suggested new tool name",
-  }),
-  category: Type.String({
-    description: "Category: 'new_tool', 'enhancement', 'bug', 'missing_param'",
-  }),
-  description: Type.String({ description: "Detailed description" }),
-  useCase: Type.String({ description: "Specific use case scenario" }),
-  priority: Type.Optional(Type.String({ description: "Priority: 'high', 'medium', 'low'" })),
-});
-
-const EmptySchema = Type.Object({});
-
-const suggestToolAgentTool: AgentTool<typeof SuggestToolSchema> = {
-  name: suggestToolImprovementTool.name,
-  description: suggestToolImprovementTool.description,
-  label: "Suggest Tool Improvement",
-  parameters: SuggestToolSchema,
-  execute: async (
-    _id: string,
-    params: {
-      toolName: string;
-      category: string;
-      description: string;
-      useCase: string;
-      priority?: string;
-    }
-  ) => toResult(await suggestToolImprovementTool.execute(params)),
-};
-
-const listWishlistAgentTool: AgentTool<typeof EmptySchema> = {
-  name: listToolWishlistTool.name,
-  description: listToolWishlistTool.description,
-  label: "List Tool Wishlist",
-  parameters: EmptySchema,
-  execute: async () => toResult(await listToolWishlistTool.execute()),
-};
-
-// ========================================================================
-// All SystemAgent tools
-// ========================================================================
-
-const systemAgentMemoryTools: AgentTool<any>[] = [
-  systemMemoryReadAgentTool,
-  systemMemoryWriteAgentTool,
-  systemMemoryAppendAgentTool,
-  systemMemorySearchAgentTool,
-];
-
-const toolFeedbackAgentTools: AgentTool<any>[] = [suggestToolAgentTool, listWishlistAgentTool];
 
 /**
  * SystemAgent — wraps pi-agent-core Agent with evolution-specific configuration.
@@ -278,14 +178,17 @@ export class SystemAgent {
     // Load system prompt from file + inject memory context
     const systemPrompt = buildSASystemPrompt();
 
-    // Assemble all tools
+    // Assemble tools: registry-derived + standalone tools
     const tools: AgentTool<any>[] = [
-      ...gitAgentTools,
+      ...globalRegistry.toAgentToolsByCategories([
+        "git",
+        "evolution",
+        "system",
+        "feedback",
+        "skill",
+      ]),
       claudeCodeAgentTool,
-      getSkillAgentTool,
       ...fileAgentTools,
-      ...systemAgentMemoryTools,
-      ...toolFeedbackAgentTools,
     ];
 
     // Convert persisted session messages to AgentMessage[] for context recovery
@@ -386,19 +289,18 @@ export class SystemAgent {
   }
 
   /**
-   * Send a message with a specific skill force-injected.
+   * Send a message with a hint to use a specific skill.
    */
   async chatWithSkill(message: string, skillName: string): Promise<void> {
-    const enriched = enrichWithForcedSkill(message, skillName);
-    await this.agent.prompt(enriched);
+    const hint = `[Load skill "${skillName}" via get_skill before responding]\n\n${message}`;
+    await this.agent.prompt(hint);
   }
 
   /**
-   * Send a message with auto skill matching.
+   * Send a message to the agent.
    */
   async chat(message: string): Promise<void> {
-    const enriched = enrichWithSkills(message);
-    await this.agent.prompt(enriched);
+    await this.agent.prompt(message);
   }
 
   /**
@@ -415,8 +317,7 @@ export class SystemAgent {
     });
 
     try {
-      const enriched = enrichWithSkills(message);
-      await this.agent.prompt(enriched);
+      await this.agent.prompt(message);
       await this.agent.waitForIdle();
     } finally {
       unsubscribe();

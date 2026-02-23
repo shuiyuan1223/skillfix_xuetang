@@ -1,0 +1,18 @@
+id: new-user
+uuid: benchmark-new-user
+
+profile:
+  nickname: ""
+  goals:
+    primary: ""
+    dailySteps: 8000
+    sleepHours: 7
+    exercisePerWeek: 3
+
+memory: ""
+
+health_data:
+  metrics: {}
+  heartRate: {}
+  sleep: {}
+  workouts: {}

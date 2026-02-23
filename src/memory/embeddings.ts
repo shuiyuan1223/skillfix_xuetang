@@ -54,6 +54,26 @@ export interface EmbeddingConfig {
 }
 
 /**
+ * Create a noop embedding provider for BM25-only fallback.
+ * Returns zero vectors so the indexing pipeline still works,
+ * but vector search will be effectively skipped.
+ */
+export function createNoopEmbeddingProvider(): EmbeddingProviderResult {
+  const provider: EmbeddingProvider = {
+    id: "noop",
+    model: "none",
+    embedQuery: async () => [],
+    embedBatch: async (texts) => texts.map(() => []),
+  };
+  return {
+    provider,
+    requestedProvider: "auto",
+    fallbackFrom: "openai",
+    fallbackReason: "No API key available — using BM25-only search",
+  };
+}
+
+/**
  * Create embedding provider (PHA simplified version).
  * Always uses OpenAI-compatible API (works with OpenRouter).
  */

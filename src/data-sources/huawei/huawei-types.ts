@@ -11,6 +11,7 @@ export interface HuaweiTokenResponse {
   expires_in: number;
   token_type: string;
   scope?: string;
+  id_token?: string; // JWT containing sub = Huawei user ID
 }
 
 // Stored token data with expiry timestamp

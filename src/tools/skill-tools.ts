@@ -14,8 +14,9 @@ import {
   renameSync,
   statSync,
 } from "fs";
-import { join, basename, relative, extname } from "path";
+import { join, basename, extname } from "path";
 import { gitCommitFiles } from "../evolution/version-manager.js";
+import type { PHATool } from "./types.js";
 
 // Default skills directory (relative to project root)
 let skillsDir = "src/skills";
@@ -218,11 +219,15 @@ function getSkillInfo(skillDir: string): {
 /**
  * List all skills
  */
-export const listSkillsTool = {
+export const listSkillsTool: PHATool<{ includeDisabled?: boolean }> = {
   name: "list_skills",
-  description: "List all skills with their status and metadata",
-  parameters: {
-    type: "object" as const,
+  description: "列出所有技能及其状态和元数据",
+  displayName: "技能列表",
+  category: "skill",
+  icon: "puzzle",
+  label: "List Skills",
+  inputSchema: {
+    type: "object",
     properties: {
       includeDisabled: {
         type: "boolean",
@@ -244,8 +249,9 @@ export const listSkillsTool = {
       enabled: boolean;
       path: string;
       emoji?: string;
-      triggers?: string[];
       type?: string;
+      category?: string;
+      tags?: string[];
     }> = [];
 
     const entries = readdirSync(dir, { withFileTypes: true });
@@ -266,8 +272,9 @@ export const listSkillsTool = {
         enabled: info.enabled,
         path: info.path,
         emoji: pha?.emoji as string | undefined,
-        triggers: pha?.triggers as string[] | undefined,
         type: (pha?.type as string) || "pha",
+        category: pha?.category as string | undefined,
+        tags: pha?.tags as string[] | undefined,
       });
     }
 
@@ -289,12 +296,15 @@ export const listSkillsTool = {
 /**
  * Get skill content
  */
-export const getSkillTool = {
+export const getSkillTool: PHATool<{ name: string; filePath?: string }> = {
   name: "get_skill",
-  description:
-    "Get the full content and metadata of a specific skill. Supports reading sub-files via filePath.",
-  parameters: {
-    type: "object" as const,
+  description: "获取特定技能的完整内容和元数据。支持通过 filePath 读取子文件。",
+  displayName: "获取技能",
+  category: "skill",
+  icon: "puzzle",
+  label: "Get Skill",
+  inputSchema: {
+    type: "object",
     properties: {
       name: {
         type: "string",
@@ -339,12 +349,28 @@ export const getSkillTool = {
     const content = readFileSync(fullPath, "utf-8");
     const language = getLanguageFromFile(targetFile);
 
+    // Skill gating: validate requires.tools against registry
+    const metadata = info.frontmatter.metadata as Record<string, unknown> | undefined;
+    const pha = metadata?.pha as Record<string, unknown> | undefined;
+    const requires = pha?.requires as Record<string, unknown> | undefined;
+    const requiredTools = requires?.tools as string[] | undefined;
+    let missingTools: string[] | undefined;
+
+    if (requiredTools && Array.isArray(requiredTools)) {
+      // Lazy import to avoid circular dependency at module load time
+      const { globalRegistry } = await import("./index.js");
+      missingTools = requiredTools.filter((t) => !globalRegistry.has(t));
+    }
+
     return {
       success: true,
       ...info,
       content,
       filePath: targetFile,
       language,
+      ...(missingTools && missingTools.length > 0
+        ? { warning: `Missing required tools: ${missingTools.join(", ")}`, missingTools }
+        : {}),
     };
   },
 };
@@ -352,11 +378,15 @@ export const getSkillTool = {
 /**
  * Update skill content
  */
-export const updateSkillTool = {
+export const updateSkillTool: PHATool<{ name: string; content: string; filePath?: string }> = {
   name: "update_skill",
-  description: "Update a skill file's content. Supports sub-files via filePath.",
-  parameters: {
-    type: "object" as const,
+  description: "更新技能文件内容。支持通过 filePath 更新子文件。",
+  displayName: "更新技能",
+  category: "skill",
+  icon: "puzzle",
+  label: "Update Skill",
+  inputSchema: {
+    type: "object",
     properties: {
       name: {
         type: "string",
@@ -430,11 +460,20 @@ export const updateSkillTool = {
 /**
  * Create a new skill
  */
-export const createSkillTool = {
+export const createSkillTool: PHATool<{
+  name: string;
+  description: string;
+  emoji?: string;
+  content?: string;
+}> = {
   name: "create_skill",
-  description: "Create a new skill with SKILL.md",
-  parameters: {
-    type: "object" as const,
+  description: "使用 SKILL.md 创建新技能",
+  displayName: "创建技能",
+  category: "skill",
+  icon: "puzzle",
+  label: "Create Skill",
+  inputSchema: {
+    type: "object",
     properties: {
       name: {
         type: "string",
@@ -448,11 +487,6 @@ export const createSkillTool = {
         type: "string",
         description: "Emoji icon for the skill",
       },
-      triggers: {
-        type: "array",
-        items: { type: "string" },
-        description: "Keywords that trigger this skill",
-      },
       content: {
         type: "string",
         description: "Skill instructions (markdown body after frontmatter)",
@@ -464,7 +498,6 @@ export const createSkillTool = {
     name: string;
     description: string;
     emoji?: string;
-    triggers?: string[];
     content?: string;
   }) => {
     const skillDir = join(getSkillsDir(), args.name);
@@ -485,11 +518,10 @@ export const createSkillTool = {
       description: args.description,
     };
 
-    if (args.emoji || args.triggers) {
+    if (args.emoji) {
       frontmatter.metadata = {
         pha: {
-          ...(args.emoji && { emoji: args.emoji }),
-          ...(args.triggers && { triggers: args.triggers }),
+          emoji: args.emoji,
         },
       };
     }
@@ -524,11 +556,15 @@ export const createSkillTool = {
 /**
  * Toggle skill enabled/disabled status
  */
-export const toggleSkillTool = {
+export const toggleSkillTool: PHATool<{ name: string; enabled: boolean }> = {
   name: "toggle_skill",
-  description: "Enable or disable a skill (renames folder with _disabled suffix)",
-  parameters: {
-    type: "object" as const,
+  description: "启用或禁用技能（通过 _disabled 后缀重命名文件夹）",
+  displayName: "切换技能状态",
+  category: "skill",
+  icon: "puzzle",
+  label: "Toggle Skill",
+  inputSchema: {
+    type: "object",
     properties: {
       name: {
         type: "string",

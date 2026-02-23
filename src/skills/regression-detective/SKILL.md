@@ -2,7 +2,7 @@
 name: regression-detective
 description: "退步侦探 — 检测和诊断进化过程中的分数退步，找到根因并建议修复"
 metadata:
-  {"pha": {"emoji": "search", "type": "system", "triggers": ["regression", "退步", "分数下降", "回退", "退化", "score drop", "degradation"]}}
+  {"pha": {"emoji": "search", "category": "evolution", "tags": ["sa", "regression", "debugging", "analysis"], "type": "system"}}
 ---
 
 # 退步侦探

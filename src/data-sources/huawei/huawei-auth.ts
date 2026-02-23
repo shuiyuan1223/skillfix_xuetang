@@ -227,14 +227,15 @@ export class HuaweiAuth {
 
   /**
    * Exchange authorization code for tokens (for specific user)
-   * Does not store token - returns it for caller to store in UserStore
+   * Does not store token - returns it for caller to store in UserStore.
+   * Also extracts Huawei user ID from id_token if present.
    */
   async exchangeCodeForUser(
     code: string,
     clientId: string,
     clientSecret: string,
     redirectUri: string
-  ): Promise<TokenData> {
+  ): Promise<{ tokenData: TokenData; huaweiUserId?: string }> {
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       code,
@@ -257,7 +258,31 @@ export class HuaweiAuth {
     }
 
     const data = (await response.json()) as HuaweiTokenResponse;
-    return this.tokenResponseToData(data);
+    const tokenData = this.tokenResponseToData(data);
+
+    // Extract Huawei user ID: try id_token first, then UserInfo endpoint
+    let huaweiUserId: string | undefined;
+    if (data.id_token) {
+      try {
+        huaweiUserId = decodeIdToken(data.id_token);
+      } catch (e) {
+        console.error("[Huawei/Auth] id_token decode failed:", e);
+      }
+    } else {
+      console.warn(
+        "[Huawei/Auth] Token response has no id_token, keys:",
+        Object.keys(data).join(",")
+      );
+    }
+    if (!huaweiUserId) {
+      try {
+        huaweiUserId = await fetchUserInfoSub(tokenData.accessToken);
+      } catch (e) {
+        console.error("[Huawei/Auth] UserInfo fallback failed:", e);
+      }
+    }
+
+    return { tokenData, huaweiUserId };
   }
 
   /**
@@ -344,6 +369,60 @@ export class HuaweiAuth {
     const store = userStore || getUserStore();
     return store.isAuthenticated(uuid);
   }
+}
+
+/**
+ * Decode a JWT id_token and extract the `sub` claim (Huawei user ID).
+ * Only decodes the payload (no signature verification — token comes from trusted HTTPS exchange).
+ */
+export function decodeIdToken(idToken: string): string {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) throw new Error("Invalid id_token format");
+  const payload = JSON.parse(
+    Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8")
+  );
+  if (!payload.sub) throw new Error("id_token missing sub claim");
+  return payload.sub;
+}
+
+/**
+ * Fetch user ID from Huawei OIDC UserInfo endpoint using access_token.
+ * Fallback when id_token is not present in the token response.
+ */
+/**
+ * Fetch user ID via Huawei's proprietary getTokenInfo API.
+ * POST https://oauth-api.cloud.huawei.com/rest.php
+ *   nsp_svc=huawei.oauth2.user.getTokenInfo&access_token=...&open_id=OPENID
+ */
+async function fetchUserInfoSub(accessToken: string): Promise<string> {
+  const url = "https://oauth-api.cloud.huawei.com/rest.php";
+  const body = new URLSearchParams({
+    nsp_svc: "huawei.oauth2.user.getTokenInfo",
+    open_id: "OPENID",
+    access_token: accessToken,
+  });
+
+  console.log("[Huawei/Auth] Fetching getTokenInfo from:", url);
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    console.error("[Huawei/Auth] getTokenInfo failed:", response.status, text.slice(0, 300));
+    throw new Error(`getTokenInfo request failed: ${response.status}`);
+  }
+  const data = (await response.json()) as Record<string, unknown>;
+  console.log("[Huawei/Auth] getTokenInfo response keys:", Object.keys(data).join(","));
+  const uid = (data.union_id || data.open_id || data.unionID || data.openID || data.sub) as
+    | string
+    | undefined;
+  if (!uid) {
+    console.error("[Huawei/Auth] getTokenInfo has no user ID:", JSON.stringify(data).slice(0, 300));
+    throw new Error("getTokenInfo response missing user ID");
+  }
+  return uid;
 }
 
 // Default instance

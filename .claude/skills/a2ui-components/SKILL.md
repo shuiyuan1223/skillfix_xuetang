@@ -8,11 +8,16 @@ description: Reference for A2UI component API. Use when building pages or UI fea
 ## Architecture
 
 ```
-Backend (pages.ts)           Frontend (main.ts)
-A2UIGenerator.build() ──→ WebSocket JSON ──→ Pure Renderer
+Backend (pages.ts)                  Frontend (Web / TUI)
+A2UIGenerator.build() ──┬─→ WebSocket /ws ──→ A2UIRenderer.tsx (React)
+                        │                     tui-renderer.ts (pi-tui)
+                        │
+Agent chat events ──────┴─→ POST /api/ag-ui (SSE) ──→ App.tsx (AG-UI events)
 ```
 
 **All UI is server-generated.** Frontend never contains business logic.
+
+**Dual channel**: Page updates via WebSocket, chat streaming via SSE.
 
 ## A2UIGenerator API
 
@@ -67,8 +72,15 @@ const ui = new A2UIGenerator("main"); // surface: "main" | "sidebar" | "modal" |
 
 ```typescript
 const root = ui.column([child1, child2], { gap: 24, padding: 24 });
-return ui.build(root); // Returns A2UIMessage
+return ui.build(root); // Returns A2UISurfaceData
 ```
+
+## Chart Constraints
+
+When using `ui.chart()`:
+- **YAxis domain**: For data with small variations (e.g., heart rate 60-100), set explicit `yDomain: [min, max]` to avoid flat lines
+- **Dense data**: For time-series with many points, consider using `area` chart type for better readability
+- **Color**: Use semantic colors — `"#ef4444"` for heart-related, `"#3b82f6"` for sleep, `"#22c55e"` for activity
 
 ## Icon Rules
 
@@ -97,10 +109,23 @@ ui.text("Health Overview", "h2");       // WRONG
 
 Update 3 files: `types.ts`, `zh-CN.ts`, `en.ts` in `src/locales/`.
 
+## Tool Display Names
+
+When Agent calls MCP tools during chat, the frontend shows a Chinese label. Maintain this mapping in `ui/src/components/a2ui/A2UIRenderer.tsx`:
+
+```typescript
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  get_health_data: "健康数据",
+  get_heart_rate: "心率数据",
+  get_sleep: "睡眠数据",
+  // ... add new tools here
+};
+```
+
 ## Page Assembly Pattern
 
 ```typescript
-export function generateXxxPage(data: { ... }): A2UIMessage {
+export function generateXxxPage(data: { ... }): A2UISurfaceData {
   const ui = new A2UIGenerator("main");
 
   // 1. Header
@@ -120,20 +145,25 @@ export function generateXxxPage(data: { ... }): A2UIMessage {
 ## Sending to Frontend
 
 ```typescript
-// Full page (sidebar + main)
+// Full page (sidebar + main) via WebSocket
 import { generatePage } from "./pages.js";
 send(generatePage("viewName", mainContent));
 
-// Update single surface
+// Update single surface via WebSocket
 send({ type: "a2ui", surface_id: "main", components, root_id });
 
-// Show modal
+// Show modal via WebSocket
 send({ type: "a2ui", surface_id: "modal", components, root_id });
 
-// Show toast
+// Show toast via WebSocket
 const toast = generateToast("message", "success");
 send({ type: "a2ui", surface_id: "toast", ...toast });
 
-// Close modal
+// Close modal via WebSocket
 send({ type: "clear_surface", surface_id: "modal" });
 ```
+
+**Chat messages** are NOT sent via A2UI — they stream via SSE (`POST /api/ag-ui`) using AG-UI protocol events:
+- `RunStarted` / `RunFinished` — Chat lifecycle
+- `TextMessageStart` / `TextMessageContent` / `TextMessageEnd` — Text streaming
+- `ToolCallStart` / `ToolCallEnd` / `ToolCallResult` — Tool invocations

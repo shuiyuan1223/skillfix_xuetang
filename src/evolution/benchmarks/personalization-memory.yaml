@@ -1,0 +1,244 @@
+category: personalization-memory
+
+tests:
+  # --- 用户画像 (2) ---
+  - id: pm-profile-001
+    subcategory: user-profile
+    query: "根据你对我的了解，我这周应该重点关注什么？"
+    difficulty: core
+    userUuid: active-user
+    sessionMessages:
+      - role: user
+        content: "我是一个35岁的办公室职员，大部分时间都坐着。"
+        timestamp: 1707321600000
+      - role: assistant
+        content: "了解了！作为办公室职员，我们需要关注减少久坐时间和改善你的睡眠作息。"
+        timestamp: 1707321700000
+      - role: user
+        content: "我的主要目标是多运动、睡好觉。"
+        timestamp: 1707321800000
+      - role: assistant
+        content: "很好的目标！我们先从增加每日步数和固定就寝时间开始吧。"
+        timestamp: 1707321900000
+    expected:
+      shouldMention:
+        - "关联用户的办公室职员背景和久坐生活方式"
+        - "基于工具数据的睡眠改善优先级"
+        - "针对办公场景的个性化活动建议"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+        - get_sleep
+
+  - id: pm-profile-002
+    subcategory: user-profile
+    query: "你知道我在准备5K比赛，这周训练计划怎么调整？"
+    difficulty: medium
+    userUuid: active-user
+    sessionMessages:
+      - role: user
+        content: "我报名了6周后的5K跑步比赛！"
+        timestamp: 1707062400000
+      - role: assistant
+        content: "太棒了！根据你目前的体能，我们可以制定一个循序渐进的训练计划。先从每周跑3次开始。"
+        timestamp: 1707062500000
+      - role: user
+        content: "好的，我现在大概能轻松跑2.5公里。"
+        timestamp: 1707062600000
+    expected:
+      shouldMention:
+        - "关联之前对话中的5K训练目标"
+        - "基于工具中最近运动数据的进展"
+        - "针对本周的训练调整建议"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_workouts
+
+  # --- 记忆回溯 (3) ---
+  - id: pm-memory-001
+    subcategory: memory-recall
+    query: "上次我们聊了我的睡眠问题，有改善吗？"
+    difficulty: core
+    userUuid: active-user
+    sessionMessages:
+      - role: user
+        content: "我最近睡眠不太好，只能睡5个小时左右。"
+        timestamp: 1707148800000
+      - role: assistant
+        content: "我看到你的睡眠确实偏短，而且睡眠中的清醒时间也偏长。我们来调整一下就寝习惯——试试在23点前上床，22点后不看屏幕。"
+        timestamp: 1707148900000
+      - role: user
+        content: "好的，我试试。我之前大概凌晨1点才睡。"
+        timestamp: 1707149000000
+    expected:
+      shouldMention:
+        - "关联之前讨论的睡眠问题（之前约5小时）"
+        - "确认工具数据中的当前睡眠状况"
+        - "就寝时间变化的观察"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_sleep
+
+  - id: pm-memory-002
+    subcategory: memory-recall
+    query: "你还记得我之前说过膝盖受伤吗？我想重新开始跑步。"
+    difficulty: hard
+    userUuid: active-user
+    sessionMessages:
+      - role: user
+        content: "我上个月打篮球伤了膝盖，医生说要休息4周。"
+        timestamp: 1706544000000
+      - role: assistant
+        content: "膝盖受伤了要好好休息！请遵循医生建议的4周恢复期。我们可以先做一些上肢运动和低冲击活动。"
+        timestamp: 1706544100000
+      - role: user
+        content: "现在大概过了5周了，膝盖感觉好多了。"
+        timestamp: 1707408000000
+    expected:
+      shouldMention:
+        - "关联之前对话中的膝盖受伤经历"
+        - "确认约5周的恢复时间线"
+        - "建议在恢复跑步前获得医生许可"
+        - "如已获批准，建议循序渐进地恢复跑步"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.8
+      expectedTools:
+        - get_metrics
+
+  - id: pm-memory-003
+    subcategory: memory-recall
+    query: "我们上个月定的目标是什么？我完成得怎么样？"
+    difficulty: hard
+    userUuid: active-user
+    sessionMessages:
+      - role: user
+        content: "我想给新的一年定一些健康目标。"
+        timestamp: 1706140800000
+      - role: assistant
+        content: "我们来定三个目标：(1) 每天走到10000步，(2) 持续睡满7小时以上，(3) 每周运动3次。"
+        timestamp: 1706140900000
+      - role: user
+        content: "听起来很好。我现在大概每天5000步，睡6个小时。"
+        timestamp: 1706141000000
+    expected:
+      shouldMention:
+        - "回顾上个月制定的三个具体目标"
+        - "工具数据中的步数进展"
+        - "工具数据中的睡眠进展"
+        - "基于数据的各目标完成度评估"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.8
+      expectedTools:
+        - get_metrics
+        - get_sleep
+
+  # --- 上下文理解 (3) ---
+  - id: pm-context-001
+    subcategory: context-awareness
+    query: "那次跑步的心率怎么样？"
+    difficulty: core
+    userUuid: active-user
+    sessionMessages:
+      - role: user
+        content: "我今天的跑步怎么样？"
+        timestamp: 1707580800000
+      - role: assistant
+        content: "跑得不错！距离和时间都很好，卡路里消耗也可以。"
+        timestamp: 1707580900000
+    expected:
+      shouldMention:
+        - "根据对话上下文将'那次跑步'解析为今天的跑步"
+        - "工具数据中跑步时的平均心率"
+        - "工具数据中的最高心率"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_workouts
+        - get_heart_rate
+
+  - id: pm-context-002
+    subcategory: context-awareness
+    query: "跟平时比怎么样？"
+    difficulty: hard
+    userUuid: active-user
+    sessionMessages:
+      - role: user
+        content: "我今天走了多少步？"
+        timestamp: 1707580800000
+      - role: assistant
+        content: "你今天的步数不错，活动时间也挺好的。是个好日子！"
+        timestamp: 1707580900000
+    expected:
+      shouldMention:
+        - "根据对话将'跟平时比'解析为今天步数与日常的对比"
+        - "工具数据中的近期平均值比较"
+        - "今天表现相对于日常水平的评估"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.8
+      expectedTools:
+        - get_metrics
+
+  - id: pm-context-003
+    subcategory: context-awareness
+    query: "能用简单的话再解释一下吗？我看不懂那些数字。"
+    difficulty: medium
+    userUuid: active-user
+    sessionMessages:
+      - role: user
+        content: "我昨晚睡得怎么样？"
+        timestamp: 1707580800000
+      - role: assistant
+        content: "你的睡眠质量一般。睡眠阶段数据显示深睡眠、浅睡眠、REM和清醒的具体百分比。睡眠效率大约91%。"
+        timestamp: 1707580900000
+    expected:
+      shouldMention:
+        - "用通俗易懂的语言重新解释上次的技术性回答"
+        - "用日常说法替代百分比和专业术语"
+        - "核心结论：睡眠好不好，需不需要改善"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_sleep

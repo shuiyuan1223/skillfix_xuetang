@@ -127,10 +127,12 @@ interface ExternalProgressInfo {
 interface VersionInfo {
   id: string;
   branchName: string;
+  parentBranch: string;
   status: string;
   triggerMode: string;
   triggerRef: string;
   scoreDelta: number | null;
+  latestScore?: number | null;
   filesChanged: string[];
   createdAt: number;
 }
@@ -163,6 +165,14 @@ export interface EvolutionLabData {
   externalProgressMap?: Record<string, ExternalProgressInfo>;
   // Versions
   versions?: VersionInfo[];
+  mainCommits?: {
+    hash: string;
+    shortHash: string;
+    message: string;
+    date: string;
+    benchmarkScore?: number | null;
+    benchmarkTag?: string;
+  }[];
   timelineEvents?: TimelineEvent[];
   selectedVersion?: string;
   selectedTimelineEvent?: string;
@@ -183,8 +193,6 @@ export function getDefaultPipelineSteps(currentStep?: string): PipelineStep[] {
   const stepsConfig = [
     { id: "benchmark", label: t("evolution.pipelineBenchmark"), icon: "test-tube" },
     { id: "diagnose", label: t("evolution.pipelineDiagnose"), icon: "search" },
-    { id: "propose", label: t("evolution.pipelinePropose"), icon: "lightbulb" },
-    { id: "approve", label: t("evolution.pipelineApprove"), icon: "check" },
     { id: "apply", label: t("evolution.pipelineApply"), icon: "zap" },
     { id: "validate", label: t("evolution.pipelineValidate"), icon: "shield" },
   ];
@@ -228,6 +236,17 @@ export const RUN_COLORS = [
   "rgb(245, 158, 11)",
   "rgb(16, 185, 129)",
 ];
+
+/** Consistent model display: always show modelId, prefix with presetName if available */
+function formatModelDisplay(presetName?: string, modelId?: string): string {
+  if (!modelId) return presetName || "-";
+  // Extract short model name from full ID (e.g. "anthropic/claude-opus-4.6" → "claude-opus-4.6")
+  const shortModel = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
+  if (presetName && presetName !== shortModel && presetName !== modelId) {
+    return `${presetName} (${shortModel})`;
+  }
+  return shortModel;
+}
 
 function getScoreColor(score: number): string {
   if (score >= 0.9) return "#4ade80";
@@ -291,16 +310,20 @@ function buildMultiSeriesRadarData(
 }
 
 /**
- * Build Plotly scatterpolar traces from comparison runs.
+ * Build Recharts-compatible radar chart data from comparison runs.
+ * Returns { data: [{subject, seriesKey1, seriesKey2, ...}], series: [{key, name, color}] }
  */
-export function buildPlotlyRadarTraces(
+export function buildRadarChartData(
   runs: ComparisonRun[],
   mode: "categories" | "criteria"
-): Array<Record<string, unknown>> {
-  return runs.map((run) => {
+): {
+  data: Array<Record<string, unknown>>;
+  series: Array<{ key: string; name: string; color: string }>;
+} {
+  // Build subjects (axis labels) and per-run scores
+  const runDataPoints = runs.map((run) => {
     let dataPoints: Array<{ name: string; score: number }>;
     if (mode === "criteria") {
-      // Average each criterion across all categories to get 16 unique points
       const criteriaMap = new Map<string, number[]>();
       for (const cs of run.categoryScores) {
         for (const sub of cs.subComponents || []) {
@@ -313,7 +336,6 @@ export function buildPlotlyRadarTraces(
         name,
         score: scores.reduce((a, b) => a + b, 0) / scores.length,
       }));
-      // Fallback to categories mode if no sub-components available
       if (dataPoints.length === 0) {
         dataPoints = run.categoryScores.map((cs) => ({
           name: getCategoryLabel(cs.category),
@@ -326,65 +348,31 @@ export function buildPlotlyRadarTraces(
         score: cs.score <= 1 ? cs.score : cs.score / 100,
       }));
     }
-
-    const r = dataPoints.map((d) => d.score);
-    const theta = dataPoints.map((d) => d.name);
-    // Close the polygon
-    if (r.length > 0) {
-      r.push(r[0]);
-      theta.push(theta[0]);
-    }
-
-    return {
-      type: "scatterpolar",
-      r,
-      theta,
-      fill: "toself",
-      fillcolor: run.color
-        .replace("rgb", "rgba")
-        .replace(")", mode === "criteria" ? ", 0.15)" : ", 0.2)"),
-      line: { color: run.color, width: mode === "criteria" ? 2 : 3 },
-      name: run.label,
-      hovertemplate: "%{theta}<br>Score: %{r:.2f}<extra></extra>",
-    };
+    return dataPoints;
   });
-}
 
-export const PLOTLY_LAYOUT = {
-  polar: {
-    radialaxis: {
-      visible: true,
-      range: [0, 1],
-      tickvals: [0.25, 0.5, 0.75, 1.0],
-      ticktext: ["0.25", "0.50", "0.75", "1.00"],
-      tickfont: { size: 10, color: "#55556a", family: "JetBrains Mono" },
-      gridcolor: "rgba(255, 255, 255, 0.06)",
-      linecolor: "rgba(255, 255, 255, 0.1)",
-    },
-    angularaxis: {
-      tickfont: { size: 10, color: "#8888a0", family: "Outfit" },
-      gridcolor: "rgba(255, 255, 255, 0.06)",
-      linecolor: "rgba(255, 255, 255, 0.1)",
-      rotation: 90,
-      direction: "clockwise",
-    },
-    bgcolor: "rgba(0, 0, 0, 0)",
-  },
-  paper_bgcolor: "rgba(0, 0, 0, 0)",
-  plot_bgcolor: "rgba(0, 0, 0, 0)",
-  font: { color: "#f0f0f5", family: "Outfit" },
-  showlegend: true,
-  legend: {
-    x: 0.5,
-    y: -0.15,
-    xanchor: "center",
-    orientation: "h",
-    font: { size: 12 },
-    bgcolor: "rgba(0,0,0,0)",
-  },
-  margin: { t: 60, b: 80, l: 80, r: 80 },
-  dragmode: false,
-};
+  // Use first run's subjects as reference
+  const subjects = runDataPoints[0]?.map((d) => d.name) || [];
+
+  // Build flat data array: [{subject, run_0, run_1, ...}]
+  const data = subjects.map((subject, si) => {
+    const row: Record<string, unknown> = { subject };
+    runs.forEach((run, ri) => {
+      const dp = runDataPoints[ri];
+      row[`run_${ri}`] = dp?.[si]?.score ?? 0;
+    });
+    return row;
+  });
+
+  // Build series metadata
+  const series = runs.map((run, ri) => ({
+    key: `run_${ri}`,
+    name: run.label,
+    color: run.color,
+  }));
+
+  return { data, series };
+}
 
 export function getCategoryLabel(category: string): string {
   const labelMap: Record<string, string> = {
@@ -423,7 +411,7 @@ export function getCategoryIcon(category: string): string {
 // Main Lab Page — 5-Tab Dashboard
 // ============================================================================
 
-export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
+export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // ---- Header ----
@@ -633,9 +621,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     // Header row: title + mode toggle + run picker
     const arenaTitle = ui.text(t("evolution.selectRunsForComparison"), "label");
     const toggleId = `arena_toggle_${Date.now()}`;
-    ui.addComponent(toggleId, {
-      id: toggleId,
-      type: "arena_mode_toggle",
+    ui.addRaw(toggleId, "ArenaModeToggle", {
       options: [
         { label: t("evolution.categoriesMode"), value: "categories" },
         { label: t("evolution.criteriaMode"), value: "criteria" },
@@ -646,12 +632,13 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
     // Run picker dropdown (replaces pills)
     const pickerId = `arena_picker_${Date.now()}`;
-    ui.addComponent(pickerId, {
-      id: pickerId,
-      type: "arena_run_picker",
+    ui.addRaw(pickerId, "ArenaRunPicker", {
       runs: recentRuns.map((r) => ({
         id: r.id,
-        label: r.presetName || r.modelId?.split("/").pop() || r.version_tag || r.id.slice(0, 8),
+        label:
+          formatModelDisplay(r.presetName, r.modelId) !== "-"
+            ? formatModelDisplay(r.presetName, r.modelId)
+            : r.version_tag || r.id.slice(0, 8),
         selected: selectedIds.has(r.id),
         color: selectedIds.has(r.id)
           ? RUN_COLORS[selectedOrder.indexOf(r.id) % RUN_COLORS.length]
@@ -681,24 +668,20 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         color: SHARP_CATEGORY_COLORS[cs.category] || "#818cf8",
       }));
 
-      // Plotly radar chart (with embedded legend data)
-      const plotlyId = `plotly_radar_${Date.now()}`;
-      const traces = buildPlotlyRadarTraces(data.comparisonRuns, radarMode);
-      ui.addComponent(plotlyId, {
-        id: plotlyId,
-        type: "plotly_radar",
-        traces,
-        layout: PLOTLY_LAYOUT,
-        config: { responsive: true, displayModeBar: false },
+      // Radar chart (Recharts)
+      const radarId = `radar_chart_${Date.now()}`;
+      const radarChartData = buildRadarChartData(data.comparisonRuns, radarMode);
+      ui.addRaw(radarId, "RadarChart", {
+        radarData: radarChartData.data,
+        radarSeries: radarChartData.series,
+        height: 400,
         categoryLegend: legendCategories,
       });
 
       // Score table card (custom component)
       const scoreTitleId = ui.text(t("evolution.overallScores"), "label");
       const scoreTableId = `arena_score_${Date.now()}`;
-      ui.addComponent(scoreTableId, {
-        id: scoreTableId,
-        type: "arena_score_table",
+      ui.addRaw(scoreTableId, "ArenaScoreTable", {
         rows: data.comparisonRuns.map((cr) => ({
           label: cr.label,
           color: cr.color,
@@ -710,8 +693,8 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         className: "arena-card",
       } as any);
 
-      // Dashboard grid (plotly radar + scores side by side)
-      const radarCardId = ui.column([plotlyId], {
+      // Dashboard grid (radar chart + scores side by side)
+      const radarCardId = ui.column([radarId], {
         gap: 8,
         className: "arena-card",
       } as any);
@@ -741,9 +724,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
           }));
 
           const catCardId = `arena_cat_${cs.category}_${Date.now()}`;
-          ui.addComponent(catCardId, {
-            id: catCardId,
-            type: "arena_category_card",
+          ui.addRaw(catCardId, "ArenaCategoryCard", {
             categoryName: getCategoryLabel(cs.category),
             categoryColor: SHARP_CATEGORY_COLORS[cs.category] || "#818cf8",
             categoryIcon: getCategoryIcon(cs.category),
@@ -783,7 +764,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         version_tag: r.version_tag || "-",
         score: scoreDisplay,
         passed: `${r.passed_count}/${r.total_test_cases}`,
-        model: r.presetName || r.modelId || "-",
+        model: formatModelDisplay(r.presetName, r.modelId),
         profile: r.profile,
         duration:
           r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
@@ -844,18 +825,34 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
 
-  // Action buttons
-  const quickBtn = ui.button(t("evolution.runQuickBenchmark"), "run_benchmark", {
-    variant: "secondary",
+  // Header row: title left, icon action buttons right
+  const tabTitle = ui.text(t("evolution.tabBenchmark"), "h3");
+  const quickBtn = ui.button("", "run_benchmark", {
+    variant: "outline",
     size: "sm",
+    icon: "play",
+    tooltip: t("evolution.runQuickBenchmark"),
     payload: { profile: "quick" },
-  });
-  const fullBtn = ui.button(t("evolution.runFullBenchmark"), "run_benchmark", {
-    variant: "secondary",
+  } as any);
+  const fullBtn = ui.button("", "run_benchmark", {
+    variant: "primary",
     size: "sm",
+    icon: "zap",
+    tooltip: t("evolution.runFullBenchmark"),
     payload: { profile: "full" },
-  });
-  children.push(ui.card([ui.row([quickBtn, fullBtn], { gap: 8 })], { padding: 12 }));
+  } as any);
+  const addTestBtn = ui.button("", "create_test_case", {
+    variant: "outline",
+    size: "sm",
+    icon: "sparkles",
+    tooltip: t("evolution.addTestCase"),
+  } as any);
+  children.push(
+    ui.row([tabTitle, ui.row([addTestBtn, quickBtn, fullBtn], { gap: 6 })], {
+      justify: "between",
+      align: "center",
+    })
+  );
 
   // SHARP Category Breakdown Cards (using arena_category_card style)
   if (data.latestRunCategoryScores && data.latestRunCategoryScores.length > 0) {
@@ -870,9 +867,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
         scores: [{ value: sub.score <= 1 ? sub.score : sub.score / 100, color: catColor }],
       }));
       const catCardId = `bench_cat_${cs.category}_${Date.now()}`;
-      ui.addComponent(catCardId, {
-        id: catCardId,
-        type: "arena_category_card",
+      ui.addRaw(catCardId, "ArenaCategoryCard", {
         categoryName: getCategoryLabel(cs.category),
         categoryColor: catColor,
         categoryIcon: getCategoryIcon(cs.category),
@@ -905,7 +900,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
         version_tag: r.version_tag || "-",
         score: scoreDisplay,
         passed: `${r.passed_count}/${r.total_test_cases}`,
-        model: r.presetName || r.modelId || "-",
+        model: formatModelDisplay(r.presetName, r.modelId),
         profile: r.profile,
         duration:
           r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
@@ -947,11 +942,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
       testRows,
       { onRowClick: "view_test_case" }
     );
-    const addTestBtn = ui.button(t("evolution.addTestCase"), "create_test_case", {
-      variant: "primary",
-      size: "sm",
-    });
-    children.push(ui.card([testCasesLabel, testsTable, addTestBtn], { padding: 16 }));
+    children.push(ui.card([testCasesLabel, testsTable], { padding: 16 }));
   }
 
   // Config summary
@@ -968,86 +959,135 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
 function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
 
-  // Active version indicator
+  // Header row: title + active branch badge + icon buttons
+  const tabTitle = ui.text(t("evolution.tabVersions"), "h3");
+  const headerLeft: string[] = [tabTitle];
+  const headerRight: string[] = [];
+
   if (data.activeVersionBranch) {
     const activeBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
-    const activeLabel = ui.text(t("evolution.activeVersion"), "label");
-    const resetBtn = ui.button(t("evolution.resetToMain"), "switch_version", {
+    headerLeft.push(activeBadge);
+    const resetBtn = ui.button("", "switch_version", {
       variant: "outline",
       size: "sm",
+      icon: "refresh-cw",
+      tooltip: t("evolution.resetToMain"),
       payload: { branch: null },
-    });
-    children.push(ui.row([activeLabel, activeBadge, resetBtn], { gap: 12, align: "center" }));
+    } as any);
+    headerRight.push(resetBtn);
   }
 
-  // Left-right layout: GitLens timeline + detail panel
-  const leftChildren: string[] = [];
-  const rightChildren: string[] = [];
+  children.push(
+    ui.row(
+      [
+        ui.row(headerLeft, { gap: 8, align: "center" }),
+        ...(headerRight.length > 0 ? [ui.row(headerRight, { gap: 6 })] : []),
+      ],
+      { justify: "between", align: "center" }
+    )
+  );
 
-  // GitLens-style vertical timeline
-  if (data.timelineEvents && data.timelineEvents.length > 0) {
-    const timelineLabel = ui.text(t("evolution.timeline"), "label");
-    leftChildren.push(timelineLabel);
+  // Left panel: version graph (Git Graph style)
+  // Compute main branch score from benchmark runs
+  const mainRuns = (data.benchmarkRuns || []).filter(
+    (r) => r.status === "completed" && r.overall_score > 0 && !r.version_tag?.startsWith("evo/")
+  );
+  const mainLatestScore =
+    mainRuns.length > 0
+      ? mainRuns[0].overall_score <= 1
+        ? mainRuns[0].overall_score
+        : mainRuns[0].overall_score / 100
+      : null;
 
-    const timeline = ui.gitTimeline(data.timelineEvents, {
-      activeBranch: data.activeVersionBranch || undefined,
-      onEventClick: "evo_timeline_click",
-      onContextAction: "evo_timeline_context",
-      selectedEventId: data.selectedTimelineEvent,
-    });
-    leftChildren.push(timeline);
-  } else {
-    leftChildren.push(
-      ui.column([ui.text(t("evolution.noVersions"), "caption")], { padding: 32, align: "center" })
+  // Build version data with parent branch and latest score
+  const versionGraphData = (data.versions || []).map((v) => {
+    // Match benchmark runs to this version by branch name (try multiple formats)
+    const branchNorm = v.branchName.replace(/\//g, "-"); // evo/v1 → evo-v1
+    const runs = (data.benchmarkRuns || []).filter(
+      (r) =>
+        r.status === "completed" &&
+        r.overall_score > 0 &&
+        (r.version_tag?.includes(v.branchName) || r.version_tag?.includes(branchNorm))
     );
-  }
+    const latestScore =
+      runs.length > 0
+        ? runs[0].overall_score <= 1
+          ? runs[0].overall_score
+          : runs[0].overall_score / 100
+        : null;
+    return {
+      id: v.id.slice(0, 8),
+      branch: v.branchName,
+      parentBranch: v.parentBranch || "main",
+      status: v.status as "active" | "merged" | "abandoned",
+      trigger: v.triggerMode || undefined,
+      scoreDelta: v.scoreDelta,
+      latestScore,
+      filesChanged: v.filesChanged.length,
+      createdAt: v.createdAt,
+    };
+  });
 
-  // Version detail panel (right side)
-  if (data.selectedVersion) {
-    const selectedInfo = data.versions?.find((v) => v.branchName === data.selectedVersion);
+  const leftPanel = ui.column(
+    [
+      ui.versionGraph(
+        { name: "main", latestScore: mainLatestScore, benchmarkCount: mainRuns.length },
+        versionGraphData,
+        {
+          mainCommits: data.mainCommits,
+          selectedBranch: data.selectedVersion,
+          onVersionClick: "view_version_from_list",
+        }
+      ),
+    ],
+    { gap: 8 }
+  );
 
-    const detailLabel = ui.text(t("evolution.versionDetail"), "label");
-    rightChildren.push(detailLabel);
+  // Right panel: detail cards
+  const rightChildren: string[] = [];
+  const selectedInfo = data.selectedVersion
+    ? data.versions?.find((v) => v.branchName === data.selectedVersion)
+    : null;
 
-    if (selectedInfo) {
-      const branchBadge = ui.badge(selectedInfo.branchName, { variant: "info" });
-      const statusBadge = ui.badge(selectedInfo.status, {
-        variant:
-          selectedInfo.status === "active"
-            ? "warning"
-            : selectedInfo.status === "merged"
-              ? "success"
-              : "default",
-      });
-      rightChildren.push(ui.row([branchBadge, statusBadge], { gap: 8 }));
-
-      if (selectedInfo.triggerMode) {
-        const triggerText = ui.text(
-          `${t("evolution.versionTrigger")}: ${selectedInfo.triggerMode} ${selectedInfo.triggerRef || ""}`,
-          "caption"
-        );
-        rightChildren.push(triggerText);
-      }
-
-      if (selectedInfo.scoreDelta != null) {
-        const sign = selectedInfo.scoreDelta > 0 ? "+" : "";
-        const deltaText = ui.text(
-          `${t("evolution.scoreDelta")}: ${sign}${selectedInfo.scoreDelta.toFixed(1)}`,
-          "caption"
-        );
-        rightChildren.push(deltaText);
-      }
+  if (data.selectedVersion && selectedInfo) {
+    // Version info card
+    const branchBadge = ui.badge(selectedInfo.branchName, { variant: "info" });
+    const statusBadge = ui.badge(selectedInfo.status, {
+      variant:
+        selectedInfo.status === "active"
+          ? "warning"
+          : selectedInfo.status === "merged"
+            ? "success"
+            : "default",
+    });
+    const infoDetails: string[] = [];
+    if (selectedInfo.triggerMode) {
+      infoDetails.push(selectedInfo.triggerMode);
     }
+    if (selectedInfo.scoreDelta != null) {
+      const sign = selectedInfo.scoreDelta > 0 ? "+" : "";
+      infoDetails.push(`${sign}${selectedInfo.scoreDelta.toFixed(1)}`);
+    }
+    infoDetails.push(new Date(selectedInfo.createdAt).toLocaleString());
+    const infoCardChildren = [
+      ui.row([branchBadge, statusBadge], { gap: 8 }),
+      ui.text(infoDetails.join(" · "), "caption"),
+    ];
+    rightChildren.push(ui.card(infoCardChildren, { padding: 16 }));
 
-    // Changed files (file tree)
+    // Changed files card (file_tree wrapped in card)
     if (data.changedFiles && data.changedFiles.length > 0) {
+      const statsLabel = ui.text(
+        `${data.changedFiles.length} ${t("evolution.filesChanged")}`,
+        "label"
+      );
       const fileTreeId = ui.fileTree(data.changedFiles, {
         selectedPath: data.diffContent?.path,
         onFileSelect: "evo_file_select",
       });
-      rightChildren.push(fileTreeId);
+      rightChildren.push(ui.card([statsLabel, fileTreeId], { padding: 16 }));
 
-      // Diff view
+      // Diff card
       if (data.diffContent) {
         const diffId = ui.diffView(data.diffContent.before, data.diffContent.after, {
           title: data.diffContent.path,
@@ -1057,12 +1097,20 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       }
     } else {
       rightChildren.push(
-        ui.column([ui.text(t("evolution.noChanges"), "caption")], { padding: 32, align: "center" })
+        ui.card(
+          [
+            ui.column([ui.text(t("evolution.noChanges"), "caption")], {
+              padding: 16,
+              align: "center",
+            }),
+          ],
+          { padding: 16 }
+        )
       );
     }
 
     // Action buttons
-    if (selectedInfo && selectedInfo.status === "active") {
+    if (selectedInfo.status === "active") {
       const switchBtn = ui.button(t("evolution.switchVersion"), "switch_version", {
         variant: "outline",
         size: "sm",
@@ -1080,164 +1128,25 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       });
       rightChildren.push(ui.row([switchBtn, mergeBtn, abandonBtn], { gap: 12 }));
     }
-  } else if (data.selectedTimelineEvent) {
-    // Show selected commit detail
-    const selectedEvt = data.timelineEvents?.find((e) => e.id === data.selectedTimelineEvent);
-    if (selectedEvt) {
-      const commitLabel = ui.text(t("evolution.commitDetail"), "label");
-      rightChildren.push(commitLabel);
-
-      const typeBadge = ui.badge(selectedEvt.type, { variant: "info" });
-      const hashCode = selectedEvt.hash
-        ? ui.badge(selectedEvt.hash.slice(0, 7), { variant: "default" })
-        : null;
-      const badges = [typeBadge];
-      if (hashCode) badges.push(hashCode);
-      if (selectedEvt.status) {
-        badges.push(
-          ui.badge(selectedEvt.status, {
-            variant:
-              selectedEvt.status === "success"
-                ? "success"
-                : selectedEvt.status === "failed"
-                  ? "error"
-                  : selectedEvt.status === "active"
-                    ? "warning"
-                    : "default",
-          })
-        );
-      }
-      rightChildren.push(ui.row(badges, { gap: 8 }));
-
-      rightChildren.push(ui.text(selectedEvt.label, "body"));
-
-      if (selectedEvt.description) {
-        rightChildren.push(ui.text(selectedEvt.description, "caption"));
-      }
-
-      if (selectedEvt.author) {
-        rightChildren.push(
-          ui.text(`${t("evolution.commitAuthor")}: ${selectedEvt.author}`, "caption")
-        );
-      }
-
-      if (selectedEvt.filesChanged) {
-        const stats: string[] = [`${selectedEvt.filesChanged} ${t("evolution.filesChanged")}`];
-        if (selectedEvt.additions) stats.push(`+${selectedEvt.additions}`);
-        if (selectedEvt.deletions) stats.push(`-${selectedEvt.deletions}`);
-        rightChildren.push(ui.text(stats.join("  "), "caption"));
-      }
-
-      if (selectedEvt.branch) {
-        rightChildren.push(
-          ui.text(`${t("evolution.versionBranch")}: ${selectedEvt.branch}`, "caption")
-        );
-      }
-
-      if (selectedEvt.tags && selectedEvt.tags.length > 0) {
-        const tagBadges = selectedEvt.tags.map((tag) => ui.badge(tag, { variant: "info" }));
-        rightChildren.push(ui.row(tagBadges, { gap: 4 }));
-      }
-
-      // Context action buttons
-      const contextBtns: string[] = [];
-      if (selectedEvt.type === "commit" || selectedEvt.type === "merge") {
-        contextBtns.push(
-          ui.button(t("evolution.viewDiff"), "evo_timeline_context", {
-            variant: "outline",
-            size: "sm",
-            icon: "search",
-            payload: { eventId: selectedEvt.id, action: "view_diff" },
-          })
-        );
-        contextBtns.push(
-          ui.button(t("evolution.cherryPick"), "evo_timeline_context", {
-            variant: "outline",
-            size: "sm",
-            icon: "git-commit",
-            payload: { eventId: selectedEvt.id, action: "cherry_pick" },
-          })
-        );
-        contextBtns.push(
-          ui.button(t("evolution.revertCommit"), "evo_timeline_context", {
-            variant: "ghost",
-            size: "sm",
-            icon: "alert-triangle",
-            payload: { eventId: selectedEvt.id, action: "revert" },
-          })
-        );
-      }
-      if (selectedEvt.type === "branch") {
-        contextBtns.push(
-          ui.button(t("evolution.switchVersion"), "switch_version", {
-            variant: "outline",
-            size: "sm",
-            payload: { branch: selectedEvt.branch },
-          })
-        );
-        contextBtns.push(
-          ui.button(t("evolution.mergeVersion"), "merge_version", {
-            variant: "primary",
-            size: "sm",
-            payload: { branch: selectedEvt.branch },
-          })
-        );
-      }
-      if (selectedEvt.type === "benchmark" && selectedEvt.score !== undefined) {
-        contextBtns.push(
-          ui.button(t("evolution.viewDetails"), "view_benchmark_run", {
-            variant: "outline",
-            size: "sm",
-            icon: "bar-chart",
-            payload: { eventId: selectedEvt.id },
-          })
-        );
-      }
-      if (contextBtns.length > 0) {
-        rightChildren.push(ui.row(contextBtns, { gap: 8, wrap: true } as any));
-      }
-    }
   } else {
-    rightChildren.push(ui.text(t("evolution.selectCommitToView"), "caption"));
+    // Empty state: select a version
+    rightChildren.push(
+      ui.column([ui.text(t("evolution.selectVersionToView"), "caption")], {
+        padding: 32,
+        align: "center",
+      })
+    );
   }
 
-  // Two-column layout: timeline (left) + detail (right)
-  const leftPanel = ui.column(leftChildren, { gap: 8 });
   const rightPanel = ui.column(rightChildren, { gap: 12 });
 
+  // Two-column layout (no bottom table)
   const twoCol = ui.row([leftPanel, rightPanel], {
     gap: 16,
     style: "align-items: flex-start;",
   } as any);
 
   children.push(twoCol);
-
-  // Versions table (always shown)
-  if (data.versions && data.versions.length > 0) {
-    const versionRows = data.versions.map((v) => ({
-      id: v.id.slice(0, 8),
-      branch: v.branchName,
-      status: v.status,
-      trigger: v.triggerMode || "-",
-      scoreDelta:
-        v.scoreDelta != null ? `${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(1)}` : "-",
-      files: v.filesChanged.length > 0 ? `${v.filesChanged.length} files` : "-",
-      created: new Date(v.createdAt).toLocaleString(),
-    }));
-    const versionsTable = ui.dataTable(
-      [
-        { key: "branch", label: t("evolution.versionBranch") },
-        { key: "status", label: t("evolution.versionStatus"), render: "badge" },
-        { key: "trigger", label: t("evolution.versionTrigger"), render: "badge" },
-        { key: "scoreDelta", label: t("evolution.scoreDelta") },
-        { key: "files", label: t("evolution.filesChanged") },
-        { key: "created", label: t("evolution.time"), sortable: true },
-      ],
-      versionRows,
-      { onRowClick: "view_version" }
-    );
-    children.push(versionsTable);
-  }
 
   return ui.column(children, { gap: 16, padding: 16 });
 }
@@ -1249,7 +1158,8 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
 
-  // Sub-tabs as buttons
+  // Header row: title left, sub-tab toggles right
+  const tabTitle = ui.text(t("evolution.tabData"), "h3");
   const subTab = data.dataSubTab || "traces";
   const tracesBtn = ui.button(t("evolution.traces"), "evo_data_subtab_change", {
     variant: subTab === "traces" ? "secondary" : "ghost",
@@ -1266,7 +1176,12 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
     size: "sm",
     payload: { tab: "suggestions" },
   });
-  children.push(ui.row([tracesBtn, evalsBtn, suggsBtn], { gap: 8 }));
+  children.push(
+    ui.row([tabTitle, ui.row([tracesBtn, evalsBtn, suggsBtn], { gap: 4 })], {
+      justify: "between",
+      align: "center",
+    })
+  );
 
   // Traces sub-tab
   if (subTab === "traces") {

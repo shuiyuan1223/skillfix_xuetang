@@ -31,6 +31,7 @@ import {
   resolveEmbeddingBaseUrl,
   isEmbeddingEnabled,
   createEmbeddingProvider,
+  createNoopEmbeddingProvider,
   type EmbeddingProvider,
   type EmbeddingProviderResult,
   type OpenAiEmbeddingClient,
@@ -290,28 +291,34 @@ export class MemoryIndexManager {
     if (!isEmbeddingEnabled()) {
       return null;
     }
-    const apiKey = resolveEmbeddingApiKey();
-    if (!apiKey) {
-      return null;
-    }
 
     const workspaceDir = params.workspaceDir || resolveAgentWorkspaceDir(null, params.agentId);
-    const settings = defaultPHAMemorySearchConfig(workspaceDir);
-    settings.apiKey = apiKey;
-
     const key = `${params.agentId}:${workspaceDir}`;
     const existing = INDEX_CACHE.get(key);
     if (existing) {
       return existing;
     }
 
-    const providerResult = await createEmbeddingProvider({
-      provider: settings.provider,
-      model: settings.model,
-      apiKey: settings.apiKey,
-      remote: { baseUrl: settings.baseUrl, apiKey: settings.apiKey },
-      fallback: "none",
-    });
+    const apiKey = resolveEmbeddingApiKey();
+    const settings = defaultPHAMemorySearchConfig(workspaceDir);
+    settings.apiKey = apiKey;
+
+    let providerResult: EmbeddingProviderResult;
+
+    if (apiKey) {
+      providerResult = await createEmbeddingProvider({
+        provider: settings.provider,
+        model: settings.model,
+        apiKey: settings.apiKey,
+        remote: { baseUrl: settings.baseUrl, apiKey: settings.apiKey },
+        fallback: "none",
+      });
+    } else {
+      // No API key — fallback to BM25-only (keyword search still works)
+      log.info("No embedding API key — using BM25-only memory search");
+      providerResult = createNoopEmbeddingProvider();
+      settings.store.vector.enabled = false;
+    }
 
     const manager = new MemoryIndexManager({
       cacheKey: key,

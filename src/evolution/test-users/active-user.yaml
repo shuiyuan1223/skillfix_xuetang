@@ -1,0 +1,147 @@
+id: active-user
+uuid: benchmark-active-user
+
+profile:
+  nickname: "小李"
+  gender: male
+  birthYear: 1991
+  height: 175
+  weight: 72
+  goals:
+    primary: "增加运动量，改善睡眠"
+    dailySteps: 10000
+    sleepHours: 7
+    exercisePerWeek: 3
+  lifestyle:
+    sleepSchedule: "23:00-06:30"
+    exercisePreference: "跑步"
+
+memory: |
+  ## 2026-01 对话记录
+  - 用户是 35 岁办公室职员，久坐较多
+  - 目标：日均 10000 步，改善睡眠到 7 小时
+  - 报名了 6 周后的 5K 跑步比赛
+  - 基线：2.5km 可以舒适跑完
+  - 上周开始尝试每周 3 次跑步
+  - 膝盖曾受伤（打篮球），已休息 5 周恢复良好
+
+health_data:
+  metrics:
+    day_0: { steps: 8200, calories: 2100, activeMinutes: 60, distance: 6150 }
+    day_-1: { steps: 6500, calories: 1950, activeMinutes: 45, distance: 4875 }
+    day_-2: { steps: 11000, calories: 2400, activeMinutes: 85, distance: 8250 }
+    day_-3: { steps: 4200, calories: 1700, activeMinutes: 20, distance: 3150 }
+    day_-4: { steps: 9800, calories: 2250, activeMinutes: 72, distance: 7350 }
+    day_-5: { steps: 7500, calories: 2050, activeMinutes: 55, distance: 5625 }
+    day_-6: { steps: 5300, calories: 1850, activeMinutes: 35, distance: 3975 }
+  heartRate:
+    day_0:
+      restingAvg: 65
+      maxToday: 175
+      minToday: 58
+      readings:
+        - { time: "06:30", value: 62 }
+        - { time: "08:00", value: 78 }
+        - { time: "10:00", value: 72 }
+        - { time: "12:00", value: 80 }
+        - { time: "14:00", value: 75 }
+        - { time: "17:00", value: 155 }
+        - { time: "17:30", value: 175 }
+        - { time: "18:00", value: 140 }
+        - { time: "20:00", value: 70 }
+        - { time: "22:00", value: 63 }
+    day_-1:
+      restingAvg: 67
+      maxToday: 158
+      minToday: 60
+      readings:
+        - { time: "07:00", value: 64 }
+        - { time: "12:00", value: 82 }
+        - { time: "18:00", value: 158 }
+        - { time: "21:00", value: 68 }
+    day_-2:
+      restingAvg: 64
+      maxToday: 170
+      minToday: 57
+      readings: []
+    day_-3:
+      restingAvg: 68
+      maxToday: 135
+      minToday: 56
+      readings: []
+    day_-4:
+      restingAvg: 65
+      maxToday: 130
+      minToday: 55
+      readings: []
+  sleep:
+    day_0:
+      durationHours: 7.2
+      qualityScore: 72
+      bedTime: "23:15"
+      wakeTime: "06:27"
+      stages: { deep: 80, light: 195, rem: 70, awake: 15 }
+    day_-1:
+      durationHours: 7.0
+      qualityScore: 70
+      bedTime: "23:15"
+      wakeTime: "06:15"
+      stages: { deep: 80, light: 190, rem: 75, awake: 15 }
+    day_-2:
+      durationHours: 6.5
+      qualityScore: 65
+      bedTime: "00:00"
+      wakeTime: "06:30"
+      stages: { deep: 70, light: 175, rem: 65, awake: 20 }
+    day_-3: null
+    day_-4:
+      durationHours: 7.5
+      qualityScore: 75
+      bedTime: "23:00"
+      wakeTime: "06:30"
+      stages: { deep: 85, light: 195, rem: 75, awake: 15 }
+    day_-5:
+      durationHours: 6.8
+      qualityScore: 62
+      bedTime: "23:30"
+      wakeTime: "06:18"
+      stages: { deep: 65, light: 178, rem: 55, awake: 25 }
+    day_-6:
+      durationHours: 6.0
+      qualityScore: 52
+      bedTime: "00:30"
+      wakeTime: "06:30"
+      stages: { deep: 50, light: 165, rem: 45, awake: 35 }
+  workouts:
+    day_0:
+      - type: running
+        durationMinutes: 35
+        caloriesBurned: 320
+        distanceKm: 5.2
+        avgHeartRate: 152
+        maxHeartRate: 175
+    day_-1: []
+    day_-2:
+      - type: running
+        durationMinutes: 42
+        caloriesBurned: 400
+        distanceKm: 6.8
+        avgHeartRate: 158
+    day_-3: []
+    day_-4:
+      - type: running
+        durationMinutes: 30
+        caloriesBurned: 280
+        distanceKm: 4.5
+        avgHeartRate: 148
+    day_-5:
+      - type: yoga
+        durationMinutes: 30
+        caloriesBurned: 95
+        avgHeartRate: 82
+    day_-6:
+      - type: running
+        durationMinutes: 38
+        caloriesBurned: 350
+        distanceKm: 5.8
+        avgHeartRate: 155

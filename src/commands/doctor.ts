@@ -298,5 +298,6 @@ export function registerDoctorCommand(program: Command): void {
       }
 
       console.log("");
+      process.exit(0);
     });
 }

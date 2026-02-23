@@ -1,7 +1,9 @@
 import React from "react";
-import type { A2UIComponent, A2UISurfaceData, PlotlyChart, MessagePart } from "../../lib/types";
+import ReactDOM from "react-dom";
+import type { A2UIComponent, A2UISurfaceData, MessagePart } from "../../lib/types";
+import { componentType, prop, getChildren } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
-import { renderMarkdown } from "../../lib/markdown";
+import { Markdown } from "../../lib/markdown";
 import { i18n } from "../../lib/i18n";
 import {
   ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line,
@@ -13,8 +15,9 @@ import {
   renderCollapsible, renderModalComponent, renderForm, renderFormInput,
   renderGitTimeline, renderStepIndicator, renderFileTree,
   renderArenaPills, renderArenaScoreTable, renderArenaCategoryCard,
-  renderPlotlyRadar, renderArenaRunPicker, renderArenaModeToggle,
+  renderRadarChart, renderArenaRunPicker, renderArenaModeToggle,
   renderPlaygroundFab, renderEvolutionPipeline, renderLogViewer,
+  renderVersionGraph,
 } from "./AdvancedRenderers";
 
 export interface RenderContext {
@@ -23,7 +26,6 @@ export interface RenderContext {
   renderChildren: (ids?: string[]) => React.ReactNode[];
   renderComponent: (id: string) => React.ReactNode;
   renderInline: (data: { components: A2UIComponent[]; root_id: string }) => React.ReactNode;
-  pendingPlotlyCharts: React.MutableRefObject<PlotlyChart[]>;
   chatAutoScrollRef: React.MutableRefObject<boolean>;
   isAutoScrollingRef: React.MutableRefObject<boolean>;
 }
@@ -32,7 +34,6 @@ interface A2UIRendererProps {
   data: A2UISurfaceData;
   sendAction: (action: string, payload?: Record<string, unknown>) => void;
   sendNavigate: (view: string) => void;
-  pendingPlotlyCharts: React.MutableRefObject<PlotlyChart[]>;
   chatAutoScrollRef: React.MutableRefObject<boolean>;
   isAutoScrollingRef: React.MutableRefObject<boolean>;
 }
@@ -45,10 +46,167 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_workouts: "运动数据",
   get_hrv: "心率变异性",
   get_health_trends: "健康趋势",
+  update_user_profile: "更新健康档案",
+  complete_onboarding: "完成引导",
+  present_insight: "健康洞察",
+  create_health_plan: "创建健康计划",
+  list_health_plans: "健康计划列表",
+  get_health_plan: "计划详情",
+  update_plan_progress: "更新进度",
+  adjust_health_plan: "调整计划",
+  update_plan_status: "更新计划状态",
+  create_recommendation: "健康推荐",
+  list_recommendations: "推荐列表",
+  dismiss_recommendation: "关闭推荐",
+  create_reminder: "创建提醒",
+  list_reminders: "提醒列表",
+  complete_reminder: "完成提醒",
+  delete_reminder: "删除提醒",
+  create_calendar_event: "创建日历事件",
+  list_calendar_events: "日历事件列表",
+  update_calendar_event: "更新日历事件",
+  delete_calendar_event: "删除日历事件",
+  get_weather: "天气查询",
 };
 
+// ---- ThinkingMessage: collapsible thinking block for thinking-mode chat ----
+
+function ThinkingMessage({
+  parts,
+  isActiveMsg,
+  renderPartFn,
+  msgBubble,
+}: {
+  parts: MessagePart[];
+  isActiveMsg: boolean;
+  renderPartFn: (part: MessagePart, idx: number) => React.ReactNode;
+  msgBubble: string;
+}) {
+  // Find the split point: last tool_use / tool_result index
+  let lastToolIdx = -1;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].type === "tool_use" || parts[i].type === "tool_result") {
+      lastToolIdx = i;
+      break;
+    }
+  }
+
+  const hasToolCalls = lastToolIdx >= 0;
+  const thinkingParts = hasToolCalls ? parts.slice(0, lastToolIdx + 1) : [];
+  const answerParts = hasToolCalls ? parts.slice(lastToolIdx + 1) : parts;
+  const hasAnswer = answerParts.some(
+    (p) => p.type === "text" && p.content?.trim()
+  );
+  const toolCount = thinkingParts.filter((p) => p.type === "tool_use").length;
+
+  // Start expanded; auto-collapse when streaming ends and answer exists
+  const [expanded, setExpanded] = React.useState(true);
+  React.useEffect(() => {
+    if (!isActiveMsg && hasAnswer) setExpanded(false);
+    if (isActiveMsg) setExpanded(true);
+  }, [isActiveMsg, hasAnswer]);
+
+  // If no tool calls, render parts normally (no thinking/answer split)
+  if (!hasToolCalls) {
+    return (
+      <>
+        {parts.map((part, pi) => {
+          if (
+            isActiveMsg && part.type === "text" && part.content?.trim() &&
+            pi === parts.length - 1
+          ) {
+            return (
+              <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+                <Markdown>{part.content}</Markdown>
+              </div>
+            );
+          }
+          return renderPartFn(part, pi);
+        })}
+        {isActiveMsg && !parts.some((p) => (p.type === "text" && p.content?.trim()) || p.type === "tool_use" || p.type === "tool_result") && (
+          <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
+            <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+            <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+            <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // Collapsible thinking + answer
+  const isThinking = isActiveMsg && !hasAnswer;
+  const headerLabel = isThinking
+    ? "思考中"
+    : expanded
+      ? "思考过程"
+      : `已搜索 ${toolCount} 项数据`;
+
+  return (
+    <>
+      {/* Collapsible thinking header */}
+      <button
+        className="flex items-center gap-2 text-xs text-text-muted py-1 cursor-pointer hover:text-text transition-colors select-none"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span className="text-[10px]">{expanded ? "\u25BE" : "\u25B8"}</span>
+        <span>{headerLabel}</span>
+        {isThinking && (
+          <span className="inline-flex gap-1 items-center">
+            <span className="w-1 h-1 rounded-full bg-primary/70 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+            <span className="w-1 h-1 rounded-full bg-primary/70 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.15s" }} />
+            <span className="w-1 h-1 rounded-full bg-primary/70 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.3s" }} />
+          </span>
+        )}
+      </button>
+
+      {/* Thinking parts (collapsible) */}
+      {expanded && (
+        <div className="border-l-2 border-border/50 pl-3 flex flex-col gap-1.5 ml-1">
+          {thinkingParts.map((part, pi) => {
+            if (part.type === "text") {
+              if (!part.content?.trim()) return null;
+              return (
+                <div key={pi} className="text-xs text-text-secondary opacity-80 leading-relaxed">
+                  <Markdown>{part.content}</Markdown>
+                </div>
+              );
+            }
+            return renderPartFn(part, pi);
+          })}
+        </div>
+      )}
+
+      {/* Answer parts */}
+      {answerParts.map((part, pi) => {
+        const realIdx = lastToolIdx + 1 + pi;
+        if (
+          isActiveMsg && part.type === "text" && part.content?.trim() &&
+          realIdx === parts.length - 1
+        ) {
+          return (
+            <div key={realIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+              <Markdown>{part.content}</Markdown>
+            </div>
+          );
+        }
+        return renderPartFn(part, realIdx);
+      })}
+
+      {/* Typing indicator when streaming but no answer yet */}
+      {isActiveMsg && !hasAnswer && thinkingParts.length > 0 && (
+        <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+        </div>
+      )}
+    </>
+  );
+}
+
 export function A2UIRenderer({
-  data, sendAction, sendNavigate, pendingPlotlyCharts, chatAutoScrollRef, isAutoScrollingRef,
+  data, sendAction, sendNavigate, chatAutoScrollRef, isAutoScrollingRef,
 }: A2UIRendererProps) {
   let components = new Map<string, A2UIComponent>();
   for (const c of data.components) {
@@ -58,51 +216,54 @@ export function A2UIRenderer({
   function renderComponent(id: string): React.ReactNode {
     const c = components.get(id);
     if (!c) return null;
-    switch (c.type) {
-      case "column": return rcColumn(c);
-      case "row": return rcRow(c);
-      case "grid": return rcGrid(c);
-      case "text": return rcText(c);
-      case "card": return rcCard(c);
-      case "stat_card": return rcStatCard(c);
-      case "metric": return rcMetric(c);
-      case "chart": return rcChart(c);
-      case "table": return rcTable(c);
-      case "button": return rcButton(c);
-      case "nav": return rcNav(c);
-      case "tabs": return rcTabs(c);
-      case "progress": return rcProgress(c);
-      case "badge": return rcBadge(c);
-      case "skeleton": return rcSkeleton(c);
-      case "divider": return <div className="sidebar-divider" />;
-      case "spacer": return <div style={{ height: (c.height as number) || 16 }} />;
-      case "chat_messages": return rcChatMessages(c);
-      case "chat_input": return rcChatInput(c);
-      case "code_editor": return renderCodeEditor(c, ctx);
-      case "commit_list": return renderCommitList(c, ctx);
-      case "diff_view": return renderDiffView(c, ctx);
-      case "data_table": return renderDataTable(c, ctx);
-      case "score_gauge": return renderScoreGauge(c, ctx);
-      case "activity_rings": return renderActivityRings(c, ctx);
-      case "status_badge": return renderStatusBadge(c, ctx);
-      case "collapsible": return renderCollapsible(c, ctx);
-      case "modal": return renderModalComponent(c, ctx);
-      case "form": return renderForm(c, ctx);
-      case "form_input": return renderFormInput(c, ctx);
-      case "git_timeline": return renderGitTimeline(c, ctx);
-      case "step_indicator": return renderStepIndicator(c, ctx);
-      case "file_tree": return renderFileTree(c, ctx);
-      case "arena_pills": return renderArenaPills(c, ctx);
-      case "arena_score_table": return renderArenaScoreTable(c, ctx);
-      case "arena_category_card": return renderArenaCategoryCard(c, ctx);
-      case "plotly_radar": return renderPlotlyRadar(c, ctx);
-      case "arena_run_picker": return renderArenaRunPicker(c, ctx);
-      case "arena_mode_toggle": return renderArenaModeToggle(c, ctx);
-      case "playground_fab": return renderPlaygroundFab(c, ctx);
-      case "evolution_pipeline": return renderEvolutionPipeline(c, ctx);
-      case "log_viewer": return renderLogViewer(c, ctx);
+    switch (componentType(c)) {
+      case "Column": return rcColumn(c);
+      case "Row": return rcRow(c);
+      case "Grid": return rcGrid(c);
+      case "Text": return rcText(c);
+      case "Card": return rcCard(c);
+      case "StatCard": return rcStatCard(c);
+      case "Metric": return rcMetric(c);
+      case "Chart": return rcChart(c);
+      case "Table": return rcTable(c);
+      case "Button": return rcButton(c);
+      case "Nav": return rcNav(c);
+      case "Tabs": return rcTabs(c);
+      case "Progress": return rcProgress(c);
+      case "Badge": return rcBadge(c);
+      case "Skeleton": return rcSkeleton(c);
+      case "Divider": return <div className="sidebar-divider" />;
+      case "Spacer": return <div style={{ height: (prop(c, "height") as number) || 16 }} />;
+      case "ChatMessages": return rcChatMessages(c);
+      case "ChatInput": return rcChatInput(c);
+      case "CodeEditor": return renderCodeEditor(c, ctx);
+      case "CommitList": return renderCommitList(c, ctx);
+      case "DiffView": return renderDiffView(c, ctx);
+      case "DataTable": return renderDataTable(c, ctx);
+      case "ScoreGauge": return renderScoreGauge(c, ctx);
+      case "ActivityRings": return renderActivityRings(c, ctx);
+      case "StatusBadge": return renderStatusBadge(c, ctx);
+      case "Collapsible": return renderCollapsible(c, ctx);
+      case "Modal": return renderModalComponent(c, ctx);
+      case "Form": return renderForm(c, ctx);
+      case "FormInput": return renderFormInput(c, ctx);
+      case "GitTimeline": return renderGitTimeline(c, ctx);
+      case "StepIndicator": return renderStepIndicator(c, ctx);
+      case "FileTree": return renderFileTree(c, ctx);
+      case "ArenaPills": return renderArenaPills(c, ctx);
+      case "ArenaScoreTable": return renderArenaScoreTable(c, ctx);
+      case "ArenaCategoryCard": return renderArenaCategoryCard(c, ctx);
+      case "RadarChart": return renderRadarChart(c, ctx);
+      case "ArenaRunPicker": return renderArenaRunPicker(c, ctx);
+      case "ArenaModeToggle": return renderArenaModeToggle(c, ctx);
+      case "PlaygroundFab": return renderPlaygroundFab(c, ctx);
+      case "VersionGraph": return renderVersionGraph(c, ctx);
+      case "EvolutionPipeline": return renderEvolutionPipeline(c, ctx);
+      case "LogViewer": return renderLogViewer(c, ctx);
+      case "AuthPage": return rcAuthPage(c);
+      case "TagPicker": return <TagPickerComponent key={(prop(c, "stableKey") as string) || c.id} c={c} sendAction={sendAction} />;
       default:
-        return <div className="text-text-muted text-xs p-2">[Unknown: {c.type}]</div>;
+        return <div className="text-text-muted text-xs p-2">[Unknown: {componentType(c)}]</div>;
     }
   }
 
@@ -124,45 +285,54 @@ export function A2UIRenderer({
 
   const ctx: RenderContext = {
     sendAction, sendNavigate, renderChildren, renderComponent, renderInline,
-    pendingPlotlyCharts, chatAutoScrollRef, isAutoScrollingRef,
+    chatAutoScrollRef, isAutoScrollingRef,
   };
 
   // ---- Layout Components ----
 
   function rcColumn(c: A2UIComponent) {
-    const gap = (c.gap as number) || 0;
-    const padding = (c.padding as number) || 0;
-    const align = (c.align as string) || "stretch";
-    const extraStyle = (c.style as string) || "";
-    const className = (c.className as string) || "";
+    const gap = (prop(c, "gap") as number) || 0;
+    const padding = (prop(c, "padding") as number) || 0;
+    const align = (prop(c, "align") as string) || "stretch";
+    const extraStyle = (prop(c, "style") as string) || "";
+    const className = (prop(c, "className") as string) || "";
     const isGrid = extraStyle.includes("display: grid");
     const baseClass = isGrid ? className : `flex flex-col ${className}`;
     return (
       <div className={baseClass} style={parseStyle(`gap: ${gap}px; padding: ${padding}px; align-items: ${align}; ${extraStyle}`)}>
-        {renderChildren(c.children)}
+        {renderChildren(getChildren(c))}
       </div>
     );
   }
 
   function rcRow(c: A2UIComponent) {
-    const gap = (c.gap as number) || 0;
-    const justify = (c.justify as string) || "start";
-    const align = (c.align as string) || "center";
-    const className = (c.className as string) || "";
-    const extraStyle = (c.style as string) || "";
+    const gap = (prop(c, "gap") as number) || 0;
+    const rawJustify = (prop(c, "justify") as string) || "start";
+    const align = (prop(c, "align") as string) || "center";
+    const wrap = prop(c, "wrap") as boolean;
+    const className = (prop(c, "className") as string) || "";
+    const extraStyle = (prop(c, "style") as string) || "";
+    // Map shorthand values to valid CSS
+    const justifyMap: Record<string, string> = {
+      start: "flex-start", center: "center", end: "flex-end",
+      between: "space-between", around: "space-around",
+    };
+    const justify = justifyMap[rawJustify] || rawJustify;
     return (
-      <div className={`flex flex-row ${className}`} style={parseStyle(`gap: ${gap}px; justify-content: ${justify}; align-items: ${align}; ${extraStyle}`)}>
-        {renderChildren(c.children)}
+      <div className={`flex flex-row ${wrap ? "flex-wrap" : ""} ${className}`} style={parseStyle(`gap: ${gap}px; justify-content: ${justify}; align-items: ${align}; ${extraStyle}`)}>
+        {renderChildren(getChildren(c))}
       </div>
     );
   }
 
   function rcGrid(c: A2UIComponent) {
-    const columns = (c.columns as number) || 2;
-    const gap = (c.gap as number) || 16;
+    const columns = (prop(c, "columns") as number) || 2;
+    const gap = (prop(c, "gap") as number) || 16;
+    const minColWidth = columns >= 4 ? 160 : columns >= 3 ? 200 : 240;
     return (
-      <div className="grid stagger-children" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)`, gap }}>
-        {(c.children || []).map((id, index) => (
+      <div className="grid stagger-children"
+           style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${minColWidth}px, 100%), 1fr))`, gap }}>
+        {getChildren(c).map((id, index) => (
           <div key={id} style={{ "--stagger-index": index } as React.CSSProperties}>{renderComponent(id)}</div>
         ))}
       </div>
@@ -172,10 +342,12 @@ export function A2UIRenderer({
   // ---- Content Components ----
 
   function rcText(c: A2UIComponent) {
-    const variant = (c.variant as string) || "body";
-    const color = (c.color as string) || "inherit";
-    const weight = (c.weight as string) || "normal";
-    const text = c.text as string;
+    const variant = (prop(c, "variant") as string) || "body";
+    const color = (prop(c, "color") as string) || "inherit";
+    const weight = (prop(c, "weight") as string) || "normal";
+    const text = prop(c, "text") as string;
+    const className = (prop(c, "className") as string) || "";
+    const extraStyle = (prop(c, "style") as string) || "";
     const textVariants: Record<string, string> = {
       h1: "text-[2rem] font-bold",
       h2: "text-2xl font-semibold",
@@ -186,16 +358,16 @@ export function A2UIRenderer({
     };
     const variantClass = textVariants[variant] || textVariants.body;
     return (
-      <span className={variantClass} style={{ color, fontWeight: weight }}>
-        {c.markdown ? <span dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }} /> : text}
+      <span className={`${variantClass} ${className}`} style={parseStyle(`color: ${color}; font-weight: ${weight}; ${extraStyle}`)}>
+        {prop(c, "markdown") ? <Markdown>{text}</Markdown> : text}
       </span>
     );
   }
 
   function rcCard(c: A2UIComponent) {
-    const title = c.title as string;
-    const padding = (c.padding as number) || 20;
-    const className = (c.className as string) || "";
+    const title = prop(c, "title") as string;
+    const padding = (prop(c, "padding") as number) || 20;
+    const className = (prop(c, "className") as string) || "";
     return (
       <div
         className={`card-hover bg-surface-card border border-border rounded-xl ${className}`}
@@ -206,18 +378,18 @@ export function A2UIRenderer({
         }}
       >
         {title && <div className="text-[15px] font-semibold mb-4 text-text-strong tracking-tight">{title}</div>}
-        {renderChildren(c.children)}
+        {renderChildren(getChildren(c))}
       </div>
     );
   }
 
   function rcStatCard(c: A2UIComponent) {
-    const title = c.title as string;
-    const value = c.value as string | number;
-    const subtitle = c.subtitle as string;
-    const icon = c.icon as string;
-    const trend = c.trend as { direction: string; value: string } | undefined;
-    const color = (c.color as string) || "rgb(var(--color-text))";
+    const title = prop(c, "title") as string;
+    const value = prop(c, "value") as string | number;
+    const subtitle = prop(c, "subtitle") as string;
+    const icon = prop(c, "icon") as string;
+    const trend = prop(c, "trend") as { direction: string; value: string } | undefined;
+    const color = (prop(c, "color") as string) || "rgb(var(--color-text))";
     const trendColors: Record<string, string> = {
       up: "text-emerald-500", down: "text-red-500", stable: "text-text-muted",
     };
@@ -246,10 +418,10 @@ export function A2UIRenderer({
   }
 
   function rcMetric(c: A2UIComponent) {
-    const label = c.label as string;
-    const value = c.value as string | number;
-    const unit = c.unit as string;
-    const icon = c.icon as string;
+    const label = prop(c, "label") as string;
+    const value = prop(c, "value") as string | number;
+    const unit = prop(c, "unit") as string;
+    const icon = prop(c, "icon") as string;
     return (
       <div className="flex items-baseline gap-1">
         {icon && <span className="text-base">{icon}</span>}
@@ -261,12 +433,12 @@ export function A2UIRenderer({
   }
 
   function rcChart(c: A2UIComponent) {
-    const chartType = c.chartType as string;
-    const data = c.data as Record<string, unknown>[];
-    const height = (c.height as number) || 200;
-    const xKey = c.xKey as string;
-    const yKey = c.yKey as string;
-    const color = (c.color as string) || "#667eea";
+    const chartType = prop(c, "chartType") as string;
+    const data = prop(c, "data") as Record<string, unknown>[];
+    const height = (prop(c, "height") as number) || 200;
+    const xKey = prop(c, "xKey") as string;
+    const yKey = prop(c, "yKey") as string;
+    const color = (prop(c, "color") as string) || "#667eea";
 
     if (!data || data.length === 0) {
       return <div className="flex items-center justify-center text-text-muted" style={{ height }}>No data</div>;
@@ -364,8 +536,8 @@ export function A2UIRenderer({
   }
 
   function rcTable(c: A2UIComponent) {
-    const columns = c.columns as { key: string; label: string }[];
-    const rows = c.rows as Record<string, unknown>[];
+    const columns = prop(c, "columns") as { key: string; label: string }[];
+    const rows = prop(c, "rows") as Record<string, unknown>[];
     return (
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
@@ -393,13 +565,15 @@ export function A2UIRenderer({
   // ---- Interactive Components ----
 
   function rcButton(c: A2UIComponent) {
-    const label = c.label as string;
-    const action = c.action as string;
-    const variant = (c.variant as string) || "primary";
-    const disabled = c.disabled as boolean;
-    const payload = c.payload as Record<string, unknown>;
-    const icon = c.icon as string | undefined;
-    const btnBase = "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
+    const label = prop(c, "label") as string;
+    const action = prop(c, "action") as string;
+    const variant = (prop(c, "variant") as string) || "primary";
+    const disabled = prop(c, "disabled") as boolean;
+    const payload = prop(c, "payload") as Record<string, unknown>;
+    const icon = prop(c, "icon") as string | undefined;
+    const tooltip = prop(c, "tooltip") as string | undefined;
+    const isIconOnly = icon && !label;
+
     const btnVariants: Record<string, string> = {
       primary: "bg-primary text-primary-fg hover:-translate-y-px",
       secondary: "bg-surface text-text border border-border hover:bg-surface-hover hover:border-border-hover",
@@ -408,6 +582,11 @@ export function A2UIRenderer({
       danger: "bg-red-600 text-white hover:bg-red-700 hover:-translate-y-px",
       accent: "text-white hover:-translate-y-0.5 animate-[glow-pulse_3s_ease-in-out_infinite]",
     };
+
+    const btnBase = isIconOnly
+      ? "inline-flex items-center justify-center w-8 h-8 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.93] transition-all duration-150 [&>svg]:w-4 [&>svg]:h-4"
+      : "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
+
     const isAccent = variant === "accent";
     const isElevated = variant === "primary" || isAccent;
     const accentStyle: React.CSSProperties = isAccent
@@ -420,23 +599,30 @@ export function A2UIRenderer({
         : {};
     return (
       <button
+        type="button"
         className={`${btnBase} ${btnVariants[variant] || btnVariants.primary}`}
         style={accentStyle}
         disabled={disabled}
+        title={tooltip || (isIconOnly ? undefined : undefined)}
         onClick={() => sendAction(action, payload)}
         onMouseEnter={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 30px var(--color-accent-glow)"; } : undefined}
         onMouseLeave={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = isAccent ? "var(--shadow-md), 0 0 24px var(--color-accent-glow)" : "var(--shadow-sm)"; } : undefined}
       >
-        {icon && <span className="inline-flex w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
+        {icon && (isIconOnly
+          ? <span dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />
+          : <span className="inline-flex w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />
+        )}
         {label}
       </button>
     );
   }
 
+  // rcTagPicker extracted to standalone TagPickerComponent (see below)
+
   function rcNav(c: A2UIComponent) {
-    const items = c.items as { id: string; label: string; icon?: string }[];
-    const activeId = c.activeId as string;
-    const orientation = (c.orientation as string) || "vertical";
+    const items = prop(c, "items") as { id: string; label: string; icon?: string }[];
+    const activeId = prop(c, "activeId") as string;
+    const orientation = (prop(c, "orientation") as string) || "vertical";
     const navDir = orientation === "horizontal" ? "flex-row" : "flex-col";
     return (
       <nav className={`flex gap-1 items-center ${navDir}`}>
@@ -463,9 +649,9 @@ export function A2UIRenderer({
   }
 
   function rcTabs(c: A2UIComponent) {
-    const tabs = c.tabs as { id: string; label: string }[];
-    const activeTab = c.activeTab as string;
-    const contentIds = c.contentIds as Record<string, string>;
+    const tabs = prop(c, "tabs") as { id: string; label: string }[];
+    const activeTab = prop(c, "activeTab") as string;
+    const contentIds = prop(c, "contentIds") as Record<string, string>;
     return (
       <div>
         <div className="flex border-b border-border gap-0">
@@ -487,10 +673,10 @@ export function A2UIRenderer({
   }
 
   function rcProgress(c: A2UIComponent) {
-    const value = (c.value as number) || 0;
-    const maxValue = (c.maxValue as number) || 100;
-    const label = c.label as string;
-    const color = (c.color as string) || "#667eea";
+    const value = (prop(c, "value") as number) || 0;
+    const maxValue = (prop(c, "maxValue") as number) || 100;
+    const label = prop(c, "label") as string;
+    const color = (prop(c, "color") as string) || "#667eea";
     const pct = Math.min(100, (value / maxValue) * 100);
     return (
       <div>
@@ -503,8 +689,8 @@ export function A2UIRenderer({
   }
 
   function rcBadge(c: A2UIComponent) {
-    const text = c.text as string;
-    const variant = (c.variant as string) || "default";
+    const text = prop(c, "text") as string;
+    const variant = (prop(c, "variant") as string) || "default";
     const badgeVariants: Record<string, string> = {
       default: "bg-slate-500/20 text-slate-300",
       success: "bg-emerald-500/20 text-emerald-400",
@@ -516,9 +702,9 @@ export function A2UIRenderer({
   }
 
   function rcSkeleton(c: A2UIComponent) {
-    const variant = (c.variant as string) || "rectangular";
-    const width = c.width || "100%";
-    const height = c.height || (variant === "text" ? "1em" : "100px");
+    const variant = (prop(c, "variant") as string) || "rectangular";
+    const width = prop(c, "width") || "100%";
+    const height = prop(c, "height") || (variant === "text" ? "1em" : "100px");
     const radiusClass = variant === "circular" ? "rounded-full" : variant === "text" ? "rounded" : "rounded-xl";
     return (
       <div
@@ -531,13 +717,13 @@ export function A2UIRenderer({
   // ---- Chat Components ----
 
   function rcChatMessages(c: A2UIComponent) {
-    const rawMessages = (c.messages as any[]) || [];
-    const streaming = c.streaming as boolean;
-    const streamingContent = c.streamingContent as string;
-    const welcomeTitle = c.welcomeTitle as string | undefined;
-    const welcomeSubtitle = c.welcomeSubtitle as string | undefined;
-    const welcomeIcon = (c.welcomeIcon as string) || "bot";
-    const welcomeActions = c.welcomeActions as Array<{ label: string; icon?: string; action: string; content: string }> | undefined;
+    const rawMessages = (prop(c, "messages") as any[]) || [];
+    const streaming = prop(c, "streaming") as boolean;
+    const streamingContent = prop(c, "streamingContent") as string;
+    const welcomeTitle = prop(c, "welcomeTitle") as string | undefined;
+    const welcomeSubtitle = prop(c, "welcomeSubtitle") as string | undefined;
+    const welcomeIcon = (prop(c, "welcomeIcon") as string) || "bot";
+    const welcomeActions = prop(c, "welcomeActions") as Array<{ label: string; icon?: string; action: string; content: string }> | undefined;
 
     // Server-driven welcome screen
     if (rawMessages.length === 0 && !streaming && welcomeTitle) {
@@ -550,7 +736,7 @@ export function A2UIRenderer({
           {welcomeActions && welcomeActions.length > 0 && (
             <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
               {welcomeActions.map((a, i) => (
-                <button key={i} className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animationDelay: `${i * 60}ms`, animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards" }} onClick={() => { const actionName = (c.action as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
+                <button key={i} className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animationDelay: `${i * 60}ms`, animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards" }} onClick={() => { const actionName = (prop(c, "action") as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
                   {a.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[a.icon] || "" }} />}
                   {a.label}
                 </button>
@@ -561,7 +747,7 @@ export function A2UIRenderer({
       );
     }
 
-    const noWelcome = c.noWelcome as boolean;
+    const noWelcome = prop(c, "noWelcome") as boolean;
     if (rawMessages.length === 0 && !streaming && noWelcome) {
       return (
         <div className="flex-1 flex items-center justify-center p-4 text-text-muted text-[13px] opacity-50">
@@ -594,7 +780,7 @@ export function A2UIRenderer({
     }
 
     const avatarBase = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4";
-    const msgBubble = "max-w-[70%] px-4 py-3 rounded-2xl leading-relaxed text-[13.5px]";
+    const msgBubble = "max-w-[85%] sm:max-w-[70%] px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl leading-relaxed text-[13.5px]";
 
     // Normalize messages to Parts format
     interface NormalizedMsg {
@@ -642,7 +828,7 @@ export function A2UIRenderer({
         if (!part.content?.trim()) return null;
         return (
           <div key={partIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }}>
-            <span dangerouslySetInnerHTML={{ __html: renderMarkdown(part.content) }} />
+            <Markdown>{part.content}</Markdown>
           </div>
         );
       }
@@ -654,18 +840,31 @@ export function A2UIRenderer({
           : status === "error"
             ? <span className="text-error [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["x"] }} />
             : <span className="text-success [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
-        const displayName = TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
+        const displayName = part.displayName || TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
+        const progress = part.progressData;
+        const pct = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
         return (
-          <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[70%]">
+          <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[90%] sm:max-w-[70%]">
             <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />
             <span className="truncate">{displayName}</span>
+            {progress && progress.total > 0 && (
+              <div className="flex items-center gap-1.5 shrink-0 min-w-[100px]">
+                <div className="h-1.5 bg-surface rounded-full overflow-hidden flex-1">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${status === "running" ? "bg-primary animate-status-pulse" : status === "error" ? "bg-error" : "bg-success"}`}
+                    style={{ width: `${Math.max(pct, 3)}%` }}
+                  />
+                </div>
+                <span className="tabular-nums text-[10px] w-[3ch] text-right">{pct}%</span>
+              </div>
+            )}
             {statusIcon}
           </div>
         );
       }
       if (part.type === "tool_result" && part.cards) {
         return (
-          <div key={partIdx} className="max-w-[70%]">
+          <div key={partIdx} className="max-w-[90%] sm:max-w-[70%]">
             {renderInline(part.cards as { components: A2UIComponent[]; root_id: string })}
           </div>
         );
@@ -704,31 +903,56 @@ export function A2UIRenderer({
             );
             const isActiveMsg = streaming && mi === messages.length - 1;
 
+            // Skip empty assistant messages that aren't actively streaming
+            if (!isActiveMsg && !hasVisibleParts) return null;
+
+            const thinkingMode = prop(c, "thinkingMode") as boolean;
+            const hasToolCalls = msg.parts.some((p) => p.type === "tool_use");
+
             return (
               <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-                <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+                <div className="relative self-start shrink-0">
+                  {isActiveMsg && (
+                    <div className="absolute inset-0 rounded-lg bg-primary/20"
+                         style={{ animation: "agent-breathe-ring 2s ease-out infinite" }} />
+                  )}
+                  <div className={`${avatarBase} bg-primary`}
+                       style={isActiveMsg ? { animation: "agent-breathe 2.5s ease-in-out infinite" } : undefined}
+                       dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+                </div>
                 <div className="flex flex-col gap-2 min-w-0 flex-1">
-                  {msg.parts.map((part, pi) => {
-                    // Add stream-border-pulse to actively streaming text part
-                    if (
-                      isActiveMsg && part.type === "text" && part.content?.trim() &&
-                      pi === msg.parts.length - 1
-                    ) {
-                      return (
-                        <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
-                          <span dangerouslySetInnerHTML={{ __html: renderMarkdown(part.content) }} />
+                  {thinkingMode && hasToolCalls ? (
+                    <ThinkingMessage
+                      parts={msg.parts}
+                      isActiveMsg={isActiveMsg}
+                      renderPartFn={renderPart}
+                      msgBubble={msgBubble}
+                    />
+                  ) : (
+                    <>
+                      {msg.parts.map((part, pi) => {
+                        // Add stream-border-pulse to actively streaming text part
+                        if (
+                          isActiveMsg && part.type === "text" && part.content?.trim() &&
+                          pi === msg.parts.length - 1
+                        ) {
+                          return (
+                            <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+                              <Markdown>{part.content}</Markdown>
+                            </div>
+                          );
+                        }
+                        return renderPart(part, pi);
+                      })}
+                      {/* Typing indicator when assistant message has no visible parts yet */}
+                      {isActiveMsg && !hasVisibleParts && (
+                        <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
+                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
                         </div>
-                      );
-                    }
-                    return renderPart(part, pi);
-                  })}
-                  {/* Typing indicator when assistant message has no visible parts yet */}
-                  {isActiveMsg && !hasVisibleParts && (
-                    <div className="flex gap-1.5 px-4 py-3 items-center">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
-                    </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -736,9 +960,9 @@ export function A2UIRenderer({
           }
         })}
 
-        {!streaming && (c.quickReplies as Array<{ label: string; content: string; icon?: string; variant?: string }>)?.length ? (
+        {!streaming && (prop(c, "quickReplies") as Array<{ label: string; content: string; icon?: string; variant?: string }>)?.length ? (
           <div className="flex gap-2 pl-13 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal">
-            {(c.quickReplies as Array<{ label: string; content: string; icon?: string; variant?: string }>).map((qr, i) => (
+            {(prop(c, "quickReplies") as Array<{ label: string; content: string; icon?: string; variant?: string }>).map((qr, i) => (
               <button
                 key={i}
                 className={`quick-reply-btn flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${
@@ -746,7 +970,7 @@ export function A2UIRenderer({
                     : qr.variant === "primary" ? "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50"
                     : "border-border text-text-secondary bg-surface hover:bg-surface-hover hover:border-border-hover"
                 }`}
-                onClick={() => { const actionName = (c.action as string) || "send_message"; sendAction(actionName, { content: qr.content, value: qr.content }); }}
+                onClick={() => { const actionName = (prop(c, "action") as string) || "send_message"; sendAction(actionName, { content: qr.content, value: qr.content }); }}
               >
                 {qr.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[qr.icon] || "" }} />}
                 {qr.label}
@@ -759,13 +983,22 @@ export function A2UIRenderer({
   }
 
   function rcChatInput(c: A2UIComponent) {
-    const streaming = c.streaming as boolean;
-    const disabled = c.disabled as boolean;
-    const placeholder = (c.placeholder as string) || "Ask me anything...";
-    const actionName = (c.action as string) || "send_message";
+    const streaming = prop(c, "streaming") as boolean;
+    const disabled = prop(c, "disabled") as boolean;
+    const placeholder = (prop(c, "placeholder") as string) || "Ask me anything...";
+    const actionName = (prop(c, "action") as string) || "send_message";
+    const clearAction = prop(c, "clearAction") as string | undefined;
     const stopAction = actionName.startsWith("sa_") ? "sa_stop_generation" : "stop_generation";
     return (
       <div className="chat-input-bar flex shrink-0 gap-3 p-4 border-t border-border bg-surface backdrop-blur-[16px]">
+        {clearAction && (
+          <button
+            className="w-10 h-10 rounded-xl border border-border bg-transparent text-text-secondary cursor-pointer flex items-center justify-center shrink-0 [&>svg]:w-4 [&>svg]:h-4 hover:text-text hover:bg-surface-hover hover:border-border-hover transition-all duration-150 active:scale-[0.93]"
+            title={i18n.common?.newChat || "New Chat"}
+            onClick={() => sendAction(clearAction)}
+            dangerouslySetInnerHTML={{ __html: ICONS["refresh-cw"] }}
+          />
+        )}
         <input
           type="text"
           className="flex-1 py-2.5 px-4 bg-bg border border-border rounded-xl text-text text-[13.5px] transition-all duration-150 outline-none placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/10"
@@ -803,6 +1036,145 @@ export function A2UIRenderer({
     );
   }
 
+  function rcAuthPage(c: A2UIComponent) {
+    const title = prop(c, "title") as string;
+    const subtitle = prop(c, "subtitle") as string;
+    const tagline = prop(c, "tagline") as string;
+    const buttonLabel = prop(c, "buttonLabel") as string;
+    const buttonAction = prop(c, "buttonAction") as string;
+    const features = prop(c, "features") as Array<{ icon: string; title: string; desc: string }>;
+    const footer = prop(c, "footer") as string;
+
+    return (
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 50,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgb(var(--color-bg))",
+          overflow: "hidden",
+        }}
+      >
+        {/* Floating orbs — using design system primary & accent-2 */}
+        <div style={{
+          position: "absolute", width: 200, height: 200, borderRadius: "50%",
+          background: "rgb(var(--color-primary) / 0.12)", filter: "blur(80px)",
+          top: "15%", left: "10%",
+          animation: "auth-orb 20s ease-in-out infinite",
+        }} />
+        <div style={{
+          position: "absolute", width: 150, height: 150, borderRadius: "50%",
+          background: "rgb(var(--color-accent-2) / 0.08)", filter: "blur(60px)",
+          bottom: "20%", right: "15%",
+          animation: "auth-orb 25s ease-in-out infinite reverse",
+        }} />
+
+        {/* Glass card */}
+        <div style={{
+          position: "relative", zIndex: 1,
+          maxWidth: 480, width: "90%",
+          padding: "48px 40px",
+          background: "var(--color-surface-card)",
+          backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+          borderRadius: 24,
+          border: "1px solid rgb(var(--color-border))",
+          boxShadow: "var(--shadow-xl)",
+          animation: "auth-card-enter 0.8s cubic-bezier(0.16, 1, 0.3, 1) backwards",
+          textAlign: "center",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+        }}>
+          {/* Logo */}
+          <div style={{
+            width: 64, height: 64,
+            borderRadius: 16,
+            background: "linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            animation: "auth-float 3s ease-in-out infinite",
+            boxShadow: "var(--shadow-glow)",
+            marginBottom: 8,
+          }}>
+            <span style={{ color: "rgb(var(--color-primary-fg))" }} className="[&>svg]:w-8 [&>svg]:h-8" dangerouslySetInnerHTML={{ __html: getIcon("heart-pulse") }} />
+          </div>
+
+          {/* Title with shimmer */}
+          <h1 style={{
+            fontSize: "2.5rem", fontWeight: 800, letterSpacing: "-0.04em",
+            background: "linear-gradient(90deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)), rgb(var(--color-primary)))",
+            backgroundSize: "200% auto",
+            WebkitBackgroundClip: "text", backgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            animation: "auth-shimmer 4s linear infinite",
+            margin: 0, lineHeight: 1.2,
+          }}>{title}</h1>
+
+          {/* Subtitle */}
+          <p style={{
+            fontSize: "1rem", color: "rgb(var(--color-text))",
+            fontWeight: 500, margin: 0, letterSpacing: "-0.01em",
+          }}>{subtitle}</p>
+
+          {/* Tagline */}
+          <p style={{
+            fontSize: "0.85rem", color: "rgb(var(--color-text-muted))",
+            margin: "4px 0 16px", lineHeight: 1.5,
+          }}>{tagline}</p>
+
+          {/* Features */}
+          {features && features.length > 0 && (
+            <div style={{
+              display: "grid", gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 12, width: "100%", marginBottom: 24,
+            }}>
+              {features.map((f, i) => (
+                <div key={i} style={{
+                  padding: "16px 12px", borderRadius: 16,
+                  background: "var(--color-surface-hover)",
+                  border: "1px solid rgb(var(--color-border))",
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+                  animation: `auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.3 + i * 0.1}s backwards`,
+                }}>
+                  <span style={{ color: "rgb(var(--color-text-secondary))" }} className="[&>svg]:w-5 [&>svg]:h-5" dangerouslySetInnerHTML={{ __html: getIcon(f.icon) }} />
+                  <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgb(var(--color-text-strong))" }}>{f.title}</span>
+                  <span style={{ fontSize: "0.7rem", color: "rgb(var(--color-text-muted))", lineHeight: 1.4 }}>{f.desc}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Auth button */}
+          <button
+            onClick={() => sendAction(buttonAction)}
+            style={{
+              width: "100%", padding: "14px 24px",
+              border: "none", borderRadius: 14, cursor: "pointer",
+              fontSize: "0.95rem", fontWeight: 600, fontFamily: "inherit",
+              color: "rgb(var(--color-primary-fg))", letterSpacing: "-0.01em",
+              background: "linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))",
+              boxShadow: "var(--shadow-glow)",
+              animation: "glow-pulse 3s ease-in-out infinite, auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s backwards",
+              transition: "transform 0.2s ease, box-shadow 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.transform = "scale(1.02)";
+              (e.currentTarget as HTMLElement).style.boxShadow = "0 0 40px var(--color-accent-glow)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.transform = "scale(1)";
+              (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-glow)";
+            }}
+          >{buttonLabel}</button>
+
+          {/* Footer */}
+          {footer && (
+            <p style={{
+              fontSize: "0.75rem", color: "rgb(var(--color-text-muted))",
+              margin: "12px 0 0",
+            }}>{footer}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return <>{renderComponent(data.root_id)}</>;
 }
 
@@ -817,4 +1189,160 @@ function parseStyle(styleStr: string): React.CSSProperties {
     }
   }
   return style as React.CSSProperties;
+}
+
+// ============================================================================
+// TagPickerComponent — standalone React component (proper hooks support)
+// ============================================================================
+function TagPickerComponent({
+  c,
+  sendAction,
+}: {
+  c: A2UIComponent;
+  sendAction: (action: string, payload?: Record<string, unknown>) => void;
+}) {
+  const selected = (prop(c, "selected") as string[]) || [];
+  const options = (prop(c, "options") as string[]) || [];
+  const onToggle = prop(c, "onToggle") as string;
+  const basePayload = (prop(c, "payload") as Record<string, unknown>) || {};
+  const placeholder = (prop(c, "placeholder") as string) || "...";
+  const label = (prop(c, "label") as string) || "";
+  const [open, setOpen] = React.useState(false);
+  const [customVal, setCustomVal] = React.useState("");
+  const dropRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const [dropPos, setDropPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        dropRef.current && !dropRef.current.contains(e.target as Node) &&
+        triggerRef.current && !triggerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Calculate dropdown position when opening
+  React.useEffect(() => {
+    if (open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom + 4, left: rect.left });
+    }
+  }, [open]);
+
+  const allTags = React.useMemo(
+    () => [...new Set([...options, ...selected])].sort(),
+    [options, selected],
+  );
+
+  const handleToggle = (tag: string) => {
+    const isSelected = selected.includes(tag);
+    sendAction(onToggle, { ...basePayload, tag, action: isSelected ? "remove" : "add" });
+  };
+  const handleCustomAdd = () => {
+    const v = customVal.trim();
+    if (v && !selected.includes(v)) {
+      sendAction(onToggle, { ...basePayload, tag: v, action: "add" });
+    }
+    setCustomVal("");
+  };
+
+  // Custom check icon SVG
+  const checkSvg = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+  return (
+    <div className="relative">
+      {label && <div className="text-xs text-text-muted mb-1">{label}</div>}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {selected.map((tag) => (
+          <span
+            key={tag}
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-medium"
+          >
+            {tag}
+            <button
+              type="button"
+              className="hover:text-red-500 transition-colors cursor-pointer bg-transparent border-none p-0 text-current"
+              onClick={() => handleToggle(tag)}
+            >
+              <span className="text-[10px]">&times;</span>
+            </button>
+          </span>
+        ))}
+        <button
+          ref={triggerRef}
+          type="button"
+          className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-dashed border-border text-xs text-text-muted cursor-pointer bg-transparent hover:border-primary hover:text-primary transition-colors"
+          onClick={() => setOpen(!open)}
+        >
+          <span className="text-[11px]">+</span> {placeholder}
+        </button>
+      </div>
+      {open && ReactDOM.createPortal(
+        <div
+          ref={dropRef}
+          className="fixed z-[9999] w-64 bg-surface border border-border rounded-lg shadow-lg overflow-hidden"
+          style={{ top: dropPos.top, left: dropPos.left, boxShadow: "var(--shadow-lg)" }}
+        >
+          <div className="p-2 border-b border-border">
+            <input
+              type="text"
+              value={customVal}
+              onChange={(e) => setCustomVal(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleCustomAdd();
+                }
+              }}
+              placeholder={placeholder}
+              className="w-full px-2 py-1.5 text-xs rounded-md border border-border bg-surface-hover text-text outline-none focus:border-primary"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto p-1">
+            {allTags.map((tag) => {
+              const checked = selected.includes(tag);
+              return (
+                <div
+                  key={tag}
+                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer transition-colors ${checked ? "bg-primary/8" : "hover:bg-surface-hover"}`}
+                  onClick={() => handleToggle(tag)}
+                >
+                  <span
+                    className={`inline-flex items-center justify-center w-4 h-4 rounded border transition-all duration-150 ${checked ? "bg-primary border-primary text-white" : "border-border bg-transparent"}`}
+                  >
+                    {checked && (
+                      <span dangerouslySetInnerHTML={{ __html: checkSvg }} />
+                    )}
+                  </span>
+                  <span
+                    className={
+                      checked ? "text-text font-medium" : "text-text-muted"
+                    }
+                  >
+                    {tag}
+                  </span>
+                </div>
+              );
+            })}
+            {customVal.trim() && !allTags.includes(customVal.trim()) && (
+              <div
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs cursor-pointer hover:bg-surface-hover transition-colors text-primary"
+                onClick={handleCustomAdd}
+              >
+                <span>+</span>
+                <span>&ldquo;{customVal.trim()}&rdquo;</span>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
 }

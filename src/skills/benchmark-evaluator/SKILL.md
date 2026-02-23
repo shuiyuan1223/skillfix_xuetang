@@ -5,8 +5,9 @@ metadata:
   {
     "pha": {
       "emoji": "🧬",
+      "category": "evolution",
+      "tags": ["sa", "benchmark", "evaluation", "quality"],
       "type": "system",
-      "triggers": ["benchmark", "evaluation", "scoring", "evolution", "self-improve", "评测", "基准", "评分", "进化", "自进化", "评估", "SHARP"],
       "requires": { "tools": ["run_benchmark", "list_evaluations"] },
       "config": {
         "framework": "SHARP 2.0",

@@ -58,6 +58,7 @@ Respond with ONLY the JSON, no other text.`;
       id: `issue-${issueNumber}-${Date.now()}`,
       category: parsed.category || "communication-quality",
       query: parsed.query || issueTitle,
+      userUuid: parsed.userUuid || "active-user",
       expected: {
         shouldMention: parsed.expected?.shouldMention || [],
         shouldNotMention: parsed.expected?.shouldNotMention || [],
@@ -71,6 +72,7 @@ Respond with ONLY the JSON, no other text.`;
       id: `issue-${issueNumber}-${Date.now()}`,
       category: guessCategory(issueTitle, issueBody),
       query: issueTitle,
+      userUuid: "active-user",
       expected: {
         shouldMention: extractKeywords(issueTitle),
         minScore: 70,

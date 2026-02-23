@@ -28,6 +28,7 @@ import { BenchmarkRunner, type BenchmarkRunnerConfig } from "../evolution/benchm
 import { diagnose, type DiagnoseResult } from "../evolution/diagnose.js";
 import type { BenchmarkProfile, BenchmarkCategory } from "../evolution/types.js";
 import { appendEvolutionLog } from "./system-memory-tools.js";
+import type { PHATool } from "./types.js";
 
 // ============================================================================
 // Runtime config for benchmark/diagnose (injected by server.ts)
@@ -55,10 +56,14 @@ function getRunnerConfig(): BenchmarkRunnerConfig {
 // Traces Tools
 // ============================================================================
 
-export const listTracesTool = {
+export const listTracesTool: PHATool<{ limit?: number; offset?: number; sessionId?: string }> = {
   name: "list_traces",
-  description: "List agent interaction traces with optional filtering",
-  parameters: {
+  description: "列出 Agent 交互追踪记录，支持筛选",
+  displayName: "追踪列表",
+  category: "evolution" as const,
+  icon: "search",
+  label: "List Traces",
+  inputSchema: {
     type: "object" as const,
     properties: {
       limit: {
@@ -104,10 +109,14 @@ export const listTracesTool = {
   },
 };
 
-export const getTraceTool = {
+export const getTraceTool: PHATool<{ id: string }> = {
   name: "get_trace",
-  description: "Get full details of a specific trace",
-  parameters: {
+  description: "获取特定追踪记录的完整详情",
+  displayName: "追踪详情",
+  category: "evolution" as const,
+  icon: "search",
+  label: "Get Trace",
+  inputSchema: {
     type: "object" as const,
     properties: {
       id: {
@@ -159,10 +168,14 @@ export const getTraceTool = {
 // Evaluations Tools
 // ============================================================================
 
-export const getEvaluationStatsTool = {
+export const getEvaluationStatsTool: PHATool<Record<string, never>> = {
   name: "get_evaluation_stats",
-  description: "Get aggregate evaluation statistics",
-  parameters: {
+  description: "获取评估统计汇总",
+  displayName: "评估统计",
+  category: "evolution" as const,
+  icon: "bar-chart",
+  label: "Get Evaluation Stats",
+  inputSchema: {
     type: "object" as const,
     properties: {},
   },
@@ -180,10 +193,18 @@ export const getEvaluationStatsTool = {
   },
 };
 
-export const listEvaluationsTool = {
+export const listEvaluationsTool: PHATool<{
+  limit?: number;
+  minScore?: number;
+  maxScore?: number;
+}> = {
   name: "list_evaluations",
-  description: "List evaluation results with optional score filtering",
-  parameters: {
+  description: "列出评估结果，支持按分数筛选",
+  displayName: "评估列表",
+  category: "evolution" as const,
+  icon: "bar-chart",
+  label: "List Evaluations",
+  inputSchema: {
     type: "object" as const,
     properties: {
       limit: {
@@ -228,10 +249,14 @@ export const listEvaluationsTool = {
 // Test Cases (Benchmark) Tools
 // ============================================================================
 
-export const listTestCasesTool = {
+export const listTestCasesTool: PHATool<{ category?: string; limit?: number }> = {
   name: "list_test_cases",
-  description: "List benchmark test cases",
-  parameters: {
+  description: "列出基准测试用例",
+  displayName: "测试用例列表",
+  category: "evolution" as const,
+  icon: "test-tube",
+  label: "List Test Cases",
+  inputSchema: {
     type: "object" as const,
     properties: {
       category: {
@@ -265,10 +290,14 @@ export const listTestCasesTool = {
   },
 };
 
-export const getTestCaseTool = {
+export const getTestCaseTool: PHATool<{ id: string }> = {
   name: "get_test_case",
-  description: "Get full details of a test case",
-  parameters: {
+  description: "获取测试用例的完整详情",
+  displayName: "测试用例详情",
+  category: "evolution" as const,
+  icon: "test-tube",
+  label: "Get Test Case",
+  inputSchema: {
     type: "object" as const,
     properties: {
       id: {
@@ -303,10 +332,21 @@ export const getTestCaseTool = {
   },
 };
 
-export const createTestCaseTool = {
+export const createTestCaseTool: PHATool<{
+  category: string;
+  query: string;
+  context?: Record<string, unknown>;
+  shouldMention?: string[];
+  shouldNotMention?: string[];
+  minScore?: number;
+}> = {
   name: "create_test_case",
-  description: "Create a new benchmark test case",
-  parameters: {
+  description: "创建新的基准测试用例",
+  displayName: "创建测试用例",
+  category: "evolution" as const,
+  icon: "test-tube",
+  label: "Create Test Case",
+  inputSchema: {
     type: "object" as const,
     properties: {
       category: {
@@ -352,7 +392,6 @@ export const createTestCaseTool = {
       id,
       category: args.category,
       query: args.query,
-      context: args.context,
       expected: {
         shouldMention: args.shouldMention,
         shouldNotMention: args.shouldNotMention,
@@ -368,10 +407,14 @@ export const createTestCaseTool = {
   },
 };
 
-export const deleteTestCaseTool = {
+export const deleteTestCaseTool: PHATool<{ id: string }> = {
   name: "delete_test_case",
-  description: "Delete a benchmark test case",
-  parameters: {
+  description: "删除基准测试用例",
+  displayName: "删除测试用例",
+  category: "evolution" as const,
+  icon: "test-tube",
+  label: "Delete Test Case",
+  inputSchema: {
     type: "object" as const,
     properties: {
       id: {
@@ -403,10 +446,14 @@ export const deleteTestCaseTool = {
 // Suggestions Tools
 // ============================================================================
 
-export const listSuggestionsTool = {
+export const listSuggestionsTool: PHATool<{ status?: string; type?: string; limit?: number }> = {
   name: "list_suggestions",
-  description: "List optimization suggestions",
-  parameters: {
+  description: "列出优化建议",
+  displayName: "建议列表",
+  category: "evolution" as const,
+  icon: "lightbulb",
+  label: "List Suggestions",
+  inputSchema: {
     type: "object" as const,
     properties: {
       status: {
@@ -447,10 +494,14 @@ export const listSuggestionsTool = {
   },
 };
 
-export const getSuggestionTool = {
+export const getSuggestionTool: PHATool<{ id: string }> = {
   name: "get_suggestion",
-  description: "Get full details of a suggestion",
-  parameters: {
+  description: "获取建议的完整详情",
+  displayName: "建议详情",
+  category: "evolution" as const,
+  icon: "lightbulb",
+  label: "Get Suggestion",
+  inputSchema: {
     type: "object" as const,
     properties: {
       id: {
@@ -487,10 +538,20 @@ export const getSuggestionTool = {
   },
 };
 
-export const createSuggestionTool = {
+export const createSuggestionTool: PHATool<{
+  type: "prompt" | "tool" | "behavior";
+  target: string;
+  currentValue?: string;
+  suggestedValue: string;
+  rationale?: string;
+}> = {
   name: "create_suggestion",
-  description: "Create an optimization suggestion",
-  parameters: {
+  description: "创建优化建议",
+  displayName: "创建建议",
+  category: "evolution" as const,
+  icon: "lightbulb",
+  label: "Create Suggestion",
+  inputSchema: {
     type: "object" as const,
     properties: {
       type: {
@@ -543,10 +604,18 @@ export const createSuggestionTool = {
   },
 };
 
-export const updateSuggestionStatusTool = {
+export const updateSuggestionStatusTool: PHATool<{
+  id: string;
+  status: "pending" | "testing" | "validated" | "applied" | "rejected";
+  validationResults?: { before: number; after: number; improvement: number };
+}> = {
   name: "update_suggestion_status",
-  description: "Update the status of a suggestion",
-  parameters: {
+  description: "更新建议的状态",
+  displayName: "更新建议状态",
+  category: "evolution" as const,
+  icon: "lightbulb",
+  label: "Update Suggestion Status",
+  inputSchema: {
     type: "object" as const,
     properties: {
       id: {
@@ -595,10 +664,14 @@ export const updateSuggestionStatusTool = {
 // Benchmark Tools
 // ============================================================================
 
-export const listBenchmarkRunsTool = {
+export const listBenchmarkRunsTool: PHATool<{ limit?: number }> = {
   name: "list_benchmark_runs",
-  description: "List benchmark run history with scores and pass/fail counts",
-  parameters: {
+  description: "列出基准评测运行历史，含分数和通过/失败计数",
+  displayName: "评测列表",
+  category: "evolution" as const,
+  icon: "flask",
+  label: "List Benchmark Runs",
+  inputSchema: {
     type: "object" as const,
     properties: {
       limit: {
@@ -629,10 +702,14 @@ export const listBenchmarkRunsTool = {
   },
 };
 
-export const getBenchmarkRunDetailsTool = {
+export const getBenchmarkRunDetailsTool: PHATool<{ runId: string }> = {
   name: "get_benchmark_run_details",
-  description: "Get detailed results for a benchmark run including category scores",
-  parameters: {
+  description: "获取基准评测运行的详细结果，含各维度分数",
+  displayName: "评测详情",
+  category: "evolution" as const,
+  icon: "flask",
+  label: "Get Benchmark Run Details",
+  inputSchema: {
     type: "object" as const,
     properties: {
       runId: {
@@ -685,11 +762,19 @@ export const getBenchmarkRunDetailsTool = {
 // run_benchmark — Agent can run benchmarks
 // ============================================================================
 
-export const runBenchmarkTool = {
+export const runBenchmarkTool: PHATool<{
+  profile?: string;
+  category?: string;
+  versionTag?: string;
+}> = {
   name: "run_benchmark",
   description:
-    "Run benchmark evaluation suite to measure agent capabilities across five dimensions: health data analysis, health coaching, safety boundaries, personalization memory, and communication quality. Returns scores and radar chart data.",
-  parameters: {
+    "运行基准评测套件，从五个维度衡量 Agent 能力：健康数据分析、健康指导、安全边界、个性化记忆、沟通质量。返回分数和雷达图数据。",
+  displayName: "运行评测",
+  category: "evolution" as const,
+  icon: "play",
+  label: "Run Benchmark",
+  inputSchema: {
     type: "object" as const,
     properties: {
       profile: {
@@ -772,11 +857,19 @@ export const runBenchmarkTool = {
 // run_diagnose — Agent can run diagnose pipeline
 // ============================================================================
 
-export const runDiagnoseTool = {
+export const runDiagnoseTool: PHATool<{
+  runId?: string;
+  profile?: string;
+  createIssues?: boolean;
+}> = {
   name: "run_diagnose",
   description:
-    "Run the diagnose pipeline: analyze benchmark weaknesses using LLM and generate improvement suggestions. If runId is provided, uses existing benchmark results from DB (fast, no re-run). Otherwise runs a fresh benchmark first.",
-  parameters: {
+    "运行诊断流水线：使用 LLM 分析评测弱项并生成改进建议。如提供 runId 则使用数据库中已有的评测结果（快速，无需重跑）；否则先运行新的基准评测。",
+  displayName: "运行诊断",
+  category: "evolution" as const,
+  icon: "stethoscope",
+  label: "Run Diagnose",
+  inputSchema: {
     type: "object" as const,
     properties: {
       runId: {

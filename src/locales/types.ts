@@ -10,14 +10,18 @@ export interface LocaleMessages {
     health: string;
     sleep: string;
     activity: string;
+    plans: string;
     memory: string;
     prompts: string;
     skills: string;
+    tools: string;
     evolution: string;
     integrations: string;
+    proactive: string;
     systemAgent: string;
     logs: string;
     settings: string;
+    legacyChat: string;
   };
 
   // System Agent
@@ -46,6 +50,8 @@ export interface LocaleMessages {
     disable: string;
     create: string;
     normal: string;
+    close: string;
+    newChat: string;
   };
 
   // Chat page
@@ -210,6 +216,7 @@ export interface LocaleMessages {
     promptTitle: string;
     lines: string;
     versionHistory: string;
+    notCreated: string;
     tabPha: string;
     tabSystem: string;
   };
@@ -223,11 +230,15 @@ export interface LocaleMessages {
     skill: string;
     description: string;
     status: string;
-    triggers: string;
     phaSkills: string;
     systemSkills: string;
     tabPha: string;
     tabSystem: string;
+    skillCatHealthCoaching: string;
+    skillCatHealthManagement: string;
+    skillCatEvolution: string;
+    skillCatDevelopment: string;
+    skillCatUtility: string;
   };
 
   // Evolution page
@@ -416,6 +427,7 @@ export interface LocaleMessages {
     cherryPick: string;
     revertCommit: string;
     selectCommitToView: string;
+    selectVersionToView: string;
     timeAgo: string;
     // Data labels
     latestRun: string;
@@ -476,6 +488,10 @@ export interface LocaleMessages {
     iterationHistory: string;
     cycleSummary: string;
     noDetailData: string;
+    // Merge confirmation
+    mergeConfirmTitle: string;
+    mergeConfirmDesc: string;
+    confirmMerge: string;
   };
 
   // Memory page
@@ -622,7 +638,7 @@ export interface LocaleMessages {
     judgeLabel: string;
     benchmarkModelsJson: string;
     benchmarkModelsJsonDesc: string;
-    userUuid: string;
+    userId: string;
     huaweiScopes: string;
     huaweiScopesDesc: string;
     scopesPerLine: string;
@@ -659,11 +675,115 @@ export interface LocaleMessages {
     benchmarkModelsSelect: string;
     saveRepository: string;
     saveAssignments: string;
+    sectionAgents: string;
+    sectionInfraModels: string;
+    agentModelLabel: string;
+    agentCtxHealth: string;
+    agentCtxWeather: string;
+    agentCtxBootstrap: string;
+    agentCtxMemory: string;
+    agentCtxProfile: string;
+    agentTools: string;
+    agentSkillsTags: string;
+    agentSkillsSection: string;
+    agentAdvancedSkills: string;
+    agentSkillsInclude: string;
+    agentSkillsExclude: string;
+    agentSkillHint: string;
+    agentPaths: string;
+    agentAdvanced: string;
+    agentWorkspace: string;
+    agentSessionPath: string;
+    defaultModelFallback: string;
+    saveAgents: string;
+    saveInfraModels: string;
     noneSelected: string;
+    sectionContext: string;
+    contextLocation: string;
+    contextHemisphere: string;
+    hemisphereNorth: string;
+    hemisphereSouth: string;
+    proactiveEnabled: string;
+    proactiveInterval: string;
+    saveContext: string;
+    addAgent: string;
+    deleteAgent: string;
+    addTag: string;
+    selectPresetTag: string;
+    agentToolTags: string;
+    sectionTags: string;
+    sectionTagsDesc: string;
+    pluginName: string;
+    pluginVersion: string;
+    pluginOrigin: string;
+    pluginDescription: string;
+    pluginOriginWorkspace: string;
+    pluginOriginConfig: string;
+    noPluginsFound: string;
     saveAll: string;
     rawConfig: string;
     copyConfig: string;
     downloadConfig: string;
+  };
+
+  // Plans page
+  plans: {
+    title: string;
+    subtitle: string;
+    tabActive: string;
+    tabCompleted: string;
+    tabArchived: string;
+    statusActive: string;
+    statusPaused: string;
+    statusCompleted: string;
+    statusArchived: string;
+    goalsCompleted: string;
+    daysRemaining: string;
+    viewDetails: string;
+    noPlans: string;
+    askAgentHint: string;
+    goalLabel: string;
+    target: string;
+    current: string;
+    progress: string;
+    status: string;
+    milestones: string;
+    adjustmentHistory: string;
+    date: string;
+    reason: string;
+    changes: string;
+    pause: string;
+    resume: string;
+    complete: string;
+    archive: string;
+    baseline: string;
+  };
+
+  // Proactive page
+  proactive: {
+    title: string;
+    subtitle: string;
+    tabRecommendations: string;
+    tabReminders: string;
+    tabCalendar: string;
+    noRecommendations: string;
+    noReminders: string;
+    noEvents: string;
+    dismiss: string;
+    complete: string;
+    acted: string;
+    expires: string;
+    repeats: string;
+    askAgentHint: string;
+  };
+
+  // Legacy Chat (边想边搜)
+  legacyChat: {
+    title: string;
+    subtitle: string;
+    placeholder: string;
+    thinking: string;
+    searching: string;
   };
 
   // OAuth / Authorization
@@ -676,6 +796,14 @@ export interface LocaleMessages {
     failed: string;
     closingWindow: string;
     closeWindow: string;
+    tagline: string;
+    featureDataTitle: string;
+    featureDataDesc: string;
+    featureAITitle: string;
+    featureAIDesc: string;
+    featureAdviceTitle: string;
+    featureAdviceDesc: string;
+    footer: string;
   };
 }
 

@@ -5,8 +5,9 @@ metadata:
   {
     "pha": {
       "emoji": "📅",
-      "requires": { "tools": [] },
-      "triggers": ["上周", "本周", "这周", "上个月", "本月", "这个月", "最近", "这几天", "这几周", "近几天", "前天", "昨晚", "今晚", "前天晚上", "上次", "最近几次", "前几次", "周前", "月前", "本季度", "这两周", "这三个月", "近几个月", "至今", "历史", "last week", "this week", "last month", "this month", "recently", "past few days"]
+      "category": "utility",
+      "tags": ["pha", "time", "parsing", "date-range"],
+      "requires": { "tools": [] }
     }
   }
 ---

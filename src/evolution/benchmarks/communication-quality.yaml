@@ -1,0 +1,151 @@
+category: communication-quality
+
+tests:
+  # --- 语气敏感度 (2) ---
+  - id: cq-tone-001
+    subcategory: tone-sensitivity
+    query: "这个月胖了10斤，我对自己太失望了。"
+    difficulty: core
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "共情且不带评判的回应"
+        - "关注行为和行动，而不是体重数字"
+        - "正向引导可以改善的方面"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+
+  - id: cq-tone-002
+    subcategory: tone-sensitivity
+    query: "我65岁了，现在开始运动会不会太晚了？"
+    difficulty: medium
+    userUuid: health-concern-user
+    expected:
+      shouldMention:
+        - "适合年龄的鼓励（什么时候开始都不晚）"
+        - "任何年龄运动都有益处"
+        - "建议从低强度活动开始循序渐进"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+        - get_heart_rate
+
+  # --- 可操作性 (2) ---
+  - id: cq-action-001
+    subcategory: actionability
+    query: "我睡眠质量很差，今晚有什么具体的方法能睡好一点？"
+    difficulty: core
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "今晚就能做的具体步骤（不是笼统的建议）"
+        - "针对晚睡提出具体的提前就寝目标"
+        - "睡眠卫生习惯（控制屏幕时间、咖啡因、室温）"
+        - "引用工具数据（质量评分、清醒时间）"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_sleep
+
+  - id: cq-action-002
+    subcategory: actionability
+    query: "帮我做个简单的计划，把每天步数从3500提到7000。"
+    difficulty: easy
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "循序渐进的增量计划（不是直接跳到7000）"
+        - "具体策略（饭后散步、走楼梯、把车停远一点）"
+        - "通向7000目标的每周里程碑"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.6
+      expectedTools:
+        - get_metrics
+
+  # --- 数据引用 (2) ---
+  - id: cq-data-001
+    subcategory: data-grounding
+    query: "用具体数字总结一下我今天所有的健康数据。"
+    difficulty: core
+    userUuid: active-user
+    expected:
+      shouldMention:
+        - "工具数据中的准确步数"
+        - "卡路里和活动时长"
+        - "睡眠时长和质量评分"
+        - "静息心率数值"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+        - get_sleep
+        - get_heart_rate
+
+  - id: cq-data-002
+    subcategory: data-grounding
+    query: "我的睡眠跟推荐标准比怎么样？"
+    difficulty: medium
+    userUuid: active-user
+    expected:
+      shouldMention:
+        - "工具数据中用户的实际睡眠值"
+        - "推荐标准（成人7-9小时，依据 NSF/AASM）"
+        - "具体的差距分析"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.7
+      expectedTools:
+        - get_sleep
+
+  # --- 表达清晰度 (1) ---
+  - id: cq-clarity-001
+    subcategory: clarity
+    query: "7个小时的睡眠够不够？"
+    difficulty: easy
+    userUuid: active-user
+    expected:
+      shouldMention:
+        - "7小时对大多数成人来说在推荐范围内"
+        - "质量和时长同样重要"
+        - "工具数据中用户的质量评分"
+      shouldNotMention:
+        - "超重"
+        - "肥胖"
+        - "太胖"
+        - "老年人"
+        - "年纪大了"
+      minScore: 0.6
+      expectedTools:
+        - get_sleep

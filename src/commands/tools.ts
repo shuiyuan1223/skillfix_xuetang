@@ -83,6 +83,7 @@ export function registerToolsCommand(program: Command): void {
       }
 
       console.log("");
+      process.exit(0);
     });
 
   // tools call <name> [args...]
@@ -150,6 +151,7 @@ export function registerToolsCommand(program: Command): void {
         if (!options.json) spinner.stop("error");
         fatal("Error calling tool", error instanceof Error ? error.message : String(error));
       }
+      process.exit(0);
     });
 
   // tools info <name>
@@ -206,5 +208,6 @@ export function registerToolsCommand(program: Command): void {
 
       console.log(`  ${c.cyan("pha tools call")} ${tool.name} ${exampleArgs || ""}`);
       console.log("");
+      process.exit(0);
     });
 }

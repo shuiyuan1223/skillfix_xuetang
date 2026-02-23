@@ -5,8 +5,9 @@ metadata:
   {
     "pha": {
       "emoji": "💨",
-      "requires": { "tools": ["get_spo2", "get_sleep"] },
-      "triggers": ["blood oxygen", "SpO2", "oxygen saturation", "oxygen level", "hypoxia", "breathing", "respiratory", "血氧", "血氧饱和度", "缺氧", "呼吸", "喘", "憋气", "高原", "高海拔", "打鼾", "呼吸暂停", "胸闷"]
+      "category": "health-coaching",
+      "tags": ["pha", "blood-oxygen", "spo2", "data-analysis"],
+      "requires": { "tools": ["get_spo2", "get_sleep"] }
     }
   }
 ---
@@ -115,6 +116,14 @@ metadata:
 ### 高海拔场景
 
 **正确示范**："在海拔 3,200m，你 91% 的 SpO2 在预期范围内。你的身体正在适应。今天保持轻度活动，多喝水，注意是否有头痛或恶心。如果 SpO2 降到 85% 以下或感觉不适，就该下撤了。"
+
+## 所需个人信息
+
+| 字段 | 为什么需要 | 如何自然地问 |
+|------|----------|------------|
+| **conditions** | 呼吸系统疾病（COPD、哮喘）改变 SpO2 的解读基线 | 仅在 SpO2 持续偏低时问："你有没有呼吸系统方面的诊断？" |
+
+血氧监测对年龄/性别/体重的依赖较小，无需主动收集这些字段。
 
 ## 记忆与个性化
 

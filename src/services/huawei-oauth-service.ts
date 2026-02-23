@@ -85,22 +85,25 @@ export async function completeOAuth(
   try {
     const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
 
-    // Exchange code for token
-    const token = await huaweiAuth.exchangeCodeForUser(
+    // Exchange code for token + extract Huawei user ID
+    const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
       code,
       huaweiConfig.clientId,
       huaweiConfig.clientSecret,
       redirectUri
     );
 
+    // Use Huawei user ID as primary identifier (fallback to provided UUID)
+    const userId = huaweiUserId || userUuid;
+
     // Store token
-    if (userUuid) {
+    if (userId) {
       // Multi-user: store in SQLite
       const userStore = getUserStore();
-      userStore.saveToken(userUuid, token);
+      userStore.saveToken(userId, tokenData);
     } else {
       // Single-user: store in file (CLI compatible)
-      tokenStore.saveToken(token);
+      tokenStore.saveToken(tokenData);
     }
 
     // Update session

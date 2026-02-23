@@ -3,7 +3,7 @@
  * Stores user health profile as Markdown files
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { getStateDir } from "../utils/config.js";
 import type { UserProfile } from "./types.js";
@@ -23,7 +23,8 @@ export function getUserDir(uuid: string): string {
 }
 
 /**
- * Ensure user directory exists
+ * Ensure user directory exists with all OpenClaw user-level files.
+ * Creates USER.md, MEMORY.md, BOOTSTRAP.md if they don't exist.
  */
 export function ensureUserDir(uuid: string): string {
   const userDir = getUserDir(uuid);
@@ -34,14 +35,129 @@ export function ensureUserDir(uuid: string): string {
     mkdirSync(join(userDir, "sessions"), { recursive: true });
   }
 
+  // Ensure all 3 OpenClaw user-level files exist
+  const userMdPath = join(userDir, "USER.md");
+  if (!existsSync(userMdPath)) {
+    // Check legacy PROFILE.md — migrate if exists
+    const legacyPath = join(userDir, "PROFILE.md");
+    if (existsSync(legacyPath)) {
+      // Copy legacy content to USER.md
+      writeFileSync(userMdPath, readFileSync(legacyPath, "utf-8"));
+    } else {
+      writeFileSync(userMdPath, generateProfileMd({}));
+    }
+  }
+
+  const memoryMdPath = join(userDir, "MEMORY.md");
+  if (!existsSync(memoryMdPath)) {
+    writeFileSync(
+      memoryMdPath,
+      "# MEMORY.md - 长期记忆\n\n_(Agent 会在对话中自动积累这部分内容。)_\n"
+    );
+  }
+
+  const bootstrapPath = join(userDir, "BOOTSTRAP.md");
+  if (!existsSync(bootstrapPath)) {
+    // Only create BOOTSTRAP for users that haven't been onboarded yet
+    // (i.e., USER.md is still the empty template)
+    const userContent = readFileSync(userMdPath, "utf-8");
+    const hasRealData = userContent.includes("昵称:") && !userContent.includes("{待收集}");
+    if (!hasRealData) {
+      writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE);
+    }
+  }
+
   return userDir;
 }
 
 /**
- * Get path to user's PROFILE.md
+ * Ensure System Agent directory has all 3 OpenClaw user-level files.
+ */
+export function ensureSystemAgentFiles(): void {
+  const dir = join(getStateDir(), "users", "system");
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const userMdPath = join(dir, "USER.md");
+  if (!existsSync(userMdPath)) {
+    writeFileSync(
+      userMdPath,
+      [
+        "# USER.md - 关于系统 Agent",
+        "",
+        "## 身份",
+        "- 名称: PHA System Agent",
+        "- 类型: 系统运维与进化 Agent",
+        "- 职责: 管理 PHA 系统的持续改进",
+        "",
+        "## 配置",
+        "- 进化模式: 手动",
+        "- Benchmark 频率: 按需",
+        "",
+        "## 上下文",
+        "_(系统 Agent 的运行上下文，随时间积累。)_",
+        "",
+      ].join("\n")
+    );
+  }
+
+  const memoryMdPath = join(dir, "MEMORY.md");
+  if (!existsSync(memoryMdPath)) {
+    // If legacy memory.md exists, copy its content
+    const legacyPath = join(dir, "memory.md");
+    if (existsSync(legacyPath)) {
+      writeFileSync(memoryMdPath, readFileSync(legacyPath, "utf-8"));
+    } else {
+      writeFileSync(
+        memoryMdPath,
+        "# MEMORY.md - 系统 Agent 记忆\n\n_(系统 Agent 会在运行中自动积累这部分内容。)_\n"
+      );
+    }
+  }
+
+  const bootstrapPath = join(dir, "BOOTSTRAP.md");
+  if (!existsSync(bootstrapPath)) {
+    writeFileSync(
+      bootstrapPath,
+      [
+        "# BOOTSTRAP.md - 系统 Agent 初始化",
+        "",
+        "## 首次运行",
+        "",
+        "1. 检查系统状态（git status、构建状态）",
+        "2. 读取 evolution-log.md 了解历史进化记录",
+        "3. 运行 benchmark 获取当前基线分数",
+        "4. 记录初始状态到 MEMORY.md",
+        "",
+        "## 完成初始化后",
+        "",
+        "此文件可以被删除或保留作为参考。",
+        "",
+      ].join("\n")
+    );
+  }
+}
+
+/**
+ * Get path to user's USER.md (formerly PROFILE.md)
+ * Falls back to PROFILE.md for backward compatibility
  */
 export function getProfilePath(uuid: string): string {
-  return join(getUserDir(uuid), "PROFILE.md");
+  const userMdPath = join(getUserDir(uuid), "USER.md");
+  if (existsSync(userMdPath)) return userMdPath;
+  // Backward compatibility: fall back to PROFILE.md
+  const legacyPath = join(getUserDir(uuid), "PROFILE.md");
+  if (existsSync(legacyPath)) return legacyPath;
+  // Default to USER.md for new users
+  return userMdPath;
+}
+
+/**
+ * Get path to user's BOOTSTRAP.md
+ */
+export function getBootstrapPath(uuid: string): string {
+  return join(getUserDir(uuid), "BOOTSTRAP.md");
 }
 
 /**
@@ -61,7 +177,7 @@ export function getDailyLogPath(uuid: string, date?: Date): string {
 }
 
 /**
- * Load user profile from PROFILE.md
+ * Load user profile from USER.md (or legacy PROFILE.md)
  */
 export function loadProfileFromFile(uuid: string): UserProfile {
   const profilePath = getProfilePath(uuid);
@@ -75,13 +191,14 @@ export function loadProfileFromFile(uuid: string): UserProfile {
 }
 
 /**
- * Save user profile to PROFILE.md
+ * Save user profile to USER.md (always writes to USER.md, even if loaded from legacy PROFILE.md)
  */
 export function saveProfileToFile(uuid: string, profile: UserProfile): void {
   ensureUserDir(uuid);
-  const profilePath = getProfilePath(uuid);
+  // Always write to USER.md
+  const userMdPath = join(getUserDir(uuid), "USER.md");
   const content = generateProfileMd(profile);
-  writeFileSync(profilePath, content);
+  writeFileSync(userMdPath, content);
 }
 
 /**
@@ -251,7 +368,7 @@ export function getRecentDailyLogs(
 }
 
 /**
- * Parse PROFILE.md to UserProfile
+ * Parse USER.md to UserProfile
  */
 function parseProfileMd(content: string): UserProfile {
   const profile: UserProfile = {};
@@ -286,6 +403,12 @@ function parseProfileMd(content: string): UserProfile {
     profile.weight = parseFloat(weightMatch[1]);
   }
 
+  // Location
+  const locationMatch = content.match(/所在城市:\s*(.+)/);
+  if (locationMatch && !locationMatch[1].includes("{待收集}")) {
+    profile.location = locationMatch[1].trim();
+  }
+
   // Conditions
   const conditionsMatch = content.match(/慢性病:\s*(.+)/);
   if (conditionsMatch && conditionsMatch[1] !== "无" && !conditionsMatch[1].includes("{")) {
@@ -298,22 +421,22 @@ function parseProfileMd(content: string): UserProfile {
     profile.allergies = allergiesMatch[1].split(/[,，]/).map((s) => s.trim());
   }
 
-  // Daily steps goal
-  const stepsMatch = content.match(/每日步数目标:\s*(\d+)/);
+  // Daily steps goal (supports both "每日步数" and legacy "每日步数目标")
+  const stepsMatch = content.match(/每日步数(?:目标)?:\s*(\d+)/);
   if (stepsMatch) {
     profile.goals = profile.goals || {};
     profile.goals.dailySteps = parseInt(stepsMatch[1]);
   }
 
-  // Sleep hours goal
-  const sleepMatch = content.match(/睡眠时长目标:\s*(\d+)/);
+  // Sleep hours goal (supports both "睡眠时长" and legacy "睡眠时长目标")
+  const sleepMatch = content.match(/睡眠时长(?:目标)?:\s*(\d+)/);
   if (sleepMatch) {
     profile.goals = profile.goals || {};
     profile.goals.sleepHours = parseInt(sleepMatch[1]);
   }
 
-  // Exercise per week goal
-  const exerciseMatch = content.match(/运动频率目标:\s*每周(\d+)/);
+  // Exercise per week goal (supports both "运动频率" and legacy "运动频率目标")
+  const exerciseMatch = content.match(/运动频率(?:目标)?:\s*每周(\d+)/);
   if (exerciseMatch) {
     profile.goals = profile.goals || {};
     profile.goals.exercisePerWeek = parseInt(exerciseMatch[1]);
@@ -339,11 +462,11 @@ function parseProfileMd(content: string): UserProfile {
 }
 
 /**
- * Generate PROFILE.md from UserProfile
+ * Generate USER.md from UserProfile
  */
 function generateProfileMd(profile: UserProfile): string {
   const lines = [
-    "# 健康档案",
+    "# USER.md - 关于你的用户",
     "",
     "## 基本信息",
     `- 昵称: ${profile.nickname || "{待收集}"}`,
@@ -351,22 +474,20 @@ function generateProfileMd(profile: UserProfile): string {
     `- 出生年份: ${profile.birthYear || "{待收集}"}`,
     `- 身高: ${profile.height ? `${profile.height}cm` : "{待收集}"}`,
     `- 体重: ${profile.weight ? `${profile.weight}kg` : "{待收集}"}`,
+    `- 所在城市: ${profile.location || "{待收集}"}`,
     "",
     "## 健康状况",
-    `- 慢性病: ${profile.conditions?.length ? profile.conditions.join(", ") : "无"}`,
-    `- 过敏史: ${profile.allergies?.length ? profile.allergies.join(", ") : "无"}`,
-    `- 用药情况: ${profile.medications?.length ? profile.medications.join(", ") : "无"}`,
+    `- 慢性病: ${profile.conditions?.length ? profile.conditions.join(", ") : "{待收集}"}`,
+    `- 过敏史: ${profile.allergies?.length ? profile.allergies.join(", ") : "{待收集}"}`,
     "",
     "## 健康目标",
     `- 主要目标: ${profile.goals?.primary || "{待收集}"}`,
-    `- 每日步数目标: ${profile.goals?.dailySteps || 8000}`,
-    `- 睡眠时长目标: ${profile.goals?.sleepHours || 7}小时`,
-    `- 运动频率目标: 每周${profile.goals?.exercisePerWeek || 3}次`,
+    `- 每日步数: ${profile.goals?.dailySteps || 8000}`,
+    `- 睡眠时长: ${profile.goals?.sleepHours || 7}小时`,
+    `- 运动频率: 每周${profile.goals?.exercisePerWeek || 3}次`,
     "",
-    "## 生活习惯",
-    `- 作息: ${profile.lifestyle?.sleepSchedule || "{待收集}"}`,
-    `- 运动偏好: ${profile.lifestyle?.exercisePreference || "{待收集}"}`,
-    `- 饮食偏好: ${profile.lifestyle?.dietPreference || "{待收集}"}`,
+    "## 上下文",
+    `_(用户关心什么？在做什么？什么习惯？随时间积累这部分。)_`,
     "",
     "## 数据来源",
     `- 华为健康: ${profile.dataSources?.huawei?.connected ? "已连接" : "未连接"}`,
@@ -379,48 +500,108 @@ function generateProfileMd(profile: UserProfile): string {
 }
 
 /**
- * Format profile for display in system prompt
+ * Format profile for display in system prompt.
+ * Shows both known fields and missing fields to guide the agent.
  */
 export function formatProfileForPrompt(profile: UserProfile): string {
-  if (!profile.gender && !profile.birthYear && !profile.height && !profile.weight) {
-    return "User basic info not yet collected. Ask at an appropriate moment.";
-  }
-
   const lines: string[] = [];
 
-  if (profile.nickname) {
-    lines.push(`- Nickname: ${profile.nickname}`);
-  }
-
-  if (profile.gender) {
-    lines.push(`- Gender: ${profile.gender}`);
-  }
-
+  // Known fields
+  if (profile.nickname) lines.push(`- Nickname: ${profile.nickname}`);
+  if (profile.gender) lines.push(`- Gender: ${profile.gender}`);
   if (profile.birthYear) {
     const age = new Date().getFullYear() - profile.birthYear;
     lines.push(`- Age: ${age} (born ${profile.birthYear})`);
   }
-
-  if (profile.height) {
-    lines.push(`- Height: ${profile.height}cm`);
-  }
-
-  if (profile.weight) {
-    lines.push(`- Weight: ${profile.weight}kg`);
-  }
-
+  if (profile.height) lines.push(`- Height: ${profile.height}cm`);
+  if (profile.weight) lines.push(`- Weight: ${profile.weight}kg`);
   if (profile.height && profile.weight) {
     const bmi = profile.weight / Math.pow(profile.height / 100, 2);
     lines.push(`- BMI: ${bmi.toFixed(1)}`);
   }
+  if (profile.location) lines.push(`- Location: ${profile.location}`);
+  if (profile.conditions?.length) lines.push(`- Conditions: ${profile.conditions.join(", ")}`);
+  if (profile.allergies?.length) lines.push(`- Allergies: ${profile.allergies.join(", ")}`);
+  if (profile.goals?.primary) lines.push(`- Health goal: ${profile.goals.primary}`);
 
-  if (profile.conditions?.length) {
-    lines.push(`- Conditions: ${profile.conditions.join(", ")}`);
+  // Missing fields
+  const coreMissing: string[] = [];
+  if (!profile.gender) coreMissing.push("gender");
+  if (!profile.birthYear) coreMissing.push("birthYear");
+  if (!profile.height) coreMissing.push("height");
+  if (!profile.weight) coreMissing.push("weight");
+
+  const optionalMissing: string[] = [];
+  if (!profile.goals?.primary) optionalMissing.push("goals.primary");
+  if (!profile.conditions) optionalMissing.push("conditions");
+
+  if (coreMissing.length > 0 || optionalMissing.length > 0) {
+    lines.push("");
+    lines.push("### Missing Profile Fields");
+    if (coreMissing.length > 0) {
+      lines.push(`**Core:** ${coreMissing.join(", ")}`);
+    }
+    if (optionalMissing.length > 0) {
+      lines.push(`**Optional:** ${optionalMissing.join(", ")}`);
+    }
+    lines.push("Refer to the loaded skill's「所需个人信息」section to decide when and how to ask.");
+    lines.push("When you learn any of these, call `update_user_profile` immediately to save.");
   }
 
-  if (profile.goals?.primary) {
-    lines.push(`- Health goal: ${profile.goals.primary}`);
+  if (lines.length === 0) {
+    return "User basic info not yet collected. Ask at an appropriate moment.";
   }
 
   return lines.join("\n");
+}
+
+// ============ BOOTSTRAP ============
+
+const BOOTSTRAP_TEMPLATE = `# BOOTSTRAP.md — 新用户首次引导
+
+**优先级: 最高。在收集到基础信息之前，你无法给出个性化健康建议。**
+
+## 第一条回复
+
+简短介绍自己（1-2 句），然后问用户怎么称呼。例如：
+"你好！我是你的 AI 健康助手，可以帮你分析健康数据、制定计划。怎么称呼你比较好？"
+
+## 需要收集的信息（按优先级）
+
+1. **称呼** — 怎么称呼？
+2. **性别** — 男/女
+3. **出生年份** — 用于计算心率区间等
+4. **身高 + 体重** — 用于 BMI 等指标
+5. **所在城市** — 用于天气和季节性建议（可选）
+6. **健康目标** — 想改善什么？（可选）
+
+## 收集规则
+
+- **一次只问一个问题**，不要同时问多个
+- 自然融入对话，不要像填表
+- 如果用户主动问健康问题，先简短回答，然后自然引回收集："对了，我还不知道你的基本情况，方便告诉我……吗？"
+- 每收集到一条信息，**立即**调用 \`update_user_profile\` 保存
+
+## 引导完成
+
+当收集到至少 4 个核心字段（性别、出生年份、身高、体重）后，调用 \`complete_onboarding\` 完成引导。
+`;
+
+/**
+ * Load BOOTSTRAP.md content for a user (if exists)
+ */
+export function loadBootstrap(uuid: string): string | null {
+  const bsPath = getBootstrapPath(uuid);
+  if (!existsSync(bsPath)) return null;
+  return readFileSync(bsPath, "utf-8");
+}
+
+/**
+ * Delete BOOTSTRAP.md — called after onboarding is complete
+ */
+export function deleteBootstrap(uuid: string): boolean {
+  const bsPath = getBootstrapPath(uuid);
+  if (!existsSync(bsPath)) return false;
+  unlinkSync(bsPath);
+  return true;
 }

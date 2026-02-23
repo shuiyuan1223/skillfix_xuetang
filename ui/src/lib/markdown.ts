@@ -1,3 +1,64 @@
+import React from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+/**
+ * Markdown React component using react-markdown.
+ * Renders markdown text with custom-styled elements matching the PHA theme.
+ */
+export function Markdown({ children }: { children: string }) {
+  return React.createElement(
+    ReactMarkdown,
+    {
+      remarkPlugins: [remarkGfm],
+      components: {
+        table: ({ children }) => React.createElement("table", { className: "md-table" }, children),
+        th: ({ children }) => React.createElement("th", null, children),
+        td: ({ children }) => React.createElement("td", null, children),
+        hr: () => React.createElement("hr", { className: "md-hr" }),
+        pre: ({ children }) =>
+          React.createElement(
+            "pre",
+            {
+              className:
+                "bg-surface-code rounded-xl p-4 my-3 overflow-x-auto font-mono text-[13px] leading-relaxed",
+            },
+            children
+          ),
+        code: ({ className, children, ...props }) => {
+          // Detect fenced code block (has language class from react-markdown)
+          const isBlock = className?.startsWith("language-");
+          if (isBlock) {
+            return React.createElement("code", props, children);
+          }
+          return React.createElement(
+            "code",
+            {
+              className: "px-1.5 py-0.5 rounded bg-surface-inline-code font-mono text-[0.85em]",
+            },
+            children
+          );
+        },
+        a: ({ href, children }) =>
+          React.createElement(
+            "a",
+            { href, target: "_blank", rel: "noopener noreferrer" },
+            children
+          ),
+        h2: ({ children }) => React.createElement("h2", null, children),
+        h3: ({ children }) => React.createElement("h3", null, children),
+        h4: ({ children }) => React.createElement("h4", null, children),
+        strong: ({ children }) => React.createElement("strong", null, children),
+        em: ({ children }) => React.createElement("em", null, children),
+      },
+    },
+    children
+  );
+}
+
+/**
+ * Legacy: render markdown to HTML string (kept for non-React contexts).
+ */
 export function renderMarkdown(text: string): string {
   const tableRegex = /(?:^|\n)(\|.+\|)\n(\|[-:\s|]+\|)\n((?:\|.+\|\n?)+)/g;
   const result = text.replace(tableRegex, (_, headerRow, _separatorRow, bodyRows) => {
@@ -20,7 +81,7 @@ export function renderMarkdown(text: string): string {
       .map((row: string[]) => `<tr>${row.map((cell: string) => `<td>${cell}</td>`).join("")}</tr>`)
       .join("");
 
-    return `<table class="w-full border-collapse text-sm my-3"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+    return `<table class="md-table"><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
   });
 
   return result
@@ -37,6 +98,7 @@ export function renderMarkdown(text: string): string {
     .replace(/^### (.+)$/gm, "<h4>$1</h4>")
     .replace(/^## (.+)$/gm, "<h3>$1</h3>")
     .replace(/^# (.+)$/gm, "<h2>$1</h2>")
+    .replace(/^---+$/gm, '<hr class="md-hr">')
     .replace(/^- (.+)$/gm, "<li>$1</li>")
     .replace(/(<li>.*<\/li>\n?)+/g, "<ul>$&</ul>")
     .replace(/^\d+\. (.+)$/gm, "<li>$1</li>")

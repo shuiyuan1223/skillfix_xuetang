@@ -1,28 +1,101 @@
 /**
- * System Prompt for PHA Agent
+ * System Prompt — Skill Registry (OpenClaw pattern)
  *
- * Provides skill registry for on-demand skill loading (Claude Code pattern).
- * Skills are NOT loaded into the system prompt in full — instead, the agent
- * gets a registry of available skills and uses the `get_skill` tool to load
- * the full content when needed.
+ * Lists available skills with name + description in the system prompt.
+ * The agent scans descriptions, decides relevance, and uses `get_skill`
+ * to lazy-load full content on demand. No trigger words or regex matching.
+ *
+ * Skills are filtered via include/exclude (by name, category, or tag)
+ * and grouped by category in the output.
  */
 
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { getSkillsDir } from "../tools/skill-tools.js";
 
+interface SkillEntry {
+  name: string;
+  description: string;
+  category?: string;
+  tags?: string[];
+}
+
+/** Category display order and labels */
+const CATEGORY_LABELS: Record<string, string> = {
+  "health-coaching": "健康教练",
+  "health-management": "健康管理",
+  evolution: "进化系统",
+  development: "开发工具",
+  utility: "工具",
+};
+
+const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS);
+
+/**
+ * Parse metadata from SKILL.md content.
+ * Extracts category, tags, and type from the JSON metadata block.
+ */
+function parseSkillMetadata(content: string): {
+  category?: string;
+  tags?: string[];
+  type?: string;
+} {
+  const metadataMatch = content.match(/metadata:\s*\n\s*(\{.+\})/s);
+  if (!metadataMatch) return {};
+
+  try {
+    const meta = JSON.parse(metadataMatch[1]);
+    const pha = meta?.pha;
+    if (!pha) return {};
+    return {
+      category: pha.category,
+      tags: pha.tags,
+      type: pha.type,
+    };
+  } catch {
+    // Fallback: regex for individual fields
+    const categoryMatch = content.match(/"category"\s*:\s*"([^"]+)"/);
+    const typeMatch = content.match(/"type"\s*:\s*"([^"]+)"/);
+    return {
+      category: categoryMatch?.[1],
+      type: typeMatch?.[1],
+    };
+  }
+}
+
+/**
+ * Check if a skill matches include/exclude filters.
+ * Matches against: skill name, category, tags.
+ */
+function matchesFilter(skill: SkillEntry, filters: string[]): boolean {
+  for (const filter of filters) {
+    if (skill.name === filter) return true;
+    if (skill.category === filter) return true;
+    if (skill.tags?.includes(filter)) return true;
+  }
+  return false;
+}
+
 /**
  * Build a skill registry section for the system prompt.
- * Lists available skills with name, description, and triggers — not full content.
- * The agent uses the `get_skill` tool to load full skill content on demand.
+ * Agent scans descriptions and calls `get_skill` when relevant.
+ *
+ * Supports filtering via include/exclude (skill name, category, or tag).
+ * Output is grouped by category.
  */
-export function buildSkillRegistry(): string {
+export function buildSkillRegistry(options?: {
+  tags?: string[];
+  include?: string[];
+  exclude?: string[];
+  /** @deprecated Use exclude instead */
+  excludeTypes?: string[];
+}): string {
   const skillsDir = getSkillsDir();
   if (!existsSync(skillsDir)) {
     return "";
   }
 
-  const skills: Array<{ name: string; description: string; triggers: string[] }> = [];
+  const skills: SkillEntry[] = [];
 
   try {
     const entries = readdirSync(skillsDir, { withFileTypes: true });
@@ -34,23 +107,39 @@ export function buildSkillRegistry(): string {
       if (!existsSync(skillFile)) continue;
 
       const content = readFileSync(skillFile, "utf-8");
+      const metadata = parseSkillMetadata(content);
 
-      // Extract frontmatter fields
+      // Legacy filter: excludeTypes
+      if (options?.excludeTypes?.length) {
+        if (metadata.type && options.excludeTypes.includes(metadata.type)) continue;
+      }
+
       const nameMatch = content.match(/^name:\s*(.+)$/m);
       const descMatch = content.match(/^description:\s*"?([^"]+)"?$/m);
 
-      // Extract triggers from metadata JSON
-      let triggers: string[] = [];
-      const triggersMatch = content.match(/"triggers":\s*\[([^\]]+)\]/);
-      if (triggersMatch) {
-        triggers = triggersMatch[1].split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
-      }
-
-      skills.push({
+      const skill: SkillEntry = {
         name: nameMatch?.[1]?.trim() || entry.name,
         description: descMatch?.[1]?.trim() || "",
-        triggers,
-      });
+        category: metadata.category,
+        tags: metadata.tags,
+      };
+
+      // Tags filter: if set, skill must have at least one matching tag
+      if (options?.tags?.length) {
+        if (!metadata.tags?.some((t) => options.tags!.includes(t))) continue;
+      }
+
+      // Include filter: if set, skill must match at least one
+      if (options?.include?.length) {
+        if (!matchesFilter(skill, options.include)) continue;
+      }
+
+      // Exclude filter: if skill matches any, skip it
+      if (options?.exclude?.length) {
+        if (matchesFilter(skill, options.exclude)) continue;
+      }
+
+      skills.push(skill);
     }
   } catch (e) {
     console.warn("Failed to load skill registry:", e);
@@ -60,21 +149,46 @@ export function buildSkillRegistry(): string {
     return "";
   }
 
-  const lines = [
-    "",
-    "## 可用技能",
-    "",
-    "你拥有专业技能指南。当用户的消息匹配某个技能主题时，相关指南会自动注入。如果你需要的指南未被自动加载，请使用 `get_skill` 工具。当技能指南存在时，请遵循其中的评估框架和建议。",
-    "",
-    "| Skill | Description | Triggers |",
-    "|-------|-------------|----------|",
-  ];
-
+  // Group by category
+  const grouped = new Map<string, SkillEntry[]>();
   for (const skill of skills) {
-    const triggerStr = skill.triggers.length > 0 ? skill.triggers.join(", ") : "-";
-    lines.push(`| ${skill.name} | ${skill.description} | ${triggerStr} |`);
+    const cat = skill.category || "utility";
+    if (!grouped.has(cat)) grouped.set(cat, []);
+    grouped.get(cat)!.push(skill);
   }
 
+  const lines = [
+    "",
+    "## Skills (mandatory)",
+    "",
+    "Before replying, scan the skill descriptions below.",
+    "- If exactly one skill clearly applies to the user's question: call `get_skill(name)` to load its full guide, then follow it.",
+    "- If multiple could apply: choose the most specific one, load it, then follow it.",
+    "- If none clearly apply: do not load any skill.",
+    "- Never load more than one skill upfront.",
+    "",
+    "<available_skills>",
+  ];
+
+  // Output in category order
+  const orderedCategories = [...CATEGORY_ORDER.filter((c) => grouped.has(c))];
+  // Add any categories not in the predefined order
+  for (const cat of grouped.keys()) {
+    if (!orderedCategories.includes(cat)) orderedCategories.push(cat);
+  }
+
+  for (const cat of orderedCategories) {
+    const catSkills = grouped.get(cat);
+    if (!catSkills?.length) continue;
+
+    const label = CATEGORY_LABELS[cat] || cat;
+    lines.push(`\n### ${label}`);
+    for (const skill of catSkills) {
+      lines.push(`- **${skill.name}**: ${skill.description}`);
+    }
+  }
+
+  lines.push("</available_skills>");
   lines.push("");
 
   return lines.join("\n");

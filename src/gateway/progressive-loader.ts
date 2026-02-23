@@ -35,14 +35,14 @@ function sendProgress(send: SendFn, current: number, total: number, label: strin
     color: "#3b82f6",
   });
   const root = ui.column([text, prog], { gap: 4, padding: 8 });
-  send(ui.build(root));
+  for (const msg of ui.build(root)) send(msg);
 }
 
 /**
  * Clear the progress toast
  */
 function clearProgress(send: SendFn): void {
-  send({ type: "clear_surface", surface_id: SURFACE_TOAST });
+  send({ deleteSurface: { surfaceId: SURFACE_TOAST } });
 }
 
 /**
@@ -54,18 +54,9 @@ function sendDashboardPage(
   activeTab: TabId,
   loading: boolean
 ): void {
-  const page = generateDashboardPage(data, activeTab, { loading });
-  const sidebar = generateSidebar("dashboard");
-  send({
-    type: "page",
-    surfaces: {
-      sidebar: {
-        components: sidebar.components,
-        root_id: sidebar.root_id,
-      },
-      main: page,
-    },
-  });
+  const pageMessages = generateDashboardPage(data, activeTab, { loading });
+  const sidebarMessages = generateSidebar("dashboard");
+  for (const msg of [...sidebarMessages, ...pageMessages]) send(msg);
 }
 
 /**

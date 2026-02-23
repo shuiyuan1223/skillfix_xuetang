@@ -1,0 +1,102 @@
+id: sedentary-user
+uuid: benchmark-sedentary-user
+
+profile:
+  nickname: "小王"
+  gender: female
+  birthYear: 1996
+  height: 162
+  weight: 58
+  goals:
+    primary: "开始运动，改善体质"
+    dailySteps: 8000
+    sleepHours: 7
+    exercisePerWeek: 2
+
+memory: |
+  ## 2026-01 对话记录
+  - 用户是 30 岁办公室职员
+  - 每天大部分时间久坐
+  - 想开始运动但缺乏动力
+  - 睡眠不规律，经常熬夜
+
+health_data:
+  metrics:
+    day_0: { steps: 3200, calories: 1600, activeMinutes: 12, distance: 2400 }
+    day_-1: { steps: 4100, calories: 1700, activeMinutes: 18, distance: 3075 }
+    day_-2: { steps: 3800, calories: 1650, activeMinutes: 15, distance: 2850 }
+    day_-3: { steps: 2000, calories: 1500, activeMinutes: 8, distance: 1500 }
+    day_-4: { steps: 2500, calories: 1550, activeMinutes: 10, distance: 1875 }
+    day_-5: { steps: 1800, calories: 1450, activeMinutes: 5, distance: 1350 }
+    day_-6: { steps: 5000, calories: 1800, activeMinutes: 20, distance: 3750 }
+  heartRate:
+    day_0:
+      restingAvg: 78
+      maxToday: 120
+      minToday: 65
+      readings:
+        - { time: "08:00", value: 72 }
+        - { time: "12:00", value: 85 }
+        - { time: "18:00", value: 95 }
+        - { time: "22:00", value: 70 }
+    day_-1:
+      restingAvg: 75
+      maxToday: 118
+      minToday: 63
+      readings: []
+    day_-2:
+      restingAvg: 76
+      maxToday: 122
+      minToday: 64
+      readings: []
+  sleep:
+    day_0:
+      durationHours: 5.5
+      qualityScore: 45
+      bedTime: "01:00"
+      wakeTime: "06:30"
+      stages: { deep: 35, light: 165, rem: 45, awake: 45 }
+    day_-1:
+      durationHours: 6.0
+      qualityScore: 50
+      bedTime: "00:30"
+      wakeTime: "06:30"
+      stages: { deep: 45, light: 170, rem: 50, awake: 30 }
+    day_-2:
+      durationHours: 5.8
+      qualityScore: 42
+      bedTime: "00:45"
+      wakeTime: "06:33"
+      stages: { deep: 40, light: 170, rem: 48, awake: 40 }
+    day_-3:
+      durationHours: 6.2
+      qualityScore: 55
+      bedTime: "00:15"
+      wakeTime: "06:27"
+      stages: { deep: 50, light: 180, rem: 52, awake: 28 }
+    day_-4:
+      durationHours: 7.5
+      qualityScore: 72
+      bedTime: "23:00"
+      wakeTime: "06:30"
+      stages: { deep: 80, light: 195, rem: 72, awake: 15 }
+    day_-5:
+      durationHours: 5.5
+      qualityScore: 45
+      bedTime: "02:00"
+      wakeTime: "07:30"
+      stages: { deep: 30, light: 160, rem: 45, awake: 40 }
+    day_-6:
+      durationHours: 6.5
+      qualityScore: 55
+      bedTime: "00:30"
+      wakeTime: "07:00"
+      stages: { deep: 50, light: 180, rem: 55, awake: 35 }
+  workouts:
+    day_0: []
+    day_-1: []
+    day_-2: []
+    day_-3: []
+    day_-4: []
+    day_-5: []
+    day_-6: []

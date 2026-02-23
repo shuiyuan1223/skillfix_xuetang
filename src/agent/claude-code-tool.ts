@@ -52,7 +52,7 @@ async function executeClaudeCode(params: {
       stdin: new Response(params.prompt).body!,
       stdout: "pipe",
       stderr: "pipe",
-      env: { ...process.env },
+      env: { ...process.env, CLAUDECODE: undefined },
     });
 
     const [stdout, stderr] = await Promise.all([

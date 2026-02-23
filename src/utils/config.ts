@@ -11,9 +11,21 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { AsyncLocalStorage } from "node:async_hooks";
 
-/** Fallback user UUID (used only if config has no userUuid) */
-const FALLBACK_USER_UUID = "a755451c-938e-4cea-b7a6-b66b205949cf";
+// Session-scoped user ID (set during tool execution via runWithUserId)
+const userIdStore = new AsyncLocalStorage<string>();
+
+/**
+ * Run a function with a specific user ID in scope.
+ * Tools calling getUserId() inside will get this ID.
+ */
+export function runWithUserId<T>(userId: string, fn: () => T): T {
+  return userIdStore.run(userId, fn);
+}
+
+/** @deprecated Use runWithUserId */
+export const runWithUserUuid = runWithUserId;
 
 // ============================================================================
 // Unified LLM Provider types & constants
@@ -184,8 +196,8 @@ export interface EmbeddingConfig {
 }
 
 export interface PHAConfig {
-  /** User UUID for memory/profile isolation */
-  userUuid?: string;
+  /** User ID (Huawei openID) for memory/profile isolation */
+  uid?: string;
   gateway: {
     port: number;
     autoStart: boolean;
@@ -229,6 +241,18 @@ export interface PHAConfig {
 
   /** Evolution apply engine */
   applyEngine?: "claude-code" | "pi-coding-agent";
+  /** Session context configuration */
+  context?: {
+    /** Default location for weather (city name) */
+    location?: string;
+    /** Hemisphere for season calculation (default: "north") */
+    hemisphere?: "north" | "south";
+  };
+  /** Proactive trigger engine configuration */
+  proactive?: {
+    enabled?: boolean;
+    checkIntervalMinutes?: number;
+  };
   /** Plugin system configuration */
   plugins?: {
     enabled?: boolean;
@@ -241,6 +265,46 @@ export interface PHAConfig {
       }
     >;
   };
+  /** Agent profiles — declarative composition of tools, skills, context per agent instance */
+  agents?: Record<string, AgentProfileConfig>;
+  /** Master tag list for agent tool/skill tag pickers */
+  tags?: string[];
+}
+
+/** Agent profile as stored in config.json (relaxed types for JSON serialization) */
+export interface AgentProfileConfig {
+  /** Per-agent model ref: "provider/name" (overrides orchestrator.pha fallback) */
+  model?: string;
+  /** Workspace path template relative to .pha/ (e.g. "users/{uid}") */
+  workspace?: string;
+  /** Session path template relative to .pha/ (e.g. "users/{uid}/sessions/pha") */
+  sessionPath?: string;
+  tools?: {
+    /** Whitelist: tool names or categories. Empty = no restriction */
+    include?: string[];
+    /** Blacklist: tool names or categories */
+    exclude?: string[];
+    /** @deprecated Use include/exclude instead */
+    categories?: string[];
+    /** Agent-level tags (e.g. "pha", "sa") */
+    tags?: string[];
+  };
+  skills?: {
+    /** Tag-based filter: skill must have at least one matching tag */
+    tags?: string[];
+    /** Whitelist: skill names or tags. Empty = no restriction */
+    include?: string[];
+    /** Blacklist: skill names or tags */
+    exclude?: string[];
+    /** @deprecated Use include/exclude instead */
+    excludeTypes?: string[];
+  };
+  context?: {
+    bootstrap?: boolean;
+    memory?: boolean;
+    profile?: boolean;
+  };
+  skillHint?: string;
 }
 
 // Provider display configurations
@@ -603,7 +667,16 @@ export function loadConfig(): PHAConfig {
   try {
     const content = fs.readFileSync(configPath, "utf-8");
     const loaded = JSON.parse(content);
-    const config = { ...DEFAULT_CONFIG, ...loaded };
+    // Deep-merge known nested sections so partial user configs
+    // (e.g. { gateway: { port: 9000 } }) don't lose defaults like autoStart.
+    const config = {
+      ...DEFAULT_CONFIG,
+      ...loaded,
+      gateway: { ...DEFAULT_CONFIG.gateway, ...loaded.gateway },
+      llm: { ...DEFAULT_CONFIG.llm, ...loaded.llm },
+      dataSources: { ...DEFAULT_CONFIG.dataSources, ...loaded.dataSources },
+      tui: { ...DEFAULT_CONFIG.tui, ...loaded.tui },
+    };
     // Auto-migrate old format to new
     let needsSave = migrateConfig(config);
     // Check if file still has legacy fields that should be stripped
@@ -1048,11 +1121,27 @@ export function isConfigured(): boolean {
 }
 
 /**
- * Get the user UUID from config, falling back to the built-in default
+ * Get the user ID (Huawei user ID or legacy UUID).
+ * Priority: AsyncLocalStorage (session-scoped) > config file > null.
+ * Returns null when no user is authenticated (anonymous state).
+ */
+export function getUserId(): string | null {
+  // 1. AsyncLocalStorage (session-scoped, highest priority)
+  const alsId = userIdStore.getStore();
+  if (alsId) return alsId;
+  // 2. Config file
+  const config = loadConfig();
+  return config.uid || null;
+}
+
+/**
+ * @deprecated Use getUserId(). This wrapper throws if no user ID is available.
+ * Safe to call from tools running within runWithUserId() context.
  */
 export function getUserUuid(): string {
-  const config = loadConfig();
-  return config.userUuid || FALLBACK_USER_UUID;
+  const id = getUserId();
+  if (!id) throw new Error("No user ID available. Please authenticate first.");
+  return id;
 }
 
 /**

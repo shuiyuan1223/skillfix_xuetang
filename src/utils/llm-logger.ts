@@ -5,7 +5,7 @@
  * Handles SSE streaming responses by reassembling them into standard API response format.
  */
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { getStateDir } from "./config.js";
 import { createLogger } from "./logger.js";
@@ -640,4 +640,40 @@ export function installFetchInterceptor(): void {
   globalThis.fetch = interceptedFetch;
 
   log.info("Fetch interceptor installed");
+}
+
+/**
+ * Clean up old LLM log files (older than maxAgeDays).
+ */
+export function cleanupOldLlmLogs(maxAgeDays: number = 30): void {
+  if (!existsSync(LOG_DIR)) return;
+
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  let deleted = 0;
+
+  try {
+    const files = readdirSync(LOG_DIR).filter((f) => f.startsWith("llm-") && f.endsWith(".jsonl"));
+
+    for (const file of files) {
+      // Extract date from filename: llm-YYYY-MM-DD.jsonl
+      const dateMatch = file.match(/^llm-(\d{4}-\d{2}-\d{2})\.jsonl$/);
+      if (!dateMatch) continue;
+
+      const fileDate = new Date(dateMatch[1]).getTime();
+      if (isNaN(fileDate) || fileDate >= cutoff) continue;
+
+      try {
+        unlinkSync(join(LOG_DIR, file));
+        deleted++;
+      } catch {
+        // Skip files that can't be deleted
+      }
+    }
+
+    if (deleted > 0) {
+      log.info(`Cleaned up ${deleted} old LLM log file(s)`);
+    }
+  } catch {
+    // Ignore errors during cleanup
+  }
 }
