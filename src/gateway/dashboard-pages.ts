@@ -65,6 +65,7 @@ export interface DashboardData {
 
 export interface DashboardOptions {
   loading?: boolean; // Show skeletons for missing data
+  progress?: { current: number; total: number; label: string }; // Inline progress bar
 }
 
 export type TabId = "overview" | "vitals" | "activity" | "sleep" | "body" | "heart" | "trends";
@@ -1123,11 +1124,28 @@ export function generateDashboardPage(
 ): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const loading = options?.loading ?? false;
+  const progress = options?.progress;
 
   // Header
   const title = ui.text(t("dashboard.title"), "h2");
   const subtitle = ui.text(t("dashboard.subtitle"), "caption");
-  const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
+  const headerChildren: string[] = [title, subtitle];
+
+  // Inline progress bar (replaces separate toast surface)
+  if (progress) {
+    const progressText = t("dashboard.loadingProgress")
+      .replace("{current}", String(progress.current))
+      .replace("{total}", String(progress.total));
+    const progLabel = ui.text(`${progressText} - ${progress.label}`, "caption");
+    const progBar = ui.progress(Math.round((progress.current / progress.total) * 100), {
+      maxValue: 100,
+      size: "sm",
+      color: "#3b82f6",
+    });
+    headerChildren.push(ui.row([progLabel, progBar], { gap: 8, align: "center" }));
+  }
+
+  const header = ui.column(headerChildren, { gap: 4, padding: 24 });
 
   // Build all tab contents
   const overviewContent = buildOverviewTab(ui, data, loading);
