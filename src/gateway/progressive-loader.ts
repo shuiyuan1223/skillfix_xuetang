@@ -349,7 +349,8 @@ export class ProgressiveDashboardLoader {
 
     try {
       const trendPoints = await this.fetchTrendData(metric, startStr, endStr);
-      this.data.trendsData = trendPoints;
+      // Filter out zero/missing data points so charts aren't distorted by incomplete days
+      this.data.trendsData = trendPoints.filter((p) => p.value > 0);
     } catch {
       this.data.trendsData = [];
     }

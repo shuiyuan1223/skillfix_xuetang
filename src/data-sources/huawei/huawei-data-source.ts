@@ -566,10 +566,12 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         this.api.getPolymerizeDataRange("com.huawei.continuous.distance.delta", startDate, endDate),
       ]);
 
-      // Build lookup maps
-      const stepsMap = new Map(stepsData.map((d) => [d.date, d.values["value"] || 0]));
-      const caloriesMap = new Map(caloriesData.map((d) => [d.date, d.values["value"] || 0]));
-      const distanceMap = new Map(distanceData.map((d) => [d.date, d.values["value"] || 0]));
+      // Build lookup maps — sum all field values since fieldName varies by data type
+      const sumValues = (vals: Record<string, number>) =>
+        Object.values(vals).reduce((a, b) => a + b, 0);
+      const stepsMap = new Map(stepsData.map((d) => [d.date, sumValues(d.values)]));
+      const caloriesMap = new Map(caloriesData.map((d) => [d.date, sumValues(d.values)]));
+      const distanceMap = new Map(distanceData.map((d) => [d.date, sumValues(d.values)]));
 
       // Build result for all dates in range
       const result: Array<{

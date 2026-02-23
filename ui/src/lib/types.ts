@@ -46,13 +46,99 @@ export interface ErrorMessage {
   message: string;
 }
 
+// AG-UI Standard Events
+export interface AGUIRunStarted {
+  type: "RunStarted";
+  threadId: string;
+  runId: string;
+}
+
+export interface AGUIRunFinished {
+  type: "RunFinished";
+  threadId: string;
+  runId: string;
+}
+
+export interface AGUITextMessageStart {
+  type: "TextMessageStart";
+  messageId: string;
+  role: "assistant";
+}
+
+export interface AGUITextMessageContent {
+  type: "TextMessageContent";
+  messageId: string;
+  delta: string;
+}
+
+export interface AGUITextMessageEnd {
+  type: "TextMessageEnd";
+  messageId: string;
+}
+
+export interface AGUIToolCallStart {
+  type: "ToolCallStart";
+  toolCallId: string;
+  toolCallName: string;
+  parentMessageId?: string;
+}
+
+export interface AGUIToolCallEnd {
+  type: "ToolCallEnd";
+  toolCallId: string;
+}
+
+export interface AGUIToolCallResult {
+  type: "ToolCallResult";
+  messageId: string;
+  toolCallId: string;
+  content?: string;
+  cards?: { components: unknown[]; root_id: string };
+}
+
+export interface AGUICustom {
+  type: "Custom";
+  name: string;
+  data: unknown;
+}
+
+export interface QuickReply {
+  label: string;
+  content: string;
+  icon?: string;
+  variant?: "primary" | "danger";
+}
+
+export type AGUIEvent =
+  | AGUIRunStarted
+  | AGUIRunFinished
+  | AGUITextMessageStart
+  | AGUITextMessageContent
+  | AGUITextMessageEnd
+  | AGUIToolCallStart
+  | AGUIToolCallEnd
+  | AGUIToolCallResult
+  | AGUICustom;
+
+// Parts message model
+export type MessagePart =
+  | { type: "text"; content: string }
+  | {
+      type: "tool_use";
+      toolCallId: string;
+      toolName: string;
+      status: "running" | "completed" | "error";
+    }
+  | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
+
 export type WSMessage =
   | PageMessage
   | A2UIMessage
   | ClearSurfaceMessage
   | AgentTextMessage
   | ToolCallMessage
-  | ErrorMessage;
+  | ErrorMessage
+  | AGUIEvent;
 
 export interface PlotlyChart {
   elementId: string;

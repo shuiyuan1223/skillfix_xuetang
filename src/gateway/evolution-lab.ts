@@ -901,7 +901,6 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
           : "-";
       return {
         id: r.id,
-        time: new Date(r.timestamp).toLocaleString(),
         progress: formatRunProgress(r, data.externalProgressMap),
         version_tag: r.version_tag || "-",
         score: scoreDisplay,
@@ -914,7 +913,6 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     });
     const runsTable = ui.dataTable(
       [
-        { key: "time", label: t("evolution.time"), sortable: true },
         { key: "progress", label: t("evolution.progress"), render: "progress" },
         { key: "version_tag", label: t("evolution.versionTag") },
         { key: "score", label: t("evolution.score") },

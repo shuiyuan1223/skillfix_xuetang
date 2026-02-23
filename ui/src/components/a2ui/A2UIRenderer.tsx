@@ -1,11 +1,15 @@
 import React from "react";
-import type { A2UIComponent, A2UISurfaceData, PlotlyChart } from "../../lib/types";
+import type { A2UIComponent, A2UISurfaceData, PlotlyChart, MessagePart } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
 import { renderMarkdown } from "../../lib/markdown";
 import { i18n } from "../../lib/i18n";
 import {
+  ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line,
+  AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
+} from "recharts";
+import {
   renderCodeEditor, renderCommitList, renderDiffView, renderDataTable,
-  renderScoreGauge, renderActivityRings, renderRadarChart, renderStatusBadge,
+  renderScoreGauge, renderActivityRings, renderStatusBadge,
   renderCollapsible, renderModalComponent, renderForm, renderFormInput,
   renderGitTimeline, renderStepIndicator, renderFileTree,
   renderArenaPills, renderArenaScoreTable, renderArenaCategoryCard,
@@ -32,6 +36,16 @@ interface A2UIRendererProps {
   chatAutoScrollRef: React.MutableRefObject<boolean>;
   isAutoScrollingRef: React.MutableRefObject<boolean>;
 }
+
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  get_health_data: "健康数据",
+  get_heart_rate: "心率数据",
+  get_sleep: "睡眠数据",
+  get_weekly_summary: "周报汇总",
+  get_workouts: "运动数据",
+  get_hrv: "心率变异性",
+  get_health_trends: "健康趋势",
+};
 
 export function A2UIRenderer({
   data, sendAction, sendNavigate, pendingPlotlyCharts, chatAutoScrollRef, isAutoScrollingRef,
@@ -70,7 +84,6 @@ export function A2UIRenderer({
       case "data_table": return renderDataTable(c, ctx);
       case "score_gauge": return renderScoreGauge(c, ctx);
       case "activity_rings": return renderActivityRings(c, ctx);
-      case "radar_chart": return renderRadarChart(c, ctx);
       case "status_badge": return renderStatusBadge(c, ctx);
       case "collapsible": return renderCollapsible(c, ctx);
       case "modal": return renderModalComponent(c, ctx);
@@ -259,89 +272,94 @@ export function A2UIRenderer({
       return <div className="flex items-center justify-center text-text-muted" style={{ height }}>No data</div>;
     }
 
-    const values = data.map((d) => Number(d[yKey]) || 0);
-    const maxVal = Math.max(...values, 1);
+    const axisStyle = { fontSize: 11, fill: "currentColor", fillOpacity: 0.45 };
+    const gridStroke = "currentColor";
+    const gridOpacity = 0.08;
+    const tooltipStyle = {
+      contentStyle: { background: "var(--color-surface-elevated)", border: "1px solid rgb(var(--color-border))", borderRadius: 8, fontSize: 12 },
+      labelStyle: { color: "rgb(var(--color-text-secondary))" },
+      itemStyle: { color: "rgb(var(--color-text))" },
+    };
+    const gradientId = `chart-grad-${c.id}`;
+    const dense = data.length > 15;
+    const dotStyle = dense ? false : { r: 3, fill: color };
 
     if (chartType === "bar") {
       return (
-        <div className="w-full relative flex items-end gap-2 px-2 pb-8 pt-4 box-border" style={{ height }}>
-          {data.map((d, i) => {
-            const pct = (values[i] / maxVal) * 100;
-            return (
-              <div key={i} className="flex-1 flex flex-col items-center h-full justify-end relative cursor-pointer group">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full bg-surface-elevated text-text px-2 py-1 rounded text-xs font-medium whitespace-nowrap opacity-0 pointer-events-none transition-opacity duration-fast z-10 shadow-lg group-hover:opacity-100">
-                  {values[i]}
-                </div>
-                <div
-                  className="w-full max-w-[40px] min-h-[4px] rounded-t transition-[height] duration-normal origin-bottom motion-safe:animate-bar-grow group-hover:brightness-125"
-                  style={{ height: `${pct}%`, background: color }}
-                />
-                <div className="text-[10px] text-text-muted mt-2 whitespace-nowrap">{String(d[xKey])}</div>
-              </div>
-            );
-          })}
-        </div>
+        <ResponsiveContainer width="100%" height={height}>
+          <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.12} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
+            <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
+            <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
+            <Tooltip {...tooltipStyle} cursor={{ fill: "currentColor", fillOpacity: 0.04 }} />
+            <Bar dataKey={yKey} fill={color} fillOpacity={0.6} radius={[3, 3, 0, 0]} />
+            <Area type="monotone" dataKey={yKey} fill={`url(#${gradientId})`} stroke="none" />
+            <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} dot={dotStyle} strokeOpacity={0.8} />
+          </ComposedChart>
+        </ResponsiveContainer>
       );
     }
 
-    // Line chart
-    const chartW = 960;
-    const mL = 52, mR = 12, mT = 12, mB = 22;
-    const plotW = chartW - mL - mR;
-    const plotH = height - mT - mB;
-    const minVal = Math.min(...values);
-    const dataRange = maxVal - minVal;
-    const yPad = dataRange > 0 ? dataRange * 0.15 : maxVal * 0.1 || 1;
-    const yMin = Math.max(0, Math.floor(minVal - yPad));
-    const yMax = Math.ceil(maxVal + yPad);
-    const yRange = yMax - yMin || 1;
+    if (chartType === "area") {
+      return (
+        <ResponsiveContainer width="100%" height={height}>
+          <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.25} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
+            <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
+            <YAxis tick={axisStyle} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+            <Tooltip {...tooltipStyle} />
+            <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={dotStyle} />
+          </AreaChart>
+        </ResponsiveContainer>
+      );
+    }
 
-    const pointCoords = data.map((d, i) => ({
-      x: mL + (data.length > 1 ? (i / (data.length - 1)) * plotW : plotW / 2),
-      y: mT + plotH - ((values[i] - yMin) / yRange) * plotH,
-      label: String(d[xKey]),
-      value: values[i],
-    }));
-    const points = pointCoords.map((p) => `${p.x},${p.y}`).join(" ");
-    const areaPoints = `${pointCoords[0].x},${mT + plotH} ${points} ${pointCoords[pointCoords.length - 1].x},${mT + plotH}`;
+    if (chartType === "pie" || chartType === "donut") {
+      const COLORS = [color, "#14b8a6", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16", "#f97316"];
+      const innerRadius = chartType === "donut" ? "55%" : 0;
+      return (
+        <ResponsiveContainer width="100%" height={height}>
+          <PieChart>
+            <Tooltip {...tooltipStyle} />
+            <Pie data={data} dataKey={yKey} nameKey={xKey} cx="50%" cy="50%" innerRadius={innerRadius} outerRadius="80%" paddingAngle={2} strokeWidth={0}>
+              {data.map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} fillOpacity={0.85} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+      );
+    }
 
-    const gridCount = 4;
-    const gridLines = Array.from({ length: gridCount + 1 }, (_, i) => {
-      const pct = i / gridCount;
-      const val = yMin + pct * yRange;
-      return {
-        y: mT + plotH - pct * plotH,
-        label: val >= 10000 ? `${(val / 1000).toFixed(0)}k` : val >= 1000 ? `${(val / 1000).toFixed(1)}k` : String(Math.round(val)),
-      };
-    });
-
-    const maxXLabels = Math.min(data.length, 7);
-    const xLabelIdxs = data.length <= maxXLabels
-      ? data.map((_, i) => i)
-      : Array.from({ length: maxXLabels }, (_, i) => Math.round((i * (data.length - 1)) / (maxXLabels - 1)));
-
+    // Default: line chart (also fallback for unknown types)
     return (
-      <div className="w-full relative" style={{ height }}>
-        <svg viewBox={`0 0 ${chartW} ${height}`} className="w-full h-auto">
-          {gridLines.map((g, i) => (
-            <React.Fragment key={i}>
-              <line x1={mL} y1={g.y} x2={chartW - mR} y2={g.y} stroke="currentColor" strokeOpacity="0.08" strokeWidth="1" />
-              <text x={mL - 8} y={g.y + 4} textAnchor="end" fill="currentColor" fillOpacity="0.45" fontSize="11" fontFamily="system-ui">{g.label}</text>
-            </React.Fragment>
-          ))}
-          <polygon points={areaPoints} fill={color} fillOpacity="0.06" />
-          <polyline fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" points={points} />
-          {pointCoords.map((p, i) => (
-            <g key={i} className="chart-point-group">
-              <circle cx={p.x} cy={p.y} r="4" fill={color} className="chart-point"><title>{p.label}: {p.value}</title></circle>
-              <circle cx={p.x} cy={p.y} r="14" fill="transparent" className="chart-point-hitarea" />
-            </g>
-          ))}
-          {xLabelIdxs.map((i) => (
-            <text key={i} x={pointCoords[i].x} y={height - 4} textAnchor="middle" fill="currentColor" fillOpacity="0.4" fontSize="11" fontFamily="system-ui">{pointCoords[i].label}</text>
-          ))}
-        </svg>
-      </div>
+      <ResponsiveContainer width="100%" height={height}>
+        <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.15} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
+          <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
+          <YAxis tick={axisStyle} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+          <Tooltip {...tooltipStyle} />
+          <Area type="monotone" dataKey={yKey} stroke={color} strokeWidth={dense ? 1.5 : 2.5} fill={`url(#${gradientId})`} dot={dotStyle} />
+        </AreaChart>
+      </ResponsiveContainer>
     );
   }
 
@@ -380,22 +398,36 @@ export function A2UIRenderer({
     const variant = (c.variant as string) || "primary";
     const disabled = c.disabled as boolean;
     const payload = c.payload as Record<string, unknown>;
-    const btnBase = "px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
+    const icon = c.icon as string | undefined;
+    const btnBase = "inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.97] transition-all duration-150";
     const btnVariants: Record<string, string> = {
       primary: "bg-primary text-primary-fg hover:-translate-y-px",
       secondary: "bg-surface text-text border border-border hover:bg-surface-hover hover:border-border-hover",
       outline: "bg-transparent border border-border text-text hover:border-border-hover hover:bg-surface-hover",
       ghost: "bg-transparent text-text-secondary hover:bg-primary/8 hover:text-text",
+      danger: "bg-red-600 text-white hover:bg-red-700 hover:-translate-y-px",
+      accent: "text-white hover:-translate-y-0.5 animate-[glow-pulse_3s_ease-in-out_infinite]",
     };
+    const isAccent = variant === "accent";
+    const isElevated = variant === "primary" || isAccent;
+    const accentStyle: React.CSSProperties = isAccent
+      ? {
+          background: "linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))",
+          boxShadow: "var(--shadow-md), 0 0 24px var(--color-accent-glow)",
+        }
+      : variant === "primary"
+        ? { boxShadow: "var(--shadow-sm)" }
+        : {};
     return (
       <button
         className={`${btnBase} ${btnVariants[variant] || btnVariants.primary}`}
-        style={variant === "primary" ? { boxShadow: "var(--shadow-sm)" } : undefined}
+        style={accentStyle}
         disabled={disabled}
         onClick={() => sendAction(action, payload)}
-        onMouseEnter={variant === "primary" ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 20px var(--color-accent-glow)"; } : undefined}
-        onMouseLeave={variant === "primary" ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-sm)"; } : undefined}
+        onMouseEnter={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 30px var(--color-accent-glow)"; } : undefined}
+        onMouseLeave={isElevated ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = isAccent ? "var(--shadow-md), 0 0 24px var(--color-accent-glow)" : "var(--shadow-sm)"; } : undefined}
       >
+        {icon && <span className="inline-flex w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
         {label}
       </button>
     );
@@ -499,7 +531,7 @@ export function A2UIRenderer({
   // ---- Chat Components ----
 
   function rcChatMessages(c: A2UIComponent) {
-    const messages = (c.messages as { role: string; content: string; cards?: { components: A2UIComponent[]; root_id: string }; toolName?: string; toolStatus?: string; progressData?: { current: number; total: number; category: string } }[]) || [];
+    const rawMessages = (c.messages as any[]) || [];
     const streaming = c.streaming as boolean;
     const streamingContent = c.streamingContent as string;
     const welcomeTitle = c.welcomeTitle as string | undefined;
@@ -508,7 +540,7 @@ export function A2UIRenderer({
     const welcomeActions = c.welcomeActions as Array<{ label: string; icon?: string; action: string; content: string }> | undefined;
 
     // Server-driven welcome screen
-    if (messages.length === 0 && !streaming && welcomeTitle) {
+    if (rawMessages.length === 0 && !streaming && welcomeTitle) {
       const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center" style={{ animation: "rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}>
@@ -530,7 +562,7 @@ export function A2UIRenderer({
     }
 
     const noWelcome = c.noWelcome as boolean;
-    if (messages.length === 0 && !streaming && noWelcome) {
+    if (rawMessages.length === 0 && !streaming && noWelcome) {
       return (
         <div className="flex-1 flex items-center justify-center p-4 text-text-muted text-[13px] opacity-50">
           {i18n.evolution?.playgroundChatPlaceholder || "Waiting for messages..."}
@@ -539,7 +571,7 @@ export function A2UIRenderer({
     }
 
     // Default welcome
-    if (messages.length === 0 && !streaming) {
+    if (rawMessages.length === 0 && !streaming) {
       const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center" style={{ animation: "rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}>
@@ -562,19 +594,83 @@ export function A2UIRenderer({
     }
 
     const avatarBase = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4";
-    const msgContent = "max-w-[70%] px-4 py-3 rounded-2xl leading-relaxed text-[13.5px]";
+    const msgBubble = "max-w-[70%] px-4 py-3 rounded-2xl leading-relaxed text-[13.5px]";
 
-    // Group consecutive tool messages
-    type MsgGroup = { type: "message"; msg: (typeof messages)[0] } | { type: "tools"; msgs: (typeof messages)[0][] };
-    const groups: MsgGroup[] = [];
-    for (const msg of messages) {
-      if (msg.role === "tool") {
-        const last = groups[groups.length - 1];
-        if (last && last.type === "tools") { last.msgs.push(msg); }
-        else { groups.push({ type: "tools", msgs: [msg] }); }
+    // Normalize messages to Parts format
+    interface NormalizedMsg {
+      id: string;
+      role: "user" | "assistant";
+      parts: MessagePart[];
+    }
+    const messages: NormalizedMsg[] = [];
+    for (const raw of rawMessages) {
+      if (raw.parts && raw.parts.length > 0) {
+        // New format with parts
+        messages.push({ id: raw.id || String(messages.length), role: raw.role === "tool" ? "assistant" : raw.role, parts: raw.parts });
+      } else if (raw.role === "tool") {
+        // Legacy: merge tool message into previous assistant or create standalone
+        // (old format: independent tool messages)
+        const prev = messages[messages.length - 1];
+        if (prev && prev.role === "assistant") {
+          prev.parts.push({ type: "tool_use", toolCallId: String(messages.length), toolName: raw.toolName || "", status: raw.toolStatus || "completed" });
+          if (raw.cards) {
+            prev.parts.push({ type: "tool_result", toolCallId: String(messages.length), cards: raw.cards });
+          }
+        } else {
+          messages.push({
+            id: raw.id || String(messages.length),
+            role: "assistant",
+            parts: [
+              { type: "tool_use", toolCallId: String(messages.length), toolName: raw.toolName || "", status: raw.toolStatus || "completed" },
+              ...(raw.cards ? [{ type: "tool_result" as const, toolCallId: String(messages.length), cards: raw.cards }] : []),
+            ],
+          });
+        }
       } else {
-        groups.push({ type: "message", msg });
+        // Legacy text-only or user message
+        const parts: MessagePart[] = [{ type: "text", content: raw.content || "" }];
+        if (raw.cards) {
+          parts.push({ type: "tool_result", toolCallId: "legacy", cards: raw.cards });
+        }
+        messages.push({ id: raw.id || String(messages.length), role: raw.role === "user" ? "user" : "assistant", parts });
       }
+    }
+
+    // Render a single part
+    function renderPart(part: MessagePart, partIdx: number) {
+      if (part.type === "text") {
+        if (!part.content?.trim()) return null;
+        return (
+          <div key={partIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }}>
+            <span dangerouslySetInnerHTML={{ __html: renderMarkdown(part.content) }} />
+          </div>
+        );
+      }
+      if (part.type === "tool_use") {
+        const status = part.status || "completed";
+        const dotClass = status === "running" ? "bg-primary motion-safe:animate-pulse" : status === "error" ? "bg-error" : "bg-success";
+        const statusIcon = status === "running"
+          ? <span className="tool-spinner" />
+          : status === "error"
+            ? <span className="text-error [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["x"] }} />
+            : <span className="text-success [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
+        const displayName = TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
+        return (
+          <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[70%]">
+            <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />
+            <span className="truncate">{displayName}</span>
+            {statusIcon}
+          </div>
+        );
+      }
+      if (part.type === "tool_result" && part.cards) {
+        return (
+          <div key={partIdx} className="max-w-[70%]">
+            {renderInline(part.cards as { components: A2UIComponent[]; root_id: string })}
+          </div>
+        );
+      }
+      return null;
     }
 
     return (
@@ -586,103 +682,66 @@ export function A2UIRenderer({
           chatAutoScrollRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
         }}
       >
-        {groups.map((group, gi) => {
-          if (group.type === "tools") {
-            return (
-              <div key={gi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-                <div className="flex flex-col max-w-[70%] ml-13">
-                  {group.msgs.map((msg, idx) => {
-                    const toolName = msg.toolName || "";
-                    const status = msg.toolStatus || "completed";
-                    const hasCards = !!msg.cards;
-                    const isLast = idx === group.msgs.length - 1;
-                    const statusIcon = status === "running"
-                      ? <span className="tool-spinner" />
-                      : status === "error"
-                        ? <span className="text-error" dangerouslySetInnerHTML={{ __html: ICONS["x"] }} />
-                        : <span className="text-success" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
-                    const dotClass = status === "running" ? "bg-primary motion-safe:animate-pulse" : status === "error" ? "bg-error" : "bg-success";
+        {messages.map((msg, mi) => {
+          const isUser = msg.role === "user";
 
-                    return (
-                      <div key={idx} className="flex">
-                        <div className="flex flex-col items-center mr-3 relative">
-                          <div className={`w-2.5 h-2.5 rounded-full ${dotClass} z-10 mt-1.5 shrink-0`} />
-                          {!isLast && <div className="w-0.5 flex-1 bg-border" />}
-                        </div>
-                        <div className={`flex-1 pb-3 min-w-0 ${hasCards ? "collapsible-group" : ""}`}>
-                          <div
-                            className={`flex items-center gap-2 text-xs text-text-muted py-1 ${hasCards ? "cursor-pointer select-none" : ""}`}
-                            onClick={hasCards ? (e) => { (e.currentTarget as HTMLElement).parentElement?.classList.toggle("is-open"); } : undefined}
-                          >
-                            <span className="flex-1 truncate">{msg.content || `Using ${toolName}...`}</span>
-                            {statusIcon}
-                            {hasCards && <span className="text-text-muted transition-transform duration-200 [.is-open>&]:rotate-90 text-xs">&#9654;</span>}
-                          </div>
-                          {msg.progressData && status === "running" && (
-                            <div className="flex items-center gap-2 mt-1">
-                              <div className="flex-1 h-1.5 rounded-full bg-border overflow-hidden">
-                                <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${Math.round((msg.progressData.current / msg.progressData.total) * 100)}%` }} />
-                              </div>
-                              <span className="text-[10px] text-text-muted shrink-0">{msg.progressData.category}</span>
-                            </div>
-                          )}
-                          {hasCards && (
-                            <div className="collapsible-grid">
-                              <div>{renderInline(msg.cards!)}</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+          if (isUser) {
+            const textContent = msg.parts.filter((p) => p.type === "text").map((p) => (p as { type: "text"; content: string }).content).join("");
+            return (
+              <div key={mi} className="flex gap-4 flex-row-reverse motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-normal">
+                <div className={`${avatarBase} bg-bg-tertiary text-text-secondary`} dangerouslySetInnerHTML={{ __html: ICONS["user"] }} />
+                <div className={`${msgBubble} bg-primary/10 text-text border border-primary/20`}>
+                  {textContent}
                 </div>
               </div>
             );
           }
 
-          const msg = group.msg;
-          const isUser = msg.role === "user";
-          return (
-            <div key={gi} className={`flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal ${isUser ? "flex-row-reverse motion-safe:slide-in-from-right-4" : "motion-safe:slide-in-from-left-4"}`}>
-              <div className={`${avatarBase} ${isUser ? "bg-bg-tertiary text-text-secondary" : "bg-primary"}`} dangerouslySetInnerHTML={{ __html: ICONS[msg.role === "assistant" ? "bot" : "user"] }} />
-              {msg.role === "assistant" && msg.cards ? (
-                <div className="flex flex-col gap-3 max-w-[70%]">
-                  <div className={`${msgContent} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
-                  <div>{renderInline(msg.cards)}</div>
-                </div>
-              ) : (
-                <div
-                  className={`${msgContent} ${isUser ? "bg-primary/10 text-text border border-primary/20" : "bg-surface-card border border-border"}`}
-                  style={!isUser ? { boxShadow: "var(--shadow-sm)" } : undefined}
-                >
-                  {msg.role === "assistant" ? <span dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} /> : msg.content}
-                </div>
-              )}
-            </div>
-          );
-        })}
+          // Assistant message — render parts inline
+          {
+            const hasVisibleParts = msg.parts.some((p) =>
+              (p.type === "text" && p.content?.trim()) || p.type === "tool_use" || p.type === "tool_result"
+            );
+            const isActiveMsg = streaming && mi === messages.length - 1;
 
-        {streaming && (
-          <div className="flex gap-3 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-            <div className={`${avatarBase} bg-primary`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
-            {streamingContent ? (
-              <div className={`${msgContent} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }} dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingContent) }} />
-            ) : (
-              <div className="flex gap-1.5 px-4 py-3 items-center">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
-                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
-                <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+            return (
+              <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
+                <div className={`${avatarBase} bg-primary self-start`} dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
+                <div className="flex flex-col gap-2 min-w-0 flex-1">
+                  {msg.parts.map((part, pi) => {
+                    // Add stream-border-pulse to actively streaming text part
+                    if (
+                      isActiveMsg && part.type === "text" && part.content?.trim() &&
+                      pi === msg.parts.length - 1
+                    ) {
+                      return (
+                        <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+                          <span dangerouslySetInnerHTML={{ __html: renderMarkdown(part.content) }} />
+                        </div>
+                      );
+                    }
+                    return renderPart(part, pi);
+                  })}
+                  {/* Typing indicator when assistant message has no visible parts yet */}
+                  {isActiveMsg && !hasVisibleParts && (
+                    <div className="flex gap-1.5 px-4 py-3 items-center">
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        )}
+            );
+          }
+        })}
 
         {!streaming && (c.quickReplies as Array<{ label: string; content: string; icon?: string; variant?: string }>)?.length ? (
           <div className="flex gap-2 pl-13 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal">
             {(c.quickReplies as Array<{ label: string; content: string; icon?: string; variant?: string }>).map((qr, i) => (
               <button
                 key={i}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${
+                className={`quick-reply-btn flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${
                   qr.variant === "danger" ? "border-error/30 text-error bg-error/10 hover:bg-error/20 hover:border-error/50"
                     : qr.variant === "primary" ? "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50"
                     : "border-border text-text-secondary bg-surface hover:bg-surface-hover hover:border-border-hover"
@@ -724,7 +783,7 @@ export function A2UIRenderer({
           }}
         />
         <button
-          className={`w-10 h-10 rounded-xl border-none ${streaming ? "bg-red-500 hover:bg-red-600" : "bg-primary"} text-primary-fg cursor-pointer flex items-center justify-center shrink-0 transition-all duration-150 hover:-translate-y-px active:scale-[0.97] [&>svg]:w-4 [&>svg]:h-4`}
+          className={`chat-send-btn w-10 h-10 rounded-xl border-none ${streaming ? "bg-red-500 hover:bg-red-600" : "bg-primary"} text-primary-fg cursor-pointer flex items-center justify-center shrink-0 [&>svg]:w-4 [&>svg]:h-4`}
           style={{ boxShadow: "var(--shadow-sm)" }}
           title={streaming ? "Stop generating" : "Send"}
           onMouseEnter={!streaming ? (e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--shadow-md), 0 0 16px var(--color-accent-glow)"; } : undefined}

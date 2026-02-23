@@ -205,53 +205,10 @@
     transition: stroke-dashoffset 1s ease;
   }
 
-  /* Radar chart SVG */
-  .radar-grid {
-    fill: none;
-    stroke: currentColor;
-    stroke-opacity: 0.08;
-    stroke-width: 1;
-  }
-
-  .radar-axis {
-    stroke: currentColor;
-    stroke-opacity: 0.1;
-    stroke-width: 1;
-  }
-
-  .radar-label {
-    fill: rgb(var(--color-text-secondary));
-    font-size: 11px;
-    font-family: system-ui;
-  }
-
-  .radar-value {
-    fill: rgb(var(--color-primary));
-    font-size: 10px;
-    font-weight: 600;
-    font-family: system-ui;
-  }
-
   /* Activity ring animation */
   .ring-fill {
     transition: stroke-dashoffset 1s ease;
   }
-
-  /* Chart point interactions */
-  .chart-point {
-    opacity: 0;
-    transition: opacity 0.2s ease, r 0.2s ease;
-  }
-
-  .chart-point-hitarea {
-    cursor: pointer;
-  }
-
-  .chart-point-group:hover .chart-point {
-    opacity: 1;
-    r: 6;
-  }
-
 
   /* Collapsible: CSS Grid rows technique for smooth height */
   .collapsible-grid {
@@ -1413,6 +1370,47 @@ select:focus {
 }
 
 /* ========== Reduced Motion (Accessibility) ========== */
+/* ========== P2: Topbar Scroll Shadow ========== */
+.topbar {
+  transition: box-shadow 250ms ease;
+}
+
+.topbar-scrolled {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+}
+
+.dark .topbar-scrolled {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Activity rings rely on transition (see base .ring-fill) for smooth updates.
+   No CSS animation — avoids re-draw on progressive dashboard reloads. */
+
+/* ========== P3: Send Button Hover ========== */
+.chat-send-btn {
+  transition: transform 200ms var(--ease-spring), background 200ms ease;
+}
+
+.chat-send-btn:hover {
+  transform: scale(1.08) rotate(-8deg);
+}
+
+.chat-send-btn:active {
+  transform: scale(0.92);
+  transition-duration: 80ms;
+}
+
+/* ========== P3: Quick Reply Button Icon Bounce ========== */
+.quick-reply-btn:hover svg {
+  animation: icon-bounce 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes icon-bounce {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-3px); }
+  100% { transform: translateY(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

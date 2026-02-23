@@ -188,6 +188,7 @@ async function setupEmbedding(config: PHAConfig): Promise<void> {
 
   if (!enabled) {
     config.embedding = { enabled: false };
+    if (config.orchestrator) config.orchestrator.embedding = undefined;
     p.log.success("Vector search disabled");
     return;
   }
@@ -236,6 +237,28 @@ async function setupEmbedding(config: PHAConfig): Promise<void> {
     enabled: true,
     model: modelStr,
   };
+
+  // Sync to unified model repository
+  const embParts = modelStr.split("/");
+  const embName = embParts[embParts.length - 1];
+  // Determine target provider (use orchestrator.pha's provider or first available)
+  let embProvider = "openrouter";
+  const phaRef = config.orchestrator?.pha;
+  if (phaRef) {
+    const slashIdx = phaRef.indexOf("/");
+    if (slashIdx > 0) embProvider = phaRef.substring(0, slashIdx);
+  } else if (config.llm?.provider) {
+    embProvider = config.llm.provider;
+  }
+  // Add model to provider if models.providers exists
+  if (config.models?.providers?.[embProvider]) {
+    const provModels = config.models.providers[embProvider].models;
+    if (!provModels.find((m) => m.model === modelStr)) {
+      provModels.push({ name: embName, model: modelStr });
+    }
+  }
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.embedding = `${embProvider}/${embName}`;
 
   p.log.success(`Embedding: ${modelStr}`);
 }
@@ -375,6 +398,18 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
       }
 
       config.llm.modelId = providerCfg.defaultModel;
+      // Sync to model repository
+      if (!config.models) config.models = { providers: {} };
+      const pk = newProvider as string;
+      if (!config.models.providers[pk]) config.models.providers[pk] = { models: [] };
+      if (config.llm.apiKey) config.models.providers[pk].apiKey = config.llm.apiKey;
+      if (config.llm.baseUrl) config.models.providers[pk].baseUrl = config.llm.baseUrl;
+      const modelName = config.llm.modelId || providerCfg.defaultModel;
+      if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
+        config.models.providers[pk].models.push({ name: modelName, model: modelName });
+      }
+      if (!config.orchestrator) config.orchestrator = {};
+      config.orchestrator.pha = `${pk}/${modelName}`;
       p.log.success(`Provider: ${providerCfg.name}, Model: ${config.llm.modelId}`);
       break;
     }
@@ -391,6 +426,16 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
       handleCancel(newModel);
 
       config.llm.modelId = (newModel as string) || defaultModel;
+      // Sync to model repository
+      const modelName = config.llm.modelId;
+      const pk = config.llm.provider;
+      if (config.models?.providers?.[pk]) {
+        if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
+          config.models.providers[pk].models.push({ name: modelName, model: modelName });
+        }
+        if (!config.orchestrator) config.orchestrator = {};
+        config.orchestrator.pha = `${pk}/${modelName}`;
+      }
       p.log.success(`Model: ${config.llm.modelId}`);
       break;
     }
@@ -409,6 +454,11 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
 
       if (apiKey) {
         config.llm.apiKey = apiKey as string;
+        // Sync to model repository
+        const pk = config.llm.provider;
+        if (config.models?.providers?.[pk]) {
+          config.models.providers[pk].apiKey = apiKey as string;
+        }
         p.log.success("API key updated");
       }
       break;
@@ -638,6 +688,36 @@ async function runFullWizard(): Promise<void> {
     );
     config.embedding = { enabled: false };
   }
+
+  // Populate unified model repository from wizard selections
+  const providerKey = config.llm.provider;
+  const modelEntry = {
+    name: config.llm.modelId || providerCfg.defaultModel,
+    model: config.llm.modelId || providerCfg.defaultModel,
+  };
+  const providerModels = [modelEntry];
+  // Add embedding model to provider if enabled
+  if (config.embedding?.enabled && config.embedding.model) {
+    const embModelId = config.embedding.model;
+    const embParts = embModelId.split("/");
+    const embName = embParts[embParts.length - 1];
+    if (!providerModels.find((m) => m.name === embName)) {
+      providerModels.push({ name: embName, model: embModelId });
+    }
+    if (!config.orchestrator) config.orchestrator = {};
+    config.orchestrator.embedding = `${providerKey}/${embName}`;
+  }
+  config.models = {
+    providers: {
+      [providerKey]: {
+        ...(config.llm.baseUrl ? { baseUrl: config.llm.baseUrl } : {}),
+        ...(config.llm.apiKey ? { apiKey: config.llm.apiKey } : {}),
+        models: providerModels,
+      },
+    },
+  };
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.pha = `${providerKey}/${modelEntry.name}`;
 
   // Save
   saveConfig(config);

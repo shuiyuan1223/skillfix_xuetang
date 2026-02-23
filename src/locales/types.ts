@@ -189,6 +189,7 @@ export interface LocaleMessages {
     sleepTrend: string;
     sleepBreathing: string;
     // Activity tab extras
+    stepsTrend: string;
     workouts: string;
     recentWorkouts: string;
     // Activity rings
@@ -550,6 +551,18 @@ export interface LocaleMessages {
     allSubsystems: string;
     noLogs: string;
     refresh: string;
+    tabSystem: string;
+    tabLlm: string;
+    llmProvider: string;
+    llmModel: string;
+    llmTokens: string;
+    llmLatency: string;
+    llmStatus: string;
+    llmAllProviders: string;
+    llmAllModels: string;
+    llmNoLogs: string;
+    llmRequest: string;
+    llmResponse: string;
   };
 
   // Settings / General page
@@ -579,6 +592,8 @@ export interface LocaleMessages {
     saveError: string;
     saveButton: string;
     sectionLlm: string;
+    sectionModelRepository: string;
+    sectionModelAssignments: string;
     sectionGateway: string;
     sectionData: string;
     sectionAdvanced: string;
@@ -596,6 +611,59 @@ export interface LocaleMessages {
     huaweiApiBaseUrl: string;
     applyEngine: string;
     applyEngineDesc: string;
+    sectionEmbedding: string;
+    sectionBenchmark: string;
+    sectionJudgeModel: string;
+    sectionBenchmarkModels: string;
+    benchmarkConcurrency: string;
+    benchmarkConcurrencyDesc: string;
+    judgeProvider: string;
+    judgeModelId: string;
+    judgeLabel: string;
+    benchmarkModelsJson: string;
+    benchmarkModelsJsonDesc: string;
+    userUuid: string;
+    huaweiScopes: string;
+    huaweiScopesDesc: string;
+    scopesPerLine: string;
+    addScope: string;
+    deleteScope: string;
+    sectionMcp: string;
+    mcpJson: string;
+    mcpJsonDesc: string;
+    chromeMcpCommand: string;
+    chromeMcpArgs: string;
+    chromeMcpBrowserUrl: string;
+    chromeMcpWsEndpoint: string;
+    remoteServers: string;
+    addServer: string;
+    deleteServer: string;
+    sectionPlugins: string;
+    pluginsJson: string;
+    pluginsJsonDesc: string;
+    pluginEnabled: string;
+    pluginPaths: string;
+    addModel: string;
+    deleteModel: string;
+    addProvider: string;
+    deleteProvider: string;
+    providerBaseUrl: string;
+    providerApiKey: string;
+    modelName: string;
+    modelActualId: string;
+    modelLabel: string;
+    agentModelSelect: string;
+    systemAgentModelSelect: string;
+    judgeModelSelect: string;
+    embeddingModelSelect: string;
+    benchmarkModelsSelect: string;
+    saveRepository: string;
+    saveAssignments: string;
+    noneSelected: string;
+    saveAll: string;
+    rawConfig: string;
+    copyConfig: string;
+    downloadConfig: string;
   };
 
   // OAuth / Authorization

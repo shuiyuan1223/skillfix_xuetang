@@ -105,12 +105,15 @@ export function registerGatewayCommand(program: Command): void {
       const pid = getPid();
       const running = pid ? isRunning(pid) : false;
 
+      const phaRef = config.orchestrator?.pha;
+      const provider = phaRef ? phaRef.split("/")[0] : config.llm.provider;
+      const model = phaRef || config.llm.modelId;
       const status = {
         running,
         pid: running ? pid : null,
         port: config.gateway.port,
-        provider: config.llm.provider,
-        model: config.llm.modelId,
+        provider,
+        model,
         url: running ? `http://localhost:${config.gateway.port}` : null,
       };
 

@@ -34,7 +34,12 @@ import { suggestToolImprovementTool, listToolWishlistTool } from "../tools/tool-
 import { sessionToAgentMessages } from "../memory/session-store.js";
 import { createSACompactionFlush } from "../memory/compaction.js";
 import { readMemoryFile, appendMemoryFile } from "../tools/system-memory-tools.js";
-import type { LLMProvider } from "./pha-agent.js";
+import {
+  type LLMProvider,
+  DEFAULT_MODELS,
+  ENV_KEY_MAP,
+  BUILTIN_PROVIDERS,
+} from "../utils/config.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Agent/System");
@@ -48,39 +53,7 @@ export interface SystemAgentConfig {
   sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>;
 }
 
-const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  anthropic: "claude-sonnet-4-20250514",
-  openai: "gpt-4o",
-  google: "gemini-2.0-flash",
-  openrouter: "openrouter/auto",
-  moonshot: "moonshot-v1-128k",
-  deepseek: "deepseek-chat",
-  groq: "llama-3.3-70b-versatile",
-  mistral: "mistral-large-latest",
-  xai: "grok-2-1212",
-};
-
-const ENV_KEYS: Record<LLMProvider, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  google: "GOOGLE_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  moonshot: "MOONSHOT_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-  groq: "GROQ_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  xai: "XAI_API_KEY",
-};
-
-const BUILTIN_PROVIDERS: LLMProvider[] = [
-  "anthropic",
-  "openai",
-  "google",
-  "openrouter",
-  "groq",
-  "mistral",
-  "xai",
-];
+// LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
 
 // Fallback prompt if SOUL.md file cannot be loaded
 const FALLBACK_PROMPT = `你是 PHA 系统 Agent，负责管理和进化 PHA 系统。始终使用中文回复。`;
@@ -296,7 +269,7 @@ export class SystemAgent {
 
     if (!apiKey) {
       throw new Error(
-        `API key required for provider: ${provider}. Set ${ENV_KEYS[provider]} or provide apiKey in config.`
+        `API key required for provider: ${provider}. Set ${ENV_KEY_MAP[provider]} or provide apiKey in config.`
       );
     }
 
@@ -349,7 +322,7 @@ export class SystemAgent {
   }
 
   private getEnvApiKey(provider: LLMProvider): string | undefined {
-    const envKey = ENV_KEYS[provider];
+    const envKey = ENV_KEY_MAP[provider];
     if (envKey && typeof process !== "undefined" && process.env[envKey]) {
       return process.env[envKey];
     }

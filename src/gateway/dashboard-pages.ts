@@ -223,7 +223,7 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     const reAuthTitle = ui.text(t("dashboard.scopeErrorTitle"), "body");
     const reAuthHint = ui.text(t("dashboard.scopeErrorHint"), "caption");
     const reAuthBtn = ui.button(t("dashboard.reAuth"), "start_huawei_auth", {
-      variant: "primary",
+      variant: "accent",
       size: "sm",
     });
     const reAuthContent = ui.row(
@@ -1171,9 +1171,9 @@ export function generateDashboardPage(
 
   const tabsComponent = ui.tabs(tabsDef, activeTab, contentIds);
 
-  // Re-auth action (ghost, right-aligned above tabs)
+  // Re-auth action (accent glow, right-aligned above tabs)
   const reAuthBtn = ui.button(t("dashboard.reAuth"), "start_huawei_auth", {
-    variant: "ghost",
+    variant: "accent",
     size: "sm",
   });
   const toolbar = ui.row([reAuthBtn], { justify: "end" });

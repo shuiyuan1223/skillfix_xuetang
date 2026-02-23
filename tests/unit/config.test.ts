@@ -5,6 +5,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import type { PHAConfig } from "../../src/utils/config.js";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -178,5 +179,195 @@ describe("Default Config", () => {
 
     expect(config.tui).toBeDefined();
     expect(config.tui.theme).toBeDefined();
+  });
+});
+
+describe("Unified Model Repository", () => {
+  describe("parseModelRef", () => {
+    test("parses 'provider/name' format", async () => {
+      const { parseModelRef } = await import("../../src/utils/config.js");
+
+      const result = parseModelRef("openrouter/claude-sonnet");
+      expect(result.provider).toBe("openrouter");
+      expect(result.name).toBe("claude-sonnet");
+    });
+
+    test("handles nested model names with slashes", async () => {
+      const { parseModelRef } = await import("../../src/utils/config.js");
+
+      // Only split on first slash
+      const result = parseModelRef("openrouter/anthropic/claude-sonnet-4");
+      expect(result.provider).toBe("openrouter");
+      expect(result.name).toBe("anthropic/claude-sonnet-4");
+    });
+
+    test("throws for invalid format (no slash)", async () => {
+      const { parseModelRef } = await import("../../src/utils/config.js");
+
+      expect(() => parseModelRef("no-slash")).toThrow('expected "provider/name" format');
+    });
+  });
+
+  describe("resolveModel", () => {
+    test("resolves model from repository", async () => {
+      const { resolveModel } = await import("../../src/utils/config.js");
+
+      const config = {
+        gateway: { port: 8000, autoStart: false },
+        llm: { provider: "openrouter" as const },
+        dataSources: { type: "mock" as const },
+        tui: { theme: "dark" as const, showToolCalls: true },
+        models: {
+          providers: {
+            openrouter: {
+              apiKey: "sk-test-key",
+              baseUrl: "https://openrouter.ai/api/v1",
+              models: [
+                { name: "claude-sonnet", model: "anthropic/claude-sonnet-4" },
+                { name: "gpt-4o", model: "openai/gpt-4o", label: "GPT-4o" },
+              ],
+            },
+          },
+        },
+      } satisfies PHAConfig;
+
+      const result = resolveModel("openrouter/claude-sonnet", config);
+      expect(result.provider).toBe("openrouter");
+      expect(result.modelId).toBe("anthropic/claude-sonnet-4");
+      expect(result.apiKey).toBe("sk-test-key");
+      expect(result.baseUrl).toBe("https://openrouter.ai/api/v1");
+
+      const result2 = resolveModel("openrouter/gpt-4o", config);
+      expect(result2.modelId).toBe("openai/gpt-4o");
+      expect(result2.label).toBe("GPT-4o");
+    });
+
+    test("throws for unknown provider", async () => {
+      const { resolveModel } = await import("../../src/utils/config.js");
+
+      const config = {
+        gateway: { port: 8000, autoStart: false },
+        llm: { provider: "openrouter" as const },
+        dataSources: { type: "mock" as const },
+        tui: { theme: "dark" as const, showToolCalls: true },
+        models: { providers: {} },
+      } satisfies PHAConfig;
+
+      expect(() => resolveModel("unknown/model", config)).toThrow('Provider "unknown" not found');
+    });
+
+    test("throws for unknown model", async () => {
+      const { resolveModel } = await import("../../src/utils/config.js");
+
+      const config = {
+        gateway: { port: 8000, autoStart: false },
+        llm: { provider: "openrouter" as const },
+        dataSources: { type: "mock" as const },
+        tui: { theme: "dark" as const, showToolCalls: true },
+        models: {
+          providers: {
+            openrouter: {
+              apiKey: "sk-test",
+              models: [{ name: "existing", model: "test-model" }],
+            },
+          },
+        },
+      } satisfies PHAConfig;
+
+      expect(() => resolveModel("openrouter/nonexistent", config)).toThrow(
+        'Model "nonexistent" not found'
+      );
+    });
+  });
+
+  describe("listAllModelRefs", () => {
+    test("lists all model references", async () => {
+      const { listAllModelRefs } = await import("../../src/utils/config.js");
+
+      const config = {
+        gateway: { port: 8000, autoStart: false },
+        llm: { provider: "openrouter" as const },
+        dataSources: { type: "mock" as const },
+        tui: { theme: "dark" as const, showToolCalls: true },
+        models: {
+          providers: {
+            openrouter: {
+              models: [
+                { name: "claude-sonnet", model: "anthropic/claude-sonnet-4" },
+                { name: "gpt-4o", model: "openai/gpt-4o" },
+              ],
+            },
+            anthropic: {
+              models: [{ name: "opus", model: "claude-opus-4-6" }],
+            },
+          },
+        },
+      } satisfies PHAConfig;
+
+      const refs = listAllModelRefs(config);
+      expect(refs).toContain("openrouter/claude-sonnet");
+      expect(refs).toContain("openrouter/gpt-4o");
+      expect(refs).toContain("anthropic/opus");
+      expect(refs).toHaveLength(3);
+    });
+
+    test("returns empty for no models", async () => {
+      const { listAllModelRefs } = await import("../../src/utils/config.js");
+
+      const config = {
+        gateway: { port: 8000, autoStart: false },
+        llm: { provider: "openrouter" as const },
+        dataSources: { type: "mock" as const },
+        tui: { theme: "dark" as const, showToolCalls: true },
+      } satisfies PHAConfig;
+
+      const refs = listAllModelRefs(config);
+      expect(refs).toHaveLength(0);
+    });
+  });
+
+  describe("Unified Constants", () => {
+    test("KNOWN_PROVIDERS includes all providers", async () => {
+      const { KNOWN_PROVIDERS } = await import("../../src/utils/config.js");
+
+      expect(KNOWN_PROVIDERS).toContain("anthropic");
+      expect(KNOWN_PROVIDERS).toContain("openai");
+      expect(KNOWN_PROVIDERS).toContain("google");
+      expect(KNOWN_PROVIDERS).toContain("openrouter");
+      expect(KNOWN_PROVIDERS).toContain("moonshot");
+      expect(KNOWN_PROVIDERS).toContain("deepseek");
+      expect(KNOWN_PROVIDERS).toContain("groq");
+      expect(KNOWN_PROVIDERS).toContain("mistral");
+      expect(KNOWN_PROVIDERS).toContain("xai");
+    });
+
+    test("ENV_KEY_MAP covers all known providers", async () => {
+      const { KNOWN_PROVIDERS, ENV_KEY_MAP } = await import("../../src/utils/config.js");
+
+      for (const provider of KNOWN_PROVIDERS) {
+        expect(ENV_KEY_MAP[provider]).toBeDefined();
+        expect(ENV_KEY_MAP[provider]).toContain("_API_KEY");
+      }
+    });
+
+    test("DEFAULT_MODELS covers all known providers", async () => {
+      const { KNOWN_PROVIDERS, DEFAULT_MODELS } = await import("../../src/utils/config.js");
+
+      for (const provider of KNOWN_PROVIDERS) {
+        expect(DEFAULT_MODELS[provider]).toBeDefined();
+        expect(typeof DEFAULT_MODELS[provider]).toBe("string");
+      }
+    });
+
+    test("BUILTIN_PROVIDERS is subset of KNOWN_PROVIDERS", async () => {
+      const { KNOWN_PROVIDERS, BUILTIN_PROVIDERS } = await import("../../src/utils/config.js");
+
+      for (const provider of BUILTIN_PROVIDERS) {
+        expect(KNOWN_PROVIDERS).toContain(provider);
+      }
+      // moonshot and deepseek should NOT be in BUILTIN_PROVIDERS
+      expect(BUILTIN_PROVIDERS).not.toContain("moonshot");
+      expect(BUILTIN_PROVIDERS).not.toContain("deepseek");
+    });
   });
 });

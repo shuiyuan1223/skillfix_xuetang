@@ -4,7 +4,12 @@
 
 import type { Command } from "commander";
 import { startGateway } from "../gateway/index.js";
-import { loadConfig, PROVIDER_CONFIGS, type LLMProvider } from "../utils/config.js";
+import {
+  loadConfig,
+  PROVIDER_CONFIGS,
+  resolveAgentModel,
+  type LLMProvider,
+} from "../utils/config.js";
 import * as fs from "fs";
 import * as path from "path";
 import {
@@ -48,17 +53,7 @@ function isRunning(pid: number): boolean {
   }
 }
 
-function getApiKey(config: ReturnType<typeof loadConfig>): string | undefined {
-  if (config.llm.apiKey) {
-    return config.llm.apiKey;
-  }
-  const provider = config.llm.provider as LLMProvider;
-  const providerConfig = PROVIDER_CONFIGS[provider];
-  if (providerConfig) {
-    return process.env[providerConfig.envVar];
-  }
-  return undefined;
-}
+// Local getApiKey() removed — use resolveAgentModel() instead
 
 function getWebDir(): string {
   // Find the web dist directory
@@ -92,9 +87,16 @@ export function registerStartCommand(program: Command): void {
     .action(async (options) => {
       const config = loadConfig();
       const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
-      const apiKey = getApiKey(config);
+      let agentModel: ReturnType<typeof resolveAgentModel> | null = null;
+      let apiKey: string | undefined;
+      try {
+        agentModel = resolveAgentModel(config);
+        apiKey = agentModel.apiKey;
+      } catch {
+        // API key not found — will be caught below
+      }
       const webDir = getWebDir();
-      const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
+      const providerCfg = PROVIDER_CONFIGS[agentModel?.provider || config.llm.provider];
 
       // Check if already running (skip this check in foreground mode, as we are the server)
       if (!options.foreground) {
@@ -144,10 +146,8 @@ export function registerStartCommand(program: Command): void {
         printHeader(`${icons.server} PHA Gateway`, "Foreground Mode");
 
         printKV("URL", c.cyan(`http://localhost:${port}`));
-        printKV("Provider", providerCfg?.name || config.llm.provider);
-        if (config.llm.modelId) {
-          printKV("Model", config.llm.modelId);
-        }
+        printKV("Provider", providerCfg?.name || agentModel?.provider || config.llm.provider);
+        printKV("Model", agentModel?.modelId || config.llm.modelId || "default");
         printKV("Web UI", webDir ? c.green("Enabled") : c.yellow("Disabled"));
 
         console.log("");
@@ -161,9 +161,9 @@ export function registerStartCommand(program: Command): void {
 
         await startGateway({
           port,
-          provider: config.llm.provider as any,
-          modelId: config.llm.modelId,
-          baseUrl: config.llm.baseUrl,
+          provider: (agentModel?.provider || config.llm.provider) as any,
+          modelId: agentModel?.modelId || config.llm.modelId,
+          baseUrl: agentModel?.baseUrl || config.llm.baseUrl,
           apiKey,
           webDir,
         });

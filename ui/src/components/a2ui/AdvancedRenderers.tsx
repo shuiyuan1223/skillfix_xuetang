@@ -297,7 +297,7 @@ export function renderActivityRings(c: A2UIComponent, _ctx: RenderContext) {
           return (
             <React.Fragment key={i}>
               <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color + "30"} strokeWidth={strokeWidth} />
-              <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dashOffset} transform={`rotate(-90 ${center} ${center})`} className="ring-fill" />
+              <circle cx={center} cy={center} r={radius} fill="none" stroke={ring.color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={circumference} transform={`rotate(-90 ${center} ${center})`} className="ring-fill" style={{ strokeDashoffset: dashOffset, ['--ring-circ' as any]: circumference, animationDelay: `${i * 200}ms` }} />
             </React.Fragment>
           );
         })}
@@ -312,95 +312,6 @@ export function renderActivityRings(c: A2UIComponent, _ctx: RenderContext) {
         ))}
       </div>
     </div>
-  );
-}
-
-// ---- Radar Chart ----
-export function renderRadarChart(c: A2UIComponent, _ctx: RenderContext) {
-  const multiSeries = c.multiSeries as Array<{ label: string; data: Array<{ label: string; value: number; maxValue: number }>; color: string }> | undefined;
-  if (multiSeries && multiSeries.length > 0) return renderRadarChartMultiSeries(c, multiSeries);
-
-  const data = (c.data as Array<{ label: string; value: number; maxValue: number }>) || [];
-  const compareData = c.compareData as Array<{ label: string; value: number; maxValue: number }> | undefined;
-  const size = (c.size as number) || 280;
-  const color = (c.color as string) || "#667eea";
-  const compareColor = (c.compareColor as string) || "#f59e0b";
-  const n = data.length;
-  if (n < 3) return <div className="text-text-muted text-sm p-4">Need at least 3 data points</div>;
-
-  const cx = size / 2, cy = size / 2, radius = size / 2 - 40;
-  const angleStep = (2 * Math.PI) / n, startAngle = -Math.PI / 2;
-  const getPoint = (i: number, pct: number) => ({ x: cx + radius * pct * Math.cos(startAngle + i * angleStep), y: cy + radius * pct * Math.sin(startAngle + i * angleStep) });
-  const gridLevels = [0.2, 0.4, 0.6, 0.8, 1.0];
-  const gridPolygons = gridLevels.map((level) => Array.from({ length: n }, (_, i) => { const p = getPoint(i, level); return `${p.x},${p.y}`; }).join(" "));
-  const axisLines = Array.from({ length: n }, (_, i) => getPoint(i, 1));
-  const dataPoints = data.map((d, i) => { const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0; const p = getPoint(i, pct); return `${p.x},${p.y}`; }).join(" ");
-  let comparePoints = "";
-  if (compareData && compareData.length === n) {
-    comparePoints = compareData.map((d, i) => { const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0; const p = getPoint(i, pct); return `${p.x},${p.y}`; }).join(" ");
-  }
-  const labels = data.map((d, i) => { const angle = startAngle + i * angleStep; const lr = radius + 24; const x = cx + lr * Math.cos(angle); const y = cy + lr * Math.sin(angle); let anchor = "middle"; if (Math.cos(angle) < -0.1) anchor = "end"; else if (Math.cos(angle) > 0.1) anchor = "start"; return { x, y, label: d.label, value: Math.round(d.value), anchor }; });
-
-  return (
-    <div style={{ width: size, height: size }}>
-      <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
-        {gridPolygons.map((points, i) => <polygon key={i} points={points} className="radar-grid" />)}
-        {axisLines.map((p, i) => <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} className="radar-axis" />)}
-        {comparePoints && <polygon points={comparePoints} fill={compareColor} fillOpacity="0.15" stroke={compareColor} strokeWidth="1.5" strokeOpacity="0.6" />}
-        <polygon points={dataPoints} fill={color} fillOpacity="0.25" stroke={color} strokeWidth="2" className="motion-safe:animate-radar-expand" style={{ transformOrigin: `${cx}px ${cy}px` }} />
-        {data.map((d, i) => { const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0; const p = getPoint(i, pct); return <circle key={i} cx={p.x} cy={p.y} r="4" fill={color} />; })}
-        {labels.map((l, i) => (
-          <React.Fragment key={i}>
-            <text x={l.x} y={l.y} textAnchor={l.anchor} className="radar-label" dominantBaseline="central">{l.label}</text>
-            <text x={l.x} y={l.y + 14} textAnchor={l.anchor} className="radar-value" dominantBaseline="central">{l.value}</text>
-          </React.Fragment>
-        ))}
-      </svg>
-    </div>
-  );
-}
-
-function renderRadarChartMultiSeries(_c: A2UIComponent, multiSeries: Array<{ label: string; data: Array<{ label: string; value: number; maxValue: number }>; color: string }>) {
-  const svgSize = 500;
-  const axisData = multiSeries[0].data;
-  const n = axisData.length;
-  if (n < 3) return <div className="text-text-muted text-sm p-4">Need at least 3 data points</div>;
-  const cx = svgSize / 2, cy = svgSize / 2, radius = svgSize / 2 - 55;
-  const angleStep = (2 * Math.PI) / n, startAngle = -Math.PI / 2;
-  const getPoint = (i: number, pct: number) => ({ x: cx + radius * pct * Math.cos(startAngle + i * angleStep), y: cy + radius * pct * Math.sin(startAngle + i * angleStep) });
-  const gridLevels = [0.25, 0.5, 0.75, 1.0];
-  const gridPolygons = gridLevels.map((level) => Array.from({ length: n }, (_, i) => { const p = getPoint(i, level); return `${p.x},${p.y}`; }).join(" "));
-  const axisLines = Array.from({ length: n }, (_, i) => getPoint(i, 1));
-  const gridLabels = gridLevels.map((level) => ({ x: cx + radius * level + 4, y: cy - 4, text: level.toFixed(2) }));
-  const labelRadius = radius + 30;
-  const labels = axisData.map((d, i) => { const angle = startAngle + i * angleStep; const x = cx + labelRadius * Math.cos(angle); const y = cy + labelRadius * Math.sin(angle); let anchor = "middle"; if (Math.cos(angle) < -0.1) anchor = "end"; else if (Math.cos(angle) > 0.1) anchor = "start"; return { x, y, label: d.label, anchor }; });
-  const seriesData = multiSeries.map((series) => { const points: Array<{ x: number; y: number }> = []; const polyStr = series.data.map((d, i) => { const pct = d.maxValue > 0 ? Math.min(1, d.value / d.maxValue) : 0; const p = getPoint(i, pct); points.push(p); return `${p.x},${p.y}`; }).join(" "); return { color: series.color, label: series.label, polyStr, points }; });
-
-  return (
-    <>
-      <div className="arena-radar-container" style={{ maxWidth: 500, width: "100%" }}>
-        <svg viewBox={`0 0 ${svgSize} ${svgSize}`} width="100%">
-          {gridPolygons.map((points, i) => <polygon key={i} points={points} className="radar-grid" />)}
-          {axisLines.map((p, i) => <line key={i} x1={cx} y1={cy} x2={p.x} y2={p.y} className="radar-axis" />)}
-          {gridLabels.map((gl, i) => <text key={i} x={gl.x} y={gl.y} fill="rgb(var(--color-text-muted, 100 116 139))" fontSize="9" fontFamily="system-ui" opacity="0.6">{gl.text}</text>)}
-          {seriesData.map((sp, i) => (
-            <React.Fragment key={i}>
-              <polygon points={sp.polyStr} fill={sp.color} fillOpacity="0.12" stroke={sp.color} strokeWidth="2" className="motion-safe:animate-radar-expand" style={{ transformOrigin: `${cx}px ${cy}px` }} />
-              {sp.points.map((pt, j) => <circle key={j} cx={pt.x} cy={pt.y} r="3.5" fill={sp.color} />)}
-            </React.Fragment>
-          ))}
-          {labels.map((l, i) => <text key={i} x={l.x} y={l.y} textAnchor={l.anchor} className="radar-label" dominantBaseline="central" fontSize="11">{l.label}</text>)}
-        </svg>
-      </div>
-      <div className="arena-legend">
-        {multiSeries.map((s, i) => (
-          <span key={i} className="arena-legend-item">
-            <span className="arena-legend-dot" style={{ background: s.color, boxShadow: `0 0 8px ${s.color}` }} />
-            {s.label}
-          </span>
-        ))}
-      </div>
-    </>
   );
 }
 
