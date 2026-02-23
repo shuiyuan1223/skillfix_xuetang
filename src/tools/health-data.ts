@@ -163,7 +163,7 @@ export const getWorkoutsTool: PHATool<{ date: string }> = {
 export const getWeeklySummaryTool: PHATool<{}> = {
   name: "get_weekly_summary",
   description:
-    "获取 7 天健康汇总。返回每日步数、总步数/平均步数、每日睡眠时长及平均值。当用户询问一周情况或近几天数据时调用。",
+    "【已废弃，请优先使用 get_health_trends(period='7d')】获取 7 天步数和睡眠汇总。仅返回步数和睡眠两个维度，功能已被 get_health_trends 完全覆盖。",
   displayName: "周报汇总",
   category: "health" as const,
   icon: "calendar",
@@ -283,7 +283,7 @@ export const getSpO2Tool: PHATool<{ date: string }> = {
 export const getHealthTrendsTool: PHATool<{ period: string; metrics?: string }> = {
   name: "get_health_trends",
   description:
-    "获取长期健康趋势（按周、月或年）。返回步数、睡眠、心率的聚合日数据。用于趋势分析、进度追踪和长期模式识别，支持最多 2 年历史数据。",
+    "获取健康趋势数据（7 天到 2 年）。返回步数、睡眠、心率、卡路里、运动的逐日聚合数据。用于周回顾、趋势分析、进度追踪和长期模式识别。这是查询多日健康数据的首选工具（替代 get_weekly_summary）。",
   displayName: "健康趋势",
   category: "health" as const,
   icon: "trending-up",

@@ -88,10 +88,9 @@
 | 心率、脉搏、静息心率、心率区间 | `get_heart_rate` |
 | 睡眠、睡眠质量、就寝时间、起床时间 | `get_sleep` |
 | 锻炼、跑步、训练、健身 | `get_workouts` |
-| 周报、本周概览 | `get_weekly_summary` |
 | 压力、紧张、放松 | `get_stress` |
 | 血氧、SpO2、血氧饱和度 | `get_spo2` |
-| 长期趋势、月度/年度分析、进展追踪 | `get_health_trends` |
+| 周报、本周概览、长期趋势、月度/年度分析、进展追踪 | `get_health_trends` |
 | 需要过去的上下文或用户偏好 | `memory_search` |
 | 用户分享重要健康信息 | `memory_save` |
 | 分析完数据后展示结论 | `present_insight` |

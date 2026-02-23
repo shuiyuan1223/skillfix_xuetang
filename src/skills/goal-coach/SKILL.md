@@ -1,13 +1,13 @@
 ---
 name: goal-coach
-description: "运用行为科学原则，帮助用户设定、追踪和调整健康与健身目标"
+description: "运用行为科学原则（习惯养成、动机维持、SMART-H 框架），帮助用户设定、追踪和调整健康目标。当用户讨论目标设定、动力不足、坚持困难、习惯养成时使用。不适用于：具体计划的创建和管理用 health-planner，数据分析用对应专项技能"
 metadata:
   {
     "pha": {
       "emoji": "🎯",
       "category": "health-management",
       "tags": ["pha", "goals", "behavior-change", "tracking"],
-      "requires": { "tools": ["get_weekly_summary", "get_health_data", "memory_search", "memory_save"] }
+      "requires": { "tools": ["get_health_trends", "get_health_data", "memory_search", "memory_save"] }
     }
   }
 ---
@@ -19,7 +19,7 @@ metadata:
 | 用户说的话 | 交互类型 | 应对方法 |
 |-----------|---------|---------|
 | "帮我设定一个健身目标" | **目标设定** | 评估当前水平，设定 SMART 目标 |
-| "我的目标完成得怎么样？" | **进度检查** | `get_weekly_summary` + 与已保存目标对比 |
+| "我的目标完成得怎么样？" | **进度检查** | `get_health_trends` + 与已保存目标对比 |
 | "我的目标总是完不成" | **动力支持** | 共情、重新定义、调整目标 |
 | "我想每天走 10,000 步" | **具体目标采纳** | 根据数据验证可行性 |
 | "我没有动力了" | **重新激活** | 调查原因，重建动力 |
@@ -62,10 +62,10 @@ metadata:
 
 | 交互类型 | 需要调用的工具 | 原因 |
 |---------|--------------|------|
-| 目标设定 | `get_weekly_summary` + `memory_search("goal")` | 获取基线 + 已有目标 |
-| 进度检查 | `get_weekly_summary` + `memory_search("goal")` | 当前值 vs 目标值 |
-| 动力支持 | `get_weekly_summary` + `memory_search("goal")` | 理解差距 |
-| 目标调整 | `get_weekly_summary` | 评估当前能力 |
+| 目标设定 | `get_health_trends` + `memory_search("goal")` | 获取基线 + 已有目标 |
+| 进度检查 | `get_health_trends` + `memory_search("goal")` | 当前值 vs 目标值 |
+| 动力支持 | `get_health_trends` + `memory_search("goal")` | 理解差距 |
+| 目标调整 | `get_health_trends` | 评估当前能力 |
 
 **重要**：设定或调整目标后，务必使用 `memory_save` 记录目标，包括日期、目标值和依据。
 

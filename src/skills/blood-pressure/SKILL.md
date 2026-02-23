@@ -1,6 +1,6 @@
 ---
 name: blood-pressure
-description: "分析血压数据，评估心血管风险等级，提供生活方式干预指导"
+description: "分析血压数据（收缩压/舒张压），评估心血管风险等级，提供生活方式干预指导。当用户问血压、高血压、低血压相关问题时使用。不适用于：心率/HRV 问题用 heart-monitor"
 metadata:
   {
     "pha": {

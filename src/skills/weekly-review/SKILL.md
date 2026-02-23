@@ -1,13 +1,13 @@
 ---
 name: weekly-review
-description: "生成全面的每周健康报告，包含趋势分析和可操作的建议"
+description: "生成全面的每周健康报告，包含多维度趋势分析和可操作建议。仅当用户明确要求'周回顾'、'这周怎么样'、'周报'时使用。不适用于：今日概览用 health-overview，单项指标趋势用对应专项技能"
 metadata:
   {
     "pha": {
       "emoji": "📅",
       "category": "health-management",
       "tags": ["pha", "weekly-review", "trends", "report"],
-      "requires": { "tools": ["get_weekly_summary", "get_health_data", "get_sleep", "get_heart_rate", "list_health_plans", "get_health_plan"] }
+      "requires": { "tools": ["get_health_trends", "get_health_data", "get_sleep", "get_heart_rate", "list_health_plans", "get_health_plan"] }
     }
   }
 ---
@@ -18,15 +18,15 @@ metadata:
 
 | 用户说的话 | 回顾类型 | 数据策略 |
 |-----------|---------|---------|
-| "我这周怎么样？" | **综合回顾** | `get_weekly_summary` — 多维度全面概览 |
-| "这周和上周比怎么样" | **周期对比** | `get_weekly_summary`（包含 7 天数据），对比前后半段或参考记忆 |
-| "我有进步吗？" | **进度检查** | `get_weekly_summary` + `memory_search("weekly review")` 获取历史数据 |
+| "我这周怎么样？" | **综合回顾** | `get_health_trends` — 多维度全面概览 |
+| "这周和上周比怎么样" | **周期对比** | `get_health_trends`（包含 7 天数据），对比前后半段或参考记忆 |
+| "我有进步吗？" | **进度检查** | `get_health_trends` + `memory_search("weekly review")` 获取历史数据 |
 | "下周我该重点关注什么？" | **前瞻规划** | 全面回顾 + 找出最弱维度 |
 | "给我出个周报" | **正式报告** | 所有可用数据，结构化输出 |
 
 ## 第二步：数据收集
 
-**首先调用 `get_weekly_summary`** — 它提供基础数据。
+**首先调用 `get_health_trends`** — 它提供基础数据。
 
 进行全面回顾时，补充调用：
 - `get_heart_rate(today)` — 增加心血管维度

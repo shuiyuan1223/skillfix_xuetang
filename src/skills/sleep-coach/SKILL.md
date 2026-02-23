@@ -1,13 +1,13 @@
 ---
 name: sleep-coach
-description: "分析睡眠数据并提供个性化的睡眠改善建议"
+description: "分析睡眠数据（时长、质量、阶段、规律性）并提供个性化的睡眠改善建议。当用户问睡眠、失眠、入睡、起床、睡眠质量相关问题时使用。不适用于：压力导致的睡眠问题用 stress-management，整体健康概览用 health-overview"
 metadata:
   {
     "pha": {
       "emoji": "🌙",
       "category": "health-coaching",
       "tags": ["pha", "sleep", "data-analysis"],
-      "requires": { "tools": ["get_sleep", "get_weekly_summary", "get_heart_rate", "get_spo2"] }
+      "requires": { "tools": ["get_sleep", "get_health_trends", "get_heart_rate", "get_spo2"] }
     }
   }
 ---
@@ -34,7 +34,7 @@ metadata:
 | 问题类型 | 所需调用 | 原因 |
 |---------|---------|------|
 | 单晚问题 | `get_sleep(date)` | 获取当晚数据 |
-| 趋势/规律问题 | `get_weekly_summary` | 7 天视图用于发现规律 |
+| 趋势/规律问题 | `get_health_trends` | 7 天视图用于发现规律 |
 | "睡够了但还是累" | `get_sleep(date)` + `get_workouts(date)` | 交叉检查运动负荷 |
 | 睡眠 + 心率顾虑 | `get_sleep(date)` + `get_heart_rate(date)` | 夜间心率可揭示睡眠质量问题 |
 

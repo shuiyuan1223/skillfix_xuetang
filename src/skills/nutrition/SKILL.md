@@ -1,6 +1,6 @@
 ---
 name: nutrition
-description: "分析饮食摄入，评估宏量营养素平衡，提供个性化营养优化建议"
+description: "分析饮食摄入，评估宏量营养素平衡（蛋白质/碳水/脂肪），提供个性化营养优化建议。当用户问饮食、营养、吃什么、热量摄入相关问题时使用。不适用于：体重管理用 weight-management，运动补给用 workout-tracker"
 metadata:
   {
     "pha": {

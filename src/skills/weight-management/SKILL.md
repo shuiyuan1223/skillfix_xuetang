@@ -1,6 +1,6 @@
 ---
 name: weight-management
-description: "分析身体成分数据，管理增重/减重目标，优化减脂策略"
+description: "分析身体成分数据（体重、BMI、体脂率、肌肉量），管理增重/减重目标，优化减脂策略。当用户问体重变化、减肥、增肌、身体成分相关问题时使用。不适用于：饮食内容分析用 nutrition，运动方案用 workout-tracker"
 metadata:
   {
     "pha": {

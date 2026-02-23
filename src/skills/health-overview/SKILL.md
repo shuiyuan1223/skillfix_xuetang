@@ -1,14 +1,30 @@
+---
+name: health-overview
+description: "综合评估今日整体健康状态（步数、活动量、卡路里）。仅当用户问'我怎么样'、'今天概览'、'健康总结'等笼统问题时使用。不适用于：心率问题用 heart-monitor，睡眠问题用 sleep-coach，运动问题用 workout-tracker，压力问题用 stress-management"
+metadata:
+  {
+    "pha": {
+      "emoji": "📊",
+      "category": "health-coaching",
+      "tags": ["pha", "overview", "daily-summary", "data-analysis"],
+      "requires": { "tools": ["get_health_data", "get_health_trends"] }
+    }
+  }
+---
+
 # 健康概览技能
+
+> **适用范围**：用户问笼统的健康问题（"我怎么样"、"今天概览"、"健康总结"）。如果用户问的是**特定领域**（心率、睡眠、运动、压力、血压等），请使用对应的专项技能，不要用本技能。
 
 ## 第一步：确定查询范围
 
 | 用户描述 | 范围 | 数据策略 |
-|---------|------|---------| 
-| "我怎么样？" / "健康概览" | **全面概览** | `get_health_data(today)` + `get_weekly_summary` |
+|---------|------|---------|
+| "我怎么样？" / "健康概览" | **全面概览** | `get_health_data(today)` + `get_health_trends(7d)` |
 | "今天走了多少步？" | **单项指标，今日** | `get_health_data(today)` |
-| "这周怎么样？" | **周趋势** | `get_weekly_summary` |
-| "我达标了吗？" / "进度怎样？" | **目标追踪** | `get_weekly_summary` + 检查个人档案目标 |
-| "这周和上周比怎么样" | **周期对比** | `get_weekly_summary`（包含 7 天数据） |
+| "这周怎么样？" | **周趋势** | `get_health_trends(7d)` |
+| "我达标了吗？" / "进度怎样？" | **目标追踪** | `get_health_trends(7d)` + 检查个人档案目标 |
+| "这周和上周比怎么样" | **周期对比** | `get_health_trends(14d)` |
 
 ## 第二步：评估框架
 

@@ -1,6 +1,6 @@
 ---
 name: heart-monitor
-description: "分析心率数据并提供心血管健康建议"
+description: "分析心率、HRV 数据并提供心血管健康建议（静息心率评估、运动心率区间、过度训练检测）。当用户问心率、心跳、HRV、心血管相关问题时使用。不适用于：血压问题用 blood-pressure，压力/焦虑用 stress-management，运动表现用 workout-tracker"
 metadata:
   {
     "pha": {
@@ -31,7 +31,7 @@ metadata:
 | 单日检查 | `get_heart_rate(date)` | 静息、最低、最高、每小时读数 |
 | 运动场景 | `get_heart_rate(date)` + `get_workouts(date)` | 将心率与运动强度关联 |
 | 睡眠场景 | `get_heart_rate(date)` + `get_sleep(date)` | 夜间心率反映睡眠质量 |
-| 趋势问题 | `get_weekly_summary` + `get_heart_rate(today)` | 周趋势 + 今日详情 |
+| 趋势问题 | `get_health_trends` + `get_heart_rate(today)` | 周趋势 + 今日详情 |
 
 ## 第三步：专家评估框架
 

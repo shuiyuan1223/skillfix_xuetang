@@ -1,3 +1,17 @@
+---
+name: workout-tracker
+description: "分析运动记录（跑步、骑行、游泳、力量训练等），评估训练负荷、恢复状态和体能进步。仅当用户问运动、训练、锻炼相关问题时使用。不适用于：日常步数/卡路里用 health-overview，心率趋势用 heart-monitor，运动计划制定用 health-planner"
+metadata:
+  {
+    "pha": {
+      "emoji": "🏃",
+      "category": "health-coaching",
+      "tags": ["pha", "workout", "exercise", "training", "data-analysis"],
+      "requires": { "tools": ["get_workouts", "get_heart_rate", "get_sleep", "get_health_trends"] }
+    }
+  }
+---
+
 # 运动追踪技能
 
 ## 运动数据展示规范
@@ -39,8 +53,8 @@
 |---------|---------|------|
 | 今天的运动 | `get_workouts(today)` | 直接回答 |
 | 今天该不该运动？ | `get_workouts(yesterday)` + `get_sleep(today)` + `get_heart_rate(today)` | 准备度评估需要恢复上下文 |
-| 周回顾 | `get_weekly_summary` + `get_workouts(today)` | 总量 + 近期详情 |
-| 表现趋势 | `get_weekly_summary` | 多日视图 |
+| 周回顾 | `get_health_trends` + `get_workouts(today)` | 总量 + 近期详情 |
+| 表现趋势 | `get_health_trends` | 多日视图 |
 
 
 ## 伤病安全检查（给运动建议前执行）
