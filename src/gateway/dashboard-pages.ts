@@ -1120,7 +1120,7 @@ export function generateDashboardPage(
   data: DashboardData,
   activeTab: TabId = "overview",
   options?: DashboardOptions
-): A2UIMessage {
+): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const loading = options?.loading ?? false;
 

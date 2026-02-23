@@ -5,7 +5,8 @@
  * Pure function: input A2UI components, output text lines + action list.
  */
 
-import type { A2UIComponent, A2UIComponentType } from "./a2ui.js";
+import type { A2UIComponent } from "./a2ui.js";
+import { componentType, prop, children as getChildren } from "./a2ui.js";
 
 // ANSI color helpers
 const ansi = {
@@ -77,94 +78,91 @@ export function renderA2UIToTUI(
 }
 
 function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const type = comp.type as A2UIComponentType;
-
-  switch (type) {
-    case "text":
+  switch (componentType(comp)) {
+    case "Text":
       return renderText(comp, ctx);
-    case "card":
+    case "Card":
       return renderCard(comp, ctx);
-    case "column":
+    case "Column":
       return renderColumn(comp, ctx);
-    case "row":
+    case "Row":
       return renderRow(comp, ctx);
-    case "grid":
+    case "Grid":
       return renderGrid(comp, ctx);
-    case "stat_card":
+    case "StatCard":
       return renderStatCard(comp, ctx);
-    case "metric":
+    case "Metric":
       return renderMetric(comp, ctx);
-    case "chart":
+    case "Chart":
       return renderChart(comp, ctx);
-    case "table":
-    case "data_table":
+    case "Table":
+    case "DataTable":
       return renderTable(comp, ctx);
-    case "tabs":
+    case "Tabs":
       return renderTabs(comp, ctx);
-    case "button":
+    case "Button":
       return renderButton(comp, ctx);
-    case "nav":
+    case "Nav":
       return renderNav(comp, ctx);
-    case "chat_messages":
+    case "ChatMessages":
       return renderChatMessages(comp, ctx);
-    case "chat_input":
-      return []; // TUI handles its own editor
-    case "form":
+    case "ChatInput":
+      return [];
+    case "Form":
       return renderForm(comp, ctx);
-    case "form_input":
+    case "FormInput":
       return renderFormInput(comp, ctx);
-    case "progress":
+    case "Progress":
       return renderProgress(comp, ctx);
-    case "score_gauge":
+    case "ScoreGauge":
       return renderScoreGauge(comp, ctx);
-    case "badge":
+    case "Badge":
       return renderBadge(comp, ctx);
-    case "status_badge":
+    case "StatusBadge":
       return renderStatusBadge(comp, ctx);
-    case "git_timeline":
+    case "GitTimeline":
       return renderGitTimeline(comp, ctx);
-    case "step_indicator":
+    case "StepIndicator":
       return renderStepIndicator(comp, ctx);
-    case "file_tree":
+    case "FileTree":
       return renderFileTree(comp, ctx);
-    case "version_graph":
+    case "VersionGraph":
       return renderVersionGraph(comp, ctx);
-    case "diff_view":
+    case "DiffView":
       return renderDiffView(comp, ctx);
-    case "code_editor":
+    case "CodeEditor":
       return renderCodeEditor(comp, ctx);
-    case "commit_list":
+    case "CommitList":
       return renderCommitList(comp, ctx);
-    case "arena_pills":
+    case "ArenaPills":
       return renderArenaPills(comp, ctx);
-    case "arena_score_table":
+    case "ArenaScoreTable":
       return renderArenaScoreTable(comp, ctx);
-    case "arena_category_card":
+    case "ArenaCategoryCard":
       return renderArenaCategoryCard(comp, ctx);
-    case "radar_chart":
+    case "RadarChart":
       return renderRadarChartTUI(comp, ctx);
-    case "arena_run_picker":
+    case "ArenaRunPicker":
       return renderArenaRunPickerTUI(comp, ctx);
-    case "arena_mode_toggle":
+    case "ArenaModeToggle":
       return renderArenaModeToggleTUI(comp, ctx);
-    case "collapsible":
+    case "Collapsible":
       return renderCollapsible(comp, ctx);
-    case "activity_rings":
+    case "ActivityRings":
       return renderActivityRings(comp, ctx);
-    case "log_viewer":
+    case "LogViewer":
       return renderLogViewer(comp, ctx);
-    case "skeleton":
+    case "Skeleton":
       return [indent(ctx, ansi.dim("Loading..."))];
-    case "divider":
+    case "Divider":
       return [indent(ctx, ansi.dim("─".repeat(Math.min(ctx.width - ctx.indent * 2, 60))))];
-    case "spacer":
+    case "Spacer":
       return [""];
-    case "icon":
-      return []; // Icons are inline, usually handled by parent
-    case "modal":
+    case "Icon":
+      return [];
+    case "Modal":
       return renderModal(comp, ctx);
     default:
-      // Render children if present
       return renderChildren(comp, ctx);
   }
 }
@@ -174,9 +172,9 @@ function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
 // ============================================================================
 
 function renderText(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const text = String(comp.text || "");
-  const variant = comp.variant as string;
-  const color = comp.color as string | undefined;
+  const text = String(prop(comp, "text") || "");
+  const variant = prop(comp, "variant") as string;
+  const color = prop(comp, "color") as string | undefined;
 
   let formatted: string;
   switch (variant) {
@@ -206,7 +204,7 @@ function renderText(comp: A2UIComponent, ctx: RenderContext): string[] {
 
 function renderCard(comp: A2UIComponent, ctx: RenderContext): string[] {
   const lines: string[] = [];
-  const title = comp.title as string | undefined;
+  const title = prop(comp, "title") as string | undefined;
 
   if (title) {
     lines.push(indent(ctx, ansi.bold(title)));
@@ -226,11 +224,11 @@ function renderColumn(comp: A2UIComponent, ctx: RenderContext): string[] {
 function renderRow(comp: A2UIComponent, ctx: RenderContext): string[] {
   // For TUI, render row children separated by spaces on the same line if short,
   // otherwise render them vertically
-  const children = comp.children || [];
-  if (children.length === 0) return [];
+  const childIds = getChildren(comp);
+  if (childIds.length === 0) return [];
 
   const childOutputs: string[][] = [];
-  for (const childId of children) {
+  for (const childId of childIds) {
     const child = ctx.components.get(childId);
     if (child) {
       childOutputs.push(renderComponent(child, ctx));
@@ -252,12 +250,12 @@ function renderRow(comp: A2UIComponent, ctx: RenderContext): string[] {
 
 function renderGrid(comp: A2UIComponent, ctx: RenderContext): string[] {
   // Render grid children in pairs per line if possible
-  const children = comp.children || [];
-  const cols = (comp.columns as number) || 2;
+  const childIds = getChildren(comp);
+  const cols = (prop(comp, "columns") as number) || 2;
   const lines: string[] = [];
 
-  for (let i = 0; i < children.length; i += cols) {
-    const chunk = children.slice(i, i + cols);
+  for (let i = 0; i < childIds.length; i += cols) {
+    const chunk = childIds.slice(i, i + cols);
     const parts: string[] = [];
     const colWidth = Math.floor((ctx.width - ctx.indent * 2) / cols);
 
@@ -291,10 +289,10 @@ function renderGrid(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderStatCard(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const title = String(comp.title || "");
-  const value = String(comp.value ?? "");
-  const subtitle = comp.subtitle as string | undefined;
-  const trend = comp.trend as { direction: string; value: string } | undefined;
+  const title = String(prop(comp, "title") || "");
+  const value = String(prop(comp, "value") ?? "");
+  const subtitle = prop(comp, "subtitle") as string | undefined;
+  const trend = prop(comp, "trend") as { direction: string; value: string } | undefined;
 
   let trendStr = "";
   if (trend) {
@@ -313,10 +311,10 @@ function renderStatCard(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderMetric(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const label = String(comp.label || "");
-  const value = String(comp.value ?? "");
-  const unit = (comp.unit as string) || "";
-  const trend = comp.trend as string | undefined;
+  const label = String(prop(comp, "label") || "");
+  const value = String(prop(comp, "value") ?? "");
+  const unit = (prop(comp, "unit") as string) || "";
+  const trend = prop(comp, "trend") as string | undefined;
 
   let trendStr = "";
   if (trend === "up") trendStr = ansi.green(" ▲");
@@ -329,10 +327,10 @@ function renderMetric(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderChart(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const data = (comp.data as Record<string, unknown>[]) || [];
-  const yKey = comp.yKey as string;
-  const xKey = comp.xKey as string;
-  const chartType = comp.chartType as string;
+  const data = (prop(comp, "data") as Record<string, unknown>[]) || [];
+  const yKey = prop(comp, "yKey") as string;
+  const xKey = prop(comp, "xKey") as string;
+  const chartType = prop(comp, "chartType") as string;
   const lines: string[] = [];
 
   lines.push(indent(ctx, ansi.dim(`[${chartType} chart]`)));
@@ -370,8 +368,8 @@ function renderChart(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderTable(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const columns = (comp.columns as Array<{ key: string; label: string }>) || [];
-  const rows = (comp.rows as Record<string, unknown>[]) || [];
+  const columns = (prop(comp, "columns") as Array<{ key: string; label: string }>) || [];
+  const rows = (prop(comp, "rows") as Record<string, unknown>[]) || [];
   const lines: string[] = [];
 
   if (columns.length === 0) return [indent(ctx, ansi.dim("(empty table)"))];
@@ -386,7 +384,7 @@ function renderTable(comp: A2UIComponent, ctx: RenderContext): string[] {
   lines.push(indent(ctx, ansi.dim("─".repeat(Math.min(headerLine.length, availWidth)))));
 
   // Rows (with action numbers if clickable)
-  const onRowClick = comp.onRowClick as string | undefined;
+  const onRowClick = prop(comp, "onRowClick") as string | undefined;
 
   for (const row of rows) {
     const cells = columns.map((c) => {
@@ -410,7 +408,7 @@ function renderTable(comp: A2UIComponent, ctx: RenderContext): string[] {
   }
 
   // Pagination info
-  const pagination = comp.pagination as
+  const pagination = prop(comp, "pagination") as
     | { page: number; pageSize: number; total: number }
     | undefined;
   if (pagination) {
@@ -427,9 +425,9 @@ function renderTable(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderTabs(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const tabs = (comp.tabs as Array<{ id: string; label: string }>) || [];
-  const activeTab = comp.activeTab as string;
-  const contentIds = (comp.contentIds as Record<string, string>) || {};
+  const tabs = (prop(comp, "tabs") as Array<{ id: string; label: string }>) || [];
+  const activeTab = prop(comp, "activeTab") as string;
+  const contentIds = (prop(comp, "contentIds") as Record<string, string>) || {};
   const lines: string[] = [];
 
   // Render tab header with action numbers
@@ -466,10 +464,10 @@ function renderTabs(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderButton(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const label = String(comp.label || "");
-  const action = String(comp.action || "");
-  const disabled = comp.disabled as boolean | undefined;
-  const variant = comp.variant as string | undefined;
+  const label = String(prop(comp, "label") || "");
+  const action = String(prop(comp, "action") || "");
+  const disabled = prop(comp, "disabled") as boolean | undefined;
+  const variant = prop(comp, "variant") as string | undefined;
 
   if (disabled) {
     return [indent(ctx, ansi.dim(`[×] ${label}`))];
@@ -480,7 +478,7 @@ function renderButton(comp: A2UIComponent, ctx: RenderContext): string[] {
     number: ctx.actionCounter,
     label,
     action,
-    payload: (comp.payload as Record<string, unknown>) || undefined,
+    payload: (prop(comp, "payload") as Record<string, unknown>) || undefined,
   });
 
   const numStr = ansi.cyan(`[${ctx.actionCounter}]`);
@@ -491,8 +489,8 @@ function renderButton(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderNav(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const items = (comp.items as Array<{ id: string; label: string; icon?: string }>) || [];
-  const activeId = comp.activeId as string | undefined;
+  const items = (prop(comp, "items") as Array<{ id: string; label: string; icon?: string }>) || [];
+  const activeId = prop(comp, "activeId") as string | undefined;
   const lines: string[] = [];
 
   for (const item of items) {
@@ -507,13 +505,13 @@ function renderNav(comp: A2UIComponent, ctx: RenderContext): string[] {
 
 function renderChatMessages(comp: A2UIComponent, ctx: RenderContext): string[] {
   const messages =
-    (comp.messages as Array<{
+    (prop(comp, "messages") as Array<{
       role: string;
       content?: string;
       parts?: Array<{ type: string; content?: string; toolName?: string; status?: string }>;
     }>) || [];
-  const streaming = comp.streaming as boolean | undefined;
-  const streamingContent = comp.streamingContent as string | undefined;
+  const streaming = prop(comp, "streaming") as boolean | undefined;
+  const streamingContent = prop(comp, "streamingContent") as string | undefined;
   const lines: string[] = [];
 
   for (const msg of messages) {
@@ -557,8 +555,8 @@ function renderForm(comp: A2UIComponent, ctx: RenderContext): string[] {
   const lines: string[] = [];
   lines.push(...renderChildren(comp, ctx));
 
-  const submitLabel = (comp.submitLabel as string) || "Submit";
-  const onSubmit = comp.onSubmit as string;
+  const submitLabel = (prop(comp, "submitLabel") as string) || "Submit";
+  const onSubmit = prop(comp, "onSubmit") as string;
 
   ctx.actionCounter++;
   ctx.actions.push({
@@ -568,13 +566,14 @@ function renderForm(comp: A2UIComponent, ctx: RenderContext): string[] {
   });
   lines.push(indent(ctx, `${ansi.cyan(`[${ctx.actionCounter}]`)} ${ansi.bold(submitLabel)}`));
 
-  if (comp.onCancel) {
-    const cancelLabel = (comp.cancelLabel as string) || "Cancel";
+  const onCancel = prop(comp, "onCancel") as string | undefined;
+  if (onCancel) {
+    const cancelLabel = (prop(comp, "cancelLabel") as string) || "Cancel";
     ctx.actionCounter++;
     ctx.actions.push({
       number: ctx.actionCounter,
       label: cancelLabel,
-      action: comp.onCancel as string,
+      action: onCancel,
     });
     lines.push(indent(ctx, `${ansi.cyan(`[${ctx.actionCounter}]`)} ${cancelLabel}`));
   }
@@ -583,43 +582,47 @@ function renderForm(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderFormInput(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const label = (comp.label as string) || (comp.name as string) || "";
-  const value = comp.value != null ? String(comp.value) : "";
-  const inputType = comp.inputType as string;
+  const label = (prop(comp, "label") as string) || (prop(comp, "name") as string) || "";
+  const rawValue = prop(comp, "value");
+  const value = rawValue != null ? String(rawValue) : "";
+  const inputType = prop(comp, "inputType") as string;
 
   if (inputType === "checkbox") {
-    const checked = comp.value as boolean;
+    const checked = rawValue as boolean;
     return [indent(ctx, `${checked ? "☑" : "☐"} ${label}`)];
   }
 
   if (inputType === "select") {
-    const options = (comp.options as Array<{ value: string; label: string }>) || [];
+    const options = (prop(comp, "options") as Array<{ value: string; label: string }>) || [];
     const currentOption = options.find((o) => o.value === value);
     return [indent(ctx, `${ansi.dim(label + ":")} ${currentOption?.label || value}`)];
   }
 
   return [
-    indent(ctx, `${ansi.dim(label + ":")} ${value || ansi.dim(String(comp.placeholder || ""))}`),
+    indent(
+      ctx,
+      `${ansi.dim(label + ":")} ${value || ansi.dim(String(prop(comp, "placeholder") || ""))}`
+    ),
   ];
 }
 
 function renderProgress(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const value = Number(comp.value) || 0;
-  const maxValue = Number(comp.maxValue) || 100;
-  const label = comp.label as string | undefined;
+  const value = Number(prop(comp, "value")) || 0;
+  const maxValue = Number(prop(comp, "maxValue")) || 100;
+  const label = prop(comp, "label") as string | undefined;
   return [indent(ctx, renderProgressBar(value, maxValue, label, ctx.width - ctx.indent * 2))];
 }
 
 function renderScoreGauge(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const value = Number(comp.value) || 0;
-  const max = Number(comp.max) || 100;
-  const label = comp.label as string | undefined;
+  const value = Number(prop(comp, "value")) || 0;
+  const max = Number(prop(comp, "max")) || 100;
+  const label = prop(comp, "label") as string | undefined;
   return [indent(ctx, renderProgressBar(value, max, label, ctx.width - ctx.indent * 2))];
 }
 
 function renderBadge(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const text = String(comp.text || "");
-  const variant = comp.variant as string | undefined;
+  const text = String(prop(comp, "text") || "");
+  const variant = prop(comp, "variant") as string | undefined;
 
   switch (variant) {
     case "success":
@@ -636,8 +639,8 @@ function renderBadge(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderStatusBadge(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const status = comp.status as string;
-  const label = (comp.label as string) || status;
+  const status = prop(comp, "status") as string;
+  const label = (prop(comp, "label") as string) || status;
 
   switch (status) {
     case "success":
@@ -657,7 +660,7 @@ function renderStatusBadge(comp: A2UIComponent, ctx: RenderContext): string[] {
 
 function renderGitTimeline(comp: A2UIComponent, ctx: RenderContext): string[] {
   const events =
-    (comp.events as Array<{
+    (prop(comp, "events") as Array<{
       id: string;
       type: string;
       label: string;
@@ -704,7 +707,7 @@ function renderGitTimeline(comp: A2UIComponent, ctx: RenderContext): string[] {
 
 function renderStepIndicator(comp: A2UIComponent, ctx: RenderContext): string[] {
   const steps =
-    (comp.steps as Array<{
+    (prop(comp, "steps") as Array<{
       id: string;
       label: string;
       status: string;
@@ -737,7 +740,7 @@ function renderStepIndicator(comp: A2UIComponent, ctx: RenderContext): string[] 
 
 function renderFileTree(comp: A2UIComponent, ctx: RenderContext): string[] {
   const files =
-    (comp.files as Array<{
+    (prop(comp, "files") as Array<{
       path: string;
       status: string;
       additions?: number;
@@ -778,11 +781,11 @@ function renderFileTree(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const mainBranch = comp.mainBranch as
+  const mainBranch = prop(comp, "mainBranch") as
     | { name: string; latestScore?: number | null; benchmarkCount: number }
     | undefined;
   const mainCommits =
-    (comp.mainCommits as Array<{
+    (prop(comp, "mainCommits") as Array<{
       hash: string;
       shortHash: string;
       message: string;
@@ -791,7 +794,7 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
       benchmarkTag?: string;
     }>) || [];
   const versions =
-    (comp.versions as Array<{
+    (prop(comp, "versions") as Array<{
       id: string;
       branch: string;
       parentBranch: string;
@@ -802,8 +805,8 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
       filesChanged?: number;
       createdAt: number;
     }>) || [];
-  const onVersionClick = comp.onVersionClick as string | undefined;
-  const selectedBranch = comp.selectedBranch as string | undefined;
+  const onVersionClick = prop(comp, "onVersionClick") as string | undefined;
+  const selectedBranch = prop(comp, "selectedBranch") as string | undefined;
   const lines: string[] = [];
 
   // Main branch HEAD node
@@ -916,9 +919,9 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderDiffView(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const before = String(comp.before || "");
-  const after = String(comp.after || "");
-  const title = comp.title as string | undefined;
+  const before = String(prop(comp, "before") || "");
+  const after = String(prop(comp, "after") || "");
+  const title = prop(comp, "title") as string | undefined;
   const lines: string[] = [];
 
   if (title) {
@@ -950,8 +953,8 @@ function renderDiffView(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderCodeEditor(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const value = String(comp.value || "");
-  const language = comp.language as string | undefined;
+  const value = String(prop(comp, "value") || "");
+  const language = prop(comp, "language") as string | undefined;
   const lines: string[] = [];
 
   lines.push(indent(ctx, ansi.dim(`──── ${language || "code"} ────`)));
@@ -974,7 +977,7 @@ function renderCodeEditor(comp: A2UIComponent, ctx: RenderContext): string[] {
 
 function renderCommitList(comp: A2UIComponent, ctx: RenderContext): string[] {
   const commits =
-    (comp.commits as Array<{
+    (prop(comp, "commits") as Array<{
       shortHash: string;
       message: string;
       date: string;
@@ -993,13 +996,13 @@ function renderCommitList(comp: A2UIComponent, ctx: RenderContext): string[] {
 
 function renderArenaPills(comp: A2UIComponent, ctx: RenderContext): string[] {
   const pills =
-    (comp.pills as Array<{
+    (prop(comp, "pills") as Array<{
       label: string;
       active: boolean;
       action: string;
       payload?: Record<string, unknown>;
     }>) || [];
-  const clearAction = comp.clearAction as string | undefined;
+  const clearAction = prop(comp, "clearAction") as string | undefined;
   const lines: string[] = [];
 
   for (const p of pills) {
@@ -1029,7 +1032,7 @@ function renderArenaPills(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderArenaScoreTable(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const rows = (comp.rows as Array<{ label: string; score: number }>) || [];
+  const rows = (prop(comp, "rows") as Array<{ label: string; score: number }>) || [];
   const lines: string[] = [];
   const colWidth = 20;
 
@@ -1053,10 +1056,10 @@ function renderArenaScoreTable(comp: A2UIComponent, ctx: RenderContext): string[
 }
 
 function renderArenaCategoryCard(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const name = comp.categoryName as string;
-  const avgScore = comp.avgScore as number;
+  const name = prop(comp, "categoryName") as string;
+  const avgScore = prop(comp, "avgScore") as number;
   const criteria =
-    (comp.criteria as Array<{
+    (prop(comp, "criteria") as Array<{
       name: string;
       scores: Array<{ value: number }>;
     }>) || [];
@@ -1076,9 +1079,9 @@ function renderArenaCategoryCard(comp: A2UIComponent, ctx: RenderContext): strin
 }
 
 function renderRadarChartTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const radarData = (comp.radarData as Array<Record<string, unknown>>) || [];
+  const radarData = (prop(comp, "radarData") as Array<Record<string, unknown>>) || [];
   const radarSeries =
-    (comp.radarSeries as Array<{ key: string; name: string; color: string }>) || [];
+    (prop(comp, "radarSeries") as Array<{ key: string; name: string; color: string }>) || [];
   const lines: string[] = [];
   lines.push(indent(ctx, ansi.dim("[Radar Chart]")));
 
@@ -1109,14 +1112,14 @@ function renderRadarChartTUI(comp: A2UIComponent, ctx: RenderContext): string[] 
 
 function renderArenaRunPickerTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
   const runs =
-    (comp.runs as Array<{
+    (prop(comp, "runs") as Array<{
       id: string;
       label: string;
       selected: boolean;
       score?: number;
     }>) || [];
-  const action = comp.action as string;
-  const clearAction = comp.clearAction as string | undefined;
+  const action = prop(comp, "action") as string;
+  const clearAction = prop(comp, "clearAction") as string | undefined;
   const lines: string[] = [];
 
   for (const r of runs) {
@@ -1147,9 +1150,9 @@ function renderArenaRunPickerTUI(comp: A2UIComponent, ctx: RenderContext): strin
 }
 
 function renderArenaModeToggleTUI(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const options = (comp.options as Array<{ label: string; value: string }>) || [];
-  const active = comp.active as string;
-  const action = comp.action as string;
+  const options = (prop(comp, "options") as Array<{ label: string; value: string }>) || [];
+  const active = prop(comp, "active") as string;
+  const action = prop(comp, "action") as string;
   const lines: string[] = [];
   for (const opt of options) {
     ctx.actionCounter++;
@@ -1167,8 +1170,8 @@ function renderArenaModeToggleTUI(comp: A2UIComponent, ctx: RenderContext): stri
 }
 
 function renderCollapsible(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const title = String(comp.title || "");
-  const expanded = comp.expanded as boolean | undefined;
+  const title = String(prop(comp, "title") || "");
+  const expanded = prop(comp, "expanded") as boolean | undefined;
   const lines: string[] = [];
 
   const arrow = expanded ? "▼" : "▶";
@@ -1183,7 +1186,7 @@ function renderCollapsible(comp: A2UIComponent, ctx: RenderContext): string[] {
 
 function renderActivityRings(comp: A2UIComponent, ctx: RenderContext): string[] {
   const rings =
-    (comp.rings as Array<{
+    (prop(comp, "rings") as Array<{
       value: number;
       max: number;
       label: string;
@@ -1211,8 +1214,12 @@ function renderActivityRings(comp: A2UIComponent, ctx: RenderContext): string[] 
 
 function renderLogViewer(comp: A2UIComponent, ctx: RenderContext): string[] {
   const entries =
-    (comp.entries as Array<{ time: string; level: string; subsystem: string; message: string }>) ||
-    [];
+    (prop(comp, "entries") as Array<{
+      time: string;
+      level: string;
+      subsystem: string;
+      message: string;
+    }>) || [];
   const lines: string[] = [];
 
   // Header
@@ -1259,7 +1266,7 @@ function renderLogViewer(comp: A2UIComponent, ctx: RenderContext): string[] {
 }
 
 function renderModal(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const title = String(comp.title || "");
+  const title = String(prop(comp, "title") || "");
   const lines: string[] = [];
   const boxWidth = Math.min(60, ctx.width - 4);
 
@@ -1281,10 +1288,11 @@ function renderModal(comp: A2UIComponent, ctx: RenderContext): string[] {
 // ============================================================================
 
 function renderChildren(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const children = comp.children || [];
+  const childIds = getChildren(comp);
+  if (!childIds.length) return [];
   const lines: string[] = [];
 
-  for (const childId of children) {
+  for (const childId of childIds) {
     const child = ctx.components.get(childId);
     if (child) {
       lines.push(...renderComponent(child, ctx));

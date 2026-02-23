@@ -411,7 +411,7 @@ export function getCategoryIcon(category: string): string {
 // Main Lab Page — 5-Tab Dashboard
 // ============================================================================
 
-export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage {
+export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // ---- Header ----
@@ -621,9 +621,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     // Header row: title + mode toggle + run picker
     const arenaTitle = ui.text(t("evolution.selectRunsForComparison"), "label");
     const toggleId = `arena_toggle_${Date.now()}`;
-    ui.addComponent(toggleId, {
-      id: toggleId,
-      type: "arena_mode_toggle",
+    ui.addRaw(toggleId, "ArenaModeToggle", {
       options: [
         { label: t("evolution.categoriesMode"), value: "categories" },
         { label: t("evolution.criteriaMode"), value: "criteria" },
@@ -634,9 +632,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
     // Run picker dropdown (replaces pills)
     const pickerId = `arena_picker_${Date.now()}`;
-    ui.addComponent(pickerId, {
-      id: pickerId,
-      type: "arena_run_picker",
+    ui.addRaw(pickerId, "ArenaRunPicker", {
       runs: recentRuns.map((r) => ({
         id: r.id,
         label:
@@ -675,9 +671,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       // Radar chart (Recharts)
       const radarId = `radar_chart_${Date.now()}`;
       const radarChartData = buildRadarChartData(data.comparisonRuns, radarMode);
-      ui.addComponent(radarId, {
-        id: radarId,
-        type: "radar_chart",
+      ui.addRaw(radarId, "RadarChart", {
         radarData: radarChartData.data,
         radarSeries: radarChartData.series,
         height: 400,
@@ -687,9 +681,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       // Score table card (custom component)
       const scoreTitleId = ui.text(t("evolution.overallScores"), "label");
       const scoreTableId = `arena_score_${Date.now()}`;
-      ui.addComponent(scoreTableId, {
-        id: scoreTableId,
-        type: "arena_score_table",
+      ui.addRaw(scoreTableId, "ArenaScoreTable", {
         rows: data.comparisonRuns.map((cr) => ({
           label: cr.label,
           color: cr.color,
@@ -732,9 +724,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
           }));
 
           const catCardId = `arena_cat_${cs.category}_${Date.now()}`;
-          ui.addComponent(catCardId, {
-            id: catCardId,
-            type: "arena_category_card",
+          ui.addRaw(catCardId, "ArenaCategoryCard", {
             categoryName: getCategoryLabel(cs.category),
             categoryColor: SHARP_CATEGORY_COLORS[cs.category] || "#818cf8",
             categoryIcon: getCategoryIcon(cs.category),
@@ -877,9 +867,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
         scores: [{ value: sub.score <= 1 ? sub.score : sub.score / 100, color: catColor }],
       }));
       const catCardId = `bench_cat_${cs.category}_${Date.now()}`;
-      ui.addComponent(catCardId, {
-        id: catCardId,
-        type: "arena_category_card",
+      ui.addRaw(catCardId, "ArenaCategoryCard", {
         categoryName: getCategoryLabel(cs.category),
         categoryColor: catColor,
         categoryIcon: getCategoryIcon(cs.category),

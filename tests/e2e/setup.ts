@@ -295,24 +295,48 @@ export async function sendChat(
 }
 
 /**
- * Find a page update in updates array.
+ * Find a surfaceUpdate message for a given surfaceId in updates array (v0.8 format).
+ * Returns a compat object with { components, root } for assertions.
+ */
+export function findSurfaceUpdate(
+  updates: unknown[],
+  surfaceId: string
+): { components: unknown[]; root: string } | undefined {
+  const msgs = updates as Record<string, unknown>[];
+  const surfaceMsg = msgs.find(
+    (u) => "surfaceUpdate" in u && (u.surfaceUpdate as any)?.surfaceId === surfaceId
+  );
+  const renderMsg = msgs.find(
+    (u) => "beginRendering" in u && (u.beginRendering as any)?.surfaceId === surfaceId
+  );
+  if (!surfaceMsg) return undefined;
+  return {
+    components: (surfaceMsg as any).surfaceUpdate.components,
+    root: renderMsg ? (renderMsg as any).beginRendering.root : "",
+  };
+}
+
+/**
+ * Legacy helper — find any surfaceUpdate in updates (for tests that just check "page exists").
+ * Returns a truthy object if any surfaceUpdate for "main" is found.
  */
 export function findPageUpdate(updates: unknown[]): Record<string, unknown> | undefined {
-  return (updates as Record<string, unknown>[]).find((u) => u.type === "page");
+  const main = findSurfaceUpdate(updates, "main");
+  if (!main) return undefined;
+  // Return a compat object that tests can check
+  return { type: "page", main, sidebar: findSurfaceUpdate(updates, "sidebar") } as any;
 }
 
 /**
- * Extract sidebar from page update.
+ * Extract sidebar from a page update compat object.
  */
 export function getSidebar(update: Record<string, unknown>): Record<string, unknown> | undefined {
-  const surfaces = update.surfaces as Record<string, unknown> | undefined;
-  return surfaces?.sidebar as Record<string, unknown> | undefined;
+  return update.sidebar as Record<string, unknown> | undefined;
 }
 
 /**
- * Extract main surface from page update.
+ * Extract main surface from a page update compat object.
  */
 export function getMain(update: Record<string, unknown>): Record<string, unknown> | undefined {
-  const surfaces = update.surfaces as Record<string, unknown> | undefined;
-  return surfaces?.main as Record<string, unknown> | undefined;
+  return update.main as Record<string, unknown> | undefined;
 }

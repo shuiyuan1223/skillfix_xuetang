@@ -18,11 +18,14 @@ function renderChatInput(sendAction = mock()) {
     components: [
       {
         id: "ci1",
-        type: "chat_input",
-        placeholder: "Type a message...",
-        action: "send_message",
-        streaming: false,
-        disabled: false,
+        component: {
+          ChatInput: {
+            placeholder: { literalString: "Type a message..." },
+            action: { literalString: "send_message" },
+            streaming: { literalBoolean: false },
+            disabled: { literalBoolean: false },
+          },
+        },
       },
     ],
     root_id: "ci1",

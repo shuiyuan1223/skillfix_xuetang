@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import type { A2UIComponent, A2UISurfaceData, MessagePart } from "../../lib/types";
+import { componentType, prop, getChildren } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
 import { Markdown } from "../../lib/markdown";
 import { i18n } from "../../lib/i18n";
@@ -215,54 +216,54 @@ export function A2UIRenderer({
   function renderComponent(id: string): React.ReactNode {
     const c = components.get(id);
     if (!c) return null;
-    switch (c.type) {
-      case "column": return rcColumn(c);
-      case "row": return rcRow(c);
-      case "grid": return rcGrid(c);
-      case "text": return rcText(c);
-      case "card": return rcCard(c);
-      case "stat_card": return rcStatCard(c);
-      case "metric": return rcMetric(c);
-      case "chart": return rcChart(c);
-      case "table": return rcTable(c);
-      case "button": return rcButton(c);
-      case "nav": return rcNav(c);
-      case "tabs": return rcTabs(c);
-      case "progress": return rcProgress(c);
-      case "badge": return rcBadge(c);
-      case "skeleton": return rcSkeleton(c);
-      case "divider": return <div className="sidebar-divider" />;
-      case "spacer": return <div style={{ height: (c.height as number) || 16 }} />;
-      case "chat_messages": return rcChatMessages(c);
-      case "chat_input": return rcChatInput(c);
-      case "code_editor": return renderCodeEditor(c, ctx);
-      case "commit_list": return renderCommitList(c, ctx);
-      case "diff_view": return renderDiffView(c, ctx);
-      case "data_table": return renderDataTable(c, ctx);
-      case "score_gauge": return renderScoreGauge(c, ctx);
-      case "activity_rings": return renderActivityRings(c, ctx);
-      case "status_badge": return renderStatusBadge(c, ctx);
-      case "collapsible": return renderCollapsible(c, ctx);
-      case "modal": return renderModalComponent(c, ctx);
-      case "form": return renderForm(c, ctx);
-      case "form_input": return renderFormInput(c, ctx);
-      case "git_timeline": return renderGitTimeline(c, ctx);
-      case "step_indicator": return renderStepIndicator(c, ctx);
-      case "file_tree": return renderFileTree(c, ctx);
-      case "arena_pills": return renderArenaPills(c, ctx);
-      case "arena_score_table": return renderArenaScoreTable(c, ctx);
-      case "arena_category_card": return renderArenaCategoryCard(c, ctx);
-      case "radar_chart": return renderRadarChart(c, ctx);
-      case "arena_run_picker": return renderArenaRunPicker(c, ctx);
-      case "arena_mode_toggle": return renderArenaModeToggle(c, ctx);
-      case "playground_fab": return renderPlaygroundFab(c, ctx);
-      case "version_graph": return renderVersionGraph(c, ctx);
-      case "evolution_pipeline": return renderEvolutionPipeline(c, ctx);
-      case "log_viewer": return renderLogViewer(c, ctx);
-      case "auth_page": return rcAuthPage(c);
-      case "tag_picker": return <TagPickerComponent key={(c.stableKey as string) || c.id} c={c} sendAction={sendAction} />;
+    switch (componentType(c)) {
+      case "Column": return rcColumn(c);
+      case "Row": return rcRow(c);
+      case "Grid": return rcGrid(c);
+      case "Text": return rcText(c);
+      case "Card": return rcCard(c);
+      case "StatCard": return rcStatCard(c);
+      case "Metric": return rcMetric(c);
+      case "Chart": return rcChart(c);
+      case "Table": return rcTable(c);
+      case "Button": return rcButton(c);
+      case "Nav": return rcNav(c);
+      case "Tabs": return rcTabs(c);
+      case "Progress": return rcProgress(c);
+      case "Badge": return rcBadge(c);
+      case "Skeleton": return rcSkeleton(c);
+      case "Divider": return <div className="sidebar-divider" />;
+      case "Spacer": return <div style={{ height: (prop(c, "height") as number) || 16 }} />;
+      case "ChatMessages": return rcChatMessages(c);
+      case "ChatInput": return rcChatInput(c);
+      case "CodeEditor": return renderCodeEditor(c, ctx);
+      case "CommitList": return renderCommitList(c, ctx);
+      case "DiffView": return renderDiffView(c, ctx);
+      case "DataTable": return renderDataTable(c, ctx);
+      case "ScoreGauge": return renderScoreGauge(c, ctx);
+      case "ActivityRings": return renderActivityRings(c, ctx);
+      case "StatusBadge": return renderStatusBadge(c, ctx);
+      case "Collapsible": return renderCollapsible(c, ctx);
+      case "Modal": return renderModalComponent(c, ctx);
+      case "Form": return renderForm(c, ctx);
+      case "FormInput": return renderFormInput(c, ctx);
+      case "GitTimeline": return renderGitTimeline(c, ctx);
+      case "StepIndicator": return renderStepIndicator(c, ctx);
+      case "FileTree": return renderFileTree(c, ctx);
+      case "ArenaPills": return renderArenaPills(c, ctx);
+      case "ArenaScoreTable": return renderArenaScoreTable(c, ctx);
+      case "ArenaCategoryCard": return renderArenaCategoryCard(c, ctx);
+      case "RadarChart": return renderRadarChart(c, ctx);
+      case "ArenaRunPicker": return renderArenaRunPicker(c, ctx);
+      case "ArenaModeToggle": return renderArenaModeToggle(c, ctx);
+      case "PlaygroundFab": return renderPlaygroundFab(c, ctx);
+      case "VersionGraph": return renderVersionGraph(c, ctx);
+      case "EvolutionPipeline": return renderEvolutionPipeline(c, ctx);
+      case "LogViewer": return renderLogViewer(c, ctx);
+      case "AuthPage": return rcAuthPage(c);
+      case "TagPicker": return <TagPickerComponent key={(prop(c, "stableKey") as string) || c.id} c={c} sendAction={sendAction} />;
       default:
-        return <div className="text-text-muted text-xs p-2">[Unknown: {c.type}]</div>;
+        return <div className="text-text-muted text-xs p-2">[Unknown: {componentType(c)}]</div>;
     }
   }
 
@@ -290,27 +291,27 @@ export function A2UIRenderer({
   // ---- Layout Components ----
 
   function rcColumn(c: A2UIComponent) {
-    const gap = (c.gap as number) || 0;
-    const padding = (c.padding as number) || 0;
-    const align = (c.align as string) || "stretch";
-    const extraStyle = (c.style as string) || "";
-    const className = (c.className as string) || "";
+    const gap = (prop(c, "gap") as number) || 0;
+    const padding = (prop(c, "padding") as number) || 0;
+    const align = (prop(c, "align") as string) || "stretch";
+    const extraStyle = (prop(c, "style") as string) || "";
+    const className = (prop(c, "className") as string) || "";
     const isGrid = extraStyle.includes("display: grid");
     const baseClass = isGrid ? className : `flex flex-col ${className}`;
     return (
       <div className={baseClass} style={parseStyle(`gap: ${gap}px; padding: ${padding}px; align-items: ${align}; ${extraStyle}`)}>
-        {renderChildren(c.children)}
+        {renderChildren(getChildren(c))}
       </div>
     );
   }
 
   function rcRow(c: A2UIComponent) {
-    const gap = (c.gap as number) || 0;
-    const rawJustify = (c.justify as string) || "start";
-    const align = (c.align as string) || "center";
-    const wrap = c.wrap as boolean;
-    const className = (c.className as string) || "";
-    const extraStyle = (c.style as string) || "";
+    const gap = (prop(c, "gap") as number) || 0;
+    const rawJustify = (prop(c, "justify") as string) || "start";
+    const align = (prop(c, "align") as string) || "center";
+    const wrap = prop(c, "wrap") as boolean;
+    const className = (prop(c, "className") as string) || "";
+    const extraStyle = (prop(c, "style") as string) || "";
     // Map shorthand values to valid CSS
     const justifyMap: Record<string, string> = {
       start: "flex-start", center: "center", end: "flex-end",
@@ -319,19 +320,19 @@ export function A2UIRenderer({
     const justify = justifyMap[rawJustify] || rawJustify;
     return (
       <div className={`flex flex-row ${wrap ? "flex-wrap" : ""} ${className}`} style={parseStyle(`gap: ${gap}px; justify-content: ${justify}; align-items: ${align}; ${extraStyle}`)}>
-        {renderChildren(c.children)}
+        {renderChildren(getChildren(c))}
       </div>
     );
   }
 
   function rcGrid(c: A2UIComponent) {
-    const columns = (c.columns as number) || 2;
-    const gap = (c.gap as number) || 16;
+    const columns = (prop(c, "columns") as number) || 2;
+    const gap = (prop(c, "gap") as number) || 16;
     const minColWidth = columns >= 4 ? 160 : columns >= 3 ? 200 : 240;
     return (
       <div className="grid stagger-children"
            style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${minColWidth}px, 100%), 1fr))`, gap }}>
-        {(c.children || []).map((id, index) => (
+        {getChildren(c).map((id, index) => (
           <div key={id} style={{ "--stagger-index": index } as React.CSSProperties}>{renderComponent(id)}</div>
         ))}
       </div>
@@ -341,12 +342,12 @@ export function A2UIRenderer({
   // ---- Content Components ----
 
   function rcText(c: A2UIComponent) {
-    const variant = (c.variant as string) || "body";
-    const color = (c.color as string) || "inherit";
-    const weight = (c.weight as string) || "normal";
-    const text = c.text as string;
-    const className = (c.className as string) || "";
-    const extraStyle = (c.style as string) || "";
+    const variant = (prop(c, "variant") as string) || "body";
+    const color = (prop(c, "color") as string) || "inherit";
+    const weight = (prop(c, "weight") as string) || "normal";
+    const text = prop(c, "text") as string;
+    const className = (prop(c, "className") as string) || "";
+    const extraStyle = (prop(c, "style") as string) || "";
     const textVariants: Record<string, string> = {
       h1: "text-[2rem] font-bold",
       h2: "text-2xl font-semibold",
@@ -358,15 +359,15 @@ export function A2UIRenderer({
     const variantClass = textVariants[variant] || textVariants.body;
     return (
       <span className={`${variantClass} ${className}`} style={parseStyle(`color: ${color}; font-weight: ${weight}; ${extraStyle}`)}>
-        {c.markdown ? <Markdown>{text}</Markdown> : text}
+        {prop(c, "markdown") ? <Markdown>{text}</Markdown> : text}
       </span>
     );
   }
 
   function rcCard(c: A2UIComponent) {
-    const title = c.title as string;
-    const padding = (c.padding as number) || 20;
-    const className = (c.className as string) || "";
+    const title = prop(c, "title") as string;
+    const padding = (prop(c, "padding") as number) || 20;
+    const className = (prop(c, "className") as string) || "";
     return (
       <div
         className={`card-hover bg-surface-card border border-border rounded-xl ${className}`}
@@ -377,18 +378,18 @@ export function A2UIRenderer({
         }}
       >
         {title && <div className="text-[15px] font-semibold mb-4 text-text-strong tracking-tight">{title}</div>}
-        {renderChildren(c.children)}
+        {renderChildren(getChildren(c))}
       </div>
     );
   }
 
   function rcStatCard(c: A2UIComponent) {
-    const title = c.title as string;
-    const value = c.value as string | number;
-    const subtitle = c.subtitle as string;
-    const icon = c.icon as string;
-    const trend = c.trend as { direction: string; value: string } | undefined;
-    const color = (c.color as string) || "rgb(var(--color-text))";
+    const title = prop(c, "title") as string;
+    const value = prop(c, "value") as string | number;
+    const subtitle = prop(c, "subtitle") as string;
+    const icon = prop(c, "icon") as string;
+    const trend = prop(c, "trend") as { direction: string; value: string } | undefined;
+    const color = (prop(c, "color") as string) || "rgb(var(--color-text))";
     const trendColors: Record<string, string> = {
       up: "text-emerald-500", down: "text-red-500", stable: "text-text-muted",
     };
@@ -417,10 +418,10 @@ export function A2UIRenderer({
   }
 
   function rcMetric(c: A2UIComponent) {
-    const label = c.label as string;
-    const value = c.value as string | number;
-    const unit = c.unit as string;
-    const icon = c.icon as string;
+    const label = prop(c, "label") as string;
+    const value = prop(c, "value") as string | number;
+    const unit = prop(c, "unit") as string;
+    const icon = prop(c, "icon") as string;
     return (
       <div className="flex items-baseline gap-1">
         {icon && <span className="text-base">{icon}</span>}
@@ -432,12 +433,12 @@ export function A2UIRenderer({
   }
 
   function rcChart(c: A2UIComponent) {
-    const chartType = c.chartType as string;
-    const data = c.data as Record<string, unknown>[];
-    const height = (c.height as number) || 200;
-    const xKey = c.xKey as string;
-    const yKey = c.yKey as string;
-    const color = (c.color as string) || "#667eea";
+    const chartType = prop(c, "chartType") as string;
+    const data = prop(c, "data") as Record<string, unknown>[];
+    const height = (prop(c, "height") as number) || 200;
+    const xKey = prop(c, "xKey") as string;
+    const yKey = prop(c, "yKey") as string;
+    const color = (prop(c, "color") as string) || "#667eea";
 
     if (!data || data.length === 0) {
       return <div className="flex items-center justify-center text-text-muted" style={{ height }}>No data</div>;
@@ -535,8 +536,8 @@ export function A2UIRenderer({
   }
 
   function rcTable(c: A2UIComponent) {
-    const columns = c.columns as { key: string; label: string }[];
-    const rows = c.rows as Record<string, unknown>[];
+    const columns = prop(c, "columns") as { key: string; label: string }[];
+    const rows = prop(c, "rows") as Record<string, unknown>[];
     return (
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
@@ -564,13 +565,13 @@ export function A2UIRenderer({
   // ---- Interactive Components ----
 
   function rcButton(c: A2UIComponent) {
-    const label = c.label as string;
-    const action = c.action as string;
-    const variant = (c.variant as string) || "primary";
-    const disabled = c.disabled as boolean;
-    const payload = c.payload as Record<string, unknown>;
-    const icon = c.icon as string | undefined;
-    const tooltip = c.tooltip as string | undefined;
+    const label = prop(c, "label") as string;
+    const action = prop(c, "action") as string;
+    const variant = (prop(c, "variant") as string) || "primary";
+    const disabled = prop(c, "disabled") as boolean;
+    const payload = prop(c, "payload") as Record<string, unknown>;
+    const icon = prop(c, "icon") as string | undefined;
+    const tooltip = prop(c, "tooltip") as string | undefined;
     const isIconOnly = icon && !label;
 
     const btnVariants: Record<string, string> = {
@@ -619,9 +620,9 @@ export function A2UIRenderer({
   // rcTagPicker extracted to standalone TagPickerComponent (see below)
 
   function rcNav(c: A2UIComponent) {
-    const items = c.items as { id: string; label: string; icon?: string }[];
-    const activeId = c.activeId as string;
-    const orientation = (c.orientation as string) || "vertical";
+    const items = prop(c, "items") as { id: string; label: string; icon?: string }[];
+    const activeId = prop(c, "activeId") as string;
+    const orientation = (prop(c, "orientation") as string) || "vertical";
     const navDir = orientation === "horizontal" ? "flex-row" : "flex-col";
     return (
       <nav className={`flex gap-1 items-center ${navDir}`}>
@@ -648,9 +649,9 @@ export function A2UIRenderer({
   }
 
   function rcTabs(c: A2UIComponent) {
-    const tabs = c.tabs as { id: string; label: string }[];
-    const activeTab = c.activeTab as string;
-    const contentIds = c.contentIds as Record<string, string>;
+    const tabs = prop(c, "tabs") as { id: string; label: string }[];
+    const activeTab = prop(c, "activeTab") as string;
+    const contentIds = prop(c, "contentIds") as Record<string, string>;
     return (
       <div>
         <div className="flex border-b border-border gap-0">
@@ -672,10 +673,10 @@ export function A2UIRenderer({
   }
 
   function rcProgress(c: A2UIComponent) {
-    const value = (c.value as number) || 0;
-    const maxValue = (c.maxValue as number) || 100;
-    const label = c.label as string;
-    const color = (c.color as string) || "#667eea";
+    const value = (prop(c, "value") as number) || 0;
+    const maxValue = (prop(c, "maxValue") as number) || 100;
+    const label = prop(c, "label") as string;
+    const color = (prop(c, "color") as string) || "#667eea";
     const pct = Math.min(100, (value / maxValue) * 100);
     return (
       <div>
@@ -688,8 +689,8 @@ export function A2UIRenderer({
   }
 
   function rcBadge(c: A2UIComponent) {
-    const text = c.text as string;
-    const variant = (c.variant as string) || "default";
+    const text = prop(c, "text") as string;
+    const variant = (prop(c, "variant") as string) || "default";
     const badgeVariants: Record<string, string> = {
       default: "bg-slate-500/20 text-slate-300",
       success: "bg-emerald-500/20 text-emerald-400",
@@ -701,9 +702,9 @@ export function A2UIRenderer({
   }
 
   function rcSkeleton(c: A2UIComponent) {
-    const variant = (c.variant as string) || "rectangular";
-    const width = c.width || "100%";
-    const height = c.height || (variant === "text" ? "1em" : "100px");
+    const variant = (prop(c, "variant") as string) || "rectangular";
+    const width = prop(c, "width") || "100%";
+    const height = prop(c, "height") || (variant === "text" ? "1em" : "100px");
     const radiusClass = variant === "circular" ? "rounded-full" : variant === "text" ? "rounded" : "rounded-xl";
     return (
       <div
@@ -716,13 +717,13 @@ export function A2UIRenderer({
   // ---- Chat Components ----
 
   function rcChatMessages(c: A2UIComponent) {
-    const rawMessages = (c.messages as any[]) || [];
-    const streaming = c.streaming as boolean;
-    const streamingContent = c.streamingContent as string;
-    const welcomeTitle = c.welcomeTitle as string | undefined;
-    const welcomeSubtitle = c.welcomeSubtitle as string | undefined;
-    const welcomeIcon = (c.welcomeIcon as string) || "bot";
-    const welcomeActions = c.welcomeActions as Array<{ label: string; icon?: string; action: string; content: string }> | undefined;
+    const rawMessages = (prop(c, "messages") as any[]) || [];
+    const streaming = prop(c, "streaming") as boolean;
+    const streamingContent = prop(c, "streamingContent") as string;
+    const welcomeTitle = prop(c, "welcomeTitle") as string | undefined;
+    const welcomeSubtitle = prop(c, "welcomeSubtitle") as string | undefined;
+    const welcomeIcon = (prop(c, "welcomeIcon") as string) || "bot";
+    const welcomeActions = prop(c, "welcomeActions") as Array<{ label: string; icon?: string; action: string; content: string }> | undefined;
 
     // Server-driven welcome screen
     if (rawMessages.length === 0 && !streaming && welcomeTitle) {
@@ -735,7 +736,7 @@ export function A2UIRenderer({
           {welcomeActions && welcomeActions.length > 0 && (
             <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
               {welcomeActions.map((a, i) => (
-                <button key={i} className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animationDelay: `${i * 60}ms`, animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards" }} onClick={() => { const actionName = (c.action as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
+                <button key={i} className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animationDelay: `${i * 60}ms`, animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards" }} onClick={() => { const actionName = (prop(c, "action") as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
                   {a.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[a.icon] || "" }} />}
                   {a.label}
                 </button>
@@ -746,7 +747,7 @@ export function A2UIRenderer({
       );
     }
 
-    const noWelcome = c.noWelcome as boolean;
+    const noWelcome = prop(c, "noWelcome") as boolean;
     if (rawMessages.length === 0 && !streaming && noWelcome) {
       return (
         <div className="flex-1 flex items-center justify-center p-4 text-text-muted text-[13px] opacity-50">
@@ -905,7 +906,7 @@ export function A2UIRenderer({
             // Skip empty assistant messages that aren't actively streaming
             if (!isActiveMsg && !hasVisibleParts) return null;
 
-            const thinkingMode = c.thinkingMode as boolean;
+            const thinkingMode = prop(c, "thinkingMode") as boolean;
             const hasToolCalls = msg.parts.some((p) => p.type === "tool_use");
 
             return (
@@ -959,9 +960,9 @@ export function A2UIRenderer({
           }
         })}
 
-        {!streaming && (c.quickReplies as Array<{ label: string; content: string; icon?: string; variant?: string }>)?.length ? (
+        {!streaming && (prop(c, "quickReplies") as Array<{ label: string; content: string; icon?: string; variant?: string }>)?.length ? (
           <div className="flex gap-2 pl-13 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal">
-            {(c.quickReplies as Array<{ label: string; content: string; icon?: string; variant?: string }>).map((qr, i) => (
+            {(prop(c, "quickReplies") as Array<{ label: string; content: string; icon?: string; variant?: string }>).map((qr, i) => (
               <button
                 key={i}
                 className={`quick-reply-btn flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${
@@ -969,7 +970,7 @@ export function A2UIRenderer({
                     : qr.variant === "primary" ? "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50"
                     : "border-border text-text-secondary bg-surface hover:bg-surface-hover hover:border-border-hover"
                 }`}
-                onClick={() => { const actionName = (c.action as string) || "send_message"; sendAction(actionName, { content: qr.content, value: qr.content }); }}
+                onClick={() => { const actionName = (prop(c, "action") as string) || "send_message"; sendAction(actionName, { content: qr.content, value: qr.content }); }}
               >
                 {qr.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[qr.icon] || "" }} />}
                 {qr.label}
@@ -982,11 +983,11 @@ export function A2UIRenderer({
   }
 
   function rcChatInput(c: A2UIComponent) {
-    const streaming = c.streaming as boolean;
-    const disabled = c.disabled as boolean;
-    const placeholder = (c.placeholder as string) || "Ask me anything...";
-    const actionName = (c.action as string) || "send_message";
-    const clearAction = c.clearAction as string | undefined;
+    const streaming = prop(c, "streaming") as boolean;
+    const disabled = prop(c, "disabled") as boolean;
+    const placeholder = (prop(c, "placeholder") as string) || "Ask me anything...";
+    const actionName = (prop(c, "action") as string) || "send_message";
+    const clearAction = prop(c, "clearAction") as string | undefined;
     const stopAction = actionName.startsWith("sa_") ? "sa_stop_generation" : "stop_generation";
     return (
       <div className="chat-input-bar flex shrink-0 gap-3 p-4 border-t border-border bg-surface backdrop-blur-[16px]">
@@ -1036,13 +1037,13 @@ export function A2UIRenderer({
   }
 
   function rcAuthPage(c: A2UIComponent) {
-    const title = c.title as string;
-    const subtitle = c.subtitle as string;
-    const tagline = c.tagline as string;
-    const buttonLabel = c.buttonLabel as string;
-    const buttonAction = c.buttonAction as string;
-    const features = c.features as Array<{ icon: string; title: string; desc: string }>;
-    const footer = c.footer as string;
+    const title = prop(c, "title") as string;
+    const subtitle = prop(c, "subtitle") as string;
+    const tagline = prop(c, "tagline") as string;
+    const buttonLabel = prop(c, "buttonLabel") as string;
+    const buttonAction = prop(c, "buttonAction") as string;
+    const features = prop(c, "features") as Array<{ icon: string; title: string; desc: string }>;
+    const footer = prop(c, "footer") as string;
 
     return (
       <div
@@ -1200,12 +1201,12 @@ function TagPickerComponent({
   c: A2UIComponent;
   sendAction: (action: string, payload?: Record<string, unknown>) => void;
 }) {
-  const selected = (c.selected as string[]) || [];
-  const options = (c.options as string[]) || [];
-  const onToggle = c.onToggle as string;
-  const basePayload = (c.payload as Record<string, unknown>) || {};
-  const placeholder = (c.placeholder as string) || "...";
-  const label = (c.label as string) || "";
+  const selected = (prop(c, "selected") as string[]) || [];
+  const options = (prop(c, "options") as string[]) || [];
+  const onToggle = prop(c, "onToggle") as string;
+  const basePayload = (prop(c, "payload") as Record<string, unknown>) || {};
+  const placeholder = (prop(c, "placeholder") as string) || "...";
+  const label = (prop(c, "label") as string) || "";
   const [open, setOpen] = React.useState(false);
   const [customVal, setCustomVal] = React.useState("");
   const dropRef = React.useRef<HTMLDivElement>(null);

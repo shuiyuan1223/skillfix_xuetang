@@ -17,13 +17,18 @@ const sidebarData: A2UISurfaceData = {
   components: [
     {
       id: "nav1",
-      type: "nav",
-      items: [
-        { id: "chat", label: "Chat", icon: "chat" },
-        { id: "health", label: "Health", icon: "heart" },
-        { id: "settings", label: "Settings", icon: "settings" },
-      ],
-      activeId: "chat",
+      component: {
+        Nav: {
+          items: {
+            literalArray: [
+              { id: "chat", label: "Chat", icon: "chat" },
+              { id: "health", label: "Health", icon: "heart" },
+              { id: "settings", label: "Settings", icon: "settings" },
+            ],
+          },
+          activeId: { literalString: "chat" },
+        },
+      },
     },
   ],
   root_id: "nav1",

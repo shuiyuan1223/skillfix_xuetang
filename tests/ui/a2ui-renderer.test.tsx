@@ -2,7 +2,7 @@ import { describe, test, expect, mock, afterEach } from "bun:test";
 import React from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { A2UIRenderer } from "../../ui/src/components/a2ui/A2UIRenderer";
-import type { A2UISurfaceData } from "../../ui/src/lib/types";
+import type { A2UISurfaceData, A2UIComponent } from "../../ui/src/lib/types";
 
 afterEach(cleanup);
 
@@ -13,10 +13,31 @@ function makeRefs() {
   };
 }
 
+/** Helper to create a v0.8 component */
+function c(id: string, typeName: string, props: Record<string, unknown>): A2UIComponent {
+  const v08Props: Record<string, any> = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "children" && Array.isArray(v) && v.every((i) => typeof i === "string")) {
+      v08Props.children = { explicitList: v };
+    } else if (typeof v === "string") {
+      v08Props[k] = { literalString: v };
+    } else if (typeof v === "number") {
+      v08Props[k] = { literalNumber: v };
+    } else if (typeof v === "boolean") {
+      v08Props[k] = { literalBoolean: v };
+    } else if (Array.isArray(v)) {
+      v08Props[k] = { literalArray: v };
+    } else {
+      v08Props[k] = { literalObject: v };
+    }
+  }
+  return { id, component: { [typeName]: v08Props } };
+}
+
 describe("A2UIRenderer", () => {
   test("renders text component", () => {
     const data: A2UISurfaceData = {
-      components: [{ id: "t1", type: "text", text: "Hello PHA" }],
+      components: [c("t1", "Text", { text: "Hello PHA" })],
       root_id: "t1",
     };
     const { container } = render(
@@ -33,9 +54,9 @@ describe("A2UIRenderer", () => {
   test("renders column with children", () => {
     const data: A2UISurfaceData = {
       components: [
-        { id: "col", type: "column", children: ["c1", "c2"] },
-        { id: "c1", type: "text", text: "Child 1" },
-        { id: "c2", type: "text", text: "Child 2" },
+        c("col", "Column", { children: ["c1", "c2"] }),
+        c("c1", "Text", { text: "Child 1" }),
+        c("c2", "Text", { text: "Child 2" }),
       ],
       root_id: "col",
     };
@@ -59,7 +80,7 @@ describe("A2UIRenderer", () => {
     const sendAction = mock();
     const data: A2UISurfaceData = {
       components: [
-        { id: "btn1", type: "button", label: "Click Me", action: "do_thing", payload: { key: "val" } },
+        c("btn1", "Button", { label: "Click Me", action: "do_thing", payload: { key: "val" } }),
       ],
       root_id: "btn1",
     };
@@ -81,15 +102,13 @@ describe("A2UIRenderer", () => {
     const sendNavigate = mock();
     const data: A2UISurfaceData = {
       components: [
-        {
-          id: "nav1",
-          type: "nav",
+        c("nav1", "Nav", {
           items: [
             { id: "chat", label: "Chat", icon: "chat" },
             { id: "health", label: "Health", icon: "heart" },
           ],
           activeId: "chat",
-        },
+        }),
       ],
       root_id: "nav1",
     };
@@ -111,8 +130,8 @@ describe("A2UIRenderer", () => {
   test("renders card component with title and children", () => {
     const data: A2UISurfaceData = {
       components: [
-        { id: "card1", type: "card", title: "My Card", children: ["t1"] },
-        { id: "t1", type: "text", text: "Card content" },
+        c("card1", "Card", { title: "My Card", children: ["t1"] }),
+        c("t1", "Text", { text: "Card content" }),
       ],
       root_id: "card1",
     };

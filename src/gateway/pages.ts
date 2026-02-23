@@ -70,7 +70,7 @@ interface ChartData {
 // Sidebar Generator
 // ============================================================================
 
-export function generateSidebar(activeView: string): A2UIMessage {
+export function generateSidebar(activeView: string): A2UIMessage[] {
   const ui = new A2UIGenerator("sidebar");
 
   // Main navigation
@@ -89,7 +89,7 @@ export function generateSidebar(activeView: string): A2UIMessage {
 
   // Divider
   const dividerId = `div_${Date.now()}`;
-  ui.addComponent(dividerId, { id: dividerId, type: "divider" });
+  ui.addRaw(dividerId, "Divider", {});
 
   // Settings navigation
   const settingsNav = ui.nav(
@@ -113,14 +113,12 @@ export function generateSidebar(activeView: string): A2UIMessage {
 // Chat Page Generator
 // ============================================================================
 
-export function generateChatPage(state: ChatState): A2UIMessage {
+export function generateChatPage(state: ChatState): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Chat messages component (stable ID to avoid DOM remount on re-render)
   const messagesId = "chat_msgs";
-  ui.addComponent(messagesId, {
-    id: messagesId,
-    type: "chat_messages",
+  ui.addRaw(messagesId, "ChatMessages", {
     action: "send_message",
     messages: state.messages,
     streaming: state.streaming,
@@ -131,9 +129,7 @@ export function generateChatPage(state: ChatState): A2UIMessage {
 
   // Chat input component
   const inputId = "chat_input";
-  ui.addComponent(inputId, {
-    id: inputId,
-    type: "chat_input",
+  ui.addRaw(inputId, "ChatInput", {
     action: "send_message",
     clearAction: "clear_chat",
     disabled: state.streaming,
@@ -144,9 +140,12 @@ export function generateChatPage(state: ChatState): A2UIMessage {
   const root = ui.column([messagesId, inputId], { gap: 0 });
 
   // Make the column fill the height
-  const rootComponent = ui["components"].get(root);
-  if (rootComponent) {
-    rootComponent["style"] = "height: 100%;";
+  const rootComp = ui["components"].get(root);
+  if (rootComp) {
+    const typeName = Object.keys(rootComp.component)[0];
+    if (typeName) {
+      rootComp.component[typeName].style = { literalString: "height: 100%;" };
+    }
   }
 
   return ui.build(root);
@@ -161,15 +160,13 @@ export function generateSystemAgentPage(state: {
   streaming: boolean;
   streamingContent: string;
   quickReplies?: QuickReply[];
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const children: string[] = [];
 
   // Chat messages with System Agent welcome screen (stable ID)
   const msgsId = "sa_msgs";
-  ui.addComponent(msgsId, {
-    id: msgsId,
-    type: "chat_messages",
+  ui.addRaw(msgsId, "ChatMessages", {
     action: "sa_send_message",
     messages: state.chatMessages,
     streaming: state.streaming,
@@ -203,9 +200,7 @@ export function generateSystemAgentPage(state: {
 
   // Chat input (fixed at bottom via flexbox, stable ID)
   const inputId = "sa_input";
-  ui.addComponent(inputId, {
-    id: inputId,
-    type: "chat_input",
+  ui.addRaw(inputId, "ChatInput", {
     disabled: state.streaming,
     streaming: state.streaming,
     placeholder: t("systemAgent.placeholder"),
@@ -217,7 +212,12 @@ export function generateSystemAgentPage(state: {
   const root = ui.column(children, { gap: 0 });
   // Fill height for sticky input pattern
   const rootComp = ui["components"].get(root);
-  if (rootComp) rootComp["style"] = "height: 100%;";
+  if (rootComp) {
+    const typeName = Object.keys(rootComp.component)[0];
+    if (typeName) {
+      rootComp.component[typeName].style = { literalString: "height: 100%;" };
+    }
+  }
 
   return ui.build(root);
 }
@@ -226,12 +226,10 @@ export function generateSystemAgentPage(state: {
 // Authorization Required Page Generator
 // ============================================================================
 
-export function generateAuthRequiredPage(): A2UIMessage {
+export function generateAuthRequiredPage(): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const rootId = "auth_page_root";
-  ui.addComponent(rootId, {
-    id: rootId,
-    type: "auth_page" as any,
+  ui.addRaw(rootId, "AuthPage", {
     title: "PHA",
     subtitle: "Personal Health Agent",
     tagline: t("auth.tagline"),
@@ -268,7 +266,7 @@ export function generateHealthPage(data: {
     latestHeartRate: number | null;
     records: ECGRecord[];
   };
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -386,7 +384,7 @@ export function generateSleepPage(data: {
   quality: HealthMetric;
   deepSleep: HealthMetric;
   sleepChart: ChartData[];
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -453,7 +451,7 @@ export function generateActivityPage(data: {
   calories: HealthMetric;
   activeMinutes: HealthMetric;
   stepsChart: ChartData[];
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -587,7 +585,7 @@ export function generateMemoryPage(data: {
   saSelectedMemoryFile?: string;
   saMemoryContent?: string;
   saEditingMemory?: boolean;
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -820,7 +818,7 @@ export function generatePromptsPage(data: {
   files: PromptInfo[];
   loading?: boolean;
   scope?: "pha" | "system";
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const scope = data.scope || "pha";
 
@@ -894,7 +892,7 @@ export function generatePromptDetailModal(data: {
   content: string;
   editing: boolean;
   commits?: CommitInfo[];
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
   const children: string[] = [];
 
@@ -983,7 +981,7 @@ export function generateSkillsPage(data: {
   editing?: boolean;
   loading?: boolean;
   category?: string;
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const category = data.category || "health-coaching";
 
@@ -1146,7 +1144,7 @@ export interface ToolPageEntry {
 export function generateToolsPage(data: {
   tools: ToolPageEntry[];
   selectedCategory?: string;
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -1204,7 +1202,7 @@ export function generateToolsPage(data: {
   return ui.build(root);
 }
 
-export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage {
+export function generateToolDetailModal(tool: ToolPageEntry): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const children: string[] = [];
@@ -1275,7 +1273,7 @@ export function generateSkillDetailModal(skill: {
   enabled: boolean;
   content: string;
   emoji?: string;
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
   const children: string[] = [];
 
@@ -1415,7 +1413,7 @@ export interface IntegrationsPageData {
   loading?: boolean;
 }
 
-export function generateIntegrationsPage(data: IntegrationsPageData): A2UIMessage {
+export function generateIntegrationsPage(data: IntegrationsPageData): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -1460,12 +1458,12 @@ export function generateIntegrationsPage(data: IntegrationsPageData): A2UIMessag
 
     // Register skeleton as tab content for all tabs
     const skeletonId = `int_tab_${data.activeTab}`;
-    ui.addComponent(skeletonId, { id: skeletonId, type: "column", children: [loadingContent] });
+    ui.addRaw(skeletonId, "Column", { children: [loadingContent] });
     // Register empty content for inactive tabs
     for (const tabId of ["overview", "issues", "prs", "branches"]) {
       if (tabId !== data.activeTab) {
         const emptyId = `int_tab_${tabId}`;
-        ui.addComponent(emptyId, { id: emptyId, type: "column", children: [] });
+        ui.addRaw(emptyId, "Column", { children: [] });
       }
     }
 
@@ -1502,26 +1500,10 @@ export function generateIntegrationsPage(data: IntegrationsPageData): A2UIMessag
   const branchesContent = data.activeTab === "branches" ? content : ui.column([], { gap: 0 });
 
   // Register tab content IDs
-  ui.addComponent("int_tab_overview", {
-    id: "int_tab_overview",
-    type: "column",
-    children: [overviewContent],
-  });
-  ui.addComponent("int_tab_issues", {
-    id: "int_tab_issues",
-    type: "column",
-    children: [issuesContent],
-  });
-  ui.addComponent("int_tab_prs", {
-    id: "int_tab_prs",
-    type: "column",
-    children: [prsContent],
-  });
-  ui.addComponent("int_tab_branches", {
-    id: "int_tab_branches",
-    type: "column",
-    children: [branchesContent],
-  });
+  ui.addRaw("int_tab_overview", "Column", { children: [overviewContent] });
+  ui.addRaw("int_tab_issues", "Column", { children: [issuesContent] });
+  ui.addRaw("int_tab_prs", "Column", { children: [prsContent] });
+  ui.addRaw("int_tab_branches", "Column", { children: [branchesContent] });
 
   const header = ui.column([headerRow, tabs], { gap: 16 });
   const root = ui.column([header], { gap: 0, padding: 24 });
@@ -1764,7 +1746,7 @@ interface LogsPageData {
   llmSelectedId?: number;
 }
 
-export function generateLogsPage(data: LogsPageData): A2UIMessage {
+export function generateLogsPage(data: LogsPageData): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -2057,7 +2039,7 @@ export interface SettingsPageData {
   rawConfigJson: string;
 }
 
-export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
+export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const saveIcon = { submitIcon: "save", submitTooltip: t("settings.saveButton") };
 
@@ -2608,7 +2590,10 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage {
   // Add some bottom padding to avoid content being cut off
   const rootComp = ui["components"].get(root);
   if (rootComp) {
-    rootComp["style"] = "padding-bottom: 40px;";
+    const typeName = Object.keys(rootComp.component)[0];
+    if (typeName) {
+      rootComp.component[typeName].style = { literalString: "padding-bottom: 40px;" };
+    }
   }
 
   return ui.build(root);
@@ -2622,7 +2607,7 @@ export function generateBenchmarkRunDetailModal(
   run: BenchmarkRunInfo,
   categoryScores: CategoryScoreInfo[],
   radarMode: "categories" | "criteria" = "categories"
-): A2UIMessage {
+): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const children: string[] = [];
@@ -2682,9 +2667,7 @@ export function generateBenchmarkRunDetailModal(
   if (categoryScores.length > 0) {
     // Mode toggle
     const toggleId = `modal_toggle_${Date.now()}`;
-    ui.addComponent(toggleId, {
-      id: toggleId,
-      type: "arena_mode_toggle",
+    ui.addRaw(toggleId, "ArenaModeToggle", {
       options: [
         { label: "5 Categories", value: "categories" },
         { label: "16 Criteria", value: "criteria" },
@@ -2710,9 +2693,7 @@ export function generateBenchmarkRunDetailModal(
     };
     const radarChartData = buildRadarChartData([comparisonRun], radarMode);
     const radarId = `modal_radar_${Date.now()}`;
-    ui.addComponent(radarId, {
-      id: radarId,
-      type: "radar_chart",
+    ui.addRaw(radarId, "RadarChart", {
       radarData: radarChartData.data,
       radarSeries: radarChartData.series,
       height: 300,
@@ -2733,9 +2714,7 @@ export function generateBenchmarkRunDetailModal(
           scores: [{ value: sub.score <= 1 ? sub.score : sub.score / 100, color: catColor }],
         }));
         const catCardId = `modal_cat_${cs.category}_${Date.now()}`;
-        ui.addComponent(catCardId, {
-          id: catCardId,
-          type: "arena_category_card",
+        ui.addRaw(catCardId, "ArenaCategoryCard", {
           categoryName: getCategoryLabel(cs.category),
           categoryColor: catColor,
           categoryIcon: getCategoryIcon(cs.category),
@@ -2792,7 +2771,7 @@ export function generateBenchmarkProgress(data: {
   total: number;
   category: string;
   profile: string;
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("progress");
 
   const title = ui.text(
@@ -2833,7 +2812,7 @@ export function generateBenchmarkProgressComplete(data: {
   passed: number;
   failed: number;
   total: number;
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("progress");
 
   const title = ui.text(t("evolution.benchmarkComplete"), "label");
@@ -2866,7 +2845,7 @@ export function generateBenchmarkProgressComplete(data: {
 export function generateToast(
   message: string,
   variant: "success" | "error" | "info" | "warning" = "info"
-): A2UIMessage {
+): A2UIMessage[] {
   const ui = new A2UIGenerator("toast");
 
   const icons: Record<string, string> = {
@@ -2910,7 +2889,7 @@ export function generatePlansPage(data: {
   reminders?: Reminder[];
   events?: CalendarEvent[];
   loading?: boolean;
-}): A2UIMessage {
+}): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -3151,7 +3130,7 @@ export function generatePlansPage(data: {
   return ui.build(root);
 }
 
-export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage {
+export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   // Description + date range
@@ -3303,30 +3282,9 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage {
 // Page Message Generator (combines sidebar + main)
 // ============================================================================
 
-export interface PageMessage {
-  type: "page";
-  surfaces: {
-    sidebar: { components: unknown[]; root_id: string };
-    main: { components: unknown[]; root_id: string };
-  };
-}
-
-export function generatePage(view: string, mainContent: A2UIMessage): PageMessage {
+export function generatePage(view: string, mainContent: A2UIMessage[]): A2UIMessage[] {
   const sidebar = generateSidebar(view);
-
-  return {
-    type: "page",
-    surfaces: {
-      sidebar: {
-        components: sidebar.components,
-        root_id: sidebar.root_id,
-      },
-      main: {
-        components: mainContent.components,
-        root_id: mainContent.root_id,
-      },
-    },
-  };
+  return [...sidebar, ...mainContent];
 }
 
 // ============================================================================
@@ -3343,7 +3301,7 @@ interface TraceDetail {
   durationMs?: number;
 }
 
-export function generateTraceDetailModal(trace: TraceDetail): A2UIMessage {
+export function generateTraceDetailModal(trace: TraceDetail): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const infoRow = ui.row(
@@ -3399,7 +3357,7 @@ interface EvaluationDetail {
   issues?: { type: string; description: string; severity: string }[];
 }
 
-export function generateEvaluationDetailModal(evaluation: EvaluationDetail): A2UIMessage {
+export function generateEvaluationDetailModal(evaluation: EvaluationDetail): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const overallGauge = ui.scoreGauge(evaluation.overallScore, {
@@ -3476,7 +3434,7 @@ interface TestCaseDetail {
   expected: { shouldMention?: string[]; shouldNotMention?: string[]; minScore?: number };
 }
 
-export function generateTestCaseDetailModal(testCase: TestCaseDetail): A2UIMessage {
+export function generateTestCaseDetailModal(testCase: TestCaseDetail): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const categoryBadge = ui.badge(testCase.category, { variant: "info" });
@@ -3550,7 +3508,7 @@ interface SuggestionDetail {
   validationResults?: { before: number; after: number; improvement: number };
 }
 
-export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2UIMessage {
+export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const typeBadge = ui.badge(suggestion.type, { variant: "info" });
@@ -3644,7 +3602,7 @@ export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2U
 // Form Modals
 // ============================================================================
 
-export function generateCreateTestCaseModal(): A2UIMessage {
+export function generateCreateTestCaseModal(): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const categoryInput = ui.formInput("category", "select", {
@@ -3691,7 +3649,7 @@ export function generateCreateTestCaseModal(): A2UIMessage {
   return ui.build(root);
 }
 
-export function generateCreateSkillModal(): A2UIMessage {
+export function generateCreateSkillModal(): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const nameInput = ui.formInput("name", "text", {
@@ -3730,7 +3688,7 @@ export function generateCreateSkillModal(): A2UIMessage {
 export function generateBenchmarkModelSelectorModal(
   models: Array<{ name: string; label: string }>,
   _defaultProfile: "quick" | "full" = "quick"
-): A2UIMessage {
+): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const modelOptions = [
@@ -3770,7 +3728,7 @@ export function generateBenchmarkModelSelectorModal(
 export function generatePromptRevertModal(
   promptName: string,
   commits: { hash: string; shortHash: string; message: string; date: string }[]
-): A2UIMessage {
+): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const info = ui.text("Select a commit to revert to:", "body");
@@ -3792,7 +3750,7 @@ export function generatePromptRevertModal(
 export function generateMergeConfirmModal(
   branch: string,
   changedFiles: { path: string; status: string }[]
-): A2UIMessage {
+): A2UIMessage[] {
   const ui = new A2UIGenerator("modal");
 
   const warning = ui.text(t("evolution.mergeConfirmDesc", { branch }), "body");
@@ -3822,6 +3780,21 @@ export function generateMergeConfirmModal(
 interface ToolCardResult {
   components: unknown[];
   root_id: string;
+}
+
+/** Extract ToolCardResult from A2UIMessage[] (surfaceUpdate + beginRendering) */
+function buildToolCardResult(messages: A2UIMessage[]): ToolCardResult {
+  let components: unknown[] = [];
+  let root_id = "";
+  for (const msg of messages) {
+    if ("surfaceUpdate" in msg) {
+      components = msg.surfaceUpdate.components;
+    }
+    if ("beginRendering" in msg) {
+      root_id = msg.beginRendering.root;
+    }
+  }
+  return { components, root_id };
 }
 
 /**
@@ -3891,7 +3864,7 @@ function generateGitDiffCards(details: Record<string, unknown>): ToolCardResult 
     unifiedDiff: diff,
   });
   const root = ui.column([diffId], { gap: 0 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateCreatePlanCards(data: unknown): ToolCardResult | null {
@@ -3936,7 +3909,7 @@ function generateCreatePlanCards(data: unknown): ToolCardResult | null {
   });
 
   const root = ui.column([grid, viewBtn], { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateHealthDataCards(data: unknown): ToolCardResult | null {
@@ -3991,7 +3964,7 @@ function generateHealthDataCards(data: unknown): ToolCardResult | null {
   children.push(viewBtn);
 
   const root = ui.column(children, { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateHeartRateCards(data: unknown): ToolCardResult | null {
@@ -4058,7 +4031,7 @@ function generateHeartRateCards(data: unknown): ToolCardResult | null {
   children.push(viewBtn);
 
   const root = ui.column(children, { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateSleepCards(data: unknown): ToolCardResult | null {
@@ -4129,7 +4102,7 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
   children.push(viewBtn);
 
   const root = ui.column(children, { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
@@ -4216,7 +4189,7 @@ function generateWeeklySummaryCards(data: unknown): ToolCardResult | null {
   children.push(viewBtn);
 
   const root = ui.column(children, { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateWorkoutsCards(data: unknown): ToolCardResult | null {
@@ -4250,7 +4223,7 @@ function generateWorkoutsCards(data: unknown): ToolCardResult | null {
   const tableCard = ui.card([table], { padding: 12 });
 
   const root = ui.column([tableCard], { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateHrvCards(data: unknown): ToolCardResult | null {
@@ -4308,7 +4281,7 @@ function generateHrvCards(data: unknown): ToolCardResult | null {
   }
 
   const root = ui.column(children, { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateBloodPressureCards(data: unknown): ToolCardResult | null {
@@ -4349,7 +4322,7 @@ function generateBloodPressureCards(data: unknown): ToolCardResult | null {
 
   const statsGrid = ui.grid([sysCard, diaCard, maxCard], { columns: 3, gap: 12 });
   const root = ui.column([statsGrid], { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateStressCards(data: unknown): ToolCardResult | null {
@@ -4406,7 +4379,7 @@ function generateStressCards(data: unknown): ToolCardResult | null {
   }
 
   const root = ui.column(children, { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateSpo2Cards(data: unknown): ToolCardResult | null {
@@ -4444,7 +4417,7 @@ function generateSpo2Cards(data: unknown): ToolCardResult | null {
 
   const statsGrid = ui.grid([currentCard, avgCard, minCard], { columns: 3, gap: 12 });
   const root = ui.column([statsGrid], { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateBodyCompositionCards(data: unknown): ToolCardResult | null {
@@ -4497,7 +4470,7 @@ function generateBodyCompositionCards(data: unknown): ToolCardResult | null {
 
   const statsGrid = ui.grid(cards, { columns: Math.min(cards.length, 3), gap: 12 });
   const root = ui.column([statsGrid], { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateBloodGlucoseCards(data: unknown): ToolCardResult | null {
@@ -4538,7 +4511,7 @@ function generateBloodGlucoseCards(data: unknown): ToolCardResult | null {
 
   const statsGrid = ui.grid([currentCard, avgCard, rangeCard], { columns: 3, gap: 12 });
   const root = ui.column([statsGrid], { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 function generateNutritionCards(data: unknown): ToolCardResult | null {
@@ -4596,7 +4569,7 @@ function generateNutritionCards(data: unknown): ToolCardResult | null {
   }
 
   const root = ui.column(children, { gap: 12 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 /**
@@ -4681,7 +4654,7 @@ function generateInsightCards(data: unknown): ToolCardResult | null {
   // Wrap everything in a card
   const cardContent = ui.column(children, { gap: 8 });
   const root = ui.card([cardContent], { padding: 16 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 /**
@@ -4702,7 +4675,7 @@ function generateGenericToolCards(data: unknown): ToolCardResult | null {
       // Simple value array → text
       const text = ui.text(data.map(String).join(", "), "body");
       const root = ui.column([text], { gap: 8 });
-      return ui.build(root);
+      return buildToolCardResult(ui.build(root));
     }
     const keys = Object.keys(first).slice(0, 6); // Limit columns
     const columns = keys.map((k) => ({ key: k, label: k }));
@@ -4717,7 +4690,7 @@ function generateGenericToolCards(data: unknown): ToolCardResult | null {
     const table = ui.dataTable(columns, rows);
     const tableCard = ui.card([table], { padding: 12 });
     const root = ui.column([tableCard], { gap: 12 });
-    return ui.build(root);
+    return buildToolCardResult(ui.build(root));
   }
 
   // Object → stat_card grid
@@ -4743,13 +4716,13 @@ function generateGenericToolCards(data: unknown): ToolCardResult | null {
     const cols = Math.min(cards.length, 3);
     const statsGrid = ui.grid(cards, { columns: cols, gap: 12 });
     const root = ui.column([statsGrid], { gap: 12 });
-    return ui.build(root);
+    return buildToolCardResult(ui.build(root));
   }
 
   // Primitive → text
   const text = ui.text(String(data), "body");
   const root = ui.column([text], { gap: 8 });
-  return ui.build(root);
+  return buildToolCardResult(ui.build(root));
 }
 
 /**
@@ -4772,7 +4745,7 @@ export function mergePendingCards(
   }
 
   const root = ui.column(childRootIds, { gap: 16 });
-  const built = ui.build(root);
+  const built = buildToolCardResult(ui.build(root));
 
   return {
     components: [...allComponents, ...built.components],

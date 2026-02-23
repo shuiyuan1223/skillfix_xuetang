@@ -1,8 +1,17 @@
+// ==================== A2UI v0.8 Standard ====================
+export type BoundValue =
+  | { literalString: string }
+  | { literalNumber: number }
+  | { literalBoolean: boolean }
+  | { literalArray: unknown[] }
+  | { literalObject: unknown }
+  | { path: string };
+
+export type ChildrenValue = { explicitList: string[] };
+
 export interface A2UIComponent {
   id: string;
-  type: string;
-  children?: string[];
-  [key: string]: unknown;
+  component: Record<string, Record<string, BoundValue | ChildrenValue>>;
 }
 
 export interface A2UISurfaceData {
@@ -10,24 +19,57 @@ export interface A2UISurfaceData {
   root_id: string;
 }
 
-export interface PageMessage {
-  type: "page";
-  surfaces: {
-    sidebar?: A2UISurfaceData;
-    main?: A2UISurfaceData;
+export interface SurfaceUpdateMessage {
+  surfaceUpdate: { surfaceId: string; components: A2UIComponent[] };
+}
+export interface BeginRenderingMessage {
+  beginRendering: { surfaceId: string; root: string; catalogId?: string };
+}
+export interface DeleteSurfaceMessage {
+  deleteSurface: { surfaceId: string };
+}
+
+export function componentType(c: A2UIComponent): string {
+  return Object.keys(c.component)[0] || "";
+}
+
+export function prop(c: A2UIComponent, key: string): unknown {
+  const props = c.component[componentType(c)];
+  if (!props) return undefined;
+  const bv = props[key];
+  if (!bv) return undefined;
+  if ("literalString" in bv) return bv.literalString;
+  if ("literalNumber" in bv) return bv.literalNumber;
+  if ("literalBoolean" in bv) return bv.literalBoolean;
+  if ("literalArray" in bv) return bv.literalArray;
+  if ("literalObject" in bv) return bv.literalObject;
+  if ("explicitList" in bv) return bv.explicitList;
+  if ("path" in bv) return bv.path;
+  return undefined;
+}
+
+export function getChildren(c: A2UIComponent): string[] {
+  const ch = c.component[componentType(c)]?.children;
+  if (ch && "explicitList" in ch) return ch.explicitList;
+  return [];
+}
+
+export function toBoundValue(v: unknown): BoundValue {
+  if (typeof v === "string") return { literalString: v };
+  if (typeof v === "number") return { literalNumber: v };
+  if (typeof v === "boolean") return { literalBoolean: v };
+  if (Array.isArray(v)) return { literalArray: v };
+  return { literalObject: v };
+}
+
+export function withProp(c: A2UIComponent, key: string, value: unknown): A2UIComponent {
+  const typeName = componentType(c);
+  return {
+    ...c,
+    component: {
+      [typeName]: { ...c.component[typeName], [key]: toBoundValue(value) },
+    },
   };
-}
-
-export interface A2UIMessage {
-  type: "a2ui";
-  surface_id: string;
-  components: A2UIComponent[];
-  root_id: string;
-}
-
-export interface ClearSurfaceMessage {
-  type: "clear_surface";
-  surface_id: string;
 }
 
 export interface AgentTextMessage {
@@ -135,9 +177,9 @@ export type MessagePart =
   | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
 
 export type WSMessage =
-  | PageMessage
-  | A2UIMessage
-  | ClearSurfaceMessage
+  | SurfaceUpdateMessage
+  | BeginRenderingMessage
+  | DeleteSurfaceMessage
   | AgentTextMessage
   | ToolCallMessage
   | ErrorMessage

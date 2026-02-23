@@ -54,13 +54,13 @@ describe("Actions", () => {
     expect(result.updates.length).toBeGreaterThan(0);
   });
 
-  test("close_modal action returns clear_surface", async () => {
+  test("close_modal action returns deleteSurface", async () => {
     const result = await sendAction(ctx.baseUrl, "close_modal");
     expect(result.updates).toBeTruthy();
-    // close_modal sends a clear_surface message
-    const clearSurface = (result.updates as Record<string, unknown>[]).find(
-      (u) => u.type === "clear_surface"
+    // close_modal sends a deleteSurface message
+    const deleteSurface = (result.updates as Record<string, unknown>[]).find(
+      (u) => "deleteSurface" in u
     );
-    expect(clearSurface).toBeTruthy();
+    expect(deleteSurface).toBeTruthy();
   });
 });

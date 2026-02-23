@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { A2UISurfaceData, WSMessage, AGUIEvent, MessagePart, QuickReply } from "./lib/types";
+import type { A2UISurfaceData, A2UIComponent, WSMessage, AGUIEvent, MessagePart, QuickReply } from "./lib/types";
+import { componentType, prop, withProp } from "./lib/types";
 import { generateUUID } from "./lib/utils";
 import { ICONS } from "./lib/icons";
 import { i18n } from "./lib/i18n";
@@ -102,6 +103,7 @@ export function App() {
   const reconnectAttemptRef = useRef(0);
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
   const handleMessageRef = useRef<(msg: WSMessage) => void>(() => {});
+  const pendingSurface = useRef(new Map<string, A2UIComponent[]>());
 
   // Keep mainDataRef in sync with mainData state
   mainDataRef.current = mainData;
@@ -497,8 +499,8 @@ export function App() {
       if (action === "settings_copy_config" || action === "settings_download_config") {
         // Find the code_editor component in current main data to get raw config
         const mainDataSnap = mainDataRef.current;
-        const editorComp = mainDataSnap?.components.find((c: any) => c.type === "code_editor" && c.readonly);
-        const configJson = (editorComp as any)?.value || "{}";
+        const editorComp = mainDataSnap?.components.find((c: A2UIComponent) => componentType(c) === "CodeEditor" && prop(c, "readonly"));
+        const configJson = editorComp ? (prop(editorComp, "value") as string) || "{}" : "{}";
         if (action === "settings_copy_config") {
           navigator.clipboard.writeText(configJson).then(() => {
             sendActionRaw("show_toast", { message: "Copied!", variant: "success" });
@@ -544,12 +546,9 @@ export function App() {
           return {
             ...prev,
             components: prev.components.map((c) => {
-              if (c.type === "chat_messages" && c.action === action) {
-                const msgs = (c.messages as any[]) || [];
-                return {
-                  ...c,
-                  messages: [...msgs, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", content: text }] }],
-                };
+              if (componentType(c) === "ChatMessages" && prop(c, "action") === action) {
+                const msgs = (prop(c, "messages") as any[]) || [];
+                return withProp(c, "messages", [...msgs, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", content: text }] }]);
               }
               return c;
             }),
@@ -571,11 +570,11 @@ export function App() {
           return {
             ...prev,
             components: prev.components.map((c) => {
-              if (c.type === "chat_messages" && (!c.action || c.action === "send_message")) {
-                return { ...c, messages: [], streaming: false };
+              if (componentType(c) === "ChatMessages" && (!prop(c, "action") || prop(c, "action") === "send_message")) {
+                return withProp(withProp(c, "messages", []), "streaming", false);
               }
-              if (c.type === "chat_input" && (!c.action || c.action === "send_message")) {
-                return { ...c, streaming: false };
+              if (componentType(c) === "ChatInput" && (!prop(c, "action") || prop(c, "action") === "send_message")) {
+                return withProp(c, "streaming", false);
               }
               return c;
             }),
@@ -674,9 +673,9 @@ export function App() {
   // Extract chat history from a2ui surface data (for initial sync)
   const extractChatHistory = useCallback((surface: A2UISurfaceData) => {
     if (chatInitializedRef.current) return;
-    const chatComp = surface.components.find((c) => c.type === "chat_messages" && (!c.action || c.action === "send_message"));
+    const chatComp = surface.components.find((c) => componentType(c) === "ChatMessages" && (!prop(c, "action") || prop(c, "action") === "send_message"));
     if (!chatComp) return;
-    const rawMessages = (chatComp.messages as any[]) || [];
+    const rawMessages = (prop(chatComp, "messages") as any[]) || [];
     if (rawMessages.length === 0) return;
     chatInitializedRef.current = true;
     const normalized: ChatMessage[] = [];
@@ -691,107 +690,117 @@ export function App() {
     setChatMessages(normalized);
   }, []);
 
+  // Surface application helpers
+  const applySurface = useCallback((surfaceId: string, data: A2UISurfaceData) => {
+    switch (surfaceId) {
+      case "sidebar":
+        setSidebarData(data);
+        break;
+      case "main":
+        setMainData(data);
+        extractChatHistory(data);
+        break;
+      case "modal":
+        setModalData(data);
+        requestAnimationFrame(() => setModalVisible(true));
+        break;
+      case "toast":
+        setToastData(data);
+        setToastExiting(false);
+        // Auto-dismiss toast: start exit animation at 4.6s, remove DOM at 5s
+        setTimeout(() => {
+          setToastExiting(true);
+        }, 4600);
+        setTimeout(() => {
+          setToastData(null);
+          setToastExiting(false);
+        }, 5000);
+        break;
+      case "progress":
+        setProgressData(data);
+        break;
+    }
+  }, [extractChatHistory]);
+
+  const clearSurface = useCallback((surfaceId: string) => {
+    switch (surfaceId) {
+      case "modal":
+        closeModal();
+        break;
+      case "toast":
+        setToastData(null);
+        break;
+      case "progress":
+        setProgressData(null);
+        break;
+    }
+  }, [closeModal]);
+
   const handleMessage = useCallback(
     (msg: WSMessage) => {
-      switch (msg.type) {
-        case "page":
-          if (msg.surfaces.sidebar) setSidebarData(msg.surfaces.sidebar);
-          if (msg.surfaces.main) {
-            setMainData(msg.surfaces.main);
-            extractChatHistory(msg.surfaces.main);
-          }
-          break;
+      // v0.8 A2UI messages
+      if ("surfaceUpdate" in msg) {
+        pendingSurface.current.set(msg.surfaceUpdate.surfaceId, msg.surfaceUpdate.components);
+        return;
+      }
+      if ("beginRendering" in msg) {
+        const { surfaceId, root } = msg.beginRendering;
+        const components = pendingSurface.current.get(surfaceId);
+        if (!components) return;
+        pendingSurface.current.delete(surfaceId);
+        applySurface(surfaceId, { components, root_id: root });
+        return;
+      }
+      if ("deleteSurface" in msg) {
+        clearSurface(msg.deleteSurface.surfaceId);
+        return;
+      }
 
-        case "a2ui":
-          switch (msg.surface_id) {
-            case "sidebar":
-              setSidebarData({ components: msg.components, root_id: msg.root_id });
-              break;
-            case "main": {
-              const mainSurface = { components: msg.components, root_id: msg.root_id };
-              setMainData(mainSurface);
-              extractChatHistory(mainSurface);
-              break;
-            }
-            case "modal":
-              setModalData({ components: msg.components, root_id: msg.root_id });
-              // Trigger enter animation on next frame
-              requestAnimationFrame(() => {
-                setModalVisible(true);
+      // Legacy / non-A2UI messages
+      if ("type" in msg) {
+        switch ((msg as any).type) {
+          case "agent_text": {
+            // Incremental streaming update — patch streamingContent without full re-render
+            const agentMsg = msg as { type: "agent_text"; content: string; is_final: boolean };
+            if (!agentMsg.is_final) {
+              setMainData((prev) => {
+                if (!prev) return prev;
+                const updated = { ...prev, components: prev.components.map((c) => {
+                  if (componentType(c) === "ChatMessages") {
+                    return withProp(c, "streamingContent", agentMsg.content);
+                  }
+                  return c;
+                })};
+                return updated;
               });
-              break;
-            case "toast":
-              setToastData({ components: msg.components, root_id: msg.root_id });
-              setToastExiting(false);
-              // Auto-dismiss toast: start exit animation at 4.6s, remove DOM at 5s
-              setTimeout(() => {
-                setToastExiting(true);
-              }, 4600);
-              setTimeout(() => {
-                setToastData(null);
-                setToastExiting(false);
-              }, 5000);
-              break;
-            case "progress":
-              setProgressData({ components: msg.components, root_id: msg.root_id });
-              break;
+            }
+            break;
           }
-          break;
 
-        case "clear_surface":
-          switch (msg.surface_id) {
-            case "modal":
-              closeModal();
-              break;
-            case "toast":
-              setToastData(null);
-              break;
-            case "progress":
-              setProgressData(null);
-              break;
-          }
-          break;
-
-        case "agent_text": {
-          // Incremental streaming update — patch streamingContent without full re-render
-          const agentMsg = msg as { type: "agent_text"; content: string; is_final: boolean };
-          if (!agentMsg.is_final) {
+          case "log_entry": {
+            // Append new log entry to current main surface log_viewer component
             setMainData((prev) => {
               if (!prev) return prev;
               const updated = { ...prev, components: prev.components.map((c) => {
-                if (c.type === "chat_messages") {
-                  return { ...c, streamingContent: agentMsg.content };
+                if (componentType(c) === "LogViewer") {
+                  const entries = (prop(c, "entries") as any[]) || [];
+                  return withProp(c, "entries", [...entries, (msg as any).entry]);
                 }
                 return c;
               })};
               return updated;
             });
+            // Auto-scroll to bottom
+            requestAnimationFrame(() => {
+              const el = document.getElementById("log-viewer-scroll");
+              if (el) el.scrollTop = el.scrollHeight;
+            });
+            break;
           }
-          break;
-        }
-
-        case "log_entry": {
-          // Append new log entry to current main surface log_viewer component
-          setMainData((prev) => {
-            if (!prev) return prev;
-            const updated = { ...prev, components: prev.components.map((c) => {
-              if (c.type === "log_viewer") {
-                return { ...c, entries: [...((c as any).entries || []), (msg as any).entry] };
-              }
-              return c;
-            })};
-            return updated;
-          });
-          // Auto-scroll to bottom
-          requestAnimationFrame(() => {
-            const el = document.getElementById("log-viewer-scroll");
-            if (el) el.scrollTop = el.scrollHeight;
-          });
-          break;
         }
       }
     },
-    [closeModal, extractChatHistory],
+    [applySurface, clearSurface],
   );
 
   // Keep handleMessageRef in sync so postAction always uses the latest
@@ -914,8 +923,8 @@ export function App() {
 
   const enhancedMainData = useMemo(() => {
     if (!mainData) return null;
-    // Check if mainData has a chat_messages component (i.e. we're on chat page)
-    const hasChatMessages = mainData.components.some((c) => c.type === "chat_messages");
+    // Check if mainData has a ChatMessages component (i.e. we're on chat page)
+    const hasChatMessages = mainData.components.some((c) => componentType(c) === "ChatMessages");
     if (!hasChatMessages || chatMessages.length === 0) return mainData;
 
     // Override chat_messages component with client-managed state
@@ -923,17 +932,17 @@ export function App() {
     return {
       ...mainData,
       components: mainData.components.map((c) => {
-        if (c.type === "chat_messages" && (!c.action || c.action === "send_message")) {
-          return {
-            ...c,
-            messages: chatMessages,
-            streaming: chatStreaming,
-            streamingContent: "", // No longer used; text is inline in parts
-            quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
-          };
+        if (componentType(c) === "ChatMessages" && (!prop(c, "action") || prop(c, "action") === "send_message")) {
+          let updated = withProp(c, "messages", chatMessages);
+          updated = withProp(updated, "streaming", chatStreaming);
+          updated = withProp(updated, "streamingContent", ""); // No longer used; text is inline in parts
+          if (quickReplies.length > 0) {
+            updated = withProp(updated, "quickReplies", quickReplies);
+          }
+          return updated;
         }
-        if (c.type === "chat_input" && (!c.action || c.action === "send_message")) {
-          return { ...c, streaming: chatStreaming };
+        if (componentType(c) === "ChatInput" && (!prop(c, "action") || prop(c, "action") === "send_message")) {
+          return withProp(c, "streaming", chatStreaming);
         }
         return c;
       }),
@@ -986,7 +995,7 @@ export function App() {
   // ---------------------------------------------------------------------------
 
   // Detect if we're showing the auth page (hide shell chrome)
-  const isAuthPage = mainData?.components.some((c) => c.type === "auth_page") ?? false;
+  const isAuthPage = mainData?.components.some((c) => componentType(c) === "AuthPage") ?? false;
 
   return (
     <div className={isAuthPage ? "" : "shell"}>

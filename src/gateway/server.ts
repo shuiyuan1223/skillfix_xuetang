@@ -108,7 +108,12 @@ import {
   listCalendarEvents,
 } from "../proactive/store.js";
 import { autoSyncPlanProgress, type HealthSnapshot } from "../agent/health-context.js";
-import type { PartsChatMessage, MessagePart, AGUIEvent } from "./a2ui.js";
+import type { PartsChatMessage, MessagePart, AGUIEvent, A2UIMessage } from "./a2ui.js";
+
+/** Send an array of A2UIMessage objects one by one through the send function */
+function sendAll(send: (msg: unknown) => void, messages: A2UIMessage[]): void {
+  for (const msg of messages) send(msg);
+}
 
 /** Find the last text part index in a parts array (ES2022-safe replacement for findLastIndex). */
 function findLastTextIdx(parts: MessagePart[]): number {
@@ -1757,12 +1762,7 @@ export class GatewaySession {
       editing: this.editingPrompt,
       commits,
     });
-    send({
-      type: "a2ui",
-      surface_id: "modal",
-      components: modal.components,
-      root_id: modal.root_id,
-    });
+    sendAll(send, modal);
   }
 
   private getUserFilePath(name: string): string | null {
@@ -1808,7 +1808,7 @@ export class GatewaySession {
     if (authConfig.dataSources.type === "huawei" && !this.isUserAuthenticated()) {
       if (!authExemptViews.some((v) => view.startsWith(v))) {
         const mainPage = generateAuthRequiredPage();
-        send(generatePage("auth", mainPage));
+        sendAll(send, generatePage("auth", mainPage));
         return;
       }
     }
@@ -1887,7 +1887,8 @@ export class GatewaySession {
 
       case "memory": {
         // Send loading page immediately
-        send(
+        sendAll(
+          send,
           generatePage(
             view,
             generateMemoryPage({
@@ -1958,7 +1959,7 @@ export class GatewaySession {
             saMemoryContent,
             saEditingMemory: this.saEditingMemory,
           });
-          send(generatePage(view, memoryPage));
+          sendAll(send, generatePage(view, memoryPage));
         } catch (e) {
           logMemory.error("Load error", { error: e });
         }
@@ -1967,7 +1968,8 @@ export class GatewaySession {
 
       case "settings/prompts": {
         // Send loading page immediately
-        send(
+        sendAll(
+          send,
           generatePage(
             view,
             generatePromptsPage({
@@ -1980,7 +1982,8 @@ export class GatewaySession {
 
         try {
           const files = this.buildOpenClaw8Files();
-          send(
+          sendAll(
+            send,
             generatePage(
               view,
               generatePromptsPage({
@@ -1997,7 +2000,8 @@ export class GatewaySession {
 
       case "settings/skills": {
         // Send loading page immediately
-        send(
+        sendAll(
+          send,
           generatePage(
             view,
             generateSkillsPage({
@@ -2037,7 +2041,8 @@ export class GatewaySession {
             })
           );
 
-          send(
+          sendAll(
+            send,
             generatePage(
               view,
               generateSkillsPage({
@@ -2059,7 +2064,8 @@ export class GatewaySession {
 
       case "settings/tools": {
         const toolsData = globalRegistry.getToolsPageData();
-        send(
+        sendAll(
+          send,
           generatePage(
             view,
             generateToolsPage({
@@ -2085,7 +2091,7 @@ export class GatewaySession {
         try {
           const labData = this.buildEvolutionLabData();
           const labPage = generateEvolutionLab(labData);
-          send(generatePage(view, labPage));
+          sendAll(send, generatePage(view, labPage));
         } catch (e) {
           logEvolution.error("Lab load error", { error: e });
         }
@@ -2108,7 +2114,8 @@ export class GatewaySession {
 
       case "settings/integrations": {
         // Send loading page immediately (no data yet)
-        send(
+        sendAll(
+          send,
           generatePage(
             view,
             generateIntegrationsPage({
@@ -2401,7 +2408,7 @@ export class GatewaySession {
         });
     }
 
-    send(generatePage(view, mainPage));
+    sendAll(send, generatePage(view, mainPage));
   }
 
   private async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
@@ -2584,12 +2591,7 @@ export class GatewaySession {
         streamingContent: isLegacy ? this.legacyChatStreamingContent : this.streamingContent,
         ...(isLegacy ? { thinkingMode: true } : {}),
       });
-      activeSend({
-        type: "a2ui",
-        surface_id: "main",
-        components: chatPage.components,
-        root_id: chatPage.root_id,
-      });
+      sendAll(activeSend, chatPage);
     }
   }
 
@@ -3176,12 +3178,7 @@ export class GatewaySession {
           // Sync failed — show plan with existing data
         }
         const modal = generatePlanDetailModal(plan);
-        send({
-          type: "a2ui",
-          surface_id: "modal",
-          components: modal.components,
-          root_id: modal.root_id,
-        });
+        sendAll(send, modal);
       }
     } else if (action.startsWith("update_plan_action:")) {
       const parts = action.replace("update_plan_action:", "").split(":");
@@ -3200,7 +3197,7 @@ export class GatewaySession {
           }
         }
         savePlan(uuid, plan);
-        send({ type: "clear_surface", surface_id: "modal" });
+        send({ deleteSurface: { surfaceId: "modal" } });
         await this.handleNavigate("plans", send);
       }
     }
@@ -3288,12 +3285,7 @@ export class GatewaySession {
       // Show a toast notification
       const variant = (payload.variant as "info" | "success" | "error") || "info";
       const toast = generateToast(payload.message as string, variant);
-      send({
-        type: "a2ui",
-        surface_id: "toast",
-        components: toast.components,
-        root_id: toast.root_id,
-      });
+      sendAll(send, toast);
     }
     // Prompts actions — modal-based viewing/editing
     else if (action === "select_file" && payload?.row) {
@@ -3358,12 +3350,7 @@ export class GatewaySession {
             content: result.content || "",
             emoji: result.metadata?.pha?.emoji,
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       } catch {
         /* skill not found — ignore */
@@ -3422,18 +3409,13 @@ export class GatewaySession {
             content: updated.content || "",
             emoji: updated.metadata?.pha?.emoji,
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       }
     } else if (action === "edit_skill_from_modal" && payload?.skillName) {
       const skillName = payload.skillName as string;
       // Close modal and navigate to skills page with skill selected for editing
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
       this.selectedSkill = skillName;
       this.selectedSkillFile = "SKILL.md";
       this.editingSkill = true;
@@ -3442,12 +3424,7 @@ export class GatewaySession {
     } else if (action === "create_skill") {
       // Show create skill modal
       const modal = generateCreateSkillModal();
-      send({
-        type: "a2ui",
-        surface_id: "modal",
-        components: modal.components,
-        root_id: modal.root_id,
-      });
+      sendAll(send, modal);
     } else if (action === "submit_create_skill" && payload) {
       const name = payload.name as string;
       const description = payload.description as string;
@@ -3455,7 +3432,7 @@ export class GatewaySession {
       const content = payload.content as string | undefined;
 
       await createSkillTool.execute({ name, description, emoji, content });
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
       await this.handleNavigate("settings/skills", send);
     }
     // ================================================================
@@ -3598,12 +3575,7 @@ export class GatewaySession {
             companionSkill: tool.companionSkill,
             inputSchema: tool.inputSchema,
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       }
     }
@@ -3620,12 +3592,7 @@ export class GatewaySession {
             content: result.content || "",
             emoji: result.metadata?.pha?.emoji,
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       } catch {
         /* skill not found — ignore */
@@ -3644,12 +3611,7 @@ export class GatewaySession {
             content: result.content || "",
             emoji: result.metadata?.pha?.emoji,
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       } catch {
         /* skill not found — ignore */
@@ -3725,7 +3687,8 @@ export class GatewaySession {
         this.integrationsTab = payload.tab as "overview" | "issues" | "prs" | "branches";
         if (this.integrationsCache) {
           // Cache available — instant tab switch
-          send(
+          sendAll(
+            send,
             generatePage(
               "settings/integrations",
               generateIntegrationsPage({
@@ -3741,7 +3704,8 @@ export class GatewaySession {
           this.loadIntegrationsTabData(send).catch(() => {});
         } else {
           // Still loading — just show skeleton for the new tab (don't re-trigger full load)
-          send(
+          sendAll(
+            send,
             generatePage(
               "settings/integrations",
               generateIntegrationsPage({
@@ -3815,12 +3779,7 @@ export class GatewaySession {
             toolCalls: trace.tool_calls ? JSON.parse(trace.tool_calls) : undefined,
             durationMs: trace.duration_ms || undefined,
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       }
     } else if (action === "view_evaluation" && payload?.row) {
@@ -3838,12 +3797,7 @@ export class GatewaySession {
             feedback: evaluation.feedback || undefined,
             issues: evaluation.issues ? JSON.parse(evaluation.issues) : undefined,
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       }
     } else if (action === "view_test_case" && payload?.row) {
@@ -3859,12 +3813,7 @@ export class GatewaySession {
             context: testCase.context ? JSON.parse(testCase.context) : undefined,
             expected: JSON.parse(testCase.expected),
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       }
     } else if (action === "view_suggestion" && payload?.row) {
@@ -3886,22 +3835,12 @@ export class GatewaySession {
               ? JSON.parse(suggestion.validation_results)
               : undefined,
           });
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       }
     } else if (action === "create_test_case") {
       const modal = generateCreateTestCaseModal();
-      send({
-        type: "a2ui",
-        surface_id: "modal",
-        components: modal.components,
-        root_id: modal.root_id,
-      });
+      sendAll(send, modal);
     } else if (action === "submit_create_test_case" && payload) {
       const category = payload.category as string;
       const query = payload.query as string;
@@ -3931,26 +3870,26 @@ export class GatewaySession {
         },
       });
 
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
       await this.handleNavigate("settings/evolution", send);
     } else if (action === "delete_test_case" && payload?.id) {
       deleteTestCase(payload.id as string);
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
       await this.handleNavigate("settings/evolution", send);
     } else if (action === "apply_suggestion" && payload?.id) {
       updateSuggestionStatus(payload.id as string, "applied");
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
       await this.handleNavigate("settings/evolution", send);
     } else if (action === "reject_suggestion" && payload?.id) {
       updateSuggestionStatus(payload.id as string, "rejected");
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
       await this.handleNavigate("settings/evolution", send);
     } else if (action === "test_suggestion" && payload?.id) {
       updateSuggestionStatus(payload.id as string, "testing");
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
       await this.handleNavigate("settings/evolution", send);
     } else if (action === "close_modal") {
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
     } else if (action === "revert_prompt" && this.selectedPrompt) {
       // Show revert modal with commit history
       setPromptsDir(
@@ -3963,12 +3902,7 @@ export class GatewaySession {
         });
         if (historyResult.success && historyResult.commits) {
           const modal = generatePromptRevertModal(this.selectedPrompt, historyResult.commits);
-          send({
-            type: "a2ui",
-            surface_id: "modal",
-            components: modal.components,
-            root_id: modal.root_id,
-          });
+          sendAll(send, modal);
         }
       } finally {
         setPromptsDir("src/prompts/pha");
@@ -3983,19 +3917,14 @@ export class GatewaySession {
       } finally {
         setPromptsDir("src/prompts/pha");
       }
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
       await this.handleNavigate("settings/prompts", send);
     } else if (action === "run_benchmark" || action === "open_benchmark_modal") {
       // Check if CLI is running a benchmark (block UI runs while CLI is active)
       const cliProgress = readBenchmarkProgress();
       if (cliProgress && cliProgress.running && cliProgress.source !== "ui") {
         const toast = generateToast(t("evolution.externalBenchmarkRunning"), "warning");
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
         return;
       }
 
@@ -4014,12 +3943,7 @@ export class GatewaySession {
           models,
           (payload?.profile as "quick" | "full") || "quick"
         );
-        send({
-          type: "a2ui",
-          surface_id: "modal",
-          components: modal.components,
-          root_id: modal.root_id,
-        });
+        sendAll(send, modal);
       } else {
         const profile = (payload?.profile as "quick" | "full") || "quick";
         this.runBenchmarkAsync(profile, send).catch((err: unknown) =>
@@ -4028,7 +3952,7 @@ export class GatewaySession {
       }
     } else if (action === "submit_run_benchmark") {
       // From model selector modal
-      send({ type: "clear_surface", surface_id: "modal" });
+      send({ deleteSurface: { surfaceId: "modal" } });
 
       const profile = (payload?.profile as "quick" | "full") || "quick";
       const modelPreset = payload?.modelPreset as string;
@@ -4074,12 +3998,7 @@ export class GatewaySession {
       }
     } else if (action === "run_auto_loop") {
       const toast = generateToast(t("evolution.autoLoopHint"), "warning");
-      send({
-        type: "a2ui",
-        surface_id: "toast",
-        components: toast.components,
-        root_id: toast.root_id,
-      });
+      sendAll(send, toast);
     } else if (action === "run_diagnose") {
       this.runDiagnoseAsync(send).catch((err: unknown) =>
         logEvolution.error("Diagnose failed", { error: err })
@@ -4092,12 +4011,7 @@ export class GatewaySession {
           ? t("evolution.versionSwitched").replace("{branch}", branch)
           : t("evolution.resetToMain");
         const toast = generateToast(msg, "success");
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
         if (this.currentView === "evolution") {
           this.sendEvolutionLabUpdate(send);
         } else {
@@ -4108,12 +4022,7 @@ export class GatewaySession {
           `Failed to switch version: ${error instanceof Error ? error.message : String(error)}`,
           "error"
         );
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
       }
     } else if (action === "merge_version" && payload?.branch) {
       // Show confirmation modal instead of merging directly
@@ -4122,37 +4031,22 @@ export class GatewaySession {
         const filePaths = getChangedFilesForVersion(branch);
         const changedFiles = filePaths.map((p) => ({ path: p, status: "modified" }));
         const modal = generateMergeConfirmModal(branch, changedFiles);
-        send({
-          type: "a2ui",
-          surface_id: "modal",
-          components: modal.components,
-          root_id: modal.root_id,
-        });
+        sendAll(send, modal);
       } catch (error) {
         const toast = generateToast(
           `Failed to prepare merge: ${error instanceof Error ? error.message : String(error)}`,
           "error"
         );
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
       }
     } else if (action === "confirm_merge" && payload?.branch) {
       // Actually execute the merge after user confirmation
       try {
-        send({ type: "clear_surface", surface_id: "modal" });
+        send({ deleteSurface: { surfaceId: "modal" } });
         mergeVersion(payload.branch as string);
         this.switchAgentVersion(null); // Reset to main after merge
         const toast = generateToast(t("evolution.versionMerged"), "success");
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
         if (this.currentView === "evolution") {
           this.sendEvolutionLabUpdate(send);
         } else {
@@ -4163,12 +4057,7 @@ export class GatewaySession {
           `Failed to merge: ${error instanceof Error ? error.message : String(error)}`,
           "error"
         );
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
       }
     } else if (action === "abandon_version" && payload?.branch) {
       try {
@@ -4177,12 +4066,7 @@ export class GatewaySession {
           this.switchAgentVersion(null); // Reset if abandoning active version
         }
         const toast = generateToast(t("evolution.versionAbandoned"), "success");
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
         if (this.currentView === "evolution") {
           this.evolutionSelectedVersion = null;
           this.sendEvolutionLabUpdate(send);
@@ -4194,12 +4078,7 @@ export class GatewaySession {
           `Failed to abandon: ${error instanceof Error ? error.message : String(error)}`,
           "error"
         );
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
       }
     } else if (action === "view_benchmark_run" && payload?.row) {
       const row = payload.row as { id: string };
@@ -4216,15 +4095,10 @@ export class GatewaySession {
         deleteBenchmarkRun(fullId);
         this.benchmarkSelectedRunIds.delete(fullId);
         // Close modal + refresh page
-        send({ type: "a2ui", surface_id: "modal", components: {}, root_id: "" });
+        send({ deleteSurface: { surfaceId: "modal" } });
         this.sendEvolutionLabUpdate(send);
         const toast = generateToast("Benchmark run deleted", "success");
-        send({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(send, toast);
       }
     } else if (action === "set_modal_radar_mode") {
       this.modalRadarMode = (payload?.mode as string) === "criteria" ? "criteria" : "categories";
@@ -4253,13 +4127,8 @@ export class GatewaySession {
       this.sendEvolutionLabUpdate(send);
     } else if (action === "run_test_case" && payload?.id) {
       const toast = generateToast("Running test case...", "info");
-      send({
-        type: "a2ui",
-        surface_id: "toast",
-        components: toast.components,
-        root_id: toast.root_id,
-      });
-      send({ type: "clear_surface", surface_id: "modal" });
+      sendAll(send, toast);
+      send({ deleteSurface: { surfaceId: "modal" } });
       logEvolution.info("Running test case", { id: payload.id });
     }
     // Integrations actions
@@ -4859,7 +4728,7 @@ export class GatewaySession {
           }
         } else if (action === "settings_copy_config" || action === "settings_download_config") {
           // Handled on frontend — just send toast
-          send(generateToast(t("settings.saved"), "success"));
+          sendAll(send, generateToast(t("settings.saved"), "success"));
           return;
         }
 
@@ -4870,12 +4739,12 @@ export class GatewaySession {
           action === "settings_tags_toggle" ||
           action === "settings_scope_toggle";
         if (!isTagOp) {
-          send(generateToast(t("settings.saved"), "success"));
+          sendAll(send, generateToast(t("settings.saved"), "success"));
         }
         await this.handleNavigate("settings/general", send);
         this._settingsExpandedAgent = undefined;
       } catch (e) {
-        send(generateToast(t("settings.saveError"), "error"));
+        sendAll(send, generateToast(t("settings.saveError"), "error"));
       }
     }
     // Default - log unhandled action (do NOT forward to agent as chat message)
@@ -4944,7 +4813,8 @@ export class GatewaySession {
       this.integrationsCache = { ghAvailable: false, timestamp: Date.now() };
     }
 
-    send(
+    sendAll(
+      send,
       generatePage(
         "settings/integrations",
         generateIntegrationsPage({
@@ -4981,7 +4851,8 @@ export class GatewaySession {
     }
 
     if (updated) {
-      send(
+      sendAll(
+        send,
         generatePage(
           "settings/integrations",
           generateIntegrationsPage({
@@ -5438,12 +5309,7 @@ export class GatewaySession {
     } else if (this.currentView === "evolution") {
       const labData = this.buildEvolutionLabData();
       const labPage = generateEvolutionLab(labData);
-      activeSend({
-        type: "a2ui",
-        surface_id: "main",
-        components: labPage.components,
-        root_id: labPage.root_id,
-      });
+      sendAll(activeSend, labPage);
     }
   }
 
@@ -5458,12 +5324,7 @@ export class GatewaySession {
         streaming: this.systemAgentStreaming,
         streamingContent: this.systemAgentStreamingContent,
       });
-      activeSend({
-        type: "a2ui",
-        surface_id: "main",
-        components: page.components,
-        root_id: page.root_id,
-      });
+      sendAll(activeSend, page);
     }
   }
 
@@ -5684,12 +5545,7 @@ export class GatewaySession {
       })),
       this.modalRadarMode
     );
-    send({
-      type: "a2ui",
-      surface_id: "modal",
-      components: modal.components,
-      root_id: modal.root_id,
-    });
+    sendAll(send, modal);
   }
 
   private async runBenchmarkAsync(
@@ -5710,12 +5566,7 @@ export class GatewaySession {
     const externalProgress = readBenchmarkProgress();
     if (externalProgress && externalProgress.source !== "ui") {
       const toast = generateToast(t("evolution.externalBenchmarkRunning"), "warning");
-      liveSend()({
-        type: "a2ui",
-        surface_id: "toast",
-        components: toast.components,
-        root_id: toast.root_id,
-      });
+      sendAll(liveSend(), toast);
       return;
     }
 
@@ -5724,12 +5575,7 @@ export class GatewaySession {
     for (const entry of this.runningBenchmarks.values()) {
       if (entry.modelId === targetModelId) {
         const toast = generateToast(t("evolution.modelAlreadyRunning"), "warning");
-        liveSend()({
-          type: "a2ui",
-          surface_id: "toast",
-          components: toast.components,
-          root_id: toast.root_id,
-        });
+        sendAll(liveSend(), toast);
         return;
       }
     }
@@ -5848,12 +5694,7 @@ export class GatewaySession {
         `Benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
         "error"
       );
-      liveSend()({
-        type: "a2ui",
-        surface_id: "toast",
-        components: errorToast.components,
-        root_id: errorToast.root_id,
-      });
+      sendAll(liveSend(), errorToast);
     } finally {
       this.runningBenchmarks.delete(trackingId);
       clearBenchmarkProgressForRun(trackingId);
@@ -5867,12 +5708,7 @@ export class GatewaySession {
 
     // Show diagnosing toast
     const startToast = generateToast(t("evolution.diagnosing"), "info");
-    liveSend()({
-      type: "a2ui",
-      surface_id: "toast",
-      components: startToast.components,
-      root_id: startToast.root_id,
-    });
+    sendAll(liveSend(), startToast);
 
     try {
       const { diagnose } = await import("../evolution/diagnose.js");
@@ -5931,12 +5767,7 @@ export class GatewaySession {
         },
         onProgress: (msg: string) => {
           const progress = generateToast(msg, "info");
-          liveSend()({
-            type: "a2ui",
-            surface_id: "toast",
-            components: progress.components,
-            root_id: progress.root_id,
-          });
+          sendAll(liveSend(), progress);
         },
       });
 
@@ -5949,12 +5780,7 @@ export class GatewaySession {
         completeMsg,
         result.weaknesses.length > 0 ? "warning" : "success"
       );
-      liveSend()({
-        type: "a2ui",
-        surface_id: "toast",
-        components: toast.components,
-        root_id: toast.root_id,
-      });
+      sendAll(liveSend(), toast);
 
       // Refresh evolution page
       if (this.currentView === "evolution") {
@@ -5967,12 +5793,7 @@ export class GatewaySession {
         `Diagnose failed: ${error instanceof Error ? error.message : String(error)}`,
         "error"
       );
-      liveSend()({
-        type: "a2ui",
-        surface_id: "toast",
-        components: toast.components,
-        root_id: toast.root_id,
-      });
+      sendAll(liveSend(), toast);
     }
   }
 
@@ -6538,7 +6359,7 @@ export async function startGateway(
       skillDebounce = setTimeout(() => {
         skillDebounce = null;
         log.info("Skill file changed, notifying clients", { event, path: changedPath });
-        sseManager.broadcast(generateToast("技能文件已更新", "info"));
+        for (const msg of generateToast("技能文件已更新", "info")) sseManager.broadcast(msg);
       }, 1000);
     });
   }
