@@ -5,15 +5,12 @@
  * AgentOS: All UI updates are sent via A2UI messages through WebSocket.
  */
 
+import type { A2UIMessage } from "./a2ui.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
-import {
-  generateDashboardPage,
-  type DashboardData,
-  type DashboardOptions,
-  type TabId,
-} from "./dashboard-pages.js";
+import { generateDashboardPage, type DashboardData, type TabId } from "./dashboard-pages.js";
 import { generateSidebar } from "./pages.js";
 import { t } from "../locales/index.js";
+import { A2UIGenerator, SURFACE_TOAST } from "./a2ui.js";
 import { getMissingScopeErrors } from "../data-sources/huawei/huawei-api.js";
 
 type SendFn = (msg: unknown) => void;
@@ -24,30 +21,42 @@ interface LoadGroup {
 }
 
 /**
- * Send sidebar + main dashboard page (used once at start)
+ * Send a progress toast notification
  */
-function sendDashboardFull(
-  send: SendFn,
-  data: DashboardData,
-  activeTab: TabId,
-  loading: boolean,
-  progress?: DashboardOptions["progress"]
-): void {
-  for (const msg of generateSidebar("dashboard")) send(msg);
-  for (const msg of generateDashboardPage(data, activeTab, { loading, progress })) send(msg);
+function sendProgress(send: SendFn, current: number, total: number, label: string): void {
+  const ui = new A2UIGenerator(SURFACE_TOAST);
+  const progressText = t("dashboard.loadingProgress")
+    .replace("{current}", String(current))
+    .replace("{total}", String(total));
+  const text = ui.text(`${progressText} - ${label}`, "caption");
+  const prog = ui.progress(Math.round((current / total) * 100), {
+    maxValue: 100,
+    size: "sm",
+    color: "#3b82f6",
+  });
+  const root = ui.column([text, prog], { gap: 4, padding: 8 });
+  for (const msg of ui.build(root)) send(msg);
 }
 
 /**
- * Send only the main dashboard page (incremental updates, no sidebar)
+ * Clear the progress toast
  */
-function sendDashboardMain(
+function clearProgress(send: SendFn): void {
+  send({ deleteSurface: { surfaceId: SURFACE_TOAST } });
+}
+
+/**
+ * Send an updated dashboard page to the main surface
+ */
+function sendDashboardPage(
   send: SendFn,
   data: DashboardData,
   activeTab: TabId,
-  loading: boolean,
-  progress?: DashboardOptions["progress"]
+  loading: boolean
 ): void {
-  for (const msg of generateDashboardPage(data, activeTab, { loading, progress })) send(msg);
+  const pageMessages = generateDashboardPage(data, activeTab, { loading });
+  const sidebarMessages = generateSidebar("dashboard");
+  for (const msg of [...sidebarMessages, ...pageMessages]) send(msg);
 }
 
 /**
@@ -276,10 +285,10 @@ export class ProgressiveDashboardLoader {
     const today = getLocalDateString(new Date());
     const groups = getGroupsForTab(activeTab, this.dataSource, today);
 
-    // 1. Send skeleton page with sidebar (full)
-    sendDashboardFull(this.send, this.data, activeTab, true);
+    // 1. Send skeleton page immediately
+    sendDashboardPage(this.send, this.data, activeTab, true);
 
-    // 2. Load groups sequentially, rendering after each group (main only)
+    // 2. Load groups sequentially, rendering after each group
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
       const results = await Promise.allSettled(group.fetchers.map((f) => f()));
@@ -291,12 +300,12 @@ export class ProgressiveDashboardLoader {
         }
       }
 
-      // Re-render with accumulated data + inline progress
+      // Send progress notification
+      sendProgress(this.send, i + 1, groups.length, group.label);
+
+      // Re-render with accumulated data
       const isLastGroup = i === groups.length - 1;
-      const progress = !isLastGroup
-        ? { current: i + 1, total: groups.length, label: group.label }
-        : undefined;
-      sendDashboardMain(this.send, this.data, activeTab, !isLastGroup, progress);
+      sendDashboardPage(this.send, this.data, activeTab, !isLastGroup);
     }
 
     // 3. Check for scope errors after all groups loaded
@@ -304,8 +313,11 @@ export class ProgressiveDashboardLoader {
     if (scopeErrors.length > 0) {
       this.data.scopeErrors = scopeErrors;
       // Re-send final page with scope error banner
-      sendDashboardMain(this.send, this.data, activeTab, false);
+      sendDashboardPage(this.send, this.data, activeTab, false);
     }
+
+    // 4. Clear progress toast
+    clearProgress(this.send);
   }
 
   /**
@@ -323,8 +335,8 @@ export class ProgressiveDashboardLoader {
     this.data.trendsMetric = metric;
     this.data.trendsRange = range;
 
-    // Show loading state (main only, sidebar already present)
-    sendDashboardMain(this.send, this.data, "trends", true);
+    // Show loading state
+    sendDashboardPage(this.send, this.data, "trends", true);
 
     try {
       const trendPoints = await this.fetchTrendData(metric, startStr, endStr);
@@ -334,7 +346,7 @@ export class ProgressiveDashboardLoader {
       this.data.trendsData = [];
     }
 
-    sendDashboardMain(this.send, this.data, "trends", false);
+    sendDashboardPage(this.send, this.data, "trends", false);
   }
 
   private async fetchTrendData(
