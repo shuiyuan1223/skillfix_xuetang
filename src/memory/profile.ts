@@ -29,11 +29,9 @@ export function getUserDir(uuid: string): string {
 export function ensureUserDir(uuid: string): string {
   const userDir = getUserDir(uuid);
 
-  if (!existsSync(userDir)) {
-    mkdirSync(userDir, { recursive: true });
-    mkdirSync(join(userDir, "memory"), { recursive: true });
-    mkdirSync(join(userDir, "sessions"), { recursive: true });
-  }
+  mkdirSync(userDir, { recursive: true });
+  mkdirSync(join(userDir, "memory"), { recursive: true });
+  mkdirSync(join(userDir, "sessions"), { recursive: true });
 
   // Ensure all 3 OpenClaw user-level files exist
   const userMdPath = join(userDir, "USER.md");
