@@ -180,33 +180,17 @@ endif
 	@echo "==> Git pull..."
 	@git pull
 	@echo ""
-	@echo "==> Packing source..."
-	@tar czf pha-sync.tar.gz \
-		--exclude='node_modules' \
-		--exclude='.git' \
-		--exclude='dist' \
-		--exclude='ui/dist' \
-		--exclude='ui/node_modules' \
-		--exclude='.env' \
-		--exclude='*.log' \
-		--exclude='pha-sync.tar.gz' \
-		.
-	@echo ""
 	$(eval _HOST := $(firstword $(subst :, ,$(REMOTE))))
 	$(eval _PATH := $(word 2,$(subst :, ,$(REMOTE))))
-	@echo "==> Uploading to $(_HOST):$(_PATH)..."
-	cmd /c scp pha-sync.tar.gz $(_HOST):$(_PATH)/pha-sync.tar.gz
-	-@del pha-sync.tar.gz 2>nul
-	@echo ""
-	@echo "==> Extracting on remote..."
-	cmd /c ssh $(_HOST) "cd $(_PATH) && tar xzf pha-sync.tar.gz && rm -f pha-sync.tar.gz"
+	@echo "==> Packing and uploading to $(_HOST):$(_PATH)..."
+	tar czf - --exclude=node_modules --exclude=.git --exclude=dist --exclude=ui/dist --exclude=ui/node_modules --exclude=.env --exclude=*.log . | ssh $(_HOST) "cd $(_PATH) && tar xzf -"
 	@echo ""
 	@echo "==> Installing on remote..."
-	cmd /c ssh $(_HOST) "cd $(_PATH) && make install"
+	ssh $(_HOST) "cd $(_PATH) && make install"
 	@echo ""
 	@echo "==> Restarting service on remote..."
-	cmd /c ssh $(_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
-	@ping -n 3 127.0.0.1 >nul 2>&1
-	cmd /c ssh $(_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
+	ssh $(_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
+	@ping -n 3 127.0.0.1 >nul 2>&1 || sleep 2
+	ssh $(_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
 	@echo ""
 	@echo "==> Sync complete!"
