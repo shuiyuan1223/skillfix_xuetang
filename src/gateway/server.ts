@@ -1137,11 +1137,8 @@ export class GatewaySession {
     // Use user-specific data source if userUuid is provided
     if (userUuid) {
       this.dataSource = createDataSourceForUser(userUuid);
-      // Only create user dir if already authenticated (avoid creating dirs for stale cookie UUIDs)
-      const userStore = getUserStore();
-      if (userStore.isAuthenticated(userUuid)) {
-        ensureUserDir(userUuid);
-      }
+      // Always ensure user dir exists so session persistence and memory writes don't ENOENT
+      ensureUserDir(userUuid);
     } else {
       this.dataSource = getDataSource();
     }
