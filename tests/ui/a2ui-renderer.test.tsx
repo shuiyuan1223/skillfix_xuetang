@@ -145,8 +145,9 @@ describe("A2UIRenderer", () => {
     );
     expect(container.textContent).toContain("My Card");
     expect(container.textContent).toContain("Card content");
-    // Card should have rounded-xl class
-    const card = container.firstElementChild as HTMLElement;
-    expect(card.className).toContain("rounded-xl");
+    // Card should have rounded-xl class (may be nested inside AnimatedContent wrapper)
+    const cardEl = container.querySelector(".rounded-xl") as HTMLElement;
+    expect(cardEl).not.toBeNull();
+    expect(cardEl!.className).toContain("rounded-xl");
   });
 });
