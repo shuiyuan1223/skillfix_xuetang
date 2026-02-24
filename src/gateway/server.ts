@@ -47,6 +47,7 @@ import {
 import { installFetchInterceptor, cleanupOldLlmLogs } from "../utils/llm-logger.js";
 import { migrateStateDir } from "../utils/state-migration.js";
 import { getMemoryManager } from "../memory/index.js";
+import { consolidateMemory } from "../memory/consolidation.js";
 import {
   appendToSession,
   loadLatestSession,
@@ -1040,6 +1041,9 @@ export class GatewaySession {
   private skillsCategory: string = "health-coaching";
   private toolsCategory: string = "all";
 
+  // Memory consolidation counter (daily log → MEMORY.md every N exchanges)
+  private exchangeCount = 0;
+
   // Memory system-agent sub-state
   private saSelectedMemoryFile: string | null = null;
   private saEditingMemory = false;
@@ -1333,6 +1337,17 @@ export class GatewaySession {
       this.extraToolsCache = [...pluginTools, ...remoteMcpTools];
     }
     return this.extraToolsCache;
+  }
+
+  private getLLMConfig(): import("../memory/compaction.js").LLMSummarizationConfig {
+    const model = resolveAgentProfileModel("pha");
+    return {
+      provider: model.provider,
+      modelId: model.modelId,
+      apiKey: model.apiKey,
+      baseUrl: model.baseUrl,
+      api: model.provider === "anthropic" ? "anthropic-messages" : "openai-completions",
+    };
   }
 
   private async getAgent(): Promise<PHAAgent> {
@@ -2561,6 +2576,12 @@ export class GatewaySession {
                 const logEntry = `- 用户: ${content.slice(0, 100)}\n- 助手: ${preview}`;
                 mm.appendDailyLog(this.userUuid, logEntry);
               }
+
+              // Consolidate daily log → MEMORY.md every 5 exchanges
+              this.exchangeCount++;
+              if (this.exchangeCount % 5 === 0 && !calledTools.has("memory_save")) {
+                void consolidateMemory(this.userUuid, this.getLLMConfig(), mm).catch(() => {});
+              }
             }
           } catch {
             // Indexing/auto-save is best-effort
@@ -2781,6 +2802,12 @@ export class GatewaySession {
               const preview = assistantText.replace(/\s+/g, " ").slice(0, 200);
               const logEntry = `- 用户: ${content.slice(0, 100)}\n- 助手: ${preview}`;
               mm.appendDailyLog(this.userUuid, logEntry);
+            }
+
+            // Consolidate daily log → MEMORY.md every 5 exchanges
+            this.exchangeCount++;
+            if (this.exchangeCount % 5 === 0 && !calledTools.has("memory_save")) {
+              void consolidateMemory(this.userUuid, this.getLLMConfig(), mm).catch(() => {});
             }
           }
         } catch {
