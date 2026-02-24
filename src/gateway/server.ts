@@ -47,6 +47,7 @@ import {
 import { installFetchInterceptor, cleanupOldLlmLogs } from "../utils/llm-logger.js";
 import { migrateStateDir } from "../utils/state-migration.js";
 import { getMemoryManager } from "../memory/index.js";
+import { consolidateMemory } from "../memory/consolidation.js";
 import {
   appendToSession,
   loadLatestSession,
@@ -1040,6 +1041,9 @@ export class GatewaySession {
   private skillsCategory: string = "health-coaching";
   private toolsCategory: string = "all";
 
+  // Memory consolidation counter (daily log → MEMORY.md every N exchanges)
+  private exchangeCount = 0;
+
   // Memory system-agent sub-state
   private saSelectedMemoryFile: string | null = null;
   private saEditingMemory = false;
@@ -1084,6 +1088,7 @@ export class GatewaySession {
   private memoryTab: "profile" | "summary" | "logs" | "search" | "system-agent" = "profile";
   private memorySearchQuery: string | undefined;
   private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
+  private selectedLogDate: string | null = null;
 
   // Plans page state
   private plansTab: PlansPageTab = "active";
@@ -1137,11 +1142,8 @@ export class GatewaySession {
     // Use user-specific data source if userUuid is provided
     if (userUuid) {
       this.dataSource = createDataSourceForUser(userUuid);
-      // Only create user dir if already authenticated (avoid creating dirs for stale cookie UUIDs)
-      const userStore = getUserStore();
-      if (userStore.isAuthenticated(userUuid)) {
-        ensureUserDir(userUuid);
-      }
+      // Always ensure user dir exists so session persistence and memory writes don't ENOENT
+      ensureUserDir(userUuid);
     } else {
       this.dataSource = getDataSource();
     }
@@ -1335,6 +1337,17 @@ export class GatewaySession {
       this.extraToolsCache = [...pluginTools, ...remoteMcpTools];
     }
     return this.extraToolsCache;
+  }
+
+  private getLLMConfig(): import("../memory/compaction.js").LLMSummarizationConfig {
+    const model = resolveAgentProfileModel("pha");
+    return {
+      provider: model.provider,
+      modelId: model.modelId,
+      apiKey: model.apiKey,
+      baseUrl: model.baseUrl,
+      api: model.provider === "anthropic" ? "anthropic-messages" : "openai-completions",
+    };
   }
 
   private async getAgent(): Promise<PHAAgent> {
@@ -1945,15 +1958,36 @@ export class GatewaySession {
             }
           }
 
+          // Load selected daily log content if viewing detail
+          let selectedLogContent: string | undefined;
+          if (this.memoryTab === "logs" && this.selectedLogDate) {
+            const logPath = join(getUserDir(uuid), "memory", `${this.selectedLogDate}.md`);
+            try {
+              selectedLogContent = readFileSync(logPath, "utf-8");
+            } catch {
+              selectedLogContent = "";
+            }
+          }
+
           const memoryPage = generateMemoryPage({
             activeTab: this.memoryTab,
             profileCompleteness: mm.getProfileCompleteness(uuid),
             profile: mm.getProfile(uuid),
             missingFields: mm.getAllMissingProfileKeys(uuid),
-            memorySummary: loadMemorySummary(uuid) || "",
+            memorySummary: (() => {
+              // Read raw MEMORY.md for UI display (not loadMemorySummary which appends daily logs)
+              const memPath = join(getUserDir(uuid), "MEMORY.md");
+              try {
+                return existsSync(memPath) ? readFileSync(memPath, "utf-8") : "";
+              } catch {
+                return "";
+              }
+            })(),
             dailyLogs: getRecentDailyLogs(uuid, 7),
             searchQuery: this.memorySearchQuery,
             searchResults: this.memorySearchResults,
+            selectedLogDate: this.selectedLogDate || undefined,
+            selectedLogContent,
             saMemoryFiles,
             saSelectedMemoryFile: this.saSelectedMemoryFile || undefined,
             saMemoryContent,
@@ -2461,8 +2495,12 @@ export class GatewaySession {
     try {
       const agent = isLegacy ? await this.getLegacyChatAgent() : await this.getAgent();
 
-      // Subscribe to agent events
+      // Subscribe to agent events; track which memory tools were called
+      const calledTools = new Set<string>();
       const unsubscribe = agent.subscribe((event) => {
+        if (event.type === "tool_execution_end" && !event.isError) {
+          calledTools.add(event.toolName);
+        }
         this.handleAgentEvent(event, send);
       });
 
@@ -2519,7 +2557,7 @@ export class GatewaySession {
           this.sendChatUpdate(send);
         }
 
-        // Index this exchange for memory search
+        // Index this exchange for memory search + auto-save memory fallback
         if (this.userUuid) {
           try {
             const mm = getMemoryManager();
@@ -2531,9 +2569,22 @@ export class GatewaySession {
                 .join("");
               const exchangeText = `User: ${content}\nAssistant: ${assistantText}`;
               mm.appendSessionTranscript(this.userUuid, sessionId, exchangeText);
+
+              // Auto-save daily log if agent didn't call daily_log itself
+              if (!calledTools.has("daily_log") && assistantText.length > 20) {
+                const preview = assistantText.replace(/\s+/g, " ").slice(0, 200);
+                const logEntry = `- 用户: ${content.slice(0, 100)}\n- 助手: ${preview}`;
+                mm.appendDailyLog(this.userUuid, logEntry);
+              }
+
+              // Consolidate daily log → MEMORY.md every 5 exchanges
+              this.exchangeCount++;
+              if (this.exchangeCount % 5 === 0 && !calledTools.has("memory_save")) {
+                void consolidateMemory(this.userUuid, this.getLLMConfig(), mm).catch(() => {});
+              }
             }
           } catch {
-            // Indexing is best-effort
+            // Indexing/auto-save is best-effort
           }
         }
       } finally {
@@ -2693,7 +2744,11 @@ export class GatewaySession {
       }
 
       const agent = isLegacy ? await this.getLegacyChatAgent() : await this.getAgent();
+      const calledTools = new Set<string>();
       const unsubscribe = agent.subscribe((event) => {
+        if (event.type === "tool_execution_end" && !event.isError) {
+          calledTools.add(event.toolName);
+        }
         this.handleAgentEvent(event, sseSend);
       });
 
@@ -2726,7 +2781,7 @@ export class GatewaySession {
         }
       }
 
-      // Index exchange for memory search
+      // Index exchange for memory search + auto-save memory fallback
       if (this.userUuid) {
         try {
           const mm = getMemoryManager();
@@ -2741,9 +2796,22 @@ export class GatewaySession {
               sessionId,
               `User: ${content}\nAssistant: ${assistantText}`
             );
+
+            // Auto-save daily log if agent didn't call daily_log itself
+            if (!calledTools.has("daily_log") && assistantText.length > 20) {
+              const preview = assistantText.replace(/\s+/g, " ").slice(0, 200);
+              const logEntry = `- 用户: ${content.slice(0, 100)}\n- 助手: ${preview}`;
+              mm.appendDailyLog(this.userUuid, logEntry);
+            }
+
+            // Consolidate daily log → MEMORY.md every 5 exchanges
+            this.exchangeCount++;
+            if (this.exchangeCount % 5 === 0 && !calledTools.has("memory_save")) {
+              void consolidateMemory(this.userUuid, this.getLLMConfig(), mm).catch(() => {});
+            }
           }
         } catch {
-          // best-effort
+          // Indexing/auto-save is best-effort
         }
       }
     } catch (error) {
@@ -3281,6 +3349,15 @@ export class GatewaySession {
       this.memorySearchQuery = payload.query as string;
       this.memorySearchResults = await mm.searchAsync(uuid, this.memorySearchQuery);
       await this.handleNavigate("memory", send);
+    }
+    // Daily log detail actions
+    else if (action === "memory_log_select" && payload?.row) {
+      const row = payload.row as { date: string };
+      this.selectedLogDate = row.date;
+      await this.handleNavigate("memory", send);
+    } else if (action === "memory_log_back") {
+      this.selectedLogDate = null;
+      await this.handleNavigate("memory", send);
     } else if (action === "show_toast" && payload?.message) {
       // Show a toast notification
       const variant = (payload.variant as "info" | "success" | "error") || "info";
@@ -3656,6 +3733,10 @@ export class GatewaySession {
           this.saSelectedMemoryFile = null;
           this.saEditingMemory = false;
           this.editBuffer = null;
+        }
+        // Reset log detail when switching away from logs tab
+        if (tab !== "logs") {
+          this.selectedLogDate = null;
         }
         this.memoryTab = tab as "profile" | "summary" | "logs" | "search" | "system-agent";
         await this.handleNavigate("memory", send);

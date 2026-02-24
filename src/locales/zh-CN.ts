@@ -494,6 +494,10 @@ export const zhCN: LocaleMessages = {
     memoryFileLines: "行数",
     memoryFilePreview: "预览",
     memoryEmptyFile: "（空文件）",
+    logDate: "日期",
+    logDetail: "对话详情",
+    backToLogs: "← 返回日志列表",
+    memorySummaryEmpty: "Agent 尚未积累长期记忆，对话中的关键信息会逐步记录在这里。",
   },
 
   integrations: {

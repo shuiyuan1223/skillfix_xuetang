@@ -503,6 +503,11 @@ export const en: LocaleMessages = {
     memoryFileLines: "Lines",
     memoryFilePreview: "Preview",
     memoryEmptyFile: "(empty)",
+    logDate: "Date",
+    logDetail: "Conversation Detail",
+    backToLogs: "← Back to logs",
+    memorySummaryEmpty:
+      "No long-term memories yet. Key information from conversations will be recorded here over time.",
   },
 
   integrations: {
