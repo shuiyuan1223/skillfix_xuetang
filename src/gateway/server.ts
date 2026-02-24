@@ -1959,7 +1959,15 @@ export class GatewaySession {
             profileCompleteness: mm.getProfileCompleteness(uuid),
             profile: mm.getProfile(uuid),
             missingFields: mm.getAllMissingProfileKeys(uuid),
-            memorySummary: loadMemorySummary(uuid) || "",
+            memorySummary: (() => {
+              // Read raw MEMORY.md for UI display (not loadMemorySummary which appends daily logs)
+              const memPath = join(getUserDir(uuid), "MEMORY.md");
+              try {
+                return existsSync(memPath) ? readFileSync(memPath, "utf-8") : "";
+              } catch {
+                return "";
+              }
+            })(),
             dailyLogs: getRecentDailyLogs(uuid, 7),
             searchQuery: this.memorySearchQuery,
             searchResults: this.memorySearchResults,

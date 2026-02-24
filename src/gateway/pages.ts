@@ -651,13 +651,18 @@ export function generateMemoryPage(data: {
     tabContentIds["profile"] = ui.column([statsGrid, profileCard], { padding: 16, gap: 16 });
   }
 
-  // Tab 2: Summary — MEMORY.md viewer
+  // Tab 2: Summary — MEMORY.md viewer (raw content, no daily logs appended)
   if (data.activeTab === "summary") {
-    // Check if memorySummary is just the empty template
-    const isEmptyTemplate =
-      !data.memorySummary || data.memorySummary.replace(/[#_\-\s()（）。.]/g, "").length < 20;
+    // Strip markdown headings, whitespace, and common template markers to check for real content
+    const stripped = (data.memorySummary || "")
+      .replace(/^#.*$/gm, "") // remove headings
+      .replace(/[_*()（）\-\s]/g, "") // remove markdown formatting & whitespace
+      .replace(/MEMORY\.?md/gi, "") // remove "MEMORY.md" references
+      .replace(/Agent.{0,30}(积累|记录|内容|accumulate)/gi, "") // remove template phrases
+      .trim();
+    const hasRealContent = stripped.length > 10;
 
-    if (!isEmptyTemplate) {
+    if (hasRealContent) {
       const editor = ui.codeEditor(data.memorySummary, {
         language: "markdown",
         readonly: true,
