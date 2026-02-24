@@ -169,28 +169,25 @@ endif
 	@echo ""
 	@echo "==> Sync complete!"
 
-# Sync to remote via tar + SSH (Windows compatible, no rsync needed)
-# Usage: make sync-win REMOTE=user@host:/path/to/pha
+# Sync to remote via tar+scp+ssh (for Windows, no rsync needed)
+# Run from PowerShell: make sync-win REMOTE=user@host:/path/to/pha
 sync-win:
 ifndef REMOTE
-	@echo "Error: REMOTE not specified"
-	@echo "Usage: make sync-win REMOTE=user@host:/path/to/pha"
+	@echo Error: REMOTE not specified
+	@echo Usage: make sync-win REMOTE=user@host:/path/to/pha
 	@exit 1
 endif
-	@echo "==> Git pull..."
-	@git pull
-	@echo ""
-	$(eval _HOST := $(firstword $(subst :, ,$(REMOTE))))
-	$(eval _PATH := $(word 2,$(subst :, ,$(REMOTE))))
-	@echo "==> Packing and uploading to $(_HOST):$(_PATH)..."
-	tar czf - --exclude=node_modules --exclude=.git --exclude=dist --exclude=ui/dist --exclude=ui/node_modules --exclude=.env --exclude=*.log . | ssh $(_HOST) "cd $(_PATH) && tar xzf -"
-	@echo ""
-	@echo "==> Installing on remote..."
-	ssh $(_HOST) "cd $(_PATH) && make install"
-	@echo ""
-	@echo "==> Restarting service on remote..."
-	ssh $(_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
-	@ping -n 3 127.0.0.1 >nul 2>&1 || sleep 2
-	ssh $(_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
-	@echo ""
-	@echo "==> Sync complete!"
+	$(eval _H := $(firstword $(subst :, ,$(REMOTE))))
+	$(eval _P := $(word 2,$(subst :, ,$(REMOTE))))
+	@echo ==> Git pull...
+	git pull
+	@echo ==> Packing source...
+	tar czf pha-sync.tar.gz --exclude=node_modules --exclude=.git --exclude=dist --exclude=ui/dist --exclude=ui/node_modules --exclude=.env --exclude=*.log .
+	@echo ==> Uploading to $(_H):$(_P)...
+	powershell -NoProfile -Command "scp pha-sync.tar.gz '$(_H):$(_P)/pha-sync.tar.gz'"
+	-del pha-sync.tar.gz 2>nul
+	@echo ==> Extracting and building on remote...
+	powershell -NoProfile -Command "ssh $(_H) 'cd $(_P) && tar xzf pha-sync.tar.gz && rm pha-sync.tar.gz && make install'"
+	@echo ==> Restarting service...
+	powershell -NoProfile -Command "ssh $(_H) 'pkill -f dist/cli 2>/dev/null; cd $(_P) && nohup pha start > /tmp/pha.log 2>&1 &'"
+	@echo ==> Sync complete!
