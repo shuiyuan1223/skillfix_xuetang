@@ -2701,7 +2701,11 @@ export class GatewaySession {
       }
 
       const agent = isLegacy ? await this.getLegacyChatAgent() : await this.getAgent();
+      const calledTools = new Set<string>();
       const unsubscribe = agent.subscribe((event) => {
+        if (event.type === "tool_execution_end" && !event.isError) {
+          calledTools.add(event.toolName);
+        }
         this.handleAgentEvent(event, sseSend);
       });
 
@@ -2734,7 +2738,7 @@ export class GatewaySession {
         }
       }
 
-      // Index exchange for memory search
+      // Index exchange for memory search + auto-save memory fallback
       if (this.userUuid) {
         try {
           const mm = getMemoryManager();
@@ -2749,9 +2753,16 @@ export class GatewaySession {
               sessionId,
               `User: ${content}\nAssistant: ${assistantText}`
             );
+
+            // Auto-save daily log if agent didn't call daily_log itself
+            if (!calledTools.has("daily_log") && assistantText.length > 20) {
+              const preview = assistantText.replace(/\s+/g, " ").slice(0, 200);
+              const logEntry = `- 用户: ${content.slice(0, 100)}\n- 助手: ${preview}`;
+              mm.appendDailyLog(this.userUuid, logEntry);
+            }
           }
         } catch {
-          // best-effort
+          // Indexing/auto-save is best-effort
         }
       }
     } catch (error) {
