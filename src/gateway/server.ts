@@ -37,7 +37,6 @@ import {
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
   getBenchmarkConcurrency,
-  resolveSystemAgentModel,
   PROVIDER_CONFIGS,
   listAllModelRefs,
   stripLegacyFieldsForSave,
@@ -1417,13 +1416,13 @@ export class GatewaySession {
 
   private async getSystemAgent(): Promise<SystemAgent> {
     if (!this.systemAgent) {
-      const config = loadConfig();
-      const saModel = resolveSystemAgentModel(config);
+      const saModel = resolveAgentProfileModel("sa");
       this.systemAgent = createSystemAgent({
         apiKey: saModel.apiKey,
         provider: saModel.provider as any,
         modelId: saModel.modelId,
         baseUrl: saModel.baseUrl,
+        profile: getAgentProfile("sa"),
         sessionMessages: this.systemAgentChatMessages.map((m) => ({
           role: m.role,
           content:
