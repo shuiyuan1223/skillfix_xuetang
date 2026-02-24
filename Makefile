@@ -4,13 +4,17 @@
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 
-.PHONY: all install uninstall clean check-deps help sync sync-dist
+.PHONY: all install uninstall clean check-deps help sync sync-dist sync-win
 
 # Default target
 all: help
 
 # Remote sync target (user@host:path)
 REMOTE ?=
+
+# Windows remote sync target
+WIN_REMOTE ?=
+WIN_PATH ?=
 
 # Help message
 help:
@@ -24,6 +28,7 @@ help:
 	@echo "  make test       - Run tests"
 	@echo "  make sync REMOTE=user@host:path       - Sync, build, install and restart on remote"
 	@echo "  make sync-dist REMOTE=user@host:path  - Sync pre-built dist and restart on remote"
+	@echo "  make sync-win WIN_REMOTE=user@host WIN_PATH=C:/path  - Sync to Windows via tar+ssh"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - Bun (https://bun.sh)"
@@ -167,3 +172,55 @@ endif
 	@ssh $(REMOTE_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
 	@echo ""
 	@echo "==> Sync complete!"
+
+# Sync to Windows remote via tar + SSH (no rsync needed)
+# Prerequisites: Windows has OpenSSH server + Bun installed
+# Usage: make sync-win WIN_REMOTE=user@host WIN_PATH=C:/Users/xxx/pha
+sync-win:
+ifndef WIN_REMOTE
+	@echo "Error: WIN_REMOTE not specified"
+	@echo "Usage: make sync-win WIN_REMOTE=user@host WIN_PATH=C:/Users/xxx/pha"
+	@exit 1
+endif
+ifndef WIN_PATH
+	@echo "Error: WIN_PATH not specified"
+	@echo "Usage: make sync-win WIN_REMOTE=user@host WIN_PATH=C:/Users/xxx/pha"
+	@exit 1
+endif
+	@echo "==> Git pull..."
+	@git pull
+	@echo ""
+	@echo "==> Packing source..."
+	@tar czf /tmp/pha-sync.tar.gz \
+		--exclude='node_modules' \
+		--exclude='.git' \
+		--exclude='dist' \
+		--exclude='ui/dist' \
+		--exclude='ui/node_modules' \
+		--exclude='.env' \
+		--exclude='*.log' \
+		--exclude='pha-sync.tar.gz' \
+		-C . .
+	@echo "  Archive: $$(du -h /tmp/pha-sync.tar.gz | cut -f1)"
+	@echo ""
+	@echo "==> Uploading to $(WIN_REMOTE):$(WIN_PATH)..."
+	@scp /tmp/pha-sync.tar.gz "$(WIN_REMOTE):$(WIN_PATH)/pha-sync.tar.gz"
+	@rm -f /tmp/pha-sync.tar.gz
+	@echo ""
+	@echo "==> Stopping service on remote..."
+	-@ssh $(WIN_REMOTE) "cd /d $(WIN_PATH) && bun dist/cli.js stop 2>nul"
+	@echo ""
+	@echo "==> Extracting on remote..."
+	@ssh $(WIN_REMOTE) "cd /d $(WIN_PATH) && tar xzf pha-sync.tar.gz && del pha-sync.tar.gz"
+	@echo ""
+	@echo "==> Installing dependencies on remote..."
+	@ssh $(WIN_REMOTE) "cd /d $(WIN_PATH) && bun install && cd ui && bun install"
+	@echo ""
+	@echo "==> Building on remote..."
+	@ssh $(WIN_REMOTE) "cd /d $(WIN_PATH) && bun run build"
+	@echo ""
+	@echo "==> Starting service on remote..."
+	@ssh $(WIN_REMOTE) "cd /d $(WIN_PATH) && bun dist/cli.js start"
+	@sleep 2
+	@echo ""
+	@echo "==> Windows sync complete!"
