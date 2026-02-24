@@ -518,6 +518,10 @@ export interface LocaleMessages {
     memoryFileLines: string;
     memoryFilePreview: string;
     memoryEmptyFile: string;
+    logDate: string;
+    logDetail: string;
+    backToLogs: string;
+    memorySummaryEmpty: string;
   };
 
   // Integrations page

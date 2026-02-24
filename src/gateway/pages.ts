@@ -580,6 +580,9 @@ export function generateMemoryPage(data: {
   searchQuery?: string;
   searchResults?: MemorySearchResult[];
   loading?: boolean;
+  // Daily log detail view
+  selectedLogDate?: string;
+  selectedLogContent?: string;
   // System Agent memory tab
   saMemoryFiles?: SAMemoryFileInfo[];
   saSelectedMemoryFile?: string;
@@ -650,7 +653,11 @@ export function generateMemoryPage(data: {
 
   // Tab 2: Summary — MEMORY.md viewer
   if (data.activeTab === "summary") {
-    if (data.memorySummary) {
+    // Check if memorySummary is just the empty template
+    const isEmptyTemplate =
+      !data.memorySummary || data.memorySummary.replace(/[#_\-\s()（）。.]/g, "").length < 20;
+
+    if (!isEmptyTemplate) {
       const editor = ui.codeEditor(data.memorySummary, {
         language: "markdown",
         readonly: true,
@@ -658,25 +665,42 @@ export function generateMemoryPage(data: {
       });
       tabContentIds["summary"] = ui.column([editor], { padding: 16 });
     } else {
-      tabContentIds["summary"] = ui.column([ui.text(t("memory.noResults"), "caption")], {
+      tabContentIds["summary"] = ui.column([ui.text(t("memory.memorySummaryEmpty"), "caption")], {
         padding: 16,
       });
     }
   }
 
-  // Tab 3: Logs — daily logs table
+  // Tab 3: Logs — daily logs table or detail view
   if (data.activeTab === "logs") {
-    if (data.dailyLogs.length > 0) {
+    if (data.selectedLogDate && data.selectedLogContent !== undefined) {
+      // Detail view for a selected date
+      const backBtn = ui.button(t("memory.backToLogs"), "memory_log_back", {
+        variant: "ghost",
+        size: "sm",
+      });
+      const dateTitle = ui.text(`${t("memory.logDate")}: ${data.selectedLogDate}`, "h3");
+      const editor = ui.codeEditor(data.selectedLogContent, {
+        language: "markdown",
+        readonly: true,
+        height: 400,
+      });
+      tabContentIds["logs"] = ui.column([backBtn, dateTitle, editor], {
+        padding: 16,
+        gap: 12,
+      });
+    } else if (data.dailyLogs.length > 0) {
       const logRows = data.dailyLogs.map((log) => ({
         date: log.date,
         preview: log.preview,
       }));
-      const logsTable = ui.table(
+      const logsTable = ui.dataTable(
         [
-          { key: "date", label: t("evolution.time") },
+          { key: "date", label: t("memory.logDate") },
           { key: "preview", label: t("memory.value") },
         ],
-        logRows
+        logRows,
+        { onRowClick: "memory_log_select" }
       );
       tabContentIds["logs"] = ui.column([logsTable], { padding: 16 });
     } else {

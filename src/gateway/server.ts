@@ -1084,6 +1084,7 @@ export class GatewaySession {
   private memoryTab: "profile" | "summary" | "logs" | "search" | "system-agent" = "profile";
   private memorySearchQuery: string | undefined;
   private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
+  private selectedLogDate: string | null = null;
 
   // Plans page state
   private plansTab: PlansPageTab = "active";
@@ -1942,6 +1943,17 @@ export class GatewaySession {
             }
           }
 
+          // Load selected daily log content if viewing detail
+          let selectedLogContent: string | undefined;
+          if (this.memoryTab === "logs" && this.selectedLogDate) {
+            const logPath = join(getUserDir(uuid), "memory", `${this.selectedLogDate}.md`);
+            try {
+              selectedLogContent = readFileSync(logPath, "utf-8");
+            } catch {
+              selectedLogContent = "";
+            }
+          }
+
           const memoryPage = generateMemoryPage({
             activeTab: this.memoryTab,
             profileCompleteness: mm.getProfileCompleteness(uuid),
@@ -1951,6 +1963,8 @@ export class GatewaySession {
             dailyLogs: getRecentDailyLogs(uuid, 7),
             searchQuery: this.memorySearchQuery,
             searchResults: this.memorySearchResults,
+            selectedLogDate: this.selectedLogDate || undefined,
+            selectedLogContent,
             saMemoryFiles,
             saSelectedMemoryFile: this.saSelectedMemoryFile || undefined,
             saMemoryContent,
@@ -3300,6 +3314,15 @@ export class GatewaySession {
       this.memorySearchQuery = payload.query as string;
       this.memorySearchResults = await mm.searchAsync(uuid, this.memorySearchQuery);
       await this.handleNavigate("memory", send);
+    }
+    // Daily log detail actions
+    else if (action === "memory_log_select" && payload?.row) {
+      const row = payload.row as { date: string };
+      this.selectedLogDate = row.date;
+      await this.handleNavigate("memory", send);
+    } else if (action === "memory_log_back") {
+      this.selectedLogDate = null;
+      await this.handleNavigate("memory", send);
     } else if (action === "show_toast" && payload?.message) {
       // Show a toast notification
       const variant = (payload.variant as "info" | "success" | "error") || "info";
@@ -3675,6 +3698,10 @@ export class GatewaySession {
           this.saSelectedMemoryFile = null;
           this.saEditingMemory = false;
           this.editBuffer = null;
+        }
+        // Reset log detail when switching away from logs tab
+        if (tab !== "logs") {
+          this.selectedLogDate = null;
         }
         this.memoryTab = tab as "profile" | "summary" | "logs" | "search" | "system-agent";
         await this.handleNavigate("memory", send);
