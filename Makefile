@@ -195,18 +195,18 @@ endif
 	$(eval _HOST := $(firstword $(subst :, ,$(REMOTE))))
 	$(eval _PATH := $(word 2,$(subst :, ,$(REMOTE))))
 	@echo "==> Uploading to $(_HOST):$(_PATH)..."
-	scp pha-sync.tar.gz $(_HOST):$(_PATH)/pha-sync.tar.gz
-	-@del pha-sync.tar.gz 2>nul || rm -f pha-sync.tar.gz
+	cmd /c scp pha-sync.tar.gz $(_HOST):$(_PATH)/pha-sync.tar.gz
+	-@del pha-sync.tar.gz 2>nul
 	@echo ""
 	@echo "==> Extracting on remote..."
-	ssh $(_HOST) "cd $(_PATH) && tar xzf pha-sync.tar.gz && rm -f pha-sync.tar.gz"
+	cmd /c ssh $(_HOST) "cd $(_PATH) && tar xzf pha-sync.tar.gz && rm -f pha-sync.tar.gz"
 	@echo ""
 	@echo "==> Installing on remote..."
-	ssh $(_HOST) "cd $(_PATH) && make install"
+	cmd /c ssh $(_HOST) "cd $(_PATH) && make install"
 	@echo ""
 	@echo "==> Restarting service on remote..."
-	ssh $(_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
-	@ping -n 3 127.0.0.1 >nul 2>&1 || sleep 2
-	ssh $(_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
+	cmd /c ssh $(_HOST) "pkill -f 'bun.*dist/cli' 2>/dev/null || true; cd $(_PATH) && nohup pha start > /tmp/pha.log 2>&1 &"
+	@ping -n 3 127.0.0.1 >nul 2>&1
+	cmd /c ssh $(_HOST) "pgrep -f 'bun.*dist/cli' && echo 'PHA restarted successfully!' || echo 'Warning: PHA may not have started'"
 	@echo ""
 	@echo "==> Sync complete!"
