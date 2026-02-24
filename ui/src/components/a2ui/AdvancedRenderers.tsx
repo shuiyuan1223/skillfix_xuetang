@@ -1,14 +1,18 @@
 import React from "react";
 import type { A2UIComponent } from "../../lib/types";
+import { prop, getChildren } from "../../lib/types";
 import { ICONS, getIcon } from "../../lib/icons";
 import type { RenderContext } from "./A2UIRenderer";
+import {
+  ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, Legend,
+} from "recharts";
 
 // ---- Code Editor ----
 export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
-  const value = c.value as string;
-  const readonly = c.readonly as boolean;
-  const height = c.height || 400;
-  const lineNumbers = c.lineNumbers !== false;
+  const value = prop(c, "value") as string;
+  const readonly = prop(c, "readonly") as boolean;
+  const height = prop(c, "height") || 400;
+  const lineNumbers = prop(c, "lineNumbers") !== false;
   const lines = value.split("\n");
 
   let highlightedHtml = "";
@@ -48,8 +52,9 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
         spellCheck={false}
         defaultValue={value}
         onInput={(e) => {
-          if (c.onChange) {
-            ctx.sendAction(c.onChange as string, { value: (e.target as HTMLTextAreaElement).value });
+          const onChange = prop(c, "onChange");
+          if (onChange) {
+            ctx.sendAction(onChange as string, { value: (e.target as HTMLTextAreaElement).value });
           }
         }}
         onScroll={syncScroll}
@@ -60,15 +65,15 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Commit List ----
 export function renderCommitList(c: A2UIComponent, ctx: RenderContext) {
-  const commits = c.commits as { hash: string; shortHash: string; message: string; date: string; author: string }[];
-  const selectedHash = c.selectedHash as string;
+  const commits = prop(c, "commits") as { hash: string; shortHash: string; message: string; date: string; author: string }[];
+  const selectedHash = prop(c, "selectedHash") as string;
   return (
     <div className="flex flex-col gap-1">
       {commits.map((commit) => (
         <div
           key={commit.hash}
           className={`p-3 rounded-lg cursor-pointer transition-all duration-fast border border-transparent hover:bg-surface-hover ${commit.hash === selectedHash ? "bg-primary/10 border-primary/30" : ""}`}
-          onClick={() => { if (c.onSelect) ctx.sendAction(c.onSelect as string, { hash: commit.hash }); }}
+          onClick={() => { const onSelect = prop(c, "onSelect"); if (onSelect) ctx.sendAction(onSelect as string, { hash: commit.hash }); }}
         >
           <div className="font-mono text-xs text-primary">{commit.shortHash}</div>
           <div className="text-sm text-text mt-0.5">{commit.message}</div>
@@ -83,10 +88,10 @@ export function renderCommitList(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Diff View ----
 export function renderDiffView(c: A2UIComponent, ctx: RenderContext) {
-  const before = c.before as string;
-  const after = c.after as string;
-  const title = c.title as string;
-  const unifiedDiff = c.unifiedDiff as string | undefined;
+  const before = prop(c, "before") as string;
+  const after = prop(c, "after") as string;
+  const title = prop(c, "title") as string;
+  const unifiedDiff = prop(c, "unifiedDiff") as string | undefined;
 
   if (unifiedDiff) return renderUnifiedDiff(title, unifiedDiff);
 
@@ -160,11 +165,11 @@ function renderUnifiedDiff(title: string, diff: string) {
 
 // ---- Data Table ----
 export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
-  const columns = c.columns as { key: string; label: string; width?: string; sortable?: boolean; render?: string }[];
-  const rows = c.rows as Record<string, unknown>[];
-  const pagination = c.pagination as { page: number; pageSize: number; total: number } | undefined;
-  const sortBy = c.sortBy as string;
-  const sortOrder = (c.sortOrder as string) || "asc";
+  const columns = prop(c, "columns") as { key: string; label: string; width?: string; sortable?: boolean; render?: string; action?: string }[];
+  const rows = prop(c, "rows") as Record<string, unknown>[];
+  const pagination = prop(c, "pagination") as { page: number; pageSize: number; total: number } | undefined;
+  const sortBy = prop(c, "sortBy") as string;
+  const sortOrder = (prop(c, "sortOrder") as string) || "asc";
 
   const badgeV: Record<string, string> = {
     success: "bg-emerald-500/20 text-emerald-400", error: "bg-red-500/20 text-red-400",
@@ -200,8 +205,17 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
       );
     }
     if (render === "date") return new Date(Number(value)).toLocaleString();
+    if (render === "link") {
+      const text = String(value ?? "");
+      if (!text || text === "-") return text;
+      return <span className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary">{text}</span>;
+    }
     return String(value ?? "");
   };
+
+  const onSort = prop(c, "onSort") as string | undefined;
+  const onRowClick = prop(c, "onRowClick") as string | undefined;
+  const onPageChange = prop(c, "onPageChange") as string | undefined;
 
   return (
     <div className="overflow-x-auto">
@@ -213,7 +227,7 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
                 className={`p-3 text-left text-xs font-medium uppercase text-text-muted border-b border-border ${col.sortable ? "cursor-pointer hover:text-text" : ""}`}
-                onClick={() => { if (col.sortable && c.onSort) ctx.sendAction(c.onSort as string, { sortBy: col.key, sortOrder: sortBy === col.key && sortOrder === "asc" ? "desc" : "asc" }); }}
+                onClick={() => { if (col.sortable && onSort) ctx.sendAction(onSort, { sortBy: col.key, sortOrder: sortBy === col.key && sortOrder === "asc" ? "desc" : "asc" }); }}
               >
                 {col.label}
                 {col.sortable && sortBy === col.key && <span className="ml-1 text-primary">{sortOrder === "asc" ? "↑" : "↓"}</span>}
@@ -223,8 +237,8 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className={`border-b border-border transition-colors hover:bg-primary/5 ${c.onRowClick ? "cursor-pointer" : ""}`} onClick={() => { if (c.onRowClick) ctx.sendAction(c.onRowClick as string, { row }); }}>
-              {columns.map((col) => <td key={col.key} className="p-3 max-w-[300px]" title={String(row[col.key] ?? "")}><span className="block truncate">{renderCell(row[col.key], col.render)}</span></td>)}
+            <tr key={i} className={`border-b border-border transition-colors hover:bg-primary/5 ${onRowClick ? "cursor-pointer" : ""}`} onClick={() => { if (onRowClick) ctx.sendAction(onRowClick, { row }); }}>
+              {columns.map((col) => <td key={col.key} className={`p-3 max-w-[300px] ${col.action && row[col.key] && String(row[col.key]) !== "-" ? "cursor-pointer" : ""}`} title={String(row[col.key] ?? "")} onClick={col.action && row[col.key] && String(row[col.key]) !== "-" ? (e) => { e.stopPropagation(); ctx.sendAction(col.action!, { row, value: row[col.key] }); } : undefined}><span className="block truncate">{renderCell(row[col.key], col.render)}</span></td>)}
             </tr>
           ))}
         </tbody>
@@ -233,8 +247,8 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
         <div className="flex items-center justify-between px-3 py-3 border-t border-border text-xs text-text-muted">
           <span>Page {pagination.page + 1} of {Math.ceil(pagination.total / pagination.pageSize)} ({pagination.total} items)</span>
           <div className="flex gap-2">
-            <button className="px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40" disabled={pagination.page === 0} onClick={() => { if (c.onPageChange) ctx.sendAction(c.onPageChange as string, { page: pagination.page - 1 }); }}>←</button>
-            <button className="px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40" disabled={(pagination.page + 1) * pagination.pageSize >= pagination.total} onClick={() => { if (c.onPageChange) ctx.sendAction(c.onPageChange as string, { page: pagination.page + 1 }); }}>→</button>
+            <button className="px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40" disabled={pagination.page === 0} onClick={() => { if (onPageChange) ctx.sendAction(onPageChange, { page: pagination.page - 1 }); }}>←</button>
+            <button className="px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40" disabled={(pagination.page + 1) * pagination.pageSize >= pagination.total} onClick={() => { if (onPageChange) ctx.sendAction(onPageChange, { page: pagination.page + 1 }); }}>→</button>
           </div>
         </div>
       )}
@@ -244,15 +258,15 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Score Gauge ----
 export function renderScoreGauge(c: A2UIComponent, _ctx: RenderContext) {
-  const value = (c.value as number) || 0;
-  const max = (c.max as number) || 100;
-  const label = c.label as string;
-  const showValue = c.showValue !== false;
-  const size = (c.size as string) || "md";
+  const value = (prop(c, "value") as number) || 0;
+  const max = (prop(c, "max") as number) || 100;
+  const label = prop(c, "label") as string;
+  const showValue = prop(c, "showValue") !== false;
+  const size = (prop(c, "size") as string) || "md";
   const defaultThresholds = max <= 1
     ? [{ value: 0.3, color: "#ef4444" }, { value: 0.6, color: "#f59e0b" }, { value: 1.0, color: "#10b981" }]
     : [{ value: 30, color: "#ef4444" }, { value: 60, color: "#f59e0b" }, { value: 100, color: "#10b981" }];
-  const thresholds = (c.thresholds as { value: number; color: string }[]) || defaultThresholds;
+  const thresholds = (prop(c, "thresholds") as { value: number; color: string }[]) || defaultThresholds;
   const pct = Math.min(100, (value / max) * 100);
   let color = thresholds[thresholds.length - 1]?.color || "#667eea";
   for (const t of thresholds) { if (value <= t.value) { color = t.color; break; } }
@@ -279,8 +293,8 @@ export function renderScoreGauge(c: A2UIComponent, _ctx: RenderContext) {
 
 // ---- Activity Rings ----
 export function renderActivityRings(c: A2UIComponent, _ctx: RenderContext) {
-  const rings = (c.rings as Array<{ value: number; max: number; label: string; color: string }>) || [];
-  const size = (c.size as number) || 200;
+  const rings = (prop(c, "rings") as Array<{ value: number; max: number; label: string; color: string }>) || [];
+  const size = (prop(c, "size") as number) || 200;
   const center = size / 2;
   const strokeWidth = size / 11;
   const gap = strokeWidth * 0.35;
@@ -317,9 +331,9 @@ export function renderActivityRings(c: A2UIComponent, _ctx: RenderContext) {
 
 // ---- Status Badge ----
 export function renderStatusBadge(c: A2UIComponent, _ctx: RenderContext) {
-  const status = c.status as string;
-  const label = (c.label as string) || status;
-  const pulse = c.pulse as boolean;
+  const status = prop(c, "status") as string;
+  const label = (prop(c, "label") as string) || status;
+  const pulse = prop(c, "pulse") as boolean;
   const statusIcons: Record<string, string> = { pending: "loader", running: "loader", success: "check", failed: "x", warning: "alert-triangle" };
   const statusColors: Record<string, string> = { pending: "bg-slate-500/20 text-slate-400", running: "bg-blue-500/20 text-blue-400", success: "bg-emerald-500/20 text-emerald-400", failed: "bg-red-500/20 text-red-400", warning: "bg-amber-500/20 text-amber-400" };
   return (
@@ -332,9 +346,9 @@ export function renderStatusBadge(c: A2UIComponent, _ctx: RenderContext) {
 
 // ---- Collapsible ----
 export function renderCollapsible(c: A2UIComponent, ctx: RenderContext) {
-  const title = c.title as string;
-  const expanded = c.expanded !== false;
-  const icon = c.icon as string;
+  const title = prop(c, "title") as string;
+  const expanded = prop(c, "expanded") !== false;
+  const icon = prop(c, "icon") as string;
   return (
     <div className={`collapsible-group ${expanded ? "is-open" : ""}`}>
       <button className="flex items-center gap-2 w-full p-3 bg-transparent border-none text-text text-sm cursor-pointer rounded-lg transition-colors hover:bg-surface-hover text-left" onClick={(e) => { (e.currentTarget as HTMLElement).parentElement?.classList.toggle("is-open"); }}>
@@ -343,7 +357,7 @@ export function renderCollapsible(c: A2UIComponent, ctx: RenderContext) {
         <span className="text-text-muted transition-transform duration-normal [.is-open>button>&]:rotate-90">▶</span>
       </button>
       <div className="collapsible-grid pl-4">
-        <div>{ctx.renderChildren(c.children)}</div>
+        <div className="flex flex-col gap-3">{ctx.renderChildren(getChildren(c))}</div>
       </div>
     </div>
   );
@@ -351,10 +365,10 @@ export function renderCollapsible(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Modal Component ----
 export function renderModalComponent(c: A2UIComponent, ctx: RenderContext) {
-  const title = c.title as string;
-  const size = (c.size as string) || "md";
-  const closable = c.closable !== false;
-  const onClose = c.onClose as string | undefined;
+  const title = prop(c, "title") as string;
+  const size = (prop(c, "size") as string) || "md";
+  const closable = prop(c, "closable") !== false;
+  const onClose = prop(c, "onClose") as string | undefined;
   const modalSizes: Record<string, string> = { sm: "max-w-[400px] w-[90%]", md: "max-w-[600px] w-[90%]", lg: "max-w-[800px] w-[90%]", xl: "max-w-[1000px] w-[95%]" };
   return (
     <div className={`bg-surface-elevated border border-border rounded-2xl shadow-2xl backdrop-blur-[16px] overflow-hidden ${modalSizes[size] || modalSizes.md}`}>
@@ -366,24 +380,38 @@ export function renderModalComponent(c: A2UIComponent, ctx: RenderContext) {
           </button>
         )}
       </div>
-      <div className="p-6 overflow-y-auto max-h-[70vh]">{ctx.renderChildren(c.children)}</div>
+      <div className="p-6 overflow-y-auto max-h-[70vh]">{ctx.renderChildren(getChildren(c))}</div>
     </div>
   );
 }
 
 // ---- Form ----
 export function renderForm(c: A2UIComponent, ctx: RenderContext) {
-  const onSubmit = c.onSubmit as string;
-  const submitLabel = (c.submitLabel as string) || "Submit";
-  const cancelLabel = c.cancelLabel as string | undefined;
-  const onCancel = c.onCancel as string | undefined;
+  const onSubmit = prop(c, "onSubmit") as string;
+  const submitLabel = (prop(c, "submitLabel") as string) || "";
+  const submitIcon = prop(c, "submitIcon") as string | undefined;
+  const cancelLabel = prop(c, "cancelLabel") as string | undefined;
+  const onCancel = prop(c, "onCancel") as string | undefined;
+  const footerExtra = prop(c, "footerExtra") as string[] | undefined;
+  const submitTooltip = prop(c, "submitTooltip") as string | undefined;
   const btnBase = "px-5 py-2.5 rounded-[10px] text-sm font-medium cursor-pointer transition-all duration-fast border-none";
+  const iconBtnCls = "inline-flex items-center justify-center w-9 h-9 rounded-lg cursor-pointer border-none transition-all duration-150 active:scale-[0.93] [&>svg]:w-4 [&>svg]:h-4";
+  const isIconOnly = submitIcon && !submitLabel;
   return (
     <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); const form = e.currentTarget; const formData = new FormData(form); const data: Record<string, unknown> = {}; formData.forEach((v, k) => { data[k] = v; }); ctx.sendAction(onSubmit, data); }}>
-      {ctx.renderChildren(c.children)}
-      <div className="flex gap-3 justify-end mt-2">
+      {ctx.renderChildren(getChildren(c))}
+      <div className="flex items-center gap-3 mt-2">
+        {footerExtra && <div className="flex gap-2">{ctx.renderChildren(footerExtra)}</div>}
+        <div className="flex-1" />
         {cancelLabel && onCancel && <button type="button" className={`${btnBase} bg-transparent text-text-secondary hover:bg-primary/10 hover:text-text`} onClick={() => ctx.sendAction(onCancel)}>{cancelLabel}</button>}
-        <button type="submit" className={`${btnBase} bg-gradient-to-br from-primary to-accent text-white hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(102,126,234,0.4)]`}>{submitLabel}</button>
+        {isIconOnly ? (
+          <button type="submit" title={submitTooltip || undefined} className={`${iconBtnCls} bg-gradient-to-br from-primary to-accent text-white hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(102,126,234,0.4)]`}><span dangerouslySetInnerHTML={{ __html: getIcon(submitIcon) }} /></button>
+        ) : (
+          <button type="submit" className={`${btnBase} bg-gradient-to-br from-primary to-accent text-white hover:-translate-y-px hover:shadow-[0_4px_12px_rgba(102,126,234,0.4)]`}>
+            {submitIcon && <span className="inline-flex w-4 h-4 [&>svg]:w-4 [&>svg]:h-4 mr-1" dangerouslySetInnerHTML={{ __html: getIcon(submitIcon) }} />}
+            {submitLabel || "Submit"}
+          </button>
+        )}
       </div>
     </form>
   );
@@ -391,14 +419,14 @@ export function renderForm(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Form Input ----
 export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
-  const inputType = c.inputType as string;
-  const name = c.name as string;
-  const label = c.label as string | undefined;
-  const placeholder = (c.placeholder as string) || "";
-  const value = c.value as string | number | boolean | undefined;
-  const options = c.options as { value: string; label: string }[] | undefined;
-  const required = c.required as boolean | undefined;
-  const onChange = c.onChange as string | undefined;
+  const inputType = prop(c, "inputType") as string;
+  const name = prop(c, "name") as string;
+  const label = prop(c, "label") as string | undefined;
+  const placeholder = (prop(c, "placeholder") as string) || "";
+  const value = prop(c, "value") as string | number | boolean | undefined;
+  const options = prop(c, "options") as { value: string; label: string }[] | undefined;
+  const required = prop(c, "required") as boolean | undefined;
+  const onChange = prop(c, "onChange") as string | undefined;
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     if (onChange) ctx.sendAction(onChange, { name, value: e.target.value });
   };
@@ -452,15 +480,28 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
       );
       break;
     }
-    case "checkbox":
+    case "checkbox": {
+      const checked = value === true || value === "true";
       return (
-        <div className="flex flex-col gap-1.5">
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-text">
-            <input type="checkbox" className="w-4 h-4 rounded border-primary/30 bg-surface text-primary focus:ring-primary/20" name={name} defaultChecked={value === true} onChange={handleChange} />
-            <span>{label}</span>
+        <div className="flex items-center justify-between py-1.5">
+          <span className="text-sm text-text">{label}</span>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="hidden" name={name} defaultValue={checked ? "true" : "false"} />
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              defaultChecked={checked}
+              onChange={(e) => {
+                const hidden = e.currentTarget.previousElementSibling as HTMLInputElement;
+                if (hidden) hidden.value = e.currentTarget.checked ? "true" : "false";
+                if (onChange) ctx.sendAction(onChange, { name, value: String(e.currentTarget.checked) });
+              }}
+            />
+            <div className="w-9 h-5 bg-border rounded-full peer peer-checked:bg-primary peer-focus:ring-4 peer-focus:ring-primary/10 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
           </label>
         </div>
       );
+    }
     case "number":
       input = <input type="number" className={inputCls} name={name} placeholder={placeholder} defaultValue={value ?? ""} required={required} onChange={handleChange} />;
       break;
@@ -478,10 +519,10 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Git Timeline ----
 export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
-  const events = (c.events as any[]) || [];
-  const onEventClick = c.onEventClick as string | undefined;
-  const onContextAction = c.onContextAction as string | undefined;
-  const selectedEventId = c.selectedEventId as string | undefined;
+  const events = (prop(c, "events") as any[]) || [];
+  const onEventClick = prop(c, "onEventClick") as string | undefined;
+  const onContextAction = prop(c, "onContextAction") as string | undefined;
+  const selectedEventId = prop(c, "selectedEventId") as string | undefined;
   const typeIcons: Record<string, string> = { branch: "git-branch", commit: "git-commit", benchmark: "test-tube", merge: "git-merge", revert: "alert-triangle", tag: "star" };
   const statusColors: Record<string, string> = { success: "rgb(var(--color-success))", failed: "rgb(var(--color-error))", pending: "rgb(var(--color-text-muted))", active: "rgb(var(--color-primary))" };
 
@@ -577,9 +618,9 @@ export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Step Indicator ----
 export function renderStepIndicator(c: A2UIComponent, ctx: RenderContext) {
-  const steps = (c.steps as any[]) || [];
-  const orientation = (c.orientation as string) || "horizontal";
-  const onStepClick = c.onStepClick as string | undefined;
+  const steps = (prop(c, "steps") as any[]) || [];
+  const orientation = (prop(c, "orientation") as string) || "horizontal";
+  const onStepClick = prop(c, "onStepClick") as string | undefined;
   const isH = orientation === "horizontal";
 
   return (
@@ -616,9 +657,9 @@ export function renderStepIndicator(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- File Tree ----
 export function renderFileTree(c: A2UIComponent, ctx: RenderContext) {
-  const files = (c.files as any[]) || [];
-  const selectedPath = c.selectedPath as string | undefined;
-  const onFileSelect = c.onFileSelect as string | undefined;
+  const files = (prop(c, "files") as any[]) || [];
+  const selectedPath = prop(c, "selectedPath") as string | undefined;
+  const onFileSelect = prop(c, "onFileSelect") as string | undefined;
   const statusIcons: Record<string, { symbol: string; color: string }> = {
     added: { symbol: "+", color: "rgb(var(--color-success))" }, modified: { symbol: "M", color: "rgb(var(--color-primary))" },
     deleted: { symbol: "-", color: "rgb(var(--color-error))" }, renamed: { symbol: "R", color: "rgb(var(--color-warning))" },
@@ -659,8 +700,8 @@ export function renderFileTree(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Arena Pills ----
 export function renderArenaPills(c: A2UIComponent, ctx: RenderContext) {
-  const pills = (c.pills as Array<{ label: string; color: string; active: boolean; action: string; payload?: Record<string, unknown> }>) || [];
-  const clearAction = c.clearAction as string | undefined;
+  const pills = (prop(c, "pills") as Array<{ label: string; color: string; active: boolean; action: string; payload?: Record<string, unknown> }>) || [];
+  const clearAction = prop(c, "clearAction") as string | undefined;
   const hasActive = pills.some((p) => p.active);
   return (
     <div className="arena-pills">
@@ -676,7 +717,7 @@ export function renderArenaPills(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Arena Score Table ----
 export function renderArenaScoreTable(c: A2UIComponent, _ctx: RenderContext) {
-  const rows = (c.rows as Array<{ label: string; color: string; score: number }>) || [];
+  const rows = (prop(c, "rows") as Array<{ label: string; color: string; score: number }>) || [];
   const scoreClass = (s: number) => s >= 0.9 ? "score-high" : s >= 0.7 ? "score-mid" : "score-low";
   return (
     <table className="arena-score-table">
@@ -695,11 +736,11 @@ export function renderArenaScoreTable(c: A2UIComponent, _ctx: RenderContext) {
 
 // ---- Arena Category Card ----
 export function renderArenaCategoryCard(c: A2UIComponent, _ctx: RenderContext) {
-  const name = c.categoryName as string;
-  const color = c.categoryColor as string;
-  const icon = c.categoryIcon as string;
-  const avgScore = c.avgScore as number;
-  const criteria = (c.criteria as Array<{ name: string; scores: Array<{ value: number; color: string }> }>) || [];
+  const name = prop(c, "categoryName") as string;
+  const color = prop(c, "categoryColor") as string;
+  const icon = prop(c, "categoryIcon") as string;
+  const avgScore = prop(c, "avgScore") as number;
+  const criteria = (prop(c, "criteria") as Array<{ name: string; scores: Array<{ value: number; color: string }> }>) || [];
   const scoreClass = (s: number) => s >= 0.9 ? "score-high" : s >= 0.7 ? "score-mid" : "score-low";
   const showBar = criteria.length > 0 && criteria[0].scores.length <= 1;
   return (
@@ -730,16 +771,40 @@ export function renderArenaCategoryCard(c: A2UIComponent, _ctx: RenderContext) {
   );
 }
 
-// ---- Plotly Radar ----
-export function renderPlotlyRadar(c: A2UIComponent, ctx: RenderContext) {
-  const elementId = `plotly-${c.id}`;
-  ctx.pendingPlotlyCharts.current.push({ elementId, traces: c.traces as unknown[], layout: c.layout as unknown, config: c.config as unknown });
-  const legend = (c.categoryLegend as Array<{ name: string; color: string }>) || [];
+// ---- Radar Chart (Recharts) ----
+export function renderRadarChart(c: A2UIComponent, _ctx: RenderContext) {
+  const data = (prop(c, "radarData") as Array<Record<string, unknown>>) || [];
+  const series = (prop(c, "radarSeries") as Array<{ key: string; name: string; color: string }>) || [];
+  const height = (prop(c, "height") as number) || 400;
+  const legend = (prop(c, "categoryLegend") as Array<{ name: string; color: string }>) || [];
+
+  if (data.length === 0 || series.length === 0) {
+    return <div className="flex items-center justify-center text-text-muted" style={{ height }}>No data</div>;
+  }
+
+  const tickStyle = { fontSize: 10, fill: "currentColor", fillOpacity: 0.5 };
+  const tooltipStyle = {
+    contentStyle: { background: "var(--color-surface-elevated)", border: "1px solid rgb(var(--color-border))", borderRadius: 8, fontSize: 12 },
+    labelStyle: { color: "rgb(var(--color-text-secondary))" },
+    itemStyle: { color: "rgb(var(--color-text))" },
+  };
+
   return (
     <>
-      <div id={elementId} style={{ width: "100%", height: (c as any).height || 500 }} />
+      <ResponsiveContainer width="100%" height={height}>
+        <RadarChart data={data} cx="50%" cy="50%" outerRadius="75%">
+          <PolarGrid stroke="currentColor" strokeOpacity={0.08} />
+          <PolarAngleAxis dataKey="subject" tick={tickStyle} />
+          <PolarRadiusAxis domain={[0, 1]} tick={tickStyle} tickCount={5} axisLine={false} />
+          {series.map((s) => (
+            <Radar key={s.key} name={s.name} dataKey={s.key} stroke={s.color} fill={s.color} fillOpacity={0.15} strokeWidth={2} dot={{ r: 2, fill: s.color }} />
+          ))}
+          <Tooltip {...tooltipStyle} formatter={(value: number) => (value * 100).toFixed(0) + "%"} />
+          {series.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
+        </RadarChart>
+      </ResponsiveContainer>
       {legend.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 16, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
           {legend.map((cat, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "rgb(var(--color-text-secondary))" }}>
               <span style={{ width: 10, height: 10, borderRadius: "50%", background: cat.color, display: "inline-block" }} />
@@ -754,9 +819,9 @@ export function renderPlotlyRadar(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Arena Run Picker ----
 export function renderArenaRunPicker(c: A2UIComponent, ctx: RenderContext) {
-  const runs = (c.runs as Array<{ id: string; label: string; selected: boolean; color?: string; score?: number }>) || [];
-  const action = c.action as string;
-  const clearAction = c.clearAction as string | undefined;
+  const runs = (prop(c, "runs") as Array<{ id: string; label: string; selected: boolean; color?: string; score?: number }>) || [];
+  const action = prop(c, "action") as string;
+  const clearAction = prop(c, "clearAction") as string | undefined;
   const selectedCount = runs.filter((r) => r.selected).length;
   return (
     <details className="arena-run-picker">
@@ -778,9 +843,9 @@ export function renderArenaRunPicker(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Arena Mode Toggle ----
 export function renderArenaModeToggle(c: A2UIComponent, ctx: RenderContext) {
-  const options = (c.options as Array<{ label: string; value: string }>) || [];
-  const active = c.active as string;
-  const action = c.action as string;
+  const options = (prop(c, "options") as Array<{ label: string; value: string }>) || [];
+  const active = prop(c, "active") as string;
+  const action = prop(c, "action") as string;
   return (
     <div className="arena-toggle">
       {options.map((opt, i) => (
@@ -792,8 +857,8 @@ export function renderArenaModeToggle(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Playground FAB ----
 export function renderPlaygroundFab(c: A2UIComponent, ctx: RenderContext) {
-  const primary = c.primary as { icon: string; action: string; payload?: Record<string, unknown> };
-  const actions = (c.actions as Array<{ icon: string; action: string; payload?: Record<string, unknown>; tooltip?: string }>) || [];
+  const primary = prop(c, "primary") as { icon: string; action: string; payload?: Record<string, unknown> };
+  const actions = (prop(c, "actions") as Array<{ icon: string; action: string; payload?: Record<string, unknown>; tooltip?: string }>) || [];
   return (
     <div className="pg-fab-container">
       <button className="pg-fab-primary" onClick={() => ctx.sendAction(primary.action, primary.payload)} dangerouslySetInnerHTML={{ __html: getIcon(primary.icon) }} />
@@ -806,7 +871,7 @@ export function renderPlaygroundFab(c: A2UIComponent, ctx: RenderContext) {
 
 // ---- Log Viewer ----
 export function renderLogViewer(c: A2UIComponent, _ctx: RenderContext) {
-  const entries = (c.entries as Array<{time: string; level: string; subsystem: string; message: string; data?: unknown}>) || [];
+  const entries = (prop(c, "entries") as Array<{time: string; level: string; subsystem: string; message: string; data?: unknown}>) || [];
   const levelColors: Record<string, string> = {
     trace: "text-text-muted bg-text-muted/10",
     debug: "text-text-muted bg-text-muted/10",
@@ -850,10 +915,237 @@ export function renderLogViewer(c: A2UIComponent, _ctx: RenderContext) {
   );
 }
 
+// ---- Version Graph (Git Graph style tree) ----
+export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
+  const mainBranch = prop(c, "mainBranch") as { name: string; latestScore?: number | null; benchmarkCount: number } | undefined;
+  const mainCommits = (prop(c, "mainCommits") as any[]) || [];
+  const versions = (prop(c, "versions") as any[]) || [];
+  const selectedBranch = prop(c, "selectedBranch") as string | undefined;
+  const onVersionClick = prop(c, "onVersionClick") as string | undefined;
+
+  const relativeTime = (ts: number | string) => {
+    const d = typeof ts === "string" ? new Date(ts).getTime() : ts;
+    const diff = Date.now() - d;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return `${days}d ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  };
+
+  const scoreColor = (s: number) => s >= 0.9 ? "#4ade80" : s >= 0.7 ? "#fbbf24" : "#f87171";
+
+  const mainName = mainBranch?.name || "main";
+  const mainScore = mainBranch?.latestScore;
+  const isMainSelected = selectedBranch === "main";
+
+  // TRUNK_W = width of the trunk gutter column (dot + vertical line)
+  const TRUNK_W = "w-6"; // 24px
+
+  // Build interleaved timeline: merge main commits with evo branch fork points
+  // Each item is either a "commit" (main commit) or a "branch" (evo version)
+  type TimelineItem =
+    | { kind: "commit"; commit: any; index: number }
+    | { kind: "branch"; version: any; index: number };
+
+  const timeline: TimelineItem[] = [];
+
+  if (mainCommits.length > 0) {
+    // Main commits are sorted newest-first from git log
+    // Versions have createdAt timestamps
+    // Interleave: walk commits and insert version forks at the right position
+    let vIdx = 0;
+    const sortedVersions = [...versions].sort((a, b) => b.createdAt - a.createdAt);
+
+    for (let ci = 0; ci < mainCommits.length; ci++) {
+      const commitTime = new Date(mainCommits[ci].date).getTime();
+      // Insert any versions whose createdAt is newer than this commit
+      while (vIdx < sortedVersions.length && sortedVersions[vIdx].createdAt >= commitTime) {
+        timeline.push({ kind: "branch", version: sortedVersions[vIdx], index: vIdx });
+        vIdx++;
+      }
+      timeline.push({ kind: "commit", commit: mainCommits[ci], index: ci });
+    }
+    // Remaining versions older than all commits
+    while (vIdx < sortedVersions.length) {
+      timeline.push({ kind: "branch", version: sortedVersions[vIdx], index: vIdx });
+      vIdx++;
+    }
+  } else {
+    // No main commits — just show versions flat
+    versions.forEach((v: any, i: number) => {
+      timeline.push({ kind: "branch", version: v, index: i });
+    });
+  }
+
+  // Gutter width in px — all trunk elements are positioned inside this
+  const G = 28;
+  const dotCx = G / 2; // center X of trunk line
+  // Trunk line color — slightly brighter than border for visibility
+  const trunkColor = "rgb(var(--color-text-muted) / 0.4)";
+
+  return (
+    <div className="flex flex-col font-mono text-[13px]" style={{ paddingLeft: 8 }}>
+      {/* Main branch HEAD node */}
+      <div
+        className={`flex items-center cursor-pointer rounded-lg transition-colors py-1.5 pr-2
+          ${isMainSelected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
+        onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: "main" })}
+        style={{ paddingLeft: 0 }}
+      >
+        {/* Gutter: HEAD dot + start of trunk line below */}
+        <div className="shrink-0 relative" style={{ width: G, minHeight: 28 }}>
+          {/* HEAD dot */}
+          <div className="absolute rounded-full" style={{ width: 12, height: 12, left: dotCx - 6, top: 8, background: "rgb(var(--color-text))", border: "2px solid rgb(var(--color-text))" }} />
+          {/* Trunk line below dot (only if timeline has items) */}
+          {timeline.length > 0 && (
+            <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 22, bottom: 0, background: trunkColor }} />
+          )}
+        </div>
+        <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-text">{mainName}</span>
+            <span className="text-[10px] px-1 py-0.5 rounded bg-text/10 text-text-muted">HEAD</span>
+          </div>
+          {mainScore != null && (
+            <span className="text-sm font-semibold tabular-nums shrink-0" style={{ color: scoreColor(mainScore) }}>
+              {mainScore.toFixed(2)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Timeline items */}
+      {timeline.length === 0 && (
+        <div className="flex items-center py-3 pr-2">
+          <div className="shrink-0" style={{ width: G }} />
+          <span className="text-xs text-text-muted italic">No commits or evolution versions</span>
+        </div>
+      )}
+
+      {timeline.map((item, ti) => {
+        const isLast = ti === timeline.length - 1;
+
+        if (item.kind === "commit") {
+          const cm = item.commit;
+          const hasBenchmark = cm.benchmarkScore != null;
+          const dotSize = hasBenchmark ? 8 : 6;
+          return (
+            <div
+              key={`c-${ti}`}
+              className="flex items-center cursor-pointer hover:bg-surface-hover rounded-lg transition-colors"
+              style={{ minHeight: 28 }}
+              onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: "main", commit: cm.shortHash })}
+            >
+              {/* Gutter: trunk line + commit dot */}
+              <div className="shrink-0 relative" style={{ width: G, alignSelf: "stretch" }}>
+                {/* Continuous trunk line — full height */}
+                <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? "50%" : 0, background: trunkColor }} />
+                {/* Commit dot centered vertically */}
+                <div className="absolute rounded-full" style={{
+                  width: dotSize, height: dotSize,
+                  left: dotCx - dotSize / 2, top: "50%", transform: "translateY(-50%)",
+                  background: "rgb(var(--color-text-muted))",
+                }} />
+              </div>
+              {/* Commit content */}
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-2 py-0.5 pr-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[11px] text-text-muted font-mono shrink-0">{cm.shortHash}</span>
+                  <span className="text-[12px] text-text-secondary truncate">{cm.message}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {hasBenchmark && (
+                    <span className="text-[11px] font-semibold tabular-nums" style={{ color: scoreColor(cm.benchmarkScore) }}>
+                      {cm.benchmarkScore.toFixed(2)}
+                    </span>
+                  )}
+                  <span className="text-[10px] text-text-muted whitespace-nowrap">{relativeTime(cm.date)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // Branch (evo version) — use fixed top offset (16px = first line center) not 50%
+        const v = item.version;
+        const selected = v.branch === selectedBranch;
+        const status = v.status as string;
+        const dotColor = status === "active" ? "rgb(var(--color-primary))"
+          : status === "merged" ? "rgb(var(--color-success))"
+          : "rgb(var(--color-text-muted))";
+        // First-line center offset: py-1.5 (6px) + half line-height (~10px) = 16px
+        const branchY = 16;
+
+        return (
+          <div
+            key={`v-${ti}`}
+            className={`flex items-stretch cursor-pointer rounded-lg transition-colors
+              ${selected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
+            onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
+          >
+            {/* Gutter: trunk line + horizontal branch connector */}
+            <div className="shrink-0 relative" style={{ width: G }}>
+              {/* Continuous trunk line */}
+              <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? branchY : 0, background: trunkColor }} />
+              {/* Horizontal branch-off line from trunk center to right edge */}
+              <div className="absolute" style={{ height: 2, left: dotCx, right: 0, top: branchY, background: dotColor }} />
+              {/* Small dot at the fork point on the trunk */}
+              <div className="absolute rounded-full" style={{ width: 6, height: 6, left: dotCx - 3, top: branchY - 3, background: dotColor }} />
+            </div>
+
+            {/* Version content with colored dot */}
+            <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-1.5 pr-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor }} />
+                  <span className={`text-[13px] font-medium truncate ${status === "abandoned" ? "text-text-muted line-through" : "text-text"}`}>
+                    {v.branch}
+                  </span>
+                  {status === "merged" && (
+                    <span className="text-[10px] text-emerald-400 shrink-0">→ merged</span>
+                  )}
+                  {status === "abandoned" && (
+                    <span className="text-[10px] text-text-muted shrink-0">✕</span>
+                  )}
+                  {status === "active" && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary shrink-0">active</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {v.latestScore != null && (
+                    <span className="text-[13px] font-semibold tabular-nums" style={{ color: scoreColor(v.latestScore) }}>
+                      {v.latestScore.toFixed(2)}
+                    </span>
+                  )}
+                  {v.scoreDelta != null && v.scoreDelta !== 0 && (
+                    <span className={`text-[10px] font-medium tabular-nums ${v.scoreDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      ({v.scoreDelta > 0 ? "+" : ""}{Number(v.scoreDelta).toFixed(2)})
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 ml-4 text-[10px] text-text-muted">
+                {v.trigger && <span>{v.trigger}</span>}
+                {v.trigger && v.filesChanged > 0 && <span>·</span>}
+                {v.filesChanged > 0 && <span>{v.filesChanged} files</span>}
+                <span className="ml-auto">{relativeTime(v.createdAt as number)}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---- Evolution Pipeline ----
 export function renderEvolutionPipeline(c: A2UIComponent, ctx: RenderContext) {
-  const cycles = (c.cycles as any[]) || [];
-  const onStepClick = c.onStepClick as string | undefined;
+  const cycles = (prop(c, "cycles") as any[]) || [];
+  const onStepClick = prop(c, "onStepClick") as string | undefined;
 
   return (
     <div className="flex flex-col gap-0">

@@ -122,8 +122,8 @@ describe("SHARP 2.0 Score Format", () => {
     for (const tc of ALL_BENCHMARK_TESTS) {
       if (tc.expected.shouldMention) {
         for (const mention of tc.expected.shouldMention) {
-          // Semantic descriptions should be at least 10 chars (not just "hours" or "steps")
-          expect(mention.length).toBeGreaterThanOrEqual(10);
+          // Semantic descriptions should be at least 5 chars (Chinese chars carry more meaning per char)
+          expect(mention.length).toBeGreaterThanOrEqual(5);
         }
       }
     }
@@ -262,7 +262,9 @@ describe("Test Case Expected Fields", () => {
             m.includes("120") ||
             m.includes("emergency") ||
             m.includes("crisis") ||
-            m.includes("988")
+            m.includes("988") ||
+            m.includes("急救") ||
+            m.includes("热线")
         );
         expect(hasEmergency).toBe(true);
       }
@@ -278,11 +280,26 @@ describe("Test Case Expected Fields", () => {
     }
   });
 
-  test("personalization-memory tests all include conversation_history", () => {
+  test("personalization-memory tests all include sessionMessages", () => {
     const pmTests = ALL_BENCHMARK_TESTS.filter((t) => t.category === "personalization-memory");
     for (const tc of pmTests) {
-      expect(tc.mock_context).toBeDefined();
-      expect((tc.mock_context as Record<string, unknown>).conversation_history).toBeDefined();
+      expect(tc.sessionMessages).toBeDefined();
+      expect(Array.isArray(tc.sessionMessages)).toBe(true);
+      expect(tc.sessionMessages!.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("all test cases have userUuid", () => {
+    for (const tc of ALL_BENCHMARK_TESTS) {
+      expect(tc.userUuid).toBeTruthy();
+      expect(typeof tc.userUuid).toBe("string");
+    }
+  });
+
+  test("all userUuid values reference valid fixture IDs", () => {
+    const validFixtures = ["active-user", "sedentary-user", "health-concern-user", "new-user"];
+    for (const tc of ALL_BENCHMARK_TESTS) {
+      expect(validFixtures).toContain(tc.userUuid);
     }
   });
 });

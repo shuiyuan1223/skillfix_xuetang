@@ -6,6 +6,8 @@
  *
  * Navigation via slash commands (/dashboard, /evolution, etc).
  * Actions via numbered selection ([1], [2], ...).
+ *
+ * Transport: HTTP+SSE (POST /api/a2ui/init, POST /api/a2ui/action, GET /api/a2ui/events)
  */
 
 import type { Command } from "commander";
@@ -84,7 +86,7 @@ interface ChatMessage {
   content: string;
 }
 
-// Slash command → Gateway view mapping
+// Slash command -> Gateway view mapping
 const SLASH_NAV: Record<string, string> = {
   "/chat": "chat",
   "/dashboard": "dashboard",
@@ -101,7 +103,7 @@ export function registerTuiCommand(program: Command): void {
   program
     .command("tui")
     .description("Open terminal UI for interactive chat")
-    .option("--url <string>", "Gateway WebSocket URL")
+    .option("--port <number>", "Gateway port number")
     .action(async (options) => {
       const config = loadConfig();
       await runTUI(options, config);
@@ -109,15 +111,15 @@ export function registerTuiCommand(program: Command): void {
 }
 
 async function runTUI(options: any, config: any): Promise<void> {
-  const port = config.gateway.port;
-  const wsUrl = options.url || `ws://localhost:${port}/ws`;
+  const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
+  const baseUrl = `http://localhost:${port}`;
   const phaRef = config.orchestrator?.pha;
   const provider = (phaRef ? phaRef.split("/")[0] : config.llm.provider) as LLMProvider;
   const providerCfg = PROVIDER_CONFIGS[provider];
 
   // Check gateway first (before starting TUI)
   try {
-    const healthCheck = await fetch(`http://localhost:${port}/health`, {
+    const healthCheck = await fetch(`${baseUrl}/health`, {
       signal: AbortSignal.timeout(1000),
     });
     if (!healthCheck.ok) throw new Error("not healthy");
@@ -134,7 +136,7 @@ async function runTUI(options: any, config: any): Promise<void> {
     for (let i = 0; i < 50; i++) {
       await new Promise((r) => setTimeout(r, 200));
       try {
-        const check = await fetch(`http://localhost:${port}/health`, {
+        const check = await fetch(`${baseUrl}/health`, {
           signal: AbortSignal.timeout(500),
         });
         if (check.ok) {
@@ -158,11 +160,12 @@ async function runTUI(options: any, config: any): Promise<void> {
 
   // State
   const chatMessages: ChatMessage[] = [];
-  let ws: WebSocket | null = null;
   let connected = false;
   let isProcessing = false;
   let currentAssistantMessage = "";
   let loader: Loader | null = null;
+  let sessionId = "";
+  let sseAbortController: AbortController | null = null;
 
   // View state
   let currentView = "chat";
@@ -215,6 +218,160 @@ async function runTUI(options: any, config: any): Promise<void> {
   );
   editor.setAutocompleteProvider(autocompleteProvider);
 
+  // ========================================================================
+  // HTTP+SSE transport helpers
+  // ========================================================================
+
+  function processMessage(msg: any) {
+    try {
+      switch (msg.type) {
+        case "page":
+          handlePageMessage(msg);
+          break;
+
+        case "agent_text":
+          if (msg.is_final) {
+            finishResponse();
+          } else {
+            currentAssistantMessage = msg.content;
+            if (loader) {
+              const preview =
+                msg.content.length > 60 ? msg.content.substring(0, 60) + "..." : msg.content;
+              loader.setMessage(preview);
+            }
+          }
+          break;
+
+        case "tool_call":
+          if (loader) loader.setMessage(`Using ${msg.tool}...`);
+          break;
+
+        case "modal":
+          handleModal(msg);
+          break;
+
+        case "toast":
+          handleToast(msg);
+          break;
+
+        case "clear_surface":
+          // Handle surface clearing if needed
+          break;
+
+        case "a2ui":
+          // Handle a2ui updates - delegate to page handler if it has surfaces
+          if (msg.surfaces) handlePageMessage(msg);
+          break;
+
+        case "log_entry":
+          // Log entries are for debug; ignore in TUI
+          break;
+
+        case "error":
+          finishResponse();
+          addChatMessage("assistant", `**Error:** ${msg.message}`);
+          break;
+
+        case "connected":
+          // Session connected confirmation - ignore
+          break;
+      }
+    } catch {
+      // Ignore processing errors
+    }
+  }
+
+  function processUpdates(updates: unknown[]) {
+    for (const msg of updates) {
+      processMessage(msg);
+    }
+  }
+
+  async function sendAction(action: string, payload?: Record<string, unknown>) {
+    try {
+      const res = await fetch(`${baseUrl}/api/a2ui/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "action", action, payload, sessionId }),
+      });
+      const result = (await res.json()) as { updates: unknown[] };
+      processUpdates(result.updates);
+    } catch {
+      // Ignore fetch errors
+    }
+  }
+
+  async function sendNavigate(view: string) {
+    try {
+      const res = await fetch(`${baseUrl}/api/a2ui/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "navigate", view, sessionId }),
+      });
+      const result = (await res.json()) as { updates: unknown[] };
+      processUpdates(result.updates);
+    } catch {
+      // Ignore fetch errors
+    }
+  }
+
+  async function sendUserMessage(content: string) {
+    try {
+      const res = await fetch(`${baseUrl}/api/a2ui/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "user_message", payload: { content }, sessionId }),
+      });
+      const result = (await res.json()) as { updates: unknown[] };
+      processUpdates(result.updates);
+    } catch {
+      // Ignore fetch errors
+    }
+  }
+
+  async function startSSE() {
+    sseAbortController = new AbortController();
+    try {
+      const res = await fetch(`${baseUrl}/api/a2ui/events?sessionId=${sessionId}`, {
+        signal: sseAbortController.signal,
+      });
+      if (!res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const msg = JSON.parse(line.slice(6));
+              processMessage(msg);
+            } catch {
+              /* skip unparseable SSE data */
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      // AbortError is expected on cleanup
+      if (e?.name !== "AbortError") {
+        // SSE connection lost - attempt reconnect if still connected
+        if (connected) {
+          setTimeout(() => startSSE(), 1000);
+        }
+      }
+    }
+  }
+
+  // ========================================================================
+  // Editor submit handler
+  // ========================================================================
+
   editor.onSubmit = (text) => {
     if (!text.trim()) return;
     if (isProcessing) return;
@@ -255,15 +412,7 @@ async function runTUI(options: any, config: any): Promise<void> {
       const idx = parseInt(cmd) - 1;
       if (idx >= 0 && idx < pageActions.length) {
         const action = pageActions[idx];
-        if (ws && connected) {
-          ws.send(
-            JSON.stringify({
-              type: "action",
-              action: action.action,
-              payload: action.payload,
-            })
-          );
-        }
+        sendAction(action.action, action.payload);
         editor.setText("");
         return;
       }
@@ -283,9 +432,7 @@ async function runTUI(options: any, config: any): Promise<void> {
       loader.start();
       tui.requestRender();
 
-      if (ws && connected) {
-        ws.send(JSON.stringify({ type: "user_message", content: cmd }));
-      }
+      sendUserMessage(cmd);
       return;
     }
 
@@ -314,7 +461,7 @@ async function runTUI(options: any, config: any): Promise<void> {
     for (const msg of chatMessages) {
       if (msg.role === "user") {
         messagesContainer.addChild(
-          new Text(`${colors.green("You")} ${colors.dim("›")} ${msg.content}`, 1, 0)
+          new Text(`${colors.green("You")} ${colors.dim(">")} ${msg.content}`, 1, 0)
         );
         messagesContainer.addChild(new Spacer(1));
       } else if (msg.role === "assistant") {
@@ -323,7 +470,7 @@ async function runTUI(options: any, config: any): Promise<void> {
         messagesContainer.addChild(new Spacer(1));
       } else if (msg.role === "tool") {
         messagesContainer.addChild(
-          new Text(`${colors.yellow("Tool")} ${colors.dim("›")} ${msg.content}`, 1, 0)
+          new Text(`${colors.yellow("Tool")} ${colors.dim(">")} ${msg.content}`, 1, 0)
         );
       }
     }
@@ -352,9 +499,7 @@ async function runTUI(options: any, config: any): Promise<void> {
     currentView = view;
     pageActions = [];
 
-    if (ws && connected) {
-      ws.send(JSON.stringify({ type: "navigate", view }));
-    }
+    sendNavigate(view);
 
     // Show loading state
     if (view !== "chat") {
@@ -496,7 +641,7 @@ async function runTUI(options: any, config: any): Promise<void> {
     pageActions.push(...modalActions);
 
     const title = msg.title || "Details";
-    const border = colors.dim("═".repeat(Math.min(60, termWidth - 4)));
+    const border = colors.dim("=".repeat(Math.min(60, termWidth - 4)));
 
     const modalContainer = new Container();
     modalContainer.addChild(new Spacer(1));
@@ -567,7 +712,7 @@ In page views, type a number to trigger an action.`
 
   function cleanup() {
     if (loader) loader.stop();
-    if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+    if (sseAbortController) sseAbortController.abort();
     if (tuiStarted) tui.stop();
     process.exit(0);
   }
@@ -576,90 +721,49 @@ In page views, type a number to trigger an action.`
   process.on("SIGINT", cleanup);
   process.on("SIGTERM", cleanup);
 
-  // Connect WebSocket
-  ws = new WebSocket(wsUrl);
+  // ========================================================================
+  // Initialize via HTTP+SSE
+  // ========================================================================
 
-  ws.onopen = () => {
+  try {
+    // 1. Call /api/a2ui/init to get session and initial page state
+    const defaultUserId = config.uid || undefined;
+    const initRes = await fetch(`${baseUrl}/api/a2ui/init`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uuid: defaultUserId }),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!initRes.ok) {
+      console.error(`Init request failed: ${initRes.status}`);
+      process.exit(1);
+    }
+
+    const initData = (await initRes.json()) as {
+      sessionId: string;
+      uid: string;
+      updates: unknown[];
+    };
+    sessionId = initData.sessionId;
     connected = true;
-    ws!.send(JSON.stringify({ type: "init" }));
+
+    // Process initial page state
+    processUpdates(initData.updates);
+
+    // Show welcome message
     addChatMessage(
       "assistant",
       `Welcome to **PHA**!\n\nAsk me about your health data, sleep, or activity.\nType \`/help\` for navigation commands.`
     );
     tui.requestRender();
-  };
 
-  ws.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data as string);
-      switch (msg.type) {
-        case "page":
-          handlePageMessage(msg);
-          break;
-
-        case "agent_text":
-          if (msg.is_final) {
-            finishResponse();
-          } else {
-            currentAssistantMessage = msg.content;
-            if (loader) {
-              const preview =
-                msg.content.length > 60 ? msg.content.substring(0, 60) + "..." : msg.content;
-              loader.setMessage(preview);
-            }
-          }
-          break;
-
-        case "tool_call":
-          if (loader) loader.setMessage(`Using ${msg.tool}...`);
-          break;
-
-        case "modal":
-          handleModal(msg);
-          break;
-
-        case "toast":
-          handleToast(msg);
-          break;
-
-        case "error":
-          finishResponse();
-          addChatMessage("assistant", `**Error:** ${msg.message}`);
-          break;
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  };
-
-  ws.onerror = () => {
-    if (!connected) {
-      console.error("WebSocket connection failed");
-      process.exit(1);
-    }
-  };
-
-  ws.onclose = () => {
-    if (connected) {
-      cleanup();
-    }
-  };
-
-  // Wait for connection with timeout
-  const connectionTimeout = 5000;
-  const startTime = Date.now();
-  await new Promise<void>((resolve) => {
-    const check = setInterval(() => {
-      if (connected) {
-        clearInterval(check);
-        resolve();
-      } else if (Date.now() - startTime > connectionTimeout) {
-        clearInterval(check);
-        console.error("WebSocket connection timeout");
-        process.exit(1);
-      }
-    }, 50);
-  });
+    // 2. Start SSE listener for push updates (streaming, tool calls, etc.)
+    startSSE();
+  } catch (e) {
+    console.error("Failed to connect to gateway:", e);
+    process.exit(1);
+  }
 
   // Handle Ctrl+C at raw input level (before pi-tui processes it)
   const originalStdinOn = process.stdin.on.bind(process.stdin);

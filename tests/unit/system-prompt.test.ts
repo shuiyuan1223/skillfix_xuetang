@@ -2,6 +2,7 @@
  * Tests for System Prompt Builder
  *
  * Tests skill registry generation from SKILL.md files.
+ * Registry uses OpenClaw-style: descriptions in prompt + LLM-driven get_skill loading.
  */
 
 import { describe, test, expect } from "bun:test";
@@ -13,15 +14,15 @@ describe("buildSkillRegistry", () => {
     expect(registry.length).toBeGreaterThan(0);
   });
 
-  test("contains Available Skills header", () => {
+  test("contains Skills (mandatory) header", () => {
     const registry = buildSkillRegistry();
-    expect(registry).toContain("## 可用技能");
+    expect(registry).toContain("## Skills (mandatory)");
   });
 
-  test("contains markdown table header", () => {
+  test("contains available_skills XML tags", () => {
     const registry = buildSkillRegistry();
-    expect(registry).toContain("| Skill | Description | Triggers |");
-    expect(registry).toContain("|-------|-------------|----------|");
+    expect(registry).toContain("<available_skills>");
+    expect(registry).toContain("</available_skills>");
   });
 
   test("includes all 7 skills", () => {
@@ -43,28 +44,20 @@ describe("buildSkillRegistry", () => {
     expect(registry).toContain("健康数据");
   });
 
-  test("includes trigger keywords", () => {
+  test("uses bold name + description list format", () => {
     const registry = buildSkillRegistry();
-    // Check a few representative triggers from each skill
-    expect(registry).toContain("insomnia");
-    expect(registry).toContain("bpm");
-    expect(registry).toContain("exercise");
-    expect(registry).toContain("steps");
+    // Each skill should be formatted as: - **name**: description
+    expect(registry).toMatch(/- \*\*sleep-coach\*\*:/);
+    expect(registry).toMatch(/- \*\*heart-monitor\*\*:/);
   });
 
-  test("includes Chinese triggers", () => {
+  test("contains scan instructions", () => {
     const registry = buildSkillRegistry();
-    expect(registry).toContain("睡眠");
-    expect(registry).toContain("心率");
-    expect(registry).toContain("运动");
-    expect(registry).toContain("步数");
+    expect(registry).toContain("scan the skill descriptions below");
+    expect(registry).toContain("get_skill");
   });
 
   test("excludes disabled skills", () => {
-    // Skills ending with _disabled should not appear
-    // We can't easily test this without creating a disabled skill dir,
-    // but we verify the logic exists by checking that currently no
-    // unexpected skills appear
     const registry = buildSkillRegistry();
     expect(registry).not.toContain("_disabled");
   });
@@ -74,8 +67,8 @@ describe("buildSkillRegistry", () => {
     expect(registry).toContain("get_skill");
   });
 
-  test("mentions auto-injection behavior", () => {
+  test("describes LLM-driven loading behavior", () => {
     const registry = buildSkillRegistry();
-    expect(registry).toContain("自动注入");
+    expect(registry).toContain("call `get_skill(name)` to load its full guide");
   });
 });

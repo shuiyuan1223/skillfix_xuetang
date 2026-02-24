@@ -4,8 +4,9 @@
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { MemoryManager } from "./memory-manager.js";
-import { existsSync, rmSync, mkdirSync } from "fs";
+import { existsSync, rmSync, mkdirSync, readdirSync } from "fs";
 import { join } from "path";
+import { getStateDir } from "../utils/config.js";
 
 // Use a test-specific directory
 const TEST_STATE_DIR = join(import.meta.dir, "../../.pha-test");
@@ -28,6 +29,15 @@ describe("MemoryManager", () => {
     // Clean up test directory
     if (existsSync(TEST_STATE_DIR)) {
       rmSync(TEST_STATE_DIR, { recursive: true, force: true });
+    }
+    // Clean up test user directories leaked into .pha/users/
+    const usersDir = join(getStateDir(), "users");
+    if (existsSync(usersDir)) {
+      for (const entry of readdirSync(usersDir)) {
+        if (entry.startsWith("test-user-") || entry.startsWith("new-user-")) {
+          rmSync(join(usersDir, entry), { recursive: true, force: true });
+        }
+      }
     }
   });
 
@@ -88,25 +98,6 @@ describe("MemoryManager", () => {
     const completeness = manager.getProfileCompleteness(testUuid);
     expect(completeness).toBeGreaterThan(0);
     expect(completeness).toBeLessThanOrEqual(100);
-  });
-
-  test("should extract profile from message", () => {
-    const newUuid = "extract-test-" + Date.now();
-    manager.ensureUser(newUuid);
-
-    const extracted = manager.extractAndUpdateProfile(
-      newUuid,
-      "我是男性，1985年出生，身高180cm，体重75kg"
-    );
-
-    expect(extracted.gender).toBe("male");
-    expect(extracted.birthYear).toBe(1985);
-    expect(extracted.height).toBe(180);
-    expect(extracted.weight).toBe(75);
-
-    // Verify profile was updated (file-based)
-    const profile = manager.getProfile(newUuid);
-    expect(profile.gender).toBe("male");
   });
 
   test("should append to memory without error", () => {

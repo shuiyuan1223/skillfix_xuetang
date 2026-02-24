@@ -28,5 +28,9 @@ pha.json
 # Logs
 *.log
 
-# Test coverage
+# Test coverage & results
 coverage/
+test-results/
+
+# Screenshots
+screenshot-*.png

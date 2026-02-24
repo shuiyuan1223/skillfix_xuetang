@@ -1,12 +1,13 @@
 ---
 name: weekly-review
-description: "生成全面的每周健康报告，包含趋势分析和可操作的建议"
+description: "生成全面的每周健康报告，包含多维度趋势分析和可操作建议。仅当用户明确要求'周回顾'、'这周怎么样'、'周报'时使用。不适用于：今日概览用 health-overview，单项指标趋势用对应专项技能"
 metadata:
   {
     "pha": {
       "emoji": "📅",
-      "requires": { "tools": ["get_weekly_summary", "get_health_data", "get_sleep", "get_heart_rate"] },
-      "triggers": ["weekly", "week", "this week", "last week", "weekly review", "weekly report", "7 days", "week summary", "这周", "本周", "上周", "一周", "周报", "这一周", "七天", "周总结", "回顾", "复盘"]
+      "category": "health-management",
+      "tags": ["pha", "weekly-review", "trends", "report"],
+      "requires": { "tools": ["get_health_trends", "get_health_data", "get_sleep", "get_heart_rate", "list_health_plans", "get_health_plan"] }
     }
   }
 ---
@@ -17,15 +18,15 @@ metadata:
 
 | 用户说的话 | 回顾类型 | 数据策略 |
 |-----------|---------|---------|
-| "我这周怎么样？" | **综合回顾** | `get_weekly_summary` — 多维度全面概览 |
-| "这周和上周比怎么样" | **周期对比** | `get_weekly_summary`（包含 7 天数据），对比前后半段或参考记忆 |
-| "我有进步吗？" | **进度检查** | `get_weekly_summary` + `memory_search("weekly review")` 获取历史数据 |
+| "我这周怎么样？" | **综合回顾** | `get_health_trends` — 多维度全面概览 |
+| "这周和上周比怎么样" | **周期对比** | `get_health_trends`（包含 7 天数据），对比前后半段或参考记忆 |
+| "我有进步吗？" | **进度检查** | `get_health_trends` + `memory_search("weekly review")` 获取历史数据 |
 | "下周我该重点关注什么？" | **前瞻规划** | 全面回顾 + 找出最弱维度 |
 | "给我出个周报" | **正式报告** | 所有可用数据，结构化输出 |
 
 ## 第二步：数据收集
 
-**首先调用 `get_weekly_summary`** — 它提供基础数据。
+**首先调用 `get_health_trends`** — 它提供基础数据。
 
 进行全面回顾时，补充调用：
 - `get_heart_rate(today)` — 增加心血管维度
@@ -76,6 +77,24 @@ metadata:
 **如有心率数据：**
 - 当前静息心率与预期基线对比
 - 任何值得关注的趋势（持续上升 = 压力/过度训练信号）
+
+### 3.5 健康计划进度
+
+**如果用户有活跃的健康计划，必须在周回顾中包含计划进度。**
+
+操作步骤：
+1. 调用 `list_health_plans(status="active")` 获取活跃计划
+2. 对每个计划调用 `get_health_plan(planId)` 获取详情
+3. 评估每个目标的本周进展
+
+报告模板：
+- 计划名称 + 总体进度（X/Y 目标完成）
+- 每个目标：当前值 vs 目标值 + 本周变化方向（↑ 改善 / → 持平 / ↓ 退步）
+- 如果进度落后 > 2 周，建议调整目标
+
+示例：
+"你的「睡眠改善计划」进行到第 2 周。睡眠时长从基线 6.2h 提升到了 6.8h，朝着 7.5h 的目标前进中。
+入睡时间还需要努力 — 这周平均 0:15，离 23:00 的目标还有距离。下周我们先集中把入睡时间提前到 23:30。"
 
 ### 3.4 跨维度综合分析
 

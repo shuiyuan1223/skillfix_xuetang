@@ -239,7 +239,7 @@ export class Evaluator {
     passed: boolean;
   }> {
     // Call the agent
-    const { response, toolCalls } = await agentCall(testCase.query, testCase.context);
+    const { response, toolCalls } = await agentCall(testCase.query);
 
     // Create a trace
     const trace: Trace = {
@@ -247,7 +247,6 @@ export class Evaluator {
       timestamp: Date.now(),
       sessionId: "test",
       userMessage: testCase.query,
-      context: testCase.context,
       agentResponse: response,
       toolCalls: toolCalls as Trace["toolCalls"],
       duration: 0,

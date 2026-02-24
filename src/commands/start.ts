@@ -86,6 +86,7 @@ export function registerStartCommand(program: Command): void {
     .option("-f, --foreground", "Run in foreground (don't daemonize)")
     .action(async (options) => {
       const config = loadConfig();
+      const host = config.gateway.host || "0.0.0.0";
       const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
       let agentModel: ReturnType<typeof resolveAgentModel> | null = null;
       let apiKey: string | undefined;
@@ -160,6 +161,7 @@ export function registerStartCommand(program: Command): void {
         }
 
         await startGateway({
+          host,
           port,
           provider: (agentModel?.provider || config.llm.provider) as any,
           modelId: agentModel?.modelId || config.llm.modelId,
@@ -183,6 +185,7 @@ export function registerStartCommand(program: Command): void {
           env: {
             ...process.env,
             PHA_API_KEY: apiKey,
+            CLAUDECODE: undefined,
           },
         });
 

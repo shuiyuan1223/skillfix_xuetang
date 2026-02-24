@@ -21,7 +21,8 @@ Follow these steps **in order**. Do NOT skip any step.
 - [ ] Use `A2UIGenerator` to build component tree
 - [ ] Use `t("xxx.yyy")` for all user-facing text (NO hardcoded strings)
 - [ ] Use icon NAMES (e.g. `"heart"`, `"brain"`), **NEVER emoji** for `icon` properties
-- [ ] Available icons listed in CLAUDE.md. Need new icon? Add SVG to `ui/src/main.ts` ICONS object
+- [ ] Available icons listed in CLAUDE.md. Need new icon? Add SVG to `ui/src/lib/icons.tsx` ICONS object
+- [ ] **Complex pages** can have their own file (e.g. `src/gateway/evolution-lab.ts`) instead of adding to `pages.ts`
 
 ### 3. Sidebar Navigation
 
@@ -57,13 +58,37 @@ bun run build    # Build succeeds
 - **No frontend changes needed** if existing A2UI components suffice
 - Available components: `text`, `card`, `column`, `row`, `grid`, `chart`, `stat_card`, `data_table`, `table`, `button`, `form`, `form_input`, `badge`, `progress`, `collapsible`, `code_editor`, `tabs`, `score_gauge`, `modal`, `git_timeline`, `step_indicator`, `file_tree`
 - **Complex pages** can have their own file (e.g. `evolution-lab.ts`) instead of adding to `pages.ts`
+- **New A2UI component types** require renderers in both `A2UIRenderer.tsx` (Web) and `tui-renderer.ts` (TUI)
+
+## Navigation View IDs
+
+All registered view IDs in `handleNavigate()`:
+
+```
+Main Views:
+  chat              — 聊天页面 (default)
+  system-agent      — 系统 Agent 聊天
+  dashboard         — 健康仪表盘 (aliases: health, sleep, activity)
+  memory            — 记忆系统
+  evolution         — 进化实验室
+
+Settings Views:
+  settings/prompts       — 提示词管理
+  settings/skills        — 技能管理
+  settings/integrations  — 数据源集成
+  settings/logs          — 日志查看
+  settings/general       — 通用设置
+  settings/system-agent  — (redirects → settings/prompts)
+  settings/evolution     — (redirects → evolution)
+  settings/evolution-legacy — (redirects → evolution)
+```
 
 ## Navigation Structure
 
 ```
 Main Nav (top-level):
-  chat, dashboard, memory, evolution
+  chat, dashboard, memory, evolution, system-agent
 
 Settings Nav (below divider):
-  settings/prompts, settings/skills, settings/integrations
+  settings/prompts, settings/skills, settings/integrations, settings/logs, settings/general
 ```

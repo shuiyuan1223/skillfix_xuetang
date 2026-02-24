@@ -5,8 +5,9 @@ metadata:
   {
     "pha": {
       "emoji": "🩸",
-      "requires": { "tools": ["get_blood_glucose", "get_nutrition"] },
-      "triggers": ["blood sugar", "blood glucose", "glucose", "diabetes", "fasting glucose", "postprandial", "HbA1c", "glycemic", "血糖", "血糖高", "血糖低", "糖尿病", "空腹血糖", "餐后血糖", "糖化血红蛋白", "低血糖", "高血糖", "胰岛素", "升糖"]
+      "category": "health-coaching",
+      "tags": ["pha", "blood-sugar", "diabetes", "data-analysis"],
+      "requires": { "tools": ["get_blood_glucose", "get_nutrition"] }
     }
   }
 ---

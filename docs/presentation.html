@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PHA - Personal Health Agent 系统汇报</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif; background: #0a0a0f; color: #e4e4e7; }
+
+  /* ── Slide Container ── */
+  .deck { width: 100vw; height: 100vh; position: relative; }
+  .slide {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; padding: 36px 64px; overflow: hidden;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s ease, transform 0.5s ease;
+    transform: translateX(40px);
+  }
+  .slide.active { opacity: 1; pointer-events: auto; transform: translateX(0); }
+  .slide.prev { opacity: 0; transform: translateX(-40px); }
+
+  /* ── Typography ── */
+  h1 { font-size: 3.2rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
+  h2 { font-size: 2.2rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; margin-bottom: 20px; }
+  h3 { font-size: 1.3rem; font-weight: 600; margin-bottom: 12px; }
+  p, li { font-size: 1.05rem; line-height: 1.6; color: #a1a1aa; }
+  .subtitle { font-size: 1.4rem; color: #71717a; margin-top: 12px; font-weight: 400; }
+  .highlight { color: #818cf8; }
+  .highlight-green { color: #4ade80; }
+  .highlight-amber { color: #fbbf24; }
+  .highlight-rose { color: #fb7185; }
+  .small { font-size: 0.9rem; color: #52525b; }
+
+  /* ── Layout Helpers ── */
+  .text-center { text-align: center; }
+  .flex-row { display: flex; gap: 40px; align-items: flex-start; width: 100%; }
+  .flex-col { display: flex; flex-direction: column; gap: 16px; }
+  .col { flex: 1; min-width: 0; }
+  .gap-8 { gap: 8px; }
+  .gap-24 { gap: 24px; }
+  .gap-32 { gap: 32px; }
+  .gap-48 { gap: 48px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-24 { margin-top: 24px; }
+  .mt-32 { margin-top: 24px; }
+  .mt-48 { margin-top: 36px; }
+  .w-full { width: 100%; }
+
+  /* ── Cards ── */
+  .card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; padding: 20px 24px;
+  }
+  .card-sm { padding: 16px 20px; border-radius: 12px; }
+  .card h3 { color: #e4e4e7; }
+
+  /* ── Tags ── */
+  .tag {
+    display: inline-block; padding: 4px 12px; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 500; letter-spacing: 0.02em;
+  }
+  .tag-purple { background: rgba(129,140,248,0.15); color: #818cf8; }
+  .tag-green { background: rgba(74,222,128,0.15); color: #4ade80; }
+  .tag-amber { background: rgba(251,191,36,0.15); color: #fbbf24; }
+  .tag-rose { background: rgba(251,113,133,0.15); color: #fb7185; }
+  .tag-blue { background: rgba(96,165,250,0.15); color: #60a5fa; }
+
+  /* ── Metric ── */
+  .metric { text-align: center; }
+  .metric-value { font-size: 2.8rem; font-weight: 700; line-height: 1; }
+  .metric-label { font-size: 0.9rem; color: #71717a; margin-top: 8px; }
+
+  /* ── Screenshot ── */
+  .screenshot {
+    border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4); max-height: 440px; object-fit: contain;
+    width: auto; max-width: 100%;
+  }
+  .screenshot-sm {
+    border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3); max-height: 320px; object-fit: contain;
+    width: auto; max-width: 100%;
+  }
+
+  /* ── Architecture Diagram ── */
+  .arch-layer {
+    width: 100%; padding: 20px 28px; border-radius: 12px; text-align: center;
+    font-weight: 500; font-size: 1rem; position: relative;
+  }
+  .arch-layer .arch-detail { font-size: 0.8rem; color: #a1a1aa; margin-top: 4px; font-weight: 400; }
+  .arch-arrow { text-align: center; color: #52525b; font-size: 1.2rem; padding: 4px 0; }
+  .layer-frontend { background: rgba(96,165,250,0.12); border: 1px solid rgba(96,165,250,0.25); color: #60a5fa; }
+  .layer-gateway { background: rgba(129,140,248,0.12); border: 1px solid rgba(129,140,248,0.25); color: #818cf8; }
+  .layer-agent { background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.25); color: #fbbf24; }
+  .layer-data { background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.25); color: #4ade80; }
+
+  /* ── List ── */
+  ul { list-style: none; padding: 0; }
+  ul li { position: relative; padding-left: 24px; margin-bottom: 8px; }
+  ul li::before { content: ''; position: absolute; left: 0; top: 10px; width: 8px; height: 8px; border-radius: 50%; background: #818cf8; }
+  .list-green li::before { background: #4ade80; }
+  .list-amber li::before { background: #fbbf24; }
+  .list-rose li::before { background: #fb7185; }
+
+  /* ── Timeline ── */
+  .timeline { position: relative; padding-left: 24px; border-left: 2px solid rgba(129,140,248,0.3); }
+  .timeline-item { margin-bottom: 24px; position: relative; }
+  .timeline-item::before {
+    content: ''; position: absolute; left: -29px; top: 4px;
+    width: 12px; height: 12px; border-radius: 50%; background: #818cf8; border: 2px solid #0a0a0f;
+  }
+  .timeline-item.done::before { background: #4ade80; }
+  .timeline-item .tl-title { font-weight: 600; color: #e4e4e7; font-size: 1.05rem; }
+  .timeline-item .tl-desc { color: #a1a1aa; font-size: 0.95rem; margin-top: 4px; }
+
+  /* ── Score Bar ── */
+  .score-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .score-label { width: 130px; font-size: 0.9rem; color: #a1a1aa; text-align: right; flex-shrink: 0; }
+  .score-bar { flex: 1; height: 24px; background: rgba(255,255,255,0.06); border-radius: 12px; overflow: hidden; position: relative; }
+  .score-fill { height: 100%; border-radius: 12px; transition: width 0.8s ease; }
+  .score-value { font-size: 0.85rem; font-weight: 600; color: #e4e4e7; width: 48px; text-align: left; flex-shrink: 0; }
+
+  /* ── Grid ── */
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; width: 100%; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; width: 100%; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; width: 100%; }
+  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; width: 100%; }
+
+  /* ── Slide Counter & Navigation ── */
+  .slide-nav {
+    position: fixed; bottom: 24px; right: 32px; z-index: 100;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .slide-counter { font-size: 0.85rem; color: #52525b; font-variant-numeric: tabular-nums; }
+  .nav-btn {
+    width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04); color: #a1a1aa; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    transition: all 0.2s;
+  }
+  .nav-btn:hover { background: rgba(255,255,255,0.08); color: #e4e4e7; }
+  .nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* ── Progress Bar ── */
+  .progress-bar { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, #818cf8, #c084fc); z-index: 100; transition: width 0.3s ease; }
+
+  /* ── Decorative ── */
+  .glow {
+    position: absolute; width: 400px; height: 400px; border-radius: 50%;
+    filter: blur(120px); opacity: 0.15; pointer-events: none;
+  }
+  .glow-purple { background: #818cf8; }
+  .glow-blue { background: #60a5fa; }
+  .glow-green { background: #4ade80; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  th { text-align: left; padding: 8px 12px; color: #71717a; font-weight: 500; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); color: #a1a1aa; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* ── Emphasis Box ── */
+  .emphasis {
+    background: linear-gradient(135deg, rgba(129,140,248,0.08), rgba(192,132,252,0.08));
+    border: 1px solid rgba(129,140,248,0.2); border-radius: 12px;
+    padding: 20px 28px; font-size: 1.1rem; color: #c4b5fd; line-height: 1.6;
+  }
+
+  /* ── Protocol Box ── */
+  .protocol-box {
+    font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85rem;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px; padding: 12px 16px; color: #a1a1aa; line-height: 1.6; font-size: 0.8rem;
+    white-space: pre-wrap;
+  }
+  .protocol-box .kw { color: #818cf8; }
+  .protocol-box .str { color: #4ade80; }
+  .protocol-box .cm { color: #52525b; }
+
+  /* ── Pipeline Step ── */
+  .pipeline-step {
+    display: flex; align-items: center; gap: 12px; padding: 16px 20px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; position: relative;
+  }
+  .pipeline-step .step-num {
+    width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; font-size: 1rem; flex-shrink: 0;
+  }
+  .pipeline-step .step-body { flex: 1; }
+  .pipeline-step .step-title { font-weight: 600; color: #e4e4e7; font-size: 1rem; }
+  .pipeline-step .step-desc { color: #a1a1aa; font-size: 0.85rem; margin-top: 2px; }
+  .pipeline-arrow { text-align: center; color: #52525b; font-size: 1rem; padding: 2px 0; }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<div class="deck" id="deck">
+
+<!-- ================================================================ -->
+<!-- SLIDE 1: Title -->
+<!-- ================================================================ -->
+<div class="slide active" data-slide="0">
+  <div class="glow glow-purple" style="top: -100px; right: -100px;"></div>
+  <div class="glow glow-blue" style="bottom: -150px; left: -100px;"></div>
+  <div class="text-center">
+    <div style="margin-bottom: 24px;">
+      <span class="tag tag-purple">AgentOS</span>
+      <span class="tag tag-green">AI-Native</span>
+      <span class="tag tag-amber">Health</span>
+    </div>
+    <h1>PHA<br><span style="color: #71717a; font-weight: 400; font-size: 0.6em;">Personal Health Agent</span></h1>
+    <p class="subtitle" style="max-width: 640px; margin: 20px auto 0;">
+      基于 AgentOS 架构的 AI 驱动健康管理助手<br>
+      融合对话式交互、实时健康数据、自我进化能力的新一代智能健康系统
+    </p>
+    <p class="small mt-32">2026.02</p>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 2: Problem & Vision -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="1">
+  <h2 class="text-center">为什么需要 <span class="highlight">PHA</span>？</h2>
+  <div class="grid-3 mt-32">
+    <div class="card text-center">
+      <div style="font-size: 2.4rem; margin-bottom: 16px;">📊</div>
+      <h3>数据碎片化</h3>
+      <p>健康数据散布在手环、手表、手机多个 App 中，难以整合分析形成完整画像</p>
+    </div>
+    <div class="card text-center">
+      <div style="font-size: 2.4rem; margin-bottom: 16px;">🤖</div>
+      <h3>缺乏智能解读</h3>
+      <p>现有应用仅展示数据，无法根据用户个人情况提供个性化的分析与建议</p>
+    </div>
+    <div class="card text-center">
+      <div style="font-size: 2.4rem; margin-bottom: 16px;">🔄</div>
+      <h3>无法持续进化</h3>
+      <p>传统健康 App 一旦发布就固化不变，无法根据反馈自动改进服务质量</p>
+    </div>
+  </div>
+  <div class="emphasis mt-48 text-center w-full">
+    PHA 的愿景：<strong>一个真正理解你、陪伴你、并且持续进化的 AI 健康管家</strong>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 3: AgentOS Architecture Overview -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="2">
+  <h2>系统架构：<span class="highlight">AgentOS</span></h2>
+  <p class="mt-8" style="color:#71717a; margin-bottom: 32px;">前端是纯渲染器，所有 UI 由 Agent 生成 — 一切工具 MCP 化，一切能力 Skills 化</p>
+  <div class="flex-row gap-48">
+    <div class="col" style="max-width: 380px;">
+      <div class="flex-col gap-8">
+        <div class="arch-layer layer-frontend">
+          Frontend（Web / TUI）
+          <div class="arch-detail">纯渲染器 — React A2UIRenderer / pi-tui</div>
+        </div>
+        <div class="arch-arrow">↕ A2UI + AG-UI (HTTP + SSE)</div>
+        <div class="arch-layer layer-gateway">
+          Gateway Server
+          <div class="arch-detail">A2UI 页面生成 · MCP · A2A · SSE 管理</div>
+        </div>
+        <div class="arch-arrow">↕</div>
+        <div class="arch-layer layer-agent">
+          PHA Agent（多 Profile）
+          <div class="arch-detail">MCP Tools = 手（做事） · Skills = 脑（判断）</div>
+        </div>
+        <div class="arch-arrow">↕</div>
+        <div class="arch-layer layer-data">
+          Data Sources + Plugins
+          <div class="arch-detail">华为健康 API · SQLite · 向量索引 · 插件系统</div>
+        </div>
+      </div>
+    </div>
+    <div class="col flex-col gap-24">
+      <div class="card card-sm">
+        <h3 style="color:#60a5fa;">A2UI 协议 · 60+ 组件</h3>
+        <p>Agent-to-UI — 服务端生成组件树，前端纯渲染。4 个 Surface：main / sidebar / modal / toast。涵盖布局、图表、表单、Diff、Git 时间线等。</p>
+      </div>
+      <div class="card card-sm">
+        <h3 style="color:#818cf8;">MCP 工具 · 30+</h3>
+        <p>JSON-RPC 2.0 Streamable HTTP。健康数据、Git 操作、记忆搜索、技能管理、计划与提醒等全域工具。</p>
+      </div>
+      <div class="card card-sm">
+        <h3 style="color:#fbbf24;">Skills 系统 · 20+</h3>
+        <p>SKILL.md 格式的可热插拔专家知识。自动触发、UI 可视化编辑、Git 追踪。覆盖睡眠、心脏、营养、进化等领域。</p>
+      </div>
+      <div class="card card-sm">
+        <h3 style="color:#4ade80;">双形态前端 + 多 Provider</h3>
+        <p>Web UI (React) 和 TUI (终端) 消费同一套 A2UI 数据。统一模型仓库支持 9 家 LLM Provider。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 4: Core Design Principles -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="3" style="padding: 28px 64px;">
+  <h2 style="margin-bottom: 14px;">核心设计原则</h2>
+  <div class="grid-2" style="margin-top: 12px; gap: 14px;">
+    <div class="card" style="padding: 16px 20px;">
+      <span class="tag tag-purple">原则 1</span>
+      <h3 style="margin-top: 10px; margin-bottom: 8px;">前端无业务逻辑</h3>
+      <p style="font-size: 0.95rem;">Web UI 和 TUI 只接收 A2UI 消息并渲染。23+ 页面由服务端 A2UIGenerator 生成，前端做纯粹的 Component → DOM 映射。</p>
+      <div class="protocol-box" style="margin-top: 10px; padding: 8px 12px; font-size: 0.75rem;"><span class="cm">// 服务端</span>
+<span class="kw">const</span> page = generateDashboardPage(data);
+send({ type: <span class="str">"page"</span>, surfaces: { main: page } });
+<span class="cm">// 前端</span>
+handleMessage(msg) → render(msg.surfaces.main);</div>
+    </div>
+    <div class="card" style="padding: 16px 20px;">
+      <span class="tag tag-green">原则 2</span>
+      <h3 style="margin-top: 10px; margin-bottom: 8px;">MCP + Skills 双轨能力</h3>
+      <p style="font-size: 0.95rem;">数据获取和操作执行通过 MCP Tools 暴露（JSON-RPC 标准）。专家知识和行为指导通过 Skills 热加载（Markdown 文件）。</p>
+      <div class="protocol-box" style="margin-top: 10px; padding: 8px 12px; font-size: 0.75rem;"><span class="cm">// MCP Tool (原子能力)</span>
+get_heart_rate({ date: <span class="str">"2026-02-18"</span> })
+→ { avg: 72, max: 128, min: 49 }
+<span class="cm">// Skill (解读框架)</span>
+sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
+    </div>
+    <div class="card" style="padding: 16px 20px;">
+      <span class="tag tag-amber">原则 3</span>
+      <h3 style="margin-top: 10px; margin-bottom: 8px;">Git-Backed 状态管理</h3>
+      <p style="font-size: 0.95rem;">用户画像、记忆、技能均以 Markdown/JSON 文件存储，通过 Git 追踪变更。Worktree 隔离确保安全修改，任何改动可回溯、可 diff、可合并。</p>
+    </div>
+    <div class="card" style="padding: 16px 20px;">
+      <span class="tag tag-rose">原则 4</span>
+      <h3 style="margin-top: 10px; margin-bottom: 8px;">Agent 自主进化</h3>
+      <p style="font-size: 0.95rem;">Evolution Lab 提供 SHARP 5 维评估框架。System Agent 自主诊断弱项、在 Worktree 分支修改代码、展示 Diff、验证改进效果 — 无需人工审批。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 5: Feature - Chat -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="4">
+  <h2>功能展示：<span class="highlight">对话式健康助手</span></h2>
+  <div class="flex-row gap-48" style="align-items: center;">
+    <div class="col" style="flex: 1.2;">
+      <img src="screenshots/chat.png" class="screenshot" alt="聊天界面">
+    </div>
+    <div class="col flex-col gap-24">
+      <div>
+        <h3>自然语言交互</h3>
+        <p>无需翻阅复杂界面，直接对话获取健康建议。Agent 自动调用 MCP 工具获取最新数据作为回答依据。</p>
+      </div>
+      <div>
+        <h3>个性化记忆</h3>
+        <p>Agent 记住用户的健康目标、偏好、历史对话。每次交互都建立在之前的上下文之上，向量索引支持语义搜索。</p>
+      </div>
+      <div>
+        <h3>技能自动触发</h3>
+        <p>用户消息匹配 triggers 后自动注入对应 Skill（睡眠教练、心脏监护、营养指导等），提供专业领域解答。</p>
+      </div>
+      <div>
+        <h3>安全边界</h3>
+        <p>内置医疗边界意识、风险披露、有害内容过滤等安全保障，确保建议在安全范围内。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 6: Feature - Dashboard -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="5">
+  <h2>功能展示：<span class="highlight">健康仪表盘</span></h2>
+  <div class="flex-row gap-48" style="align-items: center;">
+    <div class="col flex-col gap-24">
+      <div>
+        <h3>综合健康概览</h3>
+        <p>Apple Watch 风格的活动环展示步数、活动时间、卡路里三大核心指标的完成进度。</p>
+      </div>
+      <div>
+        <h3>7 大数据维度</h3>
+        <div class="flex-col gap-8 mt-8">
+          <div class="flex-row gap-8" style="flex-wrap: wrap; gap: 8px;">
+            <span class="tag tag-purple">概览</span>
+            <span class="tag tag-rose">生命体征</span>
+            <span class="tag tag-green">运动</span>
+            <span class="tag tag-blue">睡眠</span>
+            <span class="tag tag-amber">身体</span>
+            <span class="tag tag-rose">心脏</span>
+            <span class="tag tag-purple">趋势</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3>实时数据接入</h3>
+        <p>通过华为健康 REST API v2 实时同步：心率、血氧、睡眠、步数、压力、活动等全维度数据。</p>
+      </div>
+      <div>
+        <h3>渐进式加载</h3>
+        <p>Progressive Loader 分组并行拉取，骨架屏占位，用户感知更快。内存 + 文件双层缓存。</p>
+      </div>
+    </div>
+    <div class="col" style="flex: 1.2;">
+      <img src="screenshots/dashboard.png" class="screenshot" alt="健康仪表盘">
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 7: Feature - Plans & Memory -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="6">
+  <h2>功能展示：<span class="highlight">计划与记忆</span></h2>
+  <div class="flex-row gap-32">
+    <div class="col">
+      <img src="screenshots/plans.png" class="screenshot-sm" alt="计划与提醒" style="width: 100%;">
+      <div class="mt-16">
+        <h3>计划与提醒系统</h3>
+        <ul>
+          <li>Agent 对话中自动创建阶段化健康计划</li>
+          <li>里程碑追踪与进度可视化</li>
+          <li>主动推送提醒（Proactive Trigger Engine）</li>
+          <li>智能推荐：基于数据异常触发健康建议</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col">
+      <img src="screenshots/memory.png" class="screenshot-sm" alt="记忆系统" style="width: 100%;">
+      <div class="mt-16">
+        <h3>记忆系统</h3>
+        <ul class="list-green">
+          <li>USER.md — 用户画像（年龄、身高、目标等）</li>
+          <li>MEMORY.md — 长期记忆摘要</li>
+          <li>每日记忆日志 — 对话要点自动归档</li>
+          <li>向量搜索索引 — 语义检索历史记忆</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 8: Feature - Evolution Lab -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="7">
+  <h2>核心创新：<span class="highlight">Evolution Lab</span> — Agent 自我进化</h2>
+  <div class="flex-row gap-48" style="align-items: center;">
+    <div class="col" style="flex: 1.3;">
+      <img src="screenshots/evolution.png" class="screenshot" alt="进化实验室">
+    </div>
+    <div class="col flex-col gap-20">
+      <div class="emphasis" style="font-size: 1rem; padding: 16px 20px;">
+        Agent 不仅服务用户，还能自主改进自身 —<br>
+        <strong>基准测试 → 诊断 → 应用 → 验证</strong> 的自主进化闭环
+      </div>
+      <div>
+        <h3>SHARP 五维评估</h3>
+        <div class="flex-col gap-4">
+          <div class="score-row">
+            <span class="score-label">Safety</span>
+            <div class="score-bar"><div class="score-fill" style="width:96%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
+            <span class="score-value highlight-green">0.96</span>
+          </div>
+          <div class="score-row">
+            <span class="score-label">Helpfulness</span>
+            <div class="score-bar"><div class="score-fill" style="width:89%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
+            <span class="score-value" style="color:#60a5fa;">0.89</span>
+          </div>
+          <div class="score-row">
+            <span class="score-label">Accuracy</span>
+            <div class="score-bar"><div class="score-fill" style="width:96%; background: linear-gradient(90deg, #818cf8, #6366f1);"></div></div>
+            <span class="score-value highlight">0.96</span>
+          </div>
+          <div class="score-row">
+            <span class="score-label">Relevance</span>
+            <div class="score-bar"><div class="score-fill" style="width:94%; background: linear-gradient(90deg, #c084fc, #a855f7);"></div></div>
+            <span class="score-value" style="color:#c084fc;">0.94</span>
+          </div>
+          <div class="score-row">
+            <span class="score-label">Personalization</span>
+            <div class="score-bar"><div class="score-fill" style="width:92%; background: linear-gradient(90deg, #fbbf24, #f59e0b);"></div></div>
+            <span class="score-value highlight-amber">0.92</span>
+          </div>
+        </div>
+      </div>
+      <div class="card card-sm" style="padding: 12px 16px;">
+        <h3 style="font-size: 1rem; margin-bottom: 6px;">5-Tab Dashboard</h3>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <span class="tag tag-purple">Overview</span>
+          <span class="tag tag-blue">Benchmark</span>
+          <span class="tag tag-green">Versions</span>
+          <span class="tag tag-amber">Data</span>
+          <span class="tag tag-rose">Agent</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 9: Evolution Pipeline -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="8">
+  <h2>进化流水线：<span class="highlight">4 步自主进化</span></h2>
+  <p style="color:#71717a; margin-bottom: 24px;">System Agent 在 Git Worktree 中自主操作，无需人工审批 — Diff 即结果</p>
+  <div class="flex-row gap-48">
+    <div class="col" style="max-width: 480px;">
+      <div class="flex-col" style="gap: 10px;">
+        <div class="pipeline-step">
+          <div class="step-num" style="background: rgba(96,165,250,0.2); color: #60a5fa;">1</div>
+          <div class="step-body">
+            <div class="step-title">Benchmark — 基准测试</div>
+            <div class="step-desc">55 个测试用例覆盖 SHARP 5 大类 16 细项，Judge 模型自动评分</div>
+          </div>
+        </div>
+        <div class="pipeline-arrow">↓</div>
+        <div class="pipeline-step">
+          <div class="step-num" style="background: rgba(129,140,248,0.2); color: #818cf8;">2</div>
+          <div class="step-body">
+            <div class="step-title">Diagnose — 诊断弱项</div>
+            <div class="step-desc">分析失败用例，识别评分最低的维度和具体准则，定位改进方向</div>
+          </div>
+        </div>
+        <div class="pipeline-arrow">↓</div>
+        <div class="pipeline-step">
+          <div class="step-num" style="background: rgba(251,191,36,0.2); color: #fbbf24;">3</div>
+          <div class="step-body">
+            <div class="step-title">Apply — 自主修改</div>
+            <div class="step-desc">在 Git Worktree 分支中通过 Claude Code 直接修改 SOUL.md / SKILL.md，展示 Diff 结果</div>
+          </div>
+        </div>
+        <div class="pipeline-arrow">↓</div>
+        <div class="pipeline-step">
+          <div class="step-num" style="background: rgba(74,222,128,0.2); color: #4ade80;">4</div>
+          <div class="step-body">
+            <div class="step-title">Validate — 验证效果</div>
+            <div class="step-desc">重跑基准测试对比分数变化，确认改进有效后合并到 main</div>
+          </div>
+        </div>
+      </div>
+      <div class="card card-sm mt-24" style="padding: 12px 16px;">
+        <p style="font-size: 0.85rem;"><span class="highlight">Worktree 隔离</span> — 所有修改在 <code style="color:#818cf8;">evo/vN</code> 分支进行，主分支安全不受影响。Claude Code 工具执行实际代码编辑，结果以可视化 Diff 呈现。</p>
+      </div>
+    </div>
+    <div class="col flex-col gap-24">
+      <div class="card card-sm">
+        <h3>实际进化效果</h3>
+        <table class="mt-8">
+          <tr><th>版本</th><th>综合评分</th><th>通过率</th></tr>
+          <tr><td>baseline-v1</td><td style="color:#fbbf24;">0.88</td><td>47/55</td></tr>
+          <tr><td>post-manual-fix-v1</td><td style="color:#60a5fa;">0.93</td><td>46/55</td></tr>
+          <tr><td>post-judge-fix-v2</td><td style="color:#fb7185;">0.57 *</td><td>28/55</td></tr>
+          <tr><td>post-judge-fix-v2-retry</td><td style="color:#4ade80;">0.96</td><td>51/55</td></tr>
+          <tr><td>evo-v3-injury-check</td><td style="color:#4ade80;">0.95</td><td>51/55</td></tr>
+        </table>
+        <p class="small mt-8">* Judge 幻觉导致评分异常低，修复后恢复</p>
+      </div>
+      <div class="card card-sm">
+        <h3>进化路径</h3>
+        <p>0.88 → 0.95（+7.9%）<br>通过 3 轮自动进化完成，无需人工编写代码</p>
+      </div>
+      <div class="card card-sm" style="border-color: rgba(129,140,248,0.2);">
+        <h3 style="font-size: 1rem;">旧 6 步 → 新 4 步</h3>
+        <p style="font-size: 0.85rem;">移除 Propose 和 Approve 环节。SA 在 Worktree 中自主决策、直接修改、展示 Diff。更快的迭代速度，更少的人工干预。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 10: Skills & Tools Ecosystem -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="9" style="padding: 28px 64px;">
+  <h2 style="margin-bottom: 14px;">技能与工具生态</h2>
+  <div class="flex-row gap-48" style="align-items: flex-start;">
+    <div class="col flex-col" style="gap: 14px;">
+      <div class="card card-sm" style="padding: 14px 18px;">
+        <span class="tag tag-amber" style="margin-bottom: 8px;">Skills（脑）· 20+</span>
+        <h3 style="margin-top: 6px; margin-bottom: 6px;">可热插拔的专家知识</h3>
+        <p style="font-size: 0.9rem;">SKILL.md 格式，YAML 元数据 + Markdown 正文。支持 Tag 分组、自动触发、UI 可视化编辑、Git 追踪。</p>
+        <div style="margin-top: 10px;">
+          <p style="font-size: 0.8rem; color: #71717a; margin-bottom: 6px;">健康领域</p>
+          <div class="flex-row" style="gap: 6px; flex-wrap: wrap;">
+            <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">sleep-coach</span>
+            <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">heart-monitor</span>
+            <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">nutrition</span>
+            <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">stress-mgmt</span>
+            <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">blood-oxygen</span>
+            <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">weight-mgmt</span>
+            <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">weekly-review</span>
+            <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">goal-coach</span>
+          </div>
+          <p style="font-size: 0.8rem; color: #71717a; margin-bottom: 6px; margin-top: 8px;">进化 & 系统</p>
+          <div class="flex-row" style="gap: 6px; flex-wrap: wrap;">
+            <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">evolution-driver</span>
+            <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">benchmark-eval</span>
+            <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">diagnose-analyst</span>
+            <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">prompt-engineer</span>
+          </div>
+        </div>
+      </div>
+      <div class="card card-sm" style="padding: 14px 18px;">
+        <span class="tag tag-purple" style="margin-bottom: 8px;">MCP Tools（手）· 30+</span>
+        <h3 style="margin-top: 6px; margin-bottom: 6px;">标准化工具 · 18 个模块</h3>
+        <table style="font-size: 0.8rem;">
+          <tr><td style="color:#60a5fa; width: 90px;">健康数据</td><td>heart_rate, sleep, steps, blood_oxygen, stress, activity...</td></tr>
+          <tr><td style="color:#4ade80;">Git 操作</td><td>status, diff, log, merge, commit, branch... (12 个)</td></tr>
+          <tr><td style="color:#fbbf24;">计划 & 主动</td><td>create_plan, create_reminder, proactive_check...</td></tr>
+          <tr><td style="color:#c084fc;">进化工具</td><td>run_benchmark, list_versions, create_version...</td></tr>
+          <tr><td style="color:#fb7185;">记忆 & 画像</td><td>search_memory, get_profile, update_profile...</td></tr>
+          <tr><td style="color:#818cf8;">技能 & 配置</td><td>get_skill, list_skills, get_config, set_config...</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="col" style="flex: 1.1;">
+      <img src="screenshots/skills.png" class="screenshot" alt="技能管理">
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 11: Tech Stack & Protocols -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="10">
+  <h2>技术栈与协议</h2>
+  <div class="grid-2 mt-24">
+    <div class="card">
+      <h3>运行时</h3>
+      <table>
+        <tr><td style="width:140px; color:#818cf8;">Runtime</td><td>Bun (TypeScript)</td></tr>
+        <tr><td style="color:#818cf8;">Agent Core</td><td>pi-agent-core v0.51</td></tr>
+        <tr><td style="color:#818cf8;">Frontend</td><td>React + Vite + TailwindCSS</td></tr>
+        <tr><td style="color:#818cf8;">Database</td><td>SQLite (Bun native) + sqlite-vec</td></tr>
+        <tr><td style="color:#818cf8;">Embedding</td><td>text-embedding-3-small (向量搜索)</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>4 大通信协议</h3>
+      <table>
+        <tr><td style="width:140px; color:#4ade80;">A2UI</td><td>Agent→UI 页面推送 (HTTP+SSE)</td></tr>
+        <tr><td style="color:#4ade80;">AG-UI</td><td>聊天事件流 (POST SSE Streaming)</td></tr>
+        <tr><td style="color:#4ade80;">MCP</td><td>JSON-RPC 2.0 Streamable HTTP</td></tr>
+        <tr><td style="color:#4ade80;">A2A</td><td>Agent-to-Agent 任务协调</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>LLM 统一模型仓库</h3>
+      <table>
+        <tr><td style="width:140px; color:#fbbf24;">9 Provider</td><td>Anthropic, OpenRouter, OpenAI, Google, Groq, Mistral, xAI, Moonshot, DeepSeek</td></tr>
+        <tr><td style="color:#fbbf24;">模型配置</td><td>统一 orchestrator 按角色分配模型</td></tr>
+        <tr><td style="color:#fbbf24;">SA 工具</td><td>Claude Code CLI 集成（Worktree 编辑）</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>工程实践</h3>
+      <table>
+        <tr><td style="width:140px; color:#fb7185;">CI/CD</td><td>TypeCheck → Lint → Format → Build → Test</td></tr>
+        <tr><td style="color:#fb7185;">测试</td><td>389 测试 (Unit + Integration + E2E)</td></tr>
+        <tr><td style="color:#fb7185;">i18n</td><td>中英双语 (TypeScript 类型安全)</td></tr>
+        <tr><td style="color:#fb7185;">Git</td><td>Trunk-based + Worktree 隔离进化</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 12: A2UI Component System -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="11" style="padding: 28px 64px;">
+  <h2 style="margin-bottom: 14px;"><span class="highlight">A2UI</span> 组件体系 — 60+ 组件驱动 23+ 页面</h2>
+  <div class="grid-3" style="gap: 14px; margin-top: 12px;">
+    <div class="card card-sm" style="padding: 14px 18px;">
+      <h3 style="font-size: 1rem; margin-bottom: 10px; color: #60a5fa;">布局 & 容器</h3>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">column</span>
+        <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">row</span>
+        <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">grid</span>
+        <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">tabs</span>
+        <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">card</span>
+        <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">collapsible</span>
+      </div>
+    </div>
+    <div class="card card-sm" style="padding: 14px 18px;">
+      <h3 style="font-size: 1rem; margin-bottom: 10px; color: #4ade80;">数据展示</h3>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">metric</span>
+        <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">stat_card</span>
+        <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">chart</span>
+        <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">radar_chart</span>
+        <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">score_gauge</span>
+        <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">activity_rings</span>
+        <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">data_table</span>
+        <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">progress</span>
+      </div>
+    </div>
+    <div class="card card-sm" style="padding: 14px 18px;">
+      <h3 style="font-size: 1rem; margin-bottom: 10px; color: #fbbf24;">表单 & 输入</h3>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">form</span>
+        <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">form_input</span>
+        <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">button</span>
+        <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">select</span>
+        <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">date_picker</span>
+        <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">chat_input</span>
+        <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">code_editor</span>
+      </div>
+    </div>
+    <div class="card card-sm" style="padding: 14px 18px;">
+      <h3 style="font-size: 1rem; margin-bottom: 10px; color: #c084fc;">Git & 进化</h3>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">diff_view</span>
+        <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">git_timeline</span>
+        <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">file_tree</span>
+        <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">commit_list</span>
+        <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">step_indicator</span>
+        <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">evolution_pipeline</span>
+        <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">version_graph</span>
+      </div>
+    </div>
+    <div class="card card-sm" style="padding: 14px 18px;">
+      <h3 style="font-size: 1rem; margin-bottom: 10px; color: #fb7185;">高级组件</h3>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">arena_pills</span>
+        <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">arena_score_table</span>
+        <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">log_viewer</span>
+        <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">status_badge</span>
+        <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">tag_picker</span>
+        <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">toggle</span>
+      </div>
+    </div>
+    <div class="card card-sm" style="padding: 14px 18px;">
+      <h3 style="font-size: 1rem; margin-bottom: 10px; color: #e4e4e7;">页面覆盖</h3>
+      <p style="font-size: 0.85rem; margin-bottom: 8px;">23+ 导航视图，全部服务端生成：</p>
+      <p style="font-size: 0.8rem; color: #71717a;">Chat · Dashboard · Health · Sleep · Activity · Plans · Memory · Settings (7 子页) · Evolution Lab (5 Tab) · System Agent</p>
+    </div>
+  </div>
+  <div class="emphasis mt-24 text-center w-full" style="font-size: 0.95rem; padding: 14px 24px;">
+    新增页面 = <code style="color:#818cf8;">pages.ts</code> 添加生成器 + <code style="color:#818cf8;">server.ts</code> 注册路由 — <strong>前端零改动</strong>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 13: Current Results -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="12">
+  <h2>当前成果</h2>
+  <div class="grid-5 mt-32">
+    <div class="card text-center">
+      <div class="metric-value highlight">30+</div>
+      <div class="metric-label">MCP 工具</div>
+    </div>
+    <div class="card text-center">
+      <div class="metric-value highlight-green">20+</div>
+      <div class="metric-label">Agent Skills</div>
+    </div>
+    <div class="card text-center">
+      <div class="metric-value highlight-amber">55</div>
+      <div class="metric-label">基准测试用例</div>
+    </div>
+    <div class="card text-center">
+      <div class="metric-value highlight-rose">0.95</div>
+      <div class="metric-label">SHARP 评分</div>
+    </div>
+    <div class="card text-center">
+      <div class="metric-value" style="color: #60a5fa;">60+</div>
+      <div class="metric-label">A2UI 组件</div>
+    </div>
+  </div>
+  <div class="grid-3 mt-32">
+    <div class="card">
+      <h3>已完成</h3>
+      <ul class="list-green">
+        <li>对话式健康助手（多轮 + 工具调用 + Skill 触发）</li>
+        <li>健康仪表盘（7 Tab 全维度数据）</li>
+        <li>华为健康数据实时对接</li>
+        <li>计划创建与主动提醒系统</li>
+        <li>用户画像 + 记忆 + 向量搜索</li>
+        <li>Evolution Lab 4 步自主进化闭环</li>
+        <li>SHARP 5 维基准测试框架</li>
+        <li>双形态 UI（Web + TUI）</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>进化成效</h3>
+      <ul>
+        <li>安全性 <span class="highlight-green">0.96</span> — 风险披露、医疗边界</li>
+        <li>准确性 <span class="highlight-green">0.96</span> — 科学依据、数据引用</li>
+        <li>相关性 <span class="highlight-green">0.94</span> — 话题聚焦、领域专业</li>
+        <li>个性化 <span class="highlight-green">0.92</span> — 用户上下文感知</li>
+        <li>有用性 <span class="highlight">0.89</span> — 可操作建议</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>技术特色</h3>
+      <ul class="list-amber">
+        <li>AgentOS 架构 — 前端零业务逻辑</li>
+        <li>A2UI 协议 — 60+ 组件服务端驱动</li>
+        <li>统一模型仓库 — 9 Provider 灵活切换</li>
+        <li>MCP + Skills 双轨 — 标准化 + 可进化</li>
+        <li>4 协议支持 — A2UI / AG-UI / MCP / A2A</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 14: System Agent -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="13">
+  <h2>系统 Agent：<span class="highlight">自主运维智能体</span></h2>
+  <div class="flex-row gap-48" style="align-items: center;">
+    <div class="col" style="flex: 1.2;">
+      <img src="screenshots/system-agent.png" class="screenshot" alt="系统Agent">
+    </div>
+    <div class="col flex-col gap-24">
+      <div>
+        <h3>双 Agent 架构</h3>
+        <p>PHA 用户 Agent 负责面向用户的健康对话；System Agent (SA) 负责系统内部运维 — 基准测试、提示词优化、版本管理。两者独立 Profile 配置。</p>
+      </div>
+      <div class="card card-sm">
+        <h3>SA 自主能力</h3>
+        <ul>
+          <li>运行基准测试并分析评分维度</li>
+          <li>在 Worktree 中通过 Claude Code 修改代码</li>
+          <li>自主诊断弱项并直接应用修复</li>
+          <li>展示 Diff 结果（可视化 diff_view 组件）</li>
+          <li>重跑验证、对比效果后合并到 main</li>
+        </ul>
+      </div>
+      <div class="emphasis" style="font-size: 0.95rem; padding: 14px 20px;">
+        System Agent = <strong>自主进化引擎</strong><br>
+        Worktree 隔离 → 自主修改 → Diff 展示 → 验证合并
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 15: Future Roadmap -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="14">
+  <h2>未来展望</h2>
+  <div class="grid-3 mt-24">
+    <div class="card" style="border-color: rgba(96,165,250,0.3);">
+      <span class="tag tag-blue" style="margin-bottom: 16px;">近期 · Q1 2026</span>
+      <h3 class="mt-8">能力深化</h3>
+      <ul>
+        <li>多数据源接入（Apple Health、Fitbit、小米）</li>
+        <li>运动识别与锻炼计划生成</li>
+        <li>睡眠质量深度分析（分期、呼吸率）</li>
+        <li>饮食记录与营养建议</li>
+        <li>异常检测与主动预警强化</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color: rgba(129,140,248,0.3);">
+      <span class="tag tag-purple" style="margin-bottom: 16px;">中期 · Q2-Q3 2026</span>
+      <h3 class="mt-8">智能升级</h3>
+      <ul>
+        <li>多模态输入（语音对话、照片识别）</li>
+        <li>家庭成员健康管理（多用户协同）</li>
+        <li>社区健康挑战与排行榜</li>
+        <li>与医疗机构数据对接（体检报告）</li>
+        <li>插件生态系统扩展</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color: rgba(251,191,36,0.3);">
+      <span class="tag tag-amber" style="margin-bottom: 16px;">远期 · 2027+</span>
+      <h3 class="mt-8">生态扩展</h3>
+      <ul>
+        <li>开放 Skills 市场 — 第三方专家贡献</li>
+        <li>MCP 工具插件生态</li>
+        <li>个人健康知识图谱</li>
+        <li>预测性健康分析（长期趋势）</li>
+        <li>AgentOS 标准化 — 开源框架输出</li>
+      </ul>
+    </div>
+  </div>
+  <div class="emphasis mt-48 text-center w-full" style="font-size: 1.2rem;">
+    从<strong>健康数据展示</strong>到<strong>智能健康伙伴</strong>，再到<strong>自进化健康生态</strong><br>
+    PHA 不只是一个 App，而是一种新的人机健康协作范式
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 16: Thank You -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="15">
+  <div class="glow glow-purple" style="top: -100px; left: 50%; transform: translateX(-50%);"></div>
+  <div class="text-center">
+    <h1 style="font-size: 3.6rem;">Thank You</h1>
+    <p class="subtitle mt-24" style="font-size: 1.3rem; max-width: 500px; margin-left: auto; margin-right: auto;">
+      PHA — Personal Health Agent<br>
+      AI 驱动 · 数据融合 · 自主进化
+    </p>
+    <div class="mt-48" style="display: flex; gap: 32px; justify-content: center;">
+      <div class="card card-sm text-center" style="min-width: 180px;">
+        <div style="color:#818cf8; font-size: 0.85rem; margin-bottom: 8px;">GitHub</div>
+        <div style="font-size: 1rem;">ibytechaos/pha</div>
+      </div>
+      <div class="card card-sm text-center" style="min-width: 180px;">
+        <div style="color:#4ade80; font-size: 0.85rem; margin-bottom: 8px;">技术栈</div>
+        <div style="font-size: 1rem;">Bun + React + LLM</div>
+      </div>
+      <div class="card card-sm text-center" style="min-width: 180px;">
+        <div style="color:#fbbf24; font-size: 0.85rem; margin-bottom: 8px;">架构</div>
+        <div style="font-size: 1rem;">AgentOS</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /deck -->
+
+<!-- Navigation -->
+<div class="slide-nav">
+  <button class="nav-btn" id="prevBtn" onclick="navigate(-1)">&#8592;</button>
+  <span class="slide-counter"><span id="currentSlide">1</span> / <span id="totalSlides">16</span></span>
+  <button class="nav-btn" id="nextBtn" onclick="navigate(1)">&#8594;</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let current = 0;
+
+  document.getElementById('totalSlides').textContent = total;
+
+  function showSlide(index) {
+    slides.forEach((s, i) => {
+      s.classList.remove('active', 'prev');
+      if (i === index) s.classList.add('active');
+      else if (i < index) s.classList.add('prev');
+    });
+    current = index;
+    document.getElementById('currentSlide').textContent = current + 1;
+    document.getElementById('prevBtn').disabled = current === 0;
+    document.getElementById('nextBtn').disabled = current === total - 1;
+    document.getElementById('progressBar').style.width = ((current + 1) / total * 100) + '%';
+  }
+
+  function navigate(dir) {
+    const next = current + dir;
+    if (next >= 0 && next < total) showSlide(next);
+  }
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault(); navigate(1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault(); navigate(-1);
+    } else if (e.key === 'Home') {
+      e.preventDefault(); showSlide(0);
+    } else if (e.key === 'End') {
+      e.preventDefault(); showSlide(total - 1);
+    }
+  });
+
+  // Touch/swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) navigate(diff > 0 ? 1 : -1);
+  });
+
+  // Click to advance (not on buttons/links)
+  document.querySelector('.deck').addEventListener('click', (e) => {
+    if (e.target.closest('.slide-nav') || e.target.closest('button') || e.target.closest('a')) return;
+    const x = e.clientX / window.innerWidth;
+    navigate(x > 0.5 ? 1 : -1);
+  });
+
+  showSlide(0);
+</script>
+
+</body>
+</html>

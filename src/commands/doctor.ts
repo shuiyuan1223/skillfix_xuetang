@@ -61,7 +61,7 @@ export function registerDoctorCommand(program: Command): void {
           : () => {
               ensureConfigDir();
               saveConfig({
-                gateway: { port: 8000, autoStart: false },
+                gateway: { host: "0.0.0.0", port: 8000, autoStart: false },
                 llm: { provider: "anthropic" },
                 dataSources: { type: "mock" },
                 tui: { theme: "dark", showToolCalls: true },
@@ -298,5 +298,6 @@ export function registerDoctorCommand(program: Command): void {
       }
 
       console.log("");
+      process.exit(0);
     });
 }

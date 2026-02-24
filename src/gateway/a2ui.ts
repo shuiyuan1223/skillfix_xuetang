@@ -1,411 +1,155 @@
 /**
- * A2UI (Agent-to-UI) Protocol
+ * A2UI (Agent-to-UI) Protocol — v0.8 Standard
  *
  * JSONL-based protocol for generative UI.
  */
 
-// A2UI Component Types
-export type A2UIComponentType =
-  | "text"
-  | "card"
-  | "column"
-  | "row"
-  | "grid"
-  | "chart"
-  | "metric"
-  | "stat_card"
-  | "table"
-  | "button"
-  | "form"
-  | "form_input"
-  | "nav"
-  | "tabs"
-  | "progress"
-  | "badge"
-  | "skeleton"
-  | "date_picker"
-  | "select"
-  | "modal"
-  | "toast"
-  | "divider"
-  | "spacer"
-  | "icon"
-  | "chat_messages"
-  | "chat_input"
-  // New components for admin/evolution features
-  | "code_editor"
-  | "commit_list"
-  | "diff_view"
-  | "data_table"
-  | "score_gauge"
-  | "status_badge"
-  | "collapsible"
-  | "activity_rings"
-  // Evolution Lab components
-  | "git_timeline"
-  | "step_indicator"
-  | "file_tree"
-  // Arena dashboard components
-  | "arena_pills"
-  | "arena_score_table"
-  | "arena_category_card"
-  | "plotly_radar"
-  | "arena_run_picker"
-  | "arena_mode_toggle"
-  | "playground_fab"
-  | "evolution_pipeline"
-  | "log_viewer";
+// ==================== A2UI v0.8 Standard Types ====================
 
-// Base component interface
+export type BoundValue =
+  | { literalString: string }
+  | { literalNumber: number }
+  | { literalBoolean: boolean }
+  | { literalArray: unknown[] }
+  | { literalObject: unknown }
+  | { path: string };
+
+export type ChildrenValue = { explicitList: string[] };
+
+/** v0.8 standard component */
 export interface A2UIComponent {
   id: string;
-  type: A2UIComponentType;
-  children?: string[];
-  [key: string]: unknown;
+  component: Record<string, Record<string, BoundValue | ChildrenValue>>;
 }
 
-// Text Component
-export interface TextComponent extends A2UIComponent {
-  type: "text";
-  text: string;
-  variant?: "h1" | "h2" | "h3" | "body" | "caption" | "label";
-  color?: string;
-  weight?: "normal" | "medium" | "semibold" | "bold";
-}
+/** v0.8 standard messages */
+export type A2UIMessage =
+  | { surfaceUpdate: { surfaceId: string; components: A2UIComponent[] } }
+  | { beginRendering: { surfaceId: string; root: string; catalogId?: string } }
+  | { deleteSurface: { surfaceId: string } }
+  | { dataModelUpdate: { surfaceId: string; path: string; contents: unknown } };
 
-// Card Component
-export interface CardComponent extends A2UIComponent {
-  type: "card";
-  title?: string;
-  padding?: number;
-  shadow?: "none" | "sm" | "md" | "lg";
-}
-
-// Layout Components
-export interface ColumnComponent extends A2UIComponent {
-  type: "column";
-  gap?: number;
-  padding?: number;
-  align?: "start" | "center" | "end" | "stretch";
-}
-
-export interface RowComponent extends A2UIComponent {
-  type: "row";
-  gap?: number;
-  justify?: "start" | "center" | "end" | "between" | "around";
-  align?: "start" | "center" | "end" | "stretch";
-  wrap?: boolean;
-}
-
-export interface GridComponent extends A2UIComponent {
-  type: "grid";
-  columns?: number;
-  gap?: number;
-  responsive?: boolean;
-}
-
-// Chart Component
-export interface ChartComponent extends A2UIComponent {
-  type: "chart";
-  chartType: "line" | "bar" | "area" | "pie" | "donut";
-  data: Record<string, unknown>[];
-  xKey: string;
-  yKey: string;
-  height?: number;
-  color?: string;
-}
-
-// Metric Component
-export interface MetricComponent extends A2UIComponent {
-  type: "metric";
-  label: string;
-  value: string | number;
-  unit?: string;
-  target?: number;
-  trend?: "up" | "down" | "stable";
-  icon?: string;
-}
-
-// Stat Card Component
-export interface StatCardComponent extends A2UIComponent {
-  type: "stat_card";
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon?: string;
-  trend?: { direction: "up" | "down" | "stable"; value: string };
-  color?: string;
-}
-
-// Table Component
-export interface TableComponent extends A2UIComponent {
-  type: "table";
-  columns: { key: string; label: string; width?: string }[];
-  rows: Record<string, unknown>[];
-}
-
-// Button Component
-export interface ButtonComponent extends A2UIComponent {
-  type: "button";
-  label: string;
-  action: string;
-  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger" | "accent";
-  size?: "sm" | "md" | "lg";
-  payload?: Record<string, unknown>;
-  disabled?: boolean;
-}
-
-// Progress Component
-export interface ProgressComponent extends A2UIComponent {
-  type: "progress";
-  value: number;
-  maxValue?: number;
-  label?: string;
-  color?: string;
-  size?: "sm" | "md" | "lg";
-}
-
-// Badge Component
-export interface BadgeComponent extends A2UIComponent {
-  type: "badge";
-  text: string;
-  variant?: "default" | "success" | "warning" | "error" | "info";
-  size?: "sm" | "md";
-}
-
-// Skeleton Component (loading state)
-export interface SkeletonComponent extends A2UIComponent {
-  type: "skeleton";
-  variant?: "text" | "circular" | "rectangular" | "card";
-  width?: string | number;
-  height?: string | number;
-}
-
-// Navigation Component
-export interface NavComponent extends A2UIComponent {
-  type: "nav";
-  items: { id: string; label: string; icon?: string; href?: string }[];
-  activeId?: string;
-  collapsed?: boolean;
-  orientation?: "horizontal" | "vertical";
-}
-
-// Tabs Component
-export interface TabsComponent extends A2UIComponent {
-  type: "tabs";
-  tabs: { id: string; label: string; icon?: string }[];
-  activeTab: string;
-  contentIds: Record<string, string>;
-}
-
-// ============================================================================
-// New Admin/Evolution Components
-// ============================================================================
-
-// Code Editor Component
-export interface CodeEditorComponent extends A2UIComponent {
-  type: "code_editor";
-  value: string;
-  language?: "markdown" | "json" | "yaml" | "typescript" | "javascript";
-  readonly?: boolean;
-  lineNumbers?: boolean;
-  height?: number | string;
-  onChange?: string; // Action name to send on change
-}
-
-// Commit List Component (Git history)
-export interface CommitListComponent extends A2UIComponent {
-  type: "commit_list";
-  commits: {
-    hash: string;
-    shortHash: string;
-    message: string;
-    date: string;
-    author: string;
-  }[];
-  selectedHash?: string;
-  onSelect?: string; // Action name
-}
-
-// Diff View Component
-export interface DiffViewComponent extends A2UIComponent {
-  type: "diff_view";
-  before: string;
-  after: string;
-  language?: string;
-  title?: string;
-  unifiedDiff?: string;
-}
-
-// Data Table Component (enhanced table with pagination, sorting, filtering)
-export interface DataTableComponent extends A2UIComponent {
-  type: "data_table";
-  columns: {
-    key: string;
-    label: string;
-    width?: string;
-    sortable?: boolean;
-    render?: "text" | "badge" | "progress" | "date" | "link";
-  }[];
-  rows: Record<string, unknown>[];
-  pagination?: {
-    page: number;
-    pageSize: number;
-    total: number;
-  };
-  sortBy?: string;
-  sortOrder?: "asc" | "desc";
-  filterable?: boolean;
-  onRowClick?: string; // Action name
-  onSort?: string; // Action name
-  onPageChange?: string; // Action name
-}
-
-// Score Gauge Component
-export interface ScoreGaugeComponent extends A2UIComponent {
-  type: "score_gauge";
-  value: number;
-  max?: number;
-  label?: string;
-  showValue?: boolean;
-  size?: "sm" | "md" | "lg";
-  color?: string;
-  thresholds?: { value: number; color: string }[];
-}
-
-// Activity Rings Component (Apple Watch-style concentric rings)
-export interface ActivityRingsComponent extends A2UIComponent {
-  type: "activity_rings";
-  rings: Array<{
-    value: number;
-    max: number;
-    label: string;
-    color: string;
-  }>;
-  size?: number; // diameter in px, default 200
-}
-
-// Status Badge Component
-export interface StatusBadgeComponent extends A2UIComponent {
-  type: "status_badge";
-  status: "pending" | "running" | "success" | "failed" | "warning";
-  label?: string;
-  pulse?: boolean; // Animated pulse for running state
-}
-
-// Collapsible Panel Component
-export interface CollapsibleComponent extends A2UIComponent {
-  type: "collapsible";
-  title: string;
-  expanded?: boolean;
-  icon?: string;
-  children: string[];
-}
-
-// Git Timeline Component
-export interface GitTimelineComponent extends A2UIComponent {
-  type: "git_timeline";
-  events: Array<{
-    id: string;
-    type: "branch" | "commit" | "benchmark" | "merge" | "revert" | "tag";
-    label: string;
-    description?: string;
-    timestamp: number;
-    branch?: string;
-    hash?: string;
-    score?: number;
-    status?: "success" | "failed" | "pending" | "active";
-    author?: string;
-    filesChanged?: number;
-    additions?: number;
-    deletions?: number;
-    tags?: string[];
-  }>;
-  activeBranch?: string;
-  onEventClick?: string;
-  onContextAction?: string;
-  selectedEventId?: string;
-}
-
-// Step Indicator Component
-export interface StepIndicatorComponent extends A2UIComponent {
-  type: "step_indicator";
-  steps: Array<{
-    id: string;
-    label: string;
-    icon?: string;
-    status: "pending" | "active" | "completed" | "failed" | "skipped";
-  }>;
-  orientation?: "horizontal" | "vertical";
-}
-
-// File Tree Component
-export interface FileTreeComponent extends A2UIComponent {
-  type: "file_tree";
-  files: Array<{
-    path: string;
-    status: "added" | "modified" | "deleted" | "renamed";
-    additions?: number;
-    deletions?: number;
-  }>;
-  selectedPath?: string;
-  onFileSelect?: string;
-}
-
-// Modal Component
-export interface ModalComponent extends A2UIComponent {
-  type: "modal";
-  title: string;
-  size?: "sm" | "md" | "lg" | "xl";
-  closable?: boolean;
-  onClose?: string; // Action name
-}
-
-// Form Input Component
-export interface FormInputComponent extends A2UIComponent {
-  type: "form_input";
-  inputType: "text" | "textarea" | "number" | "select" | "checkbox";
-  name: string;
-  label?: string;
-  placeholder?: string;
-  value?: string | number | boolean;
-  options?: { value: string; label: string }[]; // For select
-  required?: boolean;
-  onChange?: string; // Action name
-}
-
-// Form Component
-export interface FormComponent extends A2UIComponent {
-  type: "form";
-  onSubmit: string; // Action name
-  submitLabel?: string;
-  cancelLabel?: string;
-  onCancel?: string; // Action name
-}
-
-// Log Viewer Component
-export interface LogViewerComponent extends A2UIComponent {
-  type: "log_viewer";
-  entries: Array<{
-    time: string;
-    level: string;
-    subsystem: string;
-    message: string;
-    data?: unknown;
-  }>;
-  levels: string[];
-  subsystems: string[];
-  activeLevel?: string;
-  activeSubsystem?: string;
-}
-
-// A2UI Message format
-export interface A2UIMessage {
-  type: "a2ui";
-  surface_id: string;
+/** Surface data (frontend storage) */
+export interface A2UISurfaceData {
   components: A2UIComponent[];
   root_id: string;
 }
+
+// ==================== BoundValue Utilities ====================
+
+/** Wrap a JS value into a BoundValue */
+export function toBoundValue(v: unknown): BoundValue {
+  if (typeof v === "string") return { literalString: v };
+  if (typeof v === "number") return { literalNumber: v };
+  if (typeof v === "boolean") return { literalBoolean: v };
+  if (Array.isArray(v)) return { literalArray: v };
+  return { literalObject: v };
+}
+
+/** Unwrap a BoundValue/ChildrenValue back to JS */
+export function fromBoundValue(bv: BoundValue | ChildrenValue | undefined): unknown {
+  if (!bv) return undefined;
+  if ("literalString" in bv) return bv.literalString;
+  if ("literalNumber" in bv) return bv.literalNumber;
+  if ("literalBoolean" in bv) return bv.literalBoolean;
+  if ("literalArray" in bv) return bv.literalArray;
+  if ("literalObject" in bv) return bv.literalObject;
+  if ("explicitList" in bv) return bv.explicitList;
+  if ("path" in bv) return bv.path;
+  return undefined;
+}
+
+// ==================== Component Read Utilities ====================
+// All renderers use these three functions to read v0.8 components uniformly.
+
+/** Get component type name (PascalCase) */
+export function componentType(c: A2UIComponent): string {
+  return Object.keys(c.component)[0] || "";
+}
+
+/** Get a component property value (auto-unwrap BoundValue) */
+export function prop(c: A2UIComponent, key: string): unknown {
+  const typeName = componentType(c);
+  const props = c.component[typeName];
+  if (!props) return undefined;
+  return fromBoundValue(props[key]);
+}
+
+/** Get children ID list */
+export function children(c: A2UIComponent): string[] {
+  const typeName = componentType(c);
+  const ch = c.component[typeName]?.children;
+  if (ch && "explicitList" in ch) return ch.explicitList;
+  return [];
+}
+
+/** Return a new component with a single prop replaced */
+export function withProp(c: A2UIComponent, key: string, value: unknown): A2UIComponent {
+  const typeName = componentType(c);
+  return {
+    ...c,
+    component: {
+      [typeName]: { ...c.component[typeName], [key]: toBoundValue(value) },
+    },
+  };
+}
+
+// ==================== Component Name Mapping ====================
+
+const TYPE_TO_PASCAL: Record<string, string> = {
+  text: "Text",
+  button: "Button",
+  column: "Column",
+  row: "Row",
+  grid: "Grid",
+  card: "Card",
+  tabs: "Tabs",
+  modal: "Modal",
+  divider: "Divider",
+  spacer: "Spacer",
+  icon: "Icon",
+  progress: "Progress",
+  badge: "Badge",
+  skeleton: "Skeleton",
+  table: "Table",
+  nav: "Nav",
+  form: "Form",
+  form_input: "FormInput",
+  select: "Select",
+  date_picker: "DatePicker",
+  toast: "Toast",
+  metric: "Metric",
+  // PHA custom components
+  chat_messages: "ChatMessages",
+  chat_input: "ChatInput",
+  stat_card: "StatCard",
+  chart: "Chart",
+  data_table: "DataTable",
+  score_gauge: "ScoreGauge",
+  activity_rings: "ActivityRings",
+  status_badge: "StatusBadge",
+  collapsible: "Collapsible",
+  code_editor: "CodeEditor",
+  commit_list: "CommitList",
+  diff_view: "DiffView",
+  git_timeline: "GitTimeline",
+  step_indicator: "StepIndicator",
+  file_tree: "FileTree",
+  version_graph: "VersionGraph",
+  log_viewer: "LogViewer",
+  tag_picker: "TagPicker",
+  radar_chart: "RadarChart",
+  auth_page: "AuthPage",
+  arena_pills: "ArenaPills",
+  arena_score_table: "ArenaScoreTable",
+  arena_category_card: "ArenaCategoryCard",
+  arena_run_picker: "ArenaRunPicker",
+  arena_mode_toggle: "ArenaModeToggle",
+  playground_fab: "PlaygroundFab",
+  evolution_pipeline: "EvolutionPipeline",
+};
+
+export const PHA_CATALOG_ID = "pha";
 
 // Surface IDs
 export const SURFACE_MAIN = "main";
@@ -413,8 +157,14 @@ export const SURFACE_SIDEBAR = "sidebar";
 export const SURFACE_MODAL = "modal";
 export const SURFACE_TOAST = "toast";
 
+// ==================== A2UIGenerator ====================
+
 /**
- * A2UI Generator - Helper class to build A2UI component trees
+ * A2UI Generator — builds v0.8 component trees.
+ *
+ * Public API is unchanged from the old generator (same method signatures).
+ * Internally stores v0.8 format components.
+ * build() now returns A2UIMessage[] (surfaceUpdate + beginRendering).
  */
 export class A2UIGenerator {
   private components: Map<string, A2UIComponent> = new Map();
@@ -429,252 +179,209 @@ export class A2UIGenerator {
     return `${this.surfaceId}_${prefix}_${++this.idCounter}`;
   }
 
+  /** Internal: create a v0.8 component and add to the map */
+  private add(prefix: string, typeName: string, props: Record<string, unknown>): string {
+    const id = this.nextId(prefix);
+    const v08Props: Record<string, BoundValue | ChildrenValue> = {};
+    for (const [k, v] of Object.entries(props)) {
+      if (v === undefined || v === null) continue;
+      if (k === "children" && Array.isArray(v) && v.every((i) => typeof i === "string")) {
+        v08Props.children = { explicitList: v as string[] };
+      } else {
+        v08Props[k] = toBoundValue(v);
+      }
+    }
+    this.components.set(id, { id, component: { [typeName]: v08Props } });
+    return id;
+  }
+
   // Layout components
-  column(children: string[], opts: Partial<ColumnComponent> = {}): string {
-    const id = this.nextId("col");
-    this.components.set(id, { id, type: "column", children, ...opts });
-    return id;
+  column(childIds: string[], opts: Record<string, unknown> = {}): string {
+    return this.add("col", "Column", { children: childIds, ...opts });
   }
 
-  row(children: string[], opts: Partial<RowComponent> = {}): string {
-    const id = this.nextId("row");
-    this.components.set(id, { id, type: "row", children, ...opts });
-    return id;
+  row(childIds: string[], opts: Record<string, unknown> = {}): string {
+    return this.add("row", "Row", { children: childIds, ...opts });
   }
 
-  grid(children: string[], opts: Partial<GridComponent> = {}): string {
-    const id = this.nextId("grid");
-    this.components.set(id, { id, type: "grid", children, ...opts });
-    return id;
+  grid(childIds: string[], opts: Record<string, unknown> = {}): string {
+    return this.add("grid", "Grid", { children: childIds, ...opts });
   }
 
   // Content components
-  text(text: string, variant: TextComponent["variant"] = "body"): string {
-    const id = this.nextId("txt");
-    this.components.set(id, { id, type: "text", text, variant });
-    return id;
+  text(text: string, variant: string = "body"): string {
+    return this.add("txt", "Text", { text, variant });
   }
 
-  card(children: string[], opts: Partial<CardComponent> = {}): string {
-    const id = this.nextId("card");
-    this.components.set(id, { id, type: "card", children, ...opts });
-    return id;
+  card(childIds: string[], opts: Record<string, unknown> = {}): string {
+    return this.add("card", "Card", { children: childIds, ...opts });
   }
 
-  metric(opts: Omit<MetricComponent, "id" | "type">): string {
-    const id = this.nextId("metric");
-    this.components.set(id, { id, type: "metric", ...opts });
-    return id;
+  metric(opts: Record<string, unknown>): string {
+    return this.add("metric", "Metric", opts);
   }
 
-  statCard(opts: Omit<StatCardComponent, "id" | "type">): string {
-    const id = this.nextId("stat");
-    this.components.set(id, { id, type: "stat_card", ...opts });
-    return id;
+  statCard(opts: Record<string, unknown>): string {
+    return this.add("stat", "StatCard", opts);
   }
 
-  chart(opts: Omit<ChartComponent, "id" | "type">): string {
-    const id = this.nextId("chart");
-    this.components.set(id, { id, type: "chart", ...opts });
-    return id;
+  chart(opts: Record<string, unknown>): string {
+    return this.add("chart", "Chart", opts);
   }
 
-  table(columns: TableComponent["columns"], rows: TableComponent["rows"]): string {
-    const id = this.nextId("table");
-    this.components.set(id, { id, type: "table", columns, rows });
-    return id;
+  table(columns: unknown[], rows: unknown[]): string {
+    return this.add("table", "Table", { columns, rows });
   }
 
-  button(label: string, action: string, opts: Partial<ButtonComponent> = {}): string {
-    const id = this.nextId("btn");
-    this.components.set(id, { id, type: "button", label, action, ...opts });
-    return id;
+  button(label: string, action: string, opts: Record<string, unknown> = {}): string {
+    return this.add("btn", "Button", { label, action, ...opts });
   }
 
-  progress(value: number, opts: Partial<ProgressComponent> = {}): string {
-    const id = this.nextId("prog");
-    this.components.set(id, { id, type: "progress", value, ...opts });
-    return id;
+  progress(value: number, opts: Record<string, unknown> = {}): string {
+    return this.add("prog", "Progress", { value, ...opts });
   }
 
-  badge(text: string, opts: Partial<BadgeComponent> = {}): string {
-    const id = this.nextId("badge");
-    this.components.set(id, { id, type: "badge", text, ...opts });
-    return id;
+  badge(text: string, opts: Record<string, unknown> = {}): string {
+    return this.add("badge", "Badge", { text, ...opts });
   }
 
-  skeleton(opts: Partial<SkeletonComponent> = {}): string {
-    const id = this.nextId("skel");
-    this.components.set(id, { id, type: "skeleton", ...opts });
-    return id;
+  skeleton(opts: Record<string, unknown> = {}): string {
+    return this.add("skel", "Skeleton", opts);
   }
 
-  nav(items: NavComponent["items"], opts: Partial<NavComponent> = {}): string {
-    const id = this.nextId("nav");
-    this.components.set(id, { id, type: "nav", items, ...opts });
-    return id;
+  nav(items: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add("nav", "Nav", { items, ...opts });
   }
 
-  tabs(tabs: TabsComponent["tabs"], activeTab: string, contentIds: Record<string, string>): string {
-    const id = this.nextId("tabs");
-    this.components.set(id, { id, type: "tabs", tabs, activeTab, contentIds });
-    return id;
+  tabs(tabsList: unknown[], activeTab: string, contentIds: Record<string, string>): string {
+    return this.add("tabs", "Tabs", { tabs: tabsList, activeTab, contentIds });
   }
 
-  // ========================================================================
-  // New Admin/Evolution Component Methods
-  // ========================================================================
-
-  codeEditor(value: string, opts: Partial<CodeEditorComponent> = {}): string {
-    const id = this.nextId("editor");
-    this.components.set(id, { id, type: "code_editor", value, ...opts });
-    return id;
+  // Admin/Evolution Component Methods
+  codeEditor(value: string, opts: Record<string, unknown> = {}): string {
+    return this.add("editor", "CodeEditor", { value, ...opts });
   }
 
-  commitList(
-    commits: CommitListComponent["commits"],
-    opts: Partial<CommitListComponent> = {}
-  ): string {
-    const id = this.nextId("commits");
-    this.components.set(id, { id, type: "commit_list", commits, ...opts });
-    return id;
+  commitList(commits: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add("commits", "CommitList", { commits, ...opts });
   }
 
-  diffView(before: string, after: string, opts: Partial<DiffViewComponent> = {}): string {
-    const id = this.nextId("diff");
-    this.components.set(id, { id, type: "diff_view", before, after, ...opts });
-    return id;
+  diffView(before: string, after: string, opts: Record<string, unknown> = {}): string {
+    return this.add("diff", "DiffView", { before, after, ...opts });
   }
 
-  dataTable(
-    columns: DataTableComponent["columns"],
-    rows: DataTableComponent["rows"],
-    opts: Partial<DataTableComponent> = {}
-  ): string {
-    const id = this.nextId("dtable");
-    this.components.set(id, { id, type: "data_table", columns, rows, ...opts });
-    return id;
+  dataTable(columns: unknown[], rows: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add("dtable", "DataTable", { columns, rows, ...opts });
   }
 
-  scoreGauge(value: number, opts: Partial<ScoreGaugeComponent> = {}): string {
-    const id = this.nextId("gauge");
-    this.components.set(id, { id, type: "score_gauge", value, ...opts });
-    return id;
+  scoreGauge(value: number, opts: Record<string, unknown> = {}): string {
+    return this.add("gauge", "ScoreGauge", { value, ...opts });
   }
 
-  activityRings(
-    rings: ActivityRingsComponent["rings"],
-    opts: Partial<ActivityRingsComponent> = {}
-  ): string {
-    const id = this.nextId("rings");
-    this.components.set(id, { id, type: "activity_rings", rings, ...opts });
-    return id;
+  activityRings(rings: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add("rings", "ActivityRings", { rings, ...opts });
   }
 
-  statusBadge(
-    status: StatusBadgeComponent["status"],
-    opts: Partial<StatusBadgeComponent> = {}
-  ): string {
-    const id = this.nextId("status");
-    this.components.set(id, { id, type: "status_badge", status, ...opts });
-    return id;
+  statusBadge(status: string, opts: Record<string, unknown> = {}): string {
+    return this.add("status", "StatusBadge", { status, ...opts });
   }
 
-  collapsible(title: string, children: string[], opts: Partial<CollapsibleComponent> = {}): string {
-    const id = this.nextId("collapse");
-    this.components.set(id, { id, type: "collapsible", title, children, ...opts });
-    return id;
+  collapsible(title: string, childIds: string[], opts: Record<string, unknown> = {}): string {
+    return this.add("collapse", "Collapsible", { title, children: childIds, ...opts });
   }
 
-  modal(title: string, children: string[], opts: Partial<ModalComponent> = {}): string {
-    const id = this.nextId("modal");
-    this.components.set(id, { id, type: "modal", title, children, ...opts });
-    return id;
+  modal(title: string, childIds: string[], opts: Record<string, unknown> = {}): string {
+    return this.add("modal", "Modal", { title, children: childIds, ...opts });
   }
 
-  form(children: string[], onSubmit: string, opts: Partial<FormComponent> = {}): string {
-    const id = this.nextId("form");
-    this.components.set(id, { id, type: "form", children, onSubmit, ...opts });
-    return id;
+  form(childIds: string[], onSubmit: string, opts: Record<string, unknown> = {}): string {
+    return this.add("form", "Form", { children: childIds, onSubmit, ...opts });
   }
 
-  formInput(
-    name: string,
-    inputType: FormInputComponent["inputType"],
-    opts: Partial<FormInputComponent> = {}
-  ): string {
-    const id = this.nextId("input");
-    this.components.set(id, { id, type: "form_input", name, inputType, ...opts });
-    return id;
+  formInput(name: string, inputType: string, opts: Record<string, unknown> = {}): string {
+    return this.add("input", "FormInput", { name, inputType, ...opts });
   }
 
-  // ========================================================================
+  tagPicker(opts: Record<string, unknown>): string {
+    return this.add("tagpick", "TagPicker", opts);
+  }
+
   // Evolution Lab Component Methods
-  // ========================================================================
-
-  gitTimeline(
-    events: GitTimelineComponent["events"],
-    opts: Partial<GitTimelineComponent> = {}
-  ): string {
-    const id = this.nextId("timeline");
-    this.components.set(id, { id, type: "git_timeline", events, ...opts });
-    return id;
+  gitTimeline(events: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add("timeline", "GitTimeline", { events, ...opts });
   }
 
-  stepIndicator(
-    steps: StepIndicatorComponent["steps"],
-    opts: Partial<StepIndicatorComponent> = {}
-  ): string {
-    const id = this.nextId("steps");
-    this.components.set(id, { id, type: "step_indicator", steps, ...opts });
-    return id;
+  stepIndicator(steps: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add("steps", "StepIndicator", { steps, ...opts });
   }
 
-  fileTree(files: FileTreeComponent["files"], opts: Partial<FileTreeComponent> = {}): string {
-    const id = this.nextId("ftree");
-    this.components.set(id, { id, type: "file_tree", files, ...opts });
-    return id;
+  fileTree(files: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add("ftree", "FileTree", { files, ...opts });
   }
 
-  logViewer(
-    entries: LogViewerComponent["entries"],
-    opts: Partial<LogViewerComponent> = {}
+  versionGraph(
+    mainBranch: unknown,
+    versions: unknown[],
+    opts: Record<string, unknown> = {}
   ): string {
-    const id = this.nextId("logviewer");
-    this.components.set(id, { id, type: "log_viewer", entries, ...opts });
-    return id;
+    return this.add("vgraph", "VersionGraph", { mainBranch, versions, ...opts });
+  }
+
+  logViewer(entries: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add("logviewer", "LogViewer", { entries, ...opts });
   }
 
   /**
-   * Add a component directly
+   * Add a raw v0.8 component with explicit type name and props.
+   * Replaces the old addComponent() which accepted old-format objects.
+   */
+  addRaw(id: string, typeName: string, props: Record<string, unknown>): void {
+    const v08Props: Record<string, BoundValue | ChildrenValue> = {};
+    for (const [k, v] of Object.entries(props)) {
+      if (v === undefined || v === null) continue;
+      if (k === "children" && Array.isArray(v) && v.every((i) => typeof i === "string")) {
+        v08Props.children = { explicitList: v as string[] };
+      } else {
+        v08Props[k] = toBoundValue(v);
+      }
+    }
+    this.components.set(id, { id, component: { [typeName]: v08Props } });
+  }
+
+  /**
+   * Add a pre-built v0.8 component directly.
    */
   addComponent(id: string, component: A2UIComponent): void {
     this.components.set(id, { ...component, id });
   }
 
   /**
-   * Build the A2UI message
+   * Build the A2UI v0.8 messages (surfaceUpdate + beginRendering)
    */
-  build(rootId: string): A2UIMessage {
-    return {
-      type: "a2ui",
-      surface_id: this.surfaceId,
-      components: Array.from(this.components.values()),
-      root_id: rootId,
-    };
+  build(rootId: string): A2UIMessage[] {
+    return [
+      {
+        surfaceUpdate: {
+          surfaceId: this.surfaceId,
+          components: Array.from(this.components.values()),
+        },
+      },
+      { beginRendering: { surfaceId: this.surfaceId, root: rootId, catalogId: PHA_CATALOG_ID } },
+    ];
   }
 
   /**
-   * Convert to JSONL format
+   * Convert to JSONL format (one message per line)
    */
   toJsonl(rootId: string): string {
-    const message = this.build(rootId);
-    return JSON.stringify(message);
+    return this.build(rootId)
+      .map((m) => JSON.stringify(m))
+      .join("\n");
   }
 }
 
 // ============================================================================
-// AG-UI Event Types (aligned with @ag-ui/core)
+// AG-UI Event Types (aligned with @ag-ui/core) — unchanged
 // ============================================================================
 
 export type AGUIEvent =
@@ -683,7 +390,13 @@ export type AGUIEvent =
   | { type: "TextMessageStart"; messageId: string; role: "assistant" }
   | { type: "TextMessageContent"; messageId: string; delta: string }
   | { type: "TextMessageEnd"; messageId: string }
-  | { type: "ToolCallStart"; toolCallId: string; toolCallName: string; parentMessageId?: string }
+  | {
+      type: "ToolCallStart";
+      toolCallId: string;
+      toolCallName: string;
+      parentMessageId?: string;
+      displayName?: string;
+    }
   | { type: "ToolCallEnd"; toolCallId: string }
   | {
       type: "ToolCallResult";
@@ -695,7 +408,7 @@ export type AGUIEvent =
   | { type: "Custom"; name: string; data: unknown };
 
 // ============================================================================
-// Parts Message Model
+// Parts Message Model — unchanged
 // ============================================================================
 
 export type MessagePart =
@@ -705,6 +418,7 @@ export type MessagePart =
       toolCallId: string;
       toolName: string;
       status: "running" | "completed" | "error";
+      displayName?: string;
     }
   | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
 

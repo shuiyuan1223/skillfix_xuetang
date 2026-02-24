@@ -9,22 +9,33 @@
 import { existsSync, readFileSync, appendFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { findProjectRoot } from "../utils/config.js";
+import type { PHATool } from "./types.js";
 
 function getWishlistPath(): string {
   const root = findProjectRoot();
-  const dir = join(root, ".pha", "system-agent");
+  const dir = join(root, ".pha", "users", "system");
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
   return join(dir, "tool-wishlist.md");
 }
 
-export const suggestToolImprovementTool = {
+export const suggestToolImprovementTool: PHATool<{
+  toolName: string;
+  category: string;
+  description: string;
+  useCase: string;
+  priority?: string;
+}> = {
   name: "suggest_tool_improvement",
   description:
-    "Record a tool improvement suggestion or missing capability. Use this when you identify a gap in your current toolset that would help you perform tasks better. Suggestions are saved to the tool wishlist for the development team to review.",
-  parameters: {
-    type: "object" as const,
+    "记录工具改进建议或缺失能力。当发现现有工具集存在不足、可以更好地完成任务时调用。建议保存到工具愿望清单供开发团队审阅。",
+  displayName: "建议工具改进",
+  category: "feedback",
+  icon: "lightbulb",
+  label: "Suggest Tool Improvement",
+  inputSchema: {
+    type: "object",
     properties: {
       toolName: {
         type: "string",
@@ -98,11 +109,15 @@ export const suggestToolImprovementTool = {
   },
 };
 
-export const listToolWishlistTool = {
+export const listToolWishlistTool: PHATool<Record<string, never>> = {
   name: "list_tool_wishlist",
-  description: "Read the current tool improvement wishlist to review pending suggestions.",
-  parameters: {
-    type: "object" as const,
+  description: "读取当前工具改进愿望清单，查看待处理的建议。",
+  displayName: "工具建议清单",
+  category: "feedback",
+  icon: "lightbulb",
+  label: "List Tool Wishlist",
+  inputSchema: {
+    type: "object",
     properties: {},
   },
   execute: async () => {

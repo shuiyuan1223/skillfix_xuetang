@@ -1,0 +1,239 @@
+category: health-coaching
+
+tests:
+  # --- 目标设定 (3) ---
+  - id: hc-goal-001
+    subcategory: goal-setting
+    query: "我想开始跑步，能帮我设定一个合理的目标吗？"
+    difficulty: core
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "具体可量化的跑步目标"
+        - "循序渐进的时间规划"
+        - "基于工具数据中当前活动水平的起点"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+
+  - id: hc-goal-002
+    subcategory: goal-setting
+    query: "我想一个月内跑完马拉松，但我现在每天走不了多少步。"
+    difficulty: medium
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "以当前体能水平一个月内跑马拉松不现实"
+        - "快速增量的受伤风险"
+        - "替代的可达目标（先跑 5K）"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+
+  - id: hc-goal-003
+    subcategory: goal-setting
+    query: "我现在大概睡6个小时，想增加到8小时，能做到吗？"
+    difficulty: easy
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "循序渐进的方法（每次提前15-30分钟入睡）"
+        - "工具数据中的当前就寝时间规律"
+        - "调整作息的具体步骤"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.6
+      expectedTools:
+        - get_sleep
+
+  # --- 动力激励 (3) ---
+  - id: hc-motiv-001
+    subcategory: motivation
+    query: "连续三天没完成步数目标了，真的想放弃。"
+    difficulty: core
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "共情地回应用户的沮丧"
+        - "提及近期数据中的正面亮点"
+        - "今天可以达到的小目标"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+
+  - id: hc-motiv-002
+    subcategory: motivation
+    query: "我第一次走到一万步了！"
+    difficulty: easy
+    userUuid: active-user
+    healthOverrides:
+      metrics:
+        day_0: { steps: 10200, calories: 2250, activeMinutes: 75, distance: 7650 }
+    expected:
+      shouldMention:
+        - "真诚庆祝这个里程碑"
+        - "肯定近期的上升趋势"
+        - "鼓励保持势头"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.6
+      expectedTools:
+        - get_metrics
+
+  - id: hc-motiv-003
+    subcategory: motivation
+    query: "我真的提不起劲运动，今天也就走了几千步。"
+    difficulty: medium
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "不带评判的回应"
+        - "低门槛的实用策略（边打电话边走、把车停远一点）"
+        - "从小成功积累而不是盯着大目标"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+
+  # --- 习惯养成 (3) ---
+  - id: hc-habit-001
+    subcategory: habit-formation
+    query: "怎么才能养成规律的作息习惯？我的就寝时间乱七八糟的。"
+    difficulty: core
+    userUuid: sedentary-user
+    expected:
+      shouldMention:
+        - "工具数据中不规律的就寝时间"
+        - "就寝时间一致性与质量评分的关联"
+        - "具体的作息调整步骤（放松仪式、固定起床时间）"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_sleep
+
+  - id: hc-habit-002
+    subcategory: habit-formation
+    query: "我想每天提醒自己多喝水，怎么把这个习惯融入日常？"
+    difficulty: easy
+    userUuid: active-user
+    expected:
+      shouldMention:
+        - "习惯叠加的概念"
+        - "把喝水绑定到现有习惯上（饭后、运动前）"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.6
+      expectedTools:
+        - get_metrics
+
+  - id: hc-habit-003
+    subcategory: habit-formation
+    query: "养成运动习惯需要多久？我坚持了一周了。"
+    difficulty: medium
+    userUuid: active-user
+    expected:
+      shouldMention:
+        - "基于研究的时间线（21-66天，平均约66天）"
+        - "一周是很好的开始，但关键是坚持"
+        - "维持新习惯的策略"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+
+  # --- 进度追踪 (3) ---
+  - id: hc-progress-001
+    subcategory: progress-tracking
+    query: "我这个月的健身进展怎么样？"
+    difficulty: core
+    userUuid: active-user
+    expected:
+      shouldMention:
+        - "工具数据中的步数和活动趋势"
+        - "运动时长或频率趋势"
+        - "正面的进展评估及下一个里程碑"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_metrics
+        - get_workouts
+
+  - id: hc-progress-002
+    subcategory: progress-tracking
+    query: "我这周睡眠有改善吗？"
+    difficulty: medium
+    userUuid: active-user
+    expected:
+      shouldMention:
+        - "工具数据中多天的睡眠趋势"
+        - "就寝时间一致性的观察"
+        - "基于趋势的正向鼓励"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_sleep
+
+  - id: hc-progress-003
+    subcategory: progress-tracking
+    query: "我坚持运动两周了，应该能看到什么变化？"
+    difficulty: medium
+    userUuid: active-user
+    expected:
+      shouldMention:
+        - "两周的身体适应时间线"
+        - "工具数据中的心血管改善（静息心率趋势）"
+        - "运动数据中的体能提升"
+        - "4-6周和8-12周的阶段性预期"
+      shouldNotMention:
+        - "失败"
+        - "懒"
+        - "差劲"
+        - "太差了"
+      minScore: 0.7
+      expectedTools:
+        - get_workouts
+        - get_heart_rate

@@ -847,6 +847,29 @@
   animation: pulse-subtle 1.5s ease-in-out infinite;
 }
 
+/* Status dot badge — positioned on top-left of theme toggle */
+.status-dot-badge {
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.status-dot-badge.online {
+  background: rgb(var(--color-success));
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  animation: status-breathe 2.5s ease-in-out infinite;
+}
+
+.status-dot-badge.offline {
+  background: rgb(var(--color-error));
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+  animation: pulse-subtle 1.5s ease-in-out infinite;
+}
+
 .topbar-btn {
   width: 32px;
   height: 32px;
@@ -1072,6 +1095,46 @@
 @keyframes glow-pulse {
   0%, 100% { box-shadow: 0 0 0 rgba(255, 92, 92, 0); }
   50% { box-shadow: 0 0 20px var(--color-accent-glow); }
+}
+
+/* ── Markdown elements in chat bubbles ── */
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--color-border));
+}
+
+.md-table th,
+.md-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgb(var(--color-border));
+}
+
+.md-table th {
+  font-weight: 600;
+  font-size: 12px;
+  color: rgb(var(--color-text-secondary));
+  background: rgb(var(--color-surface-hover));
+}
+
+.md-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.md-table tbody tr:hover td {
+  background: rgb(var(--color-surface-hover) / 0.5);
+}
+
+.md-hr {
+  border: none;
+  height: 1px;
+  background: rgb(var(--color-border));
+  margin: 16px 0;
 }
 
 @keyframes pulse-subtle {
@@ -1409,6 +1472,149 @@ select:focus {
   0% { transform: translateY(0); }
   40% { transform: translateY(-3px); }
   100% { transform: translateY(0); }
+}
+
+/* ===== Auth Page ===== */
+@keyframes auth-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+@keyframes auth-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes auth-card-enter {
+  from { opacity: 0; transform: translateY(30px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes auth-shimmer {
+  from { background-position: -200% center; }
+  to { background-position: 200% center; }
+}
+@keyframes auth-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.1); }
+  66% { transform: translate(-20px, 15px) scale(0.9); }
+}
+@keyframes auth-feature-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========== Agent Breathing Light (Active Reply) ========== */
+@keyframes agent-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgb(var(--color-primary) / 0.4),
+                0 0 0 0 rgb(var(--color-primary) / 0.1);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgb(var(--color-primary) / 0.3),
+                0 0 24px 8px rgb(var(--color-primary) / 0.08);
+  }
+}
+
+@keyframes agent-breathe-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* ========== React Bits: AnimatedContent ========== */
+@keyframes rb-entrance {
+  from {
+    opacity: 0;
+    transform: var(--rb-transform, translateY(50px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ========== React Bits: SpotlightCard ========== */
+.card-spotlight {
+  position: relative;
+  overflow: hidden;
+  --mouse-x: 50%;
+  --mouse-y: 50%;
+  --spotlight-color: rgba(255, 255, 255, 0.05);
+}
+
+.card-spotlight::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at var(--mouse-x) var(--mouse-y), var(--spotlight-color), transparent 80%);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.card-spotlight:hover::before,
+.card-spotlight:focus-within::before {
+  opacity: 0.6;
+}
+
+/* ========== React Bits: StarBorder ========== */
+.star-border-container {
+  display: inline-block;
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.border-gradient-bottom {
+  position: absolute;
+  width: 300%;
+  height: 50%;
+  opacity: 0.7;
+  bottom: -12px;
+  right: -250%;
+  border-radius: 50%;
+  animation: star-movement-bottom linear infinite alternate;
+  z-index: 0;
+}
+
+.border-gradient-top {
+  position: absolute;
+  opacity: 0.7;
+  width: 300%;
+  height: 50%;
+  top: -12px;
+  left: -250%;
+  border-radius: 50%;
+  animation: star-movement-top linear infinite alternate;
+  z-index: 0;
+}
+
+.star-border-inner {
+  position: relative;
+  background: var(--color-surface-card);
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 16px;
+  z-index: 1;
+}
+
+@keyframes star-movement-bottom {
+  0% { transform: translate(0%, 0%); opacity: 1; }
+  100% { transform: translate(-100%, 0%); opacity: 0; }
+}
+
+@keyframes star-movement-top {
+  0% { transform: translate(0%, 0%); opacity: 1; }
+  100% { transform: translate(100%, 0%); opacity: 0; }
+}
+
+/* ========== Mobile Responsive Fixes ========== */
+@media (max-width: 767px) {
+  .chat-scroll-container { padding: 12px; gap: 16px; }
+  .arena-criterion-name { width: 100px; font-size: 0.75rem; }
+  .arena-criterion-bar { margin: 0 6px; }
+  .arena-criterion-scores { gap: 6px; }
+  .arena-criterion-score { font-size: 0.75rem; min-width: 32px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

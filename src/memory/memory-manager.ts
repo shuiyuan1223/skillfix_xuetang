@@ -8,11 +8,10 @@
  * Files are the source of truth; OpenClaw's per-user index handles all search.
  */
 
-import { Database } from "bun:sqlite";
 import { join } from "path";
 import { getStateDir } from "../utils/config.js";
-import { ensureMemorySchema, openMemoryDatabase } from "./schema.js";
-import { UserStore } from "./user-store.js";
+// Side-effect import: macOS SQLite compat patch
+import "./schema.js";
 import { loadSoul } from "./soul.js";
 import {
   loadProfileFromFile,
@@ -22,20 +21,20 @@ import {
   appendToDailyLog,
   formatProfileForPrompt,
   ensureUserDir,
+  loadBootstrap,
+  deleteBootstrap,
 } from "./profile.js";
 import { buildSkillRegistry } from "../agent/system-prompt.js";
 import {
   getNextMissingField,
   getAllMissingFields,
+  getAllMissingProfileKeys,
   getProfileCompleteness,
-  shouldAskForInfo,
-  extractProfileFromMessage,
-  formatQuestion,
-  type AskContext,
 } from "./info-collector.js";
 import { MemoryIndexManager } from "./memory-index.js";
 import { emitSessionTranscriptUpdate } from "./compat.js";
 import type { UserProfile, MemorySearchResult } from "./types.js";
+import { loadConfig } from "../utils/config.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Memory");
@@ -45,17 +44,10 @@ export interface MemoryManagerConfig {
 }
 
 export class MemoryManager {
-  private db: Database;
-  private userStore: UserStore;
   private indexManagers = new Map<string, MemoryIndexManager | null>();
   private indexInitPromises = new Map<string, Promise<MemoryIndexManager | null>>();
 
-  constructor(private config: MemoryManagerConfig = {}) {
-    const dbPath = join(getStateDir(), "memory.db");
-    this.db = openMemoryDatabase(dbPath);
-    ensureMemorySchema(this.db);
-    this.userStore = new UserStore(this.db);
-  }
+  constructor(private config: MemoryManagerConfig = {}) {}
 
   // ============ Index Manager (OpenClaw Engine) ============
 
@@ -96,7 +88,6 @@ export class MemoryManager {
   // ============ User Management ============
 
   ensureUser(uuid: string): void {
-    this.userStore.ensureUser(uuid);
     ensureUserDir(uuid);
   }
 
@@ -115,6 +106,7 @@ export class MemoryManager {
     if (updates.birthYear !== undefined) merged.birthYear = updates.birthYear;
     if (updates.height !== undefined) merged.height = updates.height;
     if (updates.weight !== undefined) merged.weight = updates.weight;
+    if (updates.location !== undefined) merged.location = updates.location;
     if (updates.conditions !== undefined) merged.conditions = updates.conditions;
     if (updates.allergies !== undefined) merged.allergies = updates.allergies;
     if (updates.medications !== undefined) merged.medications = updates.medications;
@@ -133,13 +125,18 @@ export class MemoryManager {
   }
 
   deleteUser(uuid: string): void {
-    this.userStore.deleteUser(uuid);
-    // Also close and remove the user's index manager
+    // Close and remove the user's index manager
     const manager = this.indexManagers.get(uuid);
     if (manager) {
       void manager.close();
       this.indexManagers.delete(uuid);
     }
+  }
+
+  // ============ Onboarding ============
+
+  completeOnboarding(uuid: string): boolean {
+    return deleteBootstrap(uuid);
   }
 
   // ============ Profile Info Collection ============
@@ -154,30 +151,14 @@ export class MemoryManager {
     return getAllMissingFields(profile);
   }
 
+  getAllMissingProfileKeys(uuid: string): string[] {
+    const profile = this.getProfile(uuid);
+    return getAllMissingProfileKeys(profile);
+  }
+
   getProfileCompleteness(uuid: string): number {
     const profile = this.getProfile(uuid);
     return getProfileCompleteness(profile);
-  }
-
-  shouldAskForInfo(uuid: string, context: AskContext): boolean {
-    const profile = this.getProfile(uuid);
-    return shouldAskForInfo(profile, context);
-  }
-
-  extractAndUpdateProfile(uuid: string, message: string): Partial<UserProfile> {
-    const extracted = extractProfileFromMessage(message);
-
-    if (Object.keys(extracted).length > 0) {
-      this.updateProfile(uuid, extracted);
-    }
-
-    return extracted;
-  }
-
-  formatMissingInfoQuestion(uuid: string): string | null {
-    const field = this.getNextMissingField(uuid);
-    if (!field) return null;
-    return formatQuestion(field);
   }
 
   // ============ Memory Search (OpenClaw Engine) ============
@@ -252,22 +233,37 @@ export class MemoryManager {
 
   // ============ SOUL ============
 
-  getSoulPrompt(): string {
-    return loadSoul();
+  getSoulPrompt(uuid?: string): string {
+    return loadSoul(uuid);
   }
 
   // ============ System Prompt Building ============
 
-  buildSystemPrompt(uuid: string, healthContext?: string): string {
-    const soul = this.getSoulPrompt();
-    const profile = this.getProfile(uuid);
-    const memorySummary = loadMemorySummary(uuid);
+  buildSystemPrompt(
+    uuid: string,
+    skillOptions?: { include?: string[]; exclude?: string[] },
+    contextOptions?: { memory?: boolean; profile?: boolean; bootstrap?: boolean }
+  ): string {
+    const soul = this.getSoulPrompt(uuid);
+    const profile = contextOptions?.profile !== false ? this.getProfile(uuid) : null;
+    const memorySummary = contextOptions?.memory !== false ? loadMemorySummary(uuid) : null;
+    const bootstrap = contextOptions?.bootstrap !== false ? loadBootstrap(uuid) : null;
 
-    const profileSection = formatProfileForPrompt(profile);
-    const memorySection = memorySummary || "No historical memory yet";
-    const skillRegistry = buildSkillRegistry();
+    const profileSection = profile ? formatProfileForPrompt(profile) : null;
+    const memorySection =
+      memorySummary || (contextOptions?.memory !== false ? "No historical memory yet" : null);
+    const skillRegistry = buildSkillRegistry(skillOptions);
 
-    const today = new Date().toISOString().split("T")[0];
+    const sessionContext = buildSessionContext();
+
+    const bootstrapSection = bootstrap
+      ? `\n## ⚠️ 新用户首次对话 — 必须执行引导\n\n**请严格遵循以下引导流程。这是最高优先级任务。**\n\n${bootstrap}\n`
+      : "";
+
+    const profileBlock = profileSection
+      ? `\n## Current User Information\n\n${profileSection}\n`
+      : "";
+    const memoryBlock = memorySection ? `\n## User Memory\n\n${memorySection}\n` : "";
 
     const prompt = `${soul}
 
@@ -275,16 +271,8 @@ export class MemoryManager {
 
 ## Session Context
 
-- **Current Date**: ${today}
-
-## Current User Information
-
-${profileSection}
-
-## User Memory
-
-${memorySection}
-${healthContext || ""}
+${sessionContext}
+${bootstrapSection}${profileBlock}${memoryBlock}
 ${skillRegistry}
 ---
 
@@ -292,7 +280,7 @@ Based on the information above, provide personalized health services.`;
 
     const est = (s: string) => Math.ceil(s.length / 4);
     log.debug(
-      `Token distribution: soul=${est(soul)} profile=${est(profileSection)} memory=${est(memorySection)} health=${est(healthContext || "")} skills=${est(skillRegistry)} total≈${est(prompt)}`
+      `Token distribution: soul=${est(soul)} profile=${est(profileBlock)} memory=${est(memoryBlock)} skills=${est(skillRegistry)} bootstrap=${est(bootstrapSection)} total≈${est(prompt)}`
     );
 
     return prompt;
@@ -301,7 +289,6 @@ Based on the information above, provide personalized health services.`;
   // ============ Lifecycle ============
 
   close(): void {
-    this.db.close();
     // Close all index managers
     for (const [, manager] of this.indexManagers) {
       if (manager) {
@@ -311,6 +298,98 @@ Based on the information above, provide personalized health services.`;
     this.indexManagers.clear();
     this.indexInitPromises.clear();
   }
+}
+
+// ============ Session Context Builder ============
+
+const WEEKDAYS_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+function getTimeOfDay(hour: number): string {
+  if (hour < 6) return "深夜";
+  if (hour < 9) return "早晨";
+  if (hour < 12) return "上午";
+  if (hour < 13) return "中午";
+  if (hour < 17) return "下午";
+  if (hour < 19) return "傍晚";
+  if (hour < 23) return "晚上";
+  return "深夜";
+}
+
+function getSeason(month: number, hemisphere: "north" | "south" = "north"): string {
+  // month: 1-12
+  const northSeasons: Record<number, string> = {
+    1: "冬季",
+    2: "冬季",
+    3: "春季",
+    4: "春季",
+    5: "春季",
+    6: "夏季",
+    7: "夏季",
+    8: "夏季",
+    9: "秋季",
+    10: "秋季",
+    11: "秋季",
+    12: "冬季",
+  };
+  const southSeasons: Record<number, string> = {
+    1: "夏季",
+    2: "夏季",
+    3: "秋季",
+    4: "秋季",
+    5: "秋季",
+    6: "冬季",
+    7: "冬季",
+    8: "冬季",
+    9: "春季",
+    10: "春季",
+    11: "春季",
+    12: "夏季",
+  };
+  return hemisphere === "south" ? southSeasons[month] : northSeasons[month];
+}
+
+/**
+ * Build rich session context with date, time, timezone, and season.
+ * Weather is now a tool (get_weather), not injected here.
+ */
+function buildSessionContext(): string {
+  const now = new Date();
+  const dateStr = now.toISOString().split("T")[0];
+  const weekday = WEEKDAYS_ZH[now.getDay()];
+  const hour = now.getHours();
+  const minute = String(now.getMinutes()).padStart(2, "0");
+  const timeOfDay = getTimeOfDay(hour);
+  const month = now.getMonth() + 1;
+
+  // Detect timezone
+  const offsetMin = -now.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? "+" : "-";
+  const absH = Math.floor(Math.abs(offsetMin) / 60);
+  const absM = Math.abs(offsetMin) % 60;
+  const tzOffset = `UTC${sign}${absH}${absM > 0 ? ":" + String(absM).padStart(2, "0") : ""}`;
+
+  // Try to get timezone name
+  let tzName = "";
+  try {
+    tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    /* ignore */
+  }
+  const tzDisplay = tzName ? `${tzOffset} (${tzName})` : tzOffset;
+
+  // Season from config hemisphere or default north
+  const config = loadConfig();
+  const hemisphere = (config as any).context?.hemisphere || "north";
+  const season = getSeason(month, hemisphere);
+
+  const lines = [
+    `- **日期**: ${dateStr} ${weekday}`,
+    `- **时间**: ${hour}:${minute}（${timeOfDay}）`,
+    `- **时区**: ${tzDisplay}`,
+    `- **季节**: ${season}`,
+  ];
+
+  return lines.join("\n");
 }
 
 // Singleton instance

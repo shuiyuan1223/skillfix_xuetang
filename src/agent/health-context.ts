@@ -6,15 +6,33 @@
  * without needing tool calls in the first turn.
  */
 
-import type { HealthDataSource } from "../data-sources/interface.js";
+import type {
+  HealthDataSource,
+  HealthMetrics,
+  BodyCompositionData,
+} from "../data-sources/interface.js";
 import { getDataSource } from "../tools/health-data.js";
+import { listPlans, savePlan } from "../plans/store.js";
+import type { HealthPlan, GoalStatus } from "../plans/types.js";
+import { listRecommendations, listReminders, listCalendarEvents } from "../proactive/store.js";
+import { getUserUuid, loadConfig } from "../utils/config.js";
+import { loadProfileFromFile } from "../memory/profile.js";
 
 /**
- * Pre-compute a 7-day health context summary for the system prompt.
+ * @deprecated Health context is no longer injected into the system prompt.
+ * The agent now uses health tools on demand. This function is kept for
+ * backward compatibility (e.g., plan auto-sync) but should not be called
+ * for system prompt construction.
+ *
+ * Pre-compute a 7-day health context summary.
  * Best-effort: returns empty string if data fetching fails.
  * @param dataSource - Optional user-specific data source; falls back to global.
+ * @param userUuid - Optional user UUID for plan lookup; falls back to getUserUuid().
  */
-export async function preComputeHealthContext(dataSource?: HealthDataSource): Promise<string> {
+export async function preComputeHealthContext(
+  dataSource?: HealthDataSource,
+  userUuid?: string
+): Promise<string> {
   try {
     const source = dataSource || getDataSource();
     const today = new Date().toISOString().split("T")[0];
@@ -30,6 +48,8 @@ export async function preComputeHealthContext(dataSource?: HealthDataSource): Pr
       todayBP,
       todayGlucose,
       todayTemp,
+      todayMetrics,
+      todayBodyComp,
     ] = await Promise.all([
       source.getWeeklySteps(today).catch(() => []),
       source.getWeeklySleep(today).catch(() => []),
@@ -40,6 +60,8 @@ export async function preComputeHealthContext(dataSource?: HealthDataSource): Pr
       source.getBloodPressure?.(today).catch(() => null) ?? Promise.resolve(null),
       source.getBloodGlucose?.(today).catch(() => null) ?? Promise.resolve(null),
       source.getBodyTemperature?.(today).catch(() => null) ?? Promise.resolve(null),
+      source.getMetrics(today).catch(() => null),
+      source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
     ]);
 
     const sections: string[] = [];
@@ -207,9 +229,261 @@ export async function preComputeHealthContext(dataSource?: HealthDataSource): Pr
       result += `\n\n**Insights**: ${insights.join(" ")}`;
     }
 
+    // --- Active Health Plans (auto-sync + enhanced display) ---
+    try {
+      const uuid = userUuid || getUserUuid();
+      const activePlans = listPlans(uuid, "active");
+
+      // Auto-sync plan progress with latest health data
+      if (activePlans.length > 0) {
+        autoSyncPlanProgress(activePlans, uuid, today, {
+          weeklySteps,
+          weeklySleep,
+          todayHR,
+          todayWorkouts,
+          todayMetrics,
+          todayBodyComp,
+        });
+      }
+
+      if (activePlans.length > 0) {
+        result += "\n\n## Active Health Plans\n";
+        for (const plan of activePlans) {
+          const done = plan.goals.filter((g) => g.status === "completed").length;
+          result += `\n- **${plan.name}** (${plan.startDate} ~ ${plan.endDate}): ${done}/${plan.goals.length} goals completed`;
+          for (const goal of plan.goals) {
+            const current = goal.currentValue;
+            const pct = current != null ? Math.round((current / goal.targetValue) * 100) : 0;
+            const arrow =
+              goal.status === "completed" || goal.status === "ahead"
+                ? "↑"
+                : goal.status === "behind"
+                  ? "↓"
+                  : "→";
+            result += `\n  - ${goal.label}: target ${goal.targetValue}${goal.unit}, current ${current ?? "?"}${goal.unit} (${pct}%) → ${goal.status} ${arrow}`;
+          }
+        }
+        result +=
+          "\n\nWhen discussing health topics related to an active plan, mention the user's plan progress.";
+      }
+    } catch {
+      // Plans not available — ignore
+    }
+
+    // --- Proactive Items (recommendations, reminders, calendar) ---
+    try {
+      const uuid = userUuid || getUserUuid();
+      const activeRecs = listRecommendations(uuid, "active");
+      const pendingReminders = listReminders(uuid, "pending");
+      const now = new Date().toISOString();
+      const weekLater = new Date(Date.now() + 7 * 86400000).toISOString();
+      const upcomingEvents = listCalendarEvents(uuid, {
+        from: now,
+        to: weekLater,
+        status: "scheduled",
+      });
+
+      if (activeRecs.length > 0 || pendingReminders.length > 0 || upcomingEvents.length > 0) {
+        result += "\n\n## Proactive Items\n";
+
+        if (activeRecs.length > 0) {
+          result += `\n**Recommendations** (${activeRecs.length} active):`;
+          for (const rec of activeRecs.slice(0, 5)) {
+            result += `\n- [${rec.priority}] ${rec.title}: ${rec.body}`;
+          }
+        }
+
+        if (pendingReminders.length > 0) {
+          result += `\n**Reminders** (${pendingReminders.length} pending):`;
+          for (const rem of pendingReminders.slice(0, 5)) {
+            const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
+            result += `\n- ${rem.title} @ ${time} (${rem.repeatRule})`;
+          }
+        }
+
+        if (upcomingEvents.length > 0) {
+          result += `\n**Upcoming Events** (next 7 days):`;
+          for (const evt of upcomingEvents.slice(0, 5)) {
+            const date = evt.startTime.split("T")[0];
+            const time = evt.startTime.split("T")[1]?.slice(0, 5) || "";
+            result += `\n- ${evt.title} — ${date} ${time}`;
+          }
+        }
+
+        result += "\n\nReference these proactive items when relevant to the conversation.";
+      }
+    } catch {
+      // Proactive items not available — ignore
+    }
+
     return result;
   } catch (e) {
     console.warn("[Health Context] Pre-computation failed:", e);
     return "";
   }
+}
+
+// ============================================================================
+// Weather Context (optional, best-effort)
+// ============================================================================
+
+/**
+ * Fetch weather context from wttr.in (free, no API key).
+ * Returns a formatted string like `- **天气**: 5°C，多云，湿度 65%`
+ * or empty string on failure. 3 second timeout.
+ */
+export async function fetchWeatherContext(userUuid?: string): Promise<string> {
+  try {
+    // Resolve location: user profile → config → skip
+    let location: string | undefined;
+
+    if (userUuid) {
+      try {
+        const profile = loadProfileFromFile(userUuid);
+        if (profile.location) location = profile.location;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    if (!location) {
+      const config = loadConfig();
+      location = (config as any).context?.location;
+    }
+
+    if (!location) return "";
+
+    const url = `https://wttr.in/${encodeURIComponent(location)}?format=j1`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!resp.ok) return "";
+
+    const data = (await resp.json()) as any;
+    const current = data?.current_condition?.[0];
+    if (!current) return "";
+
+    const tempC = current.temp_C;
+    const desc = current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value || "";
+    const humidity = current.humidity;
+
+    return `- **天气**: ${tempC}°C，${desc}，湿度 ${humidity}%`;
+  } catch {
+    // Network error, timeout, parse error — all silently degrade
+    return "";
+  }
+}
+
+// ============================================================================
+// Auto-sync plan progress with latest health data
+// ============================================================================
+
+export interface HealthSnapshot {
+  weeklySteps: Array<{ date: string; steps: number }>;
+  weeklySleep: Array<{ date: string; hours: number }>;
+  todayHR: { restingAvg: number } | null;
+  todayWorkouts: Array<{ durationMinutes: number }>;
+  todayMetrics: HealthMetrics | null;
+  todayBodyComp: BodyCompositionData | null;
+}
+
+export function autoSyncPlanProgress(
+  plans: HealthPlan[],
+  uuid: string,
+  today: string,
+  data: HealthSnapshot
+): void {
+  for (const plan of plans) {
+    let changed = false;
+
+    for (const goal of plan.goals) {
+      // Skip custom metrics — need manual update
+      if (goal.metric === "custom") continue;
+
+      // Skip if today already has a progress entry for this goal
+      const alreadySynced = plan.progress.some((p) => p.goalId === goal.id && p.date === today);
+      if (alreadySynced) continue;
+
+      const value = resolveMetricValue(goal.metric, goal.frequency, data);
+      if (value == null) continue;
+
+      // Add progress entry
+      plan.progress.push({
+        date: today,
+        goalId: goal.id,
+        actualValue: value,
+        targetValue: goal.targetValue,
+        note: "auto-sync",
+      });
+
+      // Update current value and status
+      goal.currentValue = value;
+      goal.status = computeGoalStatus(value, goal.targetValue);
+      changed = true;
+    }
+
+    if (changed) {
+      savePlan(uuid, plan);
+    }
+  }
+}
+
+function resolveMetricValue(
+  metric: string,
+  frequency: "daily" | "weekly",
+  data: HealthSnapshot
+): number | null {
+  switch (metric) {
+    case "steps": {
+      if (data.weeklySteps.length === 0) return null;
+      if (frequency === "weekly") {
+        const total = data.weeklySteps.reduce((s, d) => s + d.steps, 0);
+        return Math.round(total / data.weeklySteps.length);
+      }
+      // daily: last entry (today or most recent)
+      return data.weeklySteps[data.weeklySteps.length - 1].steps;
+    }
+    case "sleep_hours": {
+      const sleepDays = data.weeklySleep.filter((d) => d.hours > 0);
+      if (sleepDays.length === 0) return null;
+      if (frequency === "weekly") {
+        return (
+          Math.round((sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length) * 10) / 10
+        );
+      }
+      return sleepDays[sleepDays.length - 1].hours;
+    }
+    case "exercise_count": {
+      if (frequency === "weekly") {
+        // Count workout days in the week (approximate from todayWorkouts only)
+        return data.todayWorkouts.length;
+      }
+      return data.todayWorkouts.length;
+    }
+    case "heart_rate_resting":
+      return data.todayHR?.restingAvg ?? null;
+    case "weight":
+      return data.todayBodyComp?.weight ?? null;
+    case "calories":
+      if (!data.todayMetrics) return null;
+      if (frequency === "weekly") return data.todayMetrics.calories; // best available
+      return data.todayMetrics.calories;
+    case "active_minutes":
+      if (!data.todayMetrics) return null;
+      if (frequency === "weekly") return data.todayMetrics.activeMinutes;
+      return data.todayMetrics.activeMinutes;
+    default:
+      return null;
+  }
+}
+
+function computeGoalStatus(currentValue: number, targetValue: number): GoalStatus {
+  const ratio = currentValue / targetValue;
+  if (ratio >= 1) return "completed";
+  if (ratio >= 0.9) return "ahead";
+  if (ratio >= 0.6) return "on_track";
+  return "behind";
 }

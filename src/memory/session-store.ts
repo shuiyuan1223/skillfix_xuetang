@@ -4,11 +4,29 @@
  * Each session is a separate .jsonl file under .pha/users/{uuid}/sessions/
  */
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, statSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  appendFileSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "fs";
 import { join } from "path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { UserMessage, AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
 import { getUserDir, ensureUserDir } from "./profile.js";
+import { getStateDir } from "../utils/config.js";
+
+/**
+ * Resolve a session path template by replacing {uid} placeholder.
+ * Returns an absolute path under .pha/ directory.
+ */
+export function resolveSessionPath(sessionPath: string, uid: string): string {
+  const resolved = sessionPath.replace(/\{uid\}/g, uid);
+  return join(getStateDir(), resolved);
+}
 
 export interface SessionEntry {
   timestamp: number;
@@ -145,10 +163,16 @@ function getSessionsDir(uuid: string): string {
 /**
  * Append entries to a session transcript file.
  * Creates the file if it doesn't exist. Append-only JSONL format.
+ * @param sessionDir Optional custom session directory (overrides default user sessions dir)
  */
-export function appendToSession(uuid: string, sessionId: string, entries: SessionEntry[]): void {
+export function appendToSession(
+  uuid: string,
+  sessionId: string,
+  entries: SessionEntry[],
+  sessionDir?: string
+): void {
   ensureUserDir(uuid);
-  const sessionsDir = getSessionsDir(uuid);
+  const sessionsDir = sessionDir || getSessionsDir(uuid);
   if (!existsSync(sessionsDir)) {
     mkdirSync(sessionsDir, { recursive: true });
   }
@@ -156,6 +180,20 @@ export function appendToSession(uuid: string, sessionId: string, entries: Sessio
 
   const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
   appendFileSync(filePath, lines);
+}
+
+/**
+ * Create an empty session file so it becomes the "latest" by mtime.
+ * Used when clearing chat: the empty file prevents loadLatestSession
+ * from falling back to older session files with stale messages.
+ */
+export function touchSession(uuid: string, sessionId: string, sessionDir?: string): void {
+  ensureUserDir(uuid);
+  const sessionsDir = sessionDir || getSessionsDir(uuid);
+  if (!existsSync(sessionsDir)) {
+    mkdirSync(sessionsDir, { recursive: true });
+  }
+  writeFileSync(join(sessionsDir, `${sessionId}.jsonl`), "");
 }
 
 /**
@@ -225,18 +263,59 @@ export function loadSession(uuid: string, sessionId: string): SessionEntry[] {
  * Load the most recent session for a user.
  * Filters out system-agent sessions (sa- prefix).
  * Returns null if no session exists.
+ * @param sessionDir Optional custom session directory (overrides default user sessions dir)
  */
 export function loadLatestSession(
   uuid: string,
-  options?: { prefix?: string }
+  options?: { prefix?: string; sessionDir?: string }
 ): { sessionId: string; entries: SessionEntry[] } | null {
-  const sessions = listSessions(uuid);
+  const sessions = options?.sessionDir
+    ? listSessionsFromDir(options.sessionDir)
+    : listSessions(uuid);
   const prefix = options?.prefix;
   const match = prefix
     ? sessions.find((s) => s.sessionId.startsWith(prefix))
     : sessions.find((s) => !s.sessionId.startsWith("sa-"));
   if (!match) return null;
 
-  const entries = loadSession(uuid, match.sessionId);
+  const entries = loadSessionFromPath(match.path);
   return entries.length > 0 ? { sessionId: match.sessionId, entries } : null;
+}
+
+/**
+ * List sessions from a custom directory path.
+ */
+function listSessionsFromDir(dir: string): SessionInfo[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith(".jsonl"))
+    .map((f) => {
+      const filePath = join(dir, f);
+      const stat = statSync(filePath);
+      return {
+        sessionId: f.replace(".jsonl", ""),
+        path: filePath,
+        createdAt: stat.mtimeMs,
+        sizeBytes: stat.size,
+      };
+    })
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
+ * Load session entries from a file path.
+ */
+function loadSessionFromPath(filePath: string): SessionEntry[] {
+  if (!existsSync(filePath)) return [];
+  const content = readFileSync(filePath, "utf-8");
+  const entries: SessionEntry[] = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      entries.push(JSON.parse(line));
+    } catch {
+      // Skip malformed lines
+    }
+  }
+  return entries;
 }

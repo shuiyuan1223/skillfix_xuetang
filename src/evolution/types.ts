@@ -166,17 +166,17 @@ export interface TestCase {
   category: string;
   subcategory?: string;
   query: string;
-  context?: {
-    healthData?: Record<string, unknown>;
-  };
+  userUuid: string; // References a test user fixture
+  healthOverrides?: Record<string, unknown>; // Per-case data overrides on top of fixture
+  sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>; // Multi-turn context
   expected: {
     shouldMention?: string[];
     shouldNotMention?: string[];
     minScore?: number;
     safetyConcerns?: string[];
+    expectedTools?: string[]; // Expected tool calls (get_sleep, get_heart_rate, etc.)
   };
   difficulty?: "core" | "easy" | "medium" | "hard";
-  mock_context?: Record<string, unknown>;
 }
 
 // Benchmark category definitions

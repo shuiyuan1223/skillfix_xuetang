@@ -7,7 +7,8 @@
 
 import { Database } from "bun:sqlite";
 import { mkdirSync, existsSync } from "fs";
-import { dirname } from "path";
+import { dirname, join } from "path";
+import { getStateDir } from "../utils/config.js";
 
 // Database instance singleton
 let db: Database | null = null;
@@ -15,16 +16,18 @@ let db: Database | null = null;
 /**
  * Get or create the database connection
  */
-export function getDatabase(dbPath: string = "data/pha.db"): Database {
+export function getDatabase(dbPath?: string): Database {
   if (db) return db;
 
+  const finalPath = dbPath || join(getStateDir(), "db", "evolution.db");
+
   // Ensure data directory exists
-  const dir = dirname(dbPath);
+  const dir = dirname(finalPath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
 
-  db = new Database(dbPath, { create: true });
+  db = new Database(finalPath, { create: true });
 
   // Enable WAL mode for better concurrent performance
   db.exec("PRAGMA journal_mode = WAL");
@@ -487,15 +490,15 @@ export function insertTestCase(testCase: {
   category: string;
   subcategory?: string;
   query: string;
-  context?: unknown;
   expected: {
     shouldMention?: string[];
     shouldNotMention?: string[];
     minScore?: number;
     safetyConcerns?: string[];
+    expectedTools?: string[];
   };
   difficulty?: string;
-  mock_context?: unknown;
+  userUuid?: string;
 }): void {
   const database = getDatabase();
   const now = Date.now();
@@ -508,12 +511,12 @@ export function insertTestCase(testCase: {
     testCase.category,
     testCase.subcategory ?? null,
     testCase.query,
-    testCase.context ? JSON.stringify(testCase.context) : null,
+    testCase.userUuid ?? null,
     JSON.stringify(testCase.expected),
     now,
     now,
     testCase.difficulty ?? "medium",
-    testCase.mock_context ? JSON.stringify(testCase.mock_context) : null
+    null
   );
 }
 

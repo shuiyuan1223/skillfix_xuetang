@@ -32,7 +32,7 @@ import {
   getRecentRuns,
 } from "../evolution/version-tracker.js";
 import type { BenchmarkCategory, AutoLoopConfig, BenchmarkProfile } from "../evolution/types.js";
-import { createPHAAgent } from "../agent/index.js";
+import { createPHAAgent, withActivityTimeout } from "../agent/index.js";
 import {
   loadConfig,
   getBenchmarkModels,
@@ -48,7 +48,6 @@ import {
   type BenchmarkModelConfig,
 } from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
-import { sessionToAgentMessages } from "../memory/session-store.js";
 import { getModel, complete } from "@mariozechner/pi-ai";
 import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
 import {
@@ -618,8 +617,6 @@ export function registerEvalCommand(program: Command): void {
         };
       }
 
-      const AGENT_TIMEOUT_MS = 120_000;
-
       const spinner = new Spinner("Running diagnose pipeline...");
       spinner.start();
 
@@ -627,23 +624,32 @@ export function registerEvalCommand(program: Command): void {
         const result = await diagnose({
           profile,
           runnerConfig: {
-            agentCall: async (query: string) => {
-              // Create fresh agent per test case for concurrency safety
-              const { MockDataSource } = await import("../data-sources/mock.js");
+            agentCall: async (query: string, testCase) => {
+              // Create fresh agent per test case with UUID test user
+              const {
+                seedTestUser,
+                createBenchmarkDataSource,
+                getTestUserUuid,
+                loadTestUserFixture,
+              } = await import("../evolution/test-user-seeder.js");
+              const fixture = loadTestUserFixture(testCase.userUuid);
+              seedTestUser(fixture);
+              const dataSource = createBenchmarkDataSource(
+                testCase.userUuid,
+                testCase.healthOverrides
+              );
               const testAgent = await createPHAAgent({
                 apiKey,
                 provider: diagProvider,
                 modelId: diagModelId,
                 baseUrl: diagBaseUrl,
-                dataSource: new MockDataSource(),
+                userUuid: getTestUserUuid(testCase.userUuid),
+                dataSource,
+                sessionMessages: testCase.sessionMessages,
               });
-              const response = await Promise.race([
-                testAgent.chatAndWait(query).then((r: string) => ({ response: r })),
-                new Promise<{ response: string }>((_, reject) =>
-                  setTimeout(() => reject(new Error("Agent call timed out")), AGENT_TIMEOUT_MS)
-                ),
-              ]);
-              return response;
+              return await withActivityTimeout(testAgent, () =>
+                testAgent.chatAndWaitWithTools(query)
+              );
             },
             llmCall: rawLLMCall,
             onProgress: (current, total, testCase) => {
@@ -847,7 +853,6 @@ export function registerEvalCommand(program: Command): void {
 
       const isMulti = modelEntries.length > 1;
       const isParallel = options.parallel && isMulti;
-      const AGENT_TIMEOUT_MS = 120_000;
 
       // Shared judge config (one judge for all models)
       const judgeConfig = getJudgeModel();
@@ -903,43 +908,32 @@ export function registerEvalCommand(program: Command): void {
         spinner?.start();
 
         const runner = new BenchmarkRunner({
-          agentCall: async (query: string, mockContext?: Record<string, unknown>) => {
-            // Create fresh agent per test case for concurrency safety
-            const testDs = new MockDataSource();
+          agentCall: async (query: string, testCase) => {
+            // Create fresh agent per test case with UUID test user
+            const {
+              seedTestUser,
+              createBenchmarkDataSource,
+              getTestUserUuid,
+              loadTestUserFixture,
+            } = await import("../evolution/test-user-seeder.js");
+            const fixture = loadTestUserFixture(testCase.userUuid);
+            seedTestUser(fixture);
+            const dataSource = createBenchmarkDataSource(
+              testCase.userUuid,
+              testCase.healthOverrides
+            );
             const testAgent = await createPHAAgent({
               apiKey: entry.apiKey,
               provider: entry.provider,
               modelId: entry.modelId,
               baseUrl: entry.baseUrl,
-              dataSource: testDs,
+              userUuid: getTestUserUuid(testCase.userUuid),
+              dataSource,
+              sessionMessages: testCase.sessionMessages,
             });
-
-            // Inject conversation_history into agent state so it has prior context
-            if (mockContext?.conversation_history) {
-              const history = mockContext.conversation_history as Array<{
-                role: string;
-                content: string;
-                timestamp?: number;
-              }>;
-              const msgs = sessionToAgentMessages(history);
-              for (const msg of msgs) {
-                testAgent.getAgent().state.messages.push(msg);
-              }
-            }
-
-            const result = await Promise.race([
-              testAgent.chatAndWaitWithTools(query),
-              new Promise<{
-                response: string;
-                toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
-              }>((_, reject) =>
-                setTimeout(
-                  () => reject(new Error("Agent call timed out after 2 minutes")),
-                  AGENT_TIMEOUT_MS
-                )
-              ),
-            ]);
-            return result;
+            return await withActivityTimeout(testAgent, () =>
+              testAgent.chatAndWaitWithTools(query)
+            );
           },
           llmCall: rawLLMCall,
           onProgress: (current, total, testCase) => {

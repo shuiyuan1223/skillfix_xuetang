@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { A2UISurfaceData, WSMessage, PlotlyChart, AGUIEvent, MessagePart, QuickReply } from "./lib/types";
+import type { A2UISurfaceData, A2UIComponent, WSMessage, AGUIEvent, MessagePart, QuickReply } from "./lib/types";
+import { componentType, prop, withProp } from "./lib/types";
 import { generateUUID } from "./lib/utils";
 import { ICONS } from "./lib/icons";
 import { i18n } from "./lib/i18n";
@@ -9,32 +10,55 @@ import { A2UIRenderer } from "./components/a2ui/A2UIRenderer";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getUserUuid(): string {
-  // Check URL query param first (for debugging: ?uuid=xxx)
+function setUserIdCookie(userId: string): void {
+  const expires = new Date();
+  expires.setFullYear(expires.getFullYear() + 1);
+  document.cookie = `pha_uid=${userId}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
+}
+
+function getUserId(): string | null {
+  // 1. URL ?uid=xxx (also accepts legacy ?user_id=xxx and ?uuid=xxx)
   const urlParams = new URLSearchParams(window.location.search);
-  const urlUuid = urlParams.get("uuid");
-  if (urlUuid) {
-    const expires = new Date();
-    expires.setFullYear(expires.getFullYear() + 1);
-    document.cookie = `pha_user_id=${urlUuid}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
-    return urlUuid;
+  const urlUserId = urlParams.get("uid") || urlParams.get("user_id") || urlParams.get("uuid");
+  if (urlUserId) {
+    setUserIdCookie(urlUserId);
+    return urlUserId;
   }
 
-  // Check cookie
+  // 2. Cookie pha_uid (set after OAuth; also check legacy pha_user_id)
   const cookies = document.cookie.split(";");
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split("=");
-    if (name === "pha_user_id" && value) {
+    if ((name === "pha_uid" || name === "pha_user_id") && value) {
       return value;
     }
   }
 
-  // Generate new UUID and save to cookie
-  const uuid = generateUUID();
-  const expires = new Date();
-  expires.setFullYear(expires.getFullYear() + 1);
-  document.cookie = `pha_user_id=${uuid}; expires=${expires.toUTCString()}; path=/; SameSite=Strict`;
-  return uuid;
+  // 3. Not authenticated — return null (no random UUID generation)
+  return null;
+}
+
+/** Send an action to the A2UI HTTP endpoint and process response updates. */
+async function postAction(
+  data: Record<string, unknown>,
+  handleMessage: (msg: WSMessage) => void,
+): Promise<void> {
+  try {
+    const res = await fetch("/api/a2ui/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) return;
+    const { updates } = (await res.json()) as { updates: unknown[] };
+    if (updates) {
+      for (const msg of updates) {
+        handleMessage(msg as WSMessage);
+      }
+    }
+  } catch (e) {
+    console.error("[A2UI] Action error:", e);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -70,13 +94,16 @@ export function App() {
   const chatInitializedRef = useRef(false);
 
   // --- Refs ----------------------------------------------------------------
-  const wsRef = useRef<WebSocket | null>(null);
-  const userUuidRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const uidRef = useRef<string | null>(null);
   const chatAutoScrollRef = useRef(true);
   const isAutoScrollingRef = useRef(false);
-  const pendingPlotlyChartsRef = useRef<PlotlyChart[]>([]);
   const extensionDetectedRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
+  const handleMessageRef = useRef<(msg: WSMessage) => void>(() => {});
+  const pendingSurface = useRef(new Map<string, A2UIComponent[]>());
 
   // Keep mainDataRef in sync with mainData state
   mainDataRef.current = mainData;
@@ -143,14 +170,10 @@ export function App() {
     [],
   );
 
-  // We define sendAction early so OAuth helpers can reference it.  Because
-  // sendAction itself depends on wsRef (a ref, stable), there is no circular
-  // dependency issue -- we just need to forward-declare it before the OAuth
-  // functions that call it.
-
+  // sendActionRaw: fire-and-forget action via HTTP POST
   const sendActionRaw = useCallback(
     (action: string, payload?: Record<string, unknown>) => {
-      wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+      postAction({ type: "action", action, payload }, handleMessageRef.current);
     },
     [],
   );
@@ -164,7 +187,11 @@ export function App() {
       case "TextMessageStart": {
         const msg: ChatMessage = { id: event.messageId, role: "assistant", parts: [] };
         activeMessageRef.current = event.messageId;
-        setChatMessages((prev) => [...prev, msg]);
+        // Replace placeholder with real assistant message
+        setChatMessages((prev) => {
+          const filtered = prev.filter(m => m.id !== "streaming-placeholder");
+          return [...filtered, msg];
+        });
         break;
       }
       case "TextMessageContent": {
@@ -205,6 +232,7 @@ export function App() {
               toolCallId: event.toolCallId,
               toolName: event.toolCallName,
               status: "running" as const,
+              ...(event.displayName ? { displayName: event.displayName } : {}),
             });
             msgs[msgs.length - 1] = updated;
           }
@@ -240,8 +268,6 @@ export function App() {
               toolCallId: event.toolCallId,
               cards: event.cards,
             });
-            // Add empty text part for next text stream
-            updated.parts.push({ type: "text", content: "" });
             msgs[msgs.length - 1] = updated;
           }
           return msgs;
@@ -269,7 +295,12 @@ export function App() {
       role: "user",
       parts: [{ type: "text", content }],
     };
-    setChatMessages((prev) => [...prev, userMsg]);
+    const placeholderMsg: ChatMessage = {
+      id: "streaming-placeholder",
+      role: "assistant",
+      parts: [],
+    };
+    setChatMessages((prev) => [...prev, userMsg, placeholderMsg]);
     setChatStreaming(true);
     setQuickReplies([]);
     chatAutoScrollRef.current = true;
@@ -279,7 +310,7 @@ export function App() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const uuid = userUuidRef.current || "anonymous";
+    const uuid = uidRef.current || "anonymous";
 
     fetch("/api/ag-ui", {
       method: "POST",
@@ -337,18 +368,10 @@ export function App() {
   const startOAuthWithExtension = useCallback(async () => {
     console.log("[OAuth] Using browser extension flow...");
 
-    wsRef.current?.send(
-      JSON.stringify({
-        type: "action",
-        action: "show_toast",
-        payload: { message: "Opening authorization page...", variant: "info" },
-      }),
-    );
+    sendActionRaw("show_toast", { message: "Opening authorization page...", variant: "info" });
 
     try {
-      const urlResponse = await fetch(
-        `/auth/huawei/get-auth-url?uuid=${encodeURIComponent(userUuidRef.current!)}`,
-      );
+      const urlResponse = await fetch("/auth/huawei/get-auth-url");
       if (!urlResponse.ok) {
         const text = await urlResponse.text();
         console.error("[OAuth] get-auth-url failed:", urlResponse.status, text.slice(0, 200));
@@ -367,7 +390,7 @@ export function App() {
         const exchangeResponse = await fetch("/auth/huawei/exchange", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: result.code, uuid: userUuidRef.current }),
+          body: JSON.stringify({ code: result.code, uuid: uidRef.current }),
         });
         if (!exchangeResponse.ok) {
           const text = await exchangeResponse.text();
@@ -377,7 +400,12 @@ export function App() {
         const exchangeResult = await exchangeResponse.json();
         if (exchangeResult.success) {
           console.log("[OAuth] Authentication successful!");
-          sendActionRaw("auth_complete");
+          // Store the Huawei user ID returned by the server
+          if (exchangeResult.userId) {
+            setUserIdCookie(exchangeResult.userId);
+            uidRef.current = exchangeResult.userId;
+          }
+          sendActionRaw("auth_complete", { userId: exchangeResult.userId });
         } else {
           throw new Error(exchangeResult.error || "Failed to exchange code");
         }
@@ -387,32 +415,20 @@ export function App() {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error("[OAuth] Extension flow failed:", message);
-      wsRef.current?.send(
-        JSON.stringify({
-          type: "action",
-          action: "show_toast",
-          payload: { message: `Authentication failed: ${message}`, variant: "error" },
-        }),
-      );
+      sendActionRaw("show_toast", { message: `Authentication failed: ${message}`, variant: "error" });
     }
   }, [requestExtensionOAuth, sendActionRaw]);
 
   const startOAuthWithMCP = useCallback(async () => {
     console.log("[OAuth] Using Chrome MCP flow...");
 
-    wsRef.current?.send(
-      JSON.stringify({
-        type: "action",
-        action: "show_toast",
-        payload: { message: "Launching browser for authentication...", variant: "info" },
-      }),
-    );
+    sendActionRaw("show_toast", { message: "Launching browser for authentication...", variant: "info" });
 
     try {
       const response = await fetch("/auth/huawei/mcp-flow", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid: userUuidRef.current }),
+        body: JSON.stringify({ uuid: uidRef.current }),
       });
       if (!response.ok) {
         const text = await response.text();
@@ -422,7 +438,12 @@ export function App() {
       const result = await response.json();
       if (result.success) {
         console.log("[OAuth] Authentication successful!");
-        sendActionRaw("auth_complete");
+        // Store the Huawei user ID returned by the server
+        if (result.userId) {
+          setUserIdCookie(result.userId);
+          uidRef.current = result.userId;
+        }
+        sendActionRaw("auth_complete", { userId: result.userId });
       } else {
         console.error("[OAuth] MCP flow failed:", result.error);
         if (
@@ -430,46 +451,27 @@ export function App() {
           result.error?.includes("chrome") ||
           result.error?.includes("spawn")
         ) {
-          wsRef.current?.send(
-            JSON.stringify({
-              type: "action",
-              action: "show_toast",
-              payload: {
-                message: "Please install PHA browser extension for authentication",
-                variant: "warning",
-              },
-            }),
-          );
+          sendActionRaw("show_toast", {
+            message: "Please install PHA browser extension for authentication",
+            variant: "warning",
+          });
         } else {
-          wsRef.current?.send(
-            JSON.stringify({
-              type: "action",
-              action: "show_toast",
-              payload: {
-                message: `Authentication failed: ${result.error}`,
-                variant: "error",
-              },
-            }),
-          );
+          sendActionRaw("show_toast", {
+            message: `Authentication failed: ${result.error}`,
+            variant: "error",
+          });
         }
       }
     } catch (e) {
       console.error("[OAuth] Request failed:", e);
-      wsRef.current?.send(
-        JSON.stringify({
-          type: "action",
-          action: "show_toast",
-          payload: {
-            message: "Failed to start authentication. Please install PHA extension.",
-            variant: "error",
-          },
-        }),
-      );
+      sendActionRaw("show_toast", {
+        message: "Failed to start authentication. Please install PHA extension.",
+        variant: "error",
+      });
     }
   }, [sendActionRaw]);
 
   const startHuaweiAuth = useCallback(async () => {
-    userUuidRef.current = getUserUuid();
     console.log("[OAuth] Starting authentication...");
     const hasExtension = await checkExtension();
     if (hasExtension) {
@@ -488,7 +490,7 @@ export function App() {
       // Handle OAuth actions locally
       if (action === "start_huawei_auth") {
         // Also notify server so it can clear scope error cache
-        wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+        postAction({ type: "action", action, payload }, handleMessageRef.current);
         startHuaweiAuth();
         return;
       }
@@ -497,13 +499,13 @@ export function App() {
       if (action === "settings_copy_config" || action === "settings_download_config") {
         // Find the code_editor component in current main data to get raw config
         const mainDataSnap = mainDataRef.current;
-        const editorComp = mainDataSnap?.components.find((c: any) => c.type === "code_editor" && c.readonly);
-        const configJson = (editorComp as any)?.value || "{}";
+        const editorComp = mainDataSnap?.components.find((c: A2UIComponent) => componentType(c) === "CodeEditor" && prop(c, "readonly"));
+        const configJson = editorComp ? (prop(editorComp, "value") as string) || "{}" : "{}";
         if (action === "settings_copy_config") {
           navigator.clipboard.writeText(configJson).then(() => {
-            wsRef.current?.send(JSON.stringify({ type: "action", action: "show_toast", payload: { message: "Copied!", variant: "success" } }));
+            sendActionRaw("show_toast", { message: "Copied!", variant: "success" });
           }).catch(() => {
-            wsRef.current?.send(JSON.stringify({ type: "action", action: "show_toast", payload: { message: "Copy failed", variant: "error" } }));
+            sendActionRaw("show_toast", { message: "Copy failed", variant: "error" });
           });
         } else {
           const blob = new Blob([configJson], { type: "application/json" });
@@ -533,19 +535,68 @@ export function App() {
         return;
       }
 
+      // Optimistic user message for server-driven chats (SA/evo/pg)
+      if (
+        (action === "sa_send_message" || action === "evo_send_message" || action === "pg_send_message") &&
+        (payload?.content || payload?.value)
+      ) {
+        const text = String(payload.content || payload.value);
+        setMainData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            components: prev.components.map((c) => {
+              if (componentType(c) === "ChatMessages" && prop(c, "action") === action) {
+                const msgs = (prop(c, "messages") as any[]) || [];
+                return withProp(c, "messages", [...msgs, { id: generateUUID(), role: "user", parts: [{ type: "text", content: text }] }]);
+              }
+              return c;
+            }),
+          };
+        });
+      }
+
+      // Clear chat: reset local + server state, show welcome screen
+      if (action === "clear_chat") {
+        abortControllerRef.current?.abort();
+        setChatMessages([]);
+        setChatStreaming(false);
+        setQuickReplies([]);
+        activeMessageRef.current = null;
+        chatInitializedRef.current = false;
+        // Clear messages from mainData so welcome screen shows immediately
+        setMainData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            components: prev.components.map((c) => {
+              if (componentType(c) === "ChatMessages" && (!prop(c, "action") || prop(c, "action") === "send_message")) {
+                return withProp(withProp(c, "messages", []), "streaming", false);
+              }
+              if (componentType(c) === "ChatInput" && (!prop(c, "action") || prop(c, "action") === "send_message")) {
+                return withProp(c, "streaming", false);
+              }
+              return c;
+            }),
+          };
+        });
+        postAction({ type: "action", action, payload: {} }, handleMessageRef.current);
+        return;
+      }
+
       // Stop generation: abort SSE fetch
       if (action === "stop_generation") {
         abortControllerRef.current?.abort();
         setChatStreaming(false);
         activeMessageRef.current = null;
         // Also notify server
-        wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+        postAction({ type: "action", action, payload }, handleMessageRef.current);
         return;
       }
 
-      wsRef.current?.send(JSON.stringify({ type: "action", action, payload }));
+      postAction({ type: "action", action, payload }, handleMessageRef.current);
     },
-    [startHuaweiAuth, sendChatMessage],
+    [startHuaweiAuth, sendChatMessage, sendActionRaw],
   );
 
   const sendNavigate = useCallback((view: string) => {
@@ -567,7 +618,11 @@ export function App() {
       mainContentRef.current.scrollTop = 0;
     }
 
-    wsRef.current?.send(JSON.stringify({ type: "navigate", view }));
+    // Reset chat state so the new page's messages are picked up from server
+    chatInitializedRef.current = false;
+    setChatMessages([]);
+
+    postAction({ type: "navigate", view }, handleMessageRef.current);
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -615,12 +670,12 @@ export function App() {
   // handleMessage (uses functional setState to avoid stale closures)
   // ---------------------------------------------------------------------------
 
-  // Extract chat history from a2ui surface data (for initial sync from WebSocket)
+  // Extract chat history from a2ui surface data (for initial sync)
   const extractChatHistory = useCallback((surface: A2UISurfaceData) => {
     if (chatInitializedRef.current) return;
-    const chatComp = surface.components.find((c) => c.type === "chat_messages");
+    const chatComp = surface.components.find((c) => componentType(c) === "ChatMessages" && (!prop(c, "action") || prop(c, "action") === "send_message"));
     if (!chatComp) return;
-    const rawMessages = (chatComp.messages as any[]) || [];
+    const rawMessages = (prop(chatComp, "messages") as any[]) || [];
     if (rawMessages.length === 0) return;
     chatInitializedRef.current = true;
     const normalized: ChatMessage[] = [];
@@ -635,142 +690,190 @@ export function App() {
     setChatMessages(normalized);
   }, []);
 
+  // Surface application helpers
+  const applySurface = useCallback((surfaceId: string, data: A2UISurfaceData) => {
+    switch (surfaceId) {
+      case "sidebar":
+        setSidebarData(data);
+        break;
+      case "main":
+        setMainData(data);
+        extractChatHistory(data);
+        break;
+      case "modal":
+        setModalData(data);
+        requestAnimationFrame(() => setModalVisible(true));
+        break;
+      case "toast":
+        setToastData(data);
+        setToastExiting(false);
+        // Auto-dismiss toast: start exit animation at 4.6s, remove DOM at 5s
+        setTimeout(() => {
+          setToastExiting(true);
+        }, 4600);
+        setTimeout(() => {
+          setToastData(null);
+          setToastExiting(false);
+        }, 5000);
+        break;
+      case "progress":
+        setProgressData(data);
+        break;
+    }
+  }, [extractChatHistory]);
+
+  const clearSurface = useCallback((surfaceId: string) => {
+    switch (surfaceId) {
+      case "modal":
+        closeModal();
+        break;
+      case "toast":
+        setToastData(null);
+        break;
+      case "progress":
+        setProgressData(null);
+        break;
+    }
+  }, [closeModal]);
+
   const handleMessage = useCallback(
     (msg: WSMessage) => {
-      switch (msg.type) {
-        case "page":
-          if (msg.surfaces.sidebar) setSidebarData(msg.surfaces.sidebar);
-          if (msg.surfaces.main) {
-            setMainData(msg.surfaces.main);
-            extractChatHistory(msg.surfaces.main);
-          }
-          break;
+      // v0.8 A2UI messages
+      if ("surfaceUpdate" in msg) {
+        pendingSurface.current.set(msg.surfaceUpdate.surfaceId, msg.surfaceUpdate.components);
+        return;
+      }
+      if ("beginRendering" in msg) {
+        const { surfaceId, root } = msg.beginRendering;
+        const components = pendingSurface.current.get(surfaceId);
+        if (!components) return;
+        pendingSurface.current.delete(surfaceId);
+        applySurface(surfaceId, { components, root_id: root });
+        return;
+      }
+      if ("deleteSurface" in msg) {
+        clearSurface(msg.deleteSurface.surfaceId);
+        return;
+      }
 
-        case "a2ui":
-          switch (msg.surface_id) {
-            case "sidebar":
-              setSidebarData({ components: msg.components, root_id: msg.root_id });
-              break;
-            case "main": {
-              const mainSurface = { components: msg.components, root_id: msg.root_id };
-              setMainData(mainSurface);
-              extractChatHistory(mainSurface);
-              break;
-            }
-            case "modal":
-              setModalData({ components: msg.components, root_id: msg.root_id });
-              // Trigger enter animation on next frame
-              requestAnimationFrame(() => {
-                setModalVisible(true);
+      // Legacy / non-A2UI messages
+      if ("type" in msg) {
+        switch ((msg as any).type) {
+          case "agent_text": {
+            // Incremental streaming update — patch streamingContent without full re-render
+            const agentMsg = msg as { type: "agent_text"; content: string; is_final: boolean };
+            if (!agentMsg.is_final) {
+              setMainData((prev) => {
+                if (!prev) return prev;
+                const updated = { ...prev, components: prev.components.map((c) => {
+                  if (componentType(c) === "ChatMessages") {
+                    return withProp(c, "streamingContent", agentMsg.content);
+                  }
+                  return c;
+                })};
+                return updated;
               });
-              break;
-            case "toast":
-              setToastData({ components: msg.components, root_id: msg.root_id });
-              setToastExiting(false);
-              // Auto-dismiss toast: start exit animation at 4.6s, remove DOM at 5s
-              setTimeout(() => {
-                setToastExiting(true);
-              }, 4600);
-              setTimeout(() => {
-                setToastData(null);
-                setToastExiting(false);
-              }, 5000);
-              break;
-            case "progress":
-              setProgressData({ components: msg.components, root_id: msg.root_id });
-              break;
+            }
+            break;
           }
-          break;
 
-        case "clear_surface":
-          switch (msg.surface_id) {
-            case "modal":
-              closeModal();
-              break;
-            case "toast":
-              setToastData(null);
-              break;
-            case "progress":
-              setProgressData(null);
-              break;
-          }
-          break;
-
-        case "agent_text": {
-          // Incremental streaming update — patch streamingContent without full re-render
-          const agentMsg = msg as { type: "agent_text"; content: string; is_final: boolean };
-          if (!agentMsg.is_final) {
+          case "log_entry": {
+            // Append new log entry to current main surface log_viewer component
             setMainData((prev) => {
               if (!prev) return prev;
               const updated = { ...prev, components: prev.components.map((c) => {
-                if (c.type === "chat_messages") {
-                  return { ...c, streamingContent: agentMsg.content };
+                if (componentType(c) === "LogViewer") {
+                  const entries = (prop(c, "entries") as any[]) || [];
+                  return withProp(c, "entries", [...entries, (msg as any).entry]);
                 }
                 return c;
               })};
               return updated;
             });
+            // Auto-scroll to bottom
+            requestAnimationFrame(() => {
+              const el = document.getElementById("log-viewer-scroll");
+              if (el) el.scrollTop = el.scrollHeight;
+            });
+            break;
           }
-          break;
-        }
-
-        case "log_entry": {
-          // Append new log entry to current main surface log_viewer component
-          setMainData((prev) => {
-            if (!prev) return prev;
-            const updated = { ...prev, components: prev.components.map((c) => {
-              if (c.type === "log_viewer") {
-                return { ...c, entries: [...((c as any).entries || []), (msg as any).entry] };
-              }
-              return c;
-            })};
-            return updated;
-          });
-          // Auto-scroll to bottom
-          requestAnimationFrame(() => {
-            const el = document.getElementById("log-viewer-scroll");
-            if (el) el.scrollTop = el.scrollHeight;
-          });
-          break;
         }
       }
     },
-    [closeModal, extractChatHistory],
+    [applySurface, clearSurface],
   );
 
+  // Keep handleMessageRef in sync so postAction always uses the latest
+  handleMessageRef.current = handleMessage;
+
   // ---------------------------------------------------------------------------
-  // WebSocket connect (stable via refs)
+  // HTTP+SSE connect (replaces WebSocket)
   // ---------------------------------------------------------------------------
 
-  const connect = useCallback(() => {
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const uuidParam = userUuidRef.current ? `?uuid=${userUuidRef.current}` : "";
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws${uuidParam}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+  const connect = useCallback(async () => {
+    try {
+      // 1. HTTP init — get session + initial page state
+      const uuid = uidRef.current;
+      const initRes = await fetch("/api/a2ui/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uuid }),
+      });
 
-    ws.onopen = () => {
-      setConnected(true);
-      ws.send(JSON.stringify({ type: "init" }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data) as WSMessage;
-        handleMessage(msg);
-      } catch (e) {
-        console.error("Parse error:", e);
+      if (!initRes.ok) {
+        console.error("[A2UI] Init failed:", initRes.status);
+        setTimeout(() => connect(), 2000);
+        return;
       }
-    };
 
-    ws.onerror = () => {
-      console.error("WebSocket error");
-    };
+      const { sessionId, updates } = (await initRes.json()) as {
+        sessionId: string;
+        uid?: string;
+        updates: unknown[];
+      };
+      sessionIdRef.current = sessionId;
 
-    ws.onclose = () => {
-      setConnected(false);
+      // Process initial page state
+      for (const msg of updates) {
+        handleMessage(msg as WSMessage);
+      }
+
+      setConnected(true);
+
+      // 2. SSE events — long-lived connection for server push
+      const es = new EventSource(`/api/a2ui/events?sessionId=${sessionId}`);
+      eventSourceRef.current = es;
+
+      es.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data) as WSMessage;
+          if ((msg as any).type === "throttled") return; // Graceful 429: ignore, browser retries per retry: field
+          handleMessage(msg);
+        } catch (e) {
+          console.error("[SSE] Parse error:", e);
+        }
+      };
+
+      es.onerror = () => {
+        setConnected(false);
+        // EventSource has native reconnection (interval controlled by server retry: field).
+        // Only manually reconnect when the connection is fully closed (won't auto-retry).
+        if (es.readyState === EventSource.CLOSED) {
+          eventSourceRef.current = null;
+          reconnectAttemptRef.current++;
+          const delay = Math.min(2000 * Math.pow(1.5, reconnectAttemptRef.current - 1), 30000);
+          setTimeout(() => connect(), delay);
+        }
+      };
+
+      es.onopen = () => {
+        setConnected(true);
+        reconnectAttemptRef.current = 0;
+      };
+    } catch (e) {
+      console.error("[A2UI] Connect error:", e);
       setTimeout(() => connect(), 2000);
-    };
+    }
   }, [handleMessage]);
 
   // ---------------------------------------------------------------------------
@@ -791,14 +894,25 @@ export function App() {
     document.documentElement.classList.toggle("light", !isDark);
 
     // Get user UUID
-    userUuidRef.current = getUserUuid();
+    uidRef.current = getUserId();
 
-    // Connect WebSocket
+    // Listen for OAuth completion from callback popup/tab
+    const oauthHandler = (event: MessageEvent) => {
+      if (event.data?.type === "PHA_OAUTH_COMPLETE" && event.data.userId) {
+        setUserIdCookie(event.data.userId);
+        uidRef.current = event.data.userId;
+        sendActionRaw("auth_complete", { userId: event.data.userId });
+      }
+    };
+    window.addEventListener("message", oauthHandler);
+
+    // Connect via HTTP+SSE
     connect();
 
     // Cleanup
     return () => {
-      wsRef.current?.close();
+      eventSourceRef.current?.close();
+      window.removeEventListener("message", oauthHandler);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -809,25 +923,26 @@ export function App() {
 
   const enhancedMainData = useMemo(() => {
     if (!mainData) return null;
-    // Check if mainData has a chat_messages component (i.e. we're on chat page)
-    const hasChatMessages = mainData.components.some((c) => c.type === "chat_messages");
+    // Check if mainData has a ChatMessages component (i.e. we're on chat page)
+    const hasChatMessages = mainData.components.some((c) => componentType(c) === "ChatMessages");
     if (!hasChatMessages || chatMessages.length === 0) return mainData;
 
     // Override chat_messages component with client-managed state
+    // Only override PHA chat (action="send_message"), NOT system-agent (action="sa_send_message")
     return {
       ...mainData,
       components: mainData.components.map((c) => {
-        if (c.type === "chat_messages") {
-          return {
-            ...c,
-            messages: chatMessages,
-            streaming: chatStreaming,
-            streamingContent: "", // No longer used; text is inline in parts
-            quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
-          };
+        if (componentType(c) === "ChatMessages" && (!prop(c, "action") || prop(c, "action") === "send_message")) {
+          let updated = withProp(c, "messages", chatMessages);
+          updated = withProp(updated, "streaming", chatStreaming);
+          updated = withProp(updated, "streamingContent", ""); // No longer used; text is inline in parts
+          if (quickReplies.length > 0) {
+            updated = withProp(updated, "quickReplies", quickReplies);
+          }
+          return updated;
         }
-        if (c.type === "chat_input") {
-          return { ...c, streaming: chatStreaming };
+        if (componentType(c) === "ChatInput" && (!prop(c, "action") || prop(c, "action") === "send_message")) {
+          return withProp(c, "streaming", chatStreaming);
         }
         return c;
       }),
@@ -835,24 +950,10 @@ export function App() {
   }, [mainData, chatMessages, chatStreaming, quickReplies]);
 
   // ---------------------------------------------------------------------------
-  // Auto-scroll & Plotly effect (runs when mainData or chatMessages change)
+  // Auto-scroll effect (runs when mainData or chatMessages change)
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    // Process pending Plotly chart renders after DOM update
-    if (pendingPlotlyChartsRef.current.length) {
-      const charts = [...pendingPlotlyChartsRef.current];
-      pendingPlotlyChartsRef.current = [];
-      requestAnimationFrame(() => {
-        for (const chart of charts) {
-          const el = document.getElementById(chart.elementId);
-          if (el && (window as any).Plotly) {
-            (window as any).Plotly.newPlot(el, chart.traces, chart.layout, chart.config);
-          }
-        }
-      });
-    }
-
     // Auto-scroll chat to bottom on new content
     if (chatAutoScrollRef.current) {
       isAutoScrollingRef.current = true;
@@ -893,12 +994,16 @@ export function App() {
   // JSX — Grid Shell Layout (Topbar + Sidebar + Content)
   // ---------------------------------------------------------------------------
 
+  // Detect if we're showing the auth page (hide shell chrome)
+  const isAuthPage = mainData?.components.some((c) => componentType(c) === "AuthPage") ?? false;
+
   return (
-    <div className="shell">
+    <div className={isAuthPage ? "" : "shell"}>
       {/* Decorative grid */}
-      <div className="shell-grid-bg" />
+      {!isAuthPage && <div className="shell-grid-bg" />}
 
       {/* ===== Topbar ===== */}
+      {!isAuthPage && (
       <header className="topbar">
         <div className="topbar-left">
           <button
@@ -913,9 +1018,10 @@ export function App() {
         </div>
         <div className="topbar-right" />
       </header>
+      )}
 
       {/* Mobile sidebar overlay */}
-      {mobileSidebarOpen ? (
+      {!isAuthPage && mobileSidebarOpen ? (
         <div
           className={`mobile-overlay md:!hidden transition-opacity duration-normal ${
             mobileSidebarVisible ? "opacity-100" : "opacity-0"
@@ -925,6 +1031,7 @@ export function App() {
       ) : null}
 
       {/* ===== Sidebar ===== */}
+      {!isAuthPage && (
       <aside
         className={`sidebar ${
           mobileSidebarOpen && mobileSidebarVisible ? "mobile-open" : ""
@@ -936,7 +1043,7 @@ export function App() {
               data={sidebarData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
-              pendingPlotlyCharts={pendingPlotlyChartsRef}
+
               chatAutoScrollRef={chatAutoScrollRef}
               isAutoScrollingRef={isAutoScrollingRef}
             />
@@ -945,28 +1052,31 @@ export function App() {
           )}
         </div>
         <div className="sidebar-bottom">
-          <button
-            className="sidebar-bottom-btn"
-            onClick={() => toggleTheme()}
-            title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
-            dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
-          />
-          <span
-            className={`status-dot ${connected ? "online" : "offline"}`}
-            title={connected ? i18n.common.connected : i18n.common.reconnecting}
-          />
+          <div className="relative">
+            <button
+              className="sidebar-bottom-btn"
+              onClick={() => toggleTheme()}
+              title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
+              dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
+            />
+            <span
+              className={`status-dot-badge ${connected ? "online" : "offline"}`}
+              title={connected ? i18n.common.connected : i18n.common.reconnecting}
+            />
+          </div>
         </div>
       </aside>
+      )}
 
       {/* ===== Main Content ===== */}
-      <main className="main-area">
+      <main className={isAuthPage ? "" : "main-area"}>
         {progressData ? (
           <div className="shrink-0 border-b border-border bg-primary/5 z-10">
             <A2UIRenderer
               data={progressData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
-              pendingPlotlyCharts={pendingPlotlyChartsRef}
+
               chatAutoScrollRef={chatAutoScrollRef}
               isAutoScrollingRef={isAutoScrollingRef}
             />
@@ -988,7 +1098,7 @@ export function App() {
               data={enhancedMainData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
-              pendingPlotlyCharts={pendingPlotlyChartsRef}
+
               chatAutoScrollRef={chatAutoScrollRef}
               isAutoScrollingRef={isAutoScrollingRef}
             />
@@ -1021,7 +1131,7 @@ export function App() {
               data={modalData}
               sendAction={sendAction}
               sendNavigate={sendNavigate}
-              pendingPlotlyCharts={pendingPlotlyChartsRef}
+
               chatAutoScrollRef={chatAutoScrollRef}
               isAutoScrollingRef={isAutoScrollingRef}
             />
@@ -1040,7 +1150,6 @@ export function App() {
             data={toastData}
             sendAction={sendAction}
             sendNavigate={sendNavigate}
-            pendingPlotlyCharts={pendingPlotlyChartsRef}
             chatAutoScrollRef={chatAutoScrollRef}
             isAutoScrollingRef={isAutoScrollingRef}
           />

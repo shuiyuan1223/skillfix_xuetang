@@ -237,10 +237,11 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
 
   // ── Hero Section: Activity Rings + Health Score + Quick Stats ──
   const stepsGoal = 8000;
-  const activeMinGoal = 30;
+  const activeHoursGoal = 12;
   const caloriesGoal = 500;
   const currentSteps = data.metrics?.steps ?? 0;
-  const currentActiveMin = data.metrics?.activeMinutes ?? 0;
+  // activeMinutes stores hours * 60 from dailyActivitySummary; convert back to hours
+  const currentActiveHours = Math.round((data.metrics?.activeMinutes ?? 0) / 60);
   const currentCalories = data.metrics?.calories ?? 0;
 
   // Concentric activity rings (Apple Watch style)
@@ -248,8 +249,8 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     [
       { value: currentSteps, max: stepsGoal, label: t("activity.steps"), color: "#FA114F" },
       {
-        value: currentActiveMin,
-        max: activeMinGoal,
+        value: currentActiveHours,
+        max: activeHoursGoal,
         label: t("activity.activeTime"),
         color: "#92E82A",
       },
@@ -277,22 +278,11 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     ],
   });
 
-  // Quick stats next to rings
-  const quickSteps = ui.text(
-    `${currentSteps.toLocaleString()} / ${stepsGoal.toLocaleString()} ${t("activity.steps")}`,
-    "body"
-  );
-  const quickActive = ui.text(
-    `${currentActiveMin} / ${activeMinGoal} ${t("sleep.minutes")} ${t("activity.activeTime")}`,
-    "body"
-  );
-  const quickCal = ui.text(`${currentCalories} / ${caloriesGoal} kcal`, "body");
-  const yesterdayHint = data.metricsIsYesterday
-    ? ui.badge(t("dashboard.yesterdayData"), { variant: "info" })
-    : null;
-
-  const quickStatsChildren = [gauge, quickSteps, quickActive, quickCal];
-  if (yesterdayHint) quickStatsChildren.push(yesterdayHint);
+  // Health score column (gauge only — ring legends already show percentages)
+  const quickStatsChildren: string[] = [gauge];
+  if (data.metricsIsYesterday) {
+    quickStatsChildren.push(ui.badge(t("dashboard.yesterdayData"), { variant: "info" }));
+  }
   const quickStatsCol = ui.column(quickStatsChildren, { gap: 8, align: "center" });
 
   const heroRow = ui.row([rings, quickStatsCol], { gap: 32, justify: "center", align: "center" });
@@ -649,8 +639,8 @@ function buildActivityTab(ui: A2UIGenerator, data: DashboardData, loading: boole
   cards.push(
     statOrSkeleton(ui, !!data.metrics, loading, {
       title: t("activity.activeTime"),
-      value: data.metrics ? `${data.metrics.activeMinutes}` : "--",
-      subtitle: t("sleep.minutes"),
+      value: data.metrics ? `${Math.round((data.metrics.activeMinutes || 0) / 60)}h` : "--",
+      subtitle: t("sleep.hours"),
       icon: "timer",
       color: "#8b5cf6",
     })
@@ -1130,7 +1120,7 @@ export function generateDashboardPage(
   data: DashboardData,
   activeTab: TabId = "overview",
   options?: DashboardOptions
-): A2UIMessage {
+): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const loading = options?.loading ?? false;
 
