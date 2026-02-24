@@ -187,7 +187,7 @@ endif
 	powershell -NoProfile -Command "scp pha-sync.tar.gz '$(_H):$(_P)/pha-sync.tar.gz'"
 	-del pha-sync.tar.gz 2>nul
 	@echo ==> Extracting and building on remote...
-	powershell -NoProfile -Command "ssh $(_H) 'cd $(_P) && tar xzf pha-sync.tar.gz && rm pha-sync.tar.gz && make install'"
+	powershell -NoProfile -Command "ssh $(_H) 'source ~/.bashrc && cd $(_P) && tar xzf pha-sync.tar.gz && rm pha-sync.tar.gz && make install'"
 	@echo ==> Restarting service...
-	powershell -NoProfile -Command "ssh $(_H) 'pkill -f dist/cli 2>/dev/null; cd $(_P) && nohup pha start > /tmp/pha.log 2>&1 &'"
+	powershell -NoProfile -Command "ssh $(_H) 'source ~/.bashrc && pkill -f dist/cli 2>/dev/null; cd $(_P) && nohup pha start > /tmp/pha.log 2>&1 &'"
 	@echo ==> Sync complete!
