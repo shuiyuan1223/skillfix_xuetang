@@ -784,7 +784,17 @@ export function resolveModel(ref: string, config?: PHAConfig): ResolvedModel {
 export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
   const cfg = config || loadConfig();
 
-  // Orchestrator format: orchestrator.pha
+  // Priority 1: agents.pha.model
+  const phaAgentModel = cfg.agents?.pha?.model;
+  if (phaAgentModel && cfg.models?.providers) {
+    try {
+      return resolveModel(phaAgentModel, cfg);
+    } catch {
+      // Fall through
+    }
+  }
+
+  // Priority 2: orchestrator.pha (legacy)
   const phaRef = cfg.orchestrator?.pha;
   if (phaRef && cfg.models?.providers) {
     try {
@@ -834,7 +844,17 @@ export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
 export function resolveSystemAgentModel(config?: PHAConfig): ResolvedModel {
   const cfg = config || loadConfig();
 
-  // Orchestrator format: orchestrator.sa
+  // Priority 1: agents.sa.model
+  const saAgentModel = cfg.agents?.sa?.model;
+  if (saAgentModel && cfg.models?.providers) {
+    try {
+      return resolveModel(saAgentModel, cfg);
+    } catch {
+      // Fall through
+    }
+  }
+
+  // Priority 2: orchestrator.sa (legacy)
   const saRef = cfg.orchestrator?.sa;
   if (saRef && cfg.models?.providers) {
     try {
@@ -844,7 +864,7 @@ export function resolveSystemAgentModel(config?: PHAConfig): ResolvedModel {
     }
   }
 
-  // Legacy: systemAgentModel ref
+  // Priority 3: systemAgentModel (legacy)
   if (cfg.systemAgentModel && cfg.models?.providers) {
     try {
       return resolveModel(cfg.systemAgentModel, cfg);
