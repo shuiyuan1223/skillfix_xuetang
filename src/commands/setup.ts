@@ -31,6 +31,7 @@ export function registerSetupCommand(program: Command): void {
 
       const config: PHAConfig = {
         gateway: {
+          host: "0.0.0.0",
           port: 8000,
           autoStart: false,
         },

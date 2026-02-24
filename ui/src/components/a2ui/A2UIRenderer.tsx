@@ -19,6 +19,7 @@ import {
   renderPlaygroundFab, renderEvolutionPipeline, renderLogViewer,
   renderVersionGraph,
 } from "./AdvancedRenderers";
+import { CountUp, BlurText, AnimatedContent, SpotlightCard, StarBorder } from "../reactbits";
 
 export interface RenderContext {
   sendAction: (action: string, payload?: Record<string, unknown>) => void;
@@ -368,19 +369,36 @@ export function A2UIRenderer({
     const title = prop(c, "title") as string;
     const padding = (prop(c, "padding") as number) || 20;
     const className = (prop(c, "className") as string) || "";
-    return (
-      <div
-        className={`card-hover bg-surface-card border border-border rounded-xl ${className}`}
-        style={{
-          padding,
-          boxShadow: "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)",
-          animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
-        }}
-      >
+    const accent = prop(c, "accent") as boolean;
+    const spotlightColor = "rgba(var(--color-primary), 0.08)";
+
+    const inner = (
+      <>
         {title && <div className="text-[15px] font-semibold mb-4 text-text-strong tracking-tight">{title}</div>}
         {renderChildren(getChildren(c))}
-      </div>
+      </>
     );
+
+    const card = (
+      <SpotlightCard
+        className={`card-hover bg-surface-card border border-border rounded-xl ${className}`}
+        spotlightColor={spotlightColor}
+      >
+        <div style={{ padding, position: "relative", zIndex: 2 }}>{inner}</div>
+      </SpotlightCard>
+    );
+
+    if (accent) {
+      return (
+        <AnimatedContent distance={30} duration={0.5}>
+          <StarBorder color="rgb(var(--color-primary))" speed="8s" thickness={1}>
+            <div style={{ padding }}>{inner}</div>
+          </StarBorder>
+        </AnimatedContent>
+      );
+    }
+
+    return <AnimatedContent distance={30} duration={0.5}>{card}</AnimatedContent>;
   }
 
   function rcStatCard(c: A2UIComponent) {
@@ -393,27 +411,39 @@ export function A2UIRenderer({
     const trendColors: Record<string, string> = {
       up: "text-emerald-500", down: "text-red-500", stable: "text-text-muted",
     };
+
+    // Parse numeric value for CountUp animation
+    const numericValue = typeof value === "number" ? value : parseFloat(String(value));
+    const isNumeric = !isNaN(numericValue) && isFinite(numericValue);
+    // Extract non-numeric suffix (e.g. "bpm", "%", "kcal")
+    const valueSuffix = isNumeric && typeof value === "string" ? value.replace(/[\d.,\s-]+/, "").trim() : "";
+
     return (
-      <div
-        className="card-hover bg-surface-card border border-border rounded-xl p-5 relative overflow-hidden group"
-        style={{
-          boxShadow: "var(--shadow-sm), inset 0 1px 0 var(--color-card-highlight)",
-          animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards",
-        }}
-      >
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        <div className="flex items-center gap-2 mb-3">
-          {icon && <span className="w-5 h-5 text-text-secondary [&>svg]:w-5 [&>svg]:h-5" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
-          <span className="text-[13px] text-text-secondary font-medium">{title}</span>
-        </div>
-        <div className="text-3xl font-bold" style={{ color, letterSpacing: "-0.03em" }}>{value}</div>
-        {subtitle && <div className="text-xs text-text-muted mt-1.5">{subtitle}</div>}
-        {trend && (
-          <div className={`text-xs mt-2 font-medium ${trendColors[trend.direction] || "text-text-muted"}`}>
-            {trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"} {trend.value}
+      <AnimatedContent distance={30} duration={0.5}>
+        <SpotlightCard
+          className="card-hover bg-surface-card border border-border rounded-xl p-5 relative overflow-hidden group"
+          spotlightColor="rgba(var(--color-primary), 0.08)"
+        >
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" style={{ zIndex: 2 }} />
+          <div className="flex items-center gap-2 mb-3 relative" style={{ zIndex: 2 }}>
+            {icon && <span className="w-5 h-5 text-text-secondary [&>svg]:w-5 [&>svg]:h-5" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
+            <span className="text-[13px] text-text-secondary font-medium">{title}</span>
           </div>
-        )}
-      </div>
+          <div className="text-3xl font-bold relative" style={{ color, letterSpacing: "-0.03em", zIndex: 2 }}>
+            {isNumeric ? (
+              <><CountUp to={numericValue} duration={1.8} separator="," />{valueSuffix && <span className="ml-0.5">{valueSuffix}</span>}</>
+            ) : (
+              value
+            )}
+          </div>
+          {subtitle && <div className="text-xs text-text-muted mt-1.5 relative" style={{ zIndex: 2 }}>{subtitle}</div>}
+          {trend && (
+            <div className={`text-xs mt-2 font-medium relative ${trendColors[trend.direction] || "text-text-muted"}`} style={{ zIndex: 2 }}>
+              {trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"} {trend.value}
+            </div>
+          )}
+        </SpotlightCard>
+      </AnimatedContent>
     );
   }
 
@@ -729,17 +759,25 @@ export function A2UIRenderer({
     if (rawMessages.length === 0 && !streaming && welcomeTitle) {
       const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
       return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center" style={{ animation: "rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}>
-          <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6" dangerouslySetInnerHTML={{ __html: ICONS[welcomeIcon] || ICONS["bot"] }} />
-          <div className="text-xl font-bold text-text-strong tracking-tight">{welcomeTitle}</div>
-          {welcomeSubtitle && <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{welcomeSubtitle}</div>}
+        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center">
+          <AnimatedContent distance={20} duration={0.5}>
+            <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6 mx-auto" dangerouslySetInnerHTML={{ __html: ICONS[welcomeIcon] || ICONS["bot"] }} />
+          </AnimatedContent>
+          <BlurText text={welcomeTitle} className="text-xl font-bold text-text-strong tracking-tight justify-center" delay={80} animateBy="words" direction="bottom" />
+          {welcomeSubtitle && (
+            <AnimatedContent distance={15} duration={0.5} delay={0.3}>
+              <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{welcomeSubtitle}</div>
+            </AnimatedContent>
+          )}
           {welcomeActions && welcomeActions.length > 0 && (
             <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
               {welcomeActions.map((a, i) => (
-                <button key={i} className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animationDelay: `${i * 60}ms`, animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards" }} onClick={() => { const actionName = (prop(c, "action") as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
-                  {a.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[a.icon] || "" }} />}
-                  {a.label}
-                </button>
+                <AnimatedContent key={i} distance={20} duration={0.4} delay={0.4 + i * 0.08}>
+                  <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => { const actionName = (prop(c, "action") as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
+                    {a.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[a.icon] || "" }} />}
+                    {a.label}
+                  </button>
+                </AnimatedContent>
               ))}
             </div>
           )}
@@ -760,20 +798,30 @@ export function A2UIRenderer({
     if (rawMessages.length === 0 && !streaming) {
       const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
       return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center" style={{ animation: "rise 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards" }}>
-          <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6" dangerouslySetInnerHTML={{ __html: ICONS["chat"] }} />
-          <div className="text-xl font-bold text-text-strong tracking-tight">{i18n.chat.title}</div>
-          <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{i18n.chat.subtitle}</div>
+        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center">
+          <AnimatedContent distance={20} duration={0.5}>
+            <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6 mx-auto" dangerouslySetInnerHTML={{ __html: ICONS["chat"] }} />
+          </AnimatedContent>
+          <BlurText text={i18n.chat.title} className="text-xl font-bold text-text-strong tracking-tight justify-center" delay={80} animateBy="words" direction="bottom" />
+          <AnimatedContent distance={15} duration={0.5} delay={0.3}>
+            <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{i18n.chat.subtitle}</div>
+          </AnimatedContent>
           <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
-            <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards" }} onClick={() => sendAction("send_message", { content: i18n.chat.sleepQuestion })}>
-              <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["moon"] }} />{i18n.chat.sleepAnalysis}
-            </button>
-            <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) 60ms backwards" }} onClick={() => sendAction("send_message", { content: i18n.chat.activityQuestion })}>
-              <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["activity"] }} />{i18n.chat.activitySummary}
-            </button>
-            <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)", animation: "rise 0.3s cubic-bezier(0.16, 1, 0.3, 1) 120ms backwards" }} onClick={() => sendAction("send_message", { content: i18n.chat.heartRateQuestion })}>
-              <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["heart"] }} />{i18n.chat.heartRate}
-            </button>
+            <AnimatedContent distance={20} duration={0.4} delay={0.4}>
+              <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.sleepQuestion })}>
+                <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["moon"] }} />{i18n.chat.sleepAnalysis}
+              </button>
+            </AnimatedContent>
+            <AnimatedContent distance={20} duration={0.4} delay={0.48}>
+              <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.activityQuestion })}>
+                <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["activity"] }} />{i18n.chat.activitySummary}
+              </button>
+            </AnimatedContent>
+            <AnimatedContent distance={20} duration={0.4} delay={0.56}>
+              <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.heartRateQuestion })}>
+                <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["heart"] }} />{i18n.chat.heartRate}
+              </button>
+            </AnimatedContent>
           </div>
         </div>
       );

@@ -32,6 +32,7 @@ import {
   ENV_KEY_MAP,
   BUILTIN_PROVIDERS,
 } from "../utils/config.js";
+import type { AgentProfile } from "./pha-agent.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Agent/System");
@@ -41,6 +42,8 @@ export interface SystemAgentConfig {
   provider?: LLMProvider;
   modelId?: string;
   baseUrl?: string;
+  /** Agent profile for configurable tool categories */
+  profile?: AgentProfile;
   /** Prior chat messages to restore context after restart */
   sessionMessages?: Array<{ role: string; content: string; timestamp?: number }>;
 }
@@ -178,15 +181,16 @@ export class SystemAgent {
     // Load system prompt from file + inject memory context
     const systemPrompt = buildSASystemPrompt();
 
-    // Assemble tools: registry-derived + standalone tools
+    // Assemble tools: registry-derived (profile-driven) + standalone tools
+    const categories = config.profile?.tools?.categories || [
+      "git",
+      "evolution",
+      "system",
+      "feedback",
+      "skill",
+    ];
     const tools: AgentTool<any>[] = [
-      ...globalRegistry.toAgentToolsByCategories([
-        "git",
-        "evolution",
-        "system",
-        "feedback",
-        "skill",
-      ]),
+      ...globalRegistry.toAgentToolsByCategories(categories),
       claudeCodeAgentTool,
       ...fileAgentTools,
     ];

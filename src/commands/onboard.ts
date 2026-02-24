@@ -522,7 +522,7 @@ async function runFullWizard(): Promise<void> {
   ensureConfigDir();
 
   const config: PHAConfig = {
-    gateway: { port: 8000, autoStart: false },
+    gateway: { host: "0.0.0.0", port: 8000, autoStart: false },
     llm: { provider: "anthropic" },
     dataSources: { type: "mock" },
     tui: { theme: "dark", showToolCalls: true },

@@ -243,8 +243,10 @@ export function registerStateCommand(program: Command): void {
   state
     .command("pull")
     .description("Pull latest .pha/ state from remote")
-    .action(() => {
+    .option("-f, --force", "Discard local changes and force-sync to remote")
+    .action((options) => {
       const stateDir = getStateDir();
+      const NET_TIMEOUT = 30_000;
 
       if (!isGitRepo(stateDir)) {
         console.log(`${c.red(icons.error)} Not a git repo. Run ${c.cyan("pha state init")} first.`);
@@ -258,16 +260,68 @@ export function registerStateCommand(program: Command): void {
         process.exit(1);
       }
 
+      // --force: skip rebase, directly reset to remote
+      if (options.force) {
+        try {
+          git(stateDir, "fetch origin", NET_TIMEOUT);
+          git(stateDir, "reset --hard origin/main");
+          git(stateDir, "clean -fd");
+          console.log(`${c.green(icons.success)} Force-synced local state to remote`);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.log(`${c.red(icons.error)} Force pull failed: ${msg}`);
+          process.exit(1);
+        }
+        process.exit(0);
+      }
+
+      // Normal pull: try rebase, auto-recover on conflict
       try {
-        const output = git(stateDir, "pull --rebase origin main", 30_000);
+        const output = git(stateDir, "pull --rebase origin main", NET_TIMEOUT);
         console.log(`${c.green(icons.success)} Pulled latest state`);
         if (output && output !== "Already up to date.") {
           console.log(c.dim(output));
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.log(`${c.red(icons.error)} Pull failed: ${msg}`);
-        process.exit(1);
+
+        // Abort any stuck rebase first
+        const rebaseMergeDir = path.join(stateDir, ".git", "rebase-merge");
+        const rebaseApplyDir = path.join(stateDir, ".git", "rebase-apply");
+        if (fs.existsSync(rebaseMergeDir) || fs.existsSync(rebaseApplyDir)) {
+          try {
+            git(stateDir, "rebase --abort");
+          } catch {
+            // ignore — best-effort cleanup
+          }
+        }
+
+        // Conflict detected → auto-resolve by resetting to remote
+        if (
+          msg.includes("CONFLICT") ||
+          msg.includes("could not apply") ||
+          msg.includes("Failed to merge") ||
+          msg.includes("overwritten by merge")
+        ) {
+          console.log(
+            `${c.yellow(icons.warning)} Rebase conflict detected — resetting to remote state`
+          );
+          try {
+            git(stateDir, "fetch origin", NET_TIMEOUT);
+            git(stateDir, "reset --hard origin/main");
+            git(stateDir, "clean -fd");
+            console.log(`${c.green(icons.success)} Synced to remote (local changes discarded)`);
+          } catch (resetErr) {
+            const resetMsg = resetErr instanceof Error ? resetErr.message : String(resetErr);
+            console.log(`${c.red(icons.error)} Recovery failed: ${resetMsg}`);
+            console.log(`  Try manually: ${c.cyan("pha state pull --force")}`);
+            process.exit(1);
+          }
+        } else {
+          console.log(`${c.red(icons.error)} Pull failed: ${msg}`);
+          console.log(`  To discard local and force-sync: ${c.cyan("pha state pull --force")}`);
+          process.exit(1);
+        }
       }
       process.exit(0);
     });

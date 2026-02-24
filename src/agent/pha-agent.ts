@@ -34,6 +34,7 @@ import {
   loadConfig,
   resolveModel,
   resolveAgentModel,
+  resolveSystemAgentModel,
   type AgentProfileConfig,
 } from "../utils/config.js";
 import type { ToolCategory } from "../tools/types.js";
@@ -169,7 +170,12 @@ export function resolveAgentProfileModel(agentId: string): ResolvedModel {
     }
   }
 
-  // 2. Fall back to resolveAgentModel() (orchestrator.pha > llm)
+  // 2. SA has its own legacy fallback chain
+  if (agentId === "sa") {
+    return resolveSystemAgentModel(config);
+  }
+
+  // 3. Fall back to resolveAgentModel() (orchestrator.pha > llm)
   return resolveAgentModel(config);
 }
 

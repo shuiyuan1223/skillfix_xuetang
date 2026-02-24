@@ -36,7 +36,9 @@ function parseFrontmatter(content: string): {
   frontmatter: Record<string, unknown>;
   body: string;
 } {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  // Normalize \r\n to \n for Windows compatibility
+  const normalized = content.replace(/\r\n/g, "\n");
+  const match = normalized.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) {
     return { frontmatter: {}, body: content };
   }
