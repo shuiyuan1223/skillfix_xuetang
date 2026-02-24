@@ -445,6 +445,7 @@ function parseAndReAggregateScores(
 }
 
 export interface GatewayConfig {
+  host?: string;
   port?: number;
   apiKey?: string;
   provider?: "anthropic" | "openai" | "google" | "openrouter" | "groq" | "mistral" | "xai";
@@ -6278,6 +6279,7 @@ function getContentType(filePath: string): string {
 export async function startGateway(
   config: GatewayConfig & { webDir?: string } = {}
 ): Promise<ReturnType<typeof Bun.serve>> {
+  const host = config.host ?? "0.0.0.0";
   const port = config.port ?? 8000;
   const app = createGatewayApp();
   const sessions = new Map<string, GatewaySession>();
@@ -6381,6 +6383,7 @@ export async function startGateway(
   }
 
   const server = Bun.serve({
+    hostname: host,
     port,
     idleTimeout: 255, // SSE streams need long-lived connections (max 255s)
     async fetch(req, server) {
@@ -6749,10 +6752,11 @@ export async function startGateway(
     },
   });
 
-  console.log(`PHA Gateway running at http://localhost:${port}`);
-  console.log(`A2UI SSE at http://localhost:${port}/api/a2ui/events`);
-  console.log(`MCP JSON-RPC at http://localhost:${port}/api/mcp`);
-  console.log(`A2A Agent Card at http://localhost:${port}/.well-known/agent.json`);
+  const displayHost = host === "0.0.0.0" ? "localhost" : host;
+  console.log(`PHA Gateway running at http://${displayHost}:${port}`);
+  console.log(`A2UI SSE at http://${displayHost}:${port}/api/a2ui/events`);
+  console.log(`MCP JSON-RPC at http://${displayHost}:${port}/api/mcp`);
+  console.log(`A2A Agent Card at http://${displayHost}:${port}/.well-known/agent.json`);
 
   // Trigger gateway_start hook
   const hr = getGlobalHookRunner();

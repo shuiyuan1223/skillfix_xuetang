@@ -199,6 +199,7 @@ export interface PHAConfig {
   /** User ID (Huawei openID) for memory/profile isolation */
   uid?: string;
   gateway: {
+    host: string;
     port: number;
     autoStart: boolean;
   };
@@ -377,6 +378,7 @@ export const PROVIDER_CONFIGS: Record<
 
 const DEFAULT_CONFIG: PHAConfig = {
   gateway: {
+    host: "0.0.0.0",
     port: 8000,
     autoStart: false,
   },
