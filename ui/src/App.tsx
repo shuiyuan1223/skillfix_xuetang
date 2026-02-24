@@ -548,7 +548,7 @@ export function App() {
             components: prev.components.map((c) => {
               if (componentType(c) === "ChatMessages" && prop(c, "action") === action) {
                 const msgs = (prop(c, "messages") as any[]) || [];
-                return withProp(c, "messages", [...msgs, { id: crypto.randomUUID(), role: "user", parts: [{ type: "text", content: text }] }]);
+                return withProp(c, "messages", [...msgs, { id: generateUUID(), role: "user", parts: [{ type: "text", content: text }] }]);
               }
               return c;
             }),
