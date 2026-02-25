@@ -197,6 +197,23 @@ pha eval run           # 运行评估
 | `POST /mcp/tools/call` | 调用 MCP 工具 (legacy) |
 | `GET /api/health/*` | 健康数据 REST API |
 
+### POST /api/legacy-chat
+
+内部查询接口（边想边搜），要求调用方已提前完成 OAuth 登录、token 已存入数据库。
+
+```http
+POST /api/legacy-chat
+Content-Type: application/json
+
+{
+  "message": "我今天睡眠怎么样？",  // 用户问题（必填）
+  "user_id": "huawei-uid-xxx",     // 用户 ID（可选，优先于 session_id）
+  "session_id": "sess-xxx"         // 会话 ID（可选，user_id 缺失时使用）
+}
+```
+
+`user_id` / `session_id` 均缺失时，自动生成随机 UUID 作为会话 key。响应格式同 `/api/query`。
+
 ## 开发
 
 ```bash
