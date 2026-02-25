@@ -94,6 +94,7 @@ function getHooksForName<K extends PluginHookName>(
 /**
  * Create a hook runner for a specific registry.
  */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export function createHookRunner(registry: PluginRegistry, options: HookRunnerOptions = {}) {
   const logger = options.logger;
   const catchErrors = options.catchErrors ?? true;
@@ -288,6 +289,7 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
 
     for (const hook of hooks) {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const out = (hook.handler as any)({ ...event, message: current }, ctx) as
           | PluginHookToolResultPersistResult
           | void
@@ -295,6 +297,7 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
 
         // Guard against accidental async handlers (this hook is sync-only)
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (out && typeof (out as any).then === "function") {
           const msg =
             `[hooks] tool_result_persist handler from ${hook.pluginId} returned a Promise; ` +

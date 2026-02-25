@@ -16,6 +16,9 @@
 import type { LocaleMessages, LocaleKey } from "./types.js";
 import { zhCN } from "./zh-CN.js";
 import { en } from "./en.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("i18n");
 
 // Available locales
 const locales: Record<LocaleKey, LocaleMessages> = {
@@ -33,7 +36,7 @@ export function setLocale(locale: LocaleKey): void {
   if (locales[locale]) {
     currentLocale = locale;
   } else {
-    console.warn(`Unknown locale: ${locale}, falling back to zh-CN`);
+    log.warn(`Unknown locale: ${locale}, falling back to zh-CN`);
     currentLocale = "zh-CN";
   }
 }
@@ -69,18 +72,19 @@ export function t(key: string, params?: Record<string, string | number>): string
 
   // Navigate to the value
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let value: any = messages;
   for (const k of keys) {
     if (value && typeof value === "object" && k in value) {
       value = value[k];
     } else {
-      console.warn(`Missing translation for key: ${key} in locale: ${currentLocale}`);
+      log.warn(`Missing translation for key: ${key} in locale: ${currentLocale}`);
       return key;
     }
   }
 
   if (typeof value !== "string") {
-    console.warn(`Translation key ${key} is not a string`);
+    log.warn(`Translation key ${key} is not a string`);
     return key;
   }
 

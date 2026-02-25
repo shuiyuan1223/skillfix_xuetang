@@ -22,6 +22,7 @@ export type PluginLogger = {
 // Plugin Tool Types
 // =============================================================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyAgentTool = AgentTool<any>;
 
 export type PHAPluginToolFactory = (ctx: {

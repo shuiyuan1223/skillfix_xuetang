@@ -5,7 +5,7 @@
  * Used in CI to block merges that reduce agent quality.
  */
 
-import type { BenchmarkCategory, BenchmarkRun, CategoryScore } from "./types.js";
+import type { BenchmarkCategory } from "./types.js";
 import { CATEGORY_LABELS } from "./benchmark-seed.js";
 import { normalizeScoreForDisplay } from "./category-scorer.js";
 import {

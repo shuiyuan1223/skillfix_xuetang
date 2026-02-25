@@ -299,7 +299,7 @@ function renderStatCard(comp: A2UIComponent, ctx: RenderContext): string[] {
     const arrow = trend.direction === "up" ? "▲" : trend.direction === "down" ? "▼" : "─";
     const trendColor =
       trend.direction === "up" ? ansi.green : trend.direction === "down" ? ansi.red : ansi.dim;
-    trendStr = " " + trendColor(`${arrow} ${trend.value}`);
+    trendStr = ` ${trendColor(`${arrow} ${trend.value}`)}`;
   }
 
   const lines: string[] = [];
@@ -322,7 +322,7 @@ function renderMetric(comp: A2UIComponent, ctx: RenderContext): string[] {
   else if (trend === "stable") trendStr = ansi.dim(" ─");
 
   return [
-    indent(ctx, `${ansi.dim(label)}: ${ansi.bold(value)}${unit ? " " + unit : ""}${trendStr}`),
+    indent(ctx, `${ansi.dim(label)}: ${ansi.bold(value)}${unit ? ` ${unit}` : ""}${trendStr}`),
   ];
 }
 
@@ -595,13 +595,13 @@ function renderFormInput(comp: A2UIComponent, ctx: RenderContext): string[] {
   if (inputType === "select") {
     const options = (prop(comp, "options") as Array<{ value: string; label: string }>) || [];
     const currentOption = options.find((o) => o.value === value);
-    return [indent(ctx, `${ansi.dim(label + ":")} ${currentOption?.label || value}`)];
+    return [indent(ctx, `${ansi.dim(`${label}:`)} ${currentOption?.label || value}`)];
   }
 
   return [
     indent(
       ctx,
-      `${ansi.dim(label + ":")} ${value || ansi.dim(String(prop(comp, "placeholder") || ""))}`
+      `${ansi.dim(`${label}:`)} ${value || ansi.dim(String(prop(comp, "placeholder") || ""))}`
     ),
   ];
 }
@@ -772,7 +772,7 @@ function renderFileTree(comp: A2UIComponent, ctx: RenderContext): string[] {
     const stats = [];
     if (f.additions) stats.push(ansi.green(`+${f.additions}`));
     if (f.deletions) stats.push(ansi.red(`-${f.deletions}`));
-    const statsStr = stats.length > 0 ? " " + stats.join(" ") : "";
+    const statsStr = stats.length > 0 ? ` ${stats.join(" ")}` : "";
 
     lines.push(indent(ctx, `${statusColor(statusChar)} ${f.path}${statsStr}`));
   }
@@ -812,7 +812,7 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
   // Main branch HEAD node
   const mainName = mainBranch?.name || "main";
   const mainScore = mainBranch?.latestScore;
-  const mainScoreStr = mainScore != null ? "  " + ansi.bold(mainScore.toFixed(2)) : "";
+  const mainScoreStr = mainScore != null ? `  ${ansi.bold(mainScore.toFixed(2))}` : "";
 
   lines.push(indent(ctx, `${ansi.bold("●")} ${ansi.bold(mainName)} (HEAD)${mainScoreStr}`));
 
@@ -859,9 +859,9 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
       if (cm.benchmarkScore != null) {
         const sColor =
           cm.benchmarkScore >= 0.9 ? ansi.green : cm.benchmarkScore >= 0.7 ? ansi.yellow : ansi.red;
-        scoreStr = "  " + sColor(cm.benchmarkScore.toFixed(2));
+        scoreStr = `  ${sColor(cm.benchmarkScore.toFixed(2))}`;
       }
-      const msg = cm.message.length > 40 ? cm.message.slice(0, 40) + "…" : cm.message;
+      const msg = cm.message.length > 40 ? `${cm.message.slice(0, 40)}…` : cm.message;
       lines.push(
         indent(ctx, `${trunk} ${ansi.dim(dot)} ${ansi.dim(cm.shortHash)} ${msg}${scoreStr}`)
       );
@@ -888,10 +888,10 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
     if (v.latestScore != null) {
       const scoreColor =
         v.latestScore >= 0.9 ? ansi.green : v.latestScore >= 0.7 ? ansi.yellow : ansi.red;
-      scoreStr = "  " + scoreColor(v.latestScore.toFixed(2));
+      scoreStr = `  ${scoreColor(v.latestScore.toFixed(2))}`;
       if (v.scoreDelta != null && v.scoreDelta !== 0) {
         const deltaColor = v.scoreDelta > 0 ? ansi.green : ansi.red;
-        scoreStr += " " + deltaColor(`(${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(2)})`);
+        scoreStr += ` ${deltaColor(`(${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(2)})`)}`;
       }
     }
 
@@ -987,7 +987,7 @@ function renderCommitList(comp: A2UIComponent, ctx: RenderContext): string[] {
 
   for (const c of commits) {
     const hash = ansi.yellow(c.shortHash);
-    const msg = c.message.length > 50 ? c.message.substring(0, 50) + "..." : c.message;
+    const msg = c.message.length > 50 ? `${c.message.substring(0, 50)}...` : c.message;
     lines.push(indent(ctx, `${hash} ${msg} ${ansi.dim(c.date)}`));
   }
 
@@ -1091,12 +1091,12 @@ function renderRadarChartTUI(comp: A2UIComponent, ctx: RenderContext): string[] 
   }
 
   const colWidth = 10;
-  const headerLine =
-    "  " +
-    padRight("Dimension", 18) +
-    radarSeries.map((s) => padRight(s.name.slice(0, colWidth), colWidth)).join(" ");
+  const headerLine = `  ${padRight(
+    "Dimension",
+    18
+  )}${radarSeries.map((s) => padRight(s.name.slice(0, colWidth), colWidth)).join(" ")}`;
   lines.push(indent(ctx, ansi.bold(headerLine)));
-  lines.push(indent(ctx, "  " + "─".repeat(18 + radarSeries.length * (colWidth + 1))));
+  lines.push(indent(ctx, `  ${"─".repeat(18 + radarSeries.length * (colWidth + 1))}`));
 
   for (const row of radarData) {
     const label = String(row.subject || "");
@@ -1226,7 +1226,7 @@ function renderLogViewer(comp: A2UIComponent, ctx: RenderContext): string[] {
   lines.push(
     indent(
       ctx,
-      ansi.bold(padRight("Time", 12) + padRight("Level", 8) + padRight("Subsystem", 22) + "Message")
+      ansi.bold(`${padRight("Time", 12) + padRight("Level", 8) + padRight("Subsystem", 22)}Message`)
     )
   );
   lines.push(indent(ctx, ansi.dim("─".repeat(Math.min(80, ctx.width - ctx.indent * 2)))));
@@ -1270,16 +1270,16 @@ function renderModal(comp: A2UIComponent, ctx: RenderContext): string[] {
   const lines: string[] = [];
   const boxWidth = Math.min(60, ctx.width - 4);
 
-  lines.push(indent(ctx, "╔" + "═".repeat(boxWidth) + "╗"));
-  lines.push(indent(ctx, "║ " + ansi.bold(padRight(title, boxWidth - 2)) + "║"));
-  lines.push(indent(ctx, "╠" + "═".repeat(boxWidth) + "╣"));
+  lines.push(indent(ctx, `╔${"═".repeat(boxWidth)}╗`));
+  lines.push(indent(ctx, `║ ${ansi.bold(padRight(title, boxWidth - 2))}║`));
+  lines.push(indent(ctx, `╠${"═".repeat(boxWidth)}╣`));
 
   const childLines = renderChildren(comp, { ...ctx, indent: ctx.indent + 1, width: boxWidth - 4 });
   for (const line of childLines) {
-    lines.push(indent(ctx, "║ " + padRight(stripAnsi(line).trimStart(), boxWidth - 2) + "║"));
+    lines.push(indent(ctx, `║ ${padRight(stripAnsi(line).trimStart(), boxWidth - 2)}║`));
   }
 
-  lines.push(indent(ctx, "╚" + "═".repeat(boxWidth) + "╝"));
+  lines.push(indent(ctx, `╚${"═".repeat(boxWidth)}╝`));
   return lines;
 }
 
@@ -1319,11 +1319,11 @@ function wrapLines(text: string, ctx: RenderContext): string[] {
       const words = rawLine.split(" ");
       let current = "";
       for (const word of words) {
-        if (stripAnsi(current + " " + word).length > maxLen && current) {
+        if (stripAnsi(`${current} ${word}`).length > maxLen && current) {
           lines.push(indent(ctx, current));
           current = word;
         } else {
-          current = current ? current + " " + word : word;
+          current = current ? `${current} ${word}` : word;
         }
       }
       if (current) lines.push(indent(ctx, current));

@@ -9,7 +9,7 @@
  */
 
 import { join } from "path";
-import { getStateDir } from "../utils/config.js";
+import { getStateDir, loadConfig, type PHAConfig } from "../utils/config.js";
 // Side-effect import: macOS SQLite compat patch
 import "./schema.js";
 import { loadSoul } from "./soul.js";
@@ -33,8 +33,7 @@ import {
 } from "./info-collector.js";
 import { MemoryIndexManager } from "./memory-index.js";
 import { emitSessionTranscriptUpdate } from "./compat.js";
-import type { UserProfile, MemorySearchResult } from "./types.js";
-import { loadConfig } from "../utils/config.js";
+import type { UserProfile, MemorySearchResult, RequiredField } from "./types.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Memory");
@@ -152,12 +151,12 @@ export class MemoryManager {
 
   // ============ Profile Info Collection ============
 
-  getNextMissingField(uuid: string) {
+  getNextMissingField(uuid: string): RequiredField | null {
     const profile = this.getProfile(uuid);
     return getNextMissingField(profile);
   }
 
-  getAllMissingFields(uuid: string) {
+  getAllMissingFields(uuid: string): RequiredField[] {
     const profile = this.getProfile(uuid);
     return getAllMissingFields(profile);
   }
@@ -289,6 +288,7 @@ ${skillRegistry}
 
 Based on the information above, provide personalized health services.`;
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const est = (s: string) => Math.ceil(s.length / 4);
     log.debug(
       `Token distribution: soul=${est(soul)} profile=${est(profileBlock)} memory=${est(memoryBlock)} skills=${est(skillRegistry)} bootstrap=${est(bootstrapSection)} total≈${est(prompt)}`
@@ -377,7 +377,7 @@ function buildSessionContext(): string {
   const sign = offsetMin >= 0 ? "+" : "-";
   const absH = Math.floor(Math.abs(offsetMin) / 60);
   const absM = Math.abs(offsetMin) % 60;
-  const tzOffset = `UTC${sign}${absH}${absM > 0 ? ":" + String(absM).padStart(2, "0") : ""}`;
+  const tzOffset = `UTC${sign}${absH}${absM > 0 ? `:${String(absM).padStart(2, "0")}` : ""}`;
 
   // Try to get timezone name
   let tzName = "";
@@ -389,8 +389,8 @@ function buildSessionContext(): string {
   const tzDisplay = tzName ? `${tzOffset} (${tzName})` : tzOffset;
 
   // Season from config hemisphere or default north
-  const config = loadConfig();
-  const hemisphere = (config as any).context?.hemisphere || "north";
+  const config = loadConfig() as PHAConfig;
+  const hemisphere = config.context?.hemisphere ?? "north";
   const season = getSeason(month, hemisphere);
 
   const lines = [

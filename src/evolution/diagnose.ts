@@ -24,6 +24,9 @@ import { t } from "../locales/index.js";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { getSkillsDir } from "../tools/skill-tools.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Diagnose");
 
 // ─── Interfaces ───
 
@@ -129,6 +132,7 @@ function analyzeDataGaps(results: BenchmarkResult[]): DataGap[] {
     const ctx = tc.healthOverrides;
     for (const [dataType, data] of Object.entries(ctx)) {
       if (!data || typeof data !== "object") continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const records = (data as any).daily || (data as any).sessions;
       if (!Array.isArray(records)) continue;
 
@@ -551,12 +555,12 @@ ${passingSample || "无"}
     }
 
     // LLM returned something but JSON structure doesn't match — log it
-    console.error(
+    log.error(
       "[diagnose] LLM response didn't match expected JSON structure. Response:",
       response?.slice(0, 500)
     );
   } catch (error) {
-    console.error("[diagnose] LLM analysis failed, falling back to rules:", error);
+    log.error("[diagnose] LLM analysis failed, falling back to rules:", error);
   }
 
   return {
@@ -568,6 +572,7 @@ ${passingSample || "无"}
 /**
  * Extract JSON from LLM response (may include markdown fences or extra text)
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parseJSONResponse(text: string): any {
   if (!text || typeof text !== "string") return null;
 

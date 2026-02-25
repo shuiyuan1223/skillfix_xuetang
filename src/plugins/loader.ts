@@ -14,7 +14,6 @@ import { createEmptyRegistry, type PluginRecord, type PluginRegistry } from "./r
 import type {
   AnyAgentTool,
   PHAPluginApi,
-  PHAPluginDefinition,
   PHAPluginModule,
   PHAPluginToolFactory,
   PHAPluginToolOptions,

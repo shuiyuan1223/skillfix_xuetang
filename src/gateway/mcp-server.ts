@@ -70,6 +70,7 @@ export async function handleMCPRequest(body: unknown): Promise<JsonRpcResponse> 
         if (id !== null) {
           return { jsonrpc: "2.0", id, result: {} };
         }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return null as any;
       }
 

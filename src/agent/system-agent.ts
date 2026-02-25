@@ -120,7 +120,7 @@ function buildSASystemPrompt(): string {
 
   const tailSlice = (text: string, maxChars: number): string => {
     if (!text || text.length <= maxChars) return text;
-    return "...\n" + text.slice(-maxChars);
+    return `...\n${text.slice(-maxChars)}`;
   };
 
   const memory = tailSlice(memoryRaw, SA_MEMORY_BUDGET.memory);
@@ -146,6 +146,7 @@ function buildSASystemPrompt(): string {
   const prompt = sections.join("\n");
 
   // Token distribution report (debug)
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const est = (s: string) => Math.ceil(s.length / 4);
   log.debug(
     `Token distribution: soul=${est(soul)} memory=${est(memory)} evolution=${est(evolution)} experience=${est(experience)} skills=${est(skillRegistry)} total≈${est(prompt)}`
@@ -189,6 +190,7 @@ export class SystemAgent {
       "feedback",
       "skill",
     ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: AgentTool<any>[] = [
       ...globalRegistry.toAgentToolsByCategories(categories),
       claudeCodeAgentTool,
@@ -236,7 +238,9 @@ export class SystemAgent {
     return undefined;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private resolveModel(provider: LLMProvider, modelId: string, baseUrl?: string): Model<any> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let model: Model<any> | undefined;
 
     if (BUILTIN_PROVIDERS.includes(provider)) {
@@ -329,6 +333,8 @@ export class SystemAgent {
 
     let finalContent = "";
     if (lastAssistantMessage) {
+      // pi-agent-core event types lack property declarations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const block of (lastAssistantMessage as any).content) {
         if (block.type === "text") {
           finalContent += block.text;

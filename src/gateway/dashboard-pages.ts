@@ -231,6 +231,7 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
       { justify: "between", align: "center", gap: 12 }
     );
     children.push(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ui.card([reAuthContent], { padding: 16, className: "border-l-4 border-l-warning" } as any)
     );
   }

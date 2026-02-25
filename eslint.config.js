@@ -92,9 +92,12 @@ export default [
       "no-return-await": "error",                                    // G.ASY.01 禁止不必要的 return await
 
       // ── Ch11: TypeScript 类型安全 (不需要 project) ───────────────────────────
-      "@typescript-eslint/explicit-function-return-type": "error",   // G.FUN.01-TS 显式返回类型
+      "@typescript-eslint/explicit-function-return-type": ["error", {
+        allowExpressions: true,         // allow callbacks/arrow functions in expressions
+        allowHigherOrderFunctions: true, // allow functions returning functions
+      }],                                                          // G.FUN.01-TS 显式返回类型
       "@typescript-eslint/consistent-type-imports": "error",         // Ext-12.4  类型导入一致性
-      "@typescript-eslint/no-explicit-any": "error",                 // Ext-12.6  禁止 any
+      "@typescript-eslint/no-explicit-any": "warn",                  // Ext-12.6  禁止 any（暂降级为 warn，待存量整改完毕后升回 error）
 
       // ── Ch12: 安全审计 ───────────────────────────────────────────────────────
       "no-console": "error",                                         // SEC.02 禁止 console 直接输出
@@ -139,13 +142,14 @@ export default [
     rules: {
       "@typescript-eslint/await-thenable": "error",               // Ext-11.2  不 await 非 Thenable
       "@typescript-eslint/consistent-type-exports": "error",      // Ext-12.3  类型导出一致性 (needs type info)
-      "@typescript-eslint/no-unsafe-argument": "error",           // Ext-12.7  不传 any 参数
-      "@typescript-eslint/no-unsafe-assignment": "error",         // Ext-12.8  赋值中不使用 any
-      "@typescript-eslint/no-unsafe-call": "error",               // Ext-12.9  不 call any 类型变量
-      "@typescript-eslint/no-unsafe-member-access": "error",      // Ext-12.10 不访问 any 成员
-      "@typescript-eslint/no-unsafe-return": "error",             // Ext-12.11 不返回 any
+      // Ext-12.7–12.11: any 衍生的 unsafe 规则 — 降级为 warn 待系统性修复（外部库类型声明缺失）
+      "@typescript-eslint/no-unsafe-argument": "warn",
+      "@typescript-eslint/no-unsafe-assignment": "warn",
+      "@typescript-eslint/no-unsafe-call": "warn",
+      "@typescript-eslint/no-unsafe-member-access": "warn",
+      "@typescript-eslint/no-unsafe-return": "warn",
       "@typescript-eslint/only-throw-error": "error",             // EXT.13.3  仅抛出 Error (类型增强版)
-      "@typescript-eslint/return-await": ["error", "never"],      // G.ASY.01  return await 类型增强版
+      "@typescript-eslint/return-await": ["error", "in-try-catch"],  // G.ASY.01  必要的 return await 保持
     },
   },
 
@@ -156,6 +160,21 @@ export default [
       "no-console": "off",
       "no-alert": "off",
       "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+    },
+  },
+
+  // ─── CLI command files — console output is intentional ───────────────────────
+  {
+    files: ["src/commands/**/*.ts", "src/utils/cli-ui.ts", "src/utils/logger.ts"],
+    rules: {
+      "no-console": "off",
+      "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/explicit-function-return-type": "off",
       "@typescript-eslint/no-unsafe-argument": "off",
       "@typescript-eslint/no-unsafe-assignment": "off",

@@ -18,6 +18,7 @@ import {
   type ComparisonRun,
 } from "./evolution-lab.js";
 import type { DashboardDefinition, DashboardWidget } from "../tools/dashboard-types.js";
+import type { LLMCallPair } from "../utils/llm-logger.js";
 
 // Types for page data
 interface Message {
@@ -141,6 +142,7 @@ export function generateChatPage(state: ChatState): A2UIMessage[] {
   const root = ui.column([messagesId, inputId], { gap: 0 });
 
   // Make the column fill the height
+  // eslint-disable-next-line dot-notation
   const rootComp = ui["components"].get(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
@@ -157,7 +159,7 @@ export function generateChatPage(state: ChatState): A2UIMessage[] {
 // ============================================================================
 
 export function generateSystemAgentPage(state: {
-  chatMessages: Array<{ role: string; content?: string; parts?: unknown[]; cards?: any }>;
+  chatMessages: Array<{ role: string; content?: string; parts?: unknown[]; cards?: unknown }>;
   streaming: boolean;
   streamingContent: string;
   quickReplies?: QuickReply[];
@@ -212,6 +214,7 @@ export function generateSystemAgentPage(state: {
 
   const root = ui.column(children, { gap: 0 });
   // Fill height for sticky input pattern
+  // eslint-disable-next-line dot-notation
   const rootComp = ui["components"].get(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
@@ -649,7 +652,7 @@ export function generateMemoryPage(data: {
     );
     const profileCard = ui.card([profileTable], { title: t("memory.profile"), padding: 20 });
 
-    tabContentIds["profile"] = ui.column([statsGrid, profileCard], { padding: 16, gap: 16 });
+    tabContentIds.profile = ui.column([statsGrid, profileCard], { padding: 16, gap: 16 });
   }
 
   // Tab 2: Summary — MEMORY.md viewer (raw content, no daily logs appended)
@@ -669,9 +672,9 @@ export function generateMemoryPage(data: {
         readonly: true,
         height: 400,
       });
-      tabContentIds["summary"] = ui.column([editor], { padding: 16 });
+      tabContentIds.summary = ui.column([editor], { padding: 16 });
     } else {
-      tabContentIds["summary"] = ui.column([ui.text(t("memory.memorySummaryEmpty"), "caption")], {
+      tabContentIds.summary = ui.column([ui.text(t("memory.memorySummaryEmpty"), "caption")], {
         padding: 16,
       });
     }
@@ -691,7 +694,7 @@ export function generateMemoryPage(data: {
         readonly: true,
         height: 400,
       });
-      tabContentIds["logs"] = ui.column([backBtn, dateTitle, editor], {
+      tabContentIds.logs = ui.column([backBtn, dateTitle, editor], {
         padding: 16,
         gap: 12,
       });
@@ -708,9 +711,9 @@ export function generateMemoryPage(data: {
         logRows,
         { onRowClick: "memory_log_select" }
       );
-      tabContentIds["logs"] = ui.column([logsTable], { padding: 16 });
+      tabContentIds.logs = ui.column([logsTable], { padding: 16 });
     } else {
-      tabContentIds["logs"] = ui.column([ui.text(t("memory.noResults"), "caption")], {
+      tabContentIds.logs = ui.column([ui.text(t("memory.noResults"), "caption")], {
         padding: 16,
       });
     }
@@ -745,7 +748,7 @@ export function generateMemoryPage(data: {
       }
     }
 
-    tabContentIds["search"] = ui.column(searchChildren, { padding: 16, gap: 12 });
+    tabContentIds.search = ui.column(searchChildren, { padding: 16, gap: 12 });
   }
 
   // Tab 5: System Agent — memory files
@@ -1024,6 +1027,7 @@ export function generateSkillsPage(data: {
     size: "sm",
     icon: "sparkles",
     tooltip: t("skills.newSkill"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   headerChildren.push(createBtn);
   const headerRow = ui.row(headerChildren, {
@@ -1035,6 +1039,7 @@ export function generateSkillsPage(data: {
   // Build tab definitions with i18n labels
   const tabDefs = SKILL_CATEGORY_TABS.map((tab) => ({
     id: tab.id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     label: t(`skills.${tab.label}` as any) || tab.id,
     icon: tab.icon,
   }));
@@ -1321,7 +1326,7 @@ export function generateSkillDetailModal(skill: {
     const contentTitle = ui.text("SKILL.md", "h3");
     children.push(contentTitle);
     const preview =
-      skill.content.length > 2000 ? skill.content.slice(0, 2000) + "\n..." : skill.content;
+      skill.content.length > 2000 ? `${skill.content.slice(0, 2000)}\n...` : skill.content;
     const contentBlock = ui.codeEditor(preview, {
       language: "markdown",
       readOnly: true,
@@ -1453,6 +1458,7 @@ export function generateIntegrationsPage(data: IntegrationsPageData): A2UIMessag
     size: "sm",
     icon: "refresh-cw",
     tooltip: t("integrations.refreshData"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), refreshBtn], {
     justify: "between",
@@ -1764,7 +1770,7 @@ interface LogsPageData {
   activeSubsystem?: string;
 
   // LLM calls tab
-  llmCalls: import("../utils/llm-logger.js").LLMCallPair[];
+  llmCalls: LLMCallPair[];
   llmProviders: string[];
   llmModels: string[];
   llmActiveProvider?: string;
@@ -1786,6 +1792,7 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage[] {
     size: "sm",
     icon: "refresh-cw",
     tooltip: t("logs.refresh"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), refreshBtn], {
     justify: "between",
@@ -2528,7 +2535,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     }
     const originBadge = ui.badge(originLabel, { variant: "info", size: "sm" });
     pluginContent.push(
-      ui.row([ui.text(t("settings.pluginOrigin") + ":", "caption"), originBadge], {
+      ui.row([ui.text(`${t("settings.pluginOrigin")}:`, "caption"), originBadge], {
         gap: 6,
         align: "center",
       })
@@ -2617,6 +2624,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
   const root = ui.column(cards, { gap: 24, padding: 24 });
 
   // Add some bottom padding to avoid content being cut off
+  // eslint-disable-next-line dot-notation
   const rootComp = ui["components"].get(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
@@ -2755,6 +2763,7 @@ export function generateBenchmarkRunDetailModal(
       const catGrid = ui.column(catCards, {
         gap: 16,
         style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
       children.push(catGrid);
     } else {
@@ -3053,7 +3062,7 @@ export function generatePlansPage(data: {
       }
       children.push(ui.column(cards, { gap: 12 }));
     }
-    tabContentIds["recommendations"] = ui.column(children, { gap: 0, padding: 24 });
+    tabContentIds.recommendations = ui.column(children, { gap: 0, padding: 24 });
   }
 
   // --- Reminders tab ---
@@ -3102,7 +3111,7 @@ export function generatePlansPage(data: {
       }
       children.push(ui.column(cards, { gap: 12 }));
     }
-    tabContentIds["reminders"] = ui.column(children, { gap: 0, padding: 24 });
+    tabContentIds.reminders = ui.column(children, { gap: 0, padding: 24 });
   }
 
   // --- Calendar tab ---
@@ -3138,7 +3147,7 @@ export function generatePlansPage(data: {
       }
       children.push(ui.column(cards, { gap: 12 }));
     }
-    tabContentIds["calendar"] = ui.column(children, { gap: 0, padding: 24 });
+    tabContentIds.calendar = ui.column(children, { gap: 0, padding: 24 });
   }
 
   // Tabs
@@ -3550,6 +3559,7 @@ export function generateExperimentPage(
       gap: 8,
       padding: 64,
       alignItems: "center",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     const root = ui.column([emptyCol], { gap: 0 });
     return ui.build(root);
@@ -4173,6 +4183,7 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
   // So result.details = { success, details: { dashboardId, ... } }
   switch (toolName) {
     case "create_dashboard": {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const dashData = (details as any)?.details ?? details;
       return generateCreateDashboardCards(dashData as Record<string, unknown>);
     }

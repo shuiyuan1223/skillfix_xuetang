@@ -73,12 +73,12 @@ export function registerStatusCommand(program: Command): void {
       const hasAnyKey = hasAnthropic || hasOpenAI || hasGoogle || hasOpenRouter;
 
       // Check gateway health if running
-      let gatewayHealth: any = null;
+      let gatewayHealth: { uptime?: number } | null = null;
       let gatewayUptime = "";
       if (gatewayRunning && config) {
         try {
           const response = await fetch(`http://localhost:${config.gateway.port}/health`);
-          gatewayHealth = await response.json();
+          gatewayHealth = (await response.json()) as { uptime?: number };
           if (gatewayHealth?.uptime) {
             const hours = Math.floor(gatewayHealth.uptime / 3600);
             const mins = Math.floor((gatewayHealth.uptime % 3600) / 60);

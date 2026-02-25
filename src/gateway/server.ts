@@ -6,7 +6,7 @@
  */
 
 import { join, basename } from "path";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mcpHandler } from "./mcp.js";
@@ -22,6 +22,9 @@ import {
   type PHAAgent,
 } from "../agent/pha-agent.js";
 import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
+import type { AgentTool } from "@mariozechner/pi-agent-core";
+import type { MemorySearchResult } from "../memory/types.js";
+import type { LLMSummarizationConfig } from "../memory/compaction.js";
 import { getDataSource } from "../tools/health-data.js";
 import { createDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
@@ -30,7 +33,6 @@ import {
   loadConfig,
   saveConfig,
   getUserId,
-  getUserUuid,
   getStateDir,
   getBenchmarkModels,
   resolveBenchmarkModelApiKey,
@@ -95,7 +97,6 @@ import {
   generatePlansPage,
   generatePlanDetailModal,
   type PlansPageTab,
-  type SettingsPageData,
 } from "./pages.js";
 import { listPlans, loadPlan, savePlan } from "../plans/store.js";
 import type { PlanStatus } from "../plans/types.js";
@@ -125,14 +126,12 @@ function findLastTextIdx(parts: MessagePart[]): number {
 }
 import { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import {
-  loadMemorySummary,
   getRecentDailyLogs,
   getUserDir,
   ensureUserDir,
   ensureSystemAgentFiles,
 } from "../memory/profile.js";
 import {
-  listPromptsTool,
   getPromptTool,
   getPromptHistoryTool,
   updatePromptTool,
@@ -175,7 +174,6 @@ import {
 } from "../memory/db.js";
 import { BenchmarkRunner } from "../evolution/benchmark-runner.js";
 import {
-  writeBenchmarkProgress,
   readBenchmarkProgress,
   clearBenchmarkProgress,
   readAllBenchmarkProgress,
@@ -187,7 +185,6 @@ import { listEvolutionVersions, getEvolutionVersionByBranch } from "../memory/db
 import {
   readFileFromBranch,
   readFileFromRef,
-  getChangedFilesOnBranch,
   getChangedFilesForVersion,
   mergeVersion,
   abandonVersion,
@@ -206,13 +203,7 @@ import {
 } from "../plugins/index.js";
 import { discoverPlugins } from "../plugins/discovery.js";
 import { loadPluginManifest } from "../plugins/manifest.js";
-import {
-  createLogger,
-  readLogFile,
-  getLogSubsystems,
-  subscribeToLogs,
-  type LogEntry,
-} from "../utils/logger.js";
+import { createLogger, readLogFile, subscribeToLogs, type LogEntry } from "../utils/logger.js";
 import chokidar from "chokidar";
 
 const log = createLogger("Gateway");
@@ -311,14 +302,14 @@ interface SharpCategoryRow {
 
 function reAggregateToSharpCategories(sceneRows: SceneCategoryRow[]): SharpCategoryRow[] {
   // Collect all sub-component ratings from all scene categories
-  const sharpMap = new Map<
+  const _sharpMap = new Map<
     string,
     Map<string, { scores: number[]; scoring: "binary" | "3-point" }>
   >();
 
   for (const row of sceneRows) {
     if (!row.subComponents) continue;
-    for (const sub of row.subComponents) {
+    for (const _sub of row.subComponents) {
       // sub.name = e.g. "Risk Disclosure", and it has a SHARP category in the rating
       // But the subComponent doesn't carry its SHARP category directly.
       // We need to figure out which SHARP category it belongs to.
@@ -427,6 +418,7 @@ function parseAndReAggregateScores(
       try {
         const details = typeof s.details === "string" ? JSON.parse(s.details) : s.details;
         if (Array.isArray(details)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           subComponents = details.map((d: any) => ({
             name: d.subComponent || d.name || "Unknown",
             score: typeof d.score === "number" ? d.score : 0,
@@ -452,7 +444,7 @@ export interface GatewayConfig {
   host?: string;
   port?: number;
   apiKey?: string;
-  provider?: "anthropic" | "openai" | "google" | "openrouter" | "groq" | "mistral" | "xai";
+  provider?: LLMProvider;
   modelId?: string;
   baseUrl?: string;
 }
@@ -482,7 +474,7 @@ interface WSActionMessage extends WSMessage {
 /**
  * Create the Gateway Hono app (HTTP routes only)
  */
-export function createGatewayApp() {
+export function createGatewayApp(): Hono {
   const app = new Hono();
 
   // CORS
@@ -1014,7 +1006,8 @@ export class GatewaySession {
   public _sseMode = false;
   private _chatLock = false;
 
-  private extraToolsCache: import("@mariozechner/pi-agent-core").AgentTool<any>[] | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private extraToolsCache: AgentTool<any>[] | null = null;
 
   // Legacy-chat independent state
   private legacyChatMessages: PartsChatMessage[] = [];
@@ -1099,7 +1092,7 @@ export class GatewaySession {
   // Memory page state
   private memoryTab: "profile" | "summary" | "logs" | "search" | "system-agent" = "profile";
   private memorySearchQuery: string | undefined;
-  private memorySearchResults: import("../memory/types.js").MemorySearchResult[] | undefined;
+  private memorySearchResults: MemorySearchResult[] | undefined;
   private selectedLogDate: string | null = null;
 
   // Plans page state
@@ -1359,7 +1352,7 @@ export class GatewaySession {
   }
 
   /** Common config fields shared between main and legacy agents (model resolved per-agent) */
-  private baseAgentConfig() {
+  private baseAgentConfig(): { userUuid: string | undefined; dataSource: HealthDataSource } {
     return {
       userUuid: this.userUuid || undefined,
       dataSource: this.dataSource,
@@ -1368,12 +1361,14 @@ export class GatewaySession {
 
   /** Ensure extra tools (plugin + remote MCP) are loaded and cached */
   private async ensureExtraTools(): Promise<
-    import("@mariozechner/pi-agent-core").AgentTool<any>[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    AgentTool<any>[]
   > {
     if (!this.extraToolsCache) {
       const pluginReg = getGlobalPluginRegistry();
       const pluginTools = pluginReg?.tools.map((r) => r.tool) || [];
-      let remoteMcpTools: import("@mariozechner/pi-agent-core").AgentTool<any>[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let remoteMcpTools: AgentTool<any>[] = [];
       try {
         remoteMcpTools = await getRemoteMCPTools();
       } catch (err) {
@@ -1384,7 +1379,7 @@ export class GatewaySession {
     return this.extraToolsCache;
   }
 
-  private getLLMConfig(): import("../memory/compaction.js").LLMSummarizationConfig {
+  private getLLMConfig(): LLMSummarizationConfig {
     const model = resolveAgentProfileModel("pha");
     return {
       provider: model.provider,
@@ -1403,6 +1398,7 @@ export class GatewaySession {
       this.agent = await createPHAAgent({
         ...this.baseAgentConfig(),
         apiKey: model.apiKey,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         provider: model.provider as any,
         modelId: model.modelId,
         baseUrl: model.baseUrl,
@@ -1426,6 +1422,7 @@ export class GatewaySession {
           const dataSource = createBenchmarkDataSource(testCase.userUuid, testCase.healthOverrides);
           const testAgent = await createPHAAgent({
             apiKey: sessionConfig.apiKey,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             provider: sessionConfig.provider as any,
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
@@ -1433,18 +1430,19 @@ export class GatewaySession {
             dataSource,
             sessionMessages: testCase.sessionMessages,
           });
-          return await withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
+          return withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
         },
         llmCall: async (prompt: string) => {
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
           const judgeAgent = await createPHAAgent({
             apiKey: sessionConfig.apiKey,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             provider: sessionConfig.provider as any,
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
             dataSource: new JudgeMockDS(),
           });
-          return await withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
+          return withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
         },
         concurrency: getBenchmarkConcurrency(),
       });
@@ -1461,6 +1459,7 @@ export class GatewaySession {
       this.legacyChatAgent = await createPHAAgent({
         ...this.baseAgentConfig(),
         apiKey: legacyModel.apiKey,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         provider: legacyModel.provider as any,
         modelId: legacyModel.modelId,
         baseUrl: legacyModel.baseUrl,
@@ -1478,6 +1477,7 @@ export class GatewaySession {
       const saModel = resolveAgentProfileModel("sa");
       this.systemAgent = createSystemAgent({
         apiKey: saModel.apiKey,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         provider: saModel.provider as any,
         modelId: saModel.modelId,
         baseUrl: saModel.baseUrl,
@@ -1494,8 +1494,6 @@ export class GatewaySession {
 
       // Configure evolution tools: create fresh agents per call for concurrency safety
       // (NOT the system agent — otherwise responses leak into system agent chat)
-      // Capture session reference for onProgress callback
-      const session = this;
       const sessionConfig = this.config;
       setEvolutionRunnerConfig({
         agentCall: async (query: string, testCase) => {
@@ -1506,6 +1504,7 @@ export class GatewaySession {
           const dataSource = createBenchmarkDataSource(testCase.userUuid, testCase.healthOverrides);
           const testAgent = await createPHAAgent({
             apiKey: sessionConfig.apiKey,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             provider: sessionConfig.provider as any,
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
@@ -1513,24 +1512,25 @@ export class GatewaySession {
             dataSource,
             sessionMessages: testCase.sessionMessages,
           });
-          return await withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
+          return withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
         },
         llmCall: async (prompt: string) => {
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
           const judgeAgent = await createPHAAgent({
             apiKey: sessionConfig.apiKey,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             provider: sessionConfig.provider as any,
             modelId: sessionConfig.modelId,
             baseUrl: sessionConfig.baseUrl,
             dataSource: new JudgeMockDS(),
           });
-          return await withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
+          return withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
         },
         concurrency: getBenchmarkConcurrency(),
         onProgress: (current, total, _testCase) => {
           // Update the last running run_benchmark tool_use part with progress
-          for (let i = session.systemAgentChatMessages.length - 1; i >= 0; i--) {
-            const msg = session.systemAgentChatMessages[i];
+          for (let i = this.systemAgentChatMessages.length - 1; i >= 0; i--) {
+            const msg = this.systemAgentChatMessages[i];
             if (msg.role !== "assistant" || !msg.parts) continue;
             for (let j = msg.parts.length - 1; j >= 0; j--) {
               const part = msg.parts[j];
@@ -1540,13 +1540,14 @@ export class GatewaySession {
                 part.status === "running"
               ) {
                 // Store progress info as extra field on the part (extended type)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (part as any).progressData = { current, total };
                 break;
               }
             }
           }
-          const send = session._activeSend;
-          if (send) session.sendEvolutionLabUpdateThrottled(send);
+          const send = this._activeSend;
+          if (send) this.sendEvolutionLabUpdateThrottled(send);
         },
       });
     }
@@ -1619,6 +1620,7 @@ export class GatewaySession {
    */
   async getFullPageState(clientView?: string | null): Promise<unknown[]> {
     const collected: unknown[] = [];
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const collector = (msg: unknown) => collected.push(msg);
 
     // Restore benchmark running state
@@ -1657,6 +1659,7 @@ export class GatewaySession {
     this._actionLock = true;
 
     const collected: unknown[] = [];
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const collector = (msg: unknown) => {
       collected.push(msg);
       // Also push through SSE if connected (for async listeners)
@@ -1739,6 +1742,7 @@ export class GatewaySession {
       userDir = getUserDir(uuid);
     }
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const readFileInfo = (filePath: string) => {
       if (!existsSync(filePath)) return { exists: false, title: "—", lines: 0 };
       try {
@@ -1989,6 +1993,7 @@ export class GatewaySession {
 
             saMemoryFiles = await Promise.all(
               SA_MEMORY_FILES.map(async (f) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const result = (await systemMemoryReadTool.execute({ file: f.name })) as any;
                 const fileContent = result.content === "(empty)" ? "" : result.content;
                 return {
@@ -2005,6 +2010,7 @@ export class GatewaySession {
             if (this.saSelectedMemoryFile) {
               const result = (await systemMemoryReadTool.execute({
                 file: this.saSelectedMemoryFile,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
               })) as any;
               const raw = result.content === "(empty)" ? "" : result.content;
               saMemoryContent = this.editBuffer ?? raw;
@@ -2102,6 +2108,7 @@ export class GatewaySession {
 
         // Fetch data async
         try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const skillsResult = (await listSkillsTool.execute({})) as any;
           let content: string | undefined;
           let language: string | undefined;
@@ -2110,6 +2117,7 @@ export class GatewaySession {
             const skillResult = (await getSkillTool.execute({
               name: this.selectedSkill,
               filePath: this.selectedSkillFile,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
             })) as any;
             if (skillResult.success && "content" in skillResult) {
               content = this.editBuffer ?? skillResult.content;
@@ -2119,8 +2127,10 @@ export class GatewaySession {
 
           // Enrich skills with structure info
           const enrichedSkills = await Promise.all(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (skillsResult.skills || []).map(async (s: any) => {
               if (s.name === this.selectedSkill) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const info = (await getSkillTool.execute({ name: s.name })) as any;
                 return { ...s, structure: info.success ? info.structure : undefined };
               }
@@ -2325,6 +2335,7 @@ export class GatewaySession {
         }));
         const huawei = config.dataSources?.huawei || {};
         // Handle judgeModel as either string ref or object
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const judge: { provider?: any; modelId?: any; label?: any } =
           typeof config.judgeModel === "object" && config.judgeModel ? config.judgeModel : {};
 
@@ -2415,6 +2426,7 @@ export class GatewaySession {
           // Seed from SKILL.md tags + agent profile tags
           const tagSet = new Set<string>();
           try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const skillsResult = (await listSkillsTool.execute({})) as any;
             for (const s of skillsResult.skills || []) {
               for (const tag of s.tags || []) tagSet.add(tag);
@@ -2578,6 +2590,7 @@ export class GatewaySession {
           .some((m) => m.role === "assistant");
         if (!hasNewAssistant) {
           const agentMsgs = agent.getMessages();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const lastAgentMsg = agentMsgs[agentMsgs.length - 1] as any;
           if (lastAgentMsg?.stopReason === "error" && lastAgentMsg?.errorMessage) {
             const errContent = `⚠️ ${lastAgentMsg.errorMessage}`;
@@ -2729,6 +2742,7 @@ export class GatewaySession {
     this._sseMode = true;
 
     let streamClosed = false;
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const safeWrite = (data: string) => {
       if (streamClosed) return;
       try {
@@ -2739,6 +2753,7 @@ export class GatewaySession {
         streamClosed = true;
       }
     };
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const safeClose = () => {
       if (streamClosed) return;
       streamClosed = true;
@@ -2751,6 +2766,7 @@ export class GatewaySession {
       }
     };
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const sseSend = (msg: unknown) => {
       // Only forward AG-UI events (not legacy a2ui / agent_text)
       const m = msg as Record<string, unknown>;
@@ -2964,6 +2980,7 @@ export class GatewaySession {
     try {
       const agent = await this.getSystemAgent();
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const unsubscribe = agent.subscribe((event: any) => {
         if (event.type === "message_start") {
           if (event.message?.role === "assistant") {
@@ -3485,6 +3502,7 @@ export class GatewaySession {
       const name = row.name.replace(/^[^\s]+\s+/, "");
       // Open skill detail modal (same as tools page)
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = (await getSkillTool.execute({ name })) as any;
         if (result?.success !== false) {
           const modal = generateSkillDetailModal({
@@ -3523,6 +3541,7 @@ export class GatewaySession {
       this.editBuffer = null;
       await this.handleNavigate("settings/skills", send);
     } else if (action === "toggle_skill" && this.selectedSkill) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const skillsResult = (await listSkillsTool.execute({})) as any;
       const skill = skillsResult.skills?.find(
         (s: { name: string }) => s.name === this.selectedSkill
@@ -3536,6 +3555,7 @@ export class GatewaySession {
       }
     } else if (action === "toggle_skill_from_modal" && payload?.skillName) {
       const skillName = payload.skillName as string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const skillsResult = (await listSkillsTool.execute({})) as any;
       const skill = skillsResult.skills?.find((s: { name: string }) => s.name === skillName);
       if (skill) {
@@ -3544,6 +3564,7 @@ export class GatewaySession {
           enabled: !skill.enabled,
         });
         // Re-open modal with updated state
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updated = (await getSkillTool.execute({ name: skillName })) as any;
         if (updated?.success !== false) {
           const modal = generateSkillDetailModal({
@@ -3727,6 +3748,7 @@ export class GatewaySession {
     else if (action === "view_skill_from_table" && payload?.value) {
       const skillName = payload.value as string;
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = (await getSkillTool.execute({ name: skillName })) as any;
         if (result?.success !== false) {
           const modal = generateSkillDetailModal({
@@ -3746,6 +3768,7 @@ export class GatewaySession {
     else if (action === "view_skill_from_tool" && payload?.skillName) {
       const skillName = payload.skillName as string;
       try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const result = (await getSkillTool.execute({ name: skillName })) as any;
         if (result?.success !== false) {
           const modal = generateSkillDetailModal({
@@ -3841,9 +3864,13 @@ export class GatewaySession {
               "settings/integrations",
               generateIntegrationsPage({
                 activeTab: this.integrationsTab,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 repo: this.integrationsCache.repo as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 issues: this.integrationsCache.issues as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 prs: this.integrationsCache.prs as any,
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 branchInfo: this.integrationsCache.branchInfo as any,
                 ghAvailable: this.integrationsCache.ghAvailable,
               })
@@ -4083,7 +4110,7 @@ export class GatewaySession {
       const benchmarkModels = getBenchmarkModels();
       const hasMultipleModels =
         Object.keys(benchmarkModels).length > 1 ||
-        (Object.keys(benchmarkModels).length === 1 && !benchmarkModels["default"]);
+        (Object.keys(benchmarkModels).length === 1 && !benchmarkModels.default);
 
       if (hasMultipleModels || action === "open_benchmark_modal") {
         const models = Object.entries(benchmarkModels).map(([name, config]) => ({
@@ -4521,6 +4548,7 @@ export class GatewaySession {
           // Preserve providers that weren't in the form (shouldn't happen, but safe)
           for (const [pk, pv] of Object.entries(config.models.providers || {})) {
             if (!newProviders[pk]) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               newProviders[pk] = pv as any;
             }
           }
@@ -4611,7 +4639,7 @@ export class GatewaySession {
           config.proactive.enabled =
             formData.proactiveEnabled === "true" || formData.proactiveEnabled === true;
           config.proactive.checkIntervalMinutes =
-            parseInt(String(formData.proactiveCheckInterval)) || 5;
+            parseInt(String(formData.proactiveCheckInterval), 10) || 5;
         } else if (action === "settings_save_infra_models") {
           // Save infrastructure model assignments (SA/Judge/Embedding)
           if (!config.orchestrator) config.orchestrator = {};
@@ -4627,7 +4655,8 @@ export class GatewaySession {
           // Delete a provider by key
           const key = formData?.provider as string;
           if (key && config.models?.providers) {
-            delete config.models.providers[key];
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete (config.models.providers as Record<string, unknown>)[key];
           }
         } else if (action === "settings_provider_model_add") {
           // Add an empty model to a provider
@@ -4677,11 +4706,13 @@ export class GatewaySession {
               if (match) {
                 const [, modelKey, field] = match;
                 if (!models[modelKey]) models[modelKey] = { provider: "", modelId: "" };
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (models[modelKey] as any)[field] = String(v);
               }
             }
           }
           if (Object.keys(models).length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             config.benchmarkModels = models as any;
           }
         } else if (action === "settings_bm_add") {
@@ -4697,7 +4728,8 @@ export class GatewaySession {
           // Delete a benchmark model by key
           const key = formData?.key as string;
           if (key && config.benchmarkModels) {
-            delete config.benchmarkModels[key];
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete (config.benchmarkModels as Record<string, unknown>)[key];
           }
         } else if (action === "settings_save_mcp") {
           try {
@@ -4738,8 +4770,10 @@ export class GatewaySession {
                 const [, srvKey, field] = match;
                 if (!servers[srvKey]) servers[srvKey] = { url: "" };
                 if (field === "enabled") {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   (servers[srvKey] as any)[field] = v === "true";
                 } else {
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   (servers[srvKey] as any)[field] = String(v);
                 }
               }
@@ -4763,7 +4797,8 @@ export class GatewaySession {
           // Delete a remote MCP server by key
           const key = formData?.key as string;
           if (key && config.mcp?.remoteServers) {
-            delete config.mcp.remoteServers[key];
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete (config.mcp.remoteServers as Record<string, unknown>)[key];
           }
         } else if (action === "settings_save_plugins") {
           try {
@@ -4831,7 +4866,8 @@ export class GatewaySession {
           // Delete an agent by ID
           const agentId = String(formData?.agentId || "");
           if (agentId && config.agents) {
-            delete config.agents[agentId];
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete (config.agents as Record<string, unknown>)[agentId];
           }
         } else if (action === "settings_agent_tag_toggle") {
           // Unified tag toggle from tag_picker: { agentId, kind: "tool"|"skill", tag, action: "add"|"remove" }
@@ -4894,7 +4930,7 @@ export class GatewaySession {
         }
         await this.handleNavigate("settings/general", send);
         this._settingsExpandedAgent = undefined;
-      } catch (e) {
+      } catch (_e) {
         sendAll(send, generateToast(t("settings.saveError"), "error"));
       }
     }
@@ -4970,9 +5006,13 @@ export class GatewaySession {
         "settings/integrations",
         generateIntegrationsPage({
           activeTab: this.integrationsTab,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           repo: this.integrationsCache?.repo as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           issues: this.integrationsCache?.issues as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           prs: this.integrationsCache?.prs as any,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           branchInfo: this.integrationsCache?.branchInfo as any,
           ghAvailable,
         })
@@ -5008,9 +5048,13 @@ export class GatewaySession {
           "settings/integrations",
           generateIntegrationsPage({
             activeTab: this.integrationsTab,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             repo: this.integrationsCache.repo as any,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             issues: this.integrationsCache.issues as any,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             prs: this.integrationsCache.prs as any,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             branchInfo: this.integrationsCache.branchInfo as any,
             ghAvailable: this.integrationsCache.ghAvailable,
           })
@@ -5501,6 +5545,7 @@ export class GatewaySession {
   /**
    * Load evolution data synchronously (DB queries are fast)
    */
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   private loadEvolutionData() {
     let stats;
     let traces;
@@ -5711,6 +5756,7 @@ export class GatewaySession {
     }
   ): Promise<void> {
     // Use live SSE connection for all sends in this async method
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const liveSend = () => this.getSend(send);
 
     // Check if another benchmark is running externally (e.g., from CLI)
@@ -5760,6 +5806,7 @@ export class GatewaySession {
     try {
       // Resolve agent config: use override model or default session config
       const agentApiKey = modelConfig?.apiKey || this.config.apiKey;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const agentProvider = (modelConfig?.provider || this.config.provider) as any;
       const agentModelId = modelConfig?.modelId || this.config.modelId;
       const agentBaseUrl = modelConfig?.baseUrl || this.config.baseUrl;
@@ -5786,19 +5833,20 @@ export class GatewaySession {
             dataSource,
             sessionMessages: testCase.sessionMessages,
           });
-          return await withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
+          return withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
         },
         llmCall: async (prompt: string) => {
           // Create fresh judge agent per evaluation for concurrency safety
           const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
           const judgeAgent = await createPHAAgent({
             apiKey: judgeApiKey,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             provider: judgeConfig.provider as any,
             modelId: judgeConfig.modelId,
             baseUrl: judgeBaseUrl,
             dataSource: new JudgeMockDS(),
           });
-          return await withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
+          return withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
         },
         onProgress: (current, total, testCase) => {
           // Update per-run progress file
@@ -5832,7 +5880,7 @@ export class GatewaySession {
             presetName: modelConfig.presetName,
           }
         : undefined;
-      const result = await runner.run({ profile, modelOverride });
+      await runner.run({ profile, modelOverride });
 
       // Refresh evolution page — table will now show completed run
       if (this.currentView === "evolution") {
@@ -5855,6 +5903,7 @@ export class GatewaySession {
   }
 
   private async runDiagnoseAsync(send: (msg: unknown) => void): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const liveSend = () => this.getSend(send);
 
     // Show diagnosing toast
@@ -5863,9 +5912,8 @@ export class GatewaySession {
 
     try {
       const { diagnose } = await import("../evolution/diagnose.js");
-      const { BenchmarkRunner } = await import("../evolution/benchmark-runner.js");
 
-      const agent = await this.getAgent();
+      const _agent = await this.getAgent();
 
       // Create dedicated judge agent for diagnose evaluation
       const djConfig = getJudgeModel();
@@ -5874,6 +5922,7 @@ export class GatewaySession {
       const { MockDataSource: DiagMockDS } = await import("../data-sources/mock.js");
       const diagnoseJudge = await createPHAAgent({
         apiKey: djApiKey,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         provider: djConfig.provider as any,
         modelId: djConfig.modelId,
         baseUrl: djBaseUrl,
@@ -5898,6 +5947,7 @@ export class GatewaySession {
             );
             const testAgent = await createPHAAgent({
               apiKey: djApiKey,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               provider: djConfig.provider as any,
               modelId: djConfig.modelId,
               baseUrl: djBaseUrl,
@@ -5905,15 +5955,11 @@ export class GatewaySession {
               dataSource,
               sessionMessages: testCase.sessionMessages,
             });
-            return await withActivityTimeout(testAgent, () =>
-              testAgent.chatAndWaitWithTools(query)
-            );
+            return withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
           },
           llmCall: async (prompt: string) => {
             if (typeof diagnoseJudge.reset === "function") diagnoseJudge.reset();
-            return await withActivityTimeout(diagnoseJudge, () =>
-              diagnoseJudge.chatAndWait(prompt)
-            );
+            return withActivityTimeout(diagnoseJudge, () => diagnoseJudge.chatAndWait(prompt));
           },
         },
         onProgress: (msg: string) => {
@@ -5961,6 +6007,7 @@ export class GatewaySession {
     encoder: TextEncoder
   ): Promise<void> {
     let streamClosed = false;
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const safeWrite = (data: string) => {
       if (streamClosed) return;
       try {
@@ -5971,14 +6018,18 @@ export class GatewaySession {
         streamClosed = true;
       }
     };
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const safeClose = () => {
       if (streamClosed) return;
       streamClosed = true;
       try {
         writer.close().catch(() => {});
-      } catch {}
+      } catch {
+        // ignore
+      }
     };
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const sseSend = (event: LegacySSEEvent) => {
       safeWrite(`data: ${JSON.stringify(event)}\n\n`);
     };
@@ -6045,6 +6096,7 @@ export class GatewaySession {
     return msg;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private handleAgentEvent(event: any, send: (msg: unknown) => void): void {
     try {
       this._handleAgentEventInner(event, send);
@@ -6053,6 +6105,7 @@ export class GatewaySession {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _handleAgentEventInner(event: any, send: (msg: unknown) => void): void {
     // In AG-UI SSE mode, use the provided send directly (write to SSE writer)
     const activeSend = this._sseMode ? send : this.getSend(send);
@@ -6377,6 +6430,7 @@ export class GatewaySession {
         // Our tool returns { success, details: { dashboardId, ... } }
         // So the dashboard data is at event.result.details.details
         if (event.toolName === "create_dashboard" && !event.isError) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const raw = (event.result as any)?.details;
           const d = raw?.details ?? raw;
           if (d?.dashboardId && d?.sections) {
@@ -6395,6 +6449,7 @@ export class GatewaySession {
           }
         }
         if (event.toolName === "update_dashboard" && !event.isError) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const raw = (event.result as any)?.details;
           const d = raw?.details ?? raw;
           if (d?.dashboardId && this.customDashboards.has(d.dashboardId)) {
@@ -6585,7 +6640,7 @@ export async function startGateway(
     hostname: host,
     port,
     idleTimeout: 255, // SSE streams need long-lived connections (max 255s)
-    async fetch(req, server) {
+    async fetch(req, _server) {
       const url = new URL(req.url);
 
       // AG-UI SSE endpoint
@@ -6675,7 +6730,9 @@ export async function startGateway(
           session.handleLegacyChatSSE(body.message, writer, encoder).catch(() => {
             try {
               writer.close().catch(() => {});
-            } catch {}
+            } catch {
+              // ignore
+            }
           });
 
           return new Response(readable, {
@@ -6767,7 +6824,7 @@ export async function startGateway(
 
       // GET /api/a2ui/events — SSE long-lived connection for push updates
       if (url.pathname === "/api/a2ui/events" && req.method === "GET") {
-        const sessionId = url.searchParams.get("sessionId");
+        const _sessionId = url.searchParams.get("sessionId");
         const userId = extractUserId(req);
         const session = getOrCreateSession(userId);
 
@@ -6844,7 +6901,7 @@ export async function startGateway(
               "Access-Control-Allow-Origin": "*",
             },
           });
-        } catch (e) {
+        } catch (_e) {
           return new Response(
             JSON.stringify({
               jsonrpc: "2.0",
@@ -6884,6 +6941,7 @@ export async function startGateway(
 
             // Use a simple chat-and-wait pattern
             try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const agent = await (session as any).getAgent();
               const result = await agent.chatAndWait(message);
               return result;
@@ -6898,7 +6956,7 @@ export async function startGateway(
               "Access-Control-Allow-Origin": "*",
             },
           });
-        } catch (e) {
+        } catch (_e) {
           return new Response(
             JSON.stringify({
               jsonrpc: "2.0",
@@ -6937,7 +6995,7 @@ export async function startGateway(
           !filePath.startsWith("/health") &&
           !filePath.startsWith("/auth")
         ) {
-          const indexFile = Bun.file(webDir + "/index.html");
+          const indexFile = Bun.file(`${webDir}/index.html`);
           if (await indexFile.exists()) {
             return new Response(indexFile, {
               headers: { "Content-Type": "text/html" },
@@ -6952,10 +7010,10 @@ export async function startGateway(
   });
 
   const displayHost = host === "0.0.0.0" ? "localhost" : host;
-  console.log(`PHA Gateway running at http://${displayHost}:${port}`);
-  console.log(`A2UI SSE at http://${displayHost}:${port}/api/a2ui/events`);
-  console.log(`MCP JSON-RPC at http://${displayHost}:${port}/api/mcp`);
-  console.log(`A2A Agent Card at http://${displayHost}:${port}/.well-known/agent.json`);
+  log.info(`PHA Gateway running at http://${displayHost}:${port}`);
+  log.info(`A2UI SSE at http://${displayHost}:${port}/api/a2ui/events`);
+  log.info(`MCP JSON-RPC at http://${displayHost}:${port}/api/mcp`);
+  log.info(`A2A Agent Card at http://${displayHost}:${port}/.well-known/agent.json`);
 
   // Trigger gateway_start hook
   const hr = getGlobalHookRunner();
@@ -6966,6 +7024,7 @@ export async function startGateway(
   }
 
   // Trigger gateway_stop hook on process exit
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const handleExit = () => {
     const runner = getGlobalHookRunner();
     if (runner) {

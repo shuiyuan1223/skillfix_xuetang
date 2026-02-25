@@ -5,9 +5,14 @@
  */
 
 import { loadConfig } from "../../utils/config.js";
-import { TokenStore, tokenStore as defaultTokenStore } from "./token-store.js";
-import { UserStore, getUserStore } from "./user-store.js";
+import { createLogger } from "../../utils/logger.js";
+import type { TokenStore } from "./token-store.js";
+import { tokenStore as defaultTokenStore } from "./token-store.js";
+import type { UserStore } from "./user-store.js";
+import { getUserStore } from "./user-store.js";
 import type { HuaweiTokenResponse, TokenData } from "./huawei-types.js";
+
+const log = createLogger("Huawei/Auth");
 
 // Huawei OAuth endpoints (defaults, can be overridden in config)
 const DEFAULT_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authorize";
@@ -266,19 +271,16 @@ export class HuaweiAuth {
       try {
         huaweiUserId = decodeIdToken(data.id_token);
       } catch (e) {
-        console.error("[Huawei/Auth] id_token decode failed:", e);
+        log.error("id_token decode failed:", e);
       }
     } else {
-      console.warn(
-        "[Huawei/Auth] Token response has no id_token, keys:",
-        Object.keys(data).join(",")
-      );
+      log.warn("Token response has no id_token, keys:", Object.keys(data).join(","));
     }
     if (!huaweiUserId) {
       try {
         huaweiUserId = await fetchUserInfoSub(tokenData.accessToken);
       } catch (e) {
-        console.error("[Huawei/Auth] UserInfo fallback failed:", e);
+        log.error("UserInfo fallback failed:", e);
       }
     }
 
@@ -402,7 +404,7 @@ async function fetchUserInfoSub(accessToken: string): Promise<string> {
     access_token: accessToken,
   });
 
-  console.log("[Huawei/Auth] Fetching getTokenInfo from:", url);
+  log.info("Fetching getTokenInfo from:", url);
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -410,16 +412,16 @@ async function fetchUserInfoSub(accessToken: string): Promise<string> {
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    console.error("[Huawei/Auth] getTokenInfo failed:", response.status, text.slice(0, 300));
+    log.error("getTokenInfo failed", { status: response.status, body: text.slice(0, 300) });
     throw new Error(`getTokenInfo request failed: ${response.status}`);
   }
   const data = (await response.json()) as Record<string, unknown>;
-  console.log("[Huawei/Auth] getTokenInfo response keys:", Object.keys(data).join(","));
+  log.info("getTokenInfo response keys:", Object.keys(data).join(","));
   const uid = (data.union_id || data.open_id || data.unionID || data.openID || data.sub) as
     | string
     | undefined;
   if (!uid) {
-    console.error("[Huawei/Auth] getTokenInfo has no user ID:", JSON.stringify(data).slice(0, 300));
+    log.error("getTokenInfo has no user ID:", JSON.stringify(data).slice(0, 300));
     throw new Error("getTokenInfo response missing user ID");
   }
   return uid;

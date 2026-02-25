@@ -15,8 +15,11 @@ import { getDataSource } from "../tools/health-data.js";
 import { listPlans, savePlan } from "../plans/store.js";
 import type { HealthPlan, GoalStatus } from "../plans/types.js";
 import { listRecommendations, listReminders, listCalendarEvents } from "../proactive/store.js";
-import { getUserUuid, loadConfig } from "../utils/config.js";
+import { getUserUuid, loadConfig, type PHAConfig } from "../utils/config.js";
 import { loadProfileFromFile } from "../memory/profile.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Agent/HealthContext");
 
 /**
  * @deprecated Health context is no longer injected into the system prompt.
@@ -318,7 +321,7 @@ export async function preComputeHealthContext(
 
     return result;
   } catch (e) {
-    console.warn("[Health Context] Pre-computation failed:", e);
+    log.warn("Pre-computation failed", { error: String(e) });
     return "";
   }
 }
@@ -346,14 +349,14 @@ export async function fetchWeatherContext(userUuid?: string): Promise<string> {
       }
     }
 
-    if (!location) {
-      const config = loadConfig();
-      location = (config as any).context?.location;
-    }
+    const config = loadConfig() as PHAConfig;
+    const contextConfig = config.context;
+    if (!location) location = contextConfig?.location;
 
     if (!location) return "";
 
-    const url = `https://wttr.in/${encodeURIComponent(location)}?format=j1`;
+    const weatherApiBase: string = contextConfig?.weatherApiBaseUrl ?? "https://wttr.in";
+    const url = `${weatherApiBase}/${encodeURIComponent(location)}?format=j1`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
 
@@ -362,6 +365,7 @@ export async function fetchWeatherContext(userUuid?: string): Promise<string> {
 
     if (!resp.ok) return "";
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await resp.json()) as any;
     const current = data?.current_condition?.[0];
     if (!current) return "";

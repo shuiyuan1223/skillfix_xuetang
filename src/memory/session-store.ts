@@ -178,7 +178,7 @@ export function appendToSession(
   }
   const filePath = join(sessionsDir, `${sessionId}.jsonl`);
 
-  const lines = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
+  const lines = `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`;
   appendFileSync(filePath, lines);
 }
 

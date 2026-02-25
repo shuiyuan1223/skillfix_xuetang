@@ -4,11 +4,11 @@
  * Client for calling Huawei Health Kit REST API endpoints.
  */
 
-import { HuaweiAuth, huaweiAuth as defaultAuth } from "./huawei-auth.js";
+import type { HuaweiAuth } from "./huawei-auth.js";
+import { huaweiAuth as defaultAuth } from "./huawei-auth.js";
 import {
   HuaweiDataType,
   type HuaweiPolymerizeResponse,
-  type HuaweiActivityResponse,
   type HuaweiApiError,
 } from "./huawei-types.js";
 import { loadConfig } from "../../utils/config.js";
@@ -260,6 +260,7 @@ export class HuaweiHealthApi {
       return { calories: 0, activeMinutes: 0, steps: 0, distance: 0 };
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
 
     // Parse the value array from dailyActivitySummary response
@@ -316,9 +317,11 @@ export class HuaweiHealthApi {
       await this.handleError(response);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const records = json.data || json.activityRecord || json.activityRecords || [];
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return records.map((record: any) => ({
       id: record.activityId || `activity-${record.startTime}`,
       activityType: record.activityType,
@@ -383,6 +386,7 @@ export class HuaweiHealthApi {
       return { readings: [], avg: 0, max: 0, min: 0 };
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
 
     // Parse response - extract heart rate readings
@@ -466,6 +470,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
 
@@ -544,6 +549,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const readings: Array<{ time: string; value: number }> = [];
 
@@ -637,6 +643,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const readings: Array<{ time: string; value: number }> = [];
 
@@ -753,6 +760,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
 
@@ -780,7 +788,9 @@ export class HuaweiHealthApi {
     }> = [];
 
     for (const record of healthRecords) {
+      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
       const getValue = (fieldName: string) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const field = record.value?.find((v: any) => v.fieldName === fieldName);
         return field?.integerValue ?? field?.longValue ?? field?.floatValue ?? null;
       };
@@ -882,6 +892,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     saveToFileCache("sleep-success", { date }, json);
 
@@ -900,12 +911,17 @@ export class HuaweiHealthApi {
 
     // Filter out naps (sleep_type = 3) and sort by wakeup time (most recent first)
     const normalSleepRecords = healthRecords
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((r: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sleepType = r.value?.find((v: any) => v.fieldName === "sleep_type")?.integerValue;
         return sleepType !== 3; // Exclude naps
       })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .sort((a: any, b: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const timeA = a.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue || 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const timeB = b.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue || 0;
         return timeB - timeA; // Most recent first
       });
@@ -915,7 +931,9 @@ export class HuaweiHealthApi {
     }
 
     // Find the record for the target date, or use the most recent one
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mainRecord = normalSleepRecords.find((r: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wakeupTime = r.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue;
       if (wakeupTime) {
         const wakeupDate = new Date(wakeupTime);
@@ -930,6 +948,7 @@ export class HuaweiHealthApi {
       log.info("No sleep data for requested date, using most recent", {
         requestedDate: date,
         fallbackDate: new Date(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           mainRecord.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue
         )
           .toISOString()
@@ -938,7 +957,9 @@ export class HuaweiHealthApi {
     }
 
     // Extract sleep record values
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const getValue = (fieldName: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const field = mainRecord.value?.find((v: any) => v.fieldName === fieldName);
       return field?.integerValue ?? field?.longValue ?? null;
     };
@@ -966,6 +987,7 @@ export class HuaweiHealthApi {
         if (end > 1e15) end = Math.floor(end / 1e6);
 
         const sleepState =
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           point.value?.find((v: any) => v.fieldName === "sleep_state")?.integerValue || 0;
 
         if (start && end && sleepState) {
@@ -1048,6 +1070,7 @@ export class HuaweiHealthApi {
       return [];
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const healthRecords = json.healthRecords || [];
 
@@ -1056,14 +1079,18 @@ export class HuaweiHealthApi {
 
     for (const record of healthRecords) {
       // Skip naps (sleep_type = 3)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sleepType = record.value?.find((v: any) => v.fieldName === "sleep_type")?.integerValue;
       if (sleepType === 3) continue;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wakeupTime = record.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue;
       const allSleepTime = record.value?.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (v: any) => v.fieldName === "all_sleep_time"
       )?.integerValue;
       const sleepScore = record.value?.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (v: any) => v.fieldName === "sleep_score"
       )?.integerValue;
 
@@ -1151,6 +1178,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const readings: Array<{ time: string; systolic: number; diastolic: number; pulse?: number }> =
       [];
@@ -1261,6 +1289,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const readings: Array<{ time: string; value: number }> = [];
 
@@ -1360,6 +1389,7 @@ export class HuaweiHealthApi {
       res: Response | null
     ): Promise<{ weight?: number; bmi?: number; bodyFatRate?: number; date?: string } | null> => {
       if (!res || !res.ok) return null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const json = (await res.json()) as any;
       let latest: { weight?: number; bmi?: number; bodyFatRate?: number; date?: string } | null =
         null;
@@ -1399,6 +1429,7 @@ export class HuaweiHealthApi {
     // Extract height — API returns in meters (range 0.4-2.6), convert to cm
     const extractHeight = async (res: Response | null): Promise<number | null> => {
       if (!res || !res.ok) return null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const json = (await res.json()) as any;
       let latestHeight: number | null = null;
       const groups = json.group || [];
@@ -1516,6 +1547,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const readings: Array<{ time: string; value: number }> = [];
 
@@ -1613,6 +1645,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const healthRecords = json.healthRecords || [];
 
@@ -1629,7 +1662,9 @@ export class HuaweiHealthApi {
     let water: number | undefined;
 
     for (const record of healthRecords) {
+      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
       const getValue = (fieldName: string) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const field = record.value?.find((v: any) => v.fieldName === fieldName);
         return field?.floatValue ?? field?.integerValue ?? field?.longValue ?? null;
       };
@@ -1733,6 +1768,7 @@ export class HuaweiHealthApi {
     // Parse menstrual_flow response — records with flow volume indicate period days
     const flowRes = responses[0];
     if (flowRes && flowRes.ok) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const json = (await flowRes.json()) as any;
       const groups = json.group || [];
       for (const group of groups) {
@@ -1840,6 +1876,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     let latestValue = 0;
 
@@ -1923,6 +1960,7 @@ export class HuaweiHealthApi {
 
       if (!response.ok) continue;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const json = (await response.json()) as any;
       const readings: Array<{ time: string; value: number }> = [];
 
@@ -2026,6 +2064,7 @@ export class HuaweiHealthApi {
       return null;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await response.json()) as any;
     const readings: Array<{ time: string; emotion: string; score: number }> = [];
 
@@ -2131,6 +2170,7 @@ export class HuaweiHealthApi {
           continue;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const json = (await response.json()) as any;
         const groups = json.group || [];
 
@@ -2151,7 +2191,7 @@ export class HuaweiHealthApi {
                 if (v.fieldName) {
                   dayValues[v.fieldName] = (dayValues[v.fieldName] || 0) + val;
                 } else {
-                  dayValues["value"] = (dayValues["value"] || 0) + val;
+                  dayValues.value = (dayValues.value || 0) + val;
                 }
               }
             }

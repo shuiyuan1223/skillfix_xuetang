@@ -48,13 +48,11 @@ interface UpdateDashboardArgs {
 const createDashboardTool: PHATool<CreateDashboardArgs> = {
   name: "create_dashboard",
   description:
-    "创建自定义仪表盘页面。仪表盘由多个 section 组成，每个 section 包含若干 widget。" +
-    "可用 widget 类型：stat_row（指标卡片行）、line_chart（折线图）、bar_chart（柱状图）、progress_tracker（进度条，下降目标需设baseline）、" +
-    "data_table（数据表格）、text_block（文本块）、milestone_timeline（里程碑时间线）、metric_grid（指标网格）、" +
-    "score_gauge（环形评分）、activity_rings（活动环）、radar_chart（雷达图）。" +
-    "创建后侧边栏「实验」页面会自动出现 tab。每个会话最多 " +
-    MAX_DASHBOARDS_PER_SESSION +
-    " 个。",
+    `创建自定义仪表盘页面。仪表盘由多个 section 组成，每个 section 包含若干 widget。` +
+    `可用 widget 类型：stat_row（指标卡片行）、line_chart（折线图）、bar_chart（柱状图）、progress_tracker（进度条，下降目标需设baseline）、` +
+    `data_table（数据表格）、text_block（文本块）、milestone_timeline（里程碑时间线）、metric_grid（指标网格）、` +
+    `score_gauge（环形评分）、activity_rings（活动环）、radar_chart（雷达图）。` +
+    `创建后侧边栏「实验」页面会自动出现 tab。每个会话最多 ${MAX_DASHBOARDS_PER_SESSION} 个。`,
   displayName: "创建仪表盘",
   category: "presentation",
   icon: "activity",
@@ -124,6 +122,7 @@ const createDashboardTool: PHATool<CreateDashboardArgs> = {
       }
     }
 
+    // eslint-disable-next-line no-restricted-syntax
     const dashboardId = `dash_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const totalWidgets = args.sections.reduce((sum, s) => sum + s.widgets.length, 0);
 

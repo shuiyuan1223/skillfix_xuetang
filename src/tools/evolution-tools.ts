@@ -25,8 +25,18 @@ import {
   updateSuggestionStatus,
 } from "../memory/db.js";
 import { BenchmarkRunner, type BenchmarkRunnerConfig } from "../evolution/benchmark-runner.js";
-import { diagnose, type DiagnoseResult } from "../evolution/diagnose.js";
-import type { BenchmarkProfile, BenchmarkCategory } from "../evolution/types.js";
+import {
+  diagnose,
+  type DiagnoseResult,
+  type ExistingBenchmarkData,
+} from "../evolution/diagnose.js";
+import type {
+  BenchmarkProfile,
+  BenchmarkCategory,
+  BenchmarkRun,
+  BenchmarkResult,
+  CategoryScore,
+} from "../evolution/types.js";
 import { appendEvolutionLog } from "./system-memory-tools.js";
 import type { PHATool } from "./types.js";
 
@@ -893,7 +903,7 @@ export const runDiagnoseTool: PHATool<{
     const profile = (args?.profile || "quick") as BenchmarkProfile;
 
     // If runId provided, load existing benchmark data from DB
-    let existingBenchmark: import("../evolution/diagnose.js").ExistingBenchmarkData | undefined;
+    let existingBenchmark: ExistingBenchmarkData | undefined;
     if (args?.runId) {
       const {
         getBenchmarkRun,
@@ -909,7 +919,7 @@ export const runDiagnoseTool: PHATool<{
       const resultRows = listBR({ runId: args.runId });
       const categoryRows = listCS(args.runId);
 
-      const run: import("../evolution/types.js").BenchmarkRun = {
+      const run: BenchmarkRun = {
         id: runRow.id,
         timestamp: runRow.timestamp,
         versionTag: runRow.version_tag ?? undefined,
@@ -924,7 +934,7 @@ export const runDiagnoseTool: PHATool<{
         metadata: runRow.metadata ? JSON.parse(runRow.metadata) : undefined,
       };
 
-      const results: import("../evolution/types.js").BenchmarkResult[] = resultRows.map((r) => ({
+      const results: BenchmarkResult[] = resultRows.map((r) => ({
         id: r.id,
         runId: r.run_id,
         testCaseId: r.test_case_id,
@@ -939,8 +949,8 @@ export const runDiagnoseTool: PHATool<{
         durationMs: r.duration_ms ?? 0,
       }));
 
-      type BC = import("../evolution/types.js").BenchmarkCategory;
-      type CS = import("../evolution/types.js").CategoryScore;
+      type BC = BenchmarkCategory;
+      type CS = CategoryScore;
       const categoryScores = new Map<BC, CS>();
       for (const row of categoryRows) {
         if (!row.subcategory) {
@@ -983,10 +993,11 @@ export const runDiagnoseTool: PHATool<{
         result.dataGaps.length > 0 ? `Data Gaps: ${result.dataGaps.length} issues found` : "";
       appendEvolutionLog(
         `**Diagnose Result**\n` +
-          `Overall: ${result.overallScore.toFixed(3)} | ${result.run.passedCount}/${result.run.totalTestCases} passed\n` +
-          (weakSummary ? `Weaknesses:\n${weakSummary}\n` : "") +
-          (sugSummary ? `Top Suggestions:\n${sugSummary}\n` : "") +
-          (gapSummary ? `${gapSummary}\n` : "")
+          `Overall: ${result.overallScore.toFixed(3)} | ${result.run.passedCount}/${result.run.totalTestCases} passed\n${
+            weakSummary ? `Weaknesses:\n${weakSummary}\n` : ""
+          }${
+            sugSummary ? `Top Suggestions:\n${sugSummary}\n` : ""
+          }${gapSummary ? `${gapSummary}\n` : ""}`
       );
     } catch {
       /* best-effort logging */

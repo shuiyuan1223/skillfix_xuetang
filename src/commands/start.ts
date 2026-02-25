@@ -163,7 +163,7 @@ export function registerStartCommand(program: Command): void {
         await startGateway({
           host,
           port,
-          provider: (agentModel?.provider || config.llm.provider) as any,
+          provider: (agentModel?.provider || config.llm.provider) as LLMProvider,
           modelId: agentModel?.modelId || config.llm.modelId,
           baseUrl: agentModel?.baseUrl || config.llm.baseUrl,
           apiKey,
@@ -277,7 +277,7 @@ export function registerStartCommand(program: Command): void {
 
             if (attempts >= maxAttempts && isRunning(pid)) {
               spinner.stop("warning");
-              warn("Process may still be running, force kill with: kill -9 " + pid);
+              warn(`Process may still be running, force kill with: kill -9 ${pid}`);
             } else {
               spinner.stop("success");
               success("PHA stopped");
@@ -323,10 +323,14 @@ export function registerStartCommand(program: Command): void {
           if (isRunning(pid)) {
             try {
               process.kill(pid, "SIGKILL");
-            } catch {}
+            } catch {
+              // ignore
+            }
             await new Promise((r) => setTimeout(r, 500));
           }
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
 
       // Clean up PID file
@@ -344,7 +348,9 @@ export function registerStartCommand(program: Command): void {
             if (n > 0) {
               try {
                 process.kill(n, "SIGKILL");
-              } catch {}
+              } catch {
+                // ignore
+              }
             }
           }
           // Wait for port release

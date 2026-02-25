@@ -223,9 +223,9 @@ export function loadMemorySummary(uuid: string, maxChars = 12000): string | null
   const recentLogs = getRecentDailyLogs(uuid, 3);
   let dailyLogSection = "";
   if (recentLogs.length > 0) {
-    dailyLogSection =
-      "\n\n## Recent Daily Logs\n\n" +
-      recentLogs.map((l) => `- **${l.date}**: ${l.preview}`).join("\n");
+    dailyLogSection = `\n\n## Recent Daily Logs\n\n${recentLogs
+      .map((l) => `- **${l.date}**: ${l.preview}`)
+      .join("\n")}`;
   }
 
   // If everything fits, return as-is
@@ -239,7 +239,7 @@ export function loadMemorySummary(uuid: string, maxChars = 12000): string | null
   if (sections.length <= 1) {
     // No sections to split — fall back to tail truncation
     const budget = maxChars - dailyLogSection.length;
-    return "[Earlier memories truncated]\n\n" + full.slice(-budget) + dailyLogSection;
+    return `[Earlier memories truncated]\n\n${full.slice(-budget)}${dailyLogSection}`;
   }
 
   // Always keep first section (title/header)
@@ -256,7 +256,7 @@ export function loadMemorySummary(uuid: string, maxChars = 12000): string | null
       budget -= sections[i].length;
     } else if (budget > 200) {
       // Partial section: keep the beginning with marker
-      kept.unshift(sections[i].slice(0, budget) + "\n...");
+      kept.unshift(`${sections[i].slice(0, budget)}\n...`);
       budget = 0;
       truncatedCount += i; // all remaining sections are truncated
       break;
@@ -317,7 +317,7 @@ export function appendToMemory(uuid: string, content: string): void {
     existing = "# 健康记忆\n\n";
   }
 
-  const updated = existing + "\n" + content;
+  const updated = `${existing}\n${content}`;
   writeFileSync(memoryPath, updated);
 }
 
@@ -337,7 +337,7 @@ export function appendToDailyLog(uuid: string, content: string): void {
   }
 
   const time = new Date().toTimeString().slice(0, 5);
-  const updated = existing + `\n## ${time}\n\n${content}\n`;
+  const updated = `${existing}\n## ${time}\n\n${content}\n`;
   writeFileSync(logPath, updated);
 }
 
@@ -386,7 +386,7 @@ function parseProfileMd(content: string): UserProfile {
   // Birth year
   const birthMatch = content.match(/出生年份:\s*(\d{4})/);
   if (birthMatch) {
-    profile.birthYear = parseInt(birthMatch[1]);
+    profile.birthYear = parseInt(birthMatch[1], 10);
   }
 
   // Height
@@ -423,21 +423,21 @@ function parseProfileMd(content: string): UserProfile {
   const stepsMatch = content.match(/每日步数(?:目标)?:\s*(\d+)/);
   if (stepsMatch) {
     profile.goals = profile.goals || {};
-    profile.goals.dailySteps = parseInt(stepsMatch[1]);
+    profile.goals.dailySteps = parseInt(stepsMatch[1], 10);
   }
 
   // Sleep hours goal (supports both "睡眠时长" and legacy "睡眠时长目标")
   const sleepMatch = content.match(/睡眠时长(?:目标)?:\s*(\d+)/);
   if (sleepMatch) {
     profile.goals = profile.goals || {};
-    profile.goals.sleepHours = parseInt(sleepMatch[1]);
+    profile.goals.sleepHours = parseInt(sleepMatch[1], 10);
   }
 
   // Exercise per week goal (supports both "运动频率" and legacy "运动频率目标")
   const exerciseMatch = content.match(/运动频率(?:目标)?:\s*每周(\d+)/);
   if (exerciseMatch) {
     profile.goals = profile.goals || {};
-    profile.goals.exercisePerWeek = parseInt(exerciseMatch[1]);
+    profile.goals.exercisePerWeek = parseInt(exerciseMatch[1], 10);
   }
 
   // Primary goal

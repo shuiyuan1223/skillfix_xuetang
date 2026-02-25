@@ -96,7 +96,7 @@ export function withProp(c: A2UIComponent, key: string, value: unknown): A2UICom
 
 // ==================== Component Name Mapping ====================
 
-const TYPE_TO_PASCAL: Record<string, string> = {
+const _TYPE_TO_PASCAL: Record<string, string> = {
   text: "Text",
   button: "Button",
   column: "Column",

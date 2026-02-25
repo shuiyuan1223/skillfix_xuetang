@@ -14,6 +14,9 @@ import {
   clearTraces,
   type TraceRow,
 } from "../memory/db.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("TraceCollector");
 
 /**
  * Convert database row to Trace object
@@ -107,7 +110,7 @@ export class TraceCollector {
         tokenUsage: trace.tokenUsage,
       });
     } catch (error) {
-      console.error("Failed to persist trace:", error);
+      log.error("Failed to persist trace:", error);
     }
 
     // Remove from active traces
@@ -189,7 +192,7 @@ export class TraceCollector {
         });
       } catch (error) {
         // Skip duplicates
-        console.warn(`Skipping trace ${trace.id}:`, error);
+        log.warn(`Skipping trace ${trace.id}:`, error);
       }
     }
   }

@@ -306,7 +306,7 @@ export const getHealthTrendsTool: PHATool<{ period: string; metrics?: string }> 
     required: ["period"],
   },
   execute: async (args: { period: string; metrics?: string }) => {
-    const days = parseInt(args.period) || 30;
+    const days = parseInt(args.period, 10) || 30;
     const cappedDays = Math.min(days, 730); // Cap at 2 years
 
     const requestedMetrics = args.metrics
@@ -782,6 +782,7 @@ export const healthTools = [
 /**
  * Create health tools bound to a specific data source (for per-session isolation).
  */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export function createHealthTools(source: HealthDataSource) {
   return {
     getHealthData: {

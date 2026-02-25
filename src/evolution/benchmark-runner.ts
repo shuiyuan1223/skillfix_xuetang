@@ -28,7 +28,7 @@ import {
   listBenchmarkResults,
   listCategoryScores,
 } from "../memory/db.js";
-import type { BenchmarkRunRow, BenchmarkResultRow, CategoryScoreRow } from "../memory/db.js";
+import type { BenchmarkRunRow, BenchmarkResultRow } from "../memory/db.js";
 import { getBenchmarkTests, ALL_BENCHMARK_TESTS, loadSharpRubrics } from "./benchmark-seed.js";
 import { loadConfig, getStateDir } from "../utils/config.js";
 import { aggregateByCategory, computeOverallScore } from "./category-scorer.js";
@@ -89,8 +89,8 @@ The agent has access to the following user profile and memory. Data from these s
 Nickname: ${p.nickname || "N/A"}
 Age: ${age} (birthYear: ${p.birthYear || "N/A"})
 Gender: ${p.gender || "N/A"}
-Height: ${p.height ? p.height + "cm" : "N/A"}
-Weight: ${p.weight ? p.weight + "kg" : "N/A"}
+Height: ${p.height ? `${p.height}cm` : "N/A"}
+Weight: ${p.weight ? `${p.weight}kg` : "N/A"}
 Goal: ${p.goals?.primary || "N/A"}
 
 **Memory:**
@@ -524,7 +524,7 @@ export class BenchmarkRunner {
             feedback: r.feedback,
             issues: r.issues,
           };
-          const fileName = r.testCaseId.replace(/[^a-zA-Z0-9_-]/g, "_") + ".json";
+          const fileName = `${r.testCaseId.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
           writeFileSync(join(failedDir, fileName), JSON.stringify(failedDetail, null, 2));
         }
       }
@@ -673,6 +673,7 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
         }
 
         // Normalize ratings
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ratings: SharpRating[] = parsed.ratings.map((r: any) => {
           const scoringType = this.getScoringType(rubrics, r.category, r.sub_component);
           const score = this.normalizeScore(r.score, scoringType);

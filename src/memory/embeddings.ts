@@ -114,7 +114,9 @@ export function resolveEmbeddingApiKey(): string | undefined {
   try {
     const resolved = resolveEmbeddingModelFromConfig();
     if (resolved) return resolved.apiKey;
-  } catch {}
+  } catch {
+    // ignore
+  }
 
   // Legacy fallback
   if (process.env.OPENROUTER_API_KEY) {
@@ -128,7 +130,9 @@ export function resolveEmbeddingApiKey(): string | undefined {
     if (phaConfig.llm.apiKey) {
       return phaConfig.llm.apiKey;
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
   return undefined;
 }
 
@@ -139,7 +143,9 @@ export function resolveEmbeddingModel(): string {
   try {
     const resolved = resolveEmbeddingModelFromConfig();
     if (resolved) return resolved.modelId;
-  } catch {}
+  } catch {
+    // ignore
+  }
 
   try {
     const phaConfig = loadConfig();
@@ -156,13 +162,17 @@ export function resolveEmbeddingBaseUrl(): string {
   try {
     const resolved = resolveEmbeddingModelFromConfig();
     if (resolved?.baseUrl) return resolved.baseUrl;
-  } catch {}
+  } catch {
+    // ignore
+  }
 
   try {
     const phaConfig = loadConfig();
     if (phaConfig.llm.provider === "openrouter" && phaConfig.llm.baseUrl) {
       return phaConfig.llm.baseUrl;
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
   return "https://openrouter.ai/api/v1";
 }

@@ -15,7 +15,6 @@ import {
   PROVIDER_CONFIGS,
   type LLMProvider,
   type PHAConfig,
-  type EmbeddingConfig,
 } from "../utils/config.js";
 import { c, icons } from "../utils/cli-ui.js";
 import { HuaweiAuth, tokenStore } from "../data-sources/huawei/index.js";
@@ -79,7 +78,7 @@ async function setupHuaweiHealth(config: PHAConfig): Promise<boolean> {
         p.log.success("Already authorized");
         return true;
       }
-      return await authorizeHuawei(config);
+      return authorizeHuawei(config);
     }
   }
 
@@ -114,7 +113,7 @@ async function setupHuaweiHealth(config: PHAConfig): Promise<boolean> {
   };
   p.log.success("Credentials saved");
 
-  return await authorizeHuawei(config);
+  return authorizeHuawei(config);
 }
 
 /**

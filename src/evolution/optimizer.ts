@@ -5,6 +5,9 @@
  */
 
 import type { AnalysisResult, OptimizationSuggestion } from "./types.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Optimizer");
 
 const OPTIMIZATION_PROMPT = `You are an AI system improvement specialist. Based on the analysis of a health assistant's performance, suggest specific improvements.
 
@@ -101,7 +104,7 @@ export class Optimizer {
 
       return suggestions;
     } catch (error) {
-      console.error("Failed to parse optimization suggestions:", error);
+      log.error("Failed to parse optimization suggestions:", error);
       return [];
     }
   }
@@ -153,7 +156,7 @@ export class Optimizer {
       newPrompt = newPrompt.replace(suggestion.currentValue, suggestion.suggestedValue);
     } else {
       // Append new text
-      newPrompt += "\n\n" + suggestion.suggestedValue;
+      newPrompt += `\n\n${suggestion.suggestedValue}`;
     }
 
     suggestion.status = "applied";

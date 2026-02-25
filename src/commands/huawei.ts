@@ -127,9 +127,7 @@ async function setupCredentials(): Promise<void> {
     }
 
     // Optional: redirect URI
-    console.log(
-      `\n  ${c.dim("Redirect URI (press Enter for default: " + DEFAULT_REDIRECT_URI + ")")}`
-    );
+    console.log(`\n  ${c.dim(`Redirect URI (press Enter for default: ${DEFAULT_REDIRECT_URI})`)}`);
     const redirectUri = await question(`  ${c.cyan("Redirect URI")}: `);
 
     // Save to config
@@ -175,7 +173,7 @@ async function authorizeAccess(redirectUri: string): Promise<void> {
   ${c.dim("Step 2:")} Log in with your Huawei account and authorize the app
 
   ${c.dim("Step 3:")} After authorization, you'll be redirected to:")}
-  ${c.dim(redirectUri + "?code=AUTHORIZATION_CODE")}
+  ${c.dim(`${redirectUri}?code=AUTHORIZATION_CODE`)}
 
   ${c.dim("Step 4:")} Copy the code from the URL and paste it below
 `);

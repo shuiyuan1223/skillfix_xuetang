@@ -12,13 +12,7 @@
  * 8. Repeat
  */
 
-import type {
-  AutoLoopConfig,
-  BenchmarkCategory,
-  BenchmarkResult,
-  BenchmarkRun,
-  CategoryScore,
-} from "./types.js";
+import type { AutoLoopConfig, BenchmarkCategory, BenchmarkRun, CategoryScore } from "./types.js";
 import { BenchmarkRunner, type BenchmarkRunnerConfig } from "./benchmark-runner.js";
 import {
   identifyWeakCategories,
@@ -32,12 +26,8 @@ import {
   readSkillFiles,
   type OptimizationContext,
 } from "./claude-code-optimizer.js";
-import { createNextVersion, removeWorktree, type VersionInfo } from "./version-manager.js";
-import {
-  insertEvolutionVersion,
-  updateEvolutionVersion,
-  getEvolutionVersionByBranch,
-} from "../memory/db.js";
+import { createNextVersion, type VersionInfo } from "./version-manager.js";
+import { updateEvolutionVersion, getEvolutionVersionByBranch } from "../memory/db.js";
 
 export interface AutoLoopCallbacks {
   onIterationStart?: (iteration: number, maxIterations: number) => void;

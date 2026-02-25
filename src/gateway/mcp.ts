@@ -79,7 +79,9 @@ export class MCPHandler {
         description: d.description,
         inputSchema: {
           type: "object" as const,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           properties: (d.inputSchema as any)?.properties || {},
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           required: (d.inputSchema as any)?.required,
         },
       }));

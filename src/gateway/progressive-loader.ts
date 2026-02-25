@@ -5,7 +5,6 @@
  * AgentOS: All UI updates are sent via A2UI messages through WebSocket.
  */
 
-import type { A2UIMessage } from "./a2ui.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import { generateDashboardPage, type DashboardData, type TabId } from "./dashboard-pages.js";
 import { generateSidebar } from "./pages.js";
@@ -75,7 +74,7 @@ function getGroupsForTab(tab: TabId, ds: HealthDataSource, today: string): LoadG
         })()
       );
       groups.push({
-        label: t("activity.steps") + " & " + t("health.heartRate"),
+        label: `${t("activity.steps")} & ${t("health.heartRate")}`,
         fetchers: [
           async () => {
             const metrics = await ds.getMetrics(today);
@@ -111,7 +110,7 @@ function getGroupsForTab(tab: TabId, ds: HealthDataSource, today: string): LoadG
         ],
       });
       groups.push({
-        label: t("dashboard.tabSleep") + " & " + t("dashboard.tabBody"),
+        label: `${t("dashboard.tabSleep")} & ${t("dashboard.tabBody")}`,
         fetchers: [
           async () => ({ sleep: await ds.getSleep(today) }),
           async () => ({ bodyComposition: (await ds.getBodyComposition?.(today)) ?? null }),
@@ -422,7 +421,7 @@ function parseDays(range: string): number {
   const match = range.match(/^(\d+)([dwmy])$/);
   if (!match) return 30;
   const [, numStr, unit] = match;
-  const num = parseInt(numStr);
+  const num = parseInt(numStr, 10);
   switch (unit) {
     case "d":
       return num;

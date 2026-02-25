@@ -12,12 +12,6 @@ import { t } from "../locales/index.js";
 // Types
 // ============================================================================
 
-interface EvoChatMessage {
-  role: "user" | "assistant" | "tool";
-  content: string;
-  cards?: { components: unknown[]; root_id: string };
-}
-
 export interface PipelineStep {
   id: string;
   label: string;
@@ -248,67 +242,6 @@ function formatModelDisplay(presetName?: string, modelId?: string): string {
   return shortModel;
 }
 
-function getScoreColor(score: number): string {
-  if (score >= 0.9) return "#4ade80";
-  if (score >= 0.7) return "#fbbf24";
-  return "#f87171";
-}
-
-/**
- * Build multiSeries radar data from comparison runs.
- * categories mode: 5 SHARP data points per series.
- * criteria mode: all sub-component data points per series.
- */
-function buildMultiSeriesRadarData(
-  comparisonRuns: ComparisonRun[],
-  mode: "categories" | "criteria"
-): Array<{
-  label: string;
-  data: Array<{ label: string; value: number; maxValue: number }>;
-  color: string;
-}> {
-  if (mode === "categories") {
-    return comparisonRuns.map((run) => ({
-      label: run.label,
-      color: run.color,
-      data: run.categoryScores.map((cs) => ({
-        label: getCategoryLabel(cs.category),
-        value: Math.round((cs.score <= 1.0 ? cs.score : cs.score / 100) * 100),
-        maxValue: 100,
-      })),
-    }));
-  }
-  // criteria mode: collect all sub-components in fixed order
-  // Use first run's category order and sub-component order as reference
-  const ref = comparisonRuns[0];
-  const criteriaOrder: Array<{ category: string; name: string }> = [];
-  for (const cs of ref.categoryScores) {
-    if (cs.subComponents) {
-      for (const sub of cs.subComponents) {
-        criteriaOrder.push({ category: cs.category, name: sub.name });
-      }
-    }
-  }
-  if (criteriaOrder.length === 0) {
-    // Fallback to categories mode if no sub-components
-    return buildMultiSeriesRadarData(comparisonRuns, "categories");
-  }
-  return comparisonRuns.map((run) => ({
-    label: run.label,
-    color: run.color,
-    data: criteriaOrder.map((cr) => {
-      const cat = run.categoryScores.find((cs) => cs.category === cr.category);
-      const sub = cat?.subComponents?.find((s) => s.name === cr.name);
-      const score = sub ? sub.score : 0;
-      return {
-        label: cr.name.length > 14 ? cr.name.slice(0, 12) + ".." : cr.name,
-        value: Math.round(score * 100),
-        maxValue: 100,
-      };
-    }),
-  }));
-}
-
 /**
  * Build Recharts-compatible radar chart data from comparison runs.
  * Returns { data: [{subject, seriesKey1, seriesKey2, ...}], series: [{key, name, color}] }
@@ -442,16 +375,16 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
   const tabContentIds: Record<string, string> = {};
 
   if (data.activeTab === "overview") {
-    tabContentIds["overview"] = generateOverviewTab(ui, data);
+    tabContentIds.overview = generateOverviewTab(ui, data);
   }
   if (data.activeTab === "benchmark") {
-    tabContentIds["benchmark"] = generateBenchmarkTab(ui, data);
+    tabContentIds.benchmark = generateBenchmarkTab(ui, data);
   }
   if (data.activeTab === "versions") {
-    tabContentIds["versions"] = generateVersionsTab(ui, data);
+    tabContentIds.versions = generateVersionsTab(ui, data);
   }
   if (data.activeTab === "data") {
-    tabContentIds["data"] = generateDataTab(ui, data);
+    tabContentIds.data = generateDataTab(ui, data);
   }
   // ---- Tabs ----
   const tabs = ui.tabs(
@@ -470,6 +403,7 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
     gap: 12,
     padding: 16,
     className: "relative min-h-full",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
   return ui.build(root);
@@ -691,16 +625,19 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       const scoreCardId = ui.column([scoreTitleId, scoreTableId], {
         gap: 8,
         className: "arena-card",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
 
       // Dashboard grid (radar chart + scores side by side)
       const radarCardId = ui.column([radarId], {
         gap: 8,
         className: "arena-card",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
       const dashGridId = ui.column([radarCardId, scoreCardId], {
         gap: 24,
         style: "display: grid; grid-template-columns: 1.2fr 0.8fr;",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
       arenaChildren.push(dashGridId);
 
@@ -738,6 +675,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
           const breakdownGridId = ui.column(breakdownCards, {
             gap: 20,
             style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any);
           arenaChildren.push(breakdownGridId);
         }
@@ -786,6 +724,7 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
     arenaChildren.push(runsLabel, runsTable);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     children.push(ui.card(arenaChildren, { padding: 16, className: "arena-section" } as any));
   } else {
     const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
@@ -833,6 +772,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     icon: "play",
     tooltip: t("evolution.runQuickBenchmark"),
     payload: { profile: "quick" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   const fullBtn = ui.button("", "run_benchmark", {
     variant: "primary",
@@ -840,12 +780,14 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     icon: "zap",
     tooltip: t("evolution.runFullBenchmark"),
     payload: { profile: "full" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   const addTestBtn = ui.button("", "create_test_case", {
     variant: "outline",
     size: "sm",
     icon: "sparkles",
     tooltip: t("evolution.addTestCase"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   children.push(
     ui.row([tabTitle, ui.row([addTestBtn, quickBtn, fullBtn], { gap: 6 })], {
@@ -880,8 +822,10 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     const sharpGrid = ui.column(sharpCards, {
       gap: 16,
       style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     children.push(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ui.card([sharpTitle, sharpGrid], { padding: 16, className: "arena-section" } as any)
     );
   }
@@ -973,6 +917,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       icon: "refresh-cw",
       tooltip: t("evolution.resetToMain"),
       payload: { branch: null },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any);
     headerRight.push(resetBtn);
   }
@@ -1144,6 +1089,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   const twoCol = ui.row([leftPanel, rightPanel], {
     gap: 16,
     style: "align-items: flex-start;",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
   children.push(twoCol);

@@ -24,8 +24,10 @@ import type {
   EmotionData,
   HRVData,
 } from "../interface.js";
-import { HuaweiHealthApi, huaweiHealthApi, createHuaweiHealthApiForUser } from "./huawei-api.js";
-import { HuaweiAuth, huaweiAuth } from "./huawei-auth.js";
+import type { HuaweiHealthApi } from "./huawei-api.js";
+import { huaweiHealthApi, createHuaweiHealthApiForUser } from "./huawei-api.js";
+import type { HuaweiAuth } from "./huawei-auth.js";
+import { huaweiAuth } from "./huawei-auth.js";
 import { mapActivityType } from "./huawei-types.js";
 import { getUserStore } from "./user-store.js";
 import { createLogger } from "../../utils/logger.js";
@@ -567,6 +569,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       ]);
 
       // Build lookup maps — sum all field values since fieldName varies by data type
+      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
       const sumValues = (vals: Record<string, number>) =>
         Object.values(vals).reduce((a, b) => a + b, 0);
       const stepsMap = new Map(stepsData.map((d) => [d.date, sumValues(d.values)]));
@@ -671,9 +674,9 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       // With groupByTime, each entry has daily aggregated HR values
       return data.map((d) => ({
         date: d.date,
-        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
-        max: Math.round(d.values["max"] || d.values["value"] || 0),
-        min: Math.round(d.values["min"] || d.values["value"] || 0),
+        avg: Math.round(d.values.value || d.values.avg || 0),
+        max: Math.round(d.values.max || d.values.value || 0),
+        min: Math.round(d.values.min || d.values.value || 0),
       }));
     } catch (error) {
       log.warn("Failed to fetch heart rate range with groupByTime", error);
@@ -703,9 +706,9 @@ export class HuaweiHealthDataSource implements HealthDataSource {
 
       return data.map((d) => ({
         date: d.date,
-        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
-        max: Math.round(d.values["max"] || d.values["value"] || 0),
-        min: Math.round(d.values["min"] || d.values["value"] || 0),
+        avg: Math.round(d.values.value || d.values.avg || 0),
+        max: Math.round(d.values.max || d.values.value || 0),
+        min: Math.round(d.values.min || d.values.value || 0),
       }));
     } catch (error) {
       log.warn("Failed to fetch stress range", error);
@@ -735,9 +738,9 @@ export class HuaweiHealthDataSource implements HealthDataSource {
 
       return data.map((d) => ({
         date: d.date,
-        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
-        max: Math.round(d.values["max"] || Math.min(100, (d.values["value"] || 0) + 1)),
-        min: Math.round(d.values["min"] || Math.max(0, (d.values["value"] || 0) - 2)),
+        avg: Math.round(d.values.value || d.values.avg || 0),
+        max: Math.round(d.values.max || Math.min(100, (d.values.value || 0) + 1)),
+        min: Math.round(d.values.min || Math.max(0, (d.values.value || 0) - 2)),
       }));
     } catch (error) {
       log.warn("Failed to fetch SpO2 range", error);
@@ -768,8 +771,8 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       return data
         .map((d) => ({
           date: d.date,
-          avgSystolic: Math.round(d.values["systolic_pressure"] || d.values["value"] || 0),
-          avgDiastolic: Math.round(d.values["diastolic_pressure"] || 0),
+          avgSystolic: Math.round(d.values.systolic_pressure || d.values.value || 0),
+          avgDiastolic: Math.round(d.values.diastolic_pressure || 0),
         }))
         .filter((d) => d.avgSystolic > 0);
     } catch (error) {
@@ -801,14 +804,14 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       return data
         .map((d) => ({
           date: d.date,
-          weight: d.values["body_weight"]
-            ? Math.round(d.values["body_weight"] * 10) / 10
-            : d.values["value"]
-              ? Math.round(d.values["value"] * 10) / 10
+          weight: d.values.body_weight
+            ? Math.round(d.values.body_weight * 10) / 10
+            : d.values.value
+              ? Math.round(d.values.value * 10) / 10
               : undefined,
-          bmi: d.values["bmi"] ? Math.round(d.values["bmi"] * 10) / 10 : undefined,
-          bodyFatRate: d.values["body_fat_rate"]
-            ? Math.round(d.values["body_fat_rate"] * 10) / 10
+          bmi: d.values.bmi ? Math.round(d.values.bmi * 10) / 10 : undefined,
+          bodyFatRate: d.values.body_fat_rate
+            ? Math.round(d.values.body_fat_rate * 10) / 10
             : undefined,
         }))
         .filter((d) => d.weight != null);

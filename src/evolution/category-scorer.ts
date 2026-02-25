@@ -12,7 +12,6 @@
 import type {
   BenchmarkCategory,
   CategoryScore,
-  CategoryWeightConfig,
   BenchmarkResult,
   RadarDataPoint,
   SharpRating,
@@ -308,7 +307,7 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
 
   lines.push("");
   lines.push("  Benchmark Radar Chart");
-  lines.push("  " + "=".repeat(width + maxLabelLen + 10));
+  lines.push(`  ${"=".repeat(width + maxLabelLen + 10)}`);
   lines.push("");
 
   for (const point of data) {
@@ -325,7 +324,7 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
 
   lines.push("");
   lines.push("  Legend: + Good (>=80%)  ~ Fair (>=60%)  ! Needs Work (<60%)");
-  lines.push("  " + "=".repeat(width + maxLabelLen + 10));
+  lines.push(`  ${"=".repeat(width + maxLabelLen + 10)}`);
 
   return lines.join("\n");
 }

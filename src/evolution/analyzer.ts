@@ -158,7 +158,7 @@ export class Analyzer {
     });
   }
 
-  private getSuggestedFix(category: string, score: number): string {
+  private getSuggestedFix(category: string, _score: number): string {
     const fixes: Record<string, string> = {
       accuracy:
         "Improve data verification and fact-checking in the system prompt. Consider adding explicit instructions to cross-reference health data.",

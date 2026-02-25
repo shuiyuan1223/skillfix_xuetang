@@ -4,11 +4,11 @@
 
 import type { Command } from "commander";
 import { mcpHandler } from "../gateway/mcp.js";
+
+type JsonSchema = { type?: string; description?: string; default?: unknown };
 import {
   printHeader,
   printSection,
-  printKV,
-  printDivider,
   printTable,
   c,
   icons,
@@ -50,8 +50,8 @@ export function registerToolsCommand(program: Command): void {
             console.log(`\n  ${c.bold("Parameters:")}`);
             for (const [name, schema] of Object.entries(props)) {
               const isReq = required.includes(name);
-              const desc = (schema as any).description || "";
-              const type = (schema as any).type || "any";
+              const desc = (schema as JsonSchema).description || "";
+              const type = (schema as JsonSchema).type || "any";
               console.log(`  ${c.cyan(name)}${isReq ? c.red("*") : ""} ${c.dim(`(${type})`)}`);
               if (desc) {
                 console.log(`    ${c.dim(desc)}`);
@@ -179,9 +179,9 @@ export function registerToolsCommand(program: Command): void {
 
         for (const [paramName, schema] of Object.entries(props)) {
           const isReq = required.includes(paramName);
-          const type = (schema as any).type || "any";
-          const desc = (schema as any).description || "";
-          const defaultVal = (schema as any).default;
+          const type = (schema as JsonSchema).type || "any";
+          const desc = (schema as JsonSchema).description || "";
+          const defaultVal = (schema as JsonSchema).default;
 
           console.log(`  ${c.cyan(paramName)}${isReq ? c.red(" *required") : ""}`);
           console.log(`    ${c.dim("Type:")} ${type}`);
@@ -200,7 +200,7 @@ export function registerToolsCommand(program: Command): void {
       const exampleArgs = Object.entries(props)
         .filter(([name]) => required.includes(name))
         .map(([name, schema]) => {
-          const type = (schema as any).type;
+          const type = (schema as JsonSchema).type;
           const example = type === "string" ? "value" : type === "number" ? "123" : "true";
           return `-a ${name}=${example}`;
         })

@@ -27,6 +27,7 @@ export class LegacyProtocolAdapter {
 
   constructor(private send: (event: LegacySSEEvent) => void) {}
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handleAgentEvent(event: any): void {
     switch (event.type) {
       case "message_start": {

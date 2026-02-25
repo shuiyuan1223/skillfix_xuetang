@@ -54,7 +54,7 @@ function parseFrontmatter(content: string): {
   for (const line of yamlStr.split("\n")) {
     if (inMultiline) {
       if (line.startsWith("  ") || line.trim() === "") {
-        multilineValue += line + "\n";
+        multilineValue += `${line}\n`;
         continue;
       } else {
         // Try to parse as JSON if it looks like JSON

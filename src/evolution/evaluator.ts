@@ -13,6 +13,9 @@ import {
   getEvaluationStats,
   type EvaluationRow,
 } from "../memory/db.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Evaluator");
 
 const EVALUATION_PROMPT = `You are an expert evaluator for a health assistant AI. Your task is to evaluate the quality of the AI's response to a user's health-related query.
 
@@ -174,7 +177,7 @@ export class Evaluator {
         issues: result.issues,
       });
     } catch (error) {
-      console.error("Failed to persist evaluation:", error);
+      log.error("Failed to persist evaluation:", error);
     }
 
     return result;

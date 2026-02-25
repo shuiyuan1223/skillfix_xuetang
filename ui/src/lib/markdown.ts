@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm";
  * Markdown React component using react-markdown.
  * Renders markdown text with custom-styled elements matching the PHA theme.
  */
-export function Markdown({ children }: { children: string }) {
+export function Markdown({ children }: { children: string }): React.ReactElement {
   return React.createElement(
     ReactMarkdown,
     {

@@ -243,7 +243,7 @@ export const listDirAgentTool: AgentTool<typeof ListDirSchema> = {
 
       const entries: { name: string; type: string; size?: number }[] = [];
 
-      function listDir(dirPath: string, depth: number) {
+      function listDir(dirPath: string, depth: number): void {
         if (depth > (params.recursive ? 2 : 0)) return;
         const items = readdirSync(dirPath);
         for (const item of items) {
@@ -253,7 +253,7 @@ export const listDirAgentTool: AgentTool<typeof ListDirSchema> = {
             const stat = statSync(fullPath);
             const relPath = relative(dir, fullPath);
             if (stat.isDirectory()) {
-              entries.push({ name: relPath + "/", type: "dir" });
+              entries.push({ name: `${relPath}/`, type: "dir" });
               if (params.recursive) {
                 listDir(fullPath, depth + 1);
               }
@@ -314,7 +314,7 @@ export const bashAgentTool: AgentTool<typeof BashSchema> = {
       // Truncate very long output
       const maxLen = 10000;
       const truncated = output.length > maxLen;
-      const result = truncated ? output.slice(0, maxLen) + "\n...(truncated)" : output;
+      const result = truncated ? `${output.slice(0, maxLen)}\n...(truncated)` : output;
 
       return toResult({
         success: true,
@@ -340,6 +340,7 @@ export const bashAgentTool: AgentTool<typeof BashSchema> = {
 // Export all file tools
 // ========================================================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const fileAgentTools: AgentTool<any>[] = [
   readFileAgentTool,
   grepAgentTool,

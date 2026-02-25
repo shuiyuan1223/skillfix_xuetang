@@ -508,7 +508,9 @@ export class MemoryIndexManager {
               break;
             }
           }
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
     }
     if (!allowedWorkspace && !allowedAdditional) {
@@ -774,6 +776,7 @@ export class MemoryIndexManager {
         pollInterval: 100,
       },
     });
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const markDirty = () => {
       this.dirty = true;
       this.scheduleWatchSync();
@@ -1015,7 +1018,7 @@ export class MemoryIndexManager {
       queryVec,
       limit,
       snippetMaxChars: SNIPPET_MAX_CHARS,
-      ensureVectorReady: async (dimensions) => await this.ensureVectorReady(dimensions),
+      ensureVectorReady: async (dimensions) => this.ensureVectorReady(dimensions),
       sourceFilterVec: this.buildSourceFilter("c"),
       sourceFilterChunks: this.buildSourceFilter(),
     });
@@ -1253,14 +1256,18 @@ export class MemoryIndexManager {
             `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`
           )
           .run(stale.path, "memory");
-      } catch {}
+      } catch {
+        // ignore
+      }
       this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, "memory");
       if (this.fts.enabled && this.fts.available) {
         try {
           this.db
             .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
             .run(stale.path, "memory", this.provider.model);
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
     }
   }
@@ -1359,7 +1366,9 @@ export class MemoryIndexManager {
             `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`
           )
           .run(stale.path, "sessions");
-      } catch {}
+      } catch {
+        // ignore
+      }
       this.db
         .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
         .run(stale.path, "sessions");
@@ -1368,7 +1377,9 @@ export class MemoryIndexManager {
           this.db
             .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
             .run(stale.path, "sessions", this.provider.model);
-        } catch {}
+        } catch {
+          // ignore
+        }
       }
     }
   }
@@ -1400,7 +1411,9 @@ export class MemoryIndexManager {
             `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`
           )
           .run(entry.path, options.source);
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
 
     // Clean existing FTS entries for this path
@@ -1409,7 +1422,9 @@ export class MemoryIndexManager {
         this.db
           .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
           .run(entry.path, options.source, this.provider.model);
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
 
     // Clean existing chunks for this path
@@ -1452,7 +1467,9 @@ export class MemoryIndexManager {
       if (vectorReady && embedding.length > 0) {
         try {
           this.db.prepare(`DELETE FROM ${VECTOR_TABLE} WHERE id = ?`).run(id);
-        } catch {}
+        } catch {
+          // ignore
+        }
         this.db
           .prepare(`INSERT INTO ${VECTOR_TABLE} (id, embedding) VALUES (?, ?)`)
           .run(id, vectorToBlob(embedding));
@@ -1588,6 +1605,7 @@ export class MemoryIndexManager {
         }
         const waitMs = Math.min(
           EMBEDDING_RETRY_MAX_DELAY_MS,
+          // eslint-disable-next-line no-restricted-syntax
           Math.round(delayMs * (1 + Math.random() * 0.2))
         );
         log.warn(`memory embeddings rate limited; retrying in ${waitMs}ms`);
@@ -1609,7 +1627,7 @@ export class MemoryIndexManager {
       provider: this.provider.id,
       timeoutMs: EMBEDDING_QUERY_TIMEOUT_MS,
     });
-    return await this.withTimeout(
+    return this.withTimeout(
       this.provider.embedQuery(text),
       EMBEDDING_QUERY_TIMEOUT_MS,
       `memory embeddings query timed out after ${Math.round(EMBEDDING_QUERY_TIMEOUT_MS / 1000)}s`
@@ -1793,7 +1811,9 @@ export class MemoryIndexManager {
     } catch (err) {
       try {
         this.db.run("ROLLBACK");
-      } catch {}
+      } catch {
+        // ignore
+      }
       throw err;
     }
   }
@@ -1969,7 +1989,9 @@ export class MemoryIndexManager {
     if (this.fts.enabled && this.fts.available) {
       try {
         this.db.run(`DELETE FROM ${FTS_TABLE}`);
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
     this.dropVectorTable();
     this.vector.dims = undefined;
@@ -1984,7 +2006,7 @@ export class MemoryIndexManager {
     message: string
   ): Promise<T> {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-      return await promise;
+      return promise;
     }
     let timer: NodeJS.Timeout | null = null;
     const timeoutPromise = new Promise<never>((_, reject) => {

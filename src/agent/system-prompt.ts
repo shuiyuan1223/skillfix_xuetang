@@ -12,6 +12,9 @@
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { getSkillsDir } from "../tools/skill-tools.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("Agent/SystemPrompt");
 
 interface SkillEntry {
   name: string;
@@ -142,7 +145,7 @@ export function buildSkillRegistry(options?: {
       skills.push(skill);
     }
   } catch (e) {
-    console.warn("Failed to load skill registry:", e);
+    log.warn("Failed to load skill registry", { error: String(e) });
   }
 
   if (skills.length === 0) {

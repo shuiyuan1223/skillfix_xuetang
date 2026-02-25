@@ -119,7 +119,7 @@ function logEntry(entry: Record<string, unknown>): void {
       timestamp: new Date().toISOString(),
       ...entry,
     };
-    appendFileSync(getLogFile(), JSON.stringify(fullEntry) + "\n");
+    appendFileSync(getLogFile(), `${JSON.stringify(fullEntry)}\n`);
     notifyLlmSubscribers(fullEntry);
   } catch (e) {
     log.warn("Failed to log LLM interaction", e);

@@ -21,6 +21,9 @@ import type {
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { parse as parseYaml } from "yaml";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("BenchmarkSeed");
 
 // ============================================================================
 // Skills-based Category Configuration
@@ -184,7 +187,7 @@ export function loadSharpRubrics(): SharpRubricCategory[] {
       }
     }
   } catch (e) {
-    console.warn("Failed to load SHARP rubrics:", e);
+    log.warn("Failed to load SHARP rubrics:", e);
   }
   return DEFAULT_SHARP_RUBRICS;
 }
@@ -241,7 +244,7 @@ function loadSkillConfig(): {
       return config;
     }
   } catch (e) {
-    console.warn("Failed to parse benchmark-evaluator skill config:", e);
+    log.warn("Failed to parse benchmark-evaluator skill config:", e);
   }
   return null;
 }
@@ -307,6 +310,7 @@ const DEFAULT_CATEGORY_LABELS: Record<BenchmarkCategory, string> = {
 export function loadCategoryWeights(): CategoryWeightConfig[] {
   const config = loadSkillConfig() || loadLegacyConfig();
   if (config?.categories) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return config.categories.map((c: any) => ({
       category: c.id as BenchmarkCategory,
       weight: c.weight,

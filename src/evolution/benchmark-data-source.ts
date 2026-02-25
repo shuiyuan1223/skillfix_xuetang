@@ -87,9 +87,12 @@ export function mergeFixtureOverrides(
   const merged = { ...base };
   for (const [key, value] of Object.entries(overrides)) {
     if (key in merged && typeof value === "object" && value !== null && !Array.isArray(value)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const baseVal = (merged as any)[key] || {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (merged as any)[key] = { ...baseVal, ...(value as Record<string, unknown>) };
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (merged as any)[key] = value;
     }
   }

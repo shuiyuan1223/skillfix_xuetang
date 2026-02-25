@@ -7,7 +7,6 @@ import {
   traceCollector,
   Evaluator,
   analyzer,
-  Optimizer,
   BenchmarkRunner,
   AutoLoop,
   checkRegression,
@@ -37,18 +36,15 @@ import {
   loadConfig,
   getBenchmarkModels,
   getJudgeModel,
-  resolveBenchmarkModels,
-  resolveJudgeModel,
   resolveAgentModel,
   resolveBenchmarkModelApiKey,
   resolveBenchmarkModelBaseUrl,
   BUILTIN_PROVIDERS,
   ENV_KEY_MAP,
   type LLMProvider,
-  type BenchmarkModelConfig,
 } from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
-import { getModel, complete } from "@mariozechner/pi-ai";
+import { getModel, complete, type Model } from "@mariozechner/pi-ai";
 import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
 import {
   writeBenchmarkProgress,
@@ -59,7 +55,6 @@ import {
   printHeader,
   printSection,
   printKV,
-  printStatus,
   printDivider,
   printTable,
   progressBar,
@@ -124,9 +119,9 @@ function createRawLLMCall(
   apiKey: string,
   baseUrl?: string
 ): (prompt: string) => Promise<string> {
-  let model: any;
+  let model: Model | null = null;
   if (BUILTIN_PROVIDERS.includes(provider)) {
-    model = getModel(provider as any, modelId);
+    model = getModel(provider as Parameters<typeof getModel>[0], modelId);
     if (!model && baseUrl) {
       model = {
         id: modelId,
@@ -172,8 +167,8 @@ function createRawLLMCall(
     );
 
     return response.content
-      .filter((c: any) => c.type === "text")
-      .map((c: any) => c.text)
+      .filter((item: { type: string; text: string }) => item.type === "text")
+      .map((item: { type: string; text: string }) => item.text)
       .join("");
   };
 }
@@ -269,7 +264,7 @@ export function registerEvalCommand(program: Command): void {
 
       const evaluator = new Evaluator({
         llmCall: async (prompt: string) => {
-          return await agent.chatAndWait(prompt);
+          return agent.chatAndWait(prompt);
         },
       });
 
@@ -345,7 +340,7 @@ export function registerEvalCommand(program: Command): void {
         console.log(`  ${c.cyan(icons.info)} ${c.bold("Patterns:")}`);
         for (const pattern of analysis.patterns.slice(0, 3)) {
           const pct = Math.round(pattern.frequency * 100);
-          console.log(`    ${c.dim("•")} ${pattern.type}: ${c.cyan(pct + "%")} of traces`);
+          console.log(`    ${c.dim("•")} ${pattern.type}: ${c.cyan(`${pct}%`)} of traces`);
         }
       }
 
@@ -647,9 +642,7 @@ export function registerEvalCommand(program: Command): void {
                 dataSource,
                 sessionMessages: testCase.sessionMessages,
               });
-              return await withActivityTimeout(testAgent, () =>
-                testAgent.chatAndWaitWithTools(query)
-              );
+              return withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
             },
             llmCall: rawLLMCall,
             onProgress: (current, total, testCase) => {
@@ -904,7 +897,7 @@ export function registerEvalCommand(program: Command): void {
 
         const spinner = opts.noSpinner
           ? null
-          : new Spinner(`${prefix ? prefix + " — " : ""}Running benchmarks...`);
+          : new Spinner(`${prefix ? `${prefix} — ` : ""}Running benchmarks...`);
         spinner?.start();
 
         const runner = new BenchmarkRunner({
@@ -931,9 +924,7 @@ export function registerEvalCommand(program: Command): void {
               dataSource,
               sessionMessages: testCase.sessionMessages,
             });
-            return await withActivityTimeout(testAgent, () =>
-              testAgent.chatAndWaitWithTools(query)
-            );
+            return withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
           },
           llmCall: rawLLMCall,
           onProgress: (current, total, testCase) => {
@@ -941,7 +932,7 @@ export function registerEvalCommand(program: Command): void {
               opts.onProgressOverride(current, total, testCase);
             } else {
               spinner?.update(
-                `${prefix ? prefix + " — " : ""}Running ${current}/${total}: ${testCase.id}`
+                `${prefix ? `${prefix} — ` : ""}Running ${current}/${total}: ${testCase.id}`
               );
               writeBenchmarkProgress({
                 running: true,

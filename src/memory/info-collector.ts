@@ -18,13 +18,13 @@ export const REQUIRED_FIELDS: RequiredField[] = [
     key: "birthYear",
     question: "请问您的出生年份是？这会帮助我计算您的目标心率区间等指标。",
     validate: (answer: string) => {
-      const year = parseInt(answer);
+      const year = parseInt(answer, 10);
       const currentYear = new Date().getFullYear();
       return !isNaN(year) && year > 1900 && year <= currentYear;
     },
     parse: (answer: string) => {
       const match = answer.match(/\d{4}/);
-      return match ? parseInt(match[0]) : undefined;
+      return match ? parseInt(match[0], 10) : undefined;
     },
   },
   {

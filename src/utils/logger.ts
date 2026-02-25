@@ -69,7 +69,7 @@ export function subscribeToLogs(callback: LogSubscriber): () => void {
 function writeLogEntry(entry: LogEntry): void {
   try {
     ensureLogDir();
-    appendFileSync(getLogFile(), JSON.stringify(entry) + "\n");
+    appendFileSync(getLogFile(), `${JSON.stringify(entry)}\n`);
   } catch {
     // Silently fail — avoid infinite recursion if logging itself fails
   }

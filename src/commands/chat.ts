@@ -57,8 +57,9 @@ export function registerChatCommand(program: Command): void {
           if (event.type === "message_update" && event.message.role === "assistant") {
             const content = event.message.content;
             for (const block of content) {
-              if ((block as any).type === "text") {
-                response = (block as any).text;
+              const textBlock = block as { type: string; text: string };
+              if (textBlock.type === "text") {
+                response = textBlock.text;
                 if (options.stream !== false && !options.json) {
                   // Clear spinner if active
                   if (currentToolSpinner) {

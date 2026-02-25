@@ -1,4 +1,4 @@
-export * from "./interface.js";
+export type * from "./interface.js";
 export * from "./mock.js";
 export * from "./huawei/index.js";
 
@@ -6,6 +6,9 @@ import type { HealthDataSource } from "./interface.js";
 import { MockDataSource } from "./mock.js";
 import { HuaweiHealthDataSource } from "./huawei/index.js";
 import { loadConfig } from "../utils/config.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("DataSource");
 
 /**
  * Create a data source based on configuration
@@ -20,7 +23,7 @@ export function createDataSource(userUuid?: string): HealthDataSource {
       return new HuaweiHealthDataSource(userUuid);
     case "apple":
       // Apple Health not implemented yet, fallback to mock
-      console.warn("Apple Health not implemented, using mock data");
+      log.warn("Apple Health not implemented, using mock data");
       return new MockDataSource();
     case "mock":
     default:

@@ -11,7 +11,7 @@
  */
 
 import type { Command } from "commander";
-import { loadConfig, PROVIDER_CONFIGS, type LLMProvider } from "../utils/config.js";
+import { loadConfig, PROVIDER_CONFIGS, type LLMProvider, type PHAConfig } from "../utils/config.js";
 import {
   TUI,
   ProcessTerminal,
@@ -86,6 +86,25 @@ interface ChatMessage {
   content: string;
 }
 
+interface A2UIPage {
+  components: unknown[];
+  root_id: string;
+}
+
+interface GatewayMessage {
+  type: string;
+  is_final?: boolean;
+  content?: string;
+  tool?: string;
+  message?: string;
+  text?: string;
+  variant?: string;
+  surfaces?: { main?: A2UIPage; sidebar?: A2UIPage };
+  components?: unknown[];
+  root_id?: string;
+  title?: string;
+}
+
 // Slash command -> Gateway view mapping
 const SLASH_NAV: Record<string, string> = {
   "/chat": "chat",
@@ -110,7 +129,7 @@ export function registerTuiCommand(program: Command): void {
     });
 }
 
-async function runTUI(options: any, config: any): Promise<void> {
+async function runTUI(options: { port?: string }, config: PHAConfig): Promise<void> {
   const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
   const baseUrl = `http://localhost:${port}`;
   const phaRef = config.orchestrator?.pha;
@@ -222,7 +241,7 @@ async function runTUI(options: any, config: any): Promise<void> {
   // HTTP+SSE transport helpers
   // ========================================================================
 
-  function processMessage(msg: any) {
+  function processMessage(msg: GatewayMessage) {
     try {
       switch (msg.type) {
         case "page":
@@ -233,17 +252,18 @@ async function runTUI(options: any, config: any): Promise<void> {
           if (msg.is_final) {
             finishResponse();
           } else {
-            currentAssistantMessage = msg.content;
+            currentAssistantMessage = msg.content ?? "";
             if (loader) {
+              const msgContent = msg.content ?? "";
               const preview =
-                msg.content.length > 60 ? msg.content.substring(0, 60) + "..." : msg.content;
+                msgContent.length > 60 ? `${msgContent.substring(0, 60)}...` : msgContent;
               loader.setMessage(preview);
             }
           }
           break;
 
         case "tool_call":
-          if (loader) loader.setMessage(`Using ${msg.tool}...`);
+          if (loader) loader.setMessage(`Using ${msg.tool ?? "tool"}...`);
           break;
 
         case "modal":
@@ -269,7 +289,7 @@ async function runTUI(options: any, config: any): Promise<void> {
 
         case "error":
           finishResponse();
-          addChatMessage("assistant", `**Error:** ${msg.message}`);
+          addChatMessage("assistant", `**Error:** ${msg.message ?? "unknown error"}`);
           break;
 
         case "connected":
@@ -357,9 +377,9 @@ async function runTUI(options: any, config: any): Promise<void> {
           }
         }
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       // AbortError is expected on cleanup
-      if (e?.name !== "AbortError") {
+      if ((e as { name?: string })?.name !== "AbortError") {
         // SSE connection lost - attempt reconnect if still connected
         if (connected) {
           setTimeout(() => startSSE(), 1000);
@@ -409,7 +429,7 @@ async function runTUI(options: any, config: any): Promise<void> {
 
     // Action number input (works in both chat and page modes)
     if (/^\d+$/.test(cmd) && pageActions.length > 0) {
-      const idx = parseInt(cmd) - 1;
+      const idx = parseInt(cmd, 10) - 1;
       if (idx >= 0 && idx < pageActions.length) {
         const action = pageActions[idx];
         sendAction(action.action, action.payload);
@@ -536,7 +556,7 @@ async function runTUI(options: any, config: any): Promise<void> {
   // A2UI Page rendering
   // ========================================================================
 
-  function handlePageMessage(msg: any) {
+  function handlePageMessage(msg: GatewayMessage) {
     const surfaces = msg.surfaces;
     if (!surfaces || !surfaces.main) return;
 
@@ -599,9 +619,9 @@ async function runTUI(options: any, config: any): Promise<void> {
     }, 3000);
   }
 
-  function handleToast(msg: any) {
+  function handleToast(msg: GatewayMessage) {
     const message = msg.message || msg.text || "";
-    const variant = msg.variant as string | undefined;
+    const variant = msg.variant;
 
     let formatted: string;
     switch (variant) {
@@ -625,7 +645,7 @@ async function runTUI(options: any, config: any): Promise<void> {
     }, 3000);
   }
 
-  function handleModal(msg: any) {
+  function handleModal(msg: GatewayMessage) {
     // Render modal content as a bordered overlay-style block
     if (!msg.components || !msg.root_id) return;
 
@@ -767,7 +787,7 @@ In page views, type a number to trigger an action.`
 
   // Handle Ctrl+C at raw input level (before pi-tui processes it)
   const originalStdinOn = process.stdin.on.bind(process.stdin);
-  process.stdin.on = function (event: string, listener: (...args: any[]) => void) {
+  process.stdin.on = function (event: string, listener: (...args: unknown[]) => void) {
     if (event === "data") {
       const wrappedListener = (data: Buffer | string) => {
         const str = data.toString();

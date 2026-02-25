@@ -9,6 +9,7 @@ import {
   type AgentOptions,
   type AgentEvent,
   type AgentMessage,
+  type AgentTool,
 } from "@mariozechner/pi-agent-core";
 import { getModel, type Model } from "@mariozechner/pi-ai";
 import { globalRegistry } from "../tools/index.js";
@@ -35,9 +36,9 @@ import {
   resolveModel,
   resolveAgentModel,
   resolveSystemAgentModel,
-  type AgentProfileConfig,
 } from "../utils/config.js";
 import type { ToolCategory } from "../tools/types.js";
+import type { HealthDataSource } from "../data-sources/interface.js";
 
 /** Declarative agent configuration profile (runtime, fully typed) */
 export interface AgentProfile {
@@ -203,11 +204,13 @@ export interface PHAAgentConfig {
   /** Session ID for transcript storage */
   sessionId?: string;
   /** User-specific health data source (for per-session isolation) */
-  dataSource?: import("../data-sources/interface.js").HealthDataSource;
+  dataSource?: HealthDataSource;
   /** Custom tools (overrides default health tools when provided) */
-  tools?: import("@mariozechner/pi-agent-core").AgentTool<any>[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tools?: AgentTool<any>[];
   /** Extra tools to append (e.g. from plugins), merged with default tools */
-  extraTools?: import("@mariozechner/pi-agent-core").AgentTool<any>[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extraTools?: AgentTool<any>[];
   /** Additional agent options */
   agentOptions?: Partial<AgentOptions>;
   /** Prior chat messages to restore context after restart */
@@ -237,6 +240,7 @@ export class PHAAgent {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let model: Model<any>;
 
     if (BUILTIN_PROVIDERS.includes(provider)) {
@@ -433,19 +437,23 @@ export class PHAAgent {
   }
 
   /**
-   * Send a message and wait for the complete response.
-   * Returns the final assistant message content.
+   * Core prompt-and-collect loop.
+   * Sends message, waits for idle, captures the final assistant message and handles LLM errors.
+   * @param extraEventHandler - optional handler for additional event types (e.g., tool tracking)
    */
-  async chatAndWait(message: string): Promise<string> {
+  private async runPromptAndCollect(
+    message: string,
+    extraEventHandler?: (event: AgentEvent) => void
+  ): Promise<{ finalContent: string; hasError: boolean }> {
     let hasError = false;
     let llmErrorMessage = "";
-    // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
     let lastAssistantMessage: AgentMessage | null = null;
 
     const unsubscribe = this.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
         lastAssistantMessage = event.message;
-        // Check for LLM-level errors (e.g. 401, rate limit, model not found)
+        // pi-agent-core event types lack property declarations
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const msg = event.message as any;
         if (msg.stopReason === "error" && msg.errorMessage) {
           hasError = true;
@@ -453,37 +461,50 @@ export class PHAAgent {
           log.error("LLM returned error", { errorMessage: msg.errorMessage, model: msg.model });
         }
       }
-      // Capture errors for diagnostics
+      // pi-agent-core event types lack property declarations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((event as any).type === "error" || (event as any).error) {
         hasError = true;
-        log.warn("chatAndWait error event", (event as any).error || event);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        log.warn("Agent error event", (event as any).error || event);
       }
+      extraEventHandler?.(event);
     });
 
     try {
       await this.agent.prompt(message);
       await this.agent.waitForIdle();
     } catch (err) {
-      log.warn("chatAndWait prompt/idle error", err);
+      log.warn("prompt/idle error", err);
       throw err;
     } finally {
       unsubscribe();
     }
 
-    // If the LLM returned an error, throw so callers can handle it
     if (llmErrorMessage) {
       throw new Error(`LLM error: ${llmErrorMessage}`);
     }
 
-    // Extract text from the last assistant message only
     let finalContent = "";
     if (lastAssistantMessage) {
+      // pi-agent-core event types lack property declarations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const block of (lastAssistantMessage as any).content) {
         if (block.type === "text") {
           finalContent += block.text;
         }
       }
     }
+
+    return { finalContent, hasError };
+  }
+
+  /**
+   * Send a message and wait for the complete response.
+   * Returns the final assistant message content.
+   */
+  async chatAndWait(message: string): Promise<string> {
+    const { finalContent, hasError } = await this.runPromptAndCollect(message);
 
     if (!finalContent && hasError) {
       log.warn("chatAndWait completed with empty response and errors");
@@ -500,61 +521,31 @@ export class PHAAgent {
     response: string;
     toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
   }> {
-    // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
-    let lastAssistantMessage: AgentMessage | null = null;
-    let llmErrorMessage = "";
     const toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }> = [];
     let pendingToolName = "";
     let pendingToolArgs: unknown = undefined;
 
-    const unsubscribe = this.subscribe((event) => {
-      if (event.type === "message_end" && event.message.role === "assistant") {
-        lastAssistantMessage = event.message;
-        // Check for LLM-level errors (e.g. 401, rate limit, model not found)
-        const msg = event.message as any;
-        if (msg.stopReason === "error" && msg.errorMessage) {
-          llmErrorMessage = msg.errorMessage;
-          log.error("LLM returned error", { errorMessage: msg.errorMessage, model: msg.model });
-        }
-      }
+    const { finalContent } = await this.runPromptAndCollect(message, (event) => {
       if (event.type === "tool_execution_start") {
+        // pi-agent-core event types lack property declarations
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pendingToolName = (event as any).toolName || "";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pendingToolArgs = (event as any).arguments;
       }
       if (event.type === "tool_execution_end") {
         toolCalls.push({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           tool: pendingToolName || (event as any).toolName || "unknown",
           arguments: pendingToolArgs,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           result: (event as any).result,
         });
       }
     });
 
-    try {
-      await this.agent.prompt(message);
-      await this.agent.waitForIdle();
-    } finally {
-      unsubscribe();
-    }
-
-    // If the LLM returned an error, throw so callers can handle it
-    if (llmErrorMessage) {
-      throw new Error(`LLM error: ${llmErrorMessage}`);
-    }
-
-    // Extract text from the last assistant message only
-    let finalContent = "";
-    if (lastAssistantMessage) {
-      for (const block of (lastAssistantMessage as any).content) {
-        if (block.type === "text") {
-          finalContent += block.text;
-        }
-      }
-    }
-
     if (!finalContent) {
       log.warn("chatAndWaitWithTools completed with empty response", {
-        hasLastAssistantMessage: !!lastAssistantMessage,
         toolCallCount: toolCalls.length,
       });
     }
@@ -617,12 +608,14 @@ export async function withActivityTimeout<T>(
     let hardTimer: ReturnType<typeof setTimeout>;
     let settled = false;
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const cleanup = () => {
       clearTimeout(inactivityTimer);
       clearTimeout(hardTimer);
       unsubscribe();
     };
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const fail = (reason: string) => {
       if (settled) return;
       settled = true;
@@ -631,6 +624,7 @@ export async function withActivityTimeout<T>(
       reject(new Error(reason));
     };
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const resetInactivity = () => {
       clearTimeout(inactivityTimer);
       inactivityTimer = setTimeout(

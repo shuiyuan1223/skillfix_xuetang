@@ -248,6 +248,8 @@ export interface PHAConfig {
     location?: string;
     /** Hemisphere for season calculation (default: "north") */
     hemisphere?: "north" | "south";
+    /** Base URL for the weather API (default: https://wttr.in) */
+    weatherApiBaseUrl?: string;
   };
   /** Proactive trigger engine configuration */
   proactive?: {
@@ -482,6 +484,7 @@ function migrateConfig(config: PHAConfig): boolean {
   const providers: Record<string, ModelProviderConfig> = {};
 
   // Helper: ensure provider exists in the map
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const ensureProvider = (providerKey: string, apiKey?: string, baseUrl?: string) => {
     if (!providers[providerKey]) {
       providers[providerKey] = {
@@ -501,6 +504,7 @@ function migrateConfig(config: PHAConfig): boolean {
   };
 
   // Helper: add model if not already present
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const addModel = (providerKey: string, name: string, modelId: string, label?: string) => {
     const models = providers[providerKey].models;
     if (!models.find((m) => m.name === name)) {
@@ -639,6 +643,7 @@ function syncLegacyFields(config: PHAConfig): void {
  * from the unified model repository. Returns a clean copy for file persistence.
  */
 export function stripLegacyFieldsForSave(config: PHAConfig): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const copy = { ...config } as Record<string, any>;
   // Only strip if we have the new format to derive from
   if (copy.models?.providers && Object.keys(copy.models.providers).length > 0) {
@@ -1085,6 +1090,7 @@ function resolveProviderApiKey(
 export function getConfigValue(dotPath: string): unknown {
   const config = loadConfig();
   const parts = dotPath.split(".");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = config;
 
   for (const part of parts) {
@@ -1100,6 +1106,7 @@ export function getConfigValue(dotPath: string): unknown {
 export function setConfigValue(dotPath: string, value: unknown): void {
   const config = loadConfig();
   const parts = dotPath.split(".");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = config;
 
   for (let i = 0; i < parts.length - 1; i++) {
@@ -1124,6 +1131,7 @@ export function setConfigValue(dotPath: string, value: unknown): void {
 export function unsetConfigValue(dotPath: string): void {
   const config = loadConfig();
   const parts = dotPath.split(".");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = config;
 
   for (let i = 0; i < parts.length - 1; i++) {
@@ -1134,7 +1142,8 @@ export function unsetConfigValue(dotPath: string): void {
     current = current[part];
   }
 
-  delete current[parts[parts.length - 1]];
+  // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+  delete (current as Record<string, unknown>)[parts[parts.length - 1]];
   saveConfig(config);
 }
 

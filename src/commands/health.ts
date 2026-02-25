@@ -4,6 +4,7 @@
 
 import type { Command } from "commander";
 import { getDataSource } from "../tools/health-data.js";
+import type { HealthDataSource, WorkoutData } from "../data-sources/interface.js";
 import {
   printHeader,
   printSection,
@@ -39,7 +40,11 @@ export function registerHealthCommand(program: Command): void {
     });
 }
 
-async function showDailySummary(dataSource: any, date: string, json: boolean): Promise<void> {
+async function showDailySummary(
+  dataSource: HealthDataSource,
+  date: string,
+  json: boolean
+): Promise<void> {
   const spinner = new Spinner("Loading health data...");
   if (!json) spinner.start();
 
@@ -69,7 +74,7 @@ async function showDailySummary(dataSource: any, date: string, json: boolean): P
           stages: sleep.stages,
         }
       : null,
-    workouts: workouts.map((w: any) => ({
+    workouts: workouts.map((w: WorkoutData) => ({
       type: w.type,
       duration: w.durationMinutes,
       calories: w.caloriesBurned,
@@ -87,10 +92,10 @@ async function showDailySummary(dataSource: any, date: string, json: boolean): P
   // Activity Section
   printSection("Activity", icons.activity);
   const stepsGoal = 10000;
-  const stepsPercent = Math.min(100, Math.round((metrics.steps / stepsGoal) * 100));
+  const _stepsPercent = Math.min(100, Math.round((metrics.steps / stepsGoal) * 100));
   printKV(
     "Steps",
-    `${c.bold(formatNumber(metrics.steps))} ${c.dim("/ " + formatNumber(stepsGoal))} ${progressBar(metrics.steps, stepsGoal, 15)}`
+    `${c.bold(formatNumber(metrics.steps))} ${c.dim(`/ ${formatNumber(stepsGoal)}`)} ${progressBar(metrics.steps, stepsGoal, 15)}`
   );
   printKV("Calories", `${c.bold(formatNumber(metrics.calories))} ${c.dim("kcal")}`);
   printKV("Active Time", `${c.bold(String(metrics.activeMinutes))} ${c.dim("min")}`);
@@ -122,7 +127,7 @@ async function showDailySummary(dataSource: any, date: string, json: boolean): P
       "Quality",
       `${c.bold(String(sleep.qualityScore))}${c.dim("%")} ${getQualityLabel(sleep.qualityScore)}`
     );
-    printKV("Time", `${c.dim(sleep.bedTime + " → ")}${sleep.wakeTime}`);
+    printKV("Time", `${c.dim(`${sleep.bedTime} → `)}${sleep.wakeTime}`);
 
     // Sleep stages breakdown
     const total =
@@ -149,7 +154,11 @@ async function showDailySummary(dataSource: any, date: string, json: boolean): P
   if (workouts.length > 0) {
     printTable(
       ["Type", "Duration", "Calories"],
-      workouts.map((w: any) => [w.type, `${w.durationMinutes} min`, `${w.caloriesBurned} kcal`])
+      workouts.map((w: WorkoutData) => [
+        w.type,
+        `${w.durationMinutes} min`,
+        `${w.caloriesBurned} kcal`,
+      ])
     );
   } else {
     console.log(`  ${c.dim("No workouts recorded today")}`);
@@ -168,7 +177,11 @@ function getQualityLabel(score: number): string {
   return c.red("Poor");
 }
 
-async function showWeeklySummary(dataSource: any, endDate: string, json: boolean): Promise<void> {
+async function showWeeklySummary(
+  dataSource: HealthDataSource,
+  endDate: string,
+  json: boolean
+): Promise<void> {
   const spinner = new Spinner("Loading weekly data...");
   if (!json) spinner.start();
 
@@ -179,10 +192,14 @@ async function showWeeklySummary(dataSource: any, endDate: string, json: boolean
 
   if (!json) spinner.stop("success");
 
-  const totalSteps = weeklySteps.reduce((sum: number, d: any) => sum + d.steps, 0);
+  const totalSteps = weeklySteps.reduce(
+    (sum: number, d: { date: string; steps: number }) => sum + d.steps,
+    0
+  );
   const avgSteps = Math.round(totalSteps / weeklySteps.length);
   const avgSleep =
-    weeklySleep.reduce((sum: number, d: any) => sum + d.hours, 0) / weeklySleep.length;
+    weeklySleep.reduce((sum: number, d: { date: string; hours: number }) => sum + d.hours, 0) /
+    weeklySleep.length;
 
   const data = {
     period: {
@@ -214,7 +231,7 @@ async function showWeeklySummary(dataSource: any, endDate: string, json: boolean
   printKV("Daily Avg", `${c.bold(formatNumber(avgSteps))} ${c.dim("steps / day")}`);
 
   // Steps chart
-  const maxSteps = Math.max(...weeklySteps.map((d: any) => d.steps));
+  const maxSteps = Math.max(...weeklySteps.map((d: { date: string; steps: number }) => d.steps));
   console.log("");
   for (const d of weeklySteps) {
     const dayName = new Date(d.date).toLocaleDateString("en", { weekday: "short" });
@@ -230,7 +247,7 @@ async function showWeeklySummary(dataSource: any, endDate: string, json: boolean
   printKV("Avg Duration", `${c.bold(avgSleep.toFixed(1))} ${c.dim("hours / night")}`);
 
   // Sleep chart
-  const maxSleep = Math.max(...weeklySleep.map((d: any) => d.hours));
+  const maxSleep = Math.max(...weeklySleep.map((d: { date: string; hours: number }) => d.hours));
   console.log("");
   for (const d of weeklySleep) {
     const dayName = new Date(d.date).toLocaleDateString("en", { weekday: "short" });

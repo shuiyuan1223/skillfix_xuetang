@@ -5,7 +5,6 @@
  * pre-computing it into the system prompt.
  */
 
-import { fetchWeatherContext } from "../agent/health-context.js";
 import { getUserId, loadConfig } from "../utils/config.js";
 import { loadProfileFromFile } from "../memory/profile.js";
 import type { PHATool } from "./types.js";
@@ -41,6 +40,7 @@ export const getWeatherTool: PHATool<{ location?: string }> = {
       }
       if (!location) {
         const config = loadConfig();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         location = (config as any).context?.location;
       }
     }
@@ -61,6 +61,7 @@ export const getWeatherTool: PHATool<{ location?: string }> = {
         return { error: `天气服务请求失败 (HTTP ${resp.status})` };
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (await resp.json()) as any;
       const current = data?.current_condition?.[0];
       if (!current) {
@@ -94,4 +95,5 @@ export const getWeatherTool: PHATool<{ location?: string }> = {
   },
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const weatherTools: PHATool<any>[] = [getWeatherTool];
