@@ -1049,6 +1049,7 @@ export class GatewaySession {
 
   // Custom dashboards (per-session, not persisted)
   private customDashboards = new Map<string, DashboardDefinition>();
+  private activeDashboardTab: string | null = null;
 
   /** Build a page with sidebar */
   private buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
@@ -1583,7 +1584,7 @@ export class GatewaySession {
    * Get the full page state for the current view (used by POST /api/a2ui/init).
    * Uses a collector to capture all send() calls and return them.
    */
-  async getFullPageState(): Promise<unknown[]> {
+  async getFullPageState(clientView?: string | null): Promise<unknown[]> {
     const collected: unknown[] = [];
     const collector = (msg: unknown) => collected.push(msg);
 
@@ -1599,7 +1600,10 @@ export class GatewaySession {
       }
     }
 
-    await this.handleNavigate(this.currentView, collector);
+    // Use client-provided view on reconnect (avoids cross-browser sync),
+    // fall back to session's currentView for first connection
+    const view = clientView || this.currentView;
+    await this.handleNavigate(view, collector);
     return collected;
   }
 
@@ -1643,7 +1647,10 @@ export class GatewaySession {
     return { updates: collected };
   }
 
-  private async handleInit(send: (msg: unknown) => void): Promise<void> {
+  private async handleInit(
+    send: (msg: unknown) => void,
+    clientView?: string | null
+  ): Promise<void> {
     send({
       type: "connected",
       session_id: this.sessionId,
@@ -1661,8 +1668,10 @@ export class GatewaySession {
       }
     }
 
-    // Restore previous view (session persists across reconnects)
-    await this.handleNavigate(this.currentView, send);
+    // Use client-provided view on reconnect (avoids cross-browser sync),
+    // fall back to session's currentView for first connection
+    const view = clientView || this.currentView;
+    await this.handleNavigate(view, send);
   }
 
   /** OpenClaw standard: 5 system-level + 3 user-level = 8 files */
@@ -2446,7 +2455,7 @@ export class GatewaySession {
       }
 
       case "experiment":
-        mainPage = generateExperimentPage(this.customDashboards);
+        mainPage = generateExperimentPage(this.customDashboards, this.activeDashboardTab);
         break;
 
       default:
@@ -3231,8 +3240,8 @@ export class GatewaySession {
     }
     // Custom dashboard actions
     else if (action === "experiment_tab_change" && payload?.tab) {
-      const tabPage = generateExperimentPage(this.customDashboards, payload.tab as string);
-      sendAll(send, this.buildPage("experiment", tabPage));
+      this.activeDashboardTab = payload.tab as string;
+      await this.handleNavigate("experiment", send);
     } else if (action.startsWith("refresh_dashboard:")) {
       const dashId = action.replace("refresh_dashboard:", "");
       const dashboard = this.customDashboards.get(dashId);
@@ -6365,9 +6374,12 @@ export class GatewaySession {
               ...(d.sections && { sections: d.sections }),
               updatedAt: new Date().toISOString(),
             });
-            // If currently viewing experiment page, refresh with updated dashboard as active tab
-            if (this.currentView === "experiment") {
-              const experimentPage = generateExperimentPage(this.customDashboards, d.dashboardId);
+            // If currently viewing experiment page with this dashboard tab, refresh
+            if (this.currentView === "experiment" && this.activeDashboardTab === d.dashboardId) {
+              const experimentPage = generateExperimentPage(
+                this.customDashboards,
+                this.activeDashboardTab
+              );
               sendAll(this.getSend(send), this.buildPage("experiment", experimentPage));
             }
           }
@@ -6655,11 +6667,11 @@ export async function startGateway(
       // POST /api/a2ui/init — Create/resume session, return initial page state
       if (url.pathname === "/api/a2ui/init" && req.method === "POST") {
         try {
-          const body = (await req.json().catch(() => ({}))) as { uuid?: string };
+          const body = (await req.json().catch(() => ({}))) as { uuid?: string; view?: string };
           const userId = body.uuid || extractUserId(req);
           const session = getOrCreateSession(userId);
 
-          const updates = await session.getFullPageState();
+          const updates = await session.getFullPageState(body.view);
 
           const headers: Record<string, string> = {
             "Content-Type": "application/json",

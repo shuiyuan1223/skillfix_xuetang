@@ -101,6 +101,7 @@ export function App() {
   const isAutoScrollingRef = useRef(false);
   const extensionDetectedRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
+  const lastViewRef = useRef<string | null>(null);
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
   const handleMessageRef = useRef<(msg: WSMessage) => void>(() => {});
   const pendingSurface = useRef(new Map<string, A2UIComponent[]>());
@@ -600,6 +601,7 @@ export function App() {
   );
 
   const sendNavigate = useCallback((view: string) => {
+    lastViewRef.current = view;
     setPageKey((k) => k + 1);
 
     // Close mobile sidebar with animation
@@ -817,7 +819,7 @@ export function App() {
       const initRes = await fetch("/api/a2ui/init", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid }),
+        body: JSON.stringify({ uuid, view: lastViewRef.current }),
       });
 
       if (!initRes.ok) {
