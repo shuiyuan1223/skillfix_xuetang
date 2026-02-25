@@ -63,15 +63,16 @@ export function ensureMemoryIndexSchema(params: {
   if (params.ftsEnabled) {
     try {
       params.db.run(
-        `CREATE VIRTUAL TABLE IF NOT EXISTS ${params.ftsTable} USING fts5(\n` +
-          `  text,\n` +
-          `  id UNINDEXED,\n` +
-          `  path UNINDEXED,\n` +
-          `  source UNINDEXED,\n` +
-          `  model UNINDEXED,\n` +
-          `  start_line UNINDEXED,\n` +
-          `  end_line UNINDEXED\n` +
-          `);`
+        `CREATE VIRTUAL TABLE IF NOT EXISTS ${params.ftsTable} USING fts5(
+          text,
+          id UNINDEXED,
+          path UNINDEXED,
+          source UNINDEXED,
+          model UNINDEXED,
+          start_line UNINDEXED,
+          end_line UNINDEXED,
+          tokenize="unicode61"
+        );`
       );
       ftsAvailable = true;
     } catch (err) {

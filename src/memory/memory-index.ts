@@ -1835,63 +1835,61 @@ export class MemoryIndexManager {
     force?: boolean;
     progress?: MemorySyncProgressState;
   }): Promise<void> {
-    const dbPath = this.settings.store.path;
-    const tempDbPath = `${dbPath}.tmp-${randomUUID()}`;
-    const tempDb = this.openDatabaseAtPath(tempDbPath);
-
-    const originalDb = this.db;
-    let originalDbClosed = false;
-    const originalState = {
-      ftsAvailable: this.fts.available,
-      ftsError: this.fts.loadError,
-      vectorAvailable: this.vector.available,
-      vectorLoadError: this.vector.loadError,
-      vectorDims: this.vector.dims,
-      vectorReady: this.vectorReady,
-    };
-
-    const restoreOriginalState = () => {
-      if (originalDbClosed) {
-        this.db = this.openDatabaseAtPath(dbPath);
-      } else {
-        this.db = originalDb;
-      }
-      this.fts.available = originalState.ftsAvailable;
-      this.fts.loadError = originalState.ftsError;
-      this.vector.available = originalDbClosed ? null : originalState.vectorAvailable;
-      this.vector.loadError = originalState.vectorLoadError;
-      this.vector.dims = originalState.vectorDims;
-      this.vectorReady = originalDbClosed ? null : originalState.vectorReady;
-    };
-
-    this.db = tempDb;
-    this.vectorReady = null;
-    this.vector.available = null;
-    this.vector.loadError = undefined;
-    this.vector.dims = undefined;
-    this.fts.available = false;
-    this.fts.loadError = undefined;
-    this.ensureSchema();
-
-    let nextMeta: MemoryIndexMeta | null = null;
+    // 直接在原数据库上进行重索引，避免 Windows 文件锁定问题
+    log.debug("memory reindex: performing in-place reindex (Windows compatible)");
 
     try {
-      this.seedEmbeddingCache(originalDb);
+      // 1. 清空现有数据 - 先检查表是否存在再删除
+      try {
+        this.db.prepare(`DELETE FROM ${VECTOR_TABLE}`).run();
+      } catch (err) {
+        log.debug(`Table ${VECTOR_TABLE} does not exist, skipping delete`);
+      }
+      try {
+        this.db.prepare(`DELETE FROM ${FTS_TABLE}`).run();
+      } catch (err) {
+        log.debug(`Table ${FTS_TABLE} does not exist, skipping delete`);
+      }
+      try {
+        this.db.prepare(`DELETE FROM chunks`).run();
+      } catch (err) {
+        log.debug(`Table chunks does not exist, skipping delete`);
+      }
+      try {
+        this.db.prepare(`DELETE FROM files`).run();
+      } catch (err) {
+        log.debug(`Table files does not exist, skipping delete`);
+      }
+
+      log.debug("memory reindex: cleared existing data");
+
+      // 2. 重新创建 schema（可选，为了确保一致性）
+      this.ensureSchema();
+
+      log.debug("memory reindex: ensured schema");
+
       const shouldSyncMemory = this.sources.has("memory");
       const shouldSyncSessions = this.shouldSyncSessions(
         { reason: params.reason, force: params.force },
         true
       );
 
+      log.debug("memory reindex: sync flags", { shouldSyncMemory, shouldSyncSessions });
+
       if (shouldSyncMemory) {
+        log.debug("memory reindex: calling syncMemoryFiles");
+
         await this.syncMemoryFiles({
           needsFullReindex: true,
           progress: params.progress,
         });
+
+        log.debug("memory reindex: syncMemoryFiles completed");
         this.dirty = false;
       }
 
       if (shouldSyncSessions) {
+        log.debug("memory reindex: calling syncSessionFiles");
         await this.syncSessionFiles({
           needsFullReindex: true,
           progress: params.progress,
@@ -1904,7 +1902,7 @@ export class MemoryIndexManager {
         this.sessionsDirty = false;
       }
 
-      nextMeta = {
+      const nextMeta: MemoryIndexMeta = {
         model: this.provider.model,
         provider: this.provider.id,
         providerKey: this.providerKey,
@@ -1918,25 +1916,23 @@ export class MemoryIndexManager {
       this.writeMeta(nextMeta);
       this.pruneEmbeddingCacheIfNeeded();
 
-      this.db.close();
-      originalDb.close();
-      originalDbClosed = true;
+      const afterChunksCount = (this.db.prepare(`SELECT COUNT(*) as c FROM chunks`).get() as any)[
+        "c"
+      ];
+      log.debug("memory reindex: in-place reindex completed", {
+        afterChunksCount,
+      });
+    } catch (err: any) {
+      log.warn("memory reindex failed", {
+        error: err,
+        stack: err.stack,
+      });
 
-      await this.swapIndexFiles(dbPath, tempDbPath);
-
-      this.db = this.openDatabaseAtPath(dbPath);
-      this.vectorReady = null;
-      this.vector.available = null;
-      this.vector.loadError = undefined;
-      this.ensureSchema();
-      this.vector.dims = nextMeta.vectorDims;
-    } catch (err) {
-      try {
-        this.db.close();
-      } catch {}
-      await this.removeIndexFiles(tempDbPath);
-      restoreOriginalState();
-      throw err;
+      console.error("=== Detailed reindex error ===");
+      console.error(err);
+      if (err.stack) {
+        console.error(err.stack);
+      }
     }
   }
 
