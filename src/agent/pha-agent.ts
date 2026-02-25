@@ -548,6 +548,48 @@ export class PHAAgent {
       log.warn("chatAndWaitWithTools completed with empty response", {
         toolCallCount: toolCalls.length,
       });
+
+      // Fallback: reconstruct reply from present_insight tool call arguments
+      const insightCall = toolCalls.find((tc) => tc.tool === "present_insight");
+      if (insightCall) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const args = insightCall.arguments as any;
+        const lines: string[] = [];
+
+        if (args?.title) {
+          lines.push(`📊 ${args.title}`, "");
+        }
+
+        const highlights = args?.highlights as Array<{ label: string; value: string | number; unit?: string; status?: string }> | undefined;
+        if (highlights && highlights.length > 0) {
+          for (const h of highlights) {
+            const unit = h.unit ? h.unit : "";
+            const status = h.status ? ` ${h.status}` : "";
+            lines.push(`• ${h.label}: ${h.value}${unit}${status}`);
+          }
+          lines.push("");
+        }
+
+        const insights = args?.insights as string[] | undefined;
+        if (insights && insights.length > 0) {
+          for (const insight of insights) {
+            lines.push(`💡 ${insight}`);
+          }
+          lines.push("");
+        }
+
+        const recommendations = args?.recommendations as string[] | undefined;
+        if (recommendations && recommendations.length > 0) {
+          for (const rec of recommendations) {
+            lines.push(`✅ ${rec}`);
+          }
+        }
+
+        const fallback = lines.join("\n").trim();
+        if (fallback) {
+          return { response: fallback, toolCalls };
+        }
+      }
     }
 
     return { response: finalContent, toolCalls };
