@@ -31,7 +31,7 @@ import {
   getAllMissingProfileKeys,
   getProfileCompleteness,
 } from "./info-collector.js";
-import { MemoryIndexManager } from "./memory-index.js";
+import { MemoryIndexManager, type MemoryProviderStatus } from "./memory-index.js";
 import { emitSessionTranscriptUpdate } from "./compat.js";
 import type { UserProfile, MemorySearchResult, RequiredField } from "./types.js";
 import { createLogger } from "../utils/logger.js";
@@ -141,7 +141,7 @@ export class MemoryManager {
   /**
    * Get memory index status (for debugging purposes)
    */
-  async getIndexStatus(uuid: string) {
+  async getIndexStatus(uuid: string): Promise<MemoryProviderStatus | null> {
     const index = await this.getIndex(uuid);
     if (index) {
       return index.status();
