@@ -721,12 +721,11 @@ export function generateMemoryPage(data: {
       placeholder: t("memory.searchPlaceholder"),
       value: data.searchQuery || "",
     });
-    const searchBtn = ui.button(t("memory.search"), "memory_search_submit", {
-      variant: "primary",
-      size: "sm",
+    const searchForm = ui.form([searchInput], "memory_search_submit", {
+      submitLabel: t("memory.search"),
+      submitIcon: "search",
     });
-    const searchRow = ui.row([searchInput, searchBtn], { gap: 8, align: "end" });
-    const searchChildren: string[] = [searchRow];
+    const searchChildren: string[] = [searchForm];
 
     if (data.searchQuery && data.searchResults) {
       if (data.searchResults.length === 0) {
