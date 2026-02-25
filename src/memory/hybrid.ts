@@ -39,14 +39,28 @@ export const DEFAULT_HYBRID_CONFIG: HybridConfig = {
 };
 
 export function buildFtsQuery(raw: string): string | null {
-  const tokens =
+  // First try strict matching: Chinese chars and alphanumeric
+  let tokens =
     raw
       .match(/[\u4e00-\u9fa5]+|[A-Za-z0-9_]+/g)
       ?.map((t) => t.trim())
       .filter(Boolean) ?? [];
+
+  // If no tokens found, fall back to whitespace splitting
+  // This handles cases like "user's preference" or "path/to/file"
+  if (tokens.length === 0) {
+    // Split on whitespace and punctuation, filter out short noise
+    tokens = raw
+      .split(/[\s\p{P}]+/u) // Split on whitespace or any Unicode punctuation
+      .filter((t) => t && t.length > 1); // Keep tokens longer than 1 char
+  }
+
+  // If still no tokens, return null
   if (tokens.length === 0) {
     return null;
   }
+
+  // Quote each token and join with AND
   const quoted = tokens.map((t) => `"${t.replaceAll('"', "")}"`);
   return quoted.join(" AND ");
 }
