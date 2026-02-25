@@ -1,6 +1,6 @@
 ---
 name: harmony-ts-checker
-description: "HarmonyOS TypeScript/JavaScript 代码安全与规范检查工具。覆盖鸿蒙环境限制、命名风格、格式规范、类型安全及安全审计（密钥明文、console禁用、SQL注入等）全部规则。"
+description: "HarmonyOS TypeScript/JavaScript 代码安全与规范检查工具。支持文件/目录、代码片段、git 单次提交、git diff 范围、全仓库扫描五种模式。集成 checker.py 静态分析 + ESLint 联合检查，覆盖鸿蒙环境限制、命名风格、格式规范、类型安全及安全审计（密钥明文、console禁用、SQL注入等）全部规则。"
 metadata:
   pha:
     emoji: "shield"
@@ -16,6 +16,10 @@ metadata:
       - "lint"
       - "TS代码检查"
       - "JS代码检查"
+      - "提交审查"
+      - "审查提交"
+      - "git commit"
+      - "git diff"
     config: {}
 ---
 
@@ -34,17 +38,81 @@ metadata:
 
 ## 检查流程
 
-1. **读取代码**：从用户提供的文件或代码片段获取待检查内容
-2. **加载规则集**：参考 `references/rules.md` 中的完整规则列表
-3. **逐条扫描**：按规则分类逐一检查代码
-4. **生成报告**：输出结构化的检查报告
+### 第一步：确定检查范围
+
+根据用户输入，确定待检查的 TS/JS 文件列表：
+
+| 输入场景 | 操作 |
+|---------|------|
+| 文件/目录路径 | 直接使用该路径 |
+| 代码片段 | 写入临时文件 `/tmp/harmony-check.ts`（检查完成后删除） |
+| 某次 git 提交 | `bash_execute("git show <hash> --name-only --diff-filter=ACMR \| grep -E '\\.(ts\|js\|ets\|tsx\|jsx)$'")` |
+| 两次提交之间的 diff | `bash_execute("git diff <hash1> <hash2> --name-only --diff-filter=ACMR \| grep -E '\\.(ts\|js\|ets\|tsx\|jsx)$'")` |
+| 全仓库扫描 | 使用项目根目录，checker.py 会递归扫描 |
+
+> git 场景下，`--diff-filter=ACMR` 只取新增/修改/重命名的文件，跳过已删除文件。
+
+### 第二步：运行 checker.py
+
+```
+bash_execute("python3 src/skills/harmony-ts-checker/checker.py <file_or_dir> --severity all")
+```
+
+支持的参数：
+- `<path>`：文件或目录（git 场景下传入空格分隔的多个文件路径）
+- `--severity error|warn|all`：过滤问题级别（默认 all）
+- `--json`：JSON 格式输出（便于后续处理）
+
+### 第三步：运行 ESLint（如已配置）
+
+先检查项目是否存在 ESLint 配置：
+```
+bash_execute("ls .eslintrc.json .eslintrc.js .eslintrc.cjs eslint.config.js eslint.config.mjs 2>/dev/null | head -1")
+```
+
+**若存在配置**，对目标文件运行 ESLint：
+```
+bash_execute("npx eslint --format compact <file1> <file2> ...")
+```
+
+**若不存在配置**，在报告末尾提示：
+> 项目未配置 ESLint，可根据本 Skill 规则速查表配置 `.eslintrc.json` 以实现自动化检测。
+
+### 第四步：人工补充分析
+
+checker.py 无法覆盖以下需要语义理解的规则，需人工判断：
+
+| 规则 | 原因 |
+|------|------|
+| G.TYP.03 浮点数比较 | 需理解上下文是否为精确比较 |
+| G.MET.07 一致 return | 需追踪所有控制流路径 |
+| Ext-12.1 null/undefined 类型标注 | 需 TypeScript 类型推断 |
+| Ext-12.3/12.4 类型导入导出一致性 | 需区分值与类型 |
+| SEC.01 密钥强度判断 | 需判断字符串是否为真实密钥 |
+| SEC.07 代码重复语义相似度 | 仅检测文本完全重复，语义相似需人工 |
+| SEC.11 SQL 注入完整性 | 复杂拼接逻辑需人工确认 |
+| EXT.13.6 ES Module 循环依赖 | 需整体项目依赖图分析，建议用 `madge` 或 `import/no-cycle` |
+| EXT.13.7 优先函数声明 | checker 不检测此项，属风格建议 |
+
+### 第五步：输出最终报告
+
+整合三个来源的结果，每条问题标注来源标签：
+
+```
+[🔴 ERROR | 🟡 WARN] 规则编号 - 规则名称  [checker|ESLint|人工]
+  📍 位置: 文件名:行号
+  📝 描述: 具体违规说明
+  ✅ 修复建议: 如何修改
+```
+
+相同位置的重复问题合并，避免 checker 和 ESLint 双重上报。
 
 ## 报告输出格式
 
-对每个发现的问题，输出以下信息：
+每条问题标注来源（`[checker]` / `[ESLint]` / `[人工]`），相同位置重复问题合并：
 
 ```
-[🔴 ERROR | 🟡 WARN] 规则编号 - 规则名称
+[🔴 ERROR | 🟡 WARN] 规则编号 - 规则名称  [checker|ESLint|人工]
   📍 位置: 文件名:行号
   📝 描述: 具体违规说明
   ✅ 修复建议: 如何修改
@@ -53,6 +121,7 @@ metadata:
 报告末尾输出汇总：
 ```
 ═══ 检查汇总 ═══
+📁 检查文件: N 个（含 git 变更/全部扫描）
 ✅ 通过规则: N 条
 🔴 ERROR: N 条（要求级别违规）
 🟡 WARN:  N 条（建议级别违规）
@@ -162,63 +231,40 @@ metadata:
 | SEC.10 | mkdir 必须设置权限 | `fs.mkdirSync`/`fs.mkdir`/鸿蒙 `fileio.mkdirSync` 必须显式传入 `mode`（如 `0o750`），不得使用默认权限 |
 | SEC.11 | 禁止字符串拼接 SQL | 禁止通过模板字符串或 `+` 拼接 SQL 语句；必须使用参数化查询 / Prepared Statement / ORM |
 
-## 检查细节
+### 十三、Google/ESLint 补充规则（🔴 要求 / 🟡 建议）
 
-对于完整的规则描述、正反例代码，请参阅 `references/rules.md`。
+源自 Google JS/TS Style Guide 及 OpenHarmony JS 通用编程规范中尚未被前述章节覆盖的重要规则。
+
+| 规则ID | 级别 | 规则 | 检查要点 |
+|--------|------|------|----------|
+| EXT.13.1 | 🔴 | 禁止使用 default export | 所有导出必须使用命名导出，`export default` 会导致跨模块命名不一致 |
+| EXT.13.2 | 🔴 | 禁止使用 Array 构造函数 | `new Array()` 行为不一致，应使用 `[]` 字面量或 `Array.from()` |
+| EXT.13.3 | 🔴 | 只抛出 Error 对象 | `throw` 和 `Promise.reject()` 必须传入 `Error` 或其子类实例 |
+| EXT.13.4 | 🔴 | 禁止 export let（可变导出） | 导出变量禁止使用 `export let`，应使用 `export const` 或导出 getter 函数 |
+| EXT.13.5 | 🟡 | for-in 必须过滤原型属性 | `for...in` 循环体内必须用 `hasOwnProperty` 过滤，推荐用 `Object.keys/values/entries` 替代 |
+| EXT.13.6 | 🟡 | 禁止 ES Module 循环依赖 | 模块间不得存在 `import` 循环引用（需 `madge` / `import/no-cycle` 检测） |
+| EXT.13.7 | 🟡 | 优先使用函数声明 | 命名函数优先用 `function foo()` 声明，而非 `const foo = () =>` |
+| EXT.13.8 | 🔴 | 禁止使用 namespace 关键字 | 使用 ES Module 组织代码，不使用 `namespace Foo {}` |
+| EXT.13.9 | 🟡 | Number() 解析须检查 NaN | `Number(str)` 后必须检查 `isNaN`/`isFinite`；`parseInt` 必须指定基数 |
+| EXT.13.10 | 🟡 | 不使用 unary + 做类型转换 | 禁止 `+str` 转数字，应使用 `Number(str)` |
+| EXT.13.11 | 🔴 | 禁止基本类型包装器 | 禁止 `new Boolean()`/`new String()`/`new Number()` |
+| EXT.13.12 | 🔴 | 不直接调用 Object.prototype 方法 | 禁止 `foo.hasOwnProperty('bar')`，应使用 `Object.prototype.hasOwnProperty.call()` 或 `Object.hasOwn()` |
+| EXT.13.13 | 🔴 | 用 Object.getPrototypeOf 替代 \_\_proto\_\_ | 禁止访问 `__proto__` 属性 |
+| EXT.13.14 | 🟡 | 优先使用模板字符串 | 字符串 `+` 拼接应使用模板字面量替代 |
+| EXT.13.15 | 🔴 | 禁止在块内声明函数 | `if`/`for`/`while` 等块内不得用 `function` 声明函数，应使用函数表达式 |
 
 ## 使用说明
 
-当收到用户的代码后：
-1. 首先判断代码是 TypeScript 还是 JavaScript
-2. 如果是 JS，跳过 TypeScript 类型安全章节（第十一类）
-3. 逐条检查所有适用规则
-4. 对发现的问题按严重级别排序（🔴 优先于 🟡）
-5. 给出具体的修复建议和修改后的代码示例
-6. 如果用户要求自动修复，生成修复后的完整代码文件
+根据用户输入模式执行对应流程：
 
-## 对应 ESLint 配置建议
+1. **文件/目录** — 直接进入第二步运行 checker.py
+2. **代码片段** — 先写入 `/tmp/harmony-check.ts`，检查后删除
+3. **`git show <hash>`** — 第一步获取该提交的变更文件列表，再依次检查
+4. **`git diff <h1> <h2>`** — 第一步获取两次提交之间的变更文件，再依次检查
+5. **全仓库** — 传入项目根目录，checker.py 递归扫描所有 TS/JS 文件
 
-检查完成后，可以建议用户配置以下 ESLint 规则实现自动化检测：
-
-```json
-{
-  "rules": {
-    "strict": ["error", "global"],
-    "no-eval": "error",
-    "no-with": "error",
-    "no-new-func": "error",
-    "no-var": "error",
-    "no-floating-decimal": "error",
-    "use-isnan": "error",
-    "eqeqeq": ["error", "smart"],
-    "no-cond-assign": "error",
-    "consistent-return": "error",
-    "prefer-rest-params": "error",
-    "no-extend-native": "error",
-    "no-unsafe-finally": "error",
-    "no-return-await": "error",
-    "semi": ["warn", "always"],
-    "quotes": ["warn", "single"],
-    "indent": ["warn", 2],
-    "max-len": ["warn", { "code": 120 }],
-    "curly": "warn",
-    "@typescript-eslint/explicit-function-return-type": "error",
-    "@typescript-eslint/no-explicit-any": "error",
-    "@typescript-eslint/no-unsafe-argument": "error",
-    "@typescript-eslint/no-unsafe-assignment": "error",
-    "@typescript-eslint/no-unsafe-call": "error",
-    "@typescript-eslint/no-unsafe-member-access": "error",
-    "@typescript-eslint/no-unsafe-return": "error",
-    "@typescript-eslint/consistent-type-exports": "error",
-    "@typescript-eslint/consistent-type-imports": "error",
-    "@typescript-eslint/no-this-alias": "error",
-    "@typescript-eslint/no-dynamic-delete": "error",
-    "@typescript-eslint/await-thenable": "error",
-    "no-console": "error",
-    "no-debugger": "error",
-    "no-restricted-syntax": ["error",
-      { "selector": "CallExpression[callee.object.name='Math'][callee.property.name='random']", "message": "Use crypto.randomBytes/randomUUID for security scenarios" }
-    ]
-  }
-}
-```
+无论哪种模式：
+- JS 文件跳过「十一、TypeScript 类型安全」章节
+- 发现的问题按严重级别排序（🔴 优先于 🟡）
+- 给出具体修复建议和代码示例
+- 如果用户要求自动修复，生成修复后的完整文件
