@@ -1049,7 +1049,6 @@ export class GatewaySession {
 
   // Custom dashboards (per-session, not persisted)
   private customDashboards = new Map<string, DashboardDefinition>();
-  private activeDashboardTab: string | null = null;
 
   /** Build a page with sidebar */
   private buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
@@ -2447,7 +2446,7 @@ export class GatewaySession {
       }
 
       case "experiment":
-        mainPage = generateExperimentPage(this.customDashboards, this.activeDashboardTab);
+        mainPage = generateExperimentPage(this.customDashboards);
         break;
 
       default:
@@ -3232,8 +3231,8 @@ export class GatewaySession {
     }
     // Custom dashboard actions
     else if (action === "experiment_tab_change" && payload?.tab) {
-      this.activeDashboardTab = payload.tab as string;
-      await this.handleNavigate("experiment", send);
+      const tabPage = generateExperimentPage(this.customDashboards, payload.tab as string);
+      sendAll(send, this.buildPage("experiment", tabPage));
     } else if (action.startsWith("refresh_dashboard:")) {
       const dashId = action.replace("refresh_dashboard:", "");
       const dashboard = this.customDashboards.get(dashId);
@@ -6366,12 +6365,9 @@ export class GatewaySession {
               ...(d.sections && { sections: d.sections }),
               updatedAt: new Date().toISOString(),
             });
-            // If currently viewing experiment page with this dashboard tab, refresh
-            if (this.currentView === "experiment" && this.activeDashboardTab === d.dashboardId) {
-              const experimentPage = generateExperimentPage(
-                this.customDashboards,
-                this.activeDashboardTab
-              );
+            // If currently viewing experiment page, refresh with updated dashboard as active tab
+            if (this.currentView === "experiment") {
+              const experimentPage = generateExperimentPage(this.customDashboards, d.dashboardId);
               sendAll(this.getSend(send), this.buildPage("experiment", experimentPage));
             }
           }
