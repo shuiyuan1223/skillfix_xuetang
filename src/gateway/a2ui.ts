@@ -253,8 +253,13 @@ export class A2UIGenerator {
     return this.add("nav", "Nav", { items, ...opts });
   }
 
-  tabs(tabsList: unknown[], activeTab: string, contentIds: Record<string, string>): string {
-    return this.add("tabs", "Tabs", { tabs: tabsList, activeTab, contentIds });
+  tabs(
+    tabsList: unknown[],
+    activeTab: string,
+    contentIds: Record<string, string>,
+    opts: { actionIds?: string[] } = {}
+  ): string {
+    return this.add("tabs", "Tabs", { tabs: tabsList, activeTab, contentIds, ...opts });
   }
 
   // Admin/Evolution Component Methods

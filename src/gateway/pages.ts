@@ -3554,25 +3554,21 @@ export function generateExperimentPage(
     tabContentIds[activeTab] = renderDashboardContent(ui, activeDash);
   }
 
-  const tabs = ui.tabs(tabDefs, activeTab, tabContentIds);
-
-  // Refresh button at top-right corner (absolute positioned via flex)
-  const refreshBtn = activeDash
-    ? ui.button("", `refresh_dashboard:${activeDash.id}`, {
+  // Refresh button in tab header bar (right side)
+  const actionIds: string[] = [];
+  if (activeDash) {
+    actionIds.push(
+      ui.button("", `refresh_dashboard:${activeDash.id}`, {
         variant: "ghost",
         icon: "refresh-cw",
         tooltip: t("experiment.refresh"),
       })
-    : null;
-  const topRow = refreshBtn
-    ? ui.row([tabs, refreshBtn], {
-        justify: "between",
-        align: "center",
-        style: "width: 100%",
-      })
-    : tabs;
+    );
+  }
 
-  const content = ui.column([topRow], { gap: 0, padding: 24 });
+  const tabs = ui.tabs(tabDefs, activeTab, tabContentIds, { actionIds });
+
+  const content = ui.column([tabs], { gap: 0, padding: 24 });
   const root = ui.column([content], { gap: 0 });
 
   return ui.build(root);
