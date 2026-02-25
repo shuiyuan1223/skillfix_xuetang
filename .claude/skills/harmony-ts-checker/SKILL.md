@@ -1,26 +1,6 @@
 ---
 name: harmony-ts-checker
-description: "HarmonyOS TypeScript/JavaScript 代码安全与规范检查工具。支持文件/目录、代码片段、git 单次提交、git diff 范围、全仓库扫描五种模式。集成 checker.py 静态分析 + ESLint 联合检查，覆盖鸿蒙环境限制、命名风格、格式规范、类型安全及安全审计（密钥明文、console禁用、SQL注入等）全部规则。"
-metadata:
-  pha:
-    emoji: "shield"
-    triggers:
-      - "代码安全检查"
-      - "安全审计"
-      - "代码规范检查"
-      - "code review"
-      - "鸿蒙代码"
-      - "HarmonyOS"
-      - "OpenHarmony"
-      - "代码审查"
-      - "lint"
-      - "TS代码检查"
-      - "JS代码检查"
-      - "提交审查"
-      - "审查提交"
-      - "git commit"
-      - "git diff"
-    config: {}
+description: Use when reviewing HarmonyOS TypeScript/JavaScript code for security, style, and compliance issues. Covers file/directory, code snippet, git commit, git diff, and full-repo scan modes. Combines checker.py static analysis + ESLint for Harmony environment restrictions, naming conventions, formatting, type safety, and security audits (hardcoded secrets, console禁用, SQL injection, etc.).
 ---
 
 # HarmonyOS TS/JS 代码安全检查 Skill
@@ -46,16 +26,16 @@ metadata:
 |---------|------|
 | 文件/目录路径 | 直接使用该路径 |
 | 代码片段 | 写入临时文件 `/tmp/harmony-check.ts`（检查完成后删除） |
-| 某次 git 提交 | `bash_execute("git show <hash> --name-only --diff-filter=ACMR \| grep -E '\\.(ts\|js\|ets\|tsx\|jsx)$'")` |
-| 两次提交之间的 diff | `bash_execute("git diff <hash1> <hash2> --name-only --diff-filter=ACMR \| grep -E '\\.(ts\|js\|ets\|tsx\|jsx)$'")` |
+| 某次 git 提交 | `git show <hash> --name-only --diff-filter=ACMR \| grep -E '\.(ts\|js\|ets\|tsx\|jsx)$'` |
+| 两次提交之间的 diff | `git diff <hash1> <hash2> --name-only --diff-filter=ACMR \| grep -E '\.(ts\|js\|ets\|tsx\|jsx)$'` |
 | 全仓库扫描 | 使用项目根目录，checker.py 会递归扫描 |
 
 > git 场景下，`--diff-filter=ACMR` 只取新增/修改/重命名的文件，跳过已删除文件。
 
 ### 第二步：运行 checker.py
 
-```
-bash_execute("python3 src/skills/harmony-ts-checker/checker.py <file_or_dir> --severity all")
+```bash
+python3 .claude/skills/harmony-ts-checker/checker.py <file_or_dir> --severity all
 ```
 
 支持的参数：
@@ -66,13 +46,13 @@ bash_execute("python3 src/skills/harmony-ts-checker/checker.py <file_or_dir> --s
 ### 第三步：运行 ESLint（如已配置）
 
 先检查项目是否存在 ESLint 配置：
-```
-bash_execute("ls .eslintrc.json .eslintrc.js .eslintrc.cjs eslint.config.js eslint.config.mjs 2>/dev/null | head -1")
+```bash
+ls .eslintrc.json .eslintrc.js .eslintrc.cjs eslint.config.js eslint.config.mjs 2>/dev/null | head -1
 ```
 
 **若存在配置**，对目标文件运行 ESLint：
-```
-bash_execute("npx eslint --format compact <file1> <file2> ...")
+```bash
+npx eslint --format compact <file1> <file2> ...
 ```
 
 **若不存在配置**，在报告末尾提示：
