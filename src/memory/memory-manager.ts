@@ -139,6 +139,17 @@ export class MemoryManager {
     return deleteBootstrap(uuid);
   }
 
+  /**
+   * Get memory index status (for debugging purposes)
+   */
+  async getIndexStatus(uuid: string) {
+    const index = await this.getIndex(uuid);
+    if (index) {
+      return index.status();
+    }
+    return null;
+  }
+
   // ============ Profile Info Collection ============
 
   getNextMissingField(uuid: string) {
