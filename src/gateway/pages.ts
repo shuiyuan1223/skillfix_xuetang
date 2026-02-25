@@ -3482,25 +3482,12 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
 function renderDashboardContent(ui: A2UIGenerator, dashboard: DashboardDefinition): string {
   const children: string[] = [];
 
-  // Header with subtitle and refresh button
-  const headerChildren: string[] = [];
+  // Subtitle + last updated (refresh button is at page level, not here)
   if (dashboard.subtitle) {
-    headerChildren.push(ui.text(dashboard.subtitle, "subheading"));
+    children.push(ui.text(dashboard.subtitle, "subheading"));
   }
   const updatedAt = new Date(dashboard.updatedAt).toLocaleString();
-  headerChildren.push(ui.text(`${t("experiment.lastUpdated")}: ${updatedAt}`, "caption"));
-
-  const headerCol = ui.column(headerChildren, { gap: 4 });
-  const refreshBtn = ui.button("", `refresh_dashboard:${dashboard.id}`, {
-    variant: "ghost",
-    icon: "refresh-cw",
-    tooltip: t("experiment.refresh"),
-  });
-  const headerRow = ui.row([headerCol, refreshBtn], {
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  });
-  children.push(headerRow);
+  children.push(ui.text(`${t("experiment.lastUpdated")}: ${updatedAt}`, "caption"));
 
   // Render sections
   for (const section of dashboard.sections) {
@@ -3568,7 +3555,24 @@ export function generateExperimentPage(
   }
 
   const tabs = ui.tabs(tabDefs, activeTab, tabContentIds);
-  const content = ui.column([tabs], { gap: 0, padding: 24 });
+
+  // Refresh button at top-right corner (absolute positioned via flex)
+  const refreshBtn = activeDash
+    ? ui.button("", `refresh_dashboard:${activeDash.id}`, {
+        variant: "ghost",
+        icon: "refresh-cw",
+        tooltip: t("experiment.refresh"),
+      })
+    : null;
+  const topRow = refreshBtn
+    ? ui.row([tabs, refreshBtn], {
+        justify: "between",
+        align: "center",
+        style: "width: 100%",
+      })
+    : tabs;
+
+  const content = ui.column([topRow], { gap: 0, padding: 24 });
   const root = ui.column([content], { gap: 0 });
 
   return ui.build(root);
