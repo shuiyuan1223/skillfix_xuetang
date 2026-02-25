@@ -567,6 +567,7 @@ export function registerEvalCommand(program: Command): void {
         `  ${c.dim("Run")} ${c.cyan("pha eval benchmark")} ${c.dim("to execute benchmarks")}\n`
       );
       closeDatabase();
+      process.exit(0);
     });
 
   // eval diagnose - run diagnose pipeline
