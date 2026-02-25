@@ -40,6 +40,8 @@ jobs:
 
       - run: bun install
 
+      - run: bun run build
+
       # Seed benchmark test cases
       - name: Seed test cases
         run: bun ./dist/cli.js eval seed --force
