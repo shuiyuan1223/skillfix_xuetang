@@ -37,6 +37,33 @@ PHA (Personal Health Agent) is an AgentOS-based health management platform built
 
 ## API Endpoints
 
+### POST /api/legacy-chat
+
+内部查询接口（边想边搜），要求调用方已提前完成 OAuth 登录、token 已存入数据库。
+
+**Request**
+
+```http
+POST /api/legacy-chat
+Content-Type: application/json
+
+{
+  "message": "我今天睡眠怎么样？",  // 用户问题（必填）
+  "user_id": "huawei-uid-xxx",     // 用户 ID（可选，优先于 session_id）
+  "session_id": "sess-xxx"         // 会话 ID（可选，user_id 缺失时使用）
+}
+```
+
+`user_id` / `session_id` 均缺失时，自动生成随机 UUID 作为会话 key。
+
+**Response** — 同 `/api/query`，返回相同格式的 `text/event-stream` SSE 流。
+
+**实现位置**
+
+- 路由：`src/gateway/server.ts` — `/api/legacy-chat` handler
+
+---
+
 ### POST /api/query
 
 外部查询接口（边想边搜），调用方直接传入 `refresh_token`，无需预先完成 OAuth 登录。
