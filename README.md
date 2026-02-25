@@ -184,11 +184,18 @@ pha eval run           # 运行评估
 | 端点 | 说明 |
 |------|------|
 | `GET /health` | 健康检查 |
-| `WS /ws` | A2UI WebSocket |
-| `POST /mcp/tools/list` | MCP 工具列表 |
-| `POST /mcp/tools/call` | 调用 MCP 工具 |
+| `POST /api/a2ui/init` | A2UI 创建/恢复会话 |
+| `POST /api/a2ui/action` | A2UI 用户动作 + 导航 |
+| `GET /api/a2ui/events` | A2UI SSE 推送（页面更新/toast/modal） |
+| `POST /api/ag-ui` | AG-UI SSE 聊天事件流 |
+| `POST /api/mcp` | MCP JSON-RPC 2.0（Streamable HTTP） |
+| `GET /.well-known/agent.json` | A2A Agent Card 发现 |
+| `POST /api/a2a` | A2A JSON-RPC 2.0 任务管理 |
+| `POST /api/legacy-chat` | 边想边搜 SSE（需已完成 OAuth） |
+| `POST /api/query` | 边想边搜 SSE（传入 refresh_token，无需预登录） |
+| `POST /mcp/tools/list` | 列出 MCP 工具 (legacy) |
+| `POST /mcp/tools/call` | 调用 MCP 工具 (legacy) |
 | `GET /api/health/*` | 健康数据 REST API |
-| `POST /auth/huawei/mcp-flow` | Web OAuth 授权 |
 
 ## 开发
 
