@@ -760,6 +760,15 @@ export const zhCN: LocaleMessages = {
     searching: "搜索中",
   },
 
+  experiment: {
+    refresh: "刷新数据",
+    lastUpdated: "最后更新",
+    viewDashboard: "查看仪表盘",
+    widgets: "个组件",
+    sections: "个分区",
+    dashboardCreated: "仪表盘已创建",
+  },
+
   auth: {
     required: "需要授权",
     requiredSubtitle: "连接您的健康账号以查看数据",

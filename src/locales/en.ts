@@ -770,6 +770,15 @@ export const en: LocaleMessages = {
     searching: "Searching",
   },
 
+  experiment: {
+    refresh: "Refresh Data",
+    lastUpdated: "Last Updated",
+    viewDashboard: "View Dashboard",
+    widgets: "widgets",
+    sections: "sections",
+    dashboardCreated: "Dashboard Created",
+  },
+
   auth: {
     required: "Authorization Required",
     requiredSubtitle: "Connect your health account to view your data",

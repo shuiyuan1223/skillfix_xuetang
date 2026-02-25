@@ -17,6 +17,7 @@ import {
   getCategoryIcon,
   type ComparisonRun,
 } from "./evolution-lab.js";
+import type { DashboardDefinition, DashboardWidget } from "../tools/dashboard-types.js";
 
 // Types for page data
 interface Message {
@@ -70,22 +71,35 @@ interface ChartData {
 // Sidebar Generator
 // ============================================================================
 
-export function generateSidebar(activeView: string): A2UIMessage[] {
+export function generateSidebar(
+  activeView: string,
+  customDashboards?: Array<{ id: string; title: string; icon?: string }>
+): A2UIMessage[] {
   const ui = new A2UIGenerator("sidebar");
 
   // Main navigation
-  const mainNav = ui.nav(
-    [
-      { id: "chat", label: t("nav.chat"), icon: "chat" },
-      { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
-      { id: "plans", label: t("nav.plans"), icon: "target" },
-      { id: "memory", label: t("nav.memory"), icon: "brain" },
-      { id: "legacy-chat", label: t("nav.legacyChat"), icon: "search" },
-      { id: "evolution", label: t("nav.evolution"), icon: "flask" },
-      { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
-    ],
-    { activeId: activeView }
-  );
+  const mainNavItems = [
+    { id: "chat", label: t("nav.chat"), icon: "chat" },
+    { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
+    { id: "plans", label: t("nav.plans"), icon: "target" },
+    { id: "memory", label: t("nav.memory"), icon: "brain" },
+    { id: "legacy-chat", label: t("nav.legacyChat"), icon: "search" },
+    { id: "evolution", label: t("nav.evolution"), icon: "flask" },
+    { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
+  ];
+
+  // Inject custom dashboard entries after plans
+  if (customDashboards?.length) {
+    const insertIdx = mainNavItems.findIndex((i) => i.id === "memory");
+    const dashItems = customDashboards.map((d) => ({
+      id: `experiment:${d.id}`,
+      label: d.title,
+      icon: d.icon || "activity",
+    }));
+    mainNavItems.splice(insertIdx, 0, ...dashItems);
+  }
+
+  const mainNav = ui.nav(mainNavItems, { activeId: activeView });
 
   // Divider
   const dividerId = `div_${Date.now()}`;
@@ -3308,11 +3322,166 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
 }
 
 // ============================================================================
+// Custom Dashboard Generator
+// ============================================================================
+
+function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
+  const cfg = widget.config as Record<string, unknown>;
+
+  switch (widget.type) {
+    case "stat_row": {
+      const items = (cfg.items as Array<Record<string, unknown>>) || [];
+      const cols = (cfg.columns as number) || items.length || 3;
+      const cards = items.map((item) =>
+        ui.statCard({
+          title: (item.label as string) || "",
+          value: (item.value as string) || "",
+          subtitle: (item.unit as string) || undefined,
+          icon: (item.icon as string) || "activity",
+          color: (item.color as string) || undefined,
+          trend: item.trend || undefined,
+        })
+      );
+      return ui.grid(cards, { columns: cols, gap: 12 });
+    }
+
+    case "line_chart": {
+      const title = cfg.title as string | undefined;
+      const children: string[] = [];
+      if (title) children.push(ui.text(title, "subheading"));
+      children.push(
+        ui.chart({
+          chartType: "line",
+          data: cfg.data || [],
+          yLabel: cfg.yLabel || undefined,
+          color: cfg.color || "#3b82f6",
+        })
+      );
+      return ui.card(children, { padding: 16 });
+    }
+
+    case "bar_chart": {
+      const title = cfg.title as string | undefined;
+      const children: string[] = [];
+      if (title) children.push(ui.text(title, "subheading"));
+      children.push(
+        ui.chart({
+          chartType: "bar",
+          data: cfg.data || [],
+          yLabel: cfg.yLabel || undefined,
+          color: cfg.color || "#10b981",
+        })
+      );
+      return ui.card(children, { padding: 16 });
+    }
+
+    case "progress_tracker": {
+      const title = (cfg.title as string) || "";
+      const current = (cfg.current as number) || 0;
+      const target = (cfg.target as number) || 100;
+      const unit = (cfg.unit as string) || "";
+      const pct = Math.min(Math.round((current / target) * 100), 100);
+      const children: string[] = [
+        ui.text(title, "subheading"),
+        ui.progress(current, { maxValue: target, color: cfg.color || "#8b5cf6" }),
+        ui.text(`${current}${unit} / ${target}${unit} (${pct}%)`, "caption"),
+      ];
+      return ui.card(children, { padding: 16 });
+    }
+
+    case "data_table": {
+      const columns = (cfg.columns as Array<Record<string, unknown>>) || [];
+      const rows = (cfg.rows as Array<Record<string, unknown>>) || [];
+      return ui.card([ui.dataTable(columns, rows)], { padding: 16 });
+    }
+
+    case "text_block": {
+      const content = (cfg.content as string) || "";
+      const variant = (cfg.variant as string) || "body";
+      return ui.text(content, variant);
+    }
+
+    case "milestone_timeline": {
+      const entries = ((cfg.entries as Array<Record<string, unknown>>) || []).map((e) => ({
+        type: e.status === "completed" ? "commit" : e.status === "current" ? "branch" : "merge",
+        date: (e.date as string) || "",
+        message: (e.title as string) || "",
+        detail: (e.description as string) || undefined,
+        icon: (e.icon as string) || undefined,
+      }));
+      return ui.card([ui.gitTimeline(entries)], { padding: 16 });
+    }
+
+    case "metric_grid": {
+      const metrics = (cfg.metrics as Array<Record<string, unknown>>) || [];
+      const cols = (cfg.columns as number) || 3;
+      const metricIds = metrics.map((m) =>
+        ui.metric({
+          label: (m.label as string) || "",
+          value: (m.value as string) || "",
+          unit: (m.unit as string) || undefined,
+          icon: (m.icon as string) || "activity",
+          color: (m.color as string) || undefined,
+        })
+      );
+      return ui.grid(metricIds, { columns: cols, gap: 12 });
+    }
+
+    default:
+      return ui.text(`Unknown widget type: ${widget.type}`, "caption");
+  }
+}
+
+export function generateCustomDashboard(dashboard: DashboardDefinition): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+  const children: string[] = [];
+
+  // Header with title, subtitle, and refresh button
+  const headerChildren: string[] = [ui.text(dashboard.title, "heading")];
+  if (dashboard.subtitle) {
+    headerChildren.push(ui.text(dashboard.subtitle, "subheading"));
+  }
+  const updatedAt = new Date(dashboard.updatedAt).toLocaleString();
+  headerChildren.push(ui.text(`${t("experiment.lastUpdated")}: ${updatedAt}`, "caption"));
+
+  const headerCol = ui.column(headerChildren, { gap: 4 });
+  const refreshBtn = ui.button(t("experiment.refresh"), `refresh_dashboard:${dashboard.id}`, {
+    variant: "outline",
+    size: "sm",
+    icon: "refresh-cw",
+  });
+  const headerRow = ui.row([headerCol, refreshBtn], {
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  });
+  children.push(headerRow);
+
+  // Render sections
+  for (const section of dashboard.sections) {
+    const sectionChildren: string[] = [];
+    if (section.title) {
+      sectionChildren.push(ui.text(section.title, "subheading"));
+    }
+    for (const widget of section.widgets) {
+      sectionChildren.push(renderWidget(ui, widget));
+    }
+    children.push(ui.card(sectionChildren, { padding: 16 }));
+  }
+
+  const root = ui.column(children, { gap: 16 });
+  return ui.build(root);
+}
+
+// ============================================================================
 // Page Message Generator (combines sidebar + main)
 // ============================================================================
 
-export function generatePage(view: string, mainContent: A2UIMessage[]): A2UIMessage[] {
-  const sidebar = generateSidebar(view);
+export function generatePage(
+  view: string,
+  mainContent: A2UIMessage[],
+  customDashboards?: Array<{ id: string; title: string; icon?: string }>
+): A2UIMessage[] {
+  const sidebar = generateSidebar(view, customDashboards);
   return [...sidebar, ...mainContent];
 }
 
@@ -3876,6 +4045,14 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
     case "create_health_plan":
       return generateCreatePlanCards(data);
     default:
+      break;
+  }
+
+  // Tools that use details directly (not details.data)
+  switch (toolName) {
+    case "create_dashboard":
+      return generateCreateDashboardCards(details);
+    default:
       return generateGenericToolCards(data);
   }
 }
@@ -3932,6 +4109,48 @@ function generateCreatePlanCards(data: unknown): ToolCardResult | null {
   const grid = ui.grid([nameCard, goalsCard, dateCard], { columns: 3, gap: 12 });
 
   const viewBtn = ui.button(t("plans.viewDetails"), "navigate:plans", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
+
+  const root = ui.column([grid, viewBtn], { gap: 12 });
+  return buildToolCardResult(ui.build(root));
+}
+
+function generateCreateDashboardCards(details: Record<string, unknown>): ToolCardResult | null {
+  const title = details.title as string | undefined;
+  const widgetCount = details.widgetCount as number | undefined;
+  const sectionCount = details.sectionCount as number | undefined;
+  const dashboardId = details.dashboardId as string | undefined;
+  if (!title || !dashboardId) return null;
+
+  const ui = new A2UIGenerator("ic-dash");
+
+  const titleCard = ui.statCard({
+    title: t("experiment.dashboardCreated"),
+    value: title,
+    icon: (details.icon as string) || "activity",
+    color: "#8b5cf6",
+  });
+
+  const widgetsCard = ui.statCard({
+    title: t("experiment.widgets"),
+    value: `${widgetCount || 0}`,
+    icon: "bar-chart",
+    color: "#3b82f6",
+  });
+
+  const sectionsCard = ui.statCard({
+    title: t("experiment.sections"),
+    value: `${sectionCount || 0}`,
+    icon: "target",
+    color: "#10b981",
+  });
+
+  const grid = ui.grid([titleCard, widgetsCard, sectionsCard], { columns: 3, gap: 12 });
+
+  const viewBtn = ui.button(t("experiment.viewDashboard"), `view_dashboard:${dashboardId}`, {
     variant: "outline",
     size: "sm",
     icon: "chevron-right",

@@ -790,6 +790,16 @@ export interface LocaleMessages {
     searching: string;
   };
 
+  // Custom Experiment Dashboard
+  experiment: {
+    refresh: string;
+    lastUpdated: string;
+    viewDashboard: string;
+    widgets: string;
+    sections: string;
+    dashboardCreated: string;
+  };
+
   // OAuth / Authorization
   auth: {
     required: string;

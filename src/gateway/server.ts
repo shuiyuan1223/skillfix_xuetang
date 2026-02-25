@@ -87,6 +87,8 @@ import {
   generateToolsPage,
   generateToolDetailModal,
   generateSkillDetailModal,
+  generateCustomDashboard,
+  generateSidebar,
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
@@ -147,6 +149,8 @@ import {
 } from "../tools/skill-tools.js";
 import { systemMemoryReadTool, systemMemoryWriteTool } from "../tools/system-memory-tools.js";
 import { globalRegistry, categoryToAgentTags } from "../tools/index.js";
+import type { DashboardDefinition } from "../tools/dashboard-types.js";
+import { MAX_DASHBOARDS_PER_SESSION } from "../tools/dashboard-types.js";
 import {
   listTraces,
   countTraces,
@@ -1044,6 +1048,22 @@ export class GatewaySession {
   // Memory consolidation counter (daily log → MEMORY.md every N exchanges)
   private exchangeCount = 0;
 
+  // Custom dashboards (per-session, not persisted)
+  private customDashboards = new Map<string, DashboardDefinition>();
+
+  private getCustomDashboardNavItems() {
+    return [...this.customDashboards.values()].map((d) => ({
+      id: d.id,
+      title: d.title,
+      icon: d.icon,
+    }));
+  }
+
+  /** Build a page with sidebar including custom dashboards */
+  private buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
+    return generatePage(view, mainPage, this.getCustomDashboardNavItems());
+  }
+
   // Memory system-agent sub-state
   private saSelectedMemoryFile: string | null = null;
   private saEditingMemory = false;
@@ -1821,7 +1841,7 @@ export class GatewaySession {
     if (authConfig.dataSources.type === "huawei" && !this.isUserAuthenticated()) {
       if (!authExemptViews.some((v) => view.startsWith(v))) {
         const mainPage = generateAuthRequiredPage();
-        sendAll(send, generatePage("auth", mainPage));
+        sendAll(send, this.buildPage("auth", mainPage));
         return;
       }
     }
@@ -1902,7 +1922,7 @@ export class GatewaySession {
         // Send loading page immediately
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generateMemoryPage({
               activeTab: this.memoryTab,
@@ -1993,7 +2013,7 @@ export class GatewaySession {
             saMemoryContent,
             saEditingMemory: this.saEditingMemory,
           });
-          sendAll(send, generatePage(view, memoryPage));
+          sendAll(send, this.buildPage(view, memoryPage));
         } catch (e) {
           logMemory.error("Load error", { error: e });
         }
@@ -2004,7 +2024,7 @@ export class GatewaySession {
         // Send loading page immediately
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generatePromptsPage({
               files: [],
@@ -2018,7 +2038,7 @@ export class GatewaySession {
           const files = this.buildOpenClaw8Files();
           sendAll(
             send,
-            generatePage(
+            this.buildPage(
               view,
               generatePromptsPage({
                 files,
@@ -2036,7 +2056,7 @@ export class GatewaySession {
         // Send loading page immediately
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generateSkillsPage({
               skills: [],
@@ -2077,7 +2097,7 @@ export class GatewaySession {
 
           sendAll(
             send,
-            generatePage(
+            this.buildPage(
               view,
               generateSkillsPage({
                 skills: enrichedSkills,
@@ -2100,7 +2120,7 @@ export class GatewaySession {
         const toolsData = globalRegistry.getToolsPageData();
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generateToolsPage({
               tools: toolsData,
@@ -2125,7 +2145,7 @@ export class GatewaySession {
         try {
           const labData = this.buildEvolutionLabData();
           const labPage = generateEvolutionLab(labData);
-          sendAll(send, generatePage(view, labPage));
+          sendAll(send, this.buildPage(view, labPage));
         } catch (e) {
           logEvolution.error("Lab load error", { error: e });
         }
@@ -2150,7 +2170,7 @@ export class GatewaySession {
         // Send loading page immediately (no data yet)
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generateIntegrationsPage({
               activeTab: this.integrationsTab,
@@ -2435,14 +2455,29 @@ export class GatewaySession {
       }
 
       default:
-        mainPage = generateChatPage({
-          messages: this.chatMessages,
-          streaming: this.isStreaming,
-          streamingContent: this.streamingContent,
-        });
+        // Custom experiment dashboards: experiment:{dashboardId}
+        if (view.startsWith("experiment:")) {
+          const dashId = view.replace("experiment:", "");
+          const dashboard = this.customDashboards.get(dashId);
+          if (dashboard) {
+            mainPage = generateCustomDashboard(dashboard);
+          } else {
+            mainPage = generateChatPage({
+              messages: this.chatMessages,
+              streaming: this.isStreaming,
+              streamingContent: this.streamingContent,
+            });
+          }
+        } else {
+          mainPage = generateChatPage({
+            messages: this.chatMessages,
+            streaming: this.isStreaming,
+            streamingContent: this.streamingContent,
+          });
+        }
     }
 
-    sendAll(send, generatePage(view, mainPage));
+    sendAll(send, this.buildPage(view, mainPage));
   }
 
   private async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
@@ -3214,6 +3249,19 @@ export class GatewaySession {
       const view = action.replace("navigate:", "");
       await this.handleNavigate(view, send);
     }
+    // Custom dashboard actions
+    else if (action.startsWith("view_dashboard:")) {
+      const dashId = action.replace("view_dashboard:", "");
+      await this.handleNavigate(`experiment:${dashId}`, send);
+    } else if (action.startsWith("refresh_dashboard:")) {
+      const dashId = action.replace("refresh_dashboard:", "");
+      const dashboard = this.customDashboards.get(dashId);
+      if (dashboard) {
+        // Send a message to the agent asking it to refresh the dashboard
+        const refreshMsg = `请刷新仪表盘「${dashboard.title}」的数据，使用 update_dashboard 工具更新 dashboardId="${dashboard.id}"`;
+        await this.handleUserMessage(refreshMsg, send);
+      }
+    }
     // Plans actions
     else if (action.startsWith("view_plan:")) {
       const planId = action.replace("view_plan:", "");
@@ -3770,7 +3818,7 @@ export class GatewaySession {
           // Cache available — instant tab switch
           sendAll(
             send,
-            generatePage(
+            this.buildPage(
               "settings/integrations",
               generateIntegrationsPage({
                 activeTab: this.integrationsTab,
@@ -3787,7 +3835,7 @@ export class GatewaySession {
           // Still loading — just show skeleton for the new tab (don't re-trigger full load)
           sendAll(
             send,
-            generatePage(
+            this.buildPage(
               "settings/integrations",
               generateIntegrationsPage({
                 activeTab: this.integrationsTab,
@@ -4896,7 +4944,7 @@ export class GatewaySession {
 
     sendAll(
       send,
-      generatePage(
+      this.buildPage(
         "settings/integrations",
         generateIntegrationsPage({
           activeTab: this.integrationsTab,
@@ -4934,7 +4982,7 @@ export class GatewaySession {
     if (updated) {
       sendAll(
         send,
-        generatePage(
+        this.buildPage(
           "settings/integrations",
           generateIntegrationsPage({
             activeTab: this.integrationsTab,
@@ -6270,6 +6318,49 @@ export class GatewaySession {
               }
             } catch (err) {
               log.error("Failed to generate cards", { tool: event.toolName, error: err });
+            }
+          }
+
+          // Intercept create_dashboard / update_dashboard to store and update sidebar
+          if (event.toolName === "create_dashboard" && !event.isError) {
+            const d = (event.result as any)?.details;
+            if (d?.dashboardId && d?.sections) {
+              if (this.customDashboards.size < MAX_DASHBOARDS_PER_SESSION) {
+                this.customDashboards.set(d.dashboardId, {
+                  id: d.dashboardId,
+                  title: d.title,
+                  subtitle: d.subtitle,
+                  icon: d.icon || "activity",
+                  sections: d.sections,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                });
+                // Re-send sidebar with new dashboard entry
+                const sidebar = generateSidebar(
+                  this.currentView,
+                  this.getCustomDashboardNavItems()
+                );
+                sendAll(send, sidebar);
+              }
+            }
+          }
+          if (event.toolName === "update_dashboard" && !event.isError) {
+            const d = (event.result as any)?.details;
+            if (d?.dashboardId && this.customDashboards.has(d.dashboardId)) {
+              const existing = this.customDashboards.get(d.dashboardId)!;
+              this.customDashboards.set(d.dashboardId, {
+                ...existing,
+                ...(d.title && { title: d.title }),
+                ...(d.subtitle && { subtitle: d.subtitle }),
+                ...(d.icon && { icon: d.icon }),
+                ...(d.sections && { sections: d.sections }),
+                updatedAt: new Date().toISOString(),
+              });
+              // If currently viewing this dashboard, refresh it
+              if (this.currentView === `experiment:${d.dashboardId}`) {
+                const updated = this.customDashboards.get(d.dashboardId)!;
+                sendAll(send, this.buildPage(this.currentView, generateCustomDashboard(updated)));
+              }
             }
           }
 
