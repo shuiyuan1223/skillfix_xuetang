@@ -369,6 +369,20 @@ export class HuaweiAuth {
     const store = userStore || getUserStore();
     return store.isAuthenticated(uuid);
   }
+
+  /**
+   * Refresh token and resolve Huawei user ID in one step.
+   * Intended for external callers (e.g. /api/query) that supply a refresh_token directly.
+   */
+  async refreshTokenAndGetUserId(
+    refreshToken: string,
+    clientId: string,
+    clientSecret: string
+  ): Promise<{ tokenData: TokenData; userId: string }> {
+    const tokenData = await this.refreshTokenForUser(refreshToken, clientId, clientSecret);
+    const userId = await fetchUserInfoSub(tokenData.accessToken);
+    return { tokenData, userId };
+  }
 }
 
 /**

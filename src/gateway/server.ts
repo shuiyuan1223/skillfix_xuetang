@@ -6496,6 +6496,108 @@ export async function startGateway(
       }
 
       // ================================================================
+      // Query SSE (边想边搜 + refresh_token 认证)
+      // ================================================================
+
+      if (url.pathname === "/api/query" && req.method === "POST") {
+        const { readable, writable } = new TransformStream<Uint8Array>();
+        const writer = writable.getWriter();
+        const encoder = new TextEncoder();
+
+        const sseSendRaw = (obj: unknown) => {
+          try {
+            writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)).catch(() => {});
+          } catch {}
+        };
+
+        (async () => {
+          try {
+            const body = (await req.json()) as {
+              refresh_token?: string;
+              query?: string;
+              sn?: string;
+            };
+
+            const { refresh_token, query, sn } = body;
+
+            if (!refresh_token || !query) {
+              sseSendRaw({
+                event: "error",
+                content: "Missing required fields: refresh_token, query",
+              });
+              sseSendRaw({ event: "finish" });
+              writer.close().catch(() => {});
+              return;
+            }
+
+            log.info("[query] start", { sn, query });
+
+            const fullConfig = loadConfig();
+            const huaweiConfig = fullConfig.dataSources.huawei;
+            if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+              sseSendRaw({ event: "error", content: "Huawei credentials not configured" });
+              sseSendRaw({ event: "finish" });
+              writer.close().catch(() => {});
+              return;
+            }
+
+            let userId: string;
+            try {
+              const { tokenData, userId: uid } = await huaweiAuth.refreshTokenAndGetUserId(
+                refresh_token,
+                huaweiConfig.clientId,
+                huaweiConfig.clientSecret
+              );
+              userId = uid;
+              getUserStore().saveToken(userId, tokenData);
+            } catch (e) {
+              log.error("[query] token refresh failed", { sn, error: String(e) });
+              sseSendRaw({
+                event: "error",
+                content: `Token refresh failed: ${e instanceof Error ? e.message : String(e)}`,
+              });
+              sseSendRaw({ event: "finish" });
+              writer.close().catch(() => {});
+              return;
+            }
+
+            await ensureUserDir(userId);
+
+            let session = sessions.get(userId);
+            if (!session) {
+              session = new GatewaySession(config, userId);
+              sessions.set(userId, session);
+            }
+
+            await session.handleLegacyChatSSE(query, writer, encoder);
+          } catch (e) {
+            try {
+              writer
+                .write(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ event: "error", content: String(e) })}\n\n`
+                  )
+                )
+                .catch(() => {});
+              writer
+                .write(encoder.encode(`data: ${JSON.stringify({ event: "finish" })}\n\n`))
+                .catch(() => {});
+            } catch {}
+            writer.close().catch(() => {});
+          }
+        })();
+
+        return new Response(readable, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
+      // ================================================================
       // A2UI HTTP+SSE endpoints (replacing WebSocket for page/action/nav)
       // ================================================================
 
