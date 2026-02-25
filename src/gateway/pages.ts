@@ -3370,14 +3370,35 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
       const title = (cfg.title as string) || "";
       const current = (cfg.current as number) || 0;
       const target = (cfg.target as number) || 100;
+      const baseline = cfg.baseline as number | undefined;
       const unit = (cfg.unit as string) || "";
-      // For progress bar: use target as maxValue, clamp percentage to 0-100
-      const pct =
-        target !== 0 ? Math.max(0, Math.min(Math.round((current / target) * 100), 100)) : 0;
+
+      // Calculate progress percentage
+      let pct: number;
+      let progressValue: number;
+      let progressMax: number;
+      if (baseline != null && baseline !== target) {
+        // Baseline provided: progress = how far from baseline toward target
+        // Works for both "higher-is-better" and "lower-is-better"
+        const range = Math.abs(baseline - target);
+        const moved =
+          baseline > target
+            ? Math.max(0, baseline - current) // lower-is-better
+            : Math.max(0, current - baseline); // higher-is-better
+        pct = Math.max(0, Math.min(Math.round((moved / range) * 100), 100));
+        progressValue = pct;
+        progressMax = 100;
+      } else {
+        // No baseline: simple ratio (for "X out of Y" style goals)
+        pct = target !== 0 ? Math.max(0, Math.min(Math.round((current / target) * 100), 100)) : 0;
+        progressValue = Math.min(current, target);
+        progressMax = target;
+      }
+
       const children: string[] = [
         ui.text(title, "subheading"),
-        ui.progress(Math.min(current, target), { maxValue: target, color: cfg.color || "#8b5cf6" }),
-        ui.text(`${current}${unit} / ${target}${unit} (${pct}%)`, "caption"),
+        ui.progress(progressValue, { maxValue: progressMax, color: cfg.color || "#8b5cf6" }),
+        ui.text(`${current}${unit} → ${target}${unit} (${pct}%)`, "caption"),
       ];
       return ui.card(children, { padding: 16 });
     }
@@ -3420,6 +3441,35 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
       return ui.grid(metricIds, { columns: cols, gap: 12 });
     }
 
+    case "score_gauge": {
+      const value = (cfg.value as number) || 0;
+      const max = (cfg.max as number) || 100;
+      const label = (cfg.label as string) || undefined;
+      const size = (cfg.size as string) || "md";
+      const thresholds = cfg.thresholds as Array<{ value: number; color: string }> | undefined;
+      return ui.scoreGauge(value, { max, label, size, thresholds });
+    }
+
+    case "activity_rings": {
+      const rings = (cfg.rings as Array<Record<string, unknown>>) || [];
+      const size = (cfg.size as number) || undefined;
+      return ui.activityRings(rings, { size });
+    }
+
+    case "radar_chart": {
+      const title = cfg.title as string | undefined;
+      const children: string[] = [];
+      if (title) children.push(ui.text(title, "subheading"));
+      children.push(
+        ui.radarChart({
+          radarData: cfg.data || [],
+          radarSeries: cfg.series || [],
+          height: 300,
+        })
+      );
+      return ui.card(children, { padding: 16 });
+    }
+
     default:
       return ui.text(`Unknown widget type: ${widget.type}`, "caption");
   }
@@ -3441,10 +3491,10 @@ function renderDashboardContent(ui: A2UIGenerator, dashboard: DashboardDefinitio
   headerChildren.push(ui.text(`${t("experiment.lastUpdated")}: ${updatedAt}`, "caption"));
 
   const headerCol = ui.column(headerChildren, { gap: 4 });
-  const refreshBtn = ui.button(t("experiment.refresh"), `refresh_dashboard:${dashboard.id}`, {
-    variant: "outline",
-    size: "sm",
+  const refreshBtn = ui.button("", `refresh_dashboard:${dashboard.id}`, {
+    variant: "ghost",
     icon: "refresh-cw",
+    tooltip: t("experiment.refresh"),
   });
   const headerRow = ui.row([headerCol, refreshBtn], {
     justifyContent: "space-between",

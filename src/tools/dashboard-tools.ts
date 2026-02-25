@@ -19,6 +19,9 @@ const VALID_WIDGET_TYPES: WidgetType[] = [
   "text_block",
   "milestone_timeline",
   "metric_grid",
+  "score_gauge",
+  "activity_rings",
+  "radar_chart",
 ];
 
 interface CreateDashboardArgs {
@@ -45,12 +48,13 @@ interface UpdateDashboardArgs {
 const createDashboardTool: PHATool<CreateDashboardArgs> = {
   name: "create_dashboard",
   description:
-    "创建一个自定义仪表盘页面，用于追踪健康实验、目标进度等。仪表盘由多个 section 组成，每个 section 包含若干 widget。" +
-    "可用 widget 类型：stat_row（指标卡片行）、line_chart（折线图）、bar_chart（柱状图）、progress_tracker（进度条）、" +
-    "data_table（数据表格）、text_block（文本块）、milestone_timeline（里程碑时间线）、metric_grid（指标网格）。" +
-    "创建后侧边栏会自动出现入口。每个会话最多 " +
+    "创建自定义仪表盘页面。仪表盘由多个 section 组成，每个 section 包含若干 widget。" +
+    "可用 widget 类型：stat_row（指标卡片行）、line_chart（折线图）、bar_chart（柱状图）、progress_tracker（进度条，下降目标需设baseline）、" +
+    "data_table（数据表格）、text_block（文本块）、milestone_timeline（里程碑时间线）、metric_grid（指标网格）、" +
+    "score_gauge（环形评分）、activity_rings（活动环）、radar_chart（雷达图）。" +
+    "创建后侧边栏「实验」页面会自动出现 tab。每个会话最多 " +
     MAX_DASHBOARDS_PER_SESSION +
-    " 个仪表盘。",
+    " 个。",
   displayName: "创建仪表盘",
   category: "presentation",
   icon: "activity",
@@ -81,7 +85,7 @@ const createDashboardTool: PHATool<CreateDashboardArgs> = {
                   type: {
                     type: "string",
                     description:
-                      "Widget type: stat_row, line_chart, bar_chart, progress_tracker, data_table, text_block, milestone_timeline, metric_grid",
+                      "Widget type: stat_row, line_chart, bar_chart, progress_tracker, data_table, text_block, milestone_timeline, metric_grid, score_gauge, activity_rings, radar_chart",
                   },
                   config: {
                     type: "object",
@@ -99,6 +103,15 @@ const createDashboardTool: PHATool<CreateDashboardArgs> = {
     required: ["title", "sections"],
   },
   execute: async (args: CreateDashboardArgs) => {
+    // Auto-parse sections if LLM passed it as a JSON string
+    if (typeof args.sections === "string") {
+      try {
+        args.sections = JSON.parse(args.sections);
+      } catch {
+        return { success: false, error: "sections: must be a valid JSON array" };
+      }
+    }
+
     // Validate widget types
     for (const section of args.sections) {
       for (const widget of section.widgets) {
@@ -172,6 +185,15 @@ const updateDashboardTool: PHATool<UpdateDashboardArgs> = {
     required: ["dashboardId"],
   },
   execute: async (args: UpdateDashboardArgs) => {
+    // Auto-parse sections if LLM passed it as a JSON string
+    if (typeof args.sections === "string") {
+      try {
+        args.sections = JSON.parse(args.sections);
+      } catch {
+        return { success: false, error: "sections: must be a valid JSON array" };
+      }
+    }
+
     // Validate widget types if sections provided
     if (args.sections) {
       for (const section of args.sections) {

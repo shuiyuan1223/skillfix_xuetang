@@ -17,7 +17,10 @@ export type WidgetType =
   | "data_table"
   | "text_block"
   | "milestone_timeline"
-  | "metric_grid";
+  | "metric_grid"
+  | "score_gauge"
+  | "activity_rings"
+  | "radar_chart";
 
 // --- Widget Config Types ---
 
@@ -51,6 +54,7 @@ export interface ProgressTrackerConfig {
   title: string;
   current: number;
   target: number;
+  baseline?: number; // Starting point. Required for "lower-is-better" goals (e.g., RHR 71→60)
   unit?: string;
   color?: string;
 }
@@ -86,6 +90,30 @@ export interface MetricGridConfig {
   columns?: number;
 }
 
+export interface ScoreGaugeConfig {
+  label?: string;
+  value: number;
+  max?: number; // default 100
+  size?: "sm" | "md" | "lg";
+  thresholds?: Array<{ value: number; color: string }>;
+}
+
+export interface ActivityRingsConfig {
+  rings: Array<{
+    label: string;
+    value: number;
+    max: number;
+    color: string;
+  }>;
+  size?: number;
+}
+
+export interface RadarChartConfig {
+  title?: string;
+  data: Array<Record<string, unknown>>; // each item has "subject" + series keys
+  series: Array<{ key: string; name: string; color: string }>;
+}
+
 export type WidgetConfig =
   | StatRowConfig
   | LineChartConfig
@@ -94,7 +122,10 @@ export type WidgetConfig =
   | DataTableConfig
   | TextBlockConfig
   | MilestoneTimelineConfig
-  | MetricGridConfig;
+  | MetricGridConfig
+  | ScoreGaugeConfig
+  | ActivityRingsConfig
+  | RadarChartConfig;
 
 // ============================================================================
 // Dashboard Definition

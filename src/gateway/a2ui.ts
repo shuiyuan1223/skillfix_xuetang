@@ -282,6 +282,10 @@ export class A2UIGenerator {
     return this.add("rings", "ActivityRings", { rings, ...opts });
   }
 
+  radarChart(opts: Record<string, unknown>): string {
+    return this.add("radar", "RadarChart", opts);
+  }
+
   statusBadge(status: string, opts: Record<string, unknown> = {}): string {
     return this.add("status", "StatusBadge", { status, ...opts });
   }
