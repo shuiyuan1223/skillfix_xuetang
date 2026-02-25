@@ -87,6 +87,7 @@ import {
   generateToolsPage,
   generateToolDetailModal,
   generateSkillDetailModal,
+  generateExperimentPage,
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
@@ -147,6 +148,8 @@ import {
 } from "../tools/skill-tools.js";
 import { systemMemoryReadTool, systemMemoryWriteTool } from "../tools/system-memory-tools.js";
 import { globalRegistry, categoryToAgentTags } from "../tools/index.js";
+import type { DashboardDefinition } from "../tools/dashboard-types.js";
+import { MAX_DASHBOARDS_PER_SESSION } from "../tools/dashboard-types.js";
 import {
   listTraces,
   countTraces,
@@ -1044,6 +1047,15 @@ export class GatewaySession {
   // Memory consolidation counter (daily log → MEMORY.md every N exchanges)
   private exchangeCount = 0;
 
+  // Custom dashboards (persisted per-user)
+  private customDashboards = new Map<string, DashboardDefinition>();
+  private activeDashboardTab: string | null = null;
+
+  /** Build a page with sidebar */
+  private buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
+    return generatePage(view, mainPage);
+  }
+
   // Memory system-agent sub-state
   private saSelectedMemoryFile: string | null = null;
   private saEditingMemory = false;
@@ -1153,6 +1165,39 @@ export class GatewaySession {
 
     // Load persisted chat history from JSONL
     this.loadPersistedMessages();
+
+    // Load persisted dashboards
+    this.loadDashboards();
+  }
+
+  // ── Dashboard persistence ──
+
+  private getDashboardsPath(): string | null {
+    if (!this.userUuid) return null;
+    return join(getUserDir(this.userUuid), "dashboards.json");
+  }
+
+  private loadDashboards(): void {
+    const path = this.getDashboardsPath();
+    if (!path || !existsSync(path)) return;
+    try {
+      const data = JSON.parse(readFileSync(path, "utf-8")) as DashboardDefinition[];
+      for (const d of data) {
+        this.customDashboards.set(d.id, d);
+      }
+    } catch {
+      // Ignore corrupt file
+    }
+  }
+
+  private saveDashboards(): void {
+    const path = this.getDashboardsPath();
+    if (!path) return;
+    try {
+      writeFileSync(path, JSON.stringify([...this.customDashboards.values()], null, 2), "utf-8");
+    } catch {
+      // Ignore write errors
+    }
   }
 
   // Maximum session age before starting a new one (24 hours)
@@ -1572,7 +1617,7 @@ export class GatewaySession {
    * Get the full page state for the current view (used by POST /api/a2ui/init).
    * Uses a collector to capture all send() calls and return them.
    */
-  async getFullPageState(): Promise<unknown[]> {
+  async getFullPageState(clientView?: string | null): Promise<unknown[]> {
     const collected: unknown[] = [];
     const collector = (msg: unknown) => collected.push(msg);
 
@@ -1588,7 +1633,10 @@ export class GatewaySession {
       }
     }
 
-    await this.handleNavigate(this.currentView, collector);
+    // Use client-provided view on reconnect (avoids cross-browser sync),
+    // fall back to session's currentView for first connection
+    const view = clientView || this.currentView;
+    await this.handleNavigate(view, collector);
     return collected;
   }
 
@@ -1632,7 +1680,10 @@ export class GatewaySession {
     return { updates: collected };
   }
 
-  private async handleInit(send: (msg: unknown) => void): Promise<void> {
+  private async handleInit(
+    send: (msg: unknown) => void,
+    clientView?: string | null
+  ): Promise<void> {
     send({
       type: "connected",
       session_id: this.sessionId,
@@ -1650,8 +1701,10 @@ export class GatewaySession {
       }
     }
 
-    // Restore previous view (session persists across reconnects)
-    await this.handleNavigate(this.currentView, send);
+    // Use client-provided view on reconnect (avoids cross-browser sync),
+    // fall back to session's currentView for first connection
+    const view = clientView || this.currentView;
+    await this.handleNavigate(view, send);
   }
 
   /** OpenClaw standard: 5 system-level + 3 user-level = 8 files */
@@ -1821,7 +1874,7 @@ export class GatewaySession {
     if (authConfig.dataSources.type === "huawei" && !this.isUserAuthenticated()) {
       if (!authExemptViews.some((v) => view.startsWith(v))) {
         const mainPage = generateAuthRequiredPage();
-        sendAll(send, generatePage("auth", mainPage));
+        sendAll(send, this.buildPage("auth", mainPage));
         return;
       }
     }
@@ -1902,7 +1955,7 @@ export class GatewaySession {
         // Send loading page immediately
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generateMemoryPage({
               activeTab: this.memoryTab,
@@ -1993,7 +2046,7 @@ export class GatewaySession {
             saMemoryContent,
             saEditingMemory: this.saEditingMemory,
           });
-          sendAll(send, generatePage(view, memoryPage));
+          sendAll(send, this.buildPage(view, memoryPage));
         } catch (e) {
           logMemory.error("Load error", { error: e });
         }
@@ -2004,7 +2057,7 @@ export class GatewaySession {
         // Send loading page immediately
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generatePromptsPage({
               files: [],
@@ -2018,7 +2071,7 @@ export class GatewaySession {
           const files = this.buildOpenClaw8Files();
           sendAll(
             send,
-            generatePage(
+            this.buildPage(
               view,
               generatePromptsPage({
                 files,
@@ -2036,7 +2089,7 @@ export class GatewaySession {
         // Send loading page immediately
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generateSkillsPage({
               skills: [],
@@ -2077,7 +2130,7 @@ export class GatewaySession {
 
           sendAll(
             send,
-            generatePage(
+            this.buildPage(
               view,
               generateSkillsPage({
                 skills: enrichedSkills,
@@ -2100,7 +2153,7 @@ export class GatewaySession {
         const toolsData = globalRegistry.getToolsPageData();
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generateToolsPage({
               tools: toolsData,
@@ -2125,7 +2178,7 @@ export class GatewaySession {
         try {
           const labData = this.buildEvolutionLabData();
           const labPage = generateEvolutionLab(labData);
-          sendAll(send, generatePage(view, labPage));
+          sendAll(send, this.buildPage(view, labPage));
         } catch (e) {
           logEvolution.error("Lab load error", { error: e });
         }
@@ -2150,7 +2203,7 @@ export class GatewaySession {
         // Send loading page immediately (no data yet)
         sendAll(
           send,
-          generatePage(
+          this.buildPage(
             view,
             generateIntegrationsPage({
               activeTab: this.integrationsTab,
@@ -2434,6 +2487,10 @@ export class GatewaySession {
         break;
       }
 
+      case "experiment":
+        mainPage = generateExperimentPage(this.customDashboards, this.activeDashboardTab);
+        break;
+
       default:
         mainPage = generateChatPage({
           messages: this.chatMessages,
@@ -2442,7 +2499,7 @@ export class GatewaySession {
         });
     }
 
-    sendAll(send, generatePage(view, mainPage));
+    sendAll(send, this.buildPage(view, mainPage));
   }
 
   private async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
@@ -3214,6 +3271,16 @@ export class GatewaySession {
       const view = action.replace("navigate:", "");
       await this.handleNavigate(view, send);
     }
+    // Custom dashboard actions
+    else if (action.startsWith("refresh_dashboard:")) {
+      const dashId = action.replace("refresh_dashboard:", "");
+      const dashboard = this.customDashboards.get(dashId);
+      if (dashboard) {
+        // Send a message to the agent asking it to refresh the dashboard
+        const refreshMsg = `请刷新仪表盘「${dashboard.title}」的数据，使用 update_dashboard 工具更新 dashboardId="${dashboard.id}"`;
+        await this.handleUserMessage(refreshMsg, send);
+      }
+    }
     // Plans actions
     else if (action.startsWith("view_plan:")) {
       const planId = action.replace("view_plan:", "");
@@ -3770,7 +3837,7 @@ export class GatewaySession {
           // Cache available — instant tab switch
           sendAll(
             send,
-            generatePage(
+            this.buildPage(
               "settings/integrations",
               generateIntegrationsPage({
                 activeTab: this.integrationsTab,
@@ -3787,7 +3854,7 @@ export class GatewaySession {
           // Still loading — just show skeleton for the new tab (don't re-trigger full load)
           sendAll(
             send,
-            generatePage(
+            this.buildPage(
               "settings/integrations",
               generateIntegrationsPage({
                 activeTab: this.integrationsTab,
@@ -3797,6 +3864,9 @@ export class GatewaySession {
             )
           );
         }
+      } else if (this.currentView === "experiment") {
+        this.activeDashboardTab = payload.tab as string;
+        await this.handleNavigate("experiment", send);
       } else if (this.currentView === "evolution") {
         this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
         this.sendEvolutionLabUpdate(send);
@@ -4896,7 +4966,7 @@ export class GatewaySession {
 
     sendAll(
       send,
-      generatePage(
+      this.buildPage(
         "settings/integrations",
         generateIntegrationsPage({
           activeTab: this.integrationsTab,
@@ -4934,7 +5004,7 @@ export class GatewaySession {
     if (updated) {
       sendAll(
         send,
-        generatePage(
+        this.buildPage(
           "settings/integrations",
           generateIntegrationsPage({
             activeTab: this.integrationsTab,
@@ -6301,6 +6371,54 @@ export class GatewaySession {
           }
         }
 
+        // Intercept create_dashboard / update_dashboard to store dashboard data
+        // Placed OUTSIDE if(assistantMsg) so it runs even in AG-UI SSE mode
+        // AgentToolResult wraps tool return in { content, details: <raw> }
+        // Our tool returns { success, details: { dashboardId, ... } }
+        // So the dashboard data is at event.result.details.details
+        if (event.toolName === "create_dashboard" && !event.isError) {
+          const raw = (event.result as any)?.details;
+          const d = raw?.details ?? raw;
+          if (d?.dashboardId && d?.sections) {
+            if (this.customDashboards.size < MAX_DASHBOARDS_PER_SESSION) {
+              this.customDashboards.set(d.dashboardId, {
+                id: d.dashboardId,
+                title: d.title,
+                subtitle: d.subtitle,
+                icon: d.icon || "activity",
+                sections: d.sections,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              });
+              this.saveDashboards();
+            }
+          }
+        }
+        if (event.toolName === "update_dashboard" && !event.isError) {
+          const raw = (event.result as any)?.details;
+          const d = raw?.details ?? raw;
+          if (d?.dashboardId && this.customDashboards.has(d.dashboardId)) {
+            const existing = this.customDashboards.get(d.dashboardId)!;
+            this.customDashboards.set(d.dashboardId, {
+              ...existing,
+              ...(d.title && { title: d.title }),
+              ...(d.subtitle && { subtitle: d.subtitle }),
+              ...(d.icon && { icon: d.icon }),
+              ...(d.sections && { sections: d.sections }),
+              updatedAt: new Date().toISOString(),
+            });
+            this.saveDashboards();
+            // If currently viewing experiment page with this dashboard tab, refresh
+            if (this.currentView === "experiment" && this.activeDashboardTab === d.dashboardId) {
+              const experimentPage = generateExperimentPage(
+                this.customDashboards,
+                this.activeDashboardTab
+              );
+              sendAll(this.getSend(send), this.buildPage("experiment", experimentPage));
+            }
+          }
+        }
+
         this.sendChatUpdate(send);
         break;
       }
@@ -6583,11 +6701,11 @@ export async function startGateway(
       // POST /api/a2ui/init — Create/resume session, return initial page state
       if (url.pathname === "/api/a2ui/init" && req.method === "POST") {
         try {
-          const body = (await req.json().catch(() => ({}))) as { uuid?: string };
+          const body = (await req.json().catch(() => ({}))) as { uuid?: string; view?: string };
           const userId = body.uuid || extractUserId(req);
           const session = getOrCreateSession(userId);
 
-          const updates = await session.getFullPageState();
+          const updates = await session.getFullPageState(body.view);
 
           const headers: Record<string, string> = {
             "Content-Type": "application/json",

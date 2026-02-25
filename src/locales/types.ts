@@ -11,6 +11,7 @@ export interface LocaleMessages {
     sleep: string;
     activity: string;
     plans: string;
+    experiment: string;
     memory: string;
     prompts: string;
     skills: string;
@@ -788,6 +789,18 @@ export interface LocaleMessages {
     placeholder: string;
     thinking: string;
     searching: string;
+  };
+
+  // Custom Experiment Dashboard
+  experiment: {
+    refresh: string;
+    lastUpdated: string;
+    viewDashboard: string;
+    widgets: string;
+    sections: string;
+    dashboardCreated: string;
+    empty: string;
+    emptyHint: string;
   };
 
   // OAuth / Authorization

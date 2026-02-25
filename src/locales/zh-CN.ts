@@ -11,6 +11,7 @@ export const zhCN: LocaleMessages = {
     sleep: "睡眠",
     activity: "运动",
     plans: "计划与提醒",
+    experiment: "实验",
     memory: "记忆",
     prompts: "提示词",
     skills: "技能",
@@ -758,6 +759,17 @@ export const zhCN: LocaleMessages = {
     placeholder: "输入健康问题...",
     thinking: "思考中",
     searching: "搜索中",
+  },
+
+  experiment: {
+    refresh: "刷新数据",
+    lastUpdated: "最后更新",
+    viewDashboard: "查看仪表盘",
+    widgets: "个组件",
+    sections: "个分区",
+    dashboardCreated: "仪表盘已创建",
+    empty: "还没有实验仪表盘",
+    emptyHint: "在聊天中让我帮你创建一个",
   },
 
   auth: {

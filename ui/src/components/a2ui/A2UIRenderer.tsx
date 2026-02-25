@@ -68,6 +68,8 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   update_calendar_event: "更新日历事件",
   delete_calendar_event: "删除日历事件",
   get_weather: "天气查询",
+  create_dashboard: "创建仪表盘",
+  update_dashboard: "更新仪表盘",
 };
 
 // ---- ThinkingMessage: collapsible thinking block for thinking-mode chat ----
@@ -454,7 +456,7 @@ export function A2UIRenderer({
     const icon = prop(c, "icon") as string;
     return (
       <div className="flex items-baseline gap-1">
-        {icon && <span className="text-base">{icon}</span>}
+        {icon && <span className="w-4 h-4 text-text-secondary [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
         <span className="text-2xl font-semibold">{value}</span>
         {unit && <span className="text-sm text-text-muted">{unit}</span>}
         <span className="text-xs text-text-muted ml-2">{label}</span>
@@ -682,18 +684,26 @@ export function A2UIRenderer({
     const tabs = prop(c, "tabs") as { id: string; label: string }[];
     const activeTab = prop(c, "activeTab") as string;
     const contentIds = prop(c, "contentIds") as Record<string, string>;
+    const actionIds = (prop(c, "actionIds") as string[]) || [];
     return (
       <div>
-        <div className="flex border-b border-border gap-0">
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTab;
-            return (
-              <button key={tab.id} className={`py-3 px-5 bg-transparent border-none text-sm cursor-pointer relative transition-colors duration-normal ${isActive ? "text-text" : "text-text-muted hover:text-text-secondary"}`} onClick={() => sendAction("tab_change", { tab: tab.id })}>
-                {tab.label}
-                <div className={`absolute bottom-[-1px] left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent transition-all duration-normal origin-center ${isActive ? "opacity-100 scale-x-100" : "opacity-0 scale-x-0"}`} />
-              </button>
-            );
-          })}
+        <div className="flex border-b border-border gap-0 items-center">
+          <div className="flex gap-0 flex-1">
+            {tabs.map((tab) => {
+              const isActive = tab.id === activeTab;
+              return (
+                <button key={tab.id} className={`py-3 px-5 bg-transparent border-none text-sm cursor-pointer relative transition-colors duration-normal ${isActive ? "text-text" : "text-text-muted hover:text-text-secondary"}`} onClick={() => sendAction("tab_change", { tab: tab.id })}>
+                  {tab.label}
+                  <div className={`absolute bottom-[-1px] left-0 right-0 h-0.5 bg-gradient-to-r from-primary to-accent transition-all duration-normal origin-center ${isActive ? "opacity-100 scale-x-100" : "opacity-0 scale-x-0"}`} />
+                </button>
+              );
+            })}
+          </div>
+          {actionIds.length > 0 && (
+            <div className="flex gap-1 px-2">
+              {actionIds.map((id) => <React.Fragment key={id}>{renderComponent(id)}</React.Fragment>)}
+            </div>
+          )}
         </div>
         <div className="pt-4">
           {contentIds[activeTab] ? renderComponent(contentIds[activeTab]) : null}

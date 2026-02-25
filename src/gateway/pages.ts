@@ -17,6 +17,7 @@ import {
   getCategoryIcon,
   type ComparisonRun,
 } from "./evolution-lab.js";
+import type { DashboardDefinition, DashboardWidget } from "../tools/dashboard-types.js";
 
 // Types for page data
 interface Message {
@@ -74,18 +75,18 @@ export function generateSidebar(activeView: string): A2UIMessage[] {
   const ui = new A2UIGenerator("sidebar");
 
   // Main navigation
-  const mainNav = ui.nav(
-    [
-      { id: "chat", label: t("nav.chat"), icon: "chat" },
-      { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
-      { id: "plans", label: t("nav.plans"), icon: "target" },
-      { id: "memory", label: t("nav.memory"), icon: "brain" },
-      { id: "legacy-chat", label: t("nav.legacyChat"), icon: "search" },
-      { id: "evolution", label: t("nav.evolution"), icon: "flask" },
-      { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
-    ],
-    { activeId: activeView }
-  );
+  const mainNavItems = [
+    { id: "chat", label: t("nav.chat"), icon: "chat" },
+    { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
+    { id: "plans", label: t("nav.plans"), icon: "target" },
+    { id: "experiment", label: t("nav.experiment"), icon: "flask" },
+    { id: "memory", label: t("nav.memory"), icon: "brain" },
+    { id: "legacy-chat", label: t("nav.legacyChat"), icon: "search" },
+    { id: "evolution", label: t("nav.evolution"), icon: "test-tube" },
+    { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
+  ];
+
+  const mainNav = ui.nav(mainNavItems, { activeId: activeView });
 
   // Divider
   const dividerId = `div_${Date.now()}`;
@@ -3307,6 +3308,295 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
 }
 
 // ============================================================================
+// Custom Dashboard Generator
+// ============================================================================
+
+function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
+  const cfg = widget.config as Record<string, unknown>;
+
+  switch (widget.type) {
+    case "stat_row": {
+      const items = (cfg.items as Array<Record<string, unknown>>) || [];
+      const cols = (cfg.columns as number) || items.length || 3;
+      const cards = items.map((item) =>
+        ui.statCard({
+          title: (item.label as string) || "",
+          value: (item.value as string) || "",
+          subtitle: (item.unit as string) || undefined,
+          icon: (item.icon as string) || "activity",
+          color: (item.color as string) || undefined,
+          trend: item.trend || undefined,
+        })
+      );
+      return ui.grid(cards, { columns: cols, gap: 12 });
+    }
+
+    case "line_chart": {
+      const title = cfg.title as string | undefined;
+      const children: string[] = [];
+      if (title) children.push(ui.text(title, "subheading"));
+
+      // Normalize data: Agent may pass nested { metrics: [{data, label}] } or flat { data: [{label,value}] }
+      let chartData = (cfg.data as Array<Record<string, unknown>>) || [];
+      let chartColor = (cfg.color as string) || "#3b82f6";
+      if (chartData.length === 0 && cfg.metrics) {
+        // Extract from metrics[0].data format (Agent sometimes uses this)
+        const metrics = cfg.metrics as Array<{
+          data?: Array<Record<string, unknown>>;
+          color?: string;
+          label?: string;
+        }>;
+        if (metrics[0]?.data) {
+          chartData = metrics[0].data;
+          if (metrics[0].color) chartColor = metrics[0].color;
+        }
+      }
+      // Normalize keys: accept "date" as alias for "label"
+      chartData = chartData.map((d) => ({
+        label: (d.label as string) || (d.date as string) || "",
+        value: d.value,
+      }));
+
+      children.push(
+        ui.chart({
+          chartType: "line",
+          data: chartData,
+          xKey: "label",
+          yKey: "value",
+          yLabel: cfg.yLabel || undefined,
+          color: chartColor,
+        })
+      );
+      return ui.card(children, { padding: 16 });
+    }
+
+    case "bar_chart": {
+      const title = cfg.title as string | undefined;
+      const children: string[] = [];
+      if (title) children.push(ui.text(title, "subheading"));
+      children.push(
+        ui.chart({
+          chartType: "bar",
+          data: cfg.data || [],
+          xKey: "label",
+          yKey: "value",
+          yLabel: cfg.yLabel || undefined,
+          color: cfg.color || "#10b981",
+        })
+      );
+      return ui.card(children, { padding: 16 });
+    }
+
+    case "progress_tracker": {
+      const title = (cfg.title as string) || "";
+      const current = (cfg.current as number) || 0;
+      const target = (cfg.target as number) || 100;
+      const baseline = cfg.baseline as number | undefined;
+      const unit = (cfg.unit as string) || "";
+
+      // Calculate progress percentage
+      let pct: number;
+      let progressValue: number;
+      let progressMax: number;
+      if (baseline != null && baseline !== target) {
+        // Baseline provided: progress = how far from baseline toward target
+        // Works for both "higher-is-better" and "lower-is-better"
+        const range = Math.abs(baseline - target);
+        const moved =
+          baseline > target
+            ? Math.max(0, baseline - current) // lower-is-better
+            : Math.max(0, current - baseline); // higher-is-better
+        pct = Math.max(0, Math.min(Math.round((moved / range) * 100), 100));
+        progressValue = pct;
+        progressMax = 100;
+      } else {
+        // No baseline: simple ratio (for "X out of Y" style goals)
+        pct = target !== 0 ? Math.max(0, Math.min(Math.round((current / target) * 100), 100)) : 0;
+        progressValue = Math.min(current, target);
+        progressMax = target;
+      }
+
+      const children: string[] = [
+        ui.text(title, "subheading"),
+        ui.progress(progressValue, { maxValue: progressMax, color: cfg.color || "#8b5cf6" }),
+        ui.text(`${current}${unit} → ${target}${unit} (${pct}%)`, "caption"),
+      ];
+      return ui.card(children, { padding: 16 });
+    }
+
+    case "data_table": {
+      const columns = (cfg.columns as Array<Record<string, unknown>>) || [];
+      const rows = (cfg.rows as Array<Record<string, unknown>>) || [];
+      return ui.card([ui.dataTable(columns, rows)], { padding: 16 });
+    }
+
+    case "text_block": {
+      const content = (cfg.content as string) || "";
+      const variant = (cfg.variant as string) || "body";
+      return ui.text(content, variant, { markdown: true });
+    }
+
+    case "milestone_timeline": {
+      const entries = ((cfg.entries as Array<Record<string, unknown>>) || []).map((e) => ({
+        type: e.status === "completed" ? "commit" : e.status === "current" ? "branch" : "merge",
+        date: (e.date as string) || "",
+        message: (e.title as string) || "",
+        detail: (e.description as string) || undefined,
+        icon: (e.icon as string) || undefined,
+      }));
+      return ui.card([ui.gitTimeline(entries)], { padding: 16 });
+    }
+
+    case "metric_grid": {
+      const metrics = (cfg.metrics as Array<Record<string, unknown>>) || [];
+      const cols = (cfg.columns as number) || 3;
+      const metricIds = metrics.map((m) =>
+        ui.metric({
+          label: (m.label as string) || "",
+          value: (m.value as string) || "",
+          unit: (m.unit as string) || undefined,
+          icon: (m.icon as string) || "activity",
+          color: (m.color as string) || undefined,
+        })
+      );
+      return ui.grid(metricIds, { columns: cols, gap: 12 });
+    }
+
+    case "score_gauge": {
+      const value = (cfg.value as number) || 0;
+      const max = (cfg.max as number) || 100;
+      const label = (cfg.label as string) || undefined;
+      const size = (cfg.size as string) || "md";
+      const thresholds = cfg.thresholds as Array<{ value: number; color: string }> | undefined;
+      return ui.scoreGauge(value, { max, label, size, thresholds });
+    }
+
+    case "activity_rings": {
+      const rings = (cfg.rings as Array<Record<string, unknown>>) || [];
+      const size = (cfg.size as number) || undefined;
+      return ui.activityRings(rings, { size });
+    }
+
+    case "radar_chart": {
+      const title = cfg.title as string | undefined;
+      const children: string[] = [];
+      if (title) children.push(ui.text(title, "subheading"));
+      children.push(
+        ui.radarChart({
+          radarData: cfg.data || [],
+          radarSeries: cfg.series || [],
+          height: 300,
+        })
+      );
+      return ui.card(children, { padding: 16 });
+    }
+
+    default:
+      return ui.text(`Unknown widget type: ${widget.type}`, "caption");
+  }
+}
+
+/**
+ * Render a single dashboard's content into the given A2UIGenerator.
+ * Returns the root component ID for embedding into tabs or standalone pages.
+ */
+function renderDashboardContent(ui: A2UIGenerator, dashboard: DashboardDefinition): string {
+  const children: string[] = [];
+
+  // Subtitle + last updated (refresh button is at page level, not here)
+  if (dashboard.subtitle) {
+    children.push(ui.text(dashboard.subtitle, "subheading"));
+  }
+  const updatedAt = new Date(dashboard.updatedAt).toLocaleString();
+  children.push(ui.text(`${t("experiment.lastUpdated")}: ${updatedAt}`, "caption"));
+
+  // Render sections
+  for (const section of dashboard.sections) {
+    const sectionChildren: string[] = [];
+    if (section.title) {
+      sectionChildren.push(ui.text(section.title, "subheading"));
+    }
+    for (const widget of section.widgets) {
+      sectionChildren.push(renderWidget(ui, widget));
+    }
+    // Use column (not card) to avoid double-card nesting with stat_row etc.
+    children.push(ui.column(sectionChildren, { gap: 12 }));
+  }
+
+  return ui.column(children, { gap: 24 });
+}
+
+export function generateCustomDashboard(dashboard: DashboardDefinition): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+  const root = renderDashboardContent(ui, dashboard);
+  return ui.build(root);
+}
+
+// ============================================================================
+// Experiment Page Generator (tabs for dynamic dashboards)
+// ============================================================================
+
+export function generateExperimentPage(
+  dashboards: Map<string, DashboardDefinition>,
+  activeDashboardTab?: string | null
+): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+
+  // Empty state
+  if (dashboards.size === 0) {
+    const emptyTitle = ui.text(t("experiment.empty"), "h2");
+    const emptyHint = ui.text(t("experiment.emptyHint"), "caption");
+    const emptyCol = ui.column([emptyTitle, emptyHint], {
+      gap: 8,
+      padding: 64,
+      alignItems: "center",
+    } as any);
+    const root = ui.column([emptyCol], { gap: 0 });
+    return ui.build(root);
+  }
+
+  // Determine active tab
+  const dashList = [...dashboards.values()];
+  let activeTab = activeDashboardTab;
+  if (!activeTab || !dashboards.has(activeTab)) {
+    activeTab = dashList[0].id;
+  }
+
+  // Build tab definitions
+  const tabDefs = dashList.map((d) => ({
+    id: d.id,
+    label: d.title,
+    icon: d.icon || "activity",
+  }));
+
+  // Build content for the active tab only
+  const tabContentIds: Record<string, string> = {};
+  const activeDash = dashboards.get(activeTab);
+  if (activeDash) {
+    tabContentIds[activeTab] = renderDashboardContent(ui, activeDash);
+  }
+
+  // Refresh button in tab header bar (right side)
+  const actionIds: string[] = [];
+  if (activeDash) {
+    actionIds.push(
+      ui.button("", `refresh_dashboard:${activeDash.id}`, {
+        variant: "ghost",
+        icon: "refresh-cw",
+        tooltip: t("experiment.refresh"),
+      })
+    );
+  }
+
+  const tabs = ui.tabs(tabDefs, activeTab, tabContentIds, { actionIds });
+
+  const content = ui.column([tabs], { gap: 0, padding: 24 });
+  const root = ui.column([content], { gap: 0 });
+
+  return ui.build(root);
+}
+
+// ============================================================================
 // Page Message Generator (combines sidebar + main)
 // ============================================================================
 
@@ -3875,6 +4165,18 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
     case "create_health_plan":
       return generateCreatePlanCards(data);
     default:
+      break;
+  }
+
+  // Tools that use details directly (not details.data)
+  // Dashboard tool returns { success, details: { dashboardId, ... } } wrapped by AgentToolResult
+  // So result.details = { success, details: { dashboardId, ... } }
+  switch (toolName) {
+    case "create_dashboard": {
+      const dashData = (details as any)?.details ?? details;
+      return generateCreateDashboardCards(dashData as Record<string, unknown>);
+    }
+    default:
       return generateGenericToolCards(data);
   }
 }
@@ -3931,6 +4233,48 @@ function generateCreatePlanCards(data: unknown): ToolCardResult | null {
   const grid = ui.grid([nameCard, goalsCard, dateCard], { columns: 3, gap: 12 });
 
   const viewBtn = ui.button(t("plans.viewDetails"), "navigate:plans", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
+
+  const root = ui.column([grid, viewBtn], { gap: 12 });
+  return buildToolCardResult(ui.build(root));
+}
+
+function generateCreateDashboardCards(details: Record<string, unknown>): ToolCardResult | null {
+  const title = details.title as string | undefined;
+  const widgetCount = details.widgetCount as number | undefined;
+  const sectionCount = details.sectionCount as number | undefined;
+  const dashboardId = details.dashboardId as string | undefined;
+  if (!title || !dashboardId) return null;
+
+  const ui = new A2UIGenerator("ic-dash");
+
+  const titleCard = ui.statCard({
+    title: t("experiment.dashboardCreated"),
+    value: title,
+    icon: (details.icon as string) || "activity",
+    color: "#8b5cf6",
+  });
+
+  const widgetsCard = ui.statCard({
+    title: t("experiment.widgets"),
+    value: `${widgetCount || 0}`,
+    icon: "bar-chart",
+    color: "#3b82f6",
+  });
+
+  const sectionsCard = ui.statCard({
+    title: t("experiment.sections"),
+    value: `${sectionCount || 0}`,
+    icon: "target",
+    color: "#10b981",
+  });
+
+  const grid = ui.grid([titleCard, widgetsCard, sectionsCard], { columns: 3, gap: 12 });
+
+  const viewBtn = ui.button(t("experiment.viewDashboard"), `view_dashboard:${dashboardId}`, {
     variant: "outline",
     size: "sm",
     icon: "chevron-right",

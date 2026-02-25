@@ -209,8 +209,8 @@ export class A2UIGenerator {
   }
 
   // Content components
-  text(text: string, variant: string = "body"): string {
-    return this.add("txt", "Text", { text, variant });
+  text(text: string, variant: string = "body", opts: Record<string, unknown> = {}): string {
+    return this.add("txt", "Text", { text, variant, ...opts });
   }
 
   card(childIds: string[], opts: Record<string, unknown> = {}): string {
@@ -253,8 +253,13 @@ export class A2UIGenerator {
     return this.add("nav", "Nav", { items, ...opts });
   }
 
-  tabs(tabsList: unknown[], activeTab: string, contentIds: Record<string, string>): string {
-    return this.add("tabs", "Tabs", { tabs: tabsList, activeTab, contentIds });
+  tabs(
+    tabsList: unknown[],
+    activeTab: string,
+    contentIds: Record<string, string>,
+    opts: { actionIds?: string[] } = {}
+  ): string {
+    return this.add("tabs", "Tabs", { tabs: tabsList, activeTab, contentIds, ...opts });
   }
 
   // Admin/Evolution Component Methods
@@ -280,6 +285,10 @@ export class A2UIGenerator {
 
   activityRings(rings: unknown[], opts: Record<string, unknown> = {}): string {
     return this.add("rings", "ActivityRings", { rings, ...opts });
+  }
+
+  radarChart(opts: Record<string, unknown>): string {
+    return this.add("radar", "RadarChart", opts);
   }
 
   statusBadge(status: string, opts: Record<string, unknown> = {}): string {
