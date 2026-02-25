@@ -1047,7 +1047,7 @@ export class GatewaySession {
   // Memory consolidation counter (daily log → MEMORY.md every N exchanges)
   private exchangeCount = 0;
 
-  // Custom dashboards (per-session, not persisted)
+  // Custom dashboards (persisted per-user)
   private customDashboards = new Map<string, DashboardDefinition>();
   private activeDashboardTab: string | null = null;
 
@@ -1165,6 +1165,39 @@ export class GatewaySession {
 
     // Load persisted chat history from JSONL
     this.loadPersistedMessages();
+
+    // Load persisted dashboards
+    this.loadDashboards();
+  }
+
+  // ── Dashboard persistence ──
+
+  private getDashboardsPath(): string | null {
+    if (!this.userUuid) return null;
+    return join(getUserDir(this.userUuid), "dashboards.json");
+  }
+
+  private loadDashboards(): void {
+    const path = this.getDashboardsPath();
+    if (!path || !existsSync(path)) return;
+    try {
+      const data = JSON.parse(readFileSync(path, "utf-8")) as DashboardDefinition[];
+      for (const d of data) {
+        this.customDashboards.set(d.id, d);
+      }
+    } catch {
+      // Ignore corrupt file
+    }
+  }
+
+  private saveDashboards(): void {
+    const path = this.getDashboardsPath();
+    if (!path) return;
+    try {
+      writeFileSync(path, JSON.stringify([...this.customDashboards.values()], null, 2), "utf-8");
+    } catch {
+      // Ignore write errors
+    }
   }
 
   // Maximum session age before starting a new one (24 hours)
@@ -6357,7 +6390,7 @@ export class GatewaySession {
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
               });
-              // No sidebar push needed — user clicks fixed "experiment" nav to see new dashboards
+              this.saveDashboards();
             }
           }
         }
@@ -6374,6 +6407,7 @@ export class GatewaySession {
               ...(d.sections && { sections: d.sections }),
               updatedAt: new Date().toISOString(),
             });
+            this.saveDashboards();
             // If currently viewing experiment page with this dashboard tab, refresh
             if (this.currentView === "experiment" && this.activeDashboardTab === d.dashboardId) {
               const experimentPage = generateExperimentPage(

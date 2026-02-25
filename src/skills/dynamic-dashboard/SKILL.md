@@ -381,6 +381,6 @@ Section 6: 总结（text_block — 文字分析，可选）
 
 ## 限制
 
-- 每个会话最多 5 个 dashboard
-- Dashboard 不持久化（刷新页面后会丢失）
+- 每个用户最多 5 个 dashboard
+- Dashboard 会持久化到用户目录（重启后保留）
 - 创建后侧边栏自动出现入口
