@@ -34,3 +34,4 @@ test-results/
 
 # Screenshots
 screenshot-*.png
+ui/package-lock.json
