@@ -109,7 +109,7 @@ export const memoryStatusTool: PHATool = {
   category: "memory",
   icon: "info",
   label: "Memory Status",
-  inputSchema: {},
+  inputSchema: { type: "object", properties: {} },
   execute: async () => {
     const uuid = getUserUuid();
     const mm = getMemoryManager();
