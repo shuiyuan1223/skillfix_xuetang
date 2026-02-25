@@ -3336,14 +3336,36 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
       const title = cfg.title as string | undefined;
       const children: string[] = [];
       if (title) children.push(ui.text(title, "subheading"));
+
+      // Normalize data: Agent may pass nested { metrics: [{data, label}] } or flat { data: [{label,value}] }
+      let chartData = (cfg.data as Array<Record<string, unknown>>) || [];
+      let chartColor = (cfg.color as string) || "#3b82f6";
+      if (chartData.length === 0 && cfg.metrics) {
+        // Extract from metrics[0].data format (Agent sometimes uses this)
+        const metrics = cfg.metrics as Array<{
+          data?: Array<Record<string, unknown>>;
+          color?: string;
+          label?: string;
+        }>;
+        if (metrics[0]?.data) {
+          chartData = metrics[0].data;
+          if (metrics[0].color) chartColor = metrics[0].color;
+        }
+      }
+      // Normalize keys: accept "date" as alias for "label"
+      chartData = chartData.map((d) => ({
+        label: (d.label as string) || (d.date as string) || "",
+        value: d.value,
+      }));
+
       children.push(
         ui.chart({
           chartType: "line",
-          data: cfg.data || [],
+          data: chartData,
           xKey: "label",
           yKey: "value",
           yLabel: cfg.yLabel || undefined,
-          color: cfg.color || "#3b82f6",
+          color: chartColor,
         })
       );
       return ui.card(children, { padding: 16 });

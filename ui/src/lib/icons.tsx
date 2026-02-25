@@ -97,7 +97,9 @@ const EMOJI_TO_ICON: Record<string, string> = {
 
 export function getIcon(nameOrEmoji: string): string {
   const iconName = EMOJI_TO_ICON[nameOrEmoji] || nameOrEmoji;
-  return ICONS[iconName] || nameOrEmoji;
+  // Normalize underscores to hyphens (Agent may write "trending_down" instead of "trending-down")
+  const normalized = iconName.replace(/_/g, "-");
+  return ICONS[iconName] || ICONS[normalized] || nameOrEmoji;
 }
 
 export function Icon({ name, className }: { name: string; className?: string }) {
