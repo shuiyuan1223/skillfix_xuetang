@@ -34,3 +34,60 @@ PHA (Personal Health Agent) is an AgentOS-based health management platform built
 - Keep code concise
 - No emojis in code or commits
 - Use conventional commits (feat:, fix:, docs:, etc.)
+
+## API Endpoints
+
+### POST /api/query
+
+外部查询接口（边想边搜），调用方直接传入 `refresh_token`，无需预先完成 OAuth 登录。
+
+**Request**
+
+```http
+POST /api/query
+Content-Type: application/json
+
+{
+  "refresh_token": "xxxxxx",   // 华为 OAuth refresh token（必填）
+  "query": "我今天睡眠怎么样？",  // 用户问题（必填）
+  "sn": "req-20260225-001"     // 请求序列号，用于日志追踪（可选）
+}
+```
+
+**Response** — `text/event-stream` SSE 流
+
+```
+data: {"event":"search_mode","content":"search_with_think"}
+
+data: {"event":"rag_status","content":"start_search"}
+
+data: {"event":"data","content":"正在思考...","content_type":"reasoning"}
+
+data: {"event":"data","content":"\n[searching: get_sleep]\n","content_type":"reasoning"}
+
+data: {"event":"rag_status","content":"start_search"}
+
+data: {"event":"data","content":"你今天的睡眠时长为7小时..."}
+
+data: {"event":"finish"}
+```
+
+**Error Response** — 参数缺失或 token 无效时，同样以 SSE 流返回：
+
+```
+data: {"event":"error","content":"Missing required fields: refresh_token, query"}
+
+data: {"event":"finish"}
+```
+
+**认证流程**
+
+1. 用 `refresh_token` 调用华为 token refresh API，换取 `access_token`
+2. 通过 `access_token` 调用 `getTokenInfo` 解析 Huawei userId
+3. 将新 token 存入 UserStore，并确保用户数据目录存在
+4. 复用或新建该用户的 `GatewaySession`，走边想边搜（`handleLegacyChatSSE`）流程
+
+**实现位置**
+
+- 路由：`src/gateway/server.ts` — `/api/query` handler
+- 认证辅助：`src/data-sources/huawei/huawei-auth.ts` — `HuaweiAuth.refreshTokenAndGetUserId()`
