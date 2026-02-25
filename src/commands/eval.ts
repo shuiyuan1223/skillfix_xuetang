@@ -45,7 +45,12 @@ import {
 } from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
 import { getModel, complete, type Model, type Api, type TextContent } from "@mariozechner/pi-ai";
-import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
+import {
+  countTestCases,
+  listBenchmarkRuns,
+  listCategoryScores,
+  closeDatabase,
+} from "../memory/db.js";
 import {
   writeBenchmarkProgress,
   readBenchmarkProgress,
@@ -561,6 +566,7 @@ export function registerEvalCommand(program: Command): void {
       console.log(
         `  ${c.dim("Run")} ${c.cyan("pha eval benchmark")} ${c.dim("to execute benchmarks")}\n`
       );
+      closeDatabase();
     });
 
   // eval diagnose - run diagnose pipeline
