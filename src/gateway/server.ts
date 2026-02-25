@@ -3239,10 +3239,7 @@ export class GatewaySession {
       await this.handleNavigate(view, send);
     }
     // Custom dashboard actions
-    else if (action === "experiment_tab_change" && payload?.tab) {
-      this.activeDashboardTab = payload.tab as string;
-      await this.handleNavigate("experiment", send);
-    } else if (action.startsWith("refresh_dashboard:")) {
+    else if (action.startsWith("refresh_dashboard:")) {
       const dashId = action.replace("refresh_dashboard:", "");
       const dashboard = this.customDashboards.get(dashId);
       if (dashboard) {
@@ -3834,6 +3831,9 @@ export class GatewaySession {
             )
           );
         }
+      } else if (this.currentView === "experiment") {
+        this.activeDashboardTab = payload.tab as string;
+        await this.handleNavigate("experiment", send);
       } else if (this.currentView === "evolution") {
         this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
         this.sendEvolutionLabUpdate(send);

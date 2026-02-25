@@ -209,8 +209,8 @@ export class A2UIGenerator {
   }
 
   // Content components
-  text(text: string, variant: string = "body"): string {
-    return this.add("txt", "Text", { text, variant });
+  text(text: string, variant: string = "body", opts: Record<string, unknown> = {}): string {
+    return this.add("txt", "Text", { text, variant, ...opts });
   }
 
   card(childIds: string[], opts: Record<string, unknown> = {}): string {

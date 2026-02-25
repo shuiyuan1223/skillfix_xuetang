@@ -3340,6 +3340,8 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
         ui.chart({
           chartType: "line",
           data: cfg.data || [],
+          xKey: "label",
+          yKey: "value",
           yLabel: cfg.yLabel || undefined,
           color: cfg.color || "#3b82f6",
         })
@@ -3355,6 +3357,8 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
         ui.chart({
           chartType: "bar",
           data: cfg.data || [],
+          xKey: "label",
+          yKey: "value",
           yLabel: cfg.yLabel || undefined,
           color: cfg.color || "#10b981",
         })
@@ -3367,10 +3371,12 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
       const current = (cfg.current as number) || 0;
       const target = (cfg.target as number) || 100;
       const unit = (cfg.unit as string) || "";
-      const pct = Math.min(Math.round((current / target) * 100), 100);
+      // For progress bar: use target as maxValue, clamp percentage to 0-100
+      const pct =
+        target !== 0 ? Math.max(0, Math.min(Math.round((current / target) * 100), 100)) : 0;
       const children: string[] = [
         ui.text(title, "subheading"),
-        ui.progress(current, { maxValue: target, color: cfg.color || "#8b5cf6" }),
+        ui.progress(Math.min(current, target), { maxValue: target, color: cfg.color || "#8b5cf6" }),
         ui.text(`${current}${unit} / ${target}${unit} (${pct}%)`, "caption"),
       ];
       return ui.card(children, { padding: 16 });
@@ -3385,7 +3391,7 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
     case "text_block": {
       const content = (cfg.content as string) || "";
       const variant = (cfg.variant as string) || "body";
-      return ui.text(content, variant);
+      return ui.text(content, variant, { markdown: true });
     }
 
     case "milestone_timeline": {
@@ -3479,10 +3485,9 @@ export function generateExperimentPage(
 
   // Empty state
   if (dashboards.size === 0) {
-    const emptyIcon = ui.text("flask", "caption"); // icon placeholder
     const emptyTitle = ui.text(t("experiment.empty"), "h2");
     const emptyHint = ui.text(t("experiment.emptyHint"), "caption");
-    const emptyCol = ui.column([emptyIcon, emptyTitle, emptyHint], {
+    const emptyCol = ui.column([emptyTitle, emptyHint], {
       gap: 8,
       padding: 64,
       alignItems: "center",

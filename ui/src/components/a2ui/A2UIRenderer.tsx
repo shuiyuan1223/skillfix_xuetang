@@ -456,7 +456,7 @@ export function A2UIRenderer({
     const icon = prop(c, "icon") as string;
     return (
       <div className="flex items-baseline gap-1">
-        {icon && <span className="text-base">{icon}</span>}
+        {icon && <span className="w-4 h-4 text-text-secondary [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: getIcon(icon) }} />}
         <span className="text-2xl font-semibold">{value}</span>
         {unit && <span className="text-sm text-text-muted">{unit}</span>}
         <span className="text-xs text-text-muted ml-2">{label}</span>
