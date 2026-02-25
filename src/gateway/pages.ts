@@ -3498,10 +3498,11 @@ function renderDashboardContent(ui: A2UIGenerator, dashboard: DashboardDefinitio
     for (const widget of section.widgets) {
       sectionChildren.push(renderWidget(ui, widget));
     }
-    children.push(ui.card(sectionChildren, { padding: 16 }));
+    // Use column (not card) to avoid double-card nesting with stat_row etc.
+    children.push(ui.column(sectionChildren, { gap: 12 }));
   }
 
-  return ui.column(children, { gap: 16 });
+  return ui.column(children, { gap: 24 });
 }
 
 export function generateCustomDashboard(dashboard: DashboardDefinition): A2UIMessage[] {

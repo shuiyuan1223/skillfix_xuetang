@@ -462,7 +462,7 @@ test-tube, lightbulb, target, link, shield, trending-up,
 trending-down, sparkles, info, settings, hospital, loader,
 check, x, plus, alert-triangle, chevron-left, chevron-right,
 git-branch, git-merge, git-commit, menu, play, pause,
-skip-forward, refresh-cw, square, sun
+skip-forward, refresh-cw, square, sun, clock, sunrise
 ```
 
 ### Evolution Lab 架构
