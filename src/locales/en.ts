@@ -11,6 +11,7 @@ export const en: LocaleMessages = {
     sleep: "Sleep",
     activity: "Activity",
     plans: "Plans & Reminders",
+    experiment: "Experiments",
     memory: "Memory",
     prompts: "Prompts",
     skills: "Skills",
@@ -777,6 +778,8 @@ export const en: LocaleMessages = {
     widgets: "widgets",
     sections: "sections",
     dashboardCreated: "Dashboard Created",
+    empty: "No experiment dashboards yet",
+    emptyHint: "Ask me to create one in chat",
   },
 
   auth: {

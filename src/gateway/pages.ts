@@ -71,10 +71,7 @@ interface ChartData {
 // Sidebar Generator
 // ============================================================================
 
-export function generateSidebar(
-  activeView: string,
-  customDashboards?: Array<{ id: string; title: string; icon?: string }>
-): A2UIMessage[] {
+export function generateSidebar(activeView: string): A2UIMessage[] {
   const ui = new A2UIGenerator("sidebar");
 
   // Main navigation
@@ -82,22 +79,12 @@ export function generateSidebar(
     { id: "chat", label: t("nav.chat"), icon: "chat" },
     { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
     { id: "plans", label: t("nav.plans"), icon: "target" },
+    { id: "experiment", label: t("nav.experiment"), icon: "flask" },
     { id: "memory", label: t("nav.memory"), icon: "brain" },
     { id: "legacy-chat", label: t("nav.legacyChat"), icon: "search" },
-    { id: "evolution", label: t("nav.evolution"), icon: "flask" },
+    { id: "evolution", label: t("nav.evolution"), icon: "test-tube" },
     { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
   ];
-
-  // Inject custom dashboard entries after plans
-  if (customDashboards?.length) {
-    const insertIdx = mainNavItems.findIndex((i) => i.id === "memory");
-    const dashItems = customDashboards.map((d) => ({
-      id: `experiment:${d.id}`,
-      label: d.title,
-      icon: d.icon || "activity",
-    }));
-    mainNavItems.splice(insertIdx, 0, ...dashItems);
-  }
 
   const mainNav = ui.nav(mainNavItems, { activeId: activeView });
 
@@ -3432,12 +3419,15 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
   }
 }
 
-export function generateCustomDashboard(dashboard: DashboardDefinition): A2UIMessage[] {
-  const ui = new A2UIGenerator("main");
+/**
+ * Render a single dashboard's content into the given A2UIGenerator.
+ * Returns the root component ID for embedding into tabs or standalone pages.
+ */
+function renderDashboardContent(ui: A2UIGenerator, dashboard: DashboardDefinition): string {
   const children: string[] = [];
 
-  // Header with title, subtitle, and refresh button
-  const headerChildren: string[] = [ui.text(dashboard.title, "heading")];
+  // Header with subtitle and refresh button
+  const headerChildren: string[] = [];
   if (dashboard.subtitle) {
     headerChildren.push(ui.text(dashboard.subtitle, "subheading"));
   }
@@ -3468,7 +3458,64 @@ export function generateCustomDashboard(dashboard: DashboardDefinition): A2UIMes
     children.push(ui.card(sectionChildren, { padding: 16 }));
   }
 
-  const root = ui.column(children, { gap: 16 });
+  return ui.column(children, { gap: 16 });
+}
+
+export function generateCustomDashboard(dashboard: DashboardDefinition): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+  const root = renderDashboardContent(ui, dashboard);
+  return ui.build(root);
+}
+
+// ============================================================================
+// Experiment Page Generator (tabs for dynamic dashboards)
+// ============================================================================
+
+export function generateExperimentPage(
+  dashboards: Map<string, DashboardDefinition>,
+  activeDashboardTab?: string | null
+): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+
+  // Empty state
+  if (dashboards.size === 0) {
+    const emptyIcon = ui.text("flask", "caption"); // icon placeholder
+    const emptyTitle = ui.text(t("experiment.empty"), "h2");
+    const emptyHint = ui.text(t("experiment.emptyHint"), "caption");
+    const emptyCol = ui.column([emptyIcon, emptyTitle, emptyHint], {
+      gap: 8,
+      padding: 64,
+      alignItems: "center",
+    } as any);
+    const root = ui.column([emptyCol], { gap: 0 });
+    return ui.build(root);
+  }
+
+  // Determine active tab
+  const dashList = [...dashboards.values()];
+  let activeTab = activeDashboardTab;
+  if (!activeTab || !dashboards.has(activeTab)) {
+    activeTab = dashList[0].id;
+  }
+
+  // Build tab definitions
+  const tabDefs = dashList.map((d) => ({
+    id: d.id,
+    label: d.title,
+    icon: d.icon || "activity",
+  }));
+
+  // Build content for the active tab only
+  const tabContentIds: Record<string, string> = {};
+  const activeDash = dashboards.get(activeTab);
+  if (activeDash) {
+    tabContentIds[activeTab] = renderDashboardContent(ui, activeDash);
+  }
+
+  const tabs = ui.tabs(tabDefs, activeTab, tabContentIds);
+  const content = ui.column([tabs], { gap: 0, padding: 24 });
+  const root = ui.column([content], { gap: 0 });
+
   return ui.build(root);
 }
 
@@ -3476,12 +3523,8 @@ export function generateCustomDashboard(dashboard: DashboardDefinition): A2UIMes
 // Page Message Generator (combines sidebar + main)
 // ============================================================================
 
-export function generatePage(
-  view: string,
-  mainContent: A2UIMessage[],
-  customDashboards?: Array<{ id: string; title: string; icon?: string }>
-): A2UIMessage[] {
-  const sidebar = generateSidebar(view, customDashboards);
+export function generatePage(view: string, mainContent: A2UIMessage[]): A2UIMessage[] {
+  const sidebar = generateSidebar(view);
   return [...sidebar, ...mainContent];
 }
 
@@ -4049,9 +4092,13 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
   }
 
   // Tools that use details directly (not details.data)
+  // Dashboard tool returns { success, details: { dashboardId, ... } } wrapped by AgentToolResult
+  // So result.details = { success, details: { dashboardId, ... } }
   switch (toolName) {
-    case "create_dashboard":
-      return generateCreateDashboardCards(details);
+    case "create_dashboard": {
+      const dashData = (details as any)?.details ?? details;
+      return generateCreateDashboardCards(dashData as Record<string, unknown>);
+    }
     default:
       return generateGenericToolCards(data);
   }

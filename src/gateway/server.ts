@@ -87,8 +87,7 @@ import {
   generateToolsPage,
   generateToolDetailModal,
   generateSkillDetailModal,
-  generateCustomDashboard,
-  generateSidebar,
+  generateExperimentPage,
   generateIntegrationsPage,
   generateSystemAgentPage,
   generateLogsPage,
@@ -1050,18 +1049,11 @@ export class GatewaySession {
 
   // Custom dashboards (per-session, not persisted)
   private customDashboards = new Map<string, DashboardDefinition>();
+  private activeDashboardTab: string | null = null;
 
-  private getCustomDashboardNavItems() {
-    return [...this.customDashboards.values()].map((d) => ({
-      id: d.id,
-      title: d.title,
-      icon: d.icon,
-    }));
-  }
-
-  /** Build a page with sidebar including custom dashboards */
+  /** Build a page with sidebar */
   private buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
-    return generatePage(view, mainPage, this.getCustomDashboardNavItems());
+    return generatePage(view, mainPage);
   }
 
   // Memory system-agent sub-state
@@ -2454,27 +2446,16 @@ export class GatewaySession {
         break;
       }
 
+      case "experiment":
+        mainPage = generateExperimentPage(this.customDashboards, this.activeDashboardTab);
+        break;
+
       default:
-        // Custom experiment dashboards: experiment:{dashboardId}
-        if (view.startsWith("experiment:")) {
-          const dashId = view.replace("experiment:", "");
-          const dashboard = this.customDashboards.get(dashId);
-          if (dashboard) {
-            mainPage = generateCustomDashboard(dashboard);
-          } else {
-            mainPage = generateChatPage({
-              messages: this.chatMessages,
-              streaming: this.isStreaming,
-              streamingContent: this.streamingContent,
-            });
-          }
-        } else {
-          mainPage = generateChatPage({
-            messages: this.chatMessages,
-            streaming: this.isStreaming,
-            streamingContent: this.streamingContent,
-          });
-        }
+        mainPage = generateChatPage({
+          messages: this.chatMessages,
+          streaming: this.isStreaming,
+          streamingContent: this.streamingContent,
+        });
     }
 
     sendAll(send, this.buildPage(view, mainPage));
@@ -3250,9 +3231,9 @@ export class GatewaySession {
       await this.handleNavigate(view, send);
     }
     // Custom dashboard actions
-    else if (action.startsWith("view_dashboard:")) {
-      const dashId = action.replace("view_dashboard:", "");
-      await this.handleNavigate(`experiment:${dashId}`, send);
+    else if (action === "experiment_tab_change" && payload?.tab) {
+      this.activeDashboardTab = payload.tab as string;
+      await this.handleNavigate("experiment", send);
     } else if (action.startsWith("refresh_dashboard:")) {
       const dashId = action.replace("refresh_dashboard:", "");
       const dashboard = this.customDashboards.get(dashId);
@@ -6321,49 +6302,6 @@ export class GatewaySession {
             }
           }
 
-          // Intercept create_dashboard / update_dashboard to store and update sidebar
-          if (event.toolName === "create_dashboard" && !event.isError) {
-            const d = (event.result as any)?.details;
-            if (d?.dashboardId && d?.sections) {
-              if (this.customDashboards.size < MAX_DASHBOARDS_PER_SESSION) {
-                this.customDashboards.set(d.dashboardId, {
-                  id: d.dashboardId,
-                  title: d.title,
-                  subtitle: d.subtitle,
-                  icon: d.icon || "activity",
-                  sections: d.sections,
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                });
-                // Re-send sidebar with new dashboard entry
-                const sidebar = generateSidebar(
-                  this.currentView,
-                  this.getCustomDashboardNavItems()
-                );
-                sendAll(send, sidebar);
-              }
-            }
-          }
-          if (event.toolName === "update_dashboard" && !event.isError) {
-            const d = (event.result as any)?.details;
-            if (d?.dashboardId && this.customDashboards.has(d.dashboardId)) {
-              const existing = this.customDashboards.get(d.dashboardId)!;
-              this.customDashboards.set(d.dashboardId, {
-                ...existing,
-                ...(d.title && { title: d.title }),
-                ...(d.subtitle && { subtitle: d.subtitle }),
-                ...(d.icon && { icon: d.icon }),
-                ...(d.sections && { sections: d.sections }),
-                updatedAt: new Date().toISOString(),
-              });
-              // If currently viewing this dashboard, refresh it
-              if (this.currentView === `experiment:${d.dashboardId}`) {
-                const updated = this.customDashboards.get(d.dashboardId)!;
-                sendAll(send, this.buildPage(this.currentView, generateCustomDashboard(updated)));
-              }
-            }
-          }
-
           // AG-UI events
           if (matchedToolCallId) {
             activeSend({ type: "ToolCallEnd", toolCallId: matchedToolCallId } satisfies AGUIEvent);
@@ -6389,6 +6327,53 @@ export class GatewaySession {
             this.legacyChatLastStreamedText = "";
           } else {
             this.lastStreamedText = "";
+          }
+        }
+
+        // Intercept create_dashboard / update_dashboard to store dashboard data
+        // Placed OUTSIDE if(assistantMsg) so it runs even in AG-UI SSE mode
+        // AgentToolResult wraps tool return in { content, details: <raw> }
+        // Our tool returns { success, details: { dashboardId, ... } }
+        // So the dashboard data is at event.result.details.details
+        if (event.toolName === "create_dashboard" && !event.isError) {
+          const raw = (event.result as any)?.details;
+          const d = raw?.details ?? raw;
+          if (d?.dashboardId && d?.sections) {
+            if (this.customDashboards.size < MAX_DASHBOARDS_PER_SESSION) {
+              this.customDashboards.set(d.dashboardId, {
+                id: d.dashboardId,
+                title: d.title,
+                subtitle: d.subtitle,
+                icon: d.icon || "activity",
+                sections: d.sections,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              });
+              // No sidebar push needed — user clicks fixed "experiment" nav to see new dashboards
+            }
+          }
+        }
+        if (event.toolName === "update_dashboard" && !event.isError) {
+          const raw = (event.result as any)?.details;
+          const d = raw?.details ?? raw;
+          if (d?.dashboardId && this.customDashboards.has(d.dashboardId)) {
+            const existing = this.customDashboards.get(d.dashboardId)!;
+            this.customDashboards.set(d.dashboardId, {
+              ...existing,
+              ...(d.title && { title: d.title }),
+              ...(d.subtitle && { subtitle: d.subtitle }),
+              ...(d.icon && { icon: d.icon }),
+              ...(d.sections && { sections: d.sections }),
+              updatedAt: new Date().toISOString(),
+            });
+            // If currently viewing experiment page with this dashboard tab, refresh
+            if (this.currentView === "experiment" && this.activeDashboardTab === d.dashboardId) {
+              const experimentPage = generateExperimentPage(
+                this.customDashboards,
+                this.activeDashboardTab
+              );
+              sendAll(this.getSend(send), this.buildPage("experiment", experimentPage));
+            }
           }
         }
 
