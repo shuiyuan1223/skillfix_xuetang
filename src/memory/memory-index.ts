@@ -1936,23 +1936,17 @@ export class MemoryIndexManager {
       this.writeMeta(nextMeta);
       this.pruneEmbeddingCacheIfNeeded();
 
-      const afterChunksCount = (this.db.prepare(`SELECT COUNT(*) as c FROM chunks`).get() as any)[
-        "c"
-      ];
+      const afterChunksCount = (
+        this.db.prepare(`SELECT COUNT(*) as c FROM chunks`).get() as { c: number }
+      ).c;
       log.debug("memory reindex: in-place reindex completed", {
         afterChunksCount,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.warn("memory reindex failed", {
         error: err,
-        stack: err.stack,
+        stack: err instanceof Error ? err.stack : undefined,
       });
-
-      console.error("=== Detailed reindex error ===");
-      console.error(err);
-      if (err.stack) {
-        console.error(err.stack);
-      }
     }
   }
 
