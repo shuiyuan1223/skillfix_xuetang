@@ -44,7 +44,7 @@ import {
   type LLMProvider,
 } from "../utils/config.js";
 import { MockDataSource } from "../data-sources/mock.js";
-import { getModel, complete, type Model } from "@mariozechner/pi-ai";
+import { getModel, complete, type Model, type Api, type TextContent } from "@mariozechner/pi-ai";
 import { countTestCases, listBenchmarkRuns, listCategoryScores } from "../memory/db.js";
 import {
   writeBenchmarkProgress,
@@ -119,9 +119,10 @@ function createRawLLMCall(
   apiKey: string,
   baseUrl?: string
 ): (prompt: string) => Promise<string> {
-  let model: Model | null = null;
+  let model: Model<Api> | null = null;
   if (BUILTIN_PROVIDERS.includes(provider)) {
-    model = getModel(provider as Parameters<typeof getModel>[0], modelId);
+    model =
+      (getModel as (p: string, m: string) => Model<Api> | undefined)(provider, modelId) ?? null;
     if (!model && baseUrl) {
       model = {
         id: modelId,
@@ -167,8 +168,8 @@ function createRawLLMCall(
     );
 
     return response.content
-      .filter((item: { type: string; text: string }) => item.type === "text")
-      .map((item: { type: string; text: string }) => item.text)
+      .filter((item): item is TextContent => item.type === "text")
+      .map((item) => item.text)
       .join("");
   };
 }

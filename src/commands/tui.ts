@@ -303,7 +303,7 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
 
   function processUpdates(updates: unknown[]) {
     for (const msg of updates) {
-      processMessage(msg);
+      processMessage(msg as GatewayMessage);
     }
   }
 

@@ -104,7 +104,7 @@ async function showDailySummary(
   // Heart Rate Section
   printSection("Heart Rate", icons.heart);
   const hrData =
-    heartRate.hourly ||
+    heartRate.readings.map((r) => r.value) ||
     Array(24)
       .fill(0)
       .map((_, i) => 60 + Math.sin(i) * 10);
