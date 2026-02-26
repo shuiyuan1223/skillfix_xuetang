@@ -9,6 +9,7 @@ import {
   analyzer,
   BenchmarkRunner,
   AutoLoop,
+  type AutoLoopCallbacks,
   checkRegression,
   formatRegressionMarkdown,
   diagnose,
@@ -893,9 +894,7 @@ function handleByModelComparison(options: Record<string, unknown>): void {
   console.log("");
 }
 
-function buildRadarMap(
-  scores: ReturnType<typeof listCategoryScores>
-): Map<
+function buildRadarMap(scores: ReturnType<typeof listCategoryScores>): Map<
   BenchmarkCategory,
   {
     id: string;
@@ -1032,25 +1031,25 @@ function printAutoLoopResults(
   }
 }
 
-function buildAutoLoopCallbacks(spinner: Spinner): Record<string, (...args: unknown[]) => void> {
+function buildAutoLoopCallbacks(spinner: Spinner): AutoLoopCallbacks {
   return {
-    onIterationStart: (iter: unknown, max: unknown) => {
+    onIterationStart: (iter: number, max: number) => {
       spinner.update(`Iteration ${iter}/${max}...`);
     },
-    onBenchmarkComplete: (run: { overallScore: number }) => {
+    onBenchmarkComplete: (run) => {
       spinner.update(
         `Benchmark complete: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)}`
       );
     },
-    onWeakCategoriesFound: (cats: Array<{ category: BenchmarkCategory }>) => {
+    onWeakCategoriesFound: (cats) => {
       const names = cats.map((cat) => CATEGORY_LABELS[cat.category]).join(", ");
       spinner.update(`Targeting: ${names}`);
     },
     onOptimizationStart: (cat: BenchmarkCategory) => {
       spinner.update(`Optimizing: ${CATEGORY_LABELS[cat]}`);
     },
-    onLog: (msg: unknown) => {
-      spinner.update(String(msg));
+    onLog: (msg: string) => {
+      spinner.update(msg);
     },
   };
 }
