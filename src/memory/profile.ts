@@ -365,98 +365,86 @@ export function getRecentDailyLogs(
   });
 }
 
+/** Extract a string field, excluding placeholder values */
+function parseStringField(content: string, pattern: RegExp): string | undefined {
+  const m = content.match(pattern);
+  if (m && !m[1].includes("{待收集}")) return m[1].trim();
+  return undefined;
+}
+
+/** Extract a numeric integer field */
+function parseIntField(content: string, pattern: RegExp): number | undefined {
+  const m = content.match(pattern);
+  return m ? parseInt(m[1], 10) : undefined;
+}
+
+/** Extract a numeric float field */
+function parseFloatField(content: string, pattern: RegExp): number | undefined {
+  const m = content.match(pattern);
+  return m ? parseFloat(m[1]) : undefined;
+}
+
+/** Extract a comma-separated list field, excluding "无" and placeholders */
+function parseListField(content: string, pattern: RegExp): string[] | undefined {
+  const m = content.match(pattern);
+  if (m && m[1] !== "无" && !m[1].includes("{")) {
+    return m[1].split(/[,，]/).map((s) => s.trim());
+  }
+  return undefined;
+}
+
 /**
  * Parse USER.md to UserProfile
  */
 function parseProfileMd(content: string): UserProfile {
   const profile: UserProfile = {};
 
-  // Nickname
-  const nicknameMatch = content.match(/昵称:\s*(.+)/);
-  if (nicknameMatch && !nicknameMatch[1].includes("{待收集}")) {
-    profile.nickname = nicknameMatch[1].trim();
-  }
+  profile.nickname = parseStringField(content, /昵称:\s*(.+)/);
 
-  // Gender
   const genderMatch = content.match(/性别:\s*(男|女)/);
   if (genderMatch) {
     profile.gender = genderMatch[1] === "男" ? "male" : "female";
   }
 
-  // Birth year
-  const birthMatch = content.match(/出生年份:\s*(\d{4})/);
-  if (birthMatch) {
-    profile.birthYear = parseInt(birthMatch[1], 10);
-  }
+  profile.birthYear = parseIntField(content, /出生年份:\s*(\d{4})/);
+  profile.height = parseFloatField(content, /身高:\s*(\d+(?:\.\d+)?)/);
+  profile.weight = parseFloatField(content, /体重:\s*(\d+(?:\.\d+)?)/);
+  profile.location = parseStringField(content, /所在城市:\s*(.+)/);
+  profile.conditions = parseListField(content, /慢性病:\s*(.+)/);
+  profile.allergies = parseListField(content, /过敏史:\s*(.+)/);
 
-  // Height
-  const heightMatch = content.match(/身高:\s*(\d+(?:\.\d+)?)/);
-  if (heightMatch) {
-    profile.height = parseFloat(heightMatch[1]);
-  }
+  // Goals
+  const dailySteps = parseIntField(content, /每日步数(?:目标)?:\s*(\d+)/);
+  const sleepHours = parseIntField(content, /睡眠时长(?:目标)?:\s*(\d+)/);
+  const exercisePerWeek = parseIntField(content, /运动频率(?:目标)?:\s*每周(\d+)/);
+  const primary = parseStringField(content, /主要目标:\s*(.+)/);
 
-  // Weight
-  const weightMatch = content.match(/体重:\s*(\d+(?:\.\d+)?)/);
-  if (weightMatch) {
-    profile.weight = parseFloat(weightMatch[1]);
-  }
-
-  // Location
-  const locationMatch = content.match(/所在城市:\s*(.+)/);
-  if (locationMatch && !locationMatch[1].includes("{待收集}")) {
-    profile.location = locationMatch[1].trim();
-  }
-
-  // Conditions
-  const conditionsMatch = content.match(/慢性病:\s*(.+)/);
-  if (conditionsMatch && conditionsMatch[1] !== "无" && !conditionsMatch[1].includes("{")) {
-    profile.conditions = conditionsMatch[1].split(/[,，]/).map((s) => s.trim());
-  }
-
-  // Allergies
-  const allergiesMatch = content.match(/过敏史:\s*(.+)/);
-  if (allergiesMatch && allergiesMatch[1] !== "无" && !allergiesMatch[1].includes("{")) {
-    profile.allergies = allergiesMatch[1].split(/[,，]/).map((s) => s.trim());
-  }
-
-  // Daily steps goal (supports both "每日步数" and legacy "每日步数目标")
-  const stepsMatch = content.match(/每日步数(?:目标)?:\s*(\d+)/);
-  if (stepsMatch) {
-    profile.goals = profile.goals || {};
-    profile.goals.dailySteps = parseInt(stepsMatch[1], 10);
-  }
-
-  // Sleep hours goal (supports both "睡眠时长" and legacy "睡眠时长目标")
-  const sleepMatch = content.match(/睡眠时长(?:目标)?:\s*(\d+)/);
-  if (sleepMatch) {
-    profile.goals = profile.goals || {};
-    profile.goals.sleepHours = parseInt(sleepMatch[1], 10);
-  }
-
-  // Exercise per week goal (supports both "运动频率" and legacy "运动频率目标")
-  const exerciseMatch = content.match(/运动频率(?:目标)?:\s*每周(\d+)/);
-  if (exerciseMatch) {
-    profile.goals = profile.goals || {};
-    profile.goals.exercisePerWeek = parseInt(exerciseMatch[1], 10);
-  }
-
-  // Primary goal
-  const primaryGoalMatch = content.match(/主要目标:\s*(.+)/);
-  if (primaryGoalMatch && !primaryGoalMatch[1].includes("{待收集}")) {
-    profile.goals = profile.goals || {};
-    profile.goals.primary = primaryGoalMatch[1].trim();
+  if (dailySteps || sleepHours || exercisePerWeek || primary) {
+    profile.goals = { dailySteps, sleepHours, exercisePerWeek, primary };
   }
 
   // Huawei connection
   const huaweiMatch = content.match(/华为健康:\s*(已连接|未连接)/);
   if (huaweiMatch) {
-    profile.dataSources = profile.dataSources || {};
-    profile.dataSources.huawei = {
-      connected: huaweiMatch[1] === "已连接",
-    };
+    profile.dataSources = { huawei: { connected: huaweiMatch[1] === "已连接" } };
   }
 
   return profile;
+}
+
+function formatGender(gender?: "male" | "female"): string {
+  if (gender === "male") return "男";
+  if (gender === "female") return "女";
+  return "{待收集}";
+}
+
+function formatOptional(value: string | number | undefined, suffix?: string): string {
+  if (value == null) return "{待收集}";
+  return suffix ? `${value}${suffix}` : String(value);
+}
+
+function formatList(items?: string[]): string {
+  return items?.length ? items.join(", ") : "{待收集}";
 }
 
 /**
@@ -468,15 +456,15 @@ function generateProfileMd(profile: UserProfile): string {
     "",
     "## 基本信息",
     `- 昵称: ${profile.nickname || "{待收集}"}`,
-    `- 性别: ${profile.gender === "male" ? "男" : profile.gender === "female" ? "女" : "{待收集}"}`,
-    `- 出生年份: ${profile.birthYear || "{待收集}"}`,
-    `- 身高: ${profile.height ? `${profile.height}cm` : "{待收集}"}`,
-    `- 体重: ${profile.weight ? `${profile.weight}kg` : "{待收集}"}`,
+    `- 性别: ${formatGender(profile.gender)}`,
+    `- 出生年份: ${formatOptional(profile.birthYear)}`,
+    `- 身高: ${formatOptional(profile.height, "cm")}`,
+    `- 体重: ${formatOptional(profile.weight, "kg")}`,
     `- 所在城市: ${profile.location || "{待收集}"}`,
     "",
     "## 健康状况",
-    `- 慢性病: ${profile.conditions?.length ? profile.conditions.join(", ") : "{待收集}"}`,
-    `- 过敏史: ${profile.allergies?.length ? profile.allergies.join(", ") : "{待收集}"}`,
+    `- 慢性病: ${formatList(profile.conditions)}`,
+    `- 过敏史: ${formatList(profile.allergies)}`,
     "",
     "## 健康目标",
     `- 主要目标: ${profile.goals?.primary || "{待收集}"}`,
@@ -497,14 +485,9 @@ function generateProfileMd(profile: UserProfile): string {
   return lines.join("\n");
 }
 
-/**
- * Format profile for display in system prompt.
- * Shows both known fields and missing fields to guide the agent.
- */
-export function formatProfileForPrompt(profile: UserProfile): string {
+/** Collect known profile fields as formatted lines */
+function collectKnownFields(profile: UserProfile): string[] {
   const lines: string[] = [];
-
-  // Known fields
   if (profile.nickname) lines.push(`- Nickname: ${profile.nickname}`);
   if (profile.gender) lines.push(`- Gender: ${profile.gender}`);
   if (profile.birthYear) {
@@ -521,29 +504,40 @@ export function formatProfileForPrompt(profile: UserProfile): string {
   if (profile.conditions?.length) lines.push(`- Conditions: ${profile.conditions.join(", ")}`);
   if (profile.allergies?.length) lines.push(`- Allergies: ${profile.allergies.join(", ")}`);
   if (profile.goals?.primary) lines.push(`- Health goal: ${profile.goals.primary}`);
+  return lines;
+}
 
-  // Missing fields
-  const coreMissing: string[] = [];
-  if (!profile.gender) coreMissing.push("gender");
-  if (!profile.birthYear) coreMissing.push("birthYear");
-  if (!profile.height) coreMissing.push("height");
-  if (!profile.weight) coreMissing.push("weight");
+/** Collect missing profile field names, split into core vs optional */
+function collectMissingFields(profile: UserProfile): { core: string[]; optional: string[] } {
+  const core: string[] = [];
+  if (!profile.gender) core.push("gender");
+  if (!profile.birthYear) core.push("birthYear");
+  if (!profile.height) core.push("height");
+  if (!profile.weight) core.push("weight");
 
-  const optionalMissing: string[] = [];
-  if (!profile.goals?.primary) optionalMissing.push("goals.primary");
-  if (!profile.conditions) optionalMissing.push("conditions");
+  const optional: string[] = [];
+  if (!profile.goals?.primary) optional.push("goals.primary");
+  if (!profile.conditions) optional.push("conditions");
 
-  if (coreMissing.length > 0 || optionalMissing.length > 0) {
-    lines.push("");
-    lines.push("### Missing Profile Fields");
-    if (coreMissing.length > 0) {
-      lines.push(`**Core:** ${coreMissing.join(", ")}`);
-    }
-    if (optionalMissing.length > 0) {
-      lines.push(`**Optional:** ${optionalMissing.join(", ")}`);
-    }
-    lines.push("Refer to the loaded skill's「所需个人信息」section to decide when and how to ask.");
-    lines.push("When you learn any of these, call `update_user_profile` immediately to save.");
+  return { core, optional };
+}
+
+/**
+ * Format profile for display in system prompt.
+ * Shows both known fields and missing fields to guide the agent.
+ */
+export function formatProfileForPrompt(profile: UserProfile): string {
+  const lines = collectKnownFields(profile);
+  const { core, optional } = collectMissingFields(profile);
+
+  if (core.length > 0 || optional.length > 0) {
+    lines.push("", "### Missing Profile Fields");
+    if (core.length > 0) lines.push(`**Core:** ${core.join(", ")}`);
+    if (optional.length > 0) lines.push(`**Optional:** ${optional.join(", ")}`);
+    lines.push(
+      "Refer to the loaded skill's「所需个人信息」section to decide when and how to ask.",
+      "When you learn any of these, call `update_user_profile` immediately to save."
+    );
   }
 
   if (lines.length === 0) {

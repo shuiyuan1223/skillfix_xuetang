@@ -76,6 +76,8 @@ export default [
       "no-cond-assign": "error",                                     // G.CTL.06 条件中不赋值
 
       // ── Ch7: 函数 ────────────────────────────────────────────────────────────
+      "complexity": ["warn", 20],                                    // G.MET.02 圈复杂度 ≤ 20
+      "max-lines-per-function": ["warn", { max: 100, skipBlankLines: true, skipComments: true }], // G.MET.03 函数行数 ≤ 100
       "consistent-return": "error",                                  // G.MET.07 一致的 return
       "prefer-rest-params": "error",                                 // G.MET.10 rest 替代 arguments
       "@typescript-eslint/no-this-alias": "error",                   // Ext-8.3  禁止 this 赋值
