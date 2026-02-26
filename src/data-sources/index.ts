@@ -42,9 +42,10 @@ export function createDataSourceForUser(userUuid: string): HealthDataSource {
 export function createInnerDataSourceForUser(
   userUuid: string,
   appLevelAt: string,
-  userHuid: string
+  userHuid: string,
+  clientId: string
 ): HealthDataSource {
-  const api = createInnerHuaweiHealthApiForUser(userUuid, appLevelAt, userHuid);
+  const api = createInnerHuaweiHealthApiForUser(userUuid, appLevelAt, userHuid, clientId);
   return new HuaweiHealthDataSource(userUuid, api);
 }
 

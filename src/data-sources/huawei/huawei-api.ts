@@ -99,6 +99,7 @@ export interface HuaweiHealthApiOptions {
   innerMode?: boolean;
   appLevelAt?: string;
   userHuid?: string;
+  clientId?: string;
 }
 
 export class HuaweiHealthApi {
@@ -107,6 +108,7 @@ export class HuaweiHealthApi {
   private innerMode: boolean;
   private appLevelAt: string | undefined;
   private userHuid: string | undefined;
+  private clientId: string | undefined;
 
   private static getInnerBaseUrl(): string {
     const config = loadConfig();
@@ -119,6 +121,7 @@ export class HuaweiHealthApi {
     this.innerMode = options?.innerMode ?? false;
     this.appLevelAt = options?.appLevelAt;
     this.userHuid = options?.userHuid;
+    this.clientId = options?.clientId;
   }
 
   /**
@@ -149,6 +152,9 @@ export class HuaweiHealthApi {
       const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
       if (this.userHuid) {
         headers["x-huid"] = this.userHuid;
+      }
+      if (this.clientId) {
+        headers["x-client-id"] = this.clientId;
       }
       options = { ...options, headers };
     }
@@ -2716,11 +2722,13 @@ export function createHuaweiHealthApiForUser(userUuid: string): HuaweiHealthApi 
 export function createInnerHuaweiHealthApiForUser(
   userUuid: string,
   appLevelAt: string,
-  userHuid: string
+  userHuid: string,
+  clientId: string
 ): HuaweiHealthApi {
   return new HuaweiHealthApi(defaultAuth, userUuid, {
     innerMode: true,
     appLevelAt,
     userHuid,
+    clientId,
   });
 }

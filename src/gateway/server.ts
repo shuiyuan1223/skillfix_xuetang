@@ -6472,9 +6472,10 @@ export async function startGateway(
               query?: string;
               sn?: string;
               uid?: string;
+              client_id?: string;
             };
 
-            const { grant_type = "refresh_token", Authorization, query, sn, uid } = body;
+            const { grant_type = "refresh_token", Authorization, query, sn, uid, client_id } = body;
 
             if (!Authorization || !query) {
               sseSendRaw({
@@ -6490,15 +6491,23 @@ export async function startGateway(
 
             if (grant_type === "client_credentials") {
               // App-level AT mode: Authorization is the app-level access token, uid is the Huawei user ID
-              if (!uid) {
-                sseSendRaw({ event: "error", content: "Missing required field: uid" });
+              if (!uid || !client_id) {
+                sseSendRaw({
+                  event: "error",
+                  content: "Missing required fields: uid, client_id",
+                });
                 sseSendRaw({ event: "finish" });
                 writer.close().catch(() => {});
                 return;
               }
 
               await ensureUserDir(uid);
-              const innerDataSource = createInnerDataSourceForUser(uid, Authorization, uid);
+              const innerDataSource = createInnerDataSourceForUser(
+                uid,
+                Authorization,
+                uid,
+                client_id
+              );
               const session = new GatewaySession(config, uid, innerDataSource);
               await session.handleLegacyChatSSE(query, writer, encoder);
             } else {
