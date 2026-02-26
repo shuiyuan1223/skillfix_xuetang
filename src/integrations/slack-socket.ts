@@ -4,17 +4,15 @@
  * Maintains a persistent outbound WebSocket connection to Slack.
  * No inbound port required — works behind firewalls / internal networks.
  *
- * Behavior:
- *   - Only processes messages that @mention the bot (avoids noise)
- *   - Skips system messages (channel_join, channel_leave, etc.)
- *   - Resolves Slack user ID → display name via users.info API
- *   - Posts a thread reply after ingestion with classification result
- *   - Auto-reconnects with exponential backoff
+ * Message routing (after @mention + subtype filter):
+ *   /badcase <text>              → bad case ingestion
+ *   我这有个badcase / 反馈: ...  → bad case ingestion (natural language)
+ *   everything else              → SA Chat (DB context + LLM response)
  *
  * Config (.pha/config.json):
  *   slack.appToken   — xapp-... (App-Level Token, connections:write scope)
  *   slack.botToken   — xoxb-... (Bot Token, channels:history + chat:write)
- *   slack.channelId  — optional channel ID filter (e.g. "C01234ABCDE")
+ *   slack.channelId  — optional channel ID filter
  */
 
 import { createLogger } from "../utils/logger.js";
@@ -31,15 +29,139 @@ interface SlackSocketEnvelope {
   payload?: {
     event?: {
       type?: string;
-      subtype?: string; // present for system msgs: channel_join, channel_leave, etc.
+      subtype?: string;
       text?: string;
       user?: string;
       channel?: string;
       bot_id?: string;
-      ts?: string; // message timestamp, used as thread_ts for replies
+      ts?: string;
     };
   };
   reason?: string;
+}
+
+// ── Bad case trigger detection ─────────────────────────────────────────────────
+
+/** Prefixes that indicate the user is reporting a bad case. Case-insensitive. */
+const BAD_CASE_TRIGGERS = [
+  "/badcase",
+  "/bad-case",
+  "badcase:",
+  "bad case:",
+  "我这有个badcase",
+  "我有个badcase",
+  "我这有一个badcase",
+  "我有一个badcase",
+  "有个问题反馈",
+  "反馈:",
+  "feedback:",
+];
+
+/**
+ * Detect if a message is a bad case report.
+ * Returns the cleaned text (trigger prefix stripped) if so.
+ */
+function parseBadCaseReport(
+  text: string
+): { isBadCase: true; cleanText: string } | { isBadCase: false } {
+  const lower = text.toLowerCase();
+  for (const trigger of BAD_CASE_TRIGGERS) {
+    if (lower.startsWith(trigger.toLowerCase())) {
+      const cleanText = text
+        .slice(trigger.length)
+        .replace(/^[：:\s]+/, "")
+        .trim();
+      return { isBadCase: true, cleanText };
+    }
+  }
+  return { isBadCase: false };
+}
+
+// ── SA Chat ────────────────────────────────────────────────────────────────────
+
+/**
+ * Handle a general SA query via Slack.
+ * Fetches relevant DB context and lets the LLM formulate a response.
+ * Does NOT use full agent tool-calling — uses context injection for read ops.
+ */
+async function handleSaChat(
+  message: string,
+  llmCall: (prompt: string) => Promise<string>
+): Promise<string> {
+  // Gather context from DB
+  let badCaseContext = "（数据获取失败）";
+  let benchmarkContext = "（数据获取失败）";
+
+  try {
+    const { listBadCases, getBadCasesStats } = await import("../memory/db.js");
+    const stats = getBadCasesStats();
+    const pending = listBadCases({ status: "pending", limit: 5 });
+
+    badCaseContext = `总计 ${stats.total} | 待处理 ${stats.pending} | Bug ${stats.bug} | Effect ${stats.effect} | 本周已解决 ${stats.resolvedThisWeek}${
+      pending.length > 0
+        ? `\n待处理（最新5条）:\n${pending
+            .map(
+              (bc) =>
+                `  • [${bc.id.slice(0, 8)}] *${bc.type}* / ${bc.priority} — ${bc.raw_text.slice(0, 80)}${bc.raw_text.length > 80 ? "…" : ""}`
+            )
+            .join("\n")}`
+        : "\n暂无待处理"
+    }`;
+  } catch {
+    // keep default
+  }
+
+  try {
+    const { listBenchmarkRuns, listCategoryScores } = await import("../memory/db.js");
+    const runs = listBenchmarkRuns({ limit: 3 });
+    if (runs.length === 0) {
+      benchmarkContext = "暂无 Benchmark 运行记录";
+    } else {
+      benchmarkContext = runs
+        .map((run) => {
+          const scores = listCategoryScores(run.id);
+          const avg =
+            scores.length > 0
+              ? (scores.reduce((s, c) => s + c.score, 0) / scores.length).toFixed(1)
+              : "N/A";
+          return `• ${new Date(run.timestamp).toLocaleDateString()} | 综合 ${avg} | ${run.passed_count}/${run.total_test_cases} 通过 | ${run.id.slice(0, 8)}`;
+        })
+        .join("\n");
+    }
+  } catch {
+    // keep default
+  }
+
+  const prompt = `你是 PHA System Agent，正在通过 Slack 与团队成员对话。
+
+## 当前数据快照
+
+**Bad Cases**
+${badCaseContext}
+
+**Benchmark（最近3次）**
+${benchmarkContext}
+
+## 你的能力
+- 分析和解读以上数据
+- 解答关于 PHA 系统、进化流程、Benchmark 的问题
+- 指导如何上报 bad case（发消息时用 \`/badcase <描述>\` 前缀）
+- 协助分析某个 bad case 是 bug 还是 effect 类型
+
+## 用户消息
+${message}
+
+## 回复要求
+- 与用户使用相同语言
+- 简洁，适合 Slack 展示（*粗体*、_斜体_、• 列表）
+- 不要重复用户的问题
+- 如需完整操作（修改状态、创建 Issue 等），提示用户去 Evolution Lab Dashboard`;
+
+  try {
+    return await llmCall(prompt);
+  } catch {
+    return "抱歉，SA 暂时无法响应，请稍后重试。";
+  }
 }
 
 // ── Slack API helpers ──────────────────────────────────────────────────────────
@@ -56,7 +178,6 @@ async function getWssUrl(appToken: string): Promise<string> {
   return String(data.url);
 }
 
-/** Resolve bot's own user ID so we can detect @mentions. */
 async function getBotUserId(botToken: string): Promise<string | undefined> {
   try {
     const resp = await fetch("https://slack.com/api/auth.test", {
@@ -72,7 +193,6 @@ async function getBotUserId(botToken: string): Promise<string | undefined> {
   }
 }
 
-/** Resolve Slack user ID → display name. Falls back to userId on any error. */
 async function resolveDisplayName(userId: string, botToken: string): Promise<string> {
   try {
     const resp = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
@@ -82,17 +202,16 @@ async function resolveDisplayName(userId: string, botToken: string): Promise<str
     const data = raw as Record<string, unknown>;
     const user = data.user as Record<string, unknown> | undefined;
     const profile = user?.profile as Record<string, unknown> | undefined;
-    const name =
+    return (
       String(profile?.display_name ?? "").trim() ||
       String(profile?.real_name ?? "").trim() ||
-      userId;
-    return name;
+      userId
+    );
   } catch {
     return userId;
   }
 }
 
-/** Post a reply in the same thread so reporters get immediate feedback. */
 async function postThreadReply(
   channel: string,
   threadTs: string,
@@ -115,10 +234,6 @@ async function postThreadReply(
 
 // ── Main entry ─────────────────────────────────────────────────────────────────
 
-/**
- * Start the Socket Mode connection loop.
- * Reconnects automatically with exponential backoff on disconnect.
- */
 export function startSlackSocketMode(
   appToken: string,
   botToken: string | undefined,
@@ -127,7 +242,6 @@ export function startSlackSocketMode(
 ): void {
   let reconnectDelay = RECONNECT_DELAY_MS;
 
-  // Resolve bot user ID once at startup (needed for mention detection)
   let botUserId: string | undefined;
   if (botToken) {
     void getBotUserId(botToken).then((id) => {
@@ -166,7 +280,6 @@ export function startSlackSocketMode(
           return;
         }
 
-        // Always ACK immediately
         if (envelope.envelope_id) {
           ws.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
         }
@@ -177,9 +290,7 @@ export function startSlackSocketMode(
         }
 
         if (envelope.type === "disconnect") {
-          log.info("Slack Socket Mode: server requested disconnect", {
-            reason: envelope.reason,
-          });
+          log.info("Slack Socket Mode: server requested disconnect", { reason: envelope.reason });
           ws.close();
           return;
         }
@@ -188,67 +299,64 @@ export function startSlackSocketMode(
 
         const event = envelope.payload?.event;
         if (!event || event.type !== "message") return;
+        if (event.subtype) return; // system messages: channel_join, etc.
+        if (event.bot_id) return; // bot messages — avoid loops
 
-        // ── Fix 4a: Skip system messages (channel_join, channel_leave, etc.) ──
-        if (event.subtype) return;
+        const rawText = (event.text ?? "").trim();
+        if (!rawText) return;
 
-        // Skip bot messages to avoid loops
-        if (event.bot_id) return;
-
-        // ── Fix 4b: Mention-triggered — only process if @bot is mentioned ──
-        const text = (event.text ?? "").trim();
-        if (!text) return;
-
-        // If we know the bot's user ID, require a mention; otherwise fall through
+        // Require @mention
         if (botUserId) {
-          const mentionPattern = new RegExp(`<@${botUserId}>`, "i");
-          if (!mentionPattern.test(text)) return;
+          const mentionRe = new RegExp(`<@${botUserId}>`, "i");
+          if (!mentionRe.test(rawText)) return;
         }
 
-        // Strip the @mention and any leading/trailing whitespace from the text
-        const cleanText = botUserId
-          ? text.replace(new RegExp(`<@${botUserId}>\\s*`, "gi"), "").trim()
-          : text;
+        // Strip @mention
+        const text = botUserId
+          ? rawText.replace(new RegExp(`<@${botUserId}>\\s*`, "gi"), "").trim()
+          : rawText;
 
-        if (!cleanText) return;
+        if (!text) return;
 
-        // Channel filter
         if (channelId && event.channel !== channelId) return;
 
         const userId = event.user ?? "";
         const channel = event.channel ?? "";
         const ts = event.ts ?? "";
 
-        // Process asynchronously — ACK was already sent above
         void (async (): Promise<void> => {
-          // ── Fix 3: Resolve display name ──────────────────────────────────────
           const displayName =
             botToken && userId ? await resolveDisplayName(userId, botToken) : userId;
 
-          try {
-            const { handleSlackWebhook } = await import("./slack-webhook.js");
-            const result = await handleSlackWebhook(
-              { text: cleanText, user_id: displayName, channel_id: channel },
-              llmCall
-            );
+          // ── Route: bad case report vs SA chat ───────────────────────────────
+          const parsed = parseBadCaseReport(text);
 
-            // ── Fix 1: Reply in thread with classification result ─────────────
-            if (botToken && channel && ts) {
-              await postThreadReply(channel, ts, result.message, botToken);
+          let replyText: string;
+          if (parsed.isBadCase) {
+            // Direct ingestion path
+            try {
+              const { handleSlackWebhook } = await import("./slack-webhook.js");
+              const result = await handleSlackWebhook(
+                { text: parsed.cleanText, user_id: displayName, channel_id: channel },
+                llmCall
+              );
+              replyText = result.message;
+            } catch {
+              replyText = "❌ Bad case 上报失败，请稍后重试。";
             }
-          } catch (err) {
-            log.warn("Slack event processing failed", { error: String(err) });
-            if (botToken && channel && ts) {
-              await postThreadReply(channel, ts, "❌ 上报失败，请稍后重试。", botToken);
-            }
+          } else {
+            // SA Chat path
+            replyText = await handleSaChat(text, llmCall);
+          }
+
+          if (botToken && channel && ts) {
+            await postThreadReply(channel, ts, replyText, botToken);
           }
         })();
       });
 
       ws.addEventListener("close", () => {
-        log.info("Slack Socket Mode: connection closed, reconnecting", {
-          retryMs: reconnectDelay,
-        });
+        log.info("Slack Socket Mode: connection closed, reconnecting", { retryMs: reconnectDelay });
         setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
       });
