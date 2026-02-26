@@ -156,6 +156,26 @@ export default [
   // ─── Test files override ─────────────────────────────────────────────────────
   {
     files: ["tests/**/*.ts", "**/*.test.ts", "**/*.spec.ts"],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+      },
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        setTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        clearTimeout: "readonly",
+        fetch: "readonly",
+        crypto: "readonly",
+        URL: "readonly",
+        Bun: "readonly",
+      },
+    },
     rules: {
       "no-console": "off",
       "no-alert": "off",
