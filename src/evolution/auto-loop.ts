@@ -12,7 +12,13 @@
  * 8. Repeat
  */
 
-import type { AutoLoopConfig, BenchmarkCategory, BenchmarkRun, CategoryScore } from "./types.js";
+import type {
+  AutoLoopConfig,
+  BenchmarkCategory,
+  BenchmarkResult,
+  BenchmarkRun,
+  CategoryScore,
+} from "./types.js";
 import { BenchmarkRunner, type BenchmarkRunnerConfig } from "./benchmark-runner.js";
 import {
   identifyWeakCategories,
@@ -95,28 +101,13 @@ export class AutoLoop {
       runs: [],
     };
 
-    // Ensure we're on the right branch
     await this.ensureBranch();
-
     const runner = new BenchmarkRunner(this.runnerConfig);
+    const targetNormalized = this.normalizeScore(this.config.targetScore);
 
     // Initial benchmark
-    this.log("Running initial benchmark...");
-    const initialRun = await runner.run({ profile: this.config.profile });
-    result.initialScore = initialRun.run.overallScore;
-    result.runs.push(initialRun.run);
-
-    this.callbacks.onBenchmarkComplete?.(initialRun.run, initialRun.categoryScores);
-
-    // Normalize target score: CLI provides 0-100, internal scores are 0.0-1.0
-    const targetNormalized =
-      this.config.targetScore <= 1.0 ? this.config.targetScore : this.config.targetScore / 100;
-
-    // Check if already at target
+    const initialRun = await this.runInitialBenchmark(runner, result);
     if (initialRun.run.overallScore >= targetNormalized) {
-      this.log(
-        `Already at target score (${normalizeScoreForDisplay(initialRun.run.overallScore).toFixed(2)} >= ${normalizeScoreForDisplay(this.config.targetScore).toFixed(2)})`
-      );
       result.finalScore = initialRun.run.overallScore;
       this.callbacks.onComplete?.(0, result.finalScore, false);
       return result;
@@ -131,7 +122,6 @@ export class AutoLoop {
       this.callbacks.onIterationStart?.(iteration, this.config.maxIterations);
       this.log(`\n--- Iteration ${iteration}/${this.config.maxIterations} ---`);
 
-      // Find weakest categories (threshold in 0.0-1.0 scale)
       const weakCategories = identifyWeakCategories(lastCategoryScores, targetNormalized);
       if (weakCategories.length === 0) {
         this.log("No weak categories found. Done!");
@@ -143,130 +133,14 @@ export class AutoLoop {
         `Weak categories: ${weakCategories.map((w) => `${CATEGORY_LABELS[w.category]} (${w.score.toFixed(1)})`).join(", ")}`
       );
 
-      // Optimize the weakest 1-2 categories
-      const categoriesToOptimize = weakCategories.slice(0, 2);
-
-      for (const weak of categoriesToOptimize) {
-        this.callbacks.onOptimizationStart?.(weak.category);
-        this.log(`Optimizing: ${CATEGORY_LABELS[weak.category]}`);
-
-        // Collect failing tests for this category
-        const failingTests = lastResults
-          .filter((r) => !r.passed && r.testCaseId.startsWith(getCategoryPrefix(weak.category)))
-          .map((r) => ({
-            testCaseId: r.testCaseId,
-            query: "", // Would need test case lookup
-            agentResponse: r.agentResponse,
-            feedback: r.feedback,
-            score: r.overallScore,
-            issues: r.issues || [],
-          }));
-
-        if (failingTests.length === 0) {
-          this.log(`No failing tests in ${CATEGORY_LABELS[weak.category]}, skipping`);
-          continue;
-        }
-
-        // Build optimization context — use worktree if available
-        const optCwd = this.versionInfo?.worktreePath || this.projectRoot;
-        const promptContent = await readPromptFiles(optCwd);
-        const skillContent = await readSkillFiles(optCwd, weak.category);
-
-        const context: OptimizationContext = {
-          category: weak.category,
-          failingTests,
-          currentPromptContent: promptContent,
-          currentSkillContent: skillContent,
-        };
-
-        // Spawn Claude Code in worktree directory
-        const optResult = await optimizeWithClaudeCode(context, optCwd);
-        this.callbacks.onOptimizationComplete?.(
-          weak.category,
-          optResult.success,
-          optResult.filesChanged
-        );
-
-        if (!optResult.success) {
-          this.log(`Optimization failed: ${optResult.error}`);
-          continue;
-        }
-
-        this.log(`Changed files: ${optResult.filesChanged.join(", ")}`);
-
-        // Re-run benchmark
-        this.log("Re-running benchmark...");
-        const rerunResult = await runner.run({
-          profile: this.config.profile,
-          category: weak.category,
-          versionTag: `auto-loop-iter-${iteration}`,
-        });
-
-        result.runs.push(rerunResult.run);
-        this.callbacks.onBenchmarkComplete?.(rerunResult.run, rerunResult.categoryScores);
-
-        // Check for improvement
-        const newCatScore = rerunResult.categoryScores.get(weak.category);
-        const oldCatScore = weak.score;
-        const newScore = newCatScore?.score ?? 0;
-        const delta = newScore - oldCatScore;
-
-        const improved = delta > 0;
-        // Normalize regression threshold: CLI provides 0-100 points, scores are 0.0-1.0
-        const regressionNormalized =
-          this.config.regressionThreshold <= 1.0
-            ? this.config.regressionThreshold
-            : this.config.regressionThreshold / 100;
-        const noRegression = !this.hasRegression(
-          lastCategoryScores,
-          rerunResult.categoryScores,
-          regressionNormalized
-        );
-
-        this.callbacks.onComparisonResult?.(improved && noRegression, delta);
-
-        if (improved && noRegression) {
-          this.log(
-            `Improved! ${CATEGORY_LABELS[weak.category]}: ${oldCatScore.toFixed(1)} -> ${newScore.toFixed(1)} (+${delta.toFixed(1)})`
-          );
-          result.changes.push({
-            iteration,
-            category: weak.category,
-            beforeScore: oldCatScore,
-            afterScore: newScore,
-            filesChanged: optResult.filesChanged,
-            kept: true,
-          });
-
-          // Update state
-          lastResults = rerunResult.results;
-          lastCategoryScores = rerunResult.categoryScores;
-        } else {
-          const reason = !improved
-            ? `No improvement (${delta.toFixed(1)})`
-            : `Regression detected (>${this.config.regressionThreshold} pts)`;
-
-          this.log(`Reverting: ${reason}`);
-          this.callbacks.onRevert?.(reason);
-
-          // Revert git changes
-          await this.revertLastCommit();
-
-          result.changes.push({
-            iteration,
-            category: weak.category,
-            beforeScore: oldCatScore,
-            afterScore: newScore,
-            filesChanged: optResult.filesChanged,
-            kept: false,
-          });
-        }
+      const iterState = { lastResults, lastCategoryScores };
+      for (const weak of weakCategories.slice(0, 2)) {
+        await this.optimizeCategory(weak, iteration, runner, result, iterState);
       }
+      lastResults = iterState.lastResults;
+      lastCategoryScores = iterState.lastCategoryScores;
 
-      // Compute new overall score
       currentScore = computeOverallScore(lastCategoryScores);
-
-      // Check if target reached
       if (currentScore >= targetNormalized) {
         this.log(
           `Target score reached! ${normalizeScoreForDisplay(currentScore).toFixed(2)} >= ${normalizeScoreForDisplay(this.config.targetScore).toFixed(2)}`
@@ -277,8 +151,164 @@ export class AutoLoop {
 
     result.finalScore = currentScore;
     result.improved = currentScore > result.initialScore;
+    this.updateVersionRecord(result);
+    this.callbacks.onComplete?.(result.iterations, result.finalScore, result.improved);
 
-    // Update version record with final results
+    return result;
+  }
+
+  private normalizeScore(score: number): number {
+    return score <= 1.0 ? score : score / 100;
+  }
+
+  private async runInitialBenchmark(
+    runner: BenchmarkRunner,
+    result: AutoLoopResult
+  ): Promise<{
+    run: BenchmarkRun;
+    results: BenchmarkResult[];
+    categoryScores: Map<BenchmarkCategory, CategoryScore>;
+  }> {
+    this.log("Running initial benchmark...");
+    const initialRun = await runner.run({ profile: this.config.profile });
+    result.initialScore = initialRun.run.overallScore;
+    result.runs.push(initialRun.run);
+    this.callbacks.onBenchmarkComplete?.(initialRun.run, initialRun.categoryScores);
+
+    if (initialRun.run.overallScore >= this.normalizeScore(this.config.targetScore)) {
+      this.log(
+        `Already at target score (${normalizeScoreForDisplay(initialRun.run.overallScore).toFixed(2)} >= ${normalizeScoreForDisplay(this.config.targetScore).toFixed(2)})`
+      );
+    }
+    return initialRun;
+  }
+
+  private async optimizeCategory(
+    weak: { category: BenchmarkCategory; score: number; gap: number },
+    iteration: number,
+    runner: BenchmarkRunner,
+    result: AutoLoopResult,
+    state: {
+      lastResults: BenchmarkResult[];
+      lastCategoryScores: Map<BenchmarkCategory, CategoryScore>;
+    }
+  ): Promise<void> {
+    this.callbacks.onOptimizationStart?.(weak.category);
+    this.log(`Optimizing: ${CATEGORY_LABELS[weak.category]}`);
+
+    const failingTests = state.lastResults
+      .filter((r) => !r.passed && r.testCaseId.startsWith(getCategoryPrefix(weak.category)))
+      .map((r) => ({
+        testCaseId: r.testCaseId,
+        query: "",
+        agentResponse: r.agentResponse,
+        feedback: r.feedback,
+        score: r.overallScore,
+        issues: r.issues || [],
+      }));
+
+    if (failingTests.length === 0) {
+      this.log(`No failing tests in ${CATEGORY_LABELS[weak.category]}, skipping`);
+      return;
+    }
+
+    const optCwd = this.versionInfo?.worktreePath || this.projectRoot;
+    const promptContent = await readPromptFiles(optCwd);
+    const skillContent = await readSkillFiles(optCwd, weak.category);
+    const context: OptimizationContext = {
+      category: weak.category,
+      failingTests,
+      currentPromptContent: promptContent,
+      currentSkillContent: skillContent,
+    };
+
+    const optResult = await optimizeWithClaudeCode(context, optCwd);
+    this.callbacks.onOptimizationComplete?.(
+      weak.category,
+      optResult.success,
+      optResult.filesChanged
+    );
+
+    if (!optResult.success) {
+      this.log(`Optimization failed: ${optResult.error}`);
+      return;
+    }
+
+    this.log(`Changed files: ${optResult.filesChanged.join(", ")}`);
+    this.log("Re-running benchmark...");
+    const rerunResult = await runner.run({
+      profile: this.config.profile,
+      category: weak.category,
+      versionTag: `auto-loop-iter-${iteration}`,
+    });
+
+    result.runs.push(rerunResult.run);
+    this.callbacks.onBenchmarkComplete?.(rerunResult.run, rerunResult.categoryScores);
+
+    this.applyOrRevert(weak, iteration, rerunResult, optResult.filesChanged, result, state);
+  }
+
+  private applyOrRevert(
+    weak: { category: BenchmarkCategory; score: number; gap: number },
+    iteration: number,
+    rerunResult: {
+      run: BenchmarkRun;
+      results: BenchmarkResult[];
+      categoryScores: Map<BenchmarkCategory, CategoryScore>;
+    },
+    filesChanged: string[],
+    result: AutoLoopResult,
+    state: {
+      lastResults: BenchmarkResult[];
+      lastCategoryScores: Map<BenchmarkCategory, CategoryScore>;
+    }
+  ): void {
+    const newCatScore = rerunResult.categoryScores.get(weak.category);
+    const newScore = newCatScore?.score ?? 0;
+    const delta = newScore - weak.score;
+    const improved = delta > 0;
+    const regressionNormalized = this.normalizeScore(this.config.regressionThreshold);
+    const noRegression = !this.hasRegression(
+      state.lastCategoryScores,
+      rerunResult.categoryScores,
+      regressionNormalized
+    );
+
+    this.callbacks.onComparisonResult?.(improved && noRegression, delta);
+
+    if (improved && noRegression) {
+      this.log(
+        `Improved! ${CATEGORY_LABELS[weak.category]}: ${weak.score.toFixed(1)} -> ${newScore.toFixed(1)} (+${delta.toFixed(1)})`
+      );
+      result.changes.push({
+        iteration,
+        category: weak.category,
+        beforeScore: weak.score,
+        afterScore: newScore,
+        filesChanged,
+        kept: true,
+      });
+      state.lastResults = rerunResult.results;
+      state.lastCategoryScores = rerunResult.categoryScores;
+    } else {
+      const reason = !improved
+        ? `No improvement (${delta.toFixed(1)})`
+        : `Regression detected (>${this.config.regressionThreshold} pts)`;
+      this.log(`Reverting: ${reason}`);
+      this.callbacks.onRevert?.(reason);
+      void this.revertLastCommit();
+      result.changes.push({
+        iteration,
+        category: weak.category,
+        beforeScore: weak.score,
+        afterScore: newScore,
+        filesChanged,
+        kept: false,
+      });
+    }
+  }
+
+  private updateVersionRecord(result: AutoLoopResult): void {
     if (this.versionInfo) {
       const version = getEvolutionVersionByBranch(this.versionInfo.branchName);
       if (version) {
@@ -292,10 +322,6 @@ export class AutoLoop {
         });
       }
     }
-
-    this.callbacks.onComplete?.(result.iterations, result.finalScore, result.improved);
-
-    return result;
   }
 
   /**

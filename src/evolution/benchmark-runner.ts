@@ -242,6 +242,107 @@ export class BenchmarkRunner {
   /**
    * Run a full benchmark suite
    */
+  /**
+   * Capture environment info (model, git version, prompt/skill versions)
+   */
+  private async captureEnvironment(options: {
+    modelOverride?: { provider: string; modelId: string; presetName?: string };
+    versionTag?: string;
+  }): Promise<{
+    modelId: string;
+    provider: string;
+    gitVersion: string;
+    versionTag: string;
+    promptVersions: Record<string, string>;
+    skillVersions: Record<string, string>;
+  }> {
+    const config = loadConfig();
+    const modelId = options.modelOverride?.modelId || config.llm?.modelId || "unknown";
+    const provider = options.modelOverride?.provider || config.llm?.provider || "unknown";
+    let gitVersion = "unknown";
+    try {
+      const proc = Bun.spawnSync(["git", "describe", "--always", "--dirty"]);
+      gitVersion = new TextDecoder().decode(proc.stdout).trim() || "unknown";
+    } catch {
+      /* ignore */
+    }
+    const versionTag = options.versionTag || gitVersion;
+    const promptVersions = await this.getPromptVersions();
+    const skillVersions = await this.getSkillVersions();
+    return { modelId, provider, gitVersion, versionTag, promptVersions, skillVersions };
+  }
+
+  /**
+   * Generate a semantic run ID: version_model_N
+   */
+  private generateRunId(versionTag: string, modelId: string): string {
+    const modelShort =
+      modelId
+        .split("/")
+        .pop()
+        ?.replace(/[^a-zA-Z0-9._-]/g, "") || "unknown";
+    const sanitizedVersion = versionTag.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const existingRuns = listBenchmarkRuns({ limit: 1000 });
+    const matchCount = existingRuns.filter((r) => {
+      const meta = r.metadata ? JSON.parse(r.metadata) : {};
+      const existingModel = (meta.modelId as string)?.split("/").pop() || "";
+      return r.version_tag === versionTag && existingModel === modelShort;
+    }).length;
+    return `${sanitizedVersion}_${modelShort}_${matchCount + 1}`;
+  }
+
+  /**
+   * Execute test cases (sequential or concurrent)
+   */
+  private async executeTests(
+    runId: string,
+    testCases: TestCase[],
+    rubrics: SharpRubricCategory[]
+  ): Promise<{ results: BenchmarkResult[]; passedCount: number; failedCount: number }> {
+    const concurrency = this.config.concurrency || 1;
+
+    if (concurrency <= 1) {
+      const results: BenchmarkResult[] = [];
+      let passedCount = 0;
+      let failedCount = 0;
+      for (let i = 0; i < testCases.length; i++) {
+        if (this.config.onProgress) {
+          this.config.onProgress(i + 1, testCases.length, testCases[i]);
+        }
+        const result = await this.runSingleTest(runId, testCases[i], rubrics);
+        results.push(result);
+        if (result.passed) {
+          passedCount++;
+        } else {
+          failedCount++;
+        }
+      }
+      return { results, passedCount, failedCount };
+    }
+
+    const sem = new Semaphore(concurrency);
+    let completed = 0;
+    const promises = testCases.map((testCase) =>
+      sem.run(async () => {
+        const result = await this.runSingleTest(runId, testCase, rubrics);
+        completed++;
+        if (this.config.onProgress) {
+          this.config.onProgress(completed, testCases.length, testCase);
+        }
+        return result;
+      })
+    );
+    const allResults = await Promise.all(promises);
+    return {
+      results: allResults,
+      passedCount: allResults.filter((r) => r.passed).length,
+      failedCount: allResults.filter((r) => !r.passed).length,
+    };
+  }
+
+  /**
+   * Run a full benchmark suite
+   */
   async run(
     options: {
       profile?: BenchmarkProfile;
@@ -256,70 +357,35 @@ export class BenchmarkRunner {
   }> {
     const profile = options.profile || "quick";
     const testCases = getBenchmarkTests({ profile, category: options.category });
-
     if (testCases.length === 0) {
       throw new Error("No test cases found for the specified profile/category");
     }
 
     const startTime = Date.now();
+    const env = await this.captureEnvironment(options);
 
-    // Capture model and version info
-    const config = loadConfig();
-    const modelId = options.modelOverride?.modelId || config.llm?.modelId || "unknown";
-    const provider = options.modelOverride?.provider || config.llm?.provider || "unknown";
-    let gitVersion = "unknown";
-    try {
-      const proc = Bun.spawnSync(["git", "describe", "--always", "--dirty"]);
-      gitVersion = new TextDecoder().decode(proc.stdout).trim() || "unknown";
-    } catch {
-      /* ignore */
-    }
-
-    // Capture prompt/skill versions for cache key
-    const versionTag = options.versionTag || gitVersion;
-    const promptVersions = await this.getPromptVersions();
-    const skillVersions = await this.getSkillVersions();
-    const promptVersionsJson = JSON.stringify(promptVersions);
-    const skillVersionsJson = JSON.stringify(skillVersions);
-
-    // Cache hit check: reuse existing successful run with identical conditions
+    // Cache hit check
     const cachedRun = findMatchingBenchmarkRun({
-      versionTag,
-      modelId,
+      versionTag: env.versionTag,
+      modelId: env.modelId,
       profile,
-      promptVersions: promptVersionsJson,
-      skillVersions: skillVersionsJson,
+      promptVersions: JSON.stringify(env.promptVersions),
+      skillVersions: JSON.stringify(env.skillVersions),
     });
-
     if (cachedRun) {
       log.info(
-        `Cache hit: reusing run ${cachedRun.id} (version=${versionTag}, model=${modelId}, profile=${profile})`
+        `Cache hit: reusing run ${cachedRun.id} (version=${env.versionTag}, model=${env.modelId}, profile=${profile})`
       );
       return this.rebuildFromCache(cachedRun, options.category);
     }
 
-    // Generate semantic ID: version_model_N
-    const modelShort =
-      modelId
-        .split("/")
-        .pop()
-        ?.replace(/[^a-zA-Z0-9._-]/g, "") || "unknown";
-    const sanitizedVersion = versionTag.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const existingRuns = listBenchmarkRuns({ limit: 1000 });
-    const matchCount = existingRuns.filter((r) => {
-      const meta = r.metadata ? JSON.parse(r.metadata) : {};
-      const existingModel = (meta.modelId as string)?.split("/").pop() || "";
-      return r.version_tag === versionTag && existingModel === modelShort;
-    }).length;
-    const runId = `${sanitizedVersion}_${modelShort}_${matchCount + 1}`;
-
-    // Create benchmark run record
+    const runId = this.generateRunId(env.versionTag, env.modelId);
     const run: BenchmarkRun = {
       id: runId,
       timestamp: startTime,
-      versionTag,
-      promptVersions,
-      skillVersions,
+      versionTag: env.versionTag,
+      promptVersions: env.promptVersions,
+      skillVersions: env.skillVersions,
       totalTestCases: testCases.length,
       passedCount: 0,
       failedCount: 0,
@@ -327,95 +393,38 @@ export class BenchmarkRunner {
       durationMs: 0,
       profile,
       metadata: {
-        modelId,
-        provider,
-        gitVersion,
+        modelId: env.modelId,
+        provider: env.provider,
+        gitVersion: env.gitVersion,
         ...(options.modelOverride?.presetName
           ? { presetName: options.modelOverride.presetName }
           : {}),
       },
     };
-
     insertBenchmarkRun(run);
 
-    // Load SHARP rubrics
     const rubrics = loadSharpRubrics();
+    const { results, passedCount, failedCount } = await this.executeTests(
+      runId,
+      testCases,
+      rubrics
+    );
 
-    // Run each test case
-    const results: BenchmarkResult[] = [];
-    let passedCount = 0;
-    let failedCount = 0;
-
-    const concurrency = this.config.concurrency || 1;
-    if (concurrency <= 1) {
-      // Sequential execution (original behavior)
-      for (let i = 0; i < testCases.length; i++) {
-        const testCase = testCases[i];
-
-        if (this.config.onProgress) {
-          this.config.onProgress(i + 1, testCases.length, testCase);
-        }
-
-        const result = await this.runSingleTest(runId, testCase, rubrics);
-        results.push(result);
-
-        if (result.passed) {
-          passedCount++;
-        } else {
-          failedCount++;
-        }
-      }
-    } else {
-      // Concurrent execution with semaphore
-      const sem = new Semaphore(concurrency);
-      let completed = 0;
-
-      const promises = testCases.map((testCase) =>
-        sem.run(async () => {
-          const result = await this.runSingleTest(runId, testCase, rubrics);
-          completed++;
-          if (this.config.onProgress) {
-            this.config.onProgress(completed, testCases.length, testCase);
-          }
-          return result;
-        })
-      );
-
-      const allResults = await Promise.all(promises);
-      results.push(...allResults);
-      passedCount = allResults.filter((r) => r.passed).length;
-      failedCount = allResults.filter((r) => !r.passed).length;
-    }
-
-    // Aggregate by test-case category (scene grouping)
     const categoryScores = aggregateByCategory(results);
-
-    // Store category scores
     for (const [, catScore] of categoryScores) {
       catScore.runId = runId;
       insertCategoryScore(catScore);
     }
 
-    // Compute overall score (0.0-1.0)
     const overallScore = computeOverallScore(categoryScores);
     const durationMs = Date.now() - startTime;
-
-    // Update run
     run.passedCount = passedCount;
     run.failedCount = failedCount;
     run.overallScore = overallScore;
     run.durationMs = durationMs;
+    updateBenchmarkRun(runId, { passedCount, failedCount, overallScore, durationMs });
 
-    updateBenchmarkRun(runId, {
-      passedCount,
-      failedCount,
-      overallScore,
-      durationMs,
-    });
-
-    // Export results to filesystem for offline analysis
     this.exportToFilesystem(run, results, categoryScores, testCases);
-
     return { run, results, categoryScores };
   }
 
