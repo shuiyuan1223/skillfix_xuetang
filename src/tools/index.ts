@@ -22,7 +22,7 @@ import { planTools } from "./plan-tools.js";
 import { proactiveTools } from "./proactive-tools.js";
 import { weatherTools } from "./weather-tool.js";
 import { dashboardTools } from "./dashboard-tools.js";
-import { badCaseTools } from "./bad-case-tools.js";
+import { incidentTools } from "./incident-tools.js";
 
 // ===========================================================================
 // Global Registry — single source of truth for all tools
@@ -33,7 +33,7 @@ globalRegistry.registerAll([
   ...healthTools,
   ...gitTools,
   ...evolutionTools,
-  ...badCaseTools,
+  ...incidentTools,
   ...configTools,
   ...memoryTools,
   ...skillTools,
@@ -69,6 +69,6 @@ export * from "./proactive-tools.js";
 export * from "./weather-tool.js";
 export * from "./dashboard-tools.js";
 export * from "./dashboard-types.js";
-export * from "./bad-case-tools.js";
+export * from "./incident-tools.js";
 export * from "./types.js";
 export { ToolRegistry, categoryToAgent, categoryToAgentTags } from "./registry.js";

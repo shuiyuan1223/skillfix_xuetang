@@ -307,16 +307,16 @@ export interface LocaleMessages {
     noTracesHint: string;
     noSuggestionsHint: string;
     noEvaluationsYet: string;
-    // Bad Cases
-    badCasesSlackHint: string;
-    badCasesPending: string;
-    badCasesBug: string;
-    badCasesEffect: string;
-    badCasesResolvedWeek: string;
-    badCasesReporter: string;
-    badCasesDescription: string;
-    badCasesEmpty: string;
-    badCasesEmptyHint: string;
+    // Incidents
+    incidentsSlackHint: string;
+    incidentsPending: string;
+    incidentsBug: string;
+    incidentsEffect: string;
+    incidentsResolvedWeek: string;
+    incidentsReporter: string;
+    incidentsDescription: string;
+    incidentsEmpty: string;
+    incidentsEmptyHint: string;
     statusPending: string;
     statusConfirmed: string;
     statusSuspended: string;
@@ -427,7 +427,7 @@ export interface LocaleMessages {
     tabVersions: string;
     tabData: string;
     tabAgent: string;
-    tabBadCases: string;
+    tabIncidents: string;
     startEvolutionCycle: string;
     // Overview
     currentVersion: string;

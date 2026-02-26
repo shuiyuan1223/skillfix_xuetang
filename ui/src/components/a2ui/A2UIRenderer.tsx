@@ -70,6 +70,13 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_weather: "天气查询",
   create_dashboard: "创建仪表盘",
   update_dashboard: "更新仪表盘",
+  list_incidents: "Incidents 列表",
+  get_incident: "Incident 详情",
+  update_incident_status: "更新 Incident 状态",
+  update_incident_type: "修改 Incident 类型",
+  create_github_issue_for_incident: "创建 GitHub Issue",
+  convert_incident_to_test_case: "转为测试用例",
+  get_incident_stats: "Incidents 统计",
 };
 
 // ---- ThinkingMessage: collapsible thinking block for thinking-mode chat ----

@@ -171,12 +171,12 @@ import {
   getScoreTrend,
   markInterruptedBenchmarkRuns,
   deleteBenchmarkRun,
-  listBadCases,
-  getBadCasesStats,
-  type BadCaseRow,
-  type BadCaseStatus,
-  type BadCaseType,
-  type BadCasePriority,
+  listIncidents,
+  getIncidentStats,
+  type IncidentRow,
+  type IncidentStatus,
+  type IncidentType,
+  type IncidentPriority,
 } from "../memory/db.js";
 import { BenchmarkRunner } from "../evolution/benchmark-runner.js";
 import {
@@ -1190,12 +1190,12 @@ export class GatewaySession {
   private activeVersionBranch: string | null = null;
 
   // Evolution Lab state (5-Tab Dashboard)
-  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" | "badCases" =
+  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" | "incidents" =
     "overview";
   private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
   private evolutionSelectedVersion: string | null = null;
-  private badCasesFilter: { status?: string; type?: string } = {};
-  private selectedBadCaseId: string | null = null;
+  private incidentsFilter: { status?: string; type?: string } = {};
+  private selectedIncidentId: string | null = null;
   private systemAgentChatMessages: PartsChatMessage[] = [];
   private systemAgentStreaming = false;
   private systemAgentStreamingContent = "";
@@ -3721,24 +3721,24 @@ export class GatewaySession {
         | "benchmark"
         | "versions"
         | "data"
-        | "badCases";
+        | "incidents";
       this.sendEvolutionLabUpdate(send);
-    } else if (action === "bad_cases_filter" && payload) {
+    } else if (action === "incidents_filter" && payload) {
       const { filterType, value } = payload as { filterType: string; value: string };
       if (filterType === "status")
-        this.badCasesFilter = { ...this.badCasesFilter, status: value || undefined };
+        this.incidentsFilter = { ...this.incidentsFilter, status: value || undefined };
       else if (filterType === "type")
-        this.badCasesFilter = { ...this.badCasesFilter, type: value || undefined };
-      this.evolutionActiveTab = "badCases";
+        this.incidentsFilter = { ...this.incidentsFilter, type: value || undefined };
+      this.evolutionActiveTab = "incidents";
       this.sendEvolutionLabUpdate(send);
-    } else if (action === "view_bad_case" && payload?.row) {
+    } else if (action === "view_incident" && payload?.row) {
       const row = payload.row as { _fullId?: string; id?: string };
-      const badCaseId = row._fullId ?? row.id;
-      if (badCaseId) {
-        // Store selected ID so retype/reprioritize buttons know which case to edit
-        this.selectedBadCaseId = badCaseId;
-        const { getBadCase } = await import("../memory/db.js");
-        const bc = getBadCase(badCaseId);
+      const incidentId = row._fullId ?? row.id;
+      if (incidentId) {
+        // Store selected ID so retype/reprioritize buttons know which incident to edit
+        this.selectedIncidentId = incidentId;
+        const { getIncident } = await import("../memory/db.js");
+        const bc = getIncident(incidentId);
         if (bc) {
           const { generateToast } = await import("./pages.js");
           const lines = [
@@ -3754,48 +3754,48 @@ export class GatewaySession {
           sendAll(send, generateToast(lines, "info"));
         }
       }
-    } else if (action === "confirm_bad_case" && payload?.id) {
-      const { updateBadCaseStatus } = await import("../memory/db.js");
-      updateBadCaseStatus(payload.id as string, "confirmed", payload.notes as string | undefined);
+    } else if (action === "confirm_incident" && payload?.id) {
+      const { updateIncidentStatus } = await import("../memory/db.js");
+      updateIncidentStatus(payload.id as string, "confirmed", payload.notes as string | undefined);
       const { generateToast } = await import("./pages.js");
-      sendAll(send, generateToast("Bad case 已确认", "success"));
+      sendAll(send, generateToast("Incident 已确认", "success"));
       this.sendEvolutionLabUpdate(send);
-    } else if (action === "suspend_bad_case" && payload?.id) {
-      const { updateBadCaseStatus } = await import("../memory/db.js");
-      updateBadCaseStatus(payload.id as string, "suspended", payload.notes as string | undefined);
+    } else if (action === "suspend_incident" && payload?.id) {
+      const { updateIncidentStatus } = await import("../memory/db.js");
+      updateIncidentStatus(payload.id as string, "suspended", payload.notes as string | undefined);
       const { generateToast } = await import("./pages.js");
-      sendAll(send, generateToast("Bad case 已挂起", "info"));
+      sendAll(send, generateToast("Incident 已挂起", "info"));
       this.sendEvolutionLabUpdate(send);
-    } else if (action === "resolve_bad_case" && payload?.id) {
-      const { updateBadCaseStatus } = await import("../memory/db.js");
-      updateBadCaseStatus(payload.id as string, "resolved", payload.notes as string | undefined);
+    } else if (action === "resolve_incident" && payload?.id) {
+      const { updateIncidentStatus } = await import("../memory/db.js");
+      updateIncidentStatus(payload.id as string, "resolved", payload.notes as string | undefined);
       const { generateToast } = await import("./pages.js");
-      sendAll(send, generateToast("Bad case 已解决 ✓", "success"));
+      sendAll(send, generateToast("Incident 已解决 ✓", "success"));
       this.sendEvolutionLabUpdate(send);
-    } else if (action === "bad_cases_retype" && payload?.type) {
-      const id = (payload.id as string | undefined) ?? this.selectedBadCaseId;
+    } else if (action === "incident_retype" && payload?.type) {
+      const id = (payload.id as string | undefined) ?? this.selectedIncidentId;
       if (id) {
-        const { updateBadCaseType } = await import("../memory/db.js");
+        const { updateIncidentType } = await import("../memory/db.js");
         const { generateToast } = await import("./pages.js");
-        updateBadCaseType(
+        updateIncidentType(
           id,
-          payload.type as BadCaseType,
-          payload.priority as BadCasePriority | undefined
+          payload.type as IncidentType,
+          payload.priority as IncidentPriority | undefined
         );
         sendAll(send, generateToast(`类型已更新为 ${String(payload.type)}`, "success"));
         this.sendEvolutionLabUpdate(send);
       }
-    } else if (action === "bad_cases_reprioritize" && payload?.priority) {
-      const id = (payload.id as string | undefined) ?? this.selectedBadCaseId;
+    } else if (action === "incident_reprioritize" && payload?.priority) {
+      const id = (payload.id as string | undefined) ?? this.selectedIncidentId;
       if (id) {
-        const { updateBadCaseType, getBadCase } = await import("../memory/db.js");
+        const { updateIncidentType, getIncident } = await import("../memory/db.js");
         const { generateToast } = await import("./pages.js");
-        const existing = getBadCase(id);
+        const existing = getIncident(id);
         if (existing) {
-          updateBadCaseType(
+          updateIncidentType(
             existing.id,
-            existing.type as BadCaseType,
-            payload.priority as BadCasePriority
+            existing.type as IncidentType,
+            payload.priority as IncidentPriority
           );
           sendAll(send, generateToast(`优先级已更新为 ${String(payload.priority)}`, "success"));
           this.sendEvolutionLabUpdate(send);
@@ -4062,7 +4062,7 @@ export class GatewaySession {
           | "benchmark"
           | "versions"
           | "data"
-          | "badCases";
+          | "incidents";
         this.sendEvolutionLabUpdate(send);
       } else if (this.currentView === "settings/logs") {
         this.logsTab = payload.tab as "system" | "llm";
@@ -5658,17 +5658,17 @@ export class GatewaySession {
       tracesTotal,
       evaluations,
       suggestions,
-      // Bad Cases
-      badCases: (() => {
-        if (activeTab !== "badCases") return undefined;
+      // Incidents
+      incidents: (() => {
+        if (activeTab !== "incidents") return undefined;
         try {
-          const filter = this.badCasesFilter;
-          const rows = listBadCases({
-            status: filter.status as BadCaseStatus | undefined,
-            type: filter.type as BadCaseType | undefined,
+          const filter = this.incidentsFilter;
+          const rows = listIncidents({
+            status: filter.status as IncidentStatus | undefined,
+            type: filter.type as IncidentType | undefined,
             limit: 100,
           });
-          return rows.map((r: BadCaseRow) => ({
+          return rows.map((r: IncidentRow) => ({
             id: r.id,
             timestamp: r.timestamp,
             source: r.source,
@@ -5688,15 +5688,15 @@ export class GatewaySession {
           return undefined;
         }
       })(),
-      badCasesStats: (() => {
-        if (activeTab !== "badCases") return undefined;
+      incidentStats: (() => {
+        if (activeTab !== "incidents") return undefined;
         try {
-          return getBadCasesStats();
+          return getIncidentStats();
         } catch {
           return undefined;
         }
       })(),
-      badCasesFilter: this.badCasesFilter,
+      incidentsFilter: this.incidentsFilter,
     };
   }
 

@@ -118,7 +118,7 @@ interface ExternalProgressInfo {
   presetName?: string;
 }
 
-export interface BadCaseInfo {
+export interface IncidentInfo {
   id: string;
   timestamp: number;
   source: string;
@@ -157,7 +157,7 @@ export interface ComparisonRun {
 }
 
 export interface EvolutionLabData {
-  activeTab: "overview" | "benchmark" | "versions" | "data" | "badCases";
+  activeTab: "overview" | "benchmark" | "versions" | "data" | "incidents";
   // Overview
   stats?: EvaluationStats;
   latestCategoryScores?: CategoryScoreInfo[];
@@ -196,9 +196,9 @@ export interface EvolutionLabData {
   tracesTotal?: number;
   evaluations?: EvaluationInfo[];
   suggestions?: SuggestionInfo[];
-  // Bad Cases
-  badCases?: BadCaseInfo[];
-  badCasesStats?: {
+  // Incidents
+  incidents?: IncidentInfo[];
+  incidentStats?: {
     total: number;
     pending: number;
     confirmed: number;
@@ -210,7 +210,7 @@ export interface EvolutionLabData {
     resolvedThisWeek: number;
     highPriority: number;
   };
-  badCasesFilter?: { status?: string; type?: string };
+  incidentsFilter?: { status?: string; type?: string };
   loading?: boolean;
 }
 
@@ -418,8 +418,8 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
   if (data.activeTab === "data") {
     tabContentIds.data = generateDataTab(ui, data);
   }
-  if (data.activeTab === "badCases") {
-    tabContentIds.badCases = generateBadCasesTab(ui, data);
+  if (data.activeTab === "incidents") {
+    tabContentIds.incidents = generateIncidentsTab(ui, data);
   }
   // ---- Tabs ----
   const tabs = ui.tabs(
@@ -428,7 +428,7 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
       { id: "benchmark", label: t("evolution.tabBenchmark"), icon: "test-tube" },
       { id: "versions", label: t("evolution.tabVersions"), icon: "git-branch" },
       { id: "data", label: t("evolution.tabData"), icon: "file-text" },
-      { id: "badCases", label: t("evolution.tabBadCases"), icon: "alert-triangle" },
+      { id: "incidents", label: t("evolution.tabIncidents"), icon: "alert-triangle" },
     ],
     data.activeTab,
     tabContentIds
@@ -1275,41 +1275,41 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
 // (Agent Tab removed — now a standalone System Agent page)
 
 // ============================================================================
-// Tab 5: Bad Cases
+// Tab 5: Incidents
 // ============================================================================
 
-function generateBadCasesTab(ui: A2UIGenerator, data: EvolutionLabData): string {
+function generateIncidentsTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
-  const stats = data.badCasesStats;
-  const filter = data.badCasesFilter ?? {};
+  const stats = data.incidentStats;
+  const filter = data.incidentsFilter ?? {};
 
   // ---- Header ----
-  const tabTitle = ui.text(t("evolution.tabBadCases"), "h3");
-  const slackHint = ui.text(t("evolution.badCasesSlackHint"), "caption");
+  const tabTitle = ui.text(t("evolution.tabIncidents"), "h3");
+  const slackHint = ui.text(t("evolution.incidentsSlackHint"), "caption");
   children.push(ui.column([tabTitle, slackHint], { gap: 4 }));
 
   // ---- Stats cards ----
   if (stats) {
     const pendingCard = ui.statCard({
-      title: t("evolution.badCasesPending"),
+      title: t("evolution.incidentsPending"),
       value: String(stats.pending),
       icon: "alert-triangle",
       color: stats.pending > 0 ? "#f59e0b" : "#94a3b8",
     });
     const bugCard = ui.statCard({
-      title: t("evolution.badCasesBug"),
+      title: t("evolution.incidentsBug"),
       value: String(stats.bug),
       icon: "x",
       color: stats.bug > 0 ? "#ef4444" : "#94a3b8",
     });
     const effectCard = ui.statCard({
-      title: t("evolution.badCasesEffect"),
+      title: t("evolution.incidentsEffect"),
       value: String(stats.effect),
       icon: "trending-down",
       color: "#94a3b8",
     });
     const resolvedCard = ui.statCard({
-      title: t("evolution.badCasesResolvedWeek"),
+      title: t("evolution.incidentsResolvedWeek"),
       value: String(stats.resolvedThisWeek),
       icon: "check",
       color: stats.resolvedThisWeek > 0 ? "#22c55e" : "#94a3b8",
@@ -1335,14 +1335,14 @@ function generateBadCasesTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   ];
 
   const statusBtns = statusFilters.map((f) =>
-    ui.button(f.label, "bad_cases_filter", {
+    ui.button(f.label, "incidents_filter", {
       variant: (filter.status ?? "") === f.value ? "secondary" : "ghost",
       size: "sm",
       payload: { filterType: "status", value: f.value },
     })
   );
   const typeBtns = typeFilters.map((f) =>
-    ui.button(f.label, "bad_cases_filter", {
+    ui.button(f.label, "incidents_filter", {
       variant: (filter.type ?? "") === f.value ? "secondary" : "ghost",
       size: "sm",
       payload: { filterType: "type", value: f.value },
@@ -1356,9 +1356,9 @@ function generateBadCasesTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     })
   );
 
-  // ---- Bad cases table ----
-  if (data.badCases && data.badCases.length > 0) {
-    const rows = data.badCases.map((bc) => ({
+  // ---- Incidents table ----
+  if (data.incidents && data.incidents.length > 0) {
+    const rows = data.incidents.map((bc) => ({
       id: bc.id.slice(0, 8),
       _fullId: bc.id,
       time: new Date(bc.timestamp).toLocaleString(),
@@ -1373,29 +1373,29 @@ function generateBadCasesTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     const table = ui.dataTable(
       [
         { key: "time", label: t("evolution.time"), sortable: true },
-        { key: "reporter", label: t("evolution.badCasesReporter") },
+        { key: "reporter", label: t("evolution.incidentsReporter") },
         { key: "type", label: t("evolution.type"), render: "badge" },
         { key: "status", label: t("skills.status"), render: "badge" },
         { key: "priority", label: t("evolution.priority") },
-        { key: "description", label: t("evolution.badCasesDescription") },
+        { key: "description", label: t("evolution.incidentsDescription") },
         { key: "issue", label: "GitHub" },
       ],
       rows,
-      { onRowClick: "view_bad_case" }
+      { onRowClick: "view_incident" }
     );
     children.push(table);
 
     // ---- Inline reclassify panel (shown below table for quick edits) ----
     const typeEditBtns = (["bug", "effect", "unclassified"] as const).map((t2) =>
-      ui.button(t2, "bad_cases_retype", {
+      ui.button(t2, "incident_retype", {
         variant: "outline",
         size: "sm",
-        // payload applied per-click — row must be selected via view_bad_case first
+        // payload applied per-click — row must be selected via view_incident first
         payload: { type: t2 },
       })
     );
     const priorityEditBtns = (["high", "medium", "low", "ignore"] as const).map((p) =>
-      ui.button(p, "bad_cases_reprioritize", {
+      ui.button(p, "incident_reprioritize", {
         variant: "outline",
         size: "sm",
         payload: { priority: p },
@@ -1422,8 +1422,8 @@ function generateBadCasesTab(ui: A2UIGenerator, data: EvolutionLabData): string 
     children.push(
       ui.column(
         [
-          ui.text(t("evolution.badCasesEmpty"), "caption"),
-          ui.text(t("evolution.badCasesEmptyHint"), "caption"),
+          ui.text(t("evolution.incidentsEmpty"), "caption"),
+          ui.text(t("evolution.incidentsEmptyHint"), "caption"),
         ],
         { padding: 48, align: "center", gap: 8 }
       )

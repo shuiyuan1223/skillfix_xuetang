@@ -5,8 +5,8 @@
  * No inbound port required — works behind firewalls / internal networks.
  *
  * Message routing (after @mention + subtype filter):
- *   /badcase <text>              → bad case ingestion
- *   我这有个badcase / 反馈: ...  → bad case ingestion (natural language)
+ *   /badcase <text>              → incident ingestion
+ *   我这有个badcase / 反馈: ...  → incident ingestion (natural language)
  *   everything else              → SA Chat (DB context + LLM response)
  *
  * Config (.pha/config.json):
@@ -40,10 +40,10 @@ interface SlackSocketEnvelope {
   reason?: string;
 }
 
-// ── Bad case trigger detection ─────────────────────────────────────────────────
+// ── Incident trigger detection ─────────────────────────────────────────────────
 
-/** Prefixes that indicate the user is reporting a bad case. Case-insensitive. */
-const BAD_CASE_TRIGGERS = [
+/** Prefixes that indicate the user is reporting an incident. Case-insensitive. */
+const INCIDENT_TRIGGERS = [
   "/badcase",
   "/bad-case",
   "badcase:",
@@ -58,23 +58,23 @@ const BAD_CASE_TRIGGERS = [
 ];
 
 /**
- * Detect if a message is a bad case report.
+ * Detect if a message is an incident report.
  * Returns the cleaned text (trigger prefix stripped) if so.
  */
-function parseBadCaseReport(
+function parseIncidentReport(
   text: string
-): { isBadCase: true; cleanText: string } | { isBadCase: false } {
+): { isIncident: true; cleanText: string } | { isIncident: false } {
   const lower = text.toLowerCase();
-  for (const trigger of BAD_CASE_TRIGGERS) {
+  for (const trigger of INCIDENT_TRIGGERS) {
     if (lower.startsWith(trigger.toLowerCase())) {
       const cleanText = text
         .slice(trigger.length)
         .replace(/^[：:\s]+/, "")
         .trim();
-      return { isBadCase: true, cleanText };
+      return { isIncident: true, cleanText };
     }
   }
-  return { isBadCase: false };
+  return { isIncident: false };
 }
 
 // ── SA Chat ────────────────────────────────────────────────────────────────────
@@ -89,15 +89,15 @@ async function handleSaChat(
   llmCall: (prompt: string) => Promise<string>
 ): Promise<string> {
   // Gather context from DB
-  let badCaseContext = "（数据获取失败）";
+  let incidentContext = "（数据获取失败）";
   let benchmarkContext = "（数据获取失败）";
 
   try {
-    const { listBadCases, getBadCasesStats } = await import("../memory/db.js");
-    const stats = getBadCasesStats();
-    const pending = listBadCases({ status: "pending", limit: 5 });
+    const { listIncidents, getIncidentStats } = await import("../memory/db.js");
+    const stats = getIncidentStats();
+    const pending = listIncidents({ status: "pending", limit: 5 });
 
-    badCaseContext = `总计 ${stats.total} | 待处理 ${stats.pending} | Bug ${stats.bug} | Effect ${stats.effect} | 本周已解决 ${stats.resolvedThisWeek}${
+    incidentContext = `总计 ${stats.total} | 待处理 ${stats.pending} | Bug ${stats.bug} | Effect ${stats.effect} | 本周已解决 ${stats.resolvedThisWeek}${
       pending.length > 0
         ? `\n待处理（最新5条）:\n${pending
             .map(
@@ -136,8 +136,8 @@ async function handleSaChat(
 
 ## 当前数据快照
 
-**Bad Cases**
-${badCaseContext}
+**Incidents**
+${incidentContext}
 
 **Benchmark（最近3次）**
 ${benchmarkContext}
@@ -145,8 +145,8 @@ ${benchmarkContext}
 ## 你的能力
 - 分析和解读以上数据
 - 解答关于 PHA 系统、进化流程、Benchmark 的问题
-- 指导如何上报 bad case（发消息时用 \`/badcase <描述>\` 前缀）
-- 协助分析某个 bad case 是 bug 还是 effect 类型
+- 指导如何上报 incident（发消息时用 \`/badcase <描述>\` 前缀）
+- 协助分析某个 incident 是 bug 还是 effect 类型
 
 ## 用户消息
 ${message}
@@ -328,11 +328,11 @@ export function startSlackSocketMode(
           const displayName =
             botToken && userId ? await resolveDisplayName(userId, botToken) : userId;
 
-          // ── Route: bad case report vs SA chat ───────────────────────────────
-          const parsed = parseBadCaseReport(text);
+          // ── Route: incident report vs SA chat ───────────────────────────────
+          const parsed = parseIncidentReport(text);
 
           let replyText: string;
-          if (parsed.isBadCase) {
+          if (parsed.isIncident) {
             // Direct ingestion path
             try {
               const { handleSlackWebhook } = await import("./slack-webhook.js");
@@ -342,7 +342,7 @@ export function startSlackSocketMode(
               );
               replyText = result.message;
             } catch {
-              replyText = "❌ Bad case 上报失败，请稍后重试。";
+              replyText = "❌ Incident 上报失败，请稍后重试。";
             }
           } else {
             // SA Chat path

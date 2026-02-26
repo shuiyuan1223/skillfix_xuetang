@@ -1,7 +1,7 @@
 /**
- * Bad Case Classifier
+ * Incident Classifier
  *
- * LLM-based classifier for bad cases collected via Slack or manually.
+ * LLM-based classifier for incidents collected via Slack or manually.
  * Replaces keyword-based classification with structured LLM reasoning.
  *
  * Types:
@@ -10,11 +10,11 @@
  *   unclassified — not enough info to determine
  */
 
-import type { BadCaseType, BadCasePriority } from "../memory/db.js";
+import type { IncidentType, IncidentPriority } from "../memory/db.js";
 
 export interface ClassificationResult {
-  type: BadCaseType;
-  priority: BadCasePriority;
+  type: IncidentType;
+  priority: IncidentPriority;
   confidence: number; // 0.0 - 1.0
   reason: string;
   suggestedTitle?: string; // For GitHub Issue title if bug type
@@ -24,7 +24,7 @@ const CLASSIFICATION_PROMPT = `You are a quality engineer for PHA (Personal Heal
 
 A team member has reported a bad interaction. Classify it:
 
-## Bad Case Description
+## Incident Description
 {RAW_TEXT}
 
 {TRACE_CONTEXT}
@@ -60,9 +60,9 @@ Respond with ONLY valid JSON, no markdown, no explanation outside JSON:
 }`;
 
 /**
- * Classify a bad case using LLM
+ * Classify an incident using LLM
  */
-export async function classifyBadCase(opts: {
+export async function classifyIncident(opts: {
   rawText: string;
   traceContext?: {
     userMessage?: string;
@@ -103,10 +103,10 @@ Agent Response: ${traceContext.agentResponse?.slice(0, 500) ?? "(unknown)"}${
     return {
       type: (["bug", "effect", "unclassified"].includes(parsed.type ?? "")
         ? parsed.type
-        : "unclassified") as BadCaseType,
+        : "unclassified") as IncidentType,
       priority: (["high", "medium", "low", "ignore"].includes(parsed.priority ?? "")
         ? parsed.priority
-        : "medium") as BadCasePriority,
+        : "medium") as IncidentPriority,
       confidence:
         typeof parsed.confidence === "number" ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
       reason: parsed.reason ?? "LLM classification",

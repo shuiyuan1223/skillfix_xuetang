@@ -1,8 +1,8 @@
 /**
  * Slack Webhook Handler
  *
- * Receives bad-case reports from Slack, classifies them via LLM,
- * and persists to the bad_cases database for Dashboard tracking.
+ * Receives incident reports from Slack, classifies them via LLM,
+ * and persists to the incidents database for Dashboard tracking.
  *
  * Supported Slack integration modes:
  *   A) Outgoing Webhook (trigger word, e.g. "bad-case:")
@@ -14,11 +14,11 @@
  *   "/bad-case Agent 报错了，工具调用返回 null"
  *
  * GitHub Issue creation is intentionally NOT done here.
- * It is handled by the System Agent via create_github_issue_for_bad_case MCP tool.
+ * It is handled by the System Agent via create_github_issue_for_incident MCP tool.
  */
 
-import { insertBadCase, type BadCaseSource } from "../memory/db.js";
-import { classifyBadCase, type ClassificationResult } from "../evolution/bad-case-classifier.js";
+import { insertIncident, type IncidentSource } from "../memory/db.js";
+import { classifyIncident, type ClassificationResult } from "../evolution/incident-classifier.js";
 
 export interface SlackWebhookPayload {
   token?: string;
@@ -36,7 +36,7 @@ export interface SlackWebhookPayload {
   response_url?: string;
 }
 
-export interface BadCaseIngestResult {
+export interface IncidentIngestResult {
   id: string;
   classification: ClassificationResult;
   traceId?: string;
@@ -75,7 +75,7 @@ function normalizeText(payload: SlackWebhookPayload): string {
 /**
  * Determine source based on payload shape
  */
-function detectSource(payload: SlackWebhookPayload): BadCaseSource {
+function detectSource(payload: SlackWebhookPayload): IncidentSource {
   if (payload.command) return "slack"; // slash command
   return "slack";
 }
@@ -89,7 +89,7 @@ function detectSource(payload: SlackWebhookPayload): BadCaseSource {
 export async function handleSlackWebhook(
   payload: SlackWebhookPayload,
   llmCall?: (prompt: string) => Promise<string>
-): Promise<BadCaseIngestResult> {
+): Promise<IncidentIngestResult> {
   const rawText = normalizeText(payload);
   const traceId = extractTraceId(rawText);
   const source = detectSource(payload);
@@ -107,7 +107,7 @@ export async function handleSlackWebhook(
 
   if (llmCall) {
     try {
-      classification = await classifyBadCase({ rawText, llmCall });
+      classification = await classifyIncident({ rawText, llmCall });
     } catch {
       // Keep unclassified fallback
     }
@@ -115,7 +115,7 @@ export async function handleSlackWebhook(
 
   // Persist to DB — always, regardless of classification outcome
   try {
-    insertBadCase({
+    insertIncident({
       id,
       timestamp: Date.now(),
       source,
@@ -134,7 +134,7 @@ export async function handleSlackWebhook(
       classification,
       traceId,
       persisted: false,
-      message: `Failed to persist bad case: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Failed to persist incident: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 
@@ -147,11 +147,11 @@ export async function handleSlackWebhook(
     traceId,
     persisted: true,
     message:
-      `${typeEmoji} Bad case recorded (ID: \`${id.slice(0, 8)}\`)\n` +
+      `${typeEmoji} Incident recorded (ID: \`${id.slice(0, 8)}\`)\n` +
       `分类: *${classification.type}* (置信度 ${confidencePct}%)\n` +
       `优先级: ${classification.priority}\n` +
       `原因: ${classification.reason}\n${
         traceId ? `Trace ID: \`${traceId}\`\n` : ""
-      }\n在 Evolution Lab → Bad Cases 查看详情。`,
+      }\n在 Evolution Lab → Incidents 查看详情。`,
   };
 }

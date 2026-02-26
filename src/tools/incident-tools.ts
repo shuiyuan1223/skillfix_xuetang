@@ -1,49 +1,49 @@
 /**
- * Bad Case MCP Tools
+ * Incident MCP Tools
  *
- * Tools for managing the bad-case data loop:
- * - list/get/create bad cases
+ * Tools for managing the incident data loop:
+ * - list/get/create incidents
  * - update status/type (confirm, suspend, resolve)
  * - create GitHub Issue (System Agent only, uses gh CLI)
- * - convert confirmed effect-type cases to Benchmark TestCases
+ * - convert confirmed effect-type incidents to Benchmark TestCases
  * - get aggregated stats for Dashboard
  *
  * Category: "evolution" → available to System Agent (SA)
  */
 
 import {
-  insertBadCase,
-  getBadCase,
-  listBadCases,
-  updateBadCaseStatus,
-  updateBadCaseType,
-  updateBadCaseGitHubIssue,
-  updateBadCaseNotes,
-  getBadCasesStats,
+  insertIncident,
+  getIncident,
+  listIncidents,
+  updateIncidentStatus,
+  updateIncidentType,
+  updateIncidentGitHubIssue,
+  updateIncidentNotes,
+  getIncidentStats,
   insertTestCase,
-  type BadCaseType,
-  type BadCaseStatus,
-  type BadCasePriority,
-  type BadCaseSource,
+  type IncidentType,
+  type IncidentStatus,
+  type IncidentPriority,
+  type IncidentSource,
 } from "../memory/db.js";
 import { isGitHubCLIAvailable, createGitHubIssue } from "../evolution/github-issues.js";
 import type { PHATool } from "./types.js";
 
 // ============================================================================
-// list_bad_cases
+// list_incidents
 // ============================================================================
 
-export const listBadCasesTool: PHATool<{
+export const listIncidentsTool: PHATool<{
   status?: string;
   type?: string;
   limit?: number;
 }> = {
-  name: "list_bad_cases",
-  description: "列出 bad cases，支持按状态和类型筛选",
-  displayName: "Bad Cases 列表",
+  name: "list_incidents",
+  description: "列出 incidents，支持按状态和类型筛选",
+  displayName: "Incidents 列表",
   category: "evolution",
   icon: "alert-triangle",
-  label: "List Bad Cases",
+  label: "List Incidents",
   inputSchema: {
     type: "object",
     properties: {
@@ -59,15 +59,15 @@ export const listBadCasesTool: PHATool<{
     },
   },
   execute: async (args) => {
-    const rows = listBadCases({
-      status: args.status as BadCaseStatus | undefined,
-      type: args.type as BadCaseType | undefined,
+    const rows = listIncidents({
+      status: args.status as IncidentStatus | undefined,
+      type: args.type as IncidentType | undefined,
       limit: args.limit,
     });
 
     return {
       success: true,
-      badCases: rows.map((r) => ({
+      incidents: rows.map((r) => ({
         id: r.id,
         timestamp: r.timestamp,
         source: r.source,
@@ -86,30 +86,30 @@ export const listBadCasesTool: PHATool<{
 };
 
 // ============================================================================
-// get_bad_case
+// get_incident
 // ============================================================================
 
-export const getBadCaseTool: PHATool<{ id: string }> = {
-  name: "get_bad_case",
-  description: "获取 bad case 的完整详情",
-  displayName: "Bad Case 详情",
+export const getIncidentTool: PHATool<{ id: string }> = {
+  name: "get_incident",
+  description: "获取 incident 的完整详情",
+  displayName: "Incident 详情",
   category: "evolution",
   icon: "alert-triangle",
-  label: "Get Bad Case",
+  label: "Get Incident",
   inputSchema: {
     type: "object",
     properties: {
-      id: { type: "string", description: "Bad case ID" },
+      id: { type: "string", description: "Incident ID" },
     },
     required: ["id"],
   },
   execute: async (args) => {
-    const row = getBadCase(args.id);
-    if (!row) return { success: false, error: `Bad case not found: ${args.id}` };
+    const row = getIncident(args.id);
+    if (!row) return { success: false, error: `Incident not found: ${args.id}` };
 
     return {
       success: true,
-      badCase: {
+      incident: {
         id: row.id,
         timestamp: row.timestamp,
         source: row.source,
@@ -131,24 +131,24 @@ export const getBadCaseTool: PHATool<{ id: string }> = {
 };
 
 // ============================================================================
-// update_bad_case_status
+// update_incident_status
 // ============================================================================
 
-export const updateBadCaseStatusTool: PHATool<{
+export const updateIncidentStatusTool: PHATool<{
   id: string;
   status: string;
   notes?: string;
 }> = {
-  name: "update_bad_case_status",
-  description: "更新 bad case 状态：确认、挂起、解决或关闭",
-  displayName: "更新 Bad Case 状态",
+  name: "update_incident_status",
+  description: "更新 incident 状态：确认、挂起、解决或关闭",
+  displayName: "更新 Incident 状态",
   category: "evolution",
   icon: "check",
-  label: "Update Bad Case Status",
+  label: "Update Incident Status",
   inputSchema: {
     type: "object",
     properties: {
-      id: { type: "string", description: "Bad case ID" },
+      id: { type: "string", description: "Incident ID" },
       status: {
         type: "string",
         description: "New status: pending | confirmed | suspended | resolved | closed",
@@ -158,38 +158,38 @@ export const updateBadCaseStatusTool: PHATool<{
     required: ["id", "status"],
   },
   execute: async (args) => {
-    const existing = getBadCase(args.id);
-    if (!existing) return { success: false, error: `Bad case not found: ${args.id}` };
+    const existing = getIncident(args.id);
+    if (!existing) return { success: false, error: `Incident not found: ${args.id}` };
 
-    updateBadCaseStatus(args.id, args.status as BadCaseStatus, args.notes);
+    updateIncidentStatus(args.id, args.status as IncidentStatus, args.notes);
 
     return {
       success: true,
-      message: `Bad case ${args.id} status updated to: ${args.status}`,
+      message: `Incident ${args.id} status updated to: ${args.status}`,
     };
   },
 };
 
 // ============================================================================
-// update_bad_case_type
+// update_incident_type
 // ============================================================================
 
-export const updateBadCaseTypeTool: PHATool<{
+export const updateIncidentTypeTool: PHATool<{
   id: string;
   type: string;
   priority?: string;
   notes?: string;
 }> = {
-  name: "update_bad_case_type",
-  description: "修改 bad case 的类型分类（bug/effect）和优先级",
-  displayName: "修改 Bad Case 类型",
+  name: "update_incident_type",
+  description: "修改 incident 的类型分类（bug/effect）和优先级",
+  displayName: "修改 Incident 类型",
   category: "evolution",
   icon: "alert-triangle",
-  label: "Update Bad Case Type",
+  label: "Update Incident Type",
   inputSchema: {
     type: "object",
     properties: {
-      id: { type: "string", description: "Bad case ID" },
+      id: { type: "string", description: "Incident ID" },
       type: { type: "string", description: "New type: bug | effect | unclassified" },
       priority: {
         type: "string",
@@ -200,30 +200,30 @@ export const updateBadCaseTypeTool: PHATool<{
     required: ["id", "type"],
   },
   execute: async (args) => {
-    const existing = getBadCase(args.id);
-    if (!existing) return { success: false, error: `Bad case not found: ${args.id}` };
+    const existing = getIncident(args.id);
+    if (!existing) return { success: false, error: `Incident not found: ${args.id}` };
 
-    updateBadCaseType(args.id, args.type as BadCaseType, args.priority as BadCasePriority);
-    if (args.notes) updateBadCaseNotes(args.id, args.notes);
+    updateIncidentType(args.id, args.type as IncidentType, args.priority as IncidentPriority);
+    if (args.notes) updateIncidentNotes(args.id, args.notes);
 
     return {
       success: true,
-      message: `Bad case ${args.id} reclassified as: ${args.type}${args.priority ? ` (${args.priority})` : ""}`,
+      message: `Incident ${args.id} reclassified as: ${args.type}${args.priority ? ` (${args.priority})` : ""}`,
     };
   },
 };
 
 // ============================================================================
-// create_github_issue_for_bad_case (System Agent only — requires gh CLI)
+// create_github_issue_for_incident (System Agent only — requires gh CLI)
 // ============================================================================
 
-export const createGitHubIssueForBadCaseTool: PHATool<{
+export const createGitHubIssueForIncidentTool: PHATool<{
   id: string;
   titleOverride?: string;
   additionalContext?: string;
 }> = {
-  name: "create_github_issue_for_bad_case",
-  description: "为 bad case 创建 GitHub Issue（需要 gh CLI 认证）。自动打 label：bug 或 effect。",
+  name: "create_github_issue_for_incident",
+  description: "为 incident 创建 GitHub Issue（需要 gh CLI 认证）。自动打 label：bug 或 effect。",
   displayName: "创建 GitHub Issue",
   category: "evolution",
   icon: "git-branch",
@@ -231,7 +231,7 @@ export const createGitHubIssueForBadCaseTool: PHATool<{
   inputSchema: {
     type: "object",
     properties: {
-      id: { type: "string", description: "Bad case ID" },
+      id: { type: "string", description: "Incident ID" },
       titleOverride: {
         type: "string",
         description:
@@ -245,14 +245,14 @@ export const createGitHubIssueForBadCaseTool: PHATool<{
     required: ["id"],
   },
   execute: async (args) => {
-    const row = getBadCase(args.id);
-    if (!row) return { success: false, error: `Bad case not found: ${args.id}` };
+    const row = getIncident(args.id);
+    if (!row) return { success: false, error: `Incident not found: ${args.id}` };
 
     if (!isGitHubCLIAvailable()) {
       return {
         success: false,
         error:
-          "gh CLI is not available or not authenticated. Run `gh auth status` to check. The bad case remains in pending state in the Dashboard.",
+          "gh CLI is not available or not authenticated. Run `gh auth status` to check. The incident remains in pending state in the Dashboard.",
       };
     }
 
@@ -270,16 +270,16 @@ export const createGitHubIssueForBadCaseTool: PHATool<{
       const result = await createGitHubIssue({
         title,
         body,
-        labels: [typeLabel, priorityLabel, "bad-case"],
+        labels: [typeLabel, priorityLabel, "incident"],
       });
 
-      updateBadCaseGitHubIssue(args.id, result.number, result.url);
+      updateIncidentGitHubIssue(args.id, result.number, result.url);
 
       return {
         success: true,
         issueNumber: result.number,
         issueUrl: result.url,
-        message: `GitHub Issue #${result.number} created for bad case ${args.id}`,
+        message: `GitHub Issue #${result.number} created for incident ${args.id}`,
       };
     } catch (error) {
       return {
@@ -291,13 +291,13 @@ export const createGitHubIssueForBadCaseTool: PHATool<{
 };
 
 function buildIssueBody(
-  row: ReturnType<typeof getBadCase> & object,
+  row: ReturnType<typeof getIncident> & object,
   additionalContext?: string
 ): string {
   if (!row) return "";
   const lines: string[] = [];
 
-  lines.push("## Bad Case Report");
+  lines.push("## Incident Report");
   lines.push("");
   lines.push(`**Source:** ${row.source}`);
   if (row.reporter) lines.push(`**Reporter:** ${row.reporter}`);
@@ -335,25 +335,25 @@ function buildIssueBody(
     lines.push("- [ ] Reproduce the issue with a minimal test case");
     lines.push("- [ ] Add a unit test to `tests/unit/` to prevent regression");
     lines.push("- [ ] Fix the root cause");
-    lines.push("- [ ] Mark bad case as `resolved` in the Dashboard");
+    lines.push("- [ ] Mark incident as `resolved` in the Dashboard");
   } else {
     lines.push("- [ ] Confirm this is an effect/quality issue (not a bug)");
     lines.push("- [ ] At iteration end: review with algorithm team");
     lines.push("- [ ] Add to Benchmark test cases if appropriate");
-    lines.push("- [ ] Mark bad case as `closed` in the Dashboard after iteration");
+    lines.push("- [ ] Mark incident as `closed` in the Dashboard after iteration");
   }
   lines.push("");
   lines.push("---");
-  lines.push("_Auto-created from PHA Bad Case Dashboard_");
+  lines.push("_Auto-created from PHA Incidents Dashboard_");
 
   return lines.join("\n");
 }
 
 // ============================================================================
-// convert_bad_case_to_test_case
+// convert_incident_to_test_case
 // ============================================================================
 
-export const convertBadCaseToTestCaseTool: PHATool<{
+export const convertIncidentToTestCaseTool: PHATool<{
   id: string;
   category: string;
   query: string;
@@ -361,9 +361,9 @@ export const convertBadCaseToTestCaseTool: PHATool<{
   shouldNotMention?: string[];
   minScore?: number;
 }> = {
-  name: "convert_bad_case_to_test_case",
+  name: "convert_incident_to_test_case",
   description:
-    "将已确认的 effect 类 bad case 转为 Benchmark TestCase，纳入回归防护。适用于算法专家审核后的 effect 类问题。",
+    "将已确认的 effect 类 incident 转为 Benchmark TestCase，纳入回归防护。适用于算法专家审核后的 effect 类问题。",
   displayName: "转为测试用例",
   category: "evolution",
   icon: "test-tube",
@@ -371,7 +371,7 @@ export const convertBadCaseToTestCaseTool: PHATool<{
   inputSchema: {
     type: "object",
     properties: {
-      id: { type: "string", description: "Bad case ID" },
+      id: { type: "string", description: "Incident ID" },
       category: {
         type: "string",
         description:
@@ -393,17 +393,17 @@ export const convertBadCaseToTestCaseTool: PHATool<{
     required: ["id", "category", "query"],
   },
   execute: async (args) => {
-    const row = getBadCase(args.id);
-    if (!row) return { success: false, error: `Bad case not found: ${args.id}` };
+    const row = getIncident(args.id);
+    if (!row) return { success: false, error: `Incident not found: ${args.id}` };
 
     if (row.status !== "confirmed") {
       return {
         success: false,
-        error: `Bad case must be in 'confirmed' status before converting to a test case. Current status: ${row.status}`,
+        error: `Incident must be in 'confirmed' status before converting to a test case. Current status: ${row.status}`,
       };
     }
 
-    const testCaseId = `bad-case-${args.id.slice(0, 8)}-${Date.now()}`;
+    const testCaseId = `incident-${args.id.slice(0, 8)}-${Date.now()}`;
 
     insertTestCase({
       id: testCaseId,
@@ -416,34 +416,34 @@ export const convertBadCaseToTestCaseTool: PHATool<{
       },
     });
 
-    // Mark bad case as closed after converting
-    updateBadCaseStatus(args.id, "closed", `Converted to benchmark test case: ${testCaseId}`);
+    // Mark incident as closed after converting
+    updateIncidentStatus(args.id, "closed", `Converted to benchmark test case: ${testCaseId}`);
 
     return {
       success: true,
       testCaseId,
-      message: `Bad case converted to benchmark test case: ${testCaseId}. Bad case marked as closed.`,
+      message: `Incident converted to benchmark test case: ${testCaseId}. Incident marked as closed.`,
     };
   },
 };
 
 // ============================================================================
-// get_bad_cases_stats
+// get_incident_stats
 // ============================================================================
 
-export const getBadCasesStatsTool: PHATool<Record<string, never>> = {
-  name: "get_bad_cases_stats",
-  description: "获取 bad cases 聚合统计，用于 Dashboard 概览",
-  displayName: "Bad Cases 统计",
+export const getIncidentStatsTool: PHATool<Record<string, never>> = {
+  name: "get_incident_stats",
+  description: "获取 incidents 聚合统计，用于 Dashboard 概览",
+  displayName: "Incidents 统计",
   category: "evolution",
   icon: "bar-chart",
-  label: "Get Bad Cases Stats",
+  label: "Get Incident Stats",
   inputSchema: {
     type: "object",
     properties: {},
   },
   execute: async () => {
-    const stats = getBadCasesStats();
+    const stats = getIncidentStats();
     return { success: true, stats };
   },
 };
@@ -452,12 +452,12 @@ export const getBadCasesStatsTool: PHATool<Record<string, never>> = {
 // Export
 // ============================================================================
 
-export const badCaseTools = [
-  listBadCasesTool,
-  getBadCaseTool,
-  updateBadCaseStatusTool,
-  updateBadCaseTypeTool,
-  createGitHubIssueForBadCaseTool,
-  convertBadCaseToTestCaseTool,
-  getBadCasesStatsTool,
+export const incidentTools = [
+  listIncidentsTool,
+  getIncidentTool,
+  updateIncidentStatusTool,
+  updateIncidentTypeTool,
+  createGitHubIssueForIncidentTool,
+  convertIncidentToTestCaseTool,
+  getIncidentStatsTool,
 ];

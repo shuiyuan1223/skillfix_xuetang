@@ -153,8 +153,8 @@ function initializeSchema(db: Database): void {
       metadata TEXT                       -- JSON
     );
 
-    -- Bad Cases: User-reported bad interactions collected via Slack or manually
-    CREATE TABLE IF NOT EXISTS bad_cases (
+    -- Incidents: User-reported bad interactions collected via Slack or manually
+    CREATE TABLE IF NOT EXISTS incidents (
       id TEXT PRIMARY KEY,
       timestamp INTEGER NOT NULL,
       source TEXT NOT NULL DEFAULT 'slack',      -- slack | manual | system
@@ -187,15 +187,15 @@ function initializeSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_benchmark_results_test_case ON benchmark_results(test_case_id);
     CREATE INDEX IF NOT EXISTS idx_evolution_versions_status ON evolution_versions(status);
     CREATE INDEX IF NOT EXISTS idx_evolution_versions_branch ON evolution_versions(branch_name);
-    CREATE INDEX IF NOT EXISTS idx_bad_cases_status ON bad_cases(status);
-    CREATE INDEX IF NOT EXISTS idx_bad_cases_type ON bad_cases(type);
-    CREATE INDEX IF NOT EXISTS idx_bad_cases_timestamp ON bad_cases(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+    CREATE INDEX IF NOT EXISTS idx_incidents_type ON incidents(type);
+    CREATE INDEX IF NOT EXISTS idx_incidents_timestamp ON incidents(timestamp);
   `);
 
   // Add columns to test_cases if they don't exist (safe migration)
   migrateTestCasesTable(db);
   migrateBenchmarkRunsTable(db);
-  migrateBadCasesTable(db);
+  migrateIncidentsTable(db);
 }
 
 /**
@@ -242,15 +242,15 @@ function migrateBenchmarkRunsTable(db: Database): void {
 }
 
 /**
- * Migrate bad_cases table to add new columns (future-proofing)
+ * Migrate incidents table to add new columns (future-proofing)
  */
-function migrateBadCasesTable(db: Database): void {
+function migrateIncidentsTable(db: Database): void {
   try {
-    const tableInfo = db.prepare("PRAGMA table_info(bad_cases)").all() as Array<{ name: string }>;
+    const tableInfo = db.prepare("PRAGMA table_info(incidents)").all() as Array<{ name: string }>;
     const columnNames = tableInfo.map((c) => c.name);
 
     if (!columnNames.includes("resolved_at")) {
-      db.exec("ALTER TABLE bad_cases ADD COLUMN resolved_at INTEGER");
+      db.exec("ALTER TABLE incidents ADD COLUMN resolved_at INTEGER");
     }
   } catch {
     // Table might not exist yet on first run
@@ -1238,24 +1238,24 @@ export function countTestCases(options: { category?: string; difficulty?: string
 }
 
 // ============================================================================
-// Bad Cases Operations
+// Incident Operations
 // ============================================================================
 
-export type BadCaseType = "bug" | "effect" | "unclassified";
-export type BadCaseStatus = "pending" | "confirmed" | "suspended" | "resolved" | "closed";
-export type BadCasePriority = "high" | "medium" | "low" | "ignore";
-export type BadCaseSource = "slack" | "manual" | "system";
+export type IncidentType = "bug" | "effect" | "unclassified";
+export type IncidentStatus = "pending" | "confirmed" | "suspended" | "resolved" | "closed";
+export type IncidentPriority = "high" | "medium" | "low" | "ignore";
+export type IncidentSource = "slack" | "manual" | "system";
 
-export interface BadCaseRow {
+export interface IncidentRow {
   id: string;
   timestamp: number;
-  source: BadCaseSource;
+  source: IncidentSource;
   reporter: string | null;
   raw_text: string;
   trace_id: string | null;
-  type: BadCaseType;
-  status: BadCaseStatus;
-  priority: BadCasePriority;
+  type: IncidentType;
+  status: IncidentStatus;
+  priority: IncidentPriority;
   classification_confidence: number | null;
   classification_reason: string | null;
   github_issue_url: string | null;
@@ -1264,61 +1264,61 @@ export interface BadCaseRow {
   resolved_at: number | null;
 }
 
-export function insertBadCase(badCase: {
+export function insertIncident(incident: {
   id: string;
   timestamp: number;
-  source: BadCaseSource;
+  source: IncidentSource;
   reporter?: string;
   rawText: string;
   traceId?: string;
-  type?: BadCaseType;
-  status?: BadCaseStatus;
-  priority?: BadCasePriority;
+  type?: IncidentType;
+  status?: IncidentStatus;
+  priority?: IncidentPriority;
   classificationConfidence?: number;
   classificationReason?: string;
 }): void {
   const database = getDatabase();
   database
     .prepare(
-      `INSERT INTO bad_cases (
+      `INSERT INTO incidents (
         id, timestamp, source, reporter, raw_text, trace_id,
         type, status, priority, classification_confidence, classification_reason
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
-      badCase.id,
-      badCase.timestamp,
-      badCase.source,
-      badCase.reporter ?? null,
-      badCase.rawText,
-      badCase.traceId ?? null,
-      badCase.type ?? "unclassified",
-      badCase.status ?? "pending",
-      badCase.priority ?? "medium",
-      badCase.classificationConfidence ?? null,
-      badCase.classificationReason ?? null
+      incident.id,
+      incident.timestamp,
+      incident.source,
+      incident.reporter ?? null,
+      incident.rawText,
+      incident.traceId ?? null,
+      incident.type ?? "unclassified",
+      incident.status ?? "pending",
+      incident.priority ?? "medium",
+      incident.classificationConfidence ?? null,
+      incident.classificationReason ?? null
     );
 }
 
-export function getBadCase(id: string): BadCaseRow | null {
+export function getIncident(id: string): IncidentRow | null {
   const database = getDatabase();
   return (
-    (database.prepare("SELECT * FROM bad_cases WHERE id = ?").get(id) as BadCaseRow | null) ?? null
+    (database.prepare("SELECT * FROM incidents WHERE id = ?").get(id) as IncidentRow | null) ?? null
   );
 }
 
-export function listBadCases(
+export function listIncidents(
   options: {
-    status?: BadCaseStatus;
-    type?: BadCaseType;
-    priority?: BadCasePriority;
-    source?: BadCaseSource;
+    status?: IncidentStatus;
+    type?: IncidentType;
+    priority?: IncidentPriority;
+    source?: IncidentSource;
     limit?: number;
     offset?: number;
   } = {}
-): BadCaseRow[] {
+): IncidentRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM bad_cases WHERE 1=1";
+  let sql = "SELECT * FROM incidents WHERE 1=1";
   const params: SQLParam[] = [];
 
   if (options.status) {
@@ -1342,52 +1342,56 @@ export function listBadCases(
   sql += ` LIMIT ${options.limit ?? 50}`;
   if (options.offset) sql += ` OFFSET ${options.offset}`;
 
-  return database.prepare(sql).all(...params) as BadCaseRow[];
+  return database.prepare(sql).all(...params) as IncidentRow[];
 }
 
-export function updateBadCaseStatus(id: string, status: BadCaseStatus, notes?: string): void {
+export function updateIncidentStatus(id: string, status: IncidentStatus, notes?: string): void {
   const database = getDatabase();
   const resolvedAt = status === "resolved" || status === "closed" ? Date.now() : null;
 
   if (notes !== undefined) {
     database
-      .prepare("UPDATE bad_cases SET status = ?, notes = ?, resolved_at = ? WHERE id = ?")
+      .prepare("UPDATE incidents SET status = ?, notes = ?, resolved_at = ? WHERE id = ?")
       .run(status, notes, resolvedAt, id);
   } else {
     database
       .prepare(
-        "UPDATE bad_cases SET status = ?, resolved_at = CASE WHEN ? IS NOT NULL THEN ? ELSE resolved_at END WHERE id = ?"
+        "UPDATE incidents SET status = ?, resolved_at = CASE WHEN ? IS NOT NULL THEN ? ELSE resolved_at END WHERE id = ?"
       )
       .run(status, resolvedAt, resolvedAt, id);
   }
 }
 
-export function updateBadCaseType(id: string, type: BadCaseType, priority?: BadCasePriority): void {
+export function updateIncidentType(
+  id: string,
+  type: IncidentType,
+  priority?: IncidentPriority
+): void {
   const database = getDatabase();
   if (priority !== undefined) {
     database
-      .prepare("UPDATE bad_cases SET type = ?, priority = ? WHERE id = ?")
+      .prepare("UPDATE incidents SET type = ?, priority = ? WHERE id = ?")
       .run(type, priority, id);
   } else {
-    database.prepare("UPDATE bad_cases SET type = ? WHERE id = ?").run(type, id);
+    database.prepare("UPDATE incidents SET type = ? WHERE id = ?").run(type, id);
   }
 }
 
-export function updateBadCaseGitHubIssue(id: string, issueNumber: number, issueUrl: string): void {
+export function updateIncidentGitHubIssue(id: string, issueNumber: number, issueUrl: string): void {
   const database = getDatabase();
   database
     .prepare(
-      "UPDATE bad_cases SET github_issue_number = ?, github_issue_url = ?, status = 'confirmed' WHERE id = ?"
+      "UPDATE incidents SET github_issue_number = ?, github_issue_url = ?, status = 'confirmed' WHERE id = ?"
     )
     .run(issueNumber, issueUrl, id);
 }
 
-export function updateBadCaseNotes(id: string, notes: string): void {
+export function updateIncidentNotes(id: string, notes: string): void {
   const database = getDatabase();
-  database.prepare("UPDATE bad_cases SET notes = ? WHERE id = ?").run(notes, id);
+  database.prepare("UPDATE incidents SET notes = ? WHERE id = ?").run(notes, id);
 }
 
-export interface BadCasesStats {
+export interface IncidentStats {
   total: number;
   pending: number;
   confirmed: number;
@@ -1400,7 +1404,7 @@ export interface BadCasesStats {
   highPriority: number;
 }
 
-export function getBadCasesStats(): BadCasesStats {
+export function getIncidentStats(): IncidentStats {
   const database = getDatabase();
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
@@ -1417,9 +1421,9 @@ export function getBadCasesStats(): BadCasesStats {
         SUM(CASE WHEN type = 'unclassified' THEN 1 ELSE 0 END) as unclassified,
         SUM(CASE WHEN status IN ('resolved','closed') AND resolved_at >= ${weekAgo} THEN 1 ELSE 0 END) as resolvedThisWeek,
         SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) as highPriority
-      FROM bad_cases`
+      FROM incidents`
     )
-    .get() as BadCasesStats;
+    .get() as IncidentStats;
 
   return row;
 }

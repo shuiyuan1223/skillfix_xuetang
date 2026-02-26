@@ -285,16 +285,16 @@ export const en: LocaleMessages = {
     noTracesHint: "No conversation traces recorded yet.",
     noSuggestionsHint: "No optimization suggestions available.",
     noEvaluationsYet: "No evaluations yet",
-    // Bad Cases
-    badCasesSlackHint: "Issues reported via Slack webhook, tracked through their lifecycle",
-    badCasesPending: "Pending",
-    badCasesBug: "Bugs",
-    badCasesEffect: "Effect Issues",
-    badCasesResolvedWeek: "Resolved This Week",
-    badCasesReporter: "Reporter",
-    badCasesDescription: "Description",
-    badCasesEmpty: "No bad cases yet",
-    badCasesEmptyHint:
+    // Incidents
+    incidentsSlackHint: "Issues reported via Slack webhook, tracked through their lifecycle",
+    incidentsPending: "Pending",
+    incidentsBug: "Bugs",
+    incidentsEffect: "Effect Issues",
+    incidentsResolvedWeek: "Resolved This Week",
+    incidentsReporter: "Reporter",
+    incidentsDescription: "Description",
+    incidentsEmpty: "No incidents yet",
+    incidentsEmptyHint:
       "Send a message to the Slack channel to trigger the webhook, or have the system agent report issues automatically",
     statusPending: "Pending",
     statusConfirmed: "Confirmed",
@@ -411,7 +411,7 @@ export const en: LocaleMessages = {
     tabVersions: "Versions",
     tabData: "Data",
     tabAgent: "Agent",
-    tabBadCases: "Bad Cases",
+    tabIncidents: "Incidents",
     startEvolutionCycle: "Start Evolution Cycle",
     // Overview
     currentVersion: "Current Version",
