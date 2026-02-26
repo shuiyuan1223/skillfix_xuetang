@@ -195,5 +195,5 @@ endif
 	@echo "==> Extracting and building on remote..."
 	powershell -NoProfile -Command "ssh -i '$(SSH_KEY)' $(_H) 'source ~/.bashrc && cd $(_P) && tar xzf pha-sync.tar.gz && rm pha-sync.tar.gz && make install'"
 	@echo "==> Restarting service..."
-	powershell -NoProfile -Command "ssh -i '$(SSH_KEY)' $(_H) 'source ~/.bashrc && pkill -f dist/cli 2>/dev/null; cd $(_P) && nohup pha start > /tmp/pha.log 2>&1 & exit 0'"
+	powershell -NoProfile -Command "ssh -i '$(SSH_KEY)' $(_H) 'source ~/.bashrc 2>/dev/null; cd $(_P) && pha restart' 2>&1"
 	@echo "==> Sync complete!"
