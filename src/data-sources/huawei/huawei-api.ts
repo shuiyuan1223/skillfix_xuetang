@@ -95,25 +95,61 @@ export interface ActivityRecord {
   avgHeartRate?: number;
 }
 
+export interface HuaweiHealthApiOptions {
+  innerMode?: boolean;
+  appLevelAt?: string;
+  userHuid?: string;
+}
+
 export class HuaweiHealthApi {
   private auth: HuaweiAuth;
   private userUuid: string | null = null;
+  private innerMode: boolean;
+  private appLevelAt: string | undefined;
+  private userHuid: string | undefined;
 
-  constructor(auth: HuaweiAuth = defaultAuth, userUuid?: string) {
+  private static readonly INNER_BASE = "https://healthapi-inner.things.dbankcloud.cn:443";
+
+  constructor(auth: HuaweiAuth = defaultAuth, userUuid?: string, options?: HuaweiHealthApiOptions) {
     this.auth = auth;
     this.userUuid = userUuid || null;
+    this.innerMode = options?.innerMode ?? false;
+    this.appLevelAt = options?.appLevelAt;
+    this.userHuid = options?.userHuid;
   }
 
   /**
    * Get access token - handles both single-user and multi-user modes
    */
   private async getAccessToken(): Promise<string> {
+    if (this.innerMode && this.appLevelAt) {
+      return this.appLevelAt;
+    }
     if (this.userUuid) {
       // Multi-user mode: get token from SQLite
       return this.auth.ensureValidTokenForUser(this.userUuid, getUserStore());
     }
     // Single-user mode: get token from file
     return this.auth.ensureValidToken();
+  }
+
+  /**
+   * Fetch wrapper: rewrites URL for inner API mode and injects x-huid header.
+   */
+  private async apiFetch(url: string, options: RequestInit): Promise<Response> {
+    if (this.innerMode) {
+      const outerPrefix = getApiBaseUrl() + "/healthkit";
+      const innerPrefix = HuaweiHealthApi.INNER_BASE + "/healthkit-inner";
+      if (url.startsWith(outerPrefix)) {
+        url = innerPrefix + url.slice(outerPrefix.length);
+      }
+      const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
+      if (this.userHuid) {
+        headers["x-huid"] = this.userHuid;
+      }
+      options = { ...options, headers };
+    }
+    return fetch(url, options);
   }
 
   /**
@@ -240,7 +276,7 @@ export class HuaweiHealthApi {
 
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:dailyActivitySummary`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -303,7 +339,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/activityRecords?${params}`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -363,7 +399,7 @@ export class HuaweiHealthApi {
 
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -447,7 +483,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -522,7 +558,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -615,7 +651,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -736,7 +772,7 @@ export class HuaweiHealthApi {
 
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -866,7 +902,7 @@ export class HuaweiHealthApi {
 
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1034,7 +1070,7 @@ export class HuaweiHealthApi {
 
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1129,7 +1165,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1239,7 +1275,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1494,7 +1530,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1597,7 +1633,7 @@ export class HuaweiHealthApi {
 
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1818,7 +1854,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -1907,7 +1943,7 @@ export class HuaweiHealthApi {
     const dataTypeNames = [HEALTH_DATA_TYPES.HRV, HEALTH_DATA_TYPES.HEART_RATE_STATISTICS];
 
     for (const dataTypeName of dataTypeNames) {
-      const response = await fetch(url, {
+      const response = await this.apiFetch(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -2004,7 +2040,7 @@ export class HuaweiHealthApi {
     const clientId = config.dataSources.huawei?.clientId || "";
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -2107,7 +2143,7 @@ export class HuaweiHealthApi {
       const endTime = new Date(`${chunkEndDate}T23:59:59.999`).getTime();
 
       try {
-        const response = await fetch(url, {
+        const response = await this.apiFetch(url, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -2207,7 +2243,7 @@ export class HuaweiHealthApi {
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
     const params = { dataTypeName, startTime, endTime };
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -2251,7 +2287,7 @@ export class HuaweiHealthApi {
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords`;
     const params = { dataType, startTime, endTime };
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -2297,7 +2333,7 @@ export class HuaweiHealthApi {
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:read`;
     const params = { dataTypeName, startTime, endTime };
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -2345,7 +2381,7 @@ export class HuaweiHealthApi {
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecordController:getHealthRecord`;
     const params = { healthRecordDataType, startTime, endTime };
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -2468,7 +2504,7 @@ export class HuaweiHealthApi {
     for (const collectorId of sleepCollectorPatterns) {
       const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
       try {
-        const response = await fetch(url, {
+        const response = await this.apiFetch(url, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -2517,7 +2553,7 @@ export class HuaweiHealthApi {
           : `${getApiBaseUrl()}${ep.path}`;
 
       try {
-        const response = await fetch(url, {
+        const response = await this.apiFetch(url, {
           method: ep.method,
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -2572,7 +2608,7 @@ export class HuaweiHealthApi {
     // v2 endpoint
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
-    const response = await fetch(url, {
+    const response = await this.apiFetch(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -2668,4 +2704,20 @@ export const huaweiHealthApi = new HuaweiHealthApi();
  */
 export function createHuaweiHealthApiForUser(userUuid: string): HuaweiHealthApi {
   return new HuaweiHealthApi(defaultAuth, userUuid);
+}
+
+/**
+ * Create a HuaweiHealthApi instance for inner API mode (client_credentials grant).
+ * Uses an app-level access token directly; routes requests to the inner HealthKit API.
+ */
+export function createInnerHuaweiHealthApiForUser(
+  userUuid: string,
+  appLevelAt: string,
+  userHuid: string
+): HuaweiHealthApi {
+  return new HuaweiHealthApi(defaultAuth, userUuid, {
+    innerMode: true,
+    appLevelAt,
+    userHuid,
+  });
 }

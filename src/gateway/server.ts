@@ -23,7 +23,7 @@ import {
 } from "../agent/pha-agent.js";
 import { createSystemAgent, type SystemAgent } from "../agent/system-agent.js";
 import { getDataSource } from "../tools/health-data.js";
-import { createDataSourceForUser } from "../data-sources/index.js";
+import { createDataSourceForUser, createInnerDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import {
@@ -1128,14 +1128,20 @@ export class GatewaySession {
   private modalRadarMode: "categories" | "criteria" = "categories";
   private lastViewedBenchmarkRunId: string | null = null;
 
-  constructor(config: GatewayConfig = {}, userUuid?: string) {
+  constructor(
+    config: GatewayConfig = {},
+    userUuid?: string,
+    dataSourceOverride?: HealthDataSource
+  ) {
     this.config = config;
     this.sessionId = crypto.randomUUID();
     this.saSessionId = crypto.randomUUID();
     this.userUuid = userUuid || null;
 
-    // Use user-specific data source if userUuid is provided
-    if (userUuid) {
+    // Use provided data source, or create one based on userUuid
+    if (dataSourceOverride) {
+      this.dataSource = dataSourceOverride;
+    } else if (userUuid) {
       this.dataSource = createDataSourceForUser(userUuid);
       // Only create user dir if already authenticated (avoid creating dirs for stale cookie UUIDs)
       const userStore = getUserStore();
@@ -6461,63 +6467,82 @@ export async function startGateway(
         (async () => {
           try {
             const body = (await req.json()) as {
-              refresh_token?: string;
+              grant_type?: string;
+              Authorization?: string;
               query?: string;
               sn?: string;
+              uid?: string;
             };
 
-            const { refresh_token, query, sn } = body;
+            const { grant_type = "refresh_token", Authorization, query, sn, uid } = body;
 
-            if (!refresh_token || !query) {
+            if (!Authorization || !query) {
               sseSendRaw({
                 event: "error",
-                content: "Missing required fields: refresh_token, query",
+                content: "Missing required fields: Authorization, query",
               });
               sseSendRaw({ event: "finish" });
               writer.close().catch(() => {});
               return;
             }
 
-            log.info("[query] start", { sn, query });
+            log.info("[query] start", { sn, query, grant_type });
 
-            const fullConfig = loadConfig();
-            const huaweiConfig = fullConfig.dataSources.huawei;
-            if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
-              sseSendRaw({ event: "error", content: "Huawei credentials not configured" });
-              sseSendRaw({ event: "finish" });
-              writer.close().catch(() => {});
-              return;
+            if (grant_type === "client_credentials") {
+              // App-level AT mode: Authorization is the app-level access token, uid is the Huawei user ID
+              if (!uid) {
+                sseSendRaw({ event: "error", content: "Missing required field: uid" });
+                sseSendRaw({ event: "finish" });
+                writer.close().catch(() => {});
+                return;
+              }
+
+              await ensureUserDir(uid);
+              const innerDataSource = createInnerDataSourceForUser(uid, Authorization, uid);
+              const session = new GatewaySession(config, uid, innerDataSource);
+              await session.handleLegacyChatSSE(query, writer, encoder);
+            } else {
+              // grant_type=refresh_token (default): exchange refresh token for access token
+              const fullConfig = loadConfig();
+              const huaweiConfig = fullConfig.dataSources.huawei;
+              if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+                sseSendRaw({ event: "error", content: "Huawei credentials not configured" });
+                sseSendRaw({ event: "finish" });
+                writer.close().catch(() => {});
+                return;
+              }
+
+              let userId: string;
+              try {
+                const { tokenData, userId: resolvedUid } =
+                  await huaweiAuth.refreshTokenAndGetUserId(
+                    Authorization,
+                    huaweiConfig.clientId,
+                    huaweiConfig.clientSecret
+                  );
+                userId = resolvedUid;
+                getUserStore().saveToken(userId, tokenData);
+              } catch (e) {
+                log.error("[query] token refresh failed", { sn, error: String(e) });
+                sseSendRaw({
+                  event: "error",
+                  content: `Token refresh failed: ${e instanceof Error ? e.message : String(e)}`,
+                });
+                sseSendRaw({ event: "finish" });
+                writer.close().catch(() => {});
+                return;
+              }
+
+              await ensureUserDir(userId);
+
+              let session = sessions.get(userId);
+              if (!session) {
+                session = new GatewaySession(config, userId);
+                sessions.set(userId, session);
+              }
+
+              await session.handleLegacyChatSSE(query, writer, encoder);
             }
-
-            let userId: string;
-            try {
-              const { tokenData, userId: uid } = await huaweiAuth.refreshTokenAndGetUserId(
-                refresh_token,
-                huaweiConfig.clientId,
-                huaweiConfig.clientSecret
-              );
-              userId = uid;
-              getUserStore().saveToken(userId, tokenData);
-            } catch (e) {
-              log.error("[query] token refresh failed", { sn, error: String(e) });
-              sseSendRaw({
-                event: "error",
-                content: `Token refresh failed: ${e instanceof Error ? e.message : String(e)}`,
-              });
-              sseSendRaw({ event: "finish" });
-              writer.close().catch(() => {});
-              return;
-            }
-
-            await ensureUserDir(userId);
-
-            let session = sessions.get(userId);
-            if (!session) {
-              session = new GatewaySession(config, userId);
-              sessions.set(userId, session);
-            }
-
-            await session.handleLegacyChatSSE(query, writer, encoder);
           } catch (e) {
             try {
               writer
