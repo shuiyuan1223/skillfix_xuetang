@@ -510,7 +510,6 @@ Evolution Lab 是顶级导航页面，采用 5-Tab Dashboard 布局：
 | `POST /api/mcp` | MCP JSON-RPC 2.0（Streamable HTTP） |
 | `GET /.well-known/agent.json` | A2A Agent Card 发现 |
 | `POST /api/a2a` | A2A JSON-RPC 2.0 任务管理 |
-| `POST /api/legacy-chat` | 边想边搜 SSE（需已完成 OAuth） |
 | `POST /api/query` | 边想边搜 SSE（传入 refresh_token，无需预登录） |
 | `POST /mcp/tools/list` | 列出 MCP 工具 (legacy) |
 | `POST /mcp/tools/call` | 调用 MCP 工具 (legacy) |

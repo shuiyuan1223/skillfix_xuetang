@@ -6444,58 +6444,6 @@ export async function startGateway(
       }
 
       // ================================================================
-      // Legacy Chat SSE (边想边搜 external API)
-      // ================================================================
-
-      if (url.pathname === "/api/legacy-chat" && req.method === "POST") {
-        try {
-          const body = (await req.json()) as {
-            message?: string;
-            user_id?: string;
-            session_id?: string;
-          };
-
-          if (!body.message) {
-            return new Response(JSON.stringify({ error: "No message" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            });
-          }
-
-          const key = body.user_id || body.session_id || crypto.randomUUID();
-          let session = sessions.get(key);
-          if (!session) {
-            session = new GatewaySession(config, key);
-            sessions.set(key, session);
-          }
-
-          const { readable, writable } = new TransformStream<Uint8Array>();
-          const writer = writable.getWriter();
-          const encoder = new TextEncoder();
-
-          session.handleLegacyChatSSE(body.message, writer, encoder).catch(() => {
-            try {
-              writer.close().catch(() => {});
-            } catch {}
-          });
-
-          return new Response(readable, {
-            headers: {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        } catch (e) {
-          return new Response(JSON.stringify({ error: String(e) }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-      }
-
-      // ================================================================
       // Query SSE (边想边搜 + refresh_token 认证)
       // ================================================================
 
