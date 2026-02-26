@@ -92,6 +92,216 @@ function getHooksForName<K extends PluginHookName>(
 }
 
 /**
+ * Run a hook that doesn't return a value (fire-and-forget style).
+ * All handlers are executed in parallel for performance.
+ */
+async function runVoidHook<K extends PluginHookName>(
+  registry: PluginRegistry,
+  hookName: K,
+  event: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[0],
+  ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1],
+  logger?: HookRunnerLogger,
+  catchErrors = true
+): Promise<void> {
+  const hooks = getHooksForName(registry, hookName);
+  if (hooks.length === 0) return;
+
+  logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers)`);
+
+  const promises = hooks.map(async (hook) => {
+    try {
+      await (hook.handler as (event: unknown, ctx: unknown) => Promise<void>)(event, ctx);
+    } catch (err) {
+      const msg = `[hooks] ${hookName} handler from ${hook.pluginId} failed: ${String(err)}`;
+      if (catchErrors) logger?.error(msg);
+      else throw new Error(msg, { cause: err });
+    }
+  });
+
+  await Promise.all(promises);
+}
+
+/**
+ * Run a hook that can return a modifying result.
+ * Handlers are executed sequentially in priority order, and results are merged.
+ */
+async function runModifyingHook<K extends PluginHookName, TResult>(
+  registry: PluginRegistry,
+  hookName: K,
+  event: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[0],
+  ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1],
+  logger?: HookRunnerLogger,
+  catchErrors = true,
+  mergeResults?: (accumulated: TResult | undefined, next: TResult) => TResult
+): Promise<TResult | undefined> {
+  const hooks = getHooksForName(registry, hookName);
+  if (hooks.length === 0) return undefined;
+
+  logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers, sequential)`);
+
+  let result: TResult | undefined;
+
+  for (const hook of hooks) {
+    try {
+      const handlerResult = await (
+        hook.handler as (event: unknown, ctx: unknown) => Promise<TResult>
+      )(event, ctx);
+
+      if (handlerResult !== undefined && handlerResult !== null) {
+        if (mergeResults && result !== undefined) {
+          result = mergeResults(result, handlerResult);
+        } else {
+          result = handlerResult;
+        }
+      }
+    } catch (err) {
+      const msg = `[hooks] ${hookName} handler from ${hook.pluginId} failed: ${String(err)}`;
+      if (catchErrors) logger?.error(msg);
+      else throw new Error(msg, { cause: err });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Run tool_result_persist hook (synchronous).
+ */
+function runToolResultPersistHook(
+  registry: PluginRegistry,
+  event: PluginHookToolResultPersistEvent,
+  ctx: PluginHookToolResultPersistContext,
+  logger?: HookRunnerLogger,
+  catchErrors = true
+): PluginHookToolResultPersistResult | undefined {
+  const hooks = getHooksForName(registry, "tool_result_persist");
+  if (hooks.length === 0) return undefined;
+
+  let current = event.message;
+
+  for (const hook of hooks) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const out = (hook.handler as any)({ ...event, message: current }, ctx) as
+        | PluginHookToolResultPersistResult
+        | void
+        | Promise<unknown>;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (out && typeof (out as any).then === "function") {
+        const msg =
+          `[hooks] tool_result_persist handler from ${hook.pluginId} returned a Promise; ` +
+          `this hook is synchronous and the result was ignored.`;
+        if (catchErrors) {
+          logger?.warn?.(msg);
+          continue;
+        }
+        throw new Error(msg);
+      }
+
+      const next = (out as PluginHookToolResultPersistResult | undefined)?.message;
+      if (next) current = next;
+    } catch (err) {
+      const msg = `[hooks] tool_result_persist handler from ${hook.pluginId} failed: ${String(err)}`;
+      if (catchErrors) logger?.error(msg);
+      else throw new Error(msg, { cause: err });
+    }
+  }
+
+  return { message: current };
+}
+
+/**
+ * Build agent hook functions (before_agent_start, agent_end, compaction hooks).
+ */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+function buildAgentHooks(registry: PluginRegistry, logger?: HookRunnerLogger, catchErrors = true) {
+  return {
+    runBeforeAgentStart: (event: PluginHookBeforeAgentStartEvent, ctx: PluginHookAgentContext) =>
+      runModifyingHook<"before_agent_start", PluginHookBeforeAgentStartResult>(
+        registry,
+        "before_agent_start",
+        event,
+        ctx,
+        logger,
+        catchErrors,
+        (acc, next) => ({
+          systemPrompt: next.systemPrompt ?? acc?.systemPrompt,
+          prependContext:
+            acc?.prependContext && next.prependContext
+              ? `${acc.prependContext}\n\n${next.prependContext}`
+              : (next.prependContext ?? acc?.prependContext),
+        })
+      ),
+    runAgentEnd: (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext) =>
+      runVoidHook(registry, "agent_end", event, ctx, logger, catchErrors),
+    runBeforeCompaction: (event: PluginHookBeforeCompactionEvent, ctx: PluginHookAgentContext) =>
+      runVoidHook(registry, "before_compaction", event, ctx, logger, catchErrors),
+    runAfterCompaction: (event: PluginHookAfterCompactionEvent, ctx: PluginHookAgentContext) =>
+      runVoidHook(registry, "after_compaction", event, ctx, logger, catchErrors),
+  };
+}
+
+/**
+ * Build message hook functions.
+ */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+function buildMessageHooks(
+  registry: PluginRegistry,
+  logger?: HookRunnerLogger,
+  catchErrors = true
+) {
+  return {
+    runMessageReceived: (event: PluginHookMessageReceivedEvent, ctx: PluginHookMessageContext) =>
+      runVoidHook(registry, "message_received", event, ctx, logger, catchErrors),
+    runMessageSending: (event: PluginHookMessageSendingEvent, ctx: PluginHookMessageContext) =>
+      runModifyingHook<"message_sending", PluginHookMessageSendingResult>(
+        registry,
+        "message_sending",
+        event,
+        ctx,
+        logger,
+        catchErrors,
+        (acc, next) => ({
+          content: next.content ?? acc?.content,
+          cancel: next.cancel ?? acc?.cancel,
+        })
+      ),
+    runMessageSent: (event: PluginHookMessageSentEvent, ctx: PluginHookMessageContext) =>
+      runVoidHook(registry, "message_sent", event, ctx, logger, catchErrors),
+  };
+}
+
+/**
+ * Build tool hook functions.
+ */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+function buildToolHooks(registry: PluginRegistry, logger?: HookRunnerLogger, catchErrors = true) {
+  return {
+    runBeforeToolCall: (event: PluginHookBeforeToolCallEvent, ctx: PluginHookToolContext) =>
+      runModifyingHook<"before_tool_call", PluginHookBeforeToolCallResult>(
+        registry,
+        "before_tool_call",
+        event,
+        ctx,
+        logger,
+        catchErrors,
+        (acc, next) => ({
+          params: next.params ?? acc?.params,
+          block: next.block ?? acc?.block,
+          blockReason: next.blockReason ?? acc?.blockReason,
+        })
+      ),
+    runAfterToolCall: (event: PluginHookAfterToolCallEvent, ctx: PluginHookToolContext) =>
+      runVoidHook(registry, "after_tool_call", event, ctx, logger, catchErrors),
+    runToolResultPersist: (
+      event: PluginHookToolResultPersistEvent,
+      ctx: PluginHookToolResultPersistContext
+    ) => runToolResultPersistHook(registry, event, ctx, logger, catchErrors),
+  };
+}
+
+/**
  * Create a hook runner for a specific registry.
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
@@ -99,304 +309,25 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
   const logger = options.logger;
   const catchErrors = options.catchErrors ?? true;
 
-  /**
-   * Run a hook that doesn't return a value (fire-and-forget style).
-   * All handlers are executed in parallel for performance.
-   */
-  async function runVoidHook<K extends PluginHookName>(
-    hookName: K,
-    event: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[0],
-    ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1]
-  ): Promise<void> {
-    const hooks = getHooksForName(registry, hookName);
-    if (hooks.length === 0) return;
-
-    logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers)`);
-
-    const promises = hooks.map(async (hook) => {
-      try {
-        await (hook.handler as (event: unknown, ctx: unknown) => Promise<void>)(event, ctx);
-      } catch (err) {
-        const msg = `[hooks] ${hookName} handler from ${hook.pluginId} failed: ${String(err)}`;
-        if (catchErrors) {
-          logger?.error(msg);
-        } else {
-          throw new Error(msg, { cause: err });
-        }
-      }
-    });
-
-    await Promise.all(promises);
-  }
-
-  /**
-   * Run a hook that can return a modifying result.
-   * Handlers are executed sequentially in priority order, and results are merged.
-   */
-  async function runModifyingHook<K extends PluginHookName, TResult>(
-    hookName: K,
-    event: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[0],
-    ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1],
-    mergeResults?: (accumulated: TResult | undefined, next: TResult) => TResult
-  ): Promise<TResult | undefined> {
-    const hooks = getHooksForName(registry, hookName);
-    if (hooks.length === 0) return undefined;
-
-    logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers, sequential)`);
-
-    let result: TResult | undefined;
-
-    for (const hook of hooks) {
-      try {
-        const handlerResult = await (
-          hook.handler as (event: unknown, ctx: unknown) => Promise<TResult>
-        )(event, ctx);
-
-        if (handlerResult !== undefined && handlerResult !== null) {
-          if (mergeResults && result !== undefined) {
-            result = mergeResults(result, handlerResult);
-          } else {
-            result = handlerResult;
-          }
-        }
-      } catch (err) {
-        const msg = `[hooks] ${hookName} handler from ${hook.pluginId} failed: ${String(err)}`;
-        if (catchErrors) {
-          logger?.error(msg);
-        } else {
-          throw new Error(msg, { cause: err });
-        }
-      }
-    }
-
-    return result;
-  }
-
-  // =========================================================================
-  // Agent Hooks
-  // =========================================================================
-
-  async function runBeforeAgentStart(
-    event: PluginHookBeforeAgentStartEvent,
-    ctx: PluginHookAgentContext
-  ): Promise<PluginHookBeforeAgentStartResult | undefined> {
-    return runModifyingHook<"before_agent_start", PluginHookBeforeAgentStartResult>(
-      "before_agent_start",
-      event,
-      ctx,
-      (acc, next) => ({
-        systemPrompt: next.systemPrompt ?? acc?.systemPrompt,
-        prependContext:
-          acc?.prependContext && next.prependContext
-            ? `${acc.prependContext}\n\n${next.prependContext}`
-            : (next.prependContext ?? acc?.prependContext),
-      })
-    );
-  }
-
-  async function runAgentEnd(
-    event: PluginHookAgentEndEvent,
-    ctx: PluginHookAgentContext
-  ): Promise<void> {
-    return runVoidHook("agent_end", event, ctx);
-  }
-
-  async function runBeforeCompaction(
-    event: PluginHookBeforeCompactionEvent,
-    ctx: PluginHookAgentContext
-  ): Promise<void> {
-    return runVoidHook("before_compaction", event, ctx);
-  }
-
-  async function runAfterCompaction(
-    event: PluginHookAfterCompactionEvent,
-    ctx: PluginHookAgentContext
-  ): Promise<void> {
-    return runVoidHook("after_compaction", event, ctx);
-  }
-
-  // =========================================================================
-  // Message Hooks
-  // =========================================================================
-
-  async function runMessageReceived(
-    event: PluginHookMessageReceivedEvent,
-    ctx: PluginHookMessageContext
-  ): Promise<void> {
-    return runVoidHook("message_received", event, ctx);
-  }
-
-  async function runMessageSending(
-    event: PluginHookMessageSendingEvent,
-    ctx: PluginHookMessageContext
-  ): Promise<PluginHookMessageSendingResult | undefined> {
-    return runModifyingHook<"message_sending", PluginHookMessageSendingResult>(
-      "message_sending",
-      event,
-      ctx,
-      (acc, next) => ({
-        content: next.content ?? acc?.content,
-        cancel: next.cancel ?? acc?.cancel,
-      })
-    );
-  }
-
-  async function runMessageSent(
-    event: PluginHookMessageSentEvent,
-    ctx: PluginHookMessageContext
-  ): Promise<void> {
-    return runVoidHook("message_sent", event, ctx);
-  }
-
-  // =========================================================================
-  // Tool Hooks
-  // =========================================================================
-
-  async function runBeforeToolCall(
-    event: PluginHookBeforeToolCallEvent,
-    ctx: PluginHookToolContext
-  ): Promise<PluginHookBeforeToolCallResult | undefined> {
-    return runModifyingHook<"before_tool_call", PluginHookBeforeToolCallResult>(
-      "before_tool_call",
-      event,
-      ctx,
-      (acc, next) => ({
-        params: next.params ?? acc?.params,
-        block: next.block ?? acc?.block,
-        blockReason: next.blockReason ?? acc?.blockReason,
-      })
-    );
-  }
-
-  async function runAfterToolCall(
-    event: PluginHookAfterToolCallEvent,
-    ctx: PluginHookToolContext
-  ): Promise<void> {
-    return runVoidHook("after_tool_call", event, ctx);
-  }
-
-  /**
-   * Run tool_result_persist hook (synchronous).
-   */
-  function runToolResultPersist(
-    event: PluginHookToolResultPersistEvent,
-    ctx: PluginHookToolResultPersistContext
-  ): PluginHookToolResultPersistResult | undefined {
-    const hooks = getHooksForName(registry, "tool_result_persist");
-    if (hooks.length === 0) return undefined;
-
-    let current = event.message;
-
-    for (const hook of hooks) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const out = (hook.handler as any)({ ...event, message: current }, ctx) as
-          | PluginHookToolResultPersistResult
-          | void
-          | Promise<unknown>;
-
-        // Guard against accidental async handlers (this hook is sync-only)
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (out && typeof (out as any).then === "function") {
-          const msg =
-            `[hooks] tool_result_persist handler from ${hook.pluginId} returned a Promise; ` +
-            `this hook is synchronous and the result was ignored.`;
-          if (catchErrors) {
-            logger?.warn?.(msg);
-            continue;
-          }
-          throw new Error(msg);
-        }
-
-        const next = (out as PluginHookToolResultPersistResult | undefined)?.message;
-        if (next) {
-          current = next;
-        }
-      } catch (err) {
-        const msg = `[hooks] tool_result_persist handler from ${hook.pluginId} failed: ${String(err)}`;
-        if (catchErrors) {
-          logger?.error(msg);
-        } else {
-          throw new Error(msg, { cause: err });
-        }
-      }
-    }
-
-    return { message: current };
-  }
-
-  // =========================================================================
-  // Session Hooks
-  // =========================================================================
-
-  async function runSessionStart(
-    event: PluginHookSessionStartEvent,
-    ctx: PluginHookSessionContext
-  ): Promise<void> {
-    return runVoidHook("session_start", event, ctx);
-  }
-
-  async function runSessionEnd(
-    event: PluginHookSessionEndEvent,
-    ctx: PluginHookSessionContext
-  ): Promise<void> {
-    return runVoidHook("session_end", event, ctx);
-  }
-
-  // =========================================================================
-  // Gateway Hooks
-  // =========================================================================
-
-  async function runGatewayStart(
-    event: PluginHookGatewayStartEvent,
-    ctx: PluginHookGatewayContext
-  ): Promise<void> {
-    return runVoidHook("gateway_start", event, ctx);
-  }
-
-  async function runGatewayStop(
-    event: PluginHookGatewayStopEvent,
-    ctx: PluginHookGatewayContext
-  ): Promise<void> {
-    return runVoidHook("gateway_stop", event, ctx);
-  }
-
-  // =========================================================================
-  // Utility
-  // =========================================================================
-
-  function hasHooks(hookName: PluginHookName): boolean {
-    return registry.typedHooks.some((h) => h.hookName === hookName);
-  }
-
-  function getHookCount(hookName: PluginHookName): number {
-    return registry.typedHooks.filter((h) => h.hookName === hookName).length;
-  }
-
   return {
-    // Agent hooks
-    runBeforeAgentStart,
-    runAgentEnd,
-    runBeforeCompaction,
-    runAfterCompaction,
-    // Message hooks
-    runMessageReceived,
-    runMessageSending,
-    runMessageSent,
-    // Tool hooks
-    runBeforeToolCall,
-    runAfterToolCall,
-    runToolResultPersist,
+    ...buildAgentHooks(registry, logger, catchErrors),
+    ...buildMessageHooks(registry, logger, catchErrors),
+    ...buildToolHooks(registry, logger, catchErrors),
     // Session hooks
-    runSessionStart,
-    runSessionEnd,
+    runSessionStart: (event: PluginHookSessionStartEvent, ctx: PluginHookSessionContext) =>
+      runVoidHook(registry, "session_start", event, ctx, logger, catchErrors),
+    runSessionEnd: (event: PluginHookSessionEndEvent, ctx: PluginHookSessionContext) =>
+      runVoidHook(registry, "session_end", event, ctx, logger, catchErrors),
     // Gateway hooks
-    runGatewayStart,
-    runGatewayStop,
+    runGatewayStart: (event: PluginHookGatewayStartEvent, ctx: PluginHookGatewayContext) =>
+      runVoidHook(registry, "gateway_start", event, ctx, logger, catchErrors),
+    runGatewayStop: (event: PluginHookGatewayStopEvent, ctx: PluginHookGatewayContext) =>
+      runVoidHook(registry, "gateway_stop", event, ctx, logger, catchErrors),
     // Utility
-    hasHooks,
-    getHookCount,
+    hasHooks: (hookName: PluginHookName) =>
+      registry.typedHooks.some((h) => h.hookName === hookName),
+    getHookCount: (hookName: PluginHookName) =>
+      registry.typedHooks.filter((h) => h.hookName === hookName).length,
   };
 }
 

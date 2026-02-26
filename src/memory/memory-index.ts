@@ -467,15 +467,37 @@ export class MemoryIndexManager {
   /**
    * Read a memory file by relative path.
    */
+  private async isAllowedAdditionalPath(absPath: string): Promise<boolean> {
+    if (this.settings.extraPaths.length === 0) return false;
+    const additionalPaths = normalizeExtraMemoryPaths(this.workspaceDir, this.settings.extraPaths);
+    for (const additionalPath of additionalPaths) {
+      try {
+        const stat = await fs.lstat(additionalPath);
+        if (stat.isSymbolicLink()) continue;
+        if (stat.isDirectory()) {
+          if (absPath === additionalPath || absPath.startsWith(`${additionalPath}${path.sep}`)) {
+            return true;
+          }
+          continue;
+        }
+        if (stat.isFile() && absPath === additionalPath && absPath.endsWith(".md")) {
+          return true;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return false;
+  }
+
   async readFile(params: {
     relPath: string;
     from?: number;
     lines?: number;
   }): Promise<{ text: string; path: string }> {
     const rawPath = params.relPath.trim();
-    if (!rawPath) {
-      throw new Error("path required");
-    }
+    if (!rawPath) throw new Error("path required");
+
     const absPath = path.isAbsolute(rawPath)
       ? path.resolve(rawPath)
       : path.resolve(this.workspaceDir, rawPath);
@@ -483,46 +505,16 @@ export class MemoryIndexManager {
     const inWorkspace =
       relPath.length > 0 && !relPath.startsWith("..") && !path.isAbsolute(relPath);
     const allowedWorkspace = inWorkspace && isMemoryPath(relPath);
-    let allowedAdditional = false;
-    if (!allowedWorkspace && this.settings.extraPaths.length > 0) {
-      const additionalPaths = normalizeExtraMemoryPaths(
-        this.workspaceDir,
-        this.settings.extraPaths
-      );
-      for (const additionalPath of additionalPaths) {
-        try {
-          const stat = await fs.lstat(additionalPath);
-          if (stat.isSymbolicLink()) {
-            continue;
-          }
-          if (stat.isDirectory()) {
-            if (absPath === additionalPath || absPath.startsWith(`${additionalPath}${path.sep}`)) {
-              allowedAdditional = true;
-              break;
-            }
-            continue;
-          }
-          if (stat.isFile()) {
-            if (absPath === additionalPath && absPath.endsWith(".md")) {
-              allowedAdditional = true;
-              break;
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-    if (!allowedWorkspace && !allowedAdditional) {
-      throw new Error("path required");
-    }
-    if (!absPath.endsWith(".md")) {
-      throw new Error("path required");
-    }
+    const allowedAdditional = allowedWorkspace
+      ? false
+      : await this.isAllowedAdditionalPath(absPath);
+
+    if (!allowedWorkspace && !allowedAdditional) throw new Error("path required");
+    if (!absPath.endsWith(".md")) throw new Error("path required");
+
     const stat = await fs.lstat(absPath);
-    if (stat.isSymbolicLink() || !stat.isFile()) {
-      throw new Error("path required");
-    }
+    if (stat.isSymbolicLink() || !stat.isFile()) throw new Error("path required");
+
     const content = await fs.readFile(absPath, "utf-8");
     if (!params.from && !params.lines) {
       return { text: content, path: relPath };
@@ -1109,6 +1101,23 @@ export class MemoryIndexManager {
     return state;
   }
 
+  private needsFullReindex(
+    meta: ReturnType<typeof this.readMeta>,
+    vectorReady: boolean,
+    force?: boolean
+  ): boolean {
+    return !!(
+      force ||
+      !meta ||
+      meta.model !== this.provider.model ||
+      meta.provider !== this.provider.id ||
+      meta.providerKey !== this.providerKey ||
+      meta.chunkTokens !== this.settings.chunking.tokens ||
+      meta.chunkOverlap !== this.settings.chunking.overlap ||
+      (vectorReady && !meta?.vectorDims)
+    );
+  }
+
   private async runSync(params?: {
     reason?: string;
     force?: boolean;
@@ -1126,17 +1135,9 @@ export class MemoryIndexManager {
 
     const vectorReady = await this.ensureVectorReady();
     const meta = this.readMeta();
-    const needsFullReindex =
-      params?.force ||
-      !meta ||
-      meta.model !== this.provider.model ||
-      meta.provider !== this.provider.id ||
-      meta.providerKey !== this.providerKey ||
-      meta.chunkTokens !== this.settings.chunking.tokens ||
-      meta.chunkOverlap !== this.settings.chunking.overlap ||
-      (vectorReady && !meta?.vectorDims);
+    const fullReindex = this.needsFullReindex(meta, vectorReady, params?.force);
 
-    if (needsFullReindex) {
+    if (fullReindex) {
       await this.runSafeReindex({
         reason: params?.reason,
         force: params?.force,
@@ -1145,29 +1146,17 @@ export class MemoryIndexManager {
       return;
     }
 
-    const shouldSyncMemory =
-      this.sources.has("memory") && (params?.force || needsFullReindex || this.dirty);
-    const shouldSyncSessions = this.shouldSyncSessions(params, needsFullReindex);
-
-    if (shouldSyncMemory) {
-      await this.syncMemoryFiles({
-        needsFullReindex,
-        progress: progress ?? undefined,
-      });
+    if (this.sources.has("memory") && (params?.force || this.dirty)) {
+      await this.syncMemoryFiles({ needsFullReindex: false, progress: progress ?? undefined });
       this.dirty = false;
     }
 
-    if (shouldSyncSessions) {
-      await this.syncSessionFiles({
-        needsFullReindex,
-        progress: progress ?? undefined,
-      });
+    if (this.shouldSyncSessions(params, false)) {
+      await this.syncSessionFiles({ needsFullReindex: false, progress: progress ?? undefined });
       this.sessionsDirty = false;
       this.sessionsDirtyFiles.clear();
-    } else if (this.sessionsDirtyFiles.size > 0) {
-      this.sessionsDirty = true;
     } else {
-      this.sessionsDirty = false;
+      this.sessionsDirty = this.sessionsDirtyFiles.size > 0;
     }
   }
 
@@ -1189,6 +1178,46 @@ export class MemoryIndexManager {
       return true;
     }
     return this.sessionsDirty && this.sessionsDirtyFiles.size > 0;
+  }
+
+  private reportProgress(progress: MemorySyncProgressState | undefined, label?: string): void {
+    if (progress) {
+      progress.completed += 1;
+      progress.report({
+        completed: progress.completed,
+        total: progress.total,
+        ...(label ? { label } : {}),
+      });
+    }
+  }
+
+  private cleanupStaleFiles(activePaths: Set<string>, source: string): void {
+    const staleRows = this.db
+      .prepare(`SELECT path FROM files WHERE source = ?`)
+      .all(source) as Array<{ path: string }>;
+    for (const stale of staleRows) {
+      if (activePaths.has(stale.path)) continue;
+      this.db.prepare(`DELETE FROM files WHERE path = ? AND source = ?`).run(stale.path, source);
+      try {
+        this.db
+          .prepare(
+            `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`
+          )
+          .run(stale.path, source);
+      } catch {
+        /* ignore */
+      }
+      this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(stale.path, source);
+      if (this.fts.enabled && this.fts.available) {
+        try {
+          this.db
+            .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
+            .run(stale.path, source, this.provider.model);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
   }
 
   // ============ Sync: Memory Files ============
@@ -1300,91 +1329,119 @@ export class MemoryIndexManager {
 
     const tasks = files.map((absPath) => async () => {
       if (!indexAll && !this.sessionsDirtyFiles.has(absPath)) {
-        if (params.progress) {
-          params.progress.completed += 1;
-          params.progress.report({
-            completed: params.progress.completed,
-            total: params.progress.total,
-          });
-        }
+        this.reportProgress(params.progress);
         return;
       }
       const entry = await buildSessionEntry(absPath);
       if (!entry) {
-        if (params.progress) {
-          params.progress.completed += 1;
-          params.progress.report({
-            completed: params.progress.completed,
-            total: params.progress.total,
-          });
-        }
+        this.reportProgress(params.progress);
         return;
       }
       const record = this.db
         .prepare(`SELECT hash FROM files WHERE path = ? AND source = ?`)
         .get(entry.path, "sessions") as { hash: string } | undefined;
       if (!params.needsFullReindex && record?.hash === entry.hash) {
-        if (params.progress) {
-          params.progress.completed += 1;
-          params.progress.report({
-            completed: params.progress.completed,
-            total: params.progress.total,
-          });
-        }
+        this.reportProgress(params.progress);
         this.resetSessionDelta(absPath, entry.size);
         return;
       }
-      await this.indexFile(entry, {
-        source: "sessions",
-        content: entry.content,
-      });
+      await this.indexFile(entry, { source: "sessions", content: entry.content });
       this.resetSessionDelta(absPath, entry.size);
-      if (params.progress) {
-        params.progress.completed += 1;
-        params.progress.report({
-          completed: params.progress.completed,
-          total: params.progress.total,
-        });
-      }
+      this.reportProgress(params.progress);
     });
     await runWithConcurrency(tasks, EMBEDDING_INDEX_CONCURRENCY);
 
-    // Clean up stale session files
-    const staleRows = this.db
-      .prepare(`SELECT path FROM files WHERE source = ?`)
-      .all("sessions") as Array<{ path: string }>;
-    for (const stale of staleRows) {
-      if (activePaths.has(stale.path)) {
-        continue;
-      }
-      this.db
-        .prepare(`DELETE FROM files WHERE path = ? AND source = ?`)
-        .run(stale.path, "sessions");
+    this.cleanupStaleFiles(activePaths, "sessions");
+  }
+
+  // ============ File Indexing ============
+
+  private cleanExistingPathEntries(
+    entryPath: string,
+    source: MemorySource,
+    vectorReady: boolean
+  ): void {
+    if (vectorReady) {
       try {
         this.db
           .prepare(
             `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`
           )
-          .run(stale.path, "sessions");
+          .run(entryPath, source);
       } catch {
-        // ignore
-      }
-      this.db
-        .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
-        .run(stale.path, "sessions");
-      if (this.fts.enabled && this.fts.available) {
-        try {
-          this.db
-            .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-            .run(stale.path, "sessions", this.provider.model);
-        } catch {
-          // ignore
-        }
+        /* ignore */
       }
     }
+    if (this.fts.enabled && this.fts.available) {
+      try {
+        this.db
+          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
+          .run(entryPath, source, this.provider.model);
+      } catch {
+        /* ignore */
+      }
+    }
+    this.db.prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`).run(entryPath, source);
   }
 
-  // ============ File Indexing ============
+  private insertChunkRecord(
+    chunk: MemoryChunk,
+    embedding: number[],
+    entryPath: string,
+    source: MemorySource,
+    vectorReady: boolean,
+    now: number
+  ): void {
+    const id = hashText(
+      `${source}:${entryPath}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}:${this.provider.model}`
+    );
+    this.db
+      .prepare(
+        `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           hash=excluded.hash, model=excluded.model, text=excluded.text,
+           embedding=excluded.embedding, updated_at=excluded.updated_at`
+      )
+      .run(
+        id,
+        entryPath,
+        source,
+        chunk.startLine,
+        chunk.endLine,
+        chunk.hash,
+        this.provider.model,
+        chunk.text,
+        JSON.stringify(embedding),
+        now
+      );
+
+    if (vectorReady && embedding.length > 0) {
+      try {
+        this.db.prepare(`DELETE FROM ${VECTOR_TABLE} WHERE id = ?`).run(id);
+      } catch {
+        /* ignore */
+      }
+      this.db
+        .prepare(`INSERT INTO ${VECTOR_TABLE} (id, embedding) VALUES (?, ?)`)
+        .run(id, vectorToBlob(embedding));
+    }
+    if (this.fts.enabled && this.fts.available) {
+      this.db
+        .prepare(
+          `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          chunk.text,
+          id,
+          entryPath,
+          source,
+          this.provider.model,
+          chunk.startLine,
+          chunk.endLine
+        );
+    }
+  }
 
   private async indexFile(
     entry: MemoryFileEntry | SessionFileEntry,
@@ -1403,95 +1460,17 @@ export class MemoryIndexManager {
     const vectorReady = sample ? await this.ensureVectorReady(sample.length) : false;
     const now = Date.now();
 
-    // Clean existing vector entries for this path
-    if (vectorReady) {
-      try {
-        this.db
-          .prepare(
-            `DELETE FROM ${VECTOR_TABLE} WHERE id IN (SELECT id FROM chunks WHERE path = ? AND source = ?)`
-          )
-          .run(entry.path, options.source);
-      } catch {
-        // ignore
-      }
-    }
+    this.cleanExistingPathEntries(entry.path, options.source, vectorReady);
 
-    // Clean existing FTS entries for this path
-    if (this.fts.enabled && this.fts.available) {
-      try {
-        this.db
-          .prepare(`DELETE FROM ${FTS_TABLE} WHERE path = ? AND source = ? AND model = ?`)
-          .run(entry.path, options.source, this.provider.model);
-      } catch {
-        // ignore
-      }
-    }
-
-    // Clean existing chunks for this path
-    this.db
-      .prepare(`DELETE FROM chunks WHERE path = ? AND source = ?`)
-      .run(entry.path, options.source);
-
-    // Insert chunks
     for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]!;
-      const embedding = embeddings[i] ?? [];
-      const id = hashText(
-        `${options.source}:${entry.path}:${chunk.startLine}:${chunk.endLine}:${chunk.hash}:${this.provider.model}`
+      this.insertChunkRecord(
+        chunks[i]!,
+        embeddings[i] ?? [],
+        entry.path,
+        options.source,
+        vectorReady,
+        now
       );
-      this.db
-        .prepare(
-          `INSERT INTO chunks (id, path, source, start_line, end_line, hash, model, text, embedding, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             hash=excluded.hash,
-             model=excluded.model,
-             text=excluded.text,
-             embedding=excluded.embedding,
-             updated_at=excluded.updated_at`
-        )
-        .run(
-          id,
-          entry.path,
-          options.source,
-          chunk.startLine,
-          chunk.endLine,
-          chunk.hash,
-          this.provider.model,
-          chunk.text,
-          JSON.stringify(embedding),
-          now
-        );
-
-      // Insert into vector table
-      if (vectorReady && embedding.length > 0) {
-        try {
-          this.db.prepare(`DELETE FROM ${VECTOR_TABLE} WHERE id = ?`).run(id);
-        } catch {
-          // ignore
-        }
-        this.db
-          .prepare(`INSERT INTO ${VECTOR_TABLE} (id, embedding) VALUES (?, ?)`)
-          .run(id, vectorToBlob(embedding));
-      }
-
-      // Insert into FTS table
-      if (this.fts.enabled && this.fts.available) {
-        this.db
-          .prepare(
-            `INSERT INTO ${FTS_TABLE} (text, id, path, source, model, start_line, end_line)` +
-              ` VALUES (?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(
-            chunk.text,
-            id,
-            entry.path,
-            options.source,
-            this.provider.model,
-            chunk.startLine,
-            chunk.endLine
-          );
-      }
     }
 
     // Update file record
@@ -1499,10 +1478,7 @@ export class MemoryIndexManager {
       .prepare(
         `INSERT INTO files (path, source, hash, mtime, size) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(path) DO UPDATE SET
-           source=excluded.source,
-           hash=excluded.hash,
-           mtime=excluded.mtime,
-           size=excluded.size`
+           source=excluded.source, hash=excluded.hash, mtime=excluded.mtime, size=excluded.size`
       )
       .run(entry.path, options.source, entry.hash, entry.mtimeMs, entry.size);
   }
