@@ -140,6 +140,8 @@ export class LegacyProtocolAdapter {
         this.state = "done";
         break;
       }
+
+      // no default
     }
   }
 }

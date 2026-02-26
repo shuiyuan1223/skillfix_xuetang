@@ -593,6 +593,18 @@ function getProfileRows(profile: UserProfile): Array<{ field: string; value: str
   return rows;
 }
 
+function completenessColor(pct: number): string {
+  if (pct >= 80) return "#10b981";
+  if (pct >= 50) return "#f59e0b";
+  return "#ef4444";
+}
+
+function scoreVariant(score: number): string {
+  if (score >= 0.7) return "success";
+  if (score >= 0.4) return "warning";
+  return "default";
+}
+
 export function generateMemoryPage(data: {
   activeTab: "profile" | "summary" | "logs" | "search" | "system-agent";
   profileCompleteness: number;
@@ -640,12 +652,7 @@ export function generateMemoryPage(data: {
       title: t("memory.completeness"),
       value: `${data.profileCompleteness}%`,
       icon: "bar-chart",
-      color:
-        data.profileCompleteness >= 80
-          ? "#10b981"
-          : data.profileCompleteness >= 50
-            ? "#f59e0b"
-            : "#ef4444",
+      color: completenessColor(data.profileCompleteness),
     });
 
     const missingCard = ui.statCard({
@@ -756,7 +763,7 @@ export function generateMemoryPage(data: {
       } else {
         for (const result of data.searchResults) {
           const scoreBadge = ui.badge(`${t("memory.score")}: ${Math.round(result.score * 100)}%`, {
-            variant: result.score >= 0.7 ? "success" : result.score >= 0.4 ? "warning" : "default",
+            variant: scoreVariant(result.score),
           });
           const pathText = ui.text(result.path, "caption");
           const snippetText = ui.text(result.snippet, "body");
@@ -1927,18 +1934,22 @@ function buildLlmCallsTab(ui: A2UIGenerator, data: LogsPageData): string {
     const timeStr = call.timestamp
       ? new Date(call.timestamp).toLocaleTimeString("en-US", { hour12: false })
       : "-";
-    const tokensStr =
-      call.inputTokens != null && call.outputTokens != null
-        ? `${call.inputTokens}/${call.outputTokens}`
-        : call.totalTokens != null
-          ? String(call.totalTokens)
-          : "-";
-    const latencyStr =
-      call.latencyMs != null
-        ? call.latencyMs >= 1000
-          ? `${(call.latencyMs / 1000).toFixed(1)}s`
-          : `${call.latencyMs}ms`
-        : "-";
+    let tokensStr: string;
+    if (call.inputTokens != null && call.outputTokens != null) {
+      tokensStr = `${call.inputTokens}/${call.outputTokens}`;
+    } else if (call.totalTokens != null) {
+      tokensStr = String(call.totalTokens);
+    } else {
+      tokensStr = "-";
+    }
+    let latencyStr: string;
+    if (call.latencyMs != null && call.latencyMs >= 1000) {
+      latencyStr = `${(call.latencyMs / 1000).toFixed(1)}s`;
+    } else if (call.latencyMs != null) {
+      latencyStr = `${call.latencyMs}ms`;
+    } else {
+      latencyStr = "-";
+    }
     const statusStr = call.status != null ? String(call.status) : "-";
 
     return {
@@ -2931,6 +2942,16 @@ const PLAN_STATUS_COLORS: Record<PlanStatus, string> = {
   archived: "#6b7280",
 };
 
+function planStatusLabel(status: PlanStatus): string {
+  const labels: Record<PlanStatus, string> = {
+    active: t("plans.statusActive"),
+    paused: t("plans.statusPaused"),
+    completed: t("plans.statusCompleted"),
+    archived: t("plans.statusArchived"),
+  };
+  return labels[status];
+}
+
 export type PlansPageTab =
   | "active"
   | "completed"
@@ -2996,15 +3017,7 @@ export function generatePlansPage(data: {
         );
 
         // Status badge
-        const statusLabel =
-          plan.status === "active"
-            ? t("plans.statusActive")
-            : plan.status === "paused"
-              ? t("plans.statusPaused")
-              : plan.status === "completed"
-                ? t("plans.statusCompleted")
-                : t("plans.statusArchived");
-        const badge = ui.badge(statusLabel, {
+        const badge = ui.badge(planStatusLabel(plan.status), {
           color: PLAN_STATUS_COLORS[plan.status],
         });
 
@@ -3106,13 +3119,12 @@ export function generatePlansPage(data: {
             ui.badge(`${t("proactive.repeats")}: ${rem.repeatRule}`, { color: "#8b5cf6" })
           );
         }
+        const reminderStatusColors: Record<string, string> = {
+          completed: "#10b981",
+          pending: "#3b82f6",
+        };
         const statusBadge = ui.badge(rem.status, {
-          color:
-            rem.status === "completed"
-              ? "#10b981"
-              : rem.status === "pending"
-                ? "#3b82f6"
-                : "#6b7280",
+          color: reminderStatusColors[rem.status] || "#6b7280",
         });
         const btnIds: string[] = [];
         if (rem.status === "pending") {
@@ -3152,13 +3164,12 @@ export function generatePlansPage(data: {
         const details: string[] = [];
         if (evt.description) details.push(ui.text(evt.description, "body"));
         const catBadge = ui.badge(evt.category, { color: "#8b5cf6" });
+        const eventStatusColors: Record<string, string> = {
+          completed: "#10b981",
+          cancelled: "#ef4444",
+        };
         const statusBadge = ui.badge(evt.status, {
-          color:
-            evt.status === "completed"
-              ? "#10b981"
-              : evt.status === "cancelled"
-                ? "#ef4444"
-                : "#3b82f6",
+          color: eventStatusColors[evt.status] || "#3b82f6",
         });
         const infoRow = ui.row([catBadge, statusBadge], { gap: 8 });
         const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
@@ -3193,16 +3204,9 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
   // Description + date range
   const desc = ui.text(plan.description, "caption");
   const dateRange = ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
-  const statusBadge = ui.badge(
-    plan.status === "active"
-      ? t("plans.statusActive")
-      : plan.status === "paused"
-        ? t("plans.statusPaused")
-        : plan.status === "completed"
-          ? t("plans.statusCompleted")
-          : t("plans.statusArchived"),
-    { color: PLAN_STATUS_COLORS[plan.status] }
-  );
+  const statusBadge = ui.badge(planStatusLabel(plan.status), {
+    color: PLAN_STATUS_COLORS[plan.status],
+  });
   const infoRow = ui.row([statusBadge, dateRange], { gap: 8, align: "center" });
 
   const sections: string[] = [desc, infoRow];
@@ -3215,16 +3219,13 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
       currentVal !== undefined && g.targetValue > 0
         ? `${Math.round((currentVal / g.targetValue) * 100)}%`
         : "-";
-    const statusLabel =
-      g.status === "completed"
-        ? "✓"
-        : g.status === "ahead"
-          ? "↑"
-          : g.status === "behind"
-            ? "↓"
-            : g.status === "missed"
-              ? "✗"
-              : "→";
+    const goalStatusSymbols: Record<string, string> = {
+      completed: "✓",
+      ahead: "↑",
+      behind: "↓",
+      missed: "✗",
+    };
+    const statusLabel = goalStatusSymbols[g.status] || "→";
     // Show current value, or baseline as fallback reference
     let currentDisplay: string;
     if (currentVal !== undefined) {
@@ -3465,8 +3466,12 @@ function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
     }
 
     case "milestone_timeline": {
+      const milestoneTypeMap: Record<string, string> = {
+        completed: "commit",
+        current: "branch",
+      };
       const entries = ((cfg.entries as Array<Record<string, unknown>>) || []).map((e) => ({
-        type: e.status === "completed" ? "commit" : e.status === "current" ? "branch" : "merge",
+        type: milestoneTypeMap[e.status as string] || "merge",
         date: (e.date as string) || "",
         message: (e.title as string) || "",
         detail: (e.description as string) || undefined,
@@ -3859,15 +3864,13 @@ export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2U
   const ui = new A2UIGenerator("modal");
 
   const typeBadge = ui.badge(suggestion.type, { variant: "info" });
+  const suggestionVariantMap: Record<string, string> = {
+    applied: "success",
+    rejected: "error",
+    validated: "success",
+  };
   const statusBadge = ui.badge(suggestion.status, {
-    variant:
-      suggestion.status === "applied"
-        ? "success"
-        : suggestion.status === "rejected"
-          ? "error"
-          : suggestion.status === "validated"
-            ? "success"
-            : "default",
+    variant: suggestionVariantMap[suggestion.status] || "default",
   });
   const headerRow = ui.row([typeBadge, statusBadge], { gap: 8 });
 

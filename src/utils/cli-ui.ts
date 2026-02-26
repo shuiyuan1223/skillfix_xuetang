@@ -260,12 +260,12 @@ export class Spinner {
       this.interval = null;
     }
 
-    const icon =
-      status === "success"
-        ? c.green(icons.success)
-        : status === "error"
-          ? c.red(icons.error)
-          : c.yellow(icons.warning);
+    const iconMap: Record<string, string> = {
+      success: c.green(icons.success),
+      error: c.red(icons.error),
+      warning: c.yellow(icons.warning),
+    };
+    const icon = iconMap[status] ?? c.yellow(icons.warning);
     process.stdout.write(`\r  ${icon} ${this.message}\n`);
   }
 

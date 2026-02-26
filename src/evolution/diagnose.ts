@@ -616,7 +616,14 @@ function generateFallbackSuggestions(weaknesses: DiagnoseWeakness[]): DiagnoseSu
   const suggestions: DiagnoseSuggestion[] = [];
 
   for (const weakness of weaknesses) {
-    const priority = weakness.gap > 0.3 ? "high" : weakness.gap > 0.15 ? "medium" : "low";
+    let priority: "high" | "medium" | "low";
+    if (weakness.gap > 0.3) {
+      priority = "high";
+    } else if (weakness.gap > 0.15) {
+      priority = "medium";
+    } else {
+      priority = "low";
+    }
     const targetFiles = SHARP_TARGET_FILE_MAP[weakness.category] || ["src/prompts/SOUL.md"];
 
     // Main suggestion per weak SHARP category

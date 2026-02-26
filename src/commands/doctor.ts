@@ -110,14 +110,23 @@ export function registerDoctorCommand(program: Command): void {
         configuredProviderHasKey = !!process.env[providerCfg?.envVar || ""] || !!config.llm.apiKey;
       }
 
+      let apiKeyStatus: "pass" | "warn" | "fail";
+      let apiKeyMessage: string;
+      if (configuredProviderHasKey) {
+        apiKeyStatus = "pass";
+        apiKeyMessage = "API key configured for provider";
+      } else if (hasAnyKey) {
+        apiKeyStatus = "warn";
+        apiKeyMessage = `Found keys: ${foundProviders.join(", ")}`;
+      } else {
+        apiKeyStatus = "fail";
+        apiKeyMessage = "No API key found in environment";
+      }
+
       checks.push({
         name: "API Key",
-        status: configuredProviderHasKey ? "pass" : hasAnyKey ? "warn" : "fail",
-        message: configuredProviderHasKey
-          ? "API key configured for provider"
-          : hasAnyKey
-            ? `Found keys: ${foundProviders.join(", ")}`
-            : "No API key found in environment",
+        status: apiKeyStatus,
+        message: apiKeyMessage,
         detail: config?.llm.provider ? `Provider: ${config.llm.provider}` : undefined,
         fixHint: config?.llm.provider
           ? `export ${PROVIDER_CONFIGS[config.llm.provider as LLMProvider]?.envVar}=...`
@@ -240,8 +249,9 @@ export function registerDoctorCommand(program: Command): void {
       printSection("System Checks");
 
       for (const check of checks) {
-        const statusType =
-          check.status === "pass" ? "success" : check.status === "warn" ? "warning" : "error";
+        type StatusType = "info" | "error" | "success" | "pending" | "warning";
+        const statusMap: Record<string, StatusType> = { pass: "success", warn: "warning" };
+        const statusType: StatusType = statusMap[check.status] ?? "error";
         printStatus(statusType, check.name, check.detail);
         if (check.message && check.status !== "pass") {
           console.log(`    ${c.dim(check.message)}`);

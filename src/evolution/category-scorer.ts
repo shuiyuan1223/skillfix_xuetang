@@ -317,7 +317,14 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
     const label = point.label.padEnd(maxLabelLen);
     const displayScore = point.score.toFixed(2);
     const scoreStr = displayScore.padStart(6);
-    const indicator = pct >= 0.8 ? " +" : pct >= 0.6 ? " ~" : " !";
+    let indicator: string;
+    if (pct >= 0.8) {
+      indicator = " +";
+    } else if (pct >= 0.6) {
+      indicator = " ~";
+    } else {
+      indicator = " !";
+    }
 
     lines.push(`  ${label}  ${bar} ${scoreStr}${indicator}`);
   }

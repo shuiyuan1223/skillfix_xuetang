@@ -400,6 +400,8 @@ export class ProgressiveDashboardLoader {
           return data.map((d) => ({ date: d.date, value: d.avg }));
         }
         break;
+      default:
+        break;
     }
 
     return [];

@@ -201,7 +201,8 @@ export function registerToolsCommand(program: Command): void {
         .filter(([name]) => required.includes(name))
         .map(([name, schema]) => {
           const type = (schema as JsonSchema).type;
-          const example = type === "string" ? "value" : type === "number" ? "123" : "true";
+          const exampleMap: Record<string, string> = { string: "value", number: "123" };
+          const example = exampleMap[type as string] ?? "true";
           return `-a ${name}=${example}`;
         })
         .join(" ");

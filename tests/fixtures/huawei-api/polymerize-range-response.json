@@ -1,0 +1,34 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "sampleSet": [
+        {
+          "samplePoints": [
+            {
+              "value": [
+                { "fieldName": "steps", "integerValue": 8000 },
+                { "fieldName": "calories", "integerValue": 350 }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "startTime": 1770336000000,
+      "sampleSet": [
+        {
+          "samplePoints": [
+            {
+              "value": [
+                { "fieldName": "steps", "integerValue": 6500 },
+                { "fieldName": "calories", "integerValue": 280 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

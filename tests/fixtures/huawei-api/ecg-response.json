@@ -1,0 +1,22 @@
+{
+  "healthRecords": [
+    {
+      "startTime": 1770249600000000000,
+      "endTime": 1770249660000000000,
+      "value": [
+        { "fieldName": "avg_heart_rate", "integerValue": 72 },
+        { "fieldName": "ecg_arrhythmia_type", "integerValue": 1 },
+        { "fieldName": "ecg_type", "integerValue": 1 }
+      ]
+    },
+    {
+      "startTime": 1770253200000000000,
+      "endTime": 1770253260000000000,
+      "value": [
+        { "fieldName": "avg_heart_rate", "integerValue": 85 },
+        { "fieldName": "ecg_arrhythmia_type", "integerValue": 3 },
+        { "fieldName": "ecg_type", "integerValue": 1 }
+      ]
+    }
+  ]
+}

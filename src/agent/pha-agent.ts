@@ -523,7 +523,7 @@ export class PHAAgent {
   }> {
     const toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }> = [];
     let pendingToolName = "";
-    let pendingToolArgs: unknown = undefined;
+    let pendingToolArgs: unknown;
 
     const { finalContent } = await this.runPromptAndCollect(message, (event) => {
       if (event.type === "tool_execution_start") {

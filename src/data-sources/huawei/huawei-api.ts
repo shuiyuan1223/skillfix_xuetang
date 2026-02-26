@@ -15,21 +15,31 @@ import { loadConfig } from "../../utils/config.js";
 import { saveToFileCache, getFromMemoryCache, saveToMemoryCache } from "./api-cache.js";
 import { getUserStore } from "./user-store.js";
 import { createLogger } from "../../utils/logger.js";
+import {
+  parseHeartRateResponse,
+  parseStressResponse,
+  parseSpO2Response,
+  parseECGResponse,
+  parseSleepResponse,
+  parseWeeklySleepResponse,
+  parseBloodPressureResponse,
+  parseBloodGlucoseResponse,
+  parseBodyCompositionWeightResponse,
+  parseBodyCompositionHeightResponse,
+  parseBodyTemperatureResponse,
+  parseNutritionResponse,
+  parseMenstrualFlowResponse,
+  deriveMenstrualCycleInfo,
+  parseVO2MaxResponse,
+  parseHRVResponse,
+  parseEmotionResponse,
+  parsePolymerizeDataRangeChunk,
+} from "./huawei-parsers.js";
 
 const log = createLogger("Huawei/API");
 
 // Huawei Health Kit API base URL (default, can be overridden in config)
 const DEFAULT_API_BASE = "https://health-api.cloud.huawei.com";
-
-/** Format a timestamp (ms) to "HH:MM" in Asia/Shanghai timezone. */
-function formatTimeHHMM(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
 
 // Track scope errors for re-auth detection
 const missingScopeErrors = new Set<string>();
@@ -400,44 +410,8 @@ export class HuaweiHealthApi {
       return { readings: [], avg: 0, max: 0, min: 0 };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-
-    // Parse response - extract heart rate readings
-    const readings: Array<{ time: string; value: number }> = [];
-
-    // Try different response formats
-    const groups = json.group || [];
-    for (const group of groups) {
-      const sampleSets = group.sampleSet || [];
-      for (const sampleSet of sampleSets) {
-        const points = sampleSet.samplePoints || sampleSet.samplePoint || [];
-        for (const point of points) {
-          // Timestamps can be in nanoseconds (19 digits) or milliseconds (13 digits)
-          let timestamp = point.startTime;
-          if (timestamp > 1e15) {
-            timestamp = Math.floor(timestamp / 1e6); // Convert nanoseconds to milliseconds
-          }
-          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-
-          // Value can be in value[0].floatValue or value[0].integerValue
-          const fieldValue = point.value?.[0];
-          const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
-          if (value > 0) {
-            readings.push({ time, value });
-          }
-        }
-      }
-    }
-
-    // Calculate statistics
-    const values = readings.map((r) => r.value);
-    const avg =
-      values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
-    const max = values.length > 0 ? Math.max(...values) : 0;
-    const min = values.length > 0 ? Math.min(...values) : 0;
-
-    const result = { readings, avg, max, min };
+    const json = await response.json();
+    const result = parseHeartRateResponse(json);
 
     // Save to cache
     saveToMemoryCache(cacheKey, cacheParams, result);
@@ -563,41 +537,13 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    const readings: Array<{ time: string; value: number }> = [];
+    const json = await response.json();
+    const result = parseStressResponse(json);
 
-    const groups = json.group || [];
-    for (const group of groups) {
-      for (const sampleSet of group.sampleSet || []) {
-        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-          let timestamp = point.startTime;
-          if (timestamp > 1e15) {
-            timestamp = Math.floor(timestamp / 1e6);
-          }
-          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-          const fieldValue = point.value?.[0];
-          const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
-          if (value > 0) {
-            readings.push({ time, value });
-          }
-        }
-      }
-    }
-
-    if (readings.length === 0) {
+    if (!result) {
       saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
-
-    const values = readings.map((r) => r.value);
-    const result = {
-      readings,
-      current: values[values.length - 1],
-      avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
-      max: Math.max(...values),
-      min: Math.min(...values),
-    };
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
@@ -657,41 +603,13 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    const readings: Array<{ time: string; value: number }> = [];
+    const json = await response.json();
+    const result = parseSpO2Response(json);
 
-    const groups = json.group || [];
-    for (const group of groups) {
-      for (const sampleSet of group.sampleSet || []) {
-        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-          let timestamp = point.startTime;
-          if (timestamp > 1e15) {
-            timestamp = Math.floor(timestamp / 1e6);
-          }
-          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-          const fieldValue = point.value?.[0];
-          const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
-          if (value > 0) {
-            readings.push({ time, value });
-          }
-        }
-      }
-    }
-
-    if (readings.length === 0) {
+    if (!result) {
       saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
-
-    const values = readings.map((r) => r.value);
-    const result = {
-      readings,
-      current: values[values.length - 1],
-      avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
-      max: Math.max(...values),
-      min: Math.min(...values),
-    };
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
@@ -774,68 +692,11 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
+    const json = await response.json();
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
 
-    const healthRecords = json.healthRecords || [];
-    if (healthRecords.length === 0) {
-      return null;
-    }
-
-    // Arrhythmia type labels
-    const arrhythmiaLabels: Record<number, string> = {
-      1: "Normal",
-      2: "Sinus Arrhythmia",
-      3: "Atrial Fibrillation",
-      4: "Premature Ventricular Contraction",
-      5: "Wide QRS Complex",
-      6: "Unknown",
-    };
-
-    const records: Array<{
-      time: string;
-      avgHeartRate: number;
-      arrhythmiaType: number;
-      arrhythmiaLabel: string;
-      ecgType: number;
-    }> = [];
-
-    for (const record of healthRecords) {
-      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-      const getValue = (fieldName: string) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const field = record.value?.find((v: any) => v.fieldName === fieldName);
-        return field?.integerValue ?? field?.longValue ?? field?.floatValue ?? null;
-      };
-
-      let timestamp = record.startTime;
-      if (timestamp > 1e15) {
-        timestamp = Math.floor(timestamp / 1e6);
-      }
-      const time = new Date(timestamp).toISOString();
-
-      const avgHeartRate = getValue("avg_heart_rate") || 0;
-      const arrhythmiaType = getValue("ecg_arrhythmia_type") || 1;
-      const ecgType = getValue("ecg_type") || 1;
-
-      records.push({
-        time,
-        avgHeartRate: Math.round(avgHeartRate),
-        arrhythmiaType,
-        arrhythmiaLabel: arrhythmiaLabels[arrhythmiaType] || "Unknown",
-        ecgType,
-      });
-    }
-
-    // Sort by time (most recent first)
-    records.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-
-    const result = {
-      records,
-      latestHeartRate: records.length > 0 ? records[0].avgHeartRate : null,
-      hasArrhythmia: records.some((r) => r.arrhythmiaType > 1),
-    };
+    const result = parseECGResponse(json);
+    if (!result) return null;
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     return result;
@@ -906,137 +767,10 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
+    const json = await response.json();
     saveToFileCache("sleep-success", { date }, json);
 
-    const healthRecords = json.healthRecords || [];
-    if (healthRecords.length === 0) {
-      return null;
-    }
-
-    // Find sleep record for the requested date
-    // Look for the record where wakeup_time is on the requested date
-    const targetDate = new Date(date);
-    const targetDayStart = new Date(targetDate);
-    targetDayStart.setHours(0, 0, 0, 0);
-    const targetDayEnd = new Date(targetDate);
-    targetDayEnd.setHours(23, 59, 59, 999);
-
-    // Filter out naps (sleep_type = 3) and sort by wakeup time (most recent first)
-    const normalSleepRecords = healthRecords
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter((r: any) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const sleepType = r.value?.find((v: any) => v.fieldName === "sleep_type")?.integerValue;
-        return sleepType !== 3; // Exclude naps
-      })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .sort((a: any, b: any) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const timeA = a.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue || 0;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const timeB = b.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue || 0;
-        return timeB - timeA; // Most recent first
-      });
-
-    if (normalSleepRecords.length === 0) {
-      return null;
-    }
-
-    // Find the record for the target date, or use the most recent one
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let mainRecord = normalSleepRecords.find((r: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wakeupTime = r.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue;
-      if (wakeupTime) {
-        const wakeupDate = new Date(wakeupTime);
-        return wakeupDate >= targetDayStart && wakeupDate <= targetDayEnd;
-      }
-      return false;
-    });
-
-    // If no exact match for target date, use the most recent sleep
-    if (!mainRecord) {
-      mainRecord = normalSleepRecords[0];
-      log.info("No sleep data for requested date, using most recent", {
-        requestedDate: date,
-        fallbackDate: new Date(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          mainRecord.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue
-        )
-          .toISOString()
-          .split("T")[0],
-      });
-    }
-
-    // Extract sleep record values
-    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-    const getValue = (fieldName: string) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const field = mainRecord.value?.find((v: any) => v.fieldName === fieldName);
-      return field?.integerValue ?? field?.longValue ?? null;
-    };
-
-    const fallAsleepTime = getValue("fall_asleep_time");
-    const wakeupTime = getValue("wakeup_time");
-    const allSleepTime = getValue("all_sleep_time"); // minutes
-    const sleepScore = getValue("sleep_score");
-    const deepSleepTime = getValue("deep_sleep_time"); // minutes
-    const lightSleepTime = getValue("light_sleep_time"); // minutes
-    const dreamTime = getValue("dream_time"); // REM minutes
-    const awakeTime = getValue("awake_time"); // minutes
-
-    // Parse sleep fragments from subData
-    const segments: Array<{ startTime: number; endTime: number; sleepType: number }> = [];
-    const fragmentData = mainRecord.subData?.["com.huawei.continuous.sleep.fragment"];
-
-    if (fragmentData?.samplePoints) {
-      for (const point of fragmentData.samplePoints) {
-        let start = point.startTime;
-        let end = point.endTime;
-
-        // Convert nanoseconds to milliseconds
-        if (start > 1e15) start = Math.floor(start / 1e6);
-        if (end > 1e15) end = Math.floor(end / 1e6);
-
-        const sleepState =
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          point.value?.find((v: any) => v.fieldName === "sleep_state")?.integerValue || 0;
-
-        if (start && end && sleepState) {
-          segments.push({ startTime: start, endTime: end, sleepType: sleepState });
-        }
-      }
-    }
-
-    // Sort by start time
-    segments.sort((a, b) => a.startTime - b.startTime);
-
-    // Calculate bed/wake times
-    const bedTime = fallAsleepTime
-      ? formatTimeHHMM(fallAsleepTime)
-      : segments.length > 0
-        ? formatTimeHHMM(segments[0].startTime)
-        : "00:00";
-
-    const wakeTime = wakeupTime
-      ? formatTimeHHMM(wakeupTime)
-      : segments.length > 0
-        ? formatTimeHHMM(segments[segments.length - 1].endTime)
-        : "00:00";
-
-    return {
-      segments,
-      totalMinutes: allSleepTime || 0,
-      bedTime,
-      wakeTime,
-      sleepScore: sleepScore || undefined,
-      deepSleepMinutes: deepSleepTime || undefined,
-      lightSleepMinutes: lightSleepTime || undefined,
-      remMinutes: dreamTime || undefined,
-      awakeMinutes: awakeTime || undefined,
-    };
+    return parseSleepResponse(json, date);
   }
 
   /**
@@ -1084,57 +818,8 @@ export class HuaweiHealthApi {
       return [];
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    const healthRecords = json.healthRecords || [];
-
-    // Create a map of date -> sleep data
-    const sleepByDate = new Map<string, { hours: number; sleepScore?: number }>();
-
-    for (const record of healthRecords) {
-      // Skip naps (sleep_type = 3)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sleepType = record.value?.find((v: any) => v.fieldName === "sleep_type")?.integerValue;
-      if (sleepType === 3) continue;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wakeupTime = record.value?.find((v: any) => v.fieldName === "wakeup_time")?.longValue;
-      const allSleepTime = record.value?.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (v: any) => v.fieldName === "all_sleep_time"
-      )?.integerValue;
-      const sleepScore = record.value?.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (v: any) => v.fieldName === "sleep_score"
-      )?.integerValue;
-
-      if (wakeupTime && allSleepTime) {
-        const wd = new Date(wakeupTime);
-        const wakeupDate = `${wd.getFullYear()}-${String(wd.getMonth() + 1).padStart(2, "0")}-${String(wd.getDate()).padStart(2, "0")}`;
-        const hours = Math.round((allSleepTime / 60) * 10) / 10;
-
-        // Use the most recent sleep record for each date
-        if (!sleepByDate.has(wakeupDate) || sleepByDate.get(wakeupDate)!.hours < hours) {
-          sleepByDate.set(wakeupDate, { hours, sleepScore });
-        }
-      }
-    }
-
-    // Build result array for the past 7 days
-    const result: Array<{ date: string; hours: number; sleepScore?: number }> = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(end);
-      d.setDate(d.getDate() - i);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const data = sleepByDate.get(dateStr);
-      result.push({
-        date: dateStr,
-        hours: data?.hours || 0,
-        sleepScore: data?.sleepScore,
-      });
-    }
-
-    return result;
+    const json = await response.json();
+    return parseWeeklySleepResponse(json, endDate);
   }
 
   /**
@@ -1193,60 +878,13 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    const readings: Array<{ time: string; systolic: number; diastolic: number; pulse?: number }> =
-      [];
+    const json = await response.json();
+    const result = parseBloodPressureResponse(json);
 
-    const groups = json.group || [];
-    for (const group of groups) {
-      for (const sampleSet of group.sampleSet || []) {
-        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-          let timestamp = point.startTime;
-          if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-
-          // Extract by fieldName per Huawei docs: systolic_pressure, diastolic_pressure, sphygmus
-          let systolic = 0;
-          let diastolic = 0;
-          let pulse = 0;
-          const values = point.value || [];
-          for (const v of values) {
-            const val = Math.round(v.floatValue ?? v.integerValue ?? 0);
-            if (v.fieldName === "systolic_pressure") {
-              systolic = val;
-            } else if (v.fieldName === "diastolic_pressure") {
-              diastolic = val;
-            } else if (v.fieldName === "sphygmus") {
-              pulse = val;
-            }
-          }
-          // Fallback: positional (value[0] = systolic, value[1] = diastolic)
-          if (systolic === 0 && diastolic === 0 && values.length >= 2) {
-            systolic = Math.round(values[0].floatValue ?? values[0].integerValue ?? 0);
-            diastolic = Math.round(values[1].floatValue ?? values[1].integerValue ?? 0);
-          }
-          if (systolic > 0 || diastolic > 0) {
-            readings.push({ time, systolic, diastolic, pulse: pulse > 0 ? pulse : undefined });
-          }
-        }
-      }
-    }
-
-    if (readings.length === 0) {
+    if (!result) {
       saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
-
-    const systolicValues = readings.map((r) => r.systolic);
-    const diastolicValues = readings.map((r) => r.diastolic);
-    const result = {
-      readings,
-      latestSystolic: systolicValues[systolicValues.length - 1],
-      latestDiastolic: diastolicValues[diastolicValues.length - 1],
-      avgSystolic: Math.round(systolicValues.reduce((a, b) => a + b, 0) / systolicValues.length),
-      avgDiastolic: Math.round(diastolicValues.reduce((a, b) => a + b, 0) / diastolicValues.length),
-    };
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
@@ -1304,39 +942,13 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    const readings: Array<{ time: string; value: number }> = [];
+    const json = await response.json();
+    const result = parseBloodGlucoseResponse(json);
 
-    const groups = json.group || [];
-    for (const group of groups) {
-      for (const sampleSet of group.sampleSet || []) {
-        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-          let timestamp = point.startTime;
-          if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-          const fieldValue = point.value?.[0];
-          const value = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
-          if (value > 0) {
-            readings.push({ time, value: Math.round(value * 10) / 10 });
-          }
-        }
-      }
-    }
-
-    if (readings.length === 0) {
+    if (!result) {
       saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
-
-    const values = readings.map((r) => r.value);
-    const result = {
-      readings,
-      latest: values[values.length - 1],
-      avg: Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10,
-      max: Math.max(...values),
-      min: Math.min(...values),
-    };
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
@@ -1399,84 +1011,21 @@ export class HuaweiHealthApi {
       )
     );
 
-    // Extract body_weight response — multiple fields per point: body_weight, bmi, body_fat_rate
-    const extractWeightData = async (
-      res: Response | null
-    ): Promise<{ weight?: number; bmi?: number; bodyFatRate?: number; date?: string } | null> => {
+    // Parse weight and height responses using extracted parsers
+    const parseWeightRes = async (res: Response | null): Promise<ReturnType<typeof parseBodyCompositionWeightResponse>> => {
       if (!res || !res.ok) return null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const json = (await res.json()) as any;
-      let latest: { weight?: number; bmi?: number; bodyFatRate?: number; date?: string } | null =
-        null;
-      const groups = json.group || [];
-      for (const group of groups) {
-        for (const sampleSet of group.sampleSet || []) {
-          for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-            let timestamp = point.startTime;
-            if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-            const pointDate = timestamp
-              ? new Date(timestamp).toISOString().split("T")[0]
-              : undefined;
-
-            const entry: { weight?: number; bmi?: number; bodyFatRate?: number; date?: string } = {
-              date: pointDate,
-            };
-            for (const v of point.value || []) {
-              const val = v.floatValue ?? v.integerValue ?? 0;
-              if (v.fieldName === "body_weight" && val > 0)
-                entry.weight = Math.round(val * 10) / 10;
-              else if (v.fieldName === "bmi" && val > 0) entry.bmi = Math.round(val * 10) / 10;
-              else if (v.fieldName === "body_fat_rate" && val > 0)
-                entry.bodyFatRate = Math.round(val * 10) / 10;
-            }
-            // Fallback: if no fieldName matched, use positional value[0] as weight
-            if (!entry.weight && point.value?.[0]) {
-              const val = point.value[0].floatValue ?? point.value[0].integerValue ?? 0;
-              if (val > 0) entry.weight = Math.round(val * 10) / 10;
-            }
-            if (entry.weight) latest = entry;
-          }
-        }
-      }
-      return latest;
+      const json = await res.json();
+      return parseBodyCompositionWeightResponse(json);
     };
-
-    // Extract height — API returns in meters (range 0.4-2.6), convert to cm
-    const extractHeight = async (res: Response | null): Promise<number | null> => {
+    const parseHeightRes = async (res: Response | null): Promise<number | null> => {
       if (!res || !res.ok) return null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const json = (await res.json()) as any;
-      let latestHeight: number | null = null;
-      const groups = json.group || [];
-      for (const group of groups) {
-        for (const sampleSet of group.sampleSet || []) {
-          for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-            // Try fieldName "height" first, then positional
-            let heightVal = 0;
-            for (const v of point.value || []) {
-              if (v.fieldName === "height") {
-                heightVal = v.floatValue ?? v.integerValue ?? 0;
-              }
-            }
-            if (heightVal === 0 && point.value?.[0]) {
-              heightVal = point.value[0].floatValue ?? point.value[0].integerValue ?? 0;
-            }
-            if (heightVal > 0) {
-              // Huawei API returns height in meters; convert to cm
-              latestHeight =
-                heightVal <= 3
-                  ? Math.round(heightVal * 100 * 10) / 10
-                  : Math.round(heightVal * 10) / 10;
-            }
-          }
-        }
-      }
-      return latestHeight;
+      const json = await res.json();
+      return parseBodyCompositionHeightResponse(json);
     };
 
     const [weightData, heightCm] = await Promise.all([
-      extractWeightData(weightRes),
-      extractHeight(heightRes),
+      parseWeightRes(weightRes),
+      parseHeightRes(heightRes),
     ]);
 
     if (!weightData && !heightCm) {
@@ -1562,39 +1111,13 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    const readings: Array<{ time: string; value: number }> = [];
+    const json = await response.json();
+    const result = parseBodyTemperatureResponse(json);
 
-    const groups = json.group || [];
-    for (const group of groups) {
-      for (const sampleSet of group.sampleSet || []) {
-        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-          let timestamp = point.startTime;
-          if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-          const fieldValue = point.value?.[0];
-          const value = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
-          if (value > 0) {
-            readings.push({ time, value: Math.round(value * 10) / 10 });
-          }
-        }
-      }
-    }
-
-    if (readings.length === 0) {
+    if (!result) {
       saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
-
-    const values = readings.map((r) => r.value);
-    const result = {
-      readings,
-      latest: values[values.length - 1],
-      avg: Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10,
-      max: Math.max(...values),
-      min: Math.min(...values),
-    };
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
@@ -1660,54 +1183,13 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    const healthRecords = json.healthRecords || [];
+    const json = await response.json();
+    const result = parseNutritionResponse(json);
 
-    if (healthRecords.length === 0) {
+    if (!result) {
       saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
-
-    const meals: Array<{ time: string; calories: number }> = [];
-    let totalCalories = 0;
-    let protein: number | undefined;
-    let fat: number | undefined;
-    let carbs: number | undefined;
-    let water: number | undefined;
-
-    for (const record of healthRecords) {
-      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-      const getValue = (fieldName: string) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const field = record.value?.find((v: any) => v.fieldName === fieldName);
-        return field?.floatValue ?? field?.integerValue ?? field?.longValue ?? null;
-      };
-
-      let timestamp = record.startTime;
-      if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-      const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-
-      const energy = getValue("dietaryEnergy") || 0;
-      const mealProtein = getValue("protein");
-      const mealFat = getValue("fat");
-      const mealCarbs = getValue("carbohydrates");
-
-      if (energy > 0) {
-        totalCalories += Math.round(energy);
-        meals.push({ time, calories: Math.round(energy) });
-      }
-      if (mealProtein !== null) protein = (protein || 0) + Math.round(mealProtein * 10) / 10;
-      if (mealFat !== null) fat = (fat || 0) + Math.round(mealFat * 10) / 10;
-      if (mealCarbs !== null) carbs = (carbs || 0) + Math.round(mealCarbs * 10) / 10;
-    }
-
-    if (totalCalories === 0 && meals.length === 0) {
-      saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
-      return null;
-    }
-
-    const result = { totalCalories, protein, fat, carbs, water, meals };
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
@@ -1778,63 +1260,20 @@ export class HuaweiHealthApi {
       )
     );
 
-    const records: Array<{ date: string; status: string }> = [];
-
-    // Parse menstrual_flow response — records with flow volume indicate period days
+    // Parse menstrual_flow response
+    let records: Array<{ date: string; status: string }> = [];
     const flowRes = responses[0];
     if (flowRes && flowRes.ok) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const json = (await flowRes.json()) as any;
-      const groups = json.group || [];
-      for (const group of groups) {
-        for (const sampleSet of group.sampleSet || []) {
-          for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-            let timestamp = point.startTime;
-            if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-            const pointDate = timestamp ? new Date(timestamp).toISOString().split("T")[0] : date;
-
-            // volume field: 1=spotting, 2=light, 3=moderate, 4=heavy
-            let volume = 0;
-            for (const v of point.value || []) {
-              if (v.fieldName === "volume") {
-                volume = v.integerValue ?? v.floatValue ?? 0;
-              }
-            }
-            if (volume > 0) {
-              records.push({ date: pointDate, status: "menstrual" });
-            }
-          }
-        }
-      }
+      const flowJson = await flowRes.json();
+      records = parseMenstrualFlowResponse(flowJson, date);
     }
 
-    if (records.length === 0) {
+    const result = deriveMenstrualCycleInfo(records, date);
+
+    if (!result) {
       saveToFileCache(cacheKey, cacheParams, null);
       return null;
     }
-
-    // Sort by date
-    records.sort((a, b) => a.date.localeCompare(b.date));
-
-    // Derive cycle info from flow records
-    const periodStartDate = records.length > 0 ? records[0].date : undefined;
-
-    // Estimate phase based on cycle day
-    let cycleDay: number | undefined;
-    let phase: "menstrual" | "follicular" | "ovulatory" | "luteal" | undefined;
-    if (periodStartDate) {
-      const daysDiff = Math.floor(
-        (new Date(date).getTime() - new Date(periodStartDate).getTime()) / (1000 * 60 * 60 * 24)
-      );
-      cycleDay = daysDiff + 1;
-      // Estimate phase from cycle day (typical 28-day cycle)
-      if (cycleDay <= 5) phase = "menstrual";
-      else if (cycleDay <= 13) phase = "follicular";
-      else if (cycleDay <= 16) phase = "ovulatory";
-      else phase = "luteal";
-    }
-
-    const result = { cycleDay, phase, periodStartDate, cycleLength: undefined, records };
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, cacheParams, result);
@@ -1891,35 +1330,14 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    let latestValue = 0;
+    const json = await response.json();
+    const result = parseVO2MaxResponse(json);
 
-    const groups = json.group || [];
-    for (const group of groups) {
-      for (const sampleSet of group.sampleSet || []) {
-        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-          const fieldValue = point.value?.[0];
-          const value = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
-          if (value > 0) latestValue = value;
-        }
-      }
-    }
-
-    if (latestValue === 0) {
+    if (!result) {
       saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
 
-    // Classify VO2Max level
-    let level: "low" | "fair" | "good" | "excellent" | "superior";
-    if (latestValue < 30) level = "low";
-    else if (latestValue < 37) level = "fair";
-    else if (latestValue < 48) level = "good";
-    else if (latestValue < 55) level = "excellent";
-    else level = "superior";
-
-    const result = { value: Math.round(latestValue * 10) / 10, level };
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
     return result;
@@ -1975,52 +1393,10 @@ export class HuaweiHealthApi {
 
       if (!response.ok) continue;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const json = (await response.json()) as any;
-      const readings: Array<{ time: string; value: number }> = [];
+      const json = await response.json();
+      const result = parseHRVResponse(json);
 
-      const groups = json.group || [];
-      for (const group of groups) {
-        for (const sampleSet of group.sampleSet || []) {
-          for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-            let timestamp = point.startTime;
-            if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-            const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-
-            // Try to extract HRV specific fields
-            let hrvValue = 0;
-            for (const v of point.value || []) {
-              const val = v.floatValue ?? v.integerValue ?? 0;
-              if (
-                v.fieldName === "rmssd" ||
-                v.fieldName === "hrv" ||
-                v.fieldName === "heart_rate_variability"
-              ) {
-                hrvValue = val;
-                break;
-              }
-            }
-            // Fallback: first value
-            if (hrvValue === 0 && point.value?.[0]) {
-              hrvValue = point.value[0].floatValue ?? point.value[0].integerValue ?? 0;
-            }
-            if (hrvValue > 0) {
-              readings.push({ time, value: Math.round(hrvValue) });
-            }
-          }
-        }
-      }
-
-      if (readings.length === 0) continue;
-
-      const values = readings.map((r) => r.value);
-      const result = {
-        rmssd: values[values.length - 1], // Latest reading as RMSSD
-        avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
-        max: Math.max(...values),
-        min: Math.min(...values),
-        readings,
-      };
+      if (!result) continue;
 
       saveToMemoryCache(cacheKey, cacheParams, result);
       saveToFileCache(cacheKey, { ...cacheParams, dataTypeName, rawResponse: json }, result);
@@ -2079,47 +1455,13 @@ export class HuaweiHealthApi {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = (await response.json()) as any;
-    const readings: Array<{ time: string; emotion: string; score: number }> = [];
+    const json = await response.json();
+    const result = parseEmotionResponse(json);
 
-    // Emotion score mapping: higher = more positive
-    const emotionFromScore = (score: number): string => {
-      if (score >= 80) return "happy";
-      if (score >= 60) return "calm";
-      if (score >= 40) return "neutral";
-      if (score >= 20) return "stressed";
-      return "anxious";
-    };
-
-    const groups = json.group || [];
-    for (const group of groups) {
-      for (const sampleSet of group.sampleSet || []) {
-        for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-          let timestamp = point.startTime;
-          if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
-
-          const fieldValue = point.value?.[0];
-          const score = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
-          if (score > 0) {
-            readings.push({ time, emotion: emotionFromScore(score), score });
-          }
-        }
-      }
-    }
-
-    if (readings.length === 0) {
+    if (!result) {
       saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
       return null;
     }
-
-    const latestReading = readings[readings.length - 1];
-    const result = {
-      current: latestReading.emotion,
-      score: latestReading.score,
-      readings,
-    };
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, result);
@@ -2185,37 +1527,9 @@ export class HuaweiHealthApi {
           continue;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const json = (await response.json()) as any;
-        const groups = json.group || [];
-
-        for (const group of groups) {
-          // With groupByTime, each group represents one day
-          let groupStart = group.startTime;
-          if (groupStart > 1e15) groupStart = Math.floor(groupStart / 1e6);
-          const groupDate = groupStart
-            ? new Date(groupStart).toISOString().split("T")[0]
-            : undefined;
-          if (!groupDate) continue;
-
-          const dayValues: Record<string, number> = {};
-          for (const sampleSet of group.sampleSet || []) {
-            for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
-              for (const v of point.value || []) {
-                const val = v.floatValue ?? v.integerValue ?? 0;
-                if (v.fieldName) {
-                  dayValues[v.fieldName] = (dayValues[v.fieldName] || 0) + val;
-                } else {
-                  dayValues.value = (dayValues.value || 0) + val;
-                }
-              }
-            }
-          }
-
-          if (Object.keys(dayValues).length > 0) {
-            result.push({ date: groupDate, values: dayValues });
-          }
-        }
+        const json = await response.json();
+        const chunkData = parsePolymerizeDataRangeChunk(json);
+        result.push(...chunkData);
       } catch (error) {
         log.warn("Range polymerize error", { dataTypeName, error });
       }

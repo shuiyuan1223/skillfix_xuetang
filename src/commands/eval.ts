@@ -75,6 +75,55 @@ import {
   info,
 } from "../utils/cli-ui.js";
 
+// --- Helper functions to avoid nested ternaries ---
+
+/** Map a numeric score to a color function based on thresholds. */
+function scoreColor(score: number, high: number, low: number): typeof c.green {
+  if (score >= high) return c.green;
+  if (score >= low) return c.yellow;
+  return c.red;
+}
+
+/** Map a numeric score to a label. */
+function scoreLabel(
+  score: number,
+  high: number,
+  low: number,
+  labels: [string, string, string]
+): string {
+  if (score >= high) return labels[0];
+  if (score >= low) return labels[1];
+  return labels[2];
+}
+
+/** Map a signed delta to a color function: positive=green, negative=red, zero=dim. */
+function deltaColor(value: number): typeof c.green {
+  if (value > 0) return c.green;
+  if (value < 0) return c.red;
+  return c.dim;
+}
+
+/** Map a trend value to a colored trend string. */
+function trendLabel(value: number): string {
+  if (value > 0) return c.green("↑ Improving");
+  if (value < 0) return c.red("↓ Declining");
+  return c.dim("→ Stable");
+}
+
+/** Map an impact/priority string to a color function. */
+function impactColor(level: string): typeof c.green {
+  if (level === "high") return c.red;
+  if (level === "medium") return c.yellow;
+  return c.gray;
+}
+
+/** Map a priority string to a color function. */
+function priorityColor(level: string): typeof c.green {
+  if (level === "high") return c.red;
+  if (level === "medium") return c.yellow;
+  return c.dim;
+}
+
 // PROVIDER_ENV_KEYS and resolveApiKey() removed — use ENV_KEY_MAP and resolveAgentModel() from config.ts
 
 /**
@@ -288,11 +337,10 @@ export function registerEvalCommand(program: Command): void {
       printTable(
         ["Trace", "Score", "Accuracy", "Relevance", "Helpful", "Safety", "Issues"],
         results.map((result) => {
-          const scoreColor =
-            result.overallScore >= 80 ? c.green : result.overallScore >= 60 ? c.yellow : c.red;
+          const sc = scoreColor(result.overallScore, 80, 60);
           return [
             c.dim(result.traceId.substring(0, 8)),
-            scoreColor(`${result.overallScore}/100`),
+            sc(`${result.overallScore}/100`),
             String(result.scores.accuracy),
             String(result.scores.relevance),
             String(result.scores.helpfulness),
@@ -310,33 +358,20 @@ export function registerEvalCommand(program: Command): void {
 
       const avgScore = analysis.metrics.averageScore;
       const scoreBar = progressBar(avgScore, 100, 20);
-      const scoreLabel =
-        avgScore >= 80
-          ? c.green("Excellent")
-          : avgScore >= 60
-            ? c.yellow("Good")
-            : c.red("Needs Improvement");
+      const avgLabel = scoreLabel(avgScore, 80, 60, ["Excellent", "Good", "Needs Improvement"]);
+      const avgLabelColored = scoreColor(avgScore, 80, 60)(avgLabel);
 
-      printKV("Average Score", `${c.bold(String(avgScore))} ${scoreBar} ${scoreLabel}`);
+      printKV("Average Score", `${c.bold(String(avgScore))} ${scoreBar} ${avgLabelColored}`);
 
-      const trendIcon =
-        analysis.metrics.improvementTrend > 0
-          ? c.green("↑ Improving")
-          : analysis.metrics.improvementTrend < 0
-            ? c.red("↓ Declining")
-            : c.dim("→ Stable");
-      printKV("Trend", trendIcon);
+      printKV("Trend", trendLabel(analysis.metrics.improvementTrend));
 
       // Weaknesses
       if (analysis.weaknesses.length > 0) {
         console.log("");
         console.log(`  ${c.yellow(icons.warning)} ${c.bold("Weaknesses:")}`);
         for (const weakness of analysis.weaknesses) {
-          const impactColor =
-            weakness.impact === "high" ? c.red : weakness.impact === "medium" ? c.yellow : c.gray;
-          console.log(
-            `    ${impactColor("●")} ${weakness.category}: ${c.dim(weakness.description)}`
-          );
+          const ic = impactColor(weakness.impact);
+          console.log(`    ${ic("●")} ${weakness.category}: ${c.dim(weakness.description)}`);
         }
       }
 
@@ -691,9 +726,8 @@ export function registerEvalCommand(program: Command): void {
         if (result.suggestions.length > 0) {
           printSection("Suggestions");
           for (const s of result.suggestions) {
-            const priorityColor =
-              s.priority === "high" ? c.red : s.priority === "medium" ? c.yellow : c.dim;
-            console.log(`  ${priorityColor(`[${s.priority}]`)} ${s.description}`);
+            const pc = priorityColor(s.priority);
+            console.log(`  ${pc(`[${s.priority}]`)} ${s.description}`);
             console.log(`    ${c.dim("Files:")} ${s.targetFiles.join(", ")}`);
           }
         }
@@ -1041,12 +1075,12 @@ export function registerEvalCommand(program: Command): void {
             allRunResults.push(s.value);
             doneCount++;
           } else {
-            const reason =
-              s.status === "rejected"
-                ? s.reason instanceof Error
-                  ? s.reason.message
-                  : String(s.reason)
-                : "returned null";
+            let reason: string;
+            if (s.status === "rejected") {
+              reason = s.reason instanceof Error ? s.reason.message : String(s.reason);
+            } else {
+              reason = "returned null";
+            }
             warn(`${entry.label}: ${reason}`);
           }
         }
@@ -1085,9 +1119,8 @@ export function registerEvalCommand(program: Command): void {
             );
 
             const runDisplayScore = normalizeScoreForDisplay(result.run.overallScore);
-            const scoreColor =
-              runDisplayScore >= 0.8 ? c.green : runDisplayScore >= 0.6 ? c.yellow : c.red;
-            printKV("Overall Score", scoreColor(runDisplayScore.toFixed(2)));
+            const runSc = scoreColor(runDisplayScore, 0.8, 0.6);
+            printKV("Overall Score", runSc(runDisplayScore.toFixed(2)));
             printKV("Duration", formatDuration(result.run.durationMs));
 
             if (!isMulti) {
@@ -1097,7 +1130,7 @@ export function registerEvalCommand(program: Command): void {
                 ["Test", "Category", "Score", "Pass", "Feedback"],
                 result.results.map((r) => {
                   const ds = normalizeScoreForDisplay(r.overallScore);
-                  const sc = ds >= 0.8 ? c.green : ds >= 0.6 ? c.yellow : c.red;
+                  const sc = scoreColor(ds, 0.8, 0.6);
                   return [
                     c.dim(r.testCaseId),
                     truncate(r.testCaseId.split("-").slice(0, 2).join("-"), 15),
@@ -1138,7 +1171,7 @@ export function registerEvalCommand(program: Command): void {
           ["Model", "Score", "Pass", "Fail", "Duration"],
           allRunResults.map((r) => {
             const ds = normalizeScoreForDisplay(r.run.overallScore);
-            const sc = ds >= 0.8 ? c.green : ds >= 0.6 ? c.yellow : c.red;
+            const sc = scoreColor(ds, 0.8, 0.6);
             return [
               r.label,
               sc(ds.toFixed(2)),
@@ -1253,7 +1286,7 @@ export function registerEvalCommand(program: Command): void {
           ["Model", "Score", "Pass", "Fail", "Tests", "Date"],
           modelRuns.map((m) => {
             const ds = normalizeScoreForDisplay(m.run.overall_score);
-            const sc = ds >= 0.8 ? c.green : ds >= 0.6 ? c.yellow : c.red;
+            const sc = scoreColor(ds, 0.8, 0.6);
             return [
               m.label,
               sc(ds.toFixed(2)),
@@ -1412,7 +1445,7 @@ export function registerEvalCommand(program: Command): void {
         ["Run ID", "Date", "Profile", "Tests", "Pass", "Fail", "Score", "Duration"],
         runs.map((run) => {
           const ds = normalizeScoreForDisplay(run.overallScore);
-          const scoreColor = ds >= 0.8 ? c.green : ds >= 0.6 ? c.yellow : c.red;
+          const sc = scoreColor(ds, 0.8, 0.6);
           return [
             c.dim(run.id.substring(0, 8)),
             new Date(run.timestamp).toLocaleDateString(),
@@ -1420,7 +1453,7 @@ export function registerEvalCommand(program: Command): void {
             String(run.totalTestCases),
             c.green(String(run.passedCount)),
             run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"),
-            scoreColor(ds.toFixed(2)),
+            sc(ds.toFixed(2)),
             formatDuration(run.durationMs),
           ];
         })
@@ -1551,8 +1584,8 @@ export function registerEvalCommand(program: Command): void {
         printKV("Final Score", String(result.finalScore));
 
         const delta = result.finalScore - result.initialScore;
-        const deltaColor = delta > 0 ? c.green : delta < 0 ? c.red : c.dim;
-        printKV("Change", deltaColor(`${delta > 0 ? "+" : ""}${delta.toFixed(1)} pts`));
+        const dc = deltaColor(delta);
+        printKV("Change", dc(`${delta > 0 ? "+" : ""}${delta.toFixed(1)} pts`));
 
         if (result.changes.length > 0) {
           printSection("Changes");
@@ -1821,8 +1854,8 @@ export function registerEvalCommand(program: Command): void {
         printKV("Final Score", String(result.finalScore));
 
         const delta = result.finalScore - result.initialScore;
-        const deltaColor = delta > 0 ? c.green : delta < 0 ? c.red : c.dim;
-        printKV("Change", deltaColor(`${delta > 0 ? "+" : ""}${delta.toFixed(1)} pts`));
+        const dc = deltaColor(delta);
+        printKV("Change", dc(`${delta > 0 ? "+" : ""}${delta.toFixed(1)} pts`));
 
         if (result.improved) {
           success(`Score improved: ${result.initialScore} -> ${result.finalScore}`);

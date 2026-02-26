@@ -286,6 +286,11 @@ function formatModelDisplay(presetName?: string, modelId?: string): string {
   return shortModel;
 }
 
+/** Normalize a score to the 0-1 range (scores > 1 are assumed to be percentages). */
+function normalizeScore(score: number): number {
+  return score <= 1 ? score : score / 100;
+}
+
 function getScoreColor(score: number): string {
   if (score >= 0.9) return "#4ade80";
   if (score >= 0.7) return "#fbbf24";
@@ -336,7 +341,7 @@ function buildMultiSeriesRadarData(
       data: criteriaOrder.map((cr) => {
         const score = scoreMap.get(cr.name.toLowerCase()) ?? 0;
         return {
-          label: cr.name.length > 14 ? cr.name.slice(0, 12) + ".." : cr.name,
+          label: cr.name.length > 14 ? `${cr.name.slice(0, 12)}..` : cr.name,
           value: Math.round(score * 100),
           maxValue: 100,
         };
@@ -1050,12 +1055,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   const mainRuns = (data.benchmarkRuns || []).filter(
     (r) => r.status === "completed" && r.overall_score > 0 && !r.version_tag?.startsWith("evo/")
   );
-  const mainLatestScore =
-    mainRuns.length > 0
-      ? mainRuns[0].overall_score <= 1
-        ? mainRuns[0].overall_score
-        : mainRuns[0].overall_score / 100
-      : null;
+  const mainLatestScore = mainRuns.length > 0 ? normalizeScore(mainRuns[0].overall_score) : null;
 
   // Build version data with parent branch and latest score
   const versionGraphData = (data.versions || []).map((v) => {
@@ -1067,12 +1067,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
         r.overall_score > 0 &&
         (r.version_tag?.includes(v.branchName) || r.version_tag?.includes(branchNorm))
     );
-    const latestScore =
-      runs.length > 0
-        ? runs[0].overall_score <= 1
-          ? runs[0].overall_score
-          : runs[0].overall_score / 100
-        : null;
+    const latestScore = runs.length > 0 ? normalizeScore(runs[0].overall_score) : null;
     return {
       id: v.id.slice(0, 8),
       branch: v.branchName,
@@ -1110,13 +1105,12 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   if (data.selectedVersion && selectedInfo) {
     // Version info card
     const branchBadge = ui.badge(selectedInfo.branchName, { variant: "info" });
+    const statusVariantMap: Record<string, "warning" | "success" | "default"> = {
+      active: "warning",
+      merged: "success",
+    };
     const statusBadge = ui.badge(selectedInfo.status, {
-      variant:
-        selectedInfo.status === "active"
-          ? "warning"
-          : selectedInfo.status === "merged"
-            ? "success"
-            : "default",
+      variant: statusVariantMap[selectedInfo.status] ?? "default",
     });
     const infoDetails: string[] = [];
     if (selectedInfo.triggerMode) {

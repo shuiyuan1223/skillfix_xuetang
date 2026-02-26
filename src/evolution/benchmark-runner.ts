@@ -741,7 +741,14 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
     // 3-point: valid values are 0.0, 0.5, 1.0
     if (clamped === 1.0 || clamped === 0.5 || clamped === 0.0) return clamped;
     // Snap to nearest valid value
-    const snapped = clamped >= 0.75 ? 1.0 : clamped >= 0.25 ? 0.5 : 0.0;
+    let snapped: number;
+    if (clamped >= 0.75) {
+      snapped = 1.0;
+    } else if (clamped >= 0.25) {
+      snapped = 0.5;
+    } else {
+      snapped = 0.0;
+    }
     log.warn(`3-point score ${clamped} is not 0.0/0.5/1.0, snapped to ${snapped}`);
     return snapped;
   }

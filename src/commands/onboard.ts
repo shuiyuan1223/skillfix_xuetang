@@ -511,6 +511,8 @@ async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
       await setupEmbedding(config);
       break;
     }
+    default:
+      break;
   }
 }
 

@@ -1,0 +1,27 @@
+{
+  "healthRecords": [
+    {
+      "value": [
+        { "fieldName": "sleep_type", "integerValue": 1 },
+        { "fieldName": "wakeup_time", "longValue": 1770228000000 },
+        { "fieldName": "all_sleep_time", "integerValue": 480 },
+        { "fieldName": "sleep_score", "integerValue": 85 }
+      ]
+    },
+    {
+      "value": [
+        { "fieldName": "sleep_type", "integerValue": 1 },
+        { "fieldName": "wakeup_time", "longValue": 1770141600000 },
+        { "fieldName": "all_sleep_time", "integerValue": 420 },
+        { "fieldName": "sleep_score", "integerValue": 78 }
+      ]
+    },
+    {
+      "value": [
+        { "fieldName": "sleep_type", "integerValue": 3 },
+        { "fieldName": "wakeup_time", "longValue": 1770228000000 },
+        { "fieldName": "all_sleep_time", "integerValue": 30 }
+      ]
+    }
+  ]
+}

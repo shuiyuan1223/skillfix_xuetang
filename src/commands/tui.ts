@@ -296,6 +296,8 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
         case "connected":
           // Session connected confirmation - ignore
           break;
+        default:
+          break;
       }
     } catch {
       // Ignore processing errors
