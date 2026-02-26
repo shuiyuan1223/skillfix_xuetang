@@ -19,6 +19,7 @@ import {
   updateIncidentType,
   updateIncidentGitHubIssue,
   updateIncidentNotes,
+  updateIncidentTraceId,
   getIncidentStats,
   insertTestCase,
   type IncidentType,
@@ -449,6 +450,44 @@ export const getIncidentStatsTool: PHATool<Record<string, never>> = {
 };
 
 // ============================================================================
+// update_incident_trace
+// ============================================================================
+
+export const updateIncidentTraceTool: PHATool<{
+  id: string;
+  traceId: string;
+  notes?: string;
+}> = {
+  name: "update_incident_trace",
+  description: "关联 incident 的 trace_id，用于在 LLM 日志中定位根因",
+  displayName: "关联 Trace",
+  category: "evolution",
+  icon: "link",
+  label: "Update Incident Trace",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Incident ID" },
+      traceId: { type: "string", description: "Trace ID to link (session ID or LLM log entry)" },
+      notes: { type: "string", description: "Optional notes about the root cause findings" },
+    },
+    required: ["id", "traceId"],
+  },
+  execute: async (args) => {
+    const existing = getIncident(args.id);
+    if (!existing) return { success: false, error: `Incident not found: ${args.id}` };
+
+    updateIncidentTraceId(args.id, args.traceId);
+    if (args.notes) updateIncidentNotes(args.id, args.notes);
+
+    return {
+      success: true,
+      message: `Incident ${args.id} linked to trace: ${args.traceId}`,
+    };
+  },
+};
+
+// ============================================================================
 // Export
 // ============================================================================
 
@@ -457,6 +496,7 @@ export const incidentTools = [
   getIncidentTool,
   updateIncidentStatusTool,
   updateIncidentTypeTool,
+  updateIncidentTraceTool,
   createGitHubIssueForIncidentTool,
   convertIncidentToTestCaseTool,
   getIncidentStatsTool,

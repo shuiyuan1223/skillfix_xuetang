@@ -77,6 +77,8 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   create_github_issue_for_incident: "创建 GitHub Issue",
   convert_incident_to_test_case: "转为测试用例",
   get_incident_stats: "Incidents 统计",
+  update_incident_trace: "关联 Trace",
+  search_llm_logs: "搜索 LLM 日志",
 };
 
 // ---- ThinkingMessage: collapsible thinking block for thinking-mode chat ----
