@@ -7188,6 +7188,35 @@ export async function startGateway(
   log.info(`MCP JSON-RPC at http://${displayHost}:${port}/api/mcp`);
   log.info(`A2A Agent Card at http://${displayHost}:${port}/.well-known/agent.json`);
 
+  // Start Slack Socket Mode if configured
+  const slackConfig = loadConfig().slack;
+  if (slackConfig?.appToken) {
+    void (async (): Promise<void> => {
+      try {
+        const { startSlackSocketMode } = await import("../integrations/slack-socket.js");
+        const judgeModel = resolveAgentProfileModel("pha");
+        const slackLlmCall = async (prompt: string): Promise<string> => {
+          const { MockDataSource: SlackMockDS } = await import("../data-sources/mock.js");
+          const slackAgent = await createPHAAgent({
+            apiKey: judgeModel.apiKey,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            provider: judgeModel.provider as any,
+            modelId: judgeModel.modelId,
+            baseUrl: judgeModel.baseUrl,
+            dataSource: new SlackMockDS(),
+          });
+          return slackAgent.chatAndWait(prompt);
+        };
+        startSlackSocketMode(slackConfig.appToken!, slackConfig.channelId, slackLlmCall);
+        log.info("Slack Socket Mode started", {
+          channelId: slackConfig.channelId ?? "all channels",
+        });
+      } catch (err) {
+        log.warn("Slack Socket Mode failed to start", { error: String(err) });
+      }
+    })();
+  }
+
   // Trigger gateway_start hook
   const hr = getGlobalHookRunner();
   if (hr) {

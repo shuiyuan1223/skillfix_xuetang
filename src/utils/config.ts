@@ -256,6 +256,13 @@ export interface PHAConfig {
     enabled?: boolean;
     checkIntervalMinutes?: number;
   };
+  /** Slack integration configuration */
+  slack?: {
+    /** App-Level Token (xapp-...) for Socket Mode — obtained from Slack App settings */
+    appToken?: string;
+    /** Optional: only ingest messages from this channel ID (e.g. "C01234ABCDE") */
+    channelId?: string;
+  };
   /** Plugin system configuration */
   plugins?: {
     enabled?: boolean;
