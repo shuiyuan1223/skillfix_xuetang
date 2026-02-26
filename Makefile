@@ -191,9 +191,9 @@ endif
 	tar czf pha-sync.tar.gz --exclude=node_modules --exclude=.git --exclude=dist --exclude=ui/dist --exclude=ui/node_modules --exclude=.pha --exclude=.env --exclude="*.log" --exclude=pha-sync.tar.gz . || if [ $$? -eq 1 ]; then true; else exit $$?; fi
 	@echo ==> Uploading to $(_H):$(_P)...
 	powershell -NoProfile -Command "scp -i '$(SSH_KEY)' pha-sync.tar.gz '$(_H):$(_P)/pha-sync.tar.gz'"
-	-del pha-sync.tar.gz 2>nul
+	powershell -NoProfile -Command "Remove-Item -Force pha-sync.tar.gz -ErrorAction SilentlyContinue"
 	@echo ==> Extracting and building on remote...
 	powershell -NoProfile -Command "ssh -i '$(SSH_KEY)' $(_H) 'source ~/.bashrc && cd $(_P) && tar xzf pha-sync.tar.gz && rm pha-sync.tar.gz && make install'"
 	@echo ==> Restarting service...
-	powershell -NoProfile -Command "ssh -i '$(SSH_KEY)' $(_H) 'source ~/.bashrc && pkill -f dist/cli 2>/dev/null; cd $(_P) && nohup pha start > /tmp/pha.log 2>&1 &'"
+	powershell -NoProfile -Command "ssh -i '$(SSH_KEY)' $(_H) 'source ~/.bashrc && pkill -f dist/cli 2>/dev/null; cd $(_P) && nohup pha start > /tmp/pha.log 2>&1 & exit 0'"
 	@echo ==> Sync complete!
