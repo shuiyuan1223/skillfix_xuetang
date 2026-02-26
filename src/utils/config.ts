@@ -204,6 +204,13 @@ export interface PHAConfig {
     autoStart: boolean;
     /** URL path prefix, e.g. "/health_sport/pha" */
     basePath?: string;
+    /** Sidebar navigation visibility control */
+    sidebar?: {
+      /** Whitelist: only show these view IDs (takes priority over exclude) */
+      include?: string[];
+      /** Blacklist: hide these view IDs */
+      exclude?: string[];
+    };
   };
   llm: LLMConfig;
   dataSources: {

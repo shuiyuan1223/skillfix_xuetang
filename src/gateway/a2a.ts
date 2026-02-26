@@ -124,6 +124,127 @@ interface JsonRpcResponse {
   error?: { code: number; message: string; data?: unknown };
 }
 
+type TaskExecutor = (taskId: string, message: string) => Promise<string>;
+
+function makeRpcError(id: string | number | null, code: number, message: string): JsonRpcResponse {
+  return { jsonrpc: "2.0", id, error: { code, message } };
+}
+
+function makeRpcResult(id: string | number | null, result: unknown): JsonRpcResponse {
+  return { jsonrpc: "2.0", id, result };
+}
+
+function taskResult(task: A2ATask): {
+  id: string;
+  state: TaskState;
+  messages: A2ATask["messages"];
+} {
+  return { id: task.id, state: task.state, messages: task.messages };
+}
+
+function findTask(
+  id: string | number | null,
+  taskId: string | undefined
+): JsonRpcResponse | A2ATask {
+  if (!taskId) {
+    return makeRpcError(id, -32602, "Missing task id");
+  }
+  const task = manager.tasks.get(taskId);
+  if (!task) {
+    return makeRpcError(id, -32602, `Task not found: ${taskId}`);
+  }
+  return task;
+}
+
+async function handleTasksSend(
+  id: string | number | null,
+  params: Record<string, unknown> | undefined,
+  executeTask: TaskExecutor
+): Promise<JsonRpcResponse> {
+  const p = params as
+    | { id?: string; message?: { role: string; parts: Array<{ type: string; text?: string }> } }
+    | undefined;
+
+  if (!p?.message?.parts?.length) {
+    return makeRpcError(id, -32602, "Missing message");
+  }
+
+  const taskId = p.id || crypto.randomUUID();
+  const textPart = p.message.parts.find((pt) => pt.type === "text");
+  const userMessage = textPart?.text || "";
+
+  if (!userMessage) {
+    return makeRpcError(id, -32602, "Empty message text");
+  }
+
+  let task = manager.tasks.get(taskId);
+  if (!task) {
+    task = {
+      id: taskId,
+      state: "submitted",
+      messages: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    manager.tasks.set(taskId, task);
+  }
+
+  task.messages.push({ role: "user", parts: [{ type: "text", text: userMessage }] });
+  task.state = "working";
+  task.updatedAt = Date.now();
+
+  try {
+    const response = await executeTask(taskId, userMessage);
+    task.messages.push({ role: "agent", parts: [{ type: "text", text: response }] });
+    task.state = "completed";
+  } catch (error) {
+    task.state = "failed";
+    task.messages.push({
+      role: "agent",
+      parts: [
+        { type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` },
+      ],
+    });
+  }
+  task.updatedAt = Date.now();
+
+  return makeRpcResult(id, taskResult(task));
+}
+
+function handleTasksGet(
+  id: string | number | null,
+  params: Record<string, unknown> | undefined
+): JsonRpcResponse {
+  const p = params as { id?: string } | undefined;
+  const result = findTask(id, p?.id);
+  if ("jsonrpc" in result) {
+    return result;
+  }
+  return makeRpcResult(id, taskResult(result));
+}
+
+function handleTasksCancel(
+  id: string | number | null,
+  params: Record<string, unknown> | undefined
+): JsonRpcResponse {
+  const p = params as { id?: string } | undefined;
+  const result = findTask(id, p?.id);
+  if ("jsonrpc" in result) {
+    return result;
+  }
+
+  const controller = manager.abortControllers.get(result.id);
+  if (controller) {
+    controller.abort();
+    manager.abortControllers.delete(result.id);
+  }
+
+  result.state = "canceled";
+  result.updatedAt = Date.now();
+
+  return makeRpcResult(id, taskResult(result));
+}
+
 /**
  * Handle A2A JSON-RPC 2.0 request.
  *
@@ -133,189 +254,29 @@ interface JsonRpcResponse {
  */
 export async function handleA2ARequest(
   body: unknown,
-  executeTask: (taskId: string, message: string) => Promise<string>
+  executeTask: TaskExecutor
 ): Promise<JsonRpcResponse> {
   const req = body as JsonRpcRequest;
 
   if (!req.jsonrpc || req.jsonrpc !== "2.0" || !req.method) {
-    return {
-      jsonrpc: "2.0",
-      id: req?.id ?? null,
-      error: { code: -32600, message: "Invalid Request" },
-    };
+    return makeRpcError(req?.id ?? null, -32600, "Invalid Request");
   }
 
   const id = req.id ?? null;
 
   try {
     switch (req.method) {
-      case "tasks/send": {
-        const params = req.params as
-          | {
-              id?: string;
-              message?: { role: string; parts: Array<{ type: string; text?: string }> };
-            }
-          | undefined;
-
-        if (!params?.message?.parts?.length) {
-          return {
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32602, message: "Missing message" },
-          };
-        }
-
-        const taskId = params.id || crypto.randomUUID();
-        const textPart = params.message.parts.find((p) => p.type === "text");
-        const userMessage = textPart?.text || "";
-
-        if (!userMessage) {
-          return {
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32602, message: "Empty message text" },
-          };
-        }
-
-        // Create or update task
-        let task = manager.tasks.get(taskId);
-        if (!task) {
-          task = {
-            id: taskId,
-            state: "submitted",
-            messages: [],
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-          manager.tasks.set(taskId, task);
-        }
-
-        task.messages.push({
-          role: "user",
-          parts: [{ type: "text", text: userMessage }],
-        });
-        task.state = "working";
-        task.updatedAt = Date.now();
-
-        try {
-          const response = await executeTask(taskId, userMessage);
-          task.messages.push({
-            role: "agent",
-            parts: [{ type: "text", text: response }],
-          });
-          task.state = "completed";
-          task.updatedAt = Date.now();
-        } catch (error) {
-          task.state = "failed";
-          task.updatedAt = Date.now();
-          task.messages.push({
-            role: "agent",
-            parts: [
-              {
-                type: "text",
-                text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-              },
-            ],
-          });
-        }
-
-        return {
-          jsonrpc: "2.0",
-          id,
-          result: {
-            id: task.id,
-            state: task.state,
-            messages: task.messages,
-          },
-        };
-      }
-
-      case "tasks/get": {
-        const params = req.params as { id?: string } | undefined;
-        if (!params?.id) {
-          return {
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32602, message: "Missing task id" },
-          };
-        }
-
-        const task = manager.tasks.get(params.id);
-        if (!task) {
-          return {
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32602, message: `Task not found: ${params.id}` },
-          };
-        }
-
-        return {
-          jsonrpc: "2.0",
-          id,
-          result: {
-            id: task.id,
-            state: task.state,
-            messages: task.messages,
-          },
-        };
-      }
-
-      case "tasks/cancel": {
-        const params = req.params as { id?: string } | undefined;
-        if (!params?.id) {
-          return {
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32602, message: "Missing task id" },
-          };
-        }
-
-        const task = manager.tasks.get(params.id);
-        if (!task) {
-          return {
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32602, message: `Task not found: ${params.id}` },
-          };
-        }
-
-        const controller = manager.abortControllers.get(params.id);
-        if (controller) {
-          controller.abort();
-          manager.abortControllers.delete(params.id);
-        }
-
-        task.state = "canceled";
-        task.updatedAt = Date.now();
-
-        return {
-          jsonrpc: "2.0",
-          id,
-          result: {
-            id: task.id,
-            state: task.state,
-            messages: task.messages,
-          },
-        };
-      }
-
-      default: {
-        return {
-          jsonrpc: "2.0",
-          id,
-          error: { code: -32601, message: `Method not found: ${req.method}` },
-        };
-      }
+      case "tasks/send":
+        return await handleTasksSend(id, req.params, executeTask);
+      case "tasks/get":
+        return handleTasksGet(id, req.params);
+      case "tasks/cancel":
+        return handleTasksCancel(id, req.params);
+      default:
+        return makeRpcError(id, -32601, `Method not found: ${req.method}`);
     }
   } catch (error) {
     log.error("A2A request failed", { method: req.method, error });
-    return {
-      jsonrpc: "2.0",
-      id,
-      error: {
-        code: -32603,
-        message: error instanceof Error ? error.message : String(error),
-      },
-    };
+    return makeRpcError(id, -32603, error instanceof Error ? error.message : String(error));
   }
 }

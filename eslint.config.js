@@ -81,6 +81,8 @@ export default [
       "default-case": "error",                                       // G.CTL.01 switch 必须有 default 分支
 
       // ── Ch7: 函数 ────────────────────────────────────────────────────────────
+      "complexity": ["warn", { max: 20 }],                           // G.MET.01 圈复杂度 ≤ 20
+      "max-lines-per-function": ["warn", { max: 100, skipBlankLines: true, skipComments: true }], // G.MET.02 函数体 ≤ 100 行
       "consistent-return": "error",                                  // G.MET.07 一致的 return
       "prefer-rest-params": "error",                                 // G.MET.10 rest 替代 arguments
       "@typescript-eslint/no-this-alias": "error",                   // Ext-8.3  禁止 this 赋值
@@ -130,14 +132,6 @@ export default [
           message: "G.MOD.01: 禁止 export var，导出变量必须是 const（不可变）",
         },
       ],
-
-      // ── 代码坏味道 ─────────────────────────────────────────────────────────
-      "complexity": ["warn", { max: 20 }],                           // huge_cca_cyclomatic_complexity 圈复杂度 ≤ 20
-      "max-lines-per-function": ["warn", {                           // huge_method 函数不超 100 行
-        max: 100,
-        skipBlankLines: true,
-        skipComments: true,
-      }],
 
       // ── Ch13: Google/ESLint 补充规则 ─────────────────────────────────────────
       "import/no-default-export": "error",                        // EXT.13.1 禁止 default export

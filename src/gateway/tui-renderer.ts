@@ -26,31 +26,6 @@ const ansi = {
   bgBlue: (s: string) => `\x1b[44;37m${s}\x1b[0m`,
 };
 
-type AnsiColorFn = (s: string) => string;
-
-/** Map a numeric score to a color function: green >= 0.9, yellow >= 0.7, red otherwise */
-function scoreColor(score: number): AnsiColorFn {
-  if (score >= 0.9) return ansi.green;
-  if (score >= 0.7) return ansi.yellow;
-  return ansi.red;
-}
-
-const trendArrowMap: Record<string, string> = { up: "\u25B2", down: "\u25BC" };
-const trendColorMap: Record<string, AnsiColorFn> = { up: ansi.green, down: ansi.red };
-
-const fileStatusColorMap: Record<string, AnsiColorFn> = {
-  added: ansi.green,
-  deleted: ansi.red,
-  modified: ansi.yellow,
-};
-
-const fileStatusCharMap: Record<string, string> = {
-  added: "A",
-  deleted: "D",
-  modified: "M",
-  renamed: "R",
-};
-
 export interface TUIAction {
   number: number;
   label: string;
@@ -102,94 +77,61 @@ export function renderA2UIToTUI(
   return { lines, actions: ctx.actions };
 }
 
+type ComponentRenderer = (comp: A2UIComponent, ctx: RenderContext) => string[];
+
+const COMPONENT_RENDERERS: Record<string, ComponentRenderer> = {
+  Text: renderText,
+  Card: renderCard,
+  Column: renderColumn,
+  Row: renderRow,
+  Grid: renderGrid,
+  StatCard: renderStatCard,
+  Metric: renderMetric,
+  Chart: renderChart,
+  Table: renderTable,
+  DataTable: renderTable,
+  Tabs: renderTabs,
+  Button: renderButton,
+  Nav: renderNav,
+  ChatMessages: renderChatMessages,
+  ChatInput: () => [],
+  Form: renderForm,
+  FormInput: renderFormInput,
+  Progress: renderProgress,
+  ScoreGauge: renderScoreGauge,
+  Badge: renderBadge,
+  StatusBadge: renderStatusBadge,
+  GitTimeline: renderGitTimeline,
+  StepIndicator: renderStepIndicator,
+  FileTree: renderFileTree,
+  VersionGraph: renderVersionGraph,
+  DiffView: renderDiffView,
+  CodeEditor: renderCodeEditor,
+  CommitList: renderCommitList,
+  ArenaPills: renderArenaPills,
+  ArenaScoreTable: renderArenaScoreTable,
+  ArenaCategoryCard: renderArenaCategoryCard,
+  RadarChart: renderRadarChartTUI,
+  ArenaRunPicker: renderArenaRunPickerTUI,
+  ArenaModeToggle: renderArenaModeToggleTUI,
+  Collapsible: renderCollapsible,
+  ActivityRings: renderActivityRings,
+  LogViewer: renderLogViewer,
+  Skeleton: (_comp, ctx) => [indent(ctx, ansi.dim("Loading..."))],
+  Divider: (_comp, ctx) => [
+    indent(ctx, ansi.dim("─".repeat(Math.min(ctx.width - ctx.indent * 2, 60)))),
+  ],
+  Spacer: () => [""],
+  Icon: () => [],
+  Modal: renderModal,
+};
+
 function renderComponent(comp: A2UIComponent, ctx: RenderContext): string[] {
-  switch (componentType(comp)) {
-    case "Text":
-      return renderText(comp, ctx);
-    case "Card":
-      return renderCard(comp, ctx);
-    case "Column":
-      return renderColumn(comp, ctx);
-    case "Row":
-      return renderRow(comp, ctx);
-    case "Grid":
-      return renderGrid(comp, ctx);
-    case "StatCard":
-      return renderStatCard(comp, ctx);
-    case "Metric":
-      return renderMetric(comp, ctx);
-    case "Chart":
-      return renderChart(comp, ctx);
-    case "Table":
-    case "DataTable":
-      return renderTable(comp, ctx);
-    case "Tabs":
-      return renderTabs(comp, ctx);
-    case "Button":
-      return renderButton(comp, ctx);
-    case "Nav":
-      return renderNav(comp, ctx);
-    case "ChatMessages":
-      return renderChatMessages(comp, ctx);
-    case "ChatInput":
-      return [];
-    case "Form":
-      return renderForm(comp, ctx);
-    case "FormInput":
-      return renderFormInput(comp, ctx);
-    case "Progress":
-      return renderProgress(comp, ctx);
-    case "ScoreGauge":
-      return renderScoreGauge(comp, ctx);
-    case "Badge":
-      return renderBadge(comp, ctx);
-    case "StatusBadge":
-      return renderStatusBadge(comp, ctx);
-    case "GitTimeline":
-      return renderGitTimeline(comp, ctx);
-    case "StepIndicator":
-      return renderStepIndicator(comp, ctx);
-    case "FileTree":
-      return renderFileTree(comp, ctx);
-    case "VersionGraph":
-      return renderVersionGraph(comp, ctx);
-    case "DiffView":
-      return renderDiffView(comp, ctx);
-    case "CodeEditor":
-      return renderCodeEditor(comp, ctx);
-    case "CommitList":
-      return renderCommitList(comp, ctx);
-    case "ArenaPills":
-      return renderArenaPills(comp, ctx);
-    case "ArenaScoreTable":
-      return renderArenaScoreTable(comp, ctx);
-    case "ArenaCategoryCard":
-      return renderArenaCategoryCard(comp, ctx);
-    case "RadarChart":
-      return renderRadarChartTUI(comp, ctx);
-    case "ArenaRunPicker":
-      return renderArenaRunPickerTUI(comp, ctx);
-    case "ArenaModeToggle":
-      return renderArenaModeToggleTUI(comp, ctx);
-    case "Collapsible":
-      return renderCollapsible(comp, ctx);
-    case "ActivityRings":
-      return renderActivityRings(comp, ctx);
-    case "LogViewer":
-      return renderLogViewer(comp, ctx);
-    case "Skeleton":
-      return [indent(ctx, ansi.dim("Loading..."))];
-    case "Divider":
-      return [indent(ctx, ansi.dim("─".repeat(Math.min(ctx.width - ctx.indent * 2, 60))))];
-    case "Spacer":
-      return [""];
-    case "Icon":
-      return [];
-    case "Modal":
-      return renderModal(comp, ctx);
-    default:
-      return renderChildren(comp, ctx);
+  const renderer = COMPONENT_RENDERERS[componentType(comp)];
+  if (renderer) {
+    return renderer(comp, ctx);
   }
+  return renderChildren(comp, ctx);
 }
 
 // ============================================================================
@@ -321,8 +263,18 @@ function renderStatCard(comp: A2UIComponent, ctx: RenderContext): string[] {
 
   let trendStr = "";
   if (trend) {
-    const arrow = trendArrowMap[trend.direction] ?? "\u2500";
-    const trendColor = trendColorMap[trend.direction] ?? ansi.dim;
+    let arrow: string;
+    let trendColor: (s: string) => string;
+    if (trend.direction === "up") {
+      arrow = "▲";
+      trendColor = ansi.green;
+    } else if (trend.direction === "down") {
+      arrow = "▼";
+      trendColor = ansi.red;
+    } else {
+      arrow = "─";
+      trendColor = ansi.dim;
+    }
     trendStr = ` ${trendColor(`${arrow} ${trend.value}`)}`;
   }
 
@@ -506,11 +458,14 @@ function renderButton(comp: A2UIComponent, ctx: RenderContext): string[] {
   });
 
   const numStr = ansi.cyan(`[${ctx.actionCounter}]`);
-  const variantLabelMap: Record<string, string> = {
-    danger: ansi.red(label),
-    primary: ansi.bold(label),
-  };
-  const labelStr = (variant && variantLabelMap[variant]) ?? label;
+  let labelStr: string;
+  if (variant === "danger") {
+    labelStr = ansi.red(label);
+  } else if (variant === "primary") {
+    labelStr = ansi.bold(label);
+  } else {
+    labelStr = label;
+  }
 
   return [indent(ctx, `${numStr} ${labelStr}`)];
 }
@@ -530,40 +485,65 @@ function renderNav(comp: A2UIComponent, ctx: RenderContext): string[] {
   return lines;
 }
 
+interface ChatMessage {
+  role: string;
+  content?: string;
+  parts?: Array<{ type: string; content?: string; toolName?: string; status?: string }>;
+}
+
+function renderUserMessage(msg: ChatMessage, ctx: RenderContext): string[] {
+  const text = msg.parts?.[0]?.content || msg.content || "";
+  return [indent(ctx, `${ansi.green("You")} ${ansi.dim("›")} ${text}`)];
+}
+
+function renderAssistantPart(
+  part: { type: string; content?: string; toolName?: string; status?: string },
+  ctx: RenderContext
+): string[] {
+  if (part.type === "text" && part.content?.trim()) {
+    return wrapLines(part.content, ctx);
+  }
+  if (part.type === "tool_use") {
+    let statusLabel: string;
+    if (part.status === "running") {
+      statusLabel = "...";
+    } else if (part.status === "error") {
+      statusLabel = "ERR";
+    } else {
+      statusLabel = "OK";
+    }
+    return [indent(ctx, `  ${ansi.yellow("Tool")} ${part.toolName} [${statusLabel}]`)];
+  }
+  if (part.type === "tool_result") {
+    return [indent(ctx, ansi.dim("  [Card Results]"))];
+  }
+  return [];
+}
+
+function renderAssistantMessage(msg: ChatMessage, ctx: RenderContext): string[] {
+  const lines: string[] = [indent(ctx, ansi.cyan("Assistant"))];
+  if (msg.parts && msg.parts.length > 0) {
+    for (const part of msg.parts) {
+      lines.push(...renderAssistantPart(part, ctx));
+    }
+  } else {
+    lines.push(...wrapLines(msg.content || "", ctx));
+  }
+  return lines;
+}
+
 function renderChatMessages(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const messages =
-    (prop(comp, "messages") as Array<{
-      role: string;
-      content?: string;
-      parts?: Array<{ type: string; content?: string; toolName?: string; status?: string }>;
-    }>) || [];
+  const messages = (prop(comp, "messages") as ChatMessage[]) || [];
   const streaming = prop(comp, "streaming") as boolean | undefined;
   const streamingContent = prop(comp, "streamingContent") as string | undefined;
   const lines: string[] = [];
 
   for (const msg of messages) {
     if (msg.role === "user") {
-      const text = msg.parts?.[0]?.content || msg.content || "";
-      lines.push(indent(ctx, `${ansi.green("You")} ${ansi.dim("›")} ${text}`));
+      lines.push(...renderUserMessage(msg, ctx));
     } else if (msg.role === "assistant") {
-      lines.push(indent(ctx, ansi.cyan("Assistant")));
-      if (msg.parts && msg.parts.length > 0) {
-        for (const part of msg.parts) {
-          if (part.type === "text" && part.content?.trim()) {
-            lines.push(...wrapLines(part.content, ctx));
-          } else if (part.type === "tool_use") {
-            const toolStatusMap: Record<string, string> = { running: "...", error: "ERR" };
-            const statusLabel = (part.status && toolStatusMap[part.status]) ?? "OK";
-            lines.push(indent(ctx, `  ${ansi.yellow("Tool")} ${part.toolName} [${statusLabel}]`));
-          } else if (part.type === "tool_result") {
-            lines.push(indent(ctx, ansi.dim("  [Card Results]")));
-          }
-        }
-      } else {
-        lines.push(...wrapLines(msg.content || "", ctx));
-      }
+      lines.push(...renderAssistantMessage(msg, ctx));
     } else if (msg.role === "tool") {
-      // Legacy tool messages
       lines.push(indent(ctx, `${ansi.yellow("Tool")} ${ansi.dim("›")} ${msg.content || ""}`));
     }
     lines.push("");
@@ -707,12 +687,16 @@ function renderGitTimeline(comp: A2UIComponent, ctx: RenderContext): string[] {
     const connector = isLast ? "└" : "├";
     const pipe = isLast ? " " : "│";
 
-    const eventStatusIconMap: Record<string, string> = {
-      success: ansi.green("\u25CF"),
-      failed: ansi.red("\u25CF"),
-      active: ansi.yellow("\u25CF"),
-    };
-    const statusIcon = (e.status && eventStatusIconMap[e.status]) ?? ansi.dim("\u25CB");
+    let statusIcon: string;
+    if (e.status === "success") {
+      statusIcon = ansi.green("●");
+    } else if (e.status === "failed") {
+      statusIcon = ansi.red("●");
+    } else if (e.status === "active") {
+      statusIcon = ansi.yellow("●");
+    } else {
+      statusIcon = ansi.dim("○");
+    }
 
     const hashStr = e.hash ? ansi.dim(` (${e.hash.substring(0, 7)})`) : "";
     const scoreStr = e.score != null ? ansi.cyan(` [${e.score}]`) : "";
@@ -774,9 +758,24 @@ function renderFileTree(comp: A2UIComponent, ctx: RenderContext): string[] {
   const lines: string[] = [];
 
   for (const f of files) {
-    const statusColor = fileStatusColorMap[f.status] ?? ansi.dim;
+    let statusColor: (s: string) => string;
+    if (f.status === "added") {
+      statusColor = ansi.green;
+    } else if (f.status === "deleted") {
+      statusColor = ansi.red;
+    } else if (f.status === "modified") {
+      statusColor = ansi.yellow;
+    } else {
+      statusColor = ansi.dim;
+    }
 
-    const statusChar = fileStatusCharMap[f.status] ?? "?";
+    const statusCharMap: Record<string, string> = {
+      added: "A",
+      deleted: "D",
+      modified: "M",
+      renamed: "R",
+    };
+    const statusChar = statusCharMap[f.status] ?? "?";
 
     const stats = [];
     if (f.additions) stats.push(ansi.green(`+${f.additions}`));
@@ -789,47 +788,35 @@ function renderFileTree(comp: A2UIComponent, ctx: RenderContext): string[] {
   return lines;
 }
 
-function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
-  const mainBranch = prop(comp, "mainBranch") as
-    | { name: string; latestScore?: number | null; benchmarkCount: number }
-    | undefined;
-  const mainCommits =
-    (prop(comp, "mainCommits") as Array<{
-      hash: string;
-      shortHash: string;
-      message: string;
-      date: string;
-      benchmarkScore?: number | null;
-      benchmarkTag?: string;
-    }>) || [];
-  const versions =
-    (prop(comp, "versions") as Array<{
-      id: string;
-      branch: string;
-      parentBranch: string;
-      status: string;
-      trigger?: string;
-      scoreDelta?: number | null;
-      latestScore?: number | null;
-      filesChanged?: number;
-      createdAt: number;
-    }>) || [];
-  const onVersionClick = prop(comp, "onVersionClick") as string | undefined;
-  const selectedBranch = prop(comp, "selectedBranch") as string | undefined;
-  const lines: string[] = [];
+interface VersionGraphCommit {
+  hash: string;
+  shortHash: string;
+  message: string;
+  date: string;
+  benchmarkScore?: number | null;
+  benchmarkTag?: string;
+}
 
-  // Main branch HEAD node
-  const mainName = mainBranch?.name || "main";
-  const mainScore = mainBranch?.latestScore;
-  const mainScoreStr = mainScore != null ? `  ${ansi.bold(mainScore.toFixed(2))}` : "";
+interface VersionGraphVersion {
+  id: string;
+  branch: string;
+  parentBranch: string;
+  status: string;
+  trigger?: string;
+  scoreDelta?: number | null;
+  latestScore?: number | null;
+  filesChanged?: number;
+  createdAt: number;
+}
 
-  lines.push(indent(ctx, `${ansi.bold("●")} ${ansi.bold(mainName)} (HEAD)${mainScoreStr}`));
+type TimelineItem =
+  | { kind: "commit"; commit: VersionGraphCommit }
+  | { kind: "branch"; version: VersionGraphVersion };
 
-  // Build interleaved timeline (same logic as React renderer)
-  type TimelineItem =
-    | { kind: "commit"; commit: (typeof mainCommits)[0] }
-    | { kind: "branch"; version: (typeof versions)[0] };
-
+function buildTimeline(
+  mainCommits: VersionGraphCommit[],
+  versions: VersionGraphVersion[]
+): TimelineItem[] {
   const timeline: TimelineItem[] = [];
   if (mainCommits.length > 0) {
     let vIdx = 0;
@@ -849,6 +836,99 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
   } else {
     versions.forEach((v) => timeline.push({ kind: "branch", version: v }));
   }
+  return timeline;
+}
+
+function formatScoreStr(score: number | null | undefined): string {
+  if (score == null) {
+    return "";
+  }
+  let sColor: (s: string) => string;
+  if (score >= 0.9) {
+    sColor = ansi.green;
+  } else if (score >= 0.7) {
+    sColor = ansi.yellow;
+  } else {
+    sColor = ansi.red;
+  }
+  return `  ${sColor(score.toFixed(2))}`;
+}
+
+function renderCommitItem(cm: VersionGraphCommit, isLast: boolean, ctx: RenderContext): string {
+  const trunk = isLast ? " " : "│";
+  const dot = cm.benchmarkScore != null ? "○" : "·";
+  const scoreStr = formatScoreStr(cm.benchmarkScore);
+  const msg = cm.message.length > 40 ? `${cm.message.slice(0, 40)}…` : cm.message;
+  return indent(ctx, `${trunk} ${ansi.dim(dot)} ${ansi.dim(cm.shortHash)} ${msg}${scoreStr}`);
+}
+
+function renderBranchItem(
+  v: VersionGraphVersion,
+  isLast: boolean,
+  selectedBranch: string | undefined,
+  onVersionClick: string | undefined,
+  ctx: RenderContext
+): string {
+  const connector = isLast ? "└" : "├";
+  let statusIcon: string;
+  if (v.status === "active") {
+    statusIcon = ansi.blue("●");
+  } else if (v.status === "merged") {
+    statusIcon = ansi.green("●");
+  } else {
+    statusIcon = ansi.dim("●");
+  }
+  let statusSuffix: string;
+  if (v.status === "merged") {
+    statusSuffix = ansi.green(" → merged");
+  } else if (v.status === "abandoned") {
+    statusSuffix = ansi.dim(" ✕");
+  } else {
+    statusSuffix = ansi.blue(" [active]");
+  }
+
+  let scoreStr = formatScoreStr(v.latestScore);
+  if (v.latestScore != null && v.scoreDelta != null && v.scoreDelta !== 0) {
+    const deltaColor = v.scoreDelta > 0 ? ansi.green : ansi.red;
+    scoreStr += ` ${deltaColor(`(${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(2)})`)}`;
+  }
+
+  const branchStr = v.branch === selectedBranch ? ansi.bold(ansi.cyan(v.branch)) : v.branch;
+
+  let prefix = "";
+  if (onVersionClick) {
+    ctx.actionCounter++;
+    ctx.actions.push({
+      number: ctx.actionCounter,
+      label: v.branch,
+      action: onVersionClick,
+      payload: { branch: v.branch },
+    });
+    prefix = `${ansi.cyan(`[${ctx.actionCounter}]`)} `;
+  }
+
+  return indent(
+    ctx,
+    `${prefix}${connector}── ${statusIcon} ${branchStr}${statusSuffix}${scoreStr}`
+  );
+}
+
+function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
+  const mainBranch = prop(comp, "mainBranch") as
+    | { name: string; latestScore?: number | null; benchmarkCount: number }
+    | undefined;
+  const mainCommits = (prop(comp, "mainCommits") as VersionGraphCommit[]) || [];
+  const versions = (prop(comp, "versions") as VersionGraphVersion[]) || [];
+  const onVersionClick = prop(comp, "onVersionClick") as string | undefined;
+  const selectedBranch = prop(comp, "selectedBranch") as string | undefined;
+  const lines: string[] = [];
+
+  const mainName = mainBranch?.name || "main";
+  const mainScoreStr =
+    mainBranch?.latestScore != null ? `  ${ansi.bold(mainBranch.latestScore.toFixed(2))}` : "";
+  lines.push(indent(ctx, `${ansi.bold("●")} ${ansi.bold(mainName)} (HEAD)${mainScoreStr}`));
+
+  const timeline = buildTimeline(mainCommits, versions);
 
   if (timeline.length === 0) {
     lines.push(indent(ctx, ansi.dim("│")));
@@ -859,65 +939,11 @@ function renderVersionGraph(comp: A2UIComponent, ctx: RenderContext): string[] {
   for (let i = 0; i < timeline.length; i++) {
     const item = timeline[i];
     const isLast = i === timeline.length - 1;
-
     if (item.kind === "commit") {
-      const cm = item.commit;
-      const trunk = isLast ? " " : "│";
-      const dot = cm.benchmarkScore != null ? "○" : "·";
-      let scoreStr = "";
-      if (cm.benchmarkScore != null) {
-        const sColor = scoreColor(cm.benchmarkScore);
-        scoreStr = `  ${sColor(cm.benchmarkScore.toFixed(2))}`;
-      }
-      const msg = cm.message.length > 40 ? `${cm.message.slice(0, 40)}…` : cm.message;
-      lines.push(
-        indent(ctx, `${trunk} ${ansi.dim(dot)} ${ansi.dim(cm.shortHash)} ${msg}${scoreStr}`)
-      );
-      continue;
+      lines.push(renderCommitItem(item.commit, isLast, ctx));
+    } else {
+      lines.push(renderBranchItem(item.version, isLast, selectedBranch, onVersionClick, ctx));
     }
-
-    // Branch (evo version)
-    const v = item.version;
-    const connector = isLast ? "└" : "├";
-    const versionStatusIconMap: Record<string, string> = {
-      active: ansi.blue("\u25CF"),
-      merged: ansi.green("\u25CF"),
-    };
-    const statusIcon = versionStatusIconMap[v.status] ?? ansi.dim("\u25CF");
-    const versionStatusSuffixMap: Record<string, string> = {
-      merged: ansi.green(" \u2192 merged"),
-      abandoned: ansi.dim(" \u2715"),
-    };
-    const statusSuffix = versionStatusSuffixMap[v.status] ?? ansi.blue(" [active]");
-
-    let scoreStr = "";
-    if (v.latestScore != null) {
-      const sColor = scoreColor(v.latestScore);
-      scoreStr = `  ${sColor(v.latestScore.toFixed(2))}`;
-      if (v.scoreDelta != null && v.scoreDelta !== 0) {
-        const deltaColor = v.scoreDelta > 0 ? ansi.green : ansi.red;
-        scoreStr += ` ${deltaColor(`(${v.scoreDelta > 0 ? "+" : ""}${v.scoreDelta.toFixed(2)})`)}`;
-      }
-    }
-
-    const selected = v.branch === selectedBranch;
-    const branchStr = selected ? ansi.bold(ansi.cyan(v.branch)) : v.branch;
-
-    let prefix = "";
-    if (onVersionClick) {
-      ctx.actionCounter++;
-      ctx.actions.push({
-        number: ctx.actionCounter,
-        label: v.branch,
-        action: onVersionClick,
-        payload: { branch: v.branch },
-      });
-      prefix = `${ansi.cyan(`[${ctx.actionCounter}]`)} `;
-    }
-
-    lines.push(
-      indent(ctx, `${prefix}${connector}── ${statusIcon} ${branchStr}${statusSuffix}${scoreStr}`)
-    );
   }
 
   return lines;
@@ -1048,9 +1074,19 @@ function renderArenaScoreTable(comp: A2UIComponent, ctx: RenderContext): string[
     const pct = Math.round(r.score * 100);
     const barLen = Math.round(pct / 5);
     const bar = "█".repeat(barLen) + "░".repeat(20 - barLen);
-    const sColor = scoreColor(r.score);
+    let scoreColor: (s: string) => string;
+    if (r.score >= 0.9) {
+      scoreColor = ansi.green;
+    } else if (r.score >= 0.7) {
+      scoreColor = ansi.yellow;
+    } else {
+      scoreColor = ansi.red;
+    }
     lines.push(
-      indent(ctx, `${padRight(r.label, colWidth)}${ansi.cyan(bar)} ${sColor(r.score.toFixed(2))}`)
+      indent(
+        ctx,
+        `${padRight(r.label, colWidth)}${ansi.cyan(bar)} ${scoreColor(r.score.toFixed(2))}`
+      )
     );
   }
 
@@ -1066,9 +1102,18 @@ function renderArenaCategoryCard(comp: A2UIComponent, ctx: RenderContext): strin
       scores: Array<{ value: number }>;
     }>) || [];
   const lines: string[] = [];
-  const sColor = scoreColor(avgScore);
+  let scoreColor: (s: string) => string;
+  if (avgScore >= 0.9) {
+    scoreColor = ansi.green;
+  } else if (avgScore >= 0.7) {
+    scoreColor = ansi.yellow;
+  } else {
+    scoreColor = ansi.red;
+  }
 
-  lines.push(indent(ctx, `${ansi.bold(`=== ${name}`)} ${sColor(`(${avgScore.toFixed(2)})`)} ===`));
+  lines.push(
+    indent(ctx, `${ansi.bold(`=== ${name}`)} ${scoreColor(`(${avgScore.toFixed(2)})`)} ===`)
+  );
 
   for (const cr of criteria) {
     const scores = cr.scores.map((s) => s.value.toFixed(2)).join(" / ");
