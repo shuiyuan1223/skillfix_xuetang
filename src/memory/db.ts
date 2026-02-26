@@ -153,6 +153,25 @@ function initializeSchema(db: Database): void {
       metadata TEXT                       -- JSON
     );
 
+    -- Bad Cases: User-reported bad interactions collected via Slack or manually
+    CREATE TABLE IF NOT EXISTS bad_cases (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      source TEXT NOT NULL DEFAULT 'slack',      -- slack | manual | system
+      reporter TEXT,                              -- Slack username or identifier
+      raw_text TEXT NOT NULL,                     -- Original free-text description
+      trace_id TEXT,                              -- Optional link to traces table
+      type TEXT NOT NULL DEFAULT 'unclassified',  -- bug | effect | unclassified
+      status TEXT NOT NULL DEFAULT 'pending',     -- pending | confirmed | suspended | resolved | closed
+      priority TEXT NOT NULL DEFAULT 'medium',    -- high | medium | low | ignore
+      classification_confidence REAL,             -- 0.0 - 1.0
+      classification_reason TEXT,                 -- LLM explanation for classification
+      github_issue_url TEXT,
+      github_issue_number INTEGER,
+      notes TEXT,                                 -- Human notes added in Dashboard
+      resolved_at INTEGER
+    );
+
     -- Indexes for common queries
     CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(timestamp);
     CREATE INDEX IF NOT EXISTS idx_traces_session ON traces(session_id);
@@ -168,11 +187,15 @@ function initializeSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_benchmark_results_test_case ON benchmark_results(test_case_id);
     CREATE INDEX IF NOT EXISTS idx_evolution_versions_status ON evolution_versions(status);
     CREATE INDEX IF NOT EXISTS idx_evolution_versions_branch ON evolution_versions(branch_name);
+    CREATE INDEX IF NOT EXISTS idx_bad_cases_status ON bad_cases(status);
+    CREATE INDEX IF NOT EXISTS idx_bad_cases_type ON bad_cases(type);
+    CREATE INDEX IF NOT EXISTS idx_bad_cases_timestamp ON bad_cases(timestamp);
   `);
 
   // Add columns to test_cases if they don't exist (safe migration)
   migrateTestCasesTable(db);
   migrateBenchmarkRunsTable(db);
+  migrateBadCasesTable(db);
 }
 
 /**
@@ -212,6 +235,22 @@ function migrateBenchmarkRunsTable(db: Database): void {
 
     if (!columnNames.includes("branch_name")) {
       db.exec("ALTER TABLE benchmark_runs ADD COLUMN branch_name TEXT");
+    }
+  } catch {
+    // Table might not exist yet on first run
+  }
+}
+
+/**
+ * Migrate bad_cases table to add new columns (future-proofing)
+ */
+function migrateBadCasesTable(db: Database): void {
+  try {
+    const tableInfo = db.prepare("PRAGMA table_info(bad_cases)").all() as Array<{ name: string }>;
+    const columnNames = tableInfo.map((c) => c.name);
+
+    if (!columnNames.includes("resolved_at")) {
+      db.exec("ALTER TABLE bad_cases ADD COLUMN resolved_at INTEGER");
     }
   } catch {
     // Table might not exist yet on first run
@@ -1196,4 +1235,191 @@ export function countTestCases(options: { category?: string; difficulty?: string
   const stmt = database.prepare(sql);
   const result = stmt.get(...params) as { count: number };
   return result.count;
+}
+
+// ============================================================================
+// Bad Cases Operations
+// ============================================================================
+
+export type BadCaseType = "bug" | "effect" | "unclassified";
+export type BadCaseStatus = "pending" | "confirmed" | "suspended" | "resolved" | "closed";
+export type BadCasePriority = "high" | "medium" | "low" | "ignore";
+export type BadCaseSource = "slack" | "manual" | "system";
+
+export interface BadCaseRow {
+  id: string;
+  timestamp: number;
+  source: BadCaseSource;
+  reporter: string | null;
+  raw_text: string;
+  trace_id: string | null;
+  type: BadCaseType;
+  status: BadCaseStatus;
+  priority: BadCasePriority;
+  classification_confidence: number | null;
+  classification_reason: string | null;
+  github_issue_url: string | null;
+  github_issue_number: number | null;
+  notes: string | null;
+  resolved_at: number | null;
+}
+
+export function insertBadCase(badCase: {
+  id: string;
+  timestamp: number;
+  source: BadCaseSource;
+  reporter?: string;
+  rawText: string;
+  traceId?: string;
+  type?: BadCaseType;
+  status?: BadCaseStatus;
+  priority?: BadCasePriority;
+  classificationConfidence?: number;
+  classificationReason?: string;
+}): void {
+  const database = getDatabase();
+  database
+    .prepare(
+      `INSERT INTO bad_cases (
+        id, timestamp, source, reporter, raw_text, trace_id,
+        type, status, priority, classification_confidence, classification_reason
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      badCase.id,
+      badCase.timestamp,
+      badCase.source,
+      badCase.reporter ?? null,
+      badCase.rawText,
+      badCase.traceId ?? null,
+      badCase.type ?? "unclassified",
+      badCase.status ?? "pending",
+      badCase.priority ?? "medium",
+      badCase.classificationConfidence ?? null,
+      badCase.classificationReason ?? null
+    );
+}
+
+export function getBadCase(id: string): BadCaseRow | null {
+  const database = getDatabase();
+  return (
+    (database.prepare("SELECT * FROM bad_cases WHERE id = ?").get(id) as BadCaseRow | null) ?? null
+  );
+}
+
+export function listBadCases(
+  options: {
+    status?: BadCaseStatus;
+    type?: BadCaseType;
+    priority?: BadCasePriority;
+    source?: BadCaseSource;
+    limit?: number;
+    offset?: number;
+  } = {}
+): BadCaseRow[] {
+  const database = getDatabase();
+  let sql = "SELECT * FROM bad_cases WHERE 1=1";
+  const params: SQLParam[] = [];
+
+  if (options.status) {
+    sql += " AND status = ?";
+    params.push(options.status);
+  }
+  if (options.type) {
+    sql += " AND type = ?";
+    params.push(options.type);
+  }
+  if (options.priority) {
+    sql += " AND priority = ?";
+    params.push(options.priority);
+  }
+  if (options.source) {
+    sql += " AND source = ?";
+    params.push(options.source);
+  }
+
+  sql += " ORDER BY timestamp DESC";
+  sql += ` LIMIT ${options.limit ?? 50}`;
+  if (options.offset) sql += ` OFFSET ${options.offset}`;
+
+  return database.prepare(sql).all(...params) as BadCaseRow[];
+}
+
+export function updateBadCaseStatus(id: string, status: BadCaseStatus, notes?: string): void {
+  const database = getDatabase();
+  const resolvedAt = status === "resolved" || status === "closed" ? Date.now() : null;
+
+  if (notes !== undefined) {
+    database
+      .prepare("UPDATE bad_cases SET status = ?, notes = ?, resolved_at = ? WHERE id = ?")
+      .run(status, notes, resolvedAt, id);
+  } else {
+    database
+      .prepare(
+        "UPDATE bad_cases SET status = ?, resolved_at = CASE WHEN ? IS NOT NULL THEN ? ELSE resolved_at END WHERE id = ?"
+      )
+      .run(status, resolvedAt, resolvedAt, id);
+  }
+}
+
+export function updateBadCaseType(id: string, type: BadCaseType, priority?: BadCasePriority): void {
+  const database = getDatabase();
+  if (priority !== undefined) {
+    database
+      .prepare("UPDATE bad_cases SET type = ?, priority = ? WHERE id = ?")
+      .run(type, priority, id);
+  } else {
+    database.prepare("UPDATE bad_cases SET type = ? WHERE id = ?").run(type, id);
+  }
+}
+
+export function updateBadCaseGitHubIssue(id: string, issueNumber: number, issueUrl: string): void {
+  const database = getDatabase();
+  database
+    .prepare(
+      "UPDATE bad_cases SET github_issue_number = ?, github_issue_url = ?, status = 'confirmed' WHERE id = ?"
+    )
+    .run(issueNumber, issueUrl, id);
+}
+
+export function updateBadCaseNotes(id: string, notes: string): void {
+  const database = getDatabase();
+  database.prepare("UPDATE bad_cases SET notes = ? WHERE id = ?").run(notes, id);
+}
+
+export interface BadCasesStats {
+  total: number;
+  pending: number;
+  confirmed: number;
+  suspended: number;
+  resolved: number;
+  bug: number;
+  effect: number;
+  unclassified: number;
+  resolvedThisWeek: number;
+  highPriority: number;
+}
+
+export function getBadCasesStats(): BadCasesStats {
+  const database = getDatabase();
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  const row = database
+    .prepare(
+      `SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+        SUM(CASE WHEN status = 'suspended' THEN 1 ELSE 0 END) as suspended,
+        SUM(CASE WHEN status IN ('resolved','closed') THEN 1 ELSE 0 END) as resolved,
+        SUM(CASE WHEN type = 'bug' THEN 1 ELSE 0 END) as bug,
+        SUM(CASE WHEN type = 'effect' THEN 1 ELSE 0 END) as effect,
+        SUM(CASE WHEN type = 'unclassified' THEN 1 ELSE 0 END) as unclassified,
+        SUM(CASE WHEN status IN ('resolved','closed') AND resolved_at >= ${weekAgo} THEN 1 ELSE 0 END) as resolvedThisWeek,
+        SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) as highPriority
+      FROM bad_cases`
+    )
+    .get() as BadCasesStats;
+
+  return row;
 }

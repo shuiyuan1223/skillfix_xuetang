@@ -1,12 +1,24 @@
 /**
  * Slack Webhook Handler
  *
- * Receives team feedback from Slack, classifies it by benchmark category,
- * and creates GitHub issues for tracking.
+ * Receives bad-case reports from Slack, classifies them via LLM,
+ * and persists to the bad_cases database for Dashboard tracking.
+ *
+ * Supported Slack integration modes:
+ *   A) Outgoing Webhook (trigger word, e.g. "bad-case:")
+ *   B) Slash Command (/bad-case)
+ *   C) Events API (message in dedicated channel)
+ *
+ * Format accepted (free text):
+ *   "用户问了睡眠质量，Agent 回答跑题说了步数。TraceID: abc-123"
+ *   "/bad-case Agent 报错了，工具调用返回 null"
+ *
+ * GitHub Issue creation is intentionally NOT done here.
+ * It is handled by the System Agent via create_github_issue_for_bad_case MCP tool.
  */
 
-import type { BenchmarkCategory } from "../evolution/types.js";
-import { CATEGORY_LABELS } from "../evolution/benchmark-seed.js";
+import { insertBadCase, type BadCaseSource } from "../memory/db.js";
+import { classifyBadCase, type ClassificationResult } from "../evolution/bad-case-classifier.js";
 
 export interface SlackWebhookPayload {
   token?: string;
@@ -19,221 +31,127 @@ export interface SlackWebhookPayload {
   text: string;
   timestamp?: string;
   trigger_word?: string;
+  // Slash command fields
+  command?: string;
+  response_url?: string;
 }
 
-export interface FeedbackClassification {
-  category: BenchmarkCategory | "general";
-  severity: "low" | "medium" | "high";
-  summary: string;
-  originalText: string;
-  userName: string;
-  timestamp: string;
+export interface BadCaseIngestResult {
+  id: string;
+  classification: ClassificationResult;
+  traceId?: string;
+  persisted: boolean;
+  message: string;
 }
-
-// Keyword-based category classification
-const CATEGORY_KEYWORDS: Record<BenchmarkCategory, string[]> = {
-  "health-data-analysis": [
-    "data",
-    "sleep",
-    "heart rate",
-    "steps",
-    "calories",
-    "workout",
-    "activity",
-    "metrics",
-    "numbers",
-    "incorrect data",
-    "wrong data",
-  ],
-  "health-coaching": [
-    "goal",
-    "motivation",
-    "habit",
-    "progress",
-    "coaching",
-    "encourage",
-    "advice",
-    "recommendation",
-    "plan",
-  ],
-  "safety-boundaries": [
-    "unsafe",
-    "dangerous",
-    "diagnosis",
-    "diagnose",
-    "medical",
-    "emergency",
-    "prescribe",
-    "medication",
-    "treatment",
-    "fabricated",
-    "made up",
-    "hallucinated",
-  ],
-  "personalization-memory": [
-    "remember",
-    "forgot",
-    "context",
-    "profile",
-    "personal",
-    "previous conversation",
-    "last time",
-    "my preference",
-  ],
-  "communication-quality": [
-    "confusing",
-    "unclear",
-    "verbose",
-    "too long",
-    "tone",
-    "sensitive",
-    "insensitive",
-    "vague",
-    "not specific",
-    "generic",
-    "not actionable",
-  ],
-};
-
-const SEVERITY_KEYWORDS: Record<string, string[]> = {
-  high: ["urgent", "critical", "dangerous", "emergency", "broken", "crash", "wrong medical"],
-  medium: ["incorrect", "missing", "confusing", "not working", "bug", "issue"],
-  low: ["suggestion", "nice to have", "minor", "small", "typo", "wording"],
-};
 
 /**
- * Classify feedback text into a benchmark category
+ * Extract Trace ID from free-text if mentioned.
+ * Patterns: "TraceID: abc-123", "trace: abc", "trace_id=abc"
  */
-export function classifyFeedback(payload: SlackWebhookPayload): FeedbackClassification {
-  const text = payload.text.toLowerCase();
+function extractTraceId(text: string): string | undefined {
+  const match = text.match(/trace[_\s-]?id[:\s=]+([a-zA-Z0-9_-]{8,})/i);
+  return match?.[1];
+}
 
-  // Classify category
-  let bestCategory: BenchmarkCategory | "general" = "general";
-  let bestScore = 0;
+/**
+ * Strip trigger words and slash command prefixes from text.
+ */
+function normalizeText(payload: SlackWebhookPayload): string {
+  let text = payload.text ?? "";
 
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    let score = 0;
-    for (const keyword of keywords) {
-      if (text.includes(keyword.toLowerCase())) {
-        score++;
-      }
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      bestCategory = category as BenchmarkCategory;
-    }
+  // Strip trigger word (e.g. "bad-case: ...")
+  if (payload.trigger_word) {
+    text = text.replace(new RegExp(`^${payload.trigger_word}[:\\s]*`, "i"), "").trim();
   }
 
-  // Classify severity
-  let severity: "low" | "medium" | "high" = "medium";
-  for (const [sev, keywords] of Object.entries(SEVERITY_KEYWORDS)) {
-    for (const keyword of keywords) {
-      if (text.includes(keyword.toLowerCase())) {
-        severity = sev as "low" | "medium" | "high";
-        break;
-      }
-    }
+  // Strip slash command (e.g. "/bad-case ...")
+  if (payload.command) {
+    text = text.replace(/^\/\S+\s*/, "").trim();
   }
 
-  // Generate summary
-  const summary = payload.text.length > 100 ? `${payload.text.substring(0, 100)}...` : payload.text;
+  return text.trim();
+}
 
-  return {
-    category: bestCategory,
-    severity,
-    summary,
-    originalText: payload.text,
-    userName: payload.user_name || "unknown",
-    timestamp: payload.timestamp || new Date().toISOString(),
+/**
+ * Determine source based on payload shape
+ */
+function detectSource(payload: SlackWebhookPayload): BadCaseSource {
+  if (payload.command) return "slack"; // slash command
+  return "slack";
+}
+
+/**
+ * Handle incoming Slack webhook — ingest, classify, persist.
+ *
+ * @param payload     Slack payload (Outgoing Webhook, Slash Command, or Events API)
+ * @param llmCall     LLM inference function (injected by server.ts)
+ */
+export async function handleSlackWebhook(
+  payload: SlackWebhookPayload,
+  llmCall?: (prompt: string) => Promise<string>
+): Promise<BadCaseIngestResult> {
+  const rawText = normalizeText(payload);
+  const traceId = extractTraceId(rawText);
+  const source = detectSource(payload);
+  const reporter = payload.user_name ?? payload.user_id ?? undefined;
+
+  const id = crypto.randomUUID();
+
+  // LLM classification (if llmCall provided), else persist as unclassified
+  let classification: ClassificationResult = {
+    type: "unclassified",
+    priority: "medium",
+    confidence: 0,
+    reason: "LLM not available at ingest time — pending manual classification.",
   };
-}
 
-/**
- * Build a GitHub issue body from classified feedback
- */
-export function buildIssueBody(classification: FeedbackClassification): {
-  title: string;
-  body: string;
-  labels: string[];
-} {
-  const categoryLabel =
-    classification.category === "general" ? "General" : CATEGORY_LABELS[classification.category];
+  if (llmCall) {
+    try {
+      classification = await classifyBadCase({ rawText, llmCall });
+    } catch {
+      // Keep unclassified fallback
+    }
+  }
 
-  const title = `[Feedback] ${categoryLabel}: ${classification.summary}`;
-
-  const body = `## Team Feedback
-
-**From:** ${classification.userName}
-**Category:** ${categoryLabel}
-**Severity:** ${classification.severity}
-**Timestamp:** ${classification.timestamp}
-
-## Original Feedback
-
-> ${classification.originalText}
-
-## Classification
-
-- **Benchmark Category:** ${classification.category}
-- **Severity:** ${classification.severity}
-
-## Action Items
-
-- [ ] Review feedback and determine if this is a valid issue
-- [ ] Add as benchmark test case if applicable
-- [ ] Run \`pha eval auto-loop\` if quality improvement is needed
-- [ ] Update prompts/skills if necessary
-
----
-*Auto-created from Slack feedback via PHA webhook*`;
-
-  const labels = [
-    "feedback",
-    `severity:${classification.severity}`,
-    `category:${classification.category}`,
-  ];
-
-  return { title, body, labels };
-}
-
-/**
- * Handle incoming Slack webhook
- */
-export async function handleSlackWebhook(payload: SlackWebhookPayload): Promise<{
-  classification: FeedbackClassification;
-  issueUrl?: string;
-  error?: string;
-}> {
-  const classification = classifyFeedback(payload);
-
-  // Try to create GitHub issue
+  // Persist to DB — always, regardless of classification outcome
   try {
-    const issue = buildIssueBody(classification);
-    const issueUrl = await createGitHubIssue(issue.title, issue.body, issue.labels);
-    return { classification, issueUrl };
-  } catch (error) {
+    insertBadCase({
+      id,
+      timestamp: Date.now(),
+      source,
+      reporter,
+      rawText,
+      traceId,
+      type: classification.type,
+      status: "pending",
+      priority: classification.priority,
+      classificationConfidence: classification.confidence,
+      classificationReason: classification.reason,
+    });
+  } catch (err) {
     return {
+      id,
       classification,
-      error: `Failed to create GitHub issue: ${error instanceof Error ? error.message : String(error)}`,
+      traceId,
+      persisted: false,
+      message: `Failed to persist bad case: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-}
 
-/**
- * Create a GitHub issue using the gh CLI
- */
-async function createGitHubIssue(title: string, body: string, labels: string[]): Promise<string> {
-  const { execSync } = await import("child_process");
+  const typeEmoji = { bug: "🐛", effect: "📉", unclassified: "❓" }[classification.type];
+  const confidencePct = (classification.confidence * 100).toFixed(0);
 
-  const labelArgs = labels.map((l) => `-l "${l}"`).join(" ");
-
-  try {
-    const result = execSync(
-      `gh issue create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" ${labelArgs}`,
-      { encoding: "utf-8", timeout: 15000 }
-    );
-    return result.trim();
-  } catch (error) {
-    throw new Error(`gh CLI failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  return {
+    id,
+    classification,
+    traceId,
+    persisted: true,
+    message:
+      `${typeEmoji} Bad case recorded (ID: \`${id.slice(0, 8)}\`)\n` +
+      `分类: *${classification.type}* (置信度 ${confidencePct}%)\n` +
+      `优先级: ${classification.priority}\n` +
+      `原因: ${classification.reason}\n${
+        traceId ? `Trace ID: \`${traceId}\`\n` : ""
+      }\n在 Evolution Lab → Bad Cases 查看详情。`,
+  };
 }

@@ -171,6 +171,11 @@ import {
   getScoreTrend,
   markInterruptedBenchmarkRuns,
   deleteBenchmarkRun,
+  listBadCases,
+  getBadCasesStats,
+  type BadCaseRow,
+  type BadCaseStatus,
+  type BadCaseType,
 } from "../memory/db.js";
 import { BenchmarkRunner } from "../evolution/benchmark-runner.js";
 import {
@@ -503,18 +508,32 @@ export function createGatewayApp(): Hono {
     try {
       const body = await c.req.json();
       const { handleSlackWebhook } = await import("../integrations/slack-webhook.js");
-      const result = await handleSlackWebhook(body);
+
+      // Provide LLM call for classification using the judge model config
+      const judgeModel = resolveAgentProfileModel("pha");
+      const llmCall = async (prompt: string): Promise<string> => {
+        const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+        const judgeAgent = await createPHAAgent({
+          apiKey: judgeModel.apiKey,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          provider: judgeModel.provider as any,
+          modelId: judgeModel.modelId,
+          baseUrl: judgeModel.baseUrl,
+          dataSource: new JudgeMockDS(),
+        });
+        return judgeAgent.chatAndWait(prompt);
+      };
+
+      const result = await handleSlackWebhook(body, llmCall);
       return c.json({
         response_type: "in_channel",
-        text: result.issueUrl
-          ? `Feedback received! Issue created: ${result.issueUrl}`
-          : `Feedback received and classified as: ${result.classification.category} (${result.classification.severity})${result.error ? ` [Note: ${result.error}]` : ""}`,
+        text: result.message,
       });
     } catch (error) {
       return c.json(
         {
           response_type: "ephemeral",
-          text: `Error processing feedback: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error processing bad case: ${error instanceof Error ? error.message : String(error)}`,
         },
         500
       );
@@ -1114,9 +1133,11 @@ export class GatewaySession {
   private activeVersionBranch: string | null = null;
 
   // Evolution Lab state (5-Tab Dashboard)
-  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" = "overview";
+  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" | "badCases" =
+    "overview";
   private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
   private evolutionSelectedVersion: string | null = null;
+  private badCasesFilter: { status?: string; type?: string } = {};
   private systemAgentChatMessages: PartsChatMessage[] = [];
   private systemAgentStreaming = false;
   private systemAgentStreamingContent = "";
@@ -3637,7 +3658,59 @@ export class GatewaySession {
     else if (action === "evo_send_message" && payload?.value) {
       this.fireSystemAgentMessage(payload.value as string, send);
     } else if (action === "evo_tab_change" && payload?.tab) {
-      this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
+      this.evolutionActiveTab = payload.tab as
+        | "overview"
+        | "benchmark"
+        | "versions"
+        | "data"
+        | "badCases";
+      this.sendEvolutionLabUpdate(send);
+    } else if (action === "bad_cases_filter" && payload) {
+      const { filterType, value } = payload as { filterType: string; value: string };
+      if (filterType === "status")
+        this.badCasesFilter = { ...this.badCasesFilter, status: value || undefined };
+      else if (filterType === "type")
+        this.badCasesFilter = { ...this.badCasesFilter, type: value || undefined };
+      this.evolutionActiveTab = "badCases";
+      this.sendEvolutionLabUpdate(send);
+    } else if (action === "view_bad_case" && payload?.row) {
+      const row = payload.row as { _fullId?: string; id?: string };
+      const badCaseId = row._fullId ?? row.id;
+      if (badCaseId) {
+        const { getBadCase } = await import("../memory/db.js");
+        const bc = getBadCase(badCaseId);
+        if (bc) {
+          const { generateToast } = await import("./pages.js");
+          const lines = [
+            `**ID**: ${bc.id}`,
+            `**类型**: ${bc.type} | **状态**: ${bc.status} | **优先级**: ${bc.priority}`,
+            `**描述**: ${bc.raw_text}`,
+            bc.classification_reason ? `**AI分类原因**: ${bc.classification_reason}` : "",
+            bc.notes ? `**备注**: ${bc.notes}` : "",
+            bc.github_issue_url ? `**GitHub**: ${bc.github_issue_url}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n");
+          sendAll(send, generateToast(lines, "info"));
+        }
+      }
+    } else if (action === "confirm_bad_case" && payload?.id) {
+      const { updateBadCaseStatus } = await import("../memory/db.js");
+      updateBadCaseStatus(payload.id as string, "confirmed", payload.notes as string | undefined);
+      const { generateToast } = await import("./pages.js");
+      sendAll(send, generateToast("Bad case 已确认", "success"));
+      this.sendEvolutionLabUpdate(send);
+    } else if (action === "suspend_bad_case" && payload?.id) {
+      const { updateBadCaseStatus } = await import("../memory/db.js");
+      updateBadCaseStatus(payload.id as string, "suspended", payload.notes as string | undefined);
+      const { generateToast } = await import("./pages.js");
+      sendAll(send, generateToast("Bad case 已挂起", "info"));
+      this.sendEvolutionLabUpdate(send);
+    } else if (action === "resolve_bad_case" && payload?.id) {
+      const { updateBadCaseStatus } = await import("../memory/db.js");
+      updateBadCaseStatus(payload.id as string, "resolved", payload.notes as string | undefined);
+      const { generateToast } = await import("./pages.js");
+      sendAll(send, generateToast("Bad case 已解决 ✓", "success"));
       this.sendEvolutionLabUpdate(send);
     } else if (action === "evo_data_subtab_change" && payload?.tab) {
       this.evolutionDataSubTab = payload.tab as "traces" | "evaluations" | "suggestions";
@@ -3895,7 +3968,12 @@ export class GatewaySession {
         this.activeDashboardTab = payload.tab as string;
         await this.handleNavigate("experiment", send);
       } else if (this.currentView === "evolution") {
-        this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
+        this.evolutionActiveTab = payload.tab as
+          | "overview"
+          | "benchmark"
+          | "versions"
+          | "data"
+          | "badCases";
         this.sendEvolutionLabUpdate(send);
       } else if (this.currentView === "settings/logs") {
         this.logsTab = payload.tab as "system" | "llm";
@@ -5491,6 +5569,45 @@ export class GatewaySession {
       tracesTotal,
       evaluations,
       suggestions,
+      // Bad Cases
+      badCases: (() => {
+        if (activeTab !== "badCases") return undefined;
+        try {
+          const filter = this.badCasesFilter;
+          const rows = listBadCases({
+            status: filter.status as BadCaseStatus | undefined,
+            type: filter.type as BadCaseType | undefined,
+            limit: 100,
+          });
+          return rows.map((r: BadCaseRow) => ({
+            id: r.id,
+            timestamp: r.timestamp,
+            source: r.source,
+            reporter: r.reporter,
+            rawText: r.raw_text,
+            traceId: r.trace_id,
+            type: r.type,
+            status: r.status,
+            priority: r.priority,
+            classificationConfidence: r.classification_confidence,
+            classificationReason: r.classification_reason,
+            githubIssueUrl: r.github_issue_url,
+            githubIssueNumber: r.github_issue_number,
+            notes: r.notes,
+          }));
+        } catch {
+          return undefined;
+        }
+      })(),
+      badCasesStats: (() => {
+        if (activeTab !== "badCases") return undefined;
+        try {
+          return getBadCasesStats();
+        } catch {
+          return undefined;
+        }
+      })(),
+      badCasesFilter: this.badCasesFilter,
     };
   }
 

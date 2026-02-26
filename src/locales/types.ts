@@ -307,6 +307,21 @@ export interface LocaleMessages {
     noTracesHint: string;
     noSuggestionsHint: string;
     noEvaluationsYet: string;
+    // Bad Cases
+    badCasesSlackHint: string;
+    badCasesPending: string;
+    badCasesBug: string;
+    badCasesEffect: string;
+    badCasesResolvedWeek: string;
+    badCasesReporter: string;
+    badCasesDescription: string;
+    badCasesEmpty: string;
+    badCasesEmptyHint: string;
+    statusPending: string;
+    statusConfirmed: string;
+    statusSuspended: string;
+    statusResolved: string;
+    unclassified: string;
     model: string;
     latestChange: string;
     config: string;
@@ -412,6 +427,7 @@ export interface LocaleMessages {
     tabVersions: string;
     tabData: string;
     tabAgent: string;
+    tabBadCases: string;
     startEvolutionCycle: string;
     // Overview
     currentVersion: string;
