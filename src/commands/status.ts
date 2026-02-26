@@ -77,7 +77,8 @@ export function registerStatusCommand(program: Command): void {
       let gatewayUptime = "";
       if (gatewayRunning && config) {
         try {
-          const response = await fetch(`http://localhost:${config.gateway.port}/health`);
+          const statusBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+          const response = await fetch(`http://localhost:${config.gateway.port}${statusBasePath}/health`);
           gatewayHealth = (await response.json()) as { uptime?: number };
           if (gatewayHealth?.uptime) {
             const hours = Math.floor(gatewayHealth.uptime / 3600);
@@ -126,7 +127,8 @@ export function registerStatusCommand(program: Command): void {
       printSection("Gateway", icons.server);
       if (gatewayRunning) {
         printStatus("success", "Running", `PID ${pid}`);
-        printKV("URL", c.cyan(`http://localhost:${config?.gateway.port}`));
+        const dispBasePath = (config?.gateway.basePath || "").replace(/\/+$/, "");
+        printKV("URL", c.cyan(`http://localhost:${config?.gateway.port}${dispBasePath}`));
         printKV("Health", gatewayHealth ? c.green("Healthy") : c.yellow("Not responding"));
         if (gatewayUptime) {
           printKV("Uptime", gatewayUptime);

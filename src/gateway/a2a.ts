@@ -35,12 +35,12 @@ export interface AgentCard {
   }>;
 }
 
-export function generateAgentCard(port: number): AgentCard {
+export function generateAgentCard(port: number, basePath = ""): AgentCard {
   return {
     name: "PHA - Personal Health Agent",
     description:
       "AI-driven personal health management assistant. Analyzes health data (steps, heart rate, sleep, workouts) and provides evidence-based coaching.",
-    url: `http://localhost:${port}`,
+    url: `http://localhost:${port}${basePath}`,
     version: "1.0.0",
     capabilities: {
       streaming: true,

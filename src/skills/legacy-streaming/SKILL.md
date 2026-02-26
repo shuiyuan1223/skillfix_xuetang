@@ -15,7 +15,7 @@ metadata:
 
 - 收到用户问题后，**优先调用健康数据工具**获取相关数据
 - 不要凭记忆回答，始终用真实数据支撑回答
-- 常用工具：`get_health_data`、`get_sleep`、`get_heart_rate`、`get_workouts`、`get_health_trends`
+- 常用工具：`get_health_data`、`get_sleep`、`get_heart_rate`、`get_workouts`、`get_weekly_summary`
 
 ### 2. 工具间简短推理
 

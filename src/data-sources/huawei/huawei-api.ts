@@ -21,6 +21,16 @@ const log = createLogger("Huawei/API");
 // Huawei Health Kit API base URL (default, can be overridden in config)
 const DEFAULT_API_BASE = "https://health-api.cloud.huawei.com";
 
+/** Format a timestamp (ms) to "HH:MM" in Asia/Shanghai timezone. */
+function formatTimeHHMM(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 // Track scope errors for re-auth detection
 const missingScopeErrors = new Set<string>();
 
@@ -147,11 +157,20 @@ export class HuaweiHealthApi {
       HuaweiDataType.ACTIVE_MINUTES,
     ];
 
-    const results = await Promise.all(
-      dataTypes.map((dataType) =>
-        this.fetchPolymerizeData(accessToken, dataType, startTime, endTime, timeZoneId)
-      )
-    );
+    // Fetch polymerize data and dailyActivitySummary in parallel.
+    // dailyActivitySummary provides the official deduplicated daily totals for steps,
+    // which avoids double-counting from multiple sources (phone + watch).
+    const [polymerizeResults, summaryResult] = await Promise.all([
+      Promise.all(
+        dataTypes.map((dataType) =>
+          this.fetchPolymerizeData(accessToken, dataType, startTime, endTime, timeZoneId)
+        )
+      ),
+      this.getDailyActivitySummary(date).catch((e) => {
+        log.warn("Failed to get dailyActivitySummary", e);
+        return null;
+      }),
+    ]);
 
     // Aggregate results from polymerize
     const aggregated: PolymerizeResult = {
@@ -161,7 +180,7 @@ export class HuaweiHealthApi {
       activeMinutes: 0,
     };
 
-    results.forEach((result, index) => {
+    polymerizeResults.forEach((result, index) => {
       const dataType = dataTypes[index];
       const data = result?.data || [];
       const totalValue = data.reduce((sum, item) => sum + (item?.value || 0), 0);
@@ -182,18 +201,13 @@ export class HuaweiHealthApi {
       }
     });
 
-    // Try to get more data from dailyActivitySummary if polymerize returned zeros
-    if (aggregated.calories === 0 || aggregated.activeMinutes === 0) {
-      try {
-        const summary = await this.getDailyActivitySummary(date);
-        if (summary.calories > 0) aggregated.calories = summary.calories;
-        if (summary.activeMinutes > 0) aggregated.activeMinutes = summary.activeMinutes;
-        if (summary.steps > 0 && aggregated.steps === 0) aggregated.steps = summary.steps;
-        if (summary.distance > 0 && aggregated.distance === 0)
-          aggregated.distance = summary.distance;
-      } catch (e) {
-        log.warn("Failed to get dailyActivitySummary", e);
-      }
+    // dailyActivitySummary is the authoritative source for steps (deduplicated total).
+    // Always prefer it over polymerize delta sum when available.
+    if (summaryResult) {
+      if (summaryResult.steps > 0) aggregated.steps = summaryResult.steps;
+      if (summaryResult.calories > 0) aggregated.calories = summaryResult.calories;
+      if (summaryResult.activeMinutes > 0) aggregated.activeMinutes = summaryResult.activeMinutes;
+      if (summaryResult.distance > 0) aggregated.distance = summaryResult.distance;
     }
 
     // Fallback: compute active minutes from activity records (workouts)
@@ -404,7 +418,7 @@ export class HuaweiHealthApi {
           if (timestamp > 1e15) {
             timestamp = Math.floor(timestamp / 1e6); // Convert nanoseconds to milliseconds
           }
-          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
 
           // Value can be in value[0].floatValue or value[0].integerValue
           const fieldValue = point.value?.[0];
@@ -561,7 +575,7 @@ export class HuaweiHealthApi {
           if (timestamp > 1e15) {
             timestamp = Math.floor(timestamp / 1e6);
           }
-          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
           const fieldValue = point.value?.[0];
           const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
           if (value > 0) {
@@ -655,7 +669,7 @@ export class HuaweiHealthApi {
           if (timestamp > 1e15) {
             timestamp = Math.floor(timestamp / 1e6);
           }
-          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
           const fieldValue = point.value?.[0];
           const value = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
           if (value > 0) {
@@ -1001,15 +1015,15 @@ export class HuaweiHealthApi {
 
     // Calculate bed/wake times
     const bedTime = fallAsleepTime
-      ? new Date(fallAsleepTime).toTimeString().slice(0, 5)
+      ? formatTimeHHMM(fallAsleepTime)
       : segments.length > 0
-        ? new Date(segments[0].startTime).toTimeString().slice(0, 5)
+        ? formatTimeHHMM(segments[0].startTime)
         : "00:00";
 
     const wakeTime = wakeupTime
-      ? new Date(wakeupTime).toTimeString().slice(0, 5)
+      ? formatTimeHHMM(wakeupTime)
       : segments.length > 0
-        ? new Date(segments[segments.length - 1].endTime).toTimeString().slice(0, 5)
+        ? formatTimeHHMM(segments[segments.length - 1].endTime)
         : "00:00";
 
     return {
@@ -1095,7 +1109,8 @@ export class HuaweiHealthApi {
       )?.integerValue;
 
       if (wakeupTime && allSleepTime) {
-        const wakeupDate = new Date(wakeupTime).toISOString().split("T")[0];
+        const wd = new Date(wakeupTime);
+        const wakeupDate = `${wd.getFullYear()}-${String(wd.getMonth() + 1).padStart(2, "0")}-${String(wd.getDate()).padStart(2, "0")}`;
         const hours = Math.round((allSleepTime / 60) * 10) / 10;
 
         // Use the most recent sleep record for each date
@@ -1110,7 +1125,7 @@ export class HuaweiHealthApi {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
       const data = sleepByDate.get(dateStr);
       result.push({
         date: dateStr,
@@ -1189,7 +1204,7 @@ export class HuaweiHealthApi {
         for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
           let timestamp = point.startTime;
           if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
 
           // Extract by fieldName per Huawei docs: systolic_pressure, diastolic_pressure, sphygmus
           let systolic = 0;
@@ -1299,7 +1314,7 @@ export class HuaweiHealthApi {
         for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
           let timestamp = point.startTime;
           if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
           const fieldValue = point.value?.[0];
           const value = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
           if (value > 0) {
@@ -1557,7 +1572,7 @@ export class HuaweiHealthApi {
         for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
           let timestamp = point.startTime;
           if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
           const fieldValue = point.value?.[0];
           const value = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
           if (value > 0) {
@@ -1671,7 +1686,7 @@ export class HuaweiHealthApi {
 
       let timestamp = record.startTime;
       if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-      const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+      const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
 
       const energy = getValue("dietaryEnergy") || 0;
       const mealProtein = getValue("protein");
@@ -1970,7 +1985,7 @@ export class HuaweiHealthApi {
           for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
             let timestamp = point.startTime;
             if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-            const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+            const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
 
             // Try to extract HRV specific fields
             let hrvValue = 0;
@@ -2083,7 +2098,7 @@ export class HuaweiHealthApi {
         for (const point of sampleSet.samplePoints || sampleSet.samplePoint || []) {
           let timestamp = point.startTime;
           if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-          const time = timestamp ? new Date(timestamp).toTimeString().slice(0, 5) : "00:00";
+          const time = timestamp ? formatTimeHHMM(timestamp) : "00:00";
 
           const fieldValue = point.value?.[0];
           const score = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);

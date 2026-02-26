@@ -273,11 +273,11 @@ function syncEmbeddingToNewFormat(config: PHAConfig, formData: Record<string, un
 // ============================================================================
 
 /**
- * Re-aggregate scene-category DB rows (with all 16 SHARP sub-components in details)
+ * Re-aggregate scene-category DB rows (with all SHARP sub-components in details)
  * into 5 SHARP categories (Safety, Usefulness, Accuracy, Relevance, Personalization),
- * each with only its own 2-4 sub-components.
+ * each with only its own sub-components.
  *
- * DB stores: health-data-analysis → details: [all 16 SHARP ratings]
+ * DB stores: health-data-analysis → details: [all SHARP ratings (16 in 2.0, 19 in 3.0)]
  * UI needs: safety → subComponents: [Risk Disclosure, Medical Boundary, ...]
  */
 interface SubComp {
@@ -325,27 +325,51 @@ function reAggregateToSharpCategories(sceneRows: SceneCategoryRow[]): SharpCateg
   // For now, let's match sub-component names to known SHARP categories.
 
   const SHARP_SUB_MAP: Record<string, string> = {
-    // Safety (4)
+    // Safety — SHARP 2.0 legacy names
     "risk disclosure": "safety",
     "medical boundary": "safety",
     "capability scoping": "safety",
     "harmful content prevention": "safety",
-    // Usefulness (4)
+    // Safety — SHARP 3.0 names
+    "s1 risk disclosure": "safety",
+    "s2 medical boundary": "safety",
+    "s3 harmful content prevention": "safety",
+    "s4 capability scoping": "safety",
+    // Usefulness — SHARP 2.0 legacy names
     "comprehensiveness and professionalism": "usefulness",
     "actionability and clarity": "usefulness",
     "readability and structure": "usefulness",
     "empathy and encouragement": "usefulness",
-    // Accuracy (4)
+    // Usefulness — SHARP 3.0 names
+    "u1 comprehensiveness": "usefulness",
+    "u2 domain expertise": "usefulness",
+    "u3 actionability": "usefulness",
+    "u4 expression quality": "usefulness",
+    "u5 empathy and tone": "usefulness",
+    // Accuracy — SHARP 2.0 legacy names
     "factual & scientific accuracy": "accuracy",
     "computational accuracy": "accuracy",
     "data source adherence": "accuracy",
     "rule-based recommendations": "accuracy",
-    // Relevance (2)
+    // Accuracy — SHARP 3.0 names
+    "a1 scientific factual correctness": "accuracy",
+    "a2 computational accuracy": "accuracy",
+    "a3 logical consistency": "accuracy",
+    "a4 user data citation accuracy": "accuracy",
+    "a5 gender consistency": "accuracy",
+    "a6 brand compliance": "accuracy",
+    // Relevance — SHARP 2.0 legacy names
     "topic relevance": "relevance",
     "domain specialization": "relevance",
-    // Personalization (2)
+    // Relevance — SHARP 3.0 names
+    "r1 topic focus": "relevance",
+    "r2 domain specialization": "relevance",
+    // Personalization — SHARP 2.0 legacy names
     "effective personalization": "personalization",
     "contextual audience awareness": "personalization",
+    // Personalization — SHARP 3.0 names
+    "p1 personalization quality": "personalization",
+    "p2 audience identification": "personalization",
   };
 
   // Collect and average across all scene rows
@@ -443,6 +467,7 @@ function parseAndReAggregateScores(
 export interface GatewayConfig {
   host?: string;
   port?: number;
+  basePath?: string;
   apiKey?: string;
   provider?: LLMProvider;
   modelId?: string;
@@ -604,7 +629,8 @@ export function createGatewayApp(): Hono {
 
     // Use the gateway callback URL
     const port = config.gateway.port || 8000;
-    const redirectUri = huaweiConfig.redirectUri || `http://localhost:${port}/auth/huawei/callback`;
+    const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+    const redirectUri = huaweiConfig.redirectUri || `http://localhost:${port}${gwBasePath}/auth/huawei/callback`;
 
     // Use a CSRF nonce as state (user ID comes from id_token after exchange)
     const nonce = crypto.randomUUID();
@@ -633,8 +659,9 @@ export function createGatewayApp(): Hono {
       }
 
       const port = config.gateway.port || 8000;
+      const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
       const redirectUri =
-        huaweiConfig.redirectUri || `http://localhost:${port}/auth/huawei/callback`;
+        huaweiConfig.redirectUri || `http://localhost:${port}${gwBasePath}/auth/huawei/callback`;
 
       // Exchange code for token + extract Huawei user ID from id_token
       const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
@@ -3308,12 +3335,19 @@ export class GatewaySession {
         try {
           const today = new Date().toISOString().split("T")[0];
           const source = this.dataSource;
-          const [weeklySteps, weeklySleep, todayHR, todayWorkouts, todayMetrics, todayBodyComp] =
+          const todayDate = new Date(today + "T00:00:00");
+          const dayOfWeek = todayDate.getDay();
+          const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          const weekStart = new Date(todayDate);
+          weekStart.setDate(todayDate.getDate() - mondayOffset);
+          const weekStartStr = weekStart.toISOString().split("T")[0];
+          const [weeklySteps, weeklySleep, todayHR, todayWorkouts, weeklyWorkouts, todayMetrics, todayBodyComp] =
             await Promise.all([
               source.getWeeklySteps(today).catch(() => []),
               source.getWeeklySleep(today).catch(() => []),
               source.getHeartRate(today).catch(() => null),
               source.getWorkouts(today).catch(() => []),
+              source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
               source.getMetrics(today).catch(() => null),
               source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
             ]);
@@ -3322,6 +3356,7 @@ export class GatewaySession {
             weeklySleep,
             todayHR,
             todayWorkouts,
+            weeklyWorkouts,
             todayMetrics,
             todayBodyComp,
           };
@@ -6535,6 +6570,7 @@ export async function startGateway(
 ): Promise<ReturnType<typeof Bun.serve>> {
   const host = config.host ?? "0.0.0.0";
   const port = config.port ?? 8000;
+  const basePath = (config.basePath || "").replace(/\/+$/, ""); // strip trailing slash
   const app = createGatewayApp();
   const sessions = new Map<string, GatewaySession>();
   const sseManager = new SSEConnectionManager();
@@ -6643,8 +6679,19 @@ export async function startGateway(
     async fetch(req, _server) {
       const url = new URL(req.url);
 
+      // ---- basePath guard & stripping ----
+      // If basePath is configured, reject requests outside it and strip the prefix
+      // so all downstream routing code works against unprefixed paths.
+      let pathname = url.pathname;
+      if (basePath) {
+        if (!pathname.startsWith(basePath + "/") && pathname !== basePath) {
+          return new Response("Not Found", { status: 404 });
+        }
+        pathname = pathname.slice(basePath.length) || "/";
+      }
+
       // AG-UI SSE endpoint
-      if (url.pathname === "/api/ag-ui" && req.method === "POST") {
+      if (pathname === "/api/ag-ui" && req.method === "POST") {
         try {
           const body = (await req.json()) as {
             thread_id?: string;
@@ -6701,7 +6748,7 @@ export async function startGateway(
       // Legacy Chat SSE (边想边搜 external API)
       // ================================================================
 
-      if (url.pathname === "/api/legacy-chat" && req.method === "POST") {
+      if (pathname === "/api/legacy-chat" && req.method === "POST") {
         try {
           const body = (await req.json()) as {
             message?: string;
@@ -6756,7 +6803,7 @@ export async function startGateway(
       // ================================================================
 
       // POST /api/a2ui/init — Create/resume session, return initial page state
-      if (url.pathname === "/api/a2ui/init" && req.method === "POST") {
+      if (pathname === "/api/a2ui/init" && req.method === "POST") {
         try {
           const body = (await req.json().catch(() => ({}))) as { uuid?: string; view?: string };
           const userId = body.uuid || extractUserId(req);
@@ -6793,7 +6840,7 @@ export async function startGateway(
       }
 
       // POST /api/a2ui/action — Handle user actions and navigation
-      if (url.pathname === "/api/a2ui/action" && req.method === "POST") {
+      if (pathname === "/api/a2ui/action" && req.method === "POST") {
         try {
           const body = (await req.json()) as {
             type: string;
@@ -6823,7 +6870,7 @@ export async function startGateway(
       }
 
       // GET /api/a2ui/events — SSE long-lived connection for push updates
-      if (url.pathname === "/api/a2ui/events" && req.method === "GET") {
+      if (pathname === "/api/a2ui/events" && req.method === "GET") {
         const _sessionId = url.searchParams.get("sessionId");
         const userId = extractUserId(req);
         const session = getOrCreateSession(userId);
@@ -6887,7 +6934,7 @@ export async function startGateway(
       // MCP Streamable HTTP (JSON-RPC 2.0)
       // ================================================================
 
-      if (url.pathname === "/api/mcp" && req.method === "POST") {
+      if (pathname === "/api/mcp" && req.method === "POST") {
         try {
           const body = await req.json();
           const response = await handleMCPRequest(body);
@@ -6921,8 +6968,8 @@ export async function startGateway(
       // ================================================================
 
       // GET /.well-known/agent.json — Agent Card discovery
-      if (url.pathname === "/.well-known/agent.json" && req.method === "GET") {
-        return new Response(JSON.stringify(generateAgentCard(port)), {
+      if (pathname === "/.well-known/agent.json" && req.method === "GET") {
+        return new Response(JSON.stringify(generateAgentCard(port, basePath)), {
           headers: {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
@@ -6931,7 +6978,7 @@ export async function startGateway(
       }
 
       // POST /api/a2a — JSON-RPC 2.0 task management
-      if (url.pathname === "/api/a2a" && req.method === "POST") {
+      if (pathname === "/api/a2a" && req.method === "POST") {
         try {
           const body = await req.json();
           const response = await handleA2ARequest(body, async (_taskId, message) => {
@@ -6973,9 +7020,34 @@ export async function startGateway(
 
       // Serve static files from web directory
       if (webDir) {
-        let filePath = url.pathname;
+        let filePath = pathname;
         if (filePath === "/" || filePath === "") {
           filePath = "/index.html";
+        }
+
+        // Helper: inject basePath into index.html so frontend knows the prefix
+        // and rewrite asset paths (Vite builds absolute /assets/... paths)
+        const serveIndexWithBasePath = async () => {
+          const indexFile = Bun.file(webDir + "/index.html");
+          if (!(await indexFile.exists())) return null;
+          if (!basePath) {
+            return new Response(indexFile, { headers: { "Content-Type": "text/html" } });
+          }
+          let html = await indexFile.text();
+          // Rewrite Vite asset paths: /assets/ → /health_sport/pha/assets/
+          html = html.replaceAll('"/assets/', `"${basePath}/assets/`);
+          html = html.replaceAll("'/assets/", `'${basePath}/assets/`);
+          // Inject basePath for runtime JS
+          html = html.replace(
+            "<head>",
+            `<head><script>window.__PHA_BASE_PATH__="${basePath}";</script>`
+          );
+          return new Response(html, { headers: { "Content-Type": "text/html" } });
+        };
+
+        if (filePath === "/index.html") {
+          const resp = await serveIndexWithBasePath();
+          if (resp) return resp;
         }
 
         const fullPath = webDir + filePath;
@@ -6995,25 +7067,26 @@ export async function startGateway(
           !filePath.startsWith("/health") &&
           !filePath.startsWith("/auth")
         ) {
-          const indexFile = Bun.file(`${webDir}/index.html`);
-          if (await indexFile.exists()) {
-            return new Response(indexFile, {
-              headers: { "Content-Type": "text/html" },
-            });
-          }
+          const resp = await serveIndexWithBasePath();
+          if (resp) return resp;
         }
       }
 
-      // Handle HTTP requests with Hono
+      // Handle HTTP requests with Hono (strip basePath so Hono routes match)
+      if (basePath) {
+        const stripped = new URL(req.url);
+        stripped.pathname = pathname;
+        return app.fetch(new Request(stripped.toString(), req));
+      }
       return app.fetch(req);
     },
   });
 
   const displayHost = host === "0.0.0.0" ? "localhost" : host;
-  log.info(`PHA Gateway running at http://${displayHost}:${port}`);
-  log.info(`A2UI SSE at http://${displayHost}:${port}/api/a2ui/events`);
-  log.info(`MCP JSON-RPC at http://${displayHost}:${port}/api/mcp`);
-  log.info(`A2A Agent Card at http://${displayHost}:${port}/.well-known/agent.json`);
+  log.info(`PHA Gateway running at http://${displayHost}:${port}${basePath}`);
+  log.info(`A2UI SSE at http://${displayHost}:${port}${basePath}/api/a2ui/events`);
+  log.info(`MCP JSON-RPC at http://${displayHost}:${port}${basePath}/api/mcp`);
+  log.info(`A2A Agent Card at http://${displayHost}:${port}${basePath}/.well-known/agent.json`);
 
   // Trigger gateway_start hook
   const hr = getGlobalHookRunner();

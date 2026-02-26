@@ -104,6 +104,7 @@ export function registerGatewayCommand(program: Command): void {
       const config = loadConfig();
       const pid = getPid();
       const running = pid ? isRunning(pid) : false;
+      const statusBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
 
       const phaRef = config.orchestrator?.pha;
       const provider = phaRef ? phaRef.split("/")[0] : config.llm.provider;
@@ -114,7 +115,7 @@ export function registerGatewayCommand(program: Command): void {
         port: config.gateway.port,
         provider,
         model,
-        url: running ? `http://localhost:${config.gateway.port}` : null,
+        url: running ? `http://localhost:${config.gateway.port}${statusBasePath}` : null,
       };
 
       if (options.json) {
@@ -124,7 +125,7 @@ export function registerGatewayCommand(program: Command): void {
         console.log(`  Status: ${running ? c.green("Running") : c.red("Stopped")}`);
         if (running) {
           printKV("PID", String(pid));
-          printKV("URL", c.cyan(`http://localhost:${config.gateway.port}`));
+          printKV("URL", c.cyan(`http://localhost:${config.gateway.port}${statusBasePath}`));
         }
         printKV("Provider", config.llm.provider);
         if (config.llm.modelId) {
@@ -169,7 +170,8 @@ export function registerGatewayCommand(program: Command): void {
     .description("Check gateway health endpoint")
     .action(async () => {
       const config = loadConfig();
-      const url = `http://localhost:${config.gateway.port}/health`;
+      const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+      const url = `http://localhost:${config.gateway.port}${gwBasePath}/health`;
 
       try {
         const response = await fetch(url);

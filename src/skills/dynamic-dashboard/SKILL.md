@@ -33,14 +33,14 @@ metadata:
 1. 理解用户要追踪什么
 2. 用健康数据工具获取实际数据
    - 单日详情: get_heart_rate、get_sleep、get_activity
-   - 多日趋势: get_health_trends (支持 7d/30d/90d，返回每日聚合)
+   - 多日趋势: get_weekly_summary
 3. 用数据填充 widget → 调用 create_dashboard
 4. 用户点刷新或问进展 → 重新拉数据 → 调用 update_dashboard
 ```
 
 **关键**：
 - 先拉数据，再创建 dashboard。Dashboard 里的数值必须来自真实数据，不要编造。
-- 需要多天趋势数据时，用 `get_health_trends` 而非多次调用单日接口。
+- 需要多天趋势数据时，用 `get_weekly_summary` 而非多次调用单日接口。
 - 图表 data 格式必须是 `{ label, value }` 数组（label=X轴，value=Y轴）。
 
 ## create_dashboard 参数

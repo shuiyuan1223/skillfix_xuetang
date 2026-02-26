@@ -32,8 +32,8 @@ metadata:
 
 | 计划类型 | 需要的数据 | 工具调用 |
 |---------|----------|---------|
-| 运动/步数计划 | 近7天步数、运动记录 | `get_health_data`, `get_workouts`, `get_health_trends(7d)` |
-| 睡眠改善计划 | 近7天睡眠、心率 | `get_sleep`, `get_heart_rate`, `get_health_trends(7d)` |
+| 运动/步数计划 | 近7天步数、运动记录 | `get_health_data`, `get_workouts`, `get_weekly_summary` |
+| 睡眠改善计划 | 近7天睡眠、心率 | `get_sleep`, `get_heart_rate`, `get_weekly_summary` |
 | 减重计划 | 体重、活动量、营养 | `get_body_composition`, `get_health_data`, `get_workouts` |
 | 心率管理 | 静息心率趋势、运动强度 | `get_heart_rate`, `get_hrv`, `get_workouts` |
 

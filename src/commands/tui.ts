@@ -131,7 +131,8 @@ export function registerTuiCommand(program: Command): void {
 
 async function runTUI(options: { port?: string }, config: PHAConfig): Promise<void> {
   const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
-  const baseUrl = `http://localhost:${port}`;
+  const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+  const baseUrl = `http://localhost:${port}${gwBasePath}`;
   const phaRef = config.orchestrator?.pha;
   const provider = (phaRef ? phaRef.split("/")[0] : config.llm.provider) as LLMProvider;
   const providerCfg = PROVIDER_CONFIGS[provider];

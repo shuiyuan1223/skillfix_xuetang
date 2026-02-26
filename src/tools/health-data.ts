@@ -27,12 +27,36 @@ export function resetDataSource(): void {
   resetCachedDataSource();
 }
 
+/** Args type for tools that support both single-day and date range queries */
+type DateOrRangeArgs = { date?: string; startDate?: string; endDate?: string };
+
+/** Resolve "today" / undefined to actual YYYY-MM-DD string */
+function resolveDate(date?: string): string {
+  return !date || date === "today" ? new Date().toISOString().split("T")[0] : date;
+}
+
+/** Shared inputSchema properties for date + range */
+const dateRangeProperties = {
+  date: {
+    type: "string",
+    description: "Single date (YYYY-MM-DD). Use 'today' for today. Ignored when startDate+endDate provided.",
+  },
+  startDate: {
+    type: "string",
+    description: "Range start (YYYY-MM-DD). Use with endDate for multi-day queries like '最近一周/一个月'.",
+  },
+  endDate: {
+    type: "string",
+    description: "Range end (YYYY-MM-DD). Use with startDate.",
+  },
+};
+
 // Tool definitions for pi-agent
 
-export const getHealthDataTool: PHATool<{ date: string }> = {
+export const getHealthDataTool: PHATool<DateOrRangeArgs> = {
   name: "get_health_data",
   description:
-    "获取指定日期的健康指标数据。返回步数、卡路里、活动时长、距离。当用户询问步数、活动量或运动时调用。",
+    "获取健康指标数据。返回步数、卡路里、活动时长、距离。支持 startDate+endDate 范围查询，返回每日指标数组。当用户询问步数趋势、最近N天活动量时使用范围模式。",
   displayName: "健康数据",
   category: "health" as const,
   icon: "activity",
@@ -40,29 +64,27 @@ export const getHealthDataTool: PHATool<{ date: string }> = {
   label: "Get Health Data",
   inputSchema: {
     type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
-      },
-    },
-    required: ["date"],
+    properties: dateRangeProperties,
   },
-  execute: async (args: { date: string }) => {
-    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+  execute: async (args: DateOrRangeArgs) => {
     const source = getDataSource();
+    if (args.startDate && args.endDate) {
+      if (!source.getMetricsRange) {
+        return { success: false, message: "Date range query not supported by this data source." };
+      }
+      const data = await source.getMetricsRange(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
     const metrics = await source.getMetrics(date);
-    return {
-      success: true,
-      data: metrics,
-    };
+    return { success: true, data: metrics };
   },
 };
 
-export const getHeartRateTool: PHATool<{ date: string }> = {
+export const getHeartRateTool: PHATool<DateOrRangeArgs> = {
   name: "get_heart_rate",
   description:
-    "获取指定日期的心率数据。返回静息平均值、最高值、最低值及每小时读数。当用户询问心率时调用。",
+    "获取心率数据。单日返回静息平均值、最高值、最低值及每小时读数。支持 startDate+endDate 范围查询，返回每日心率摘要数组。当用户询问心率变化、最近N天心率时使用范围模式。",
   displayName: "心率数据",
   category: "health" as const,
   icon: "heart-pulse",
@@ -71,29 +93,27 @@ export const getHeartRateTool: PHATool<{ date: string }> = {
   label: "Get Heart Rate",
   inputSchema: {
     type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
-      },
-    },
-    required: ["date"],
+    properties: dateRangeProperties,
   },
-  execute: async (args: { date: string }) => {
-    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+  execute: async (args: DateOrRangeArgs) => {
     const source = getDataSource();
+    if (args.startDate && args.endDate) {
+      if (!source.getHeartRateRange) {
+        return { success: false, message: "Date range query not supported by this data source." };
+      }
+      const data = await source.getHeartRateRange(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
     const heartRate = await source.getHeartRate(date);
-    return {
-      success: true,
-      data: heartRate,
-    };
+    return { success: true, data: heartRate };
   },
 };
 
-export const getSleepTool: PHATool<{ date: string }> = {
+export const getSleepTool: PHATool<DateOrRangeArgs> = {
   name: "get_sleep",
   description:
-    "获取指定日期的睡眠数据。返回睡眠时长、质量评分、入睡时间、起床时间及各阶段（深睡/浅睡/REM/清醒）。当用户询问睡眠时调用。",
+    "获取睡眠数据。单日返回睡眠时长、质量评分、入睡时间、起床时间及各阶段。支持 startDate+endDate 范围查询，返回每日睡眠时长和质量评分数组。当用户询问睡眠趋势、最近N天睡眠时使用范围模式。",
   displayName: "睡眠数据",
   category: "health" as const,
   icon: "moon",
@@ -102,36 +122,30 @@ export const getSleepTool: PHATool<{ date: string }> = {
   label: "Get Sleep",
   inputSchema: {
     type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Date in YYYY-MM-DD format. Use 'today' for last night's sleep.",
-      },
-    },
-    required: ["date"],
+    properties: dateRangeProperties,
   },
-  execute: async (args: { date: string }) => {
-    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+  execute: async (args: DateOrRangeArgs) => {
     const source = getDataSource();
+    if (args.startDate && args.endDate) {
+      if (!source.getSleepRange) {
+        return { success: false, message: "Date range query not supported by this data source." };
+      }
+      const data = await source.getSleepRange(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
     const sleep = await source.getSleep(date);
     if (!sleep) {
-      return {
-        success: true,
-        data: null,
-        message: "No sleep data available for this date.",
-      };
+      return { success: true, data: null, message: "No sleep data available for this date." };
     }
-    return {
-      success: true,
-      data: sleep,
-    };
+    return { success: true, data: sleep };
   },
 };
 
-export const getWorkoutsTool: PHATool<{ date: string }> = {
+export const getWorkoutsTool: PHATool<DateOrRangeArgs> = {
   name: "get_workouts",
   description:
-    "获取指定日期的运动记录。返回运动类型、时长、消耗卡路里、距离、平均心率。当用户询问锻炼或运动时调用。",
+    "获取运动记录。单日返回运动类型、时长、消耗卡路里、距离、平均心率。支持 startDate+endDate 范围查询，返回时间段内所有运动记录。当用户询问运动趋势、最近N天锻炼时使用范围模式。",
   displayName: "运动数据",
   category: "health" as const,
   icon: "activity",
@@ -140,30 +154,27 @@ export const getWorkoutsTool: PHATool<{ date: string }> = {
   label: "Get Workouts",
   inputSchema: {
     type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
-      },
-    },
-    required: ["date"],
+    properties: dateRangeProperties,
   },
-  execute: async (args: { date: string }) => {
-    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+  execute: async (args: DateOrRangeArgs) => {
     const source = getDataSource();
+    if (args.startDate && args.endDate) {
+      if (!source.getWorkoutsRange) {
+        return { success: false, message: "Date range query not supported by this data source." };
+      }
+      const data = await source.getWorkoutsRange(args.startDate, args.endDate);
+      return { success: true, data, count: data.length, mode: "range" };
+    }
+    const date = resolveDate(args.date);
     const workouts = await source.getWorkouts(date);
-    return {
-      success: true,
-      data: workouts,
-      count: workouts.length,
-    };
+    return { success: true, data: workouts, count: workouts.length };
   },
 };
 
 export const getWeeklySummaryTool: PHATool<{}> = {
   name: "get_weekly_summary",
   description:
-    "【已废弃，请优先使用 get_health_trends(period='7d')】获取 7 天步数和睡眠汇总。仅返回步数和睡眠两个维度，功能已被 get_health_trends 完全覆盖。",
+    "获取 7 天步数和睡眠汇总。返回步数和睡眠两个维度的每日数据及平均值。",
   displayName: "周报汇总",
   category: "health" as const,
   icon: "calendar",
@@ -208,10 +219,10 @@ export const getWeeklySummaryTool: PHATool<{}> = {
   },
 };
 
-export const getStressTool: PHATool<{ date: string }> = {
+export const getStressTool: PHATool<DateOrRangeArgs> = {
   name: "get_stress",
   description:
-    "获取指定日期的压力数据。返回当前压力值（1-99）、平均值、最高值、最低值及全天读数。当用户询问压力或心理负荷时调用。",
+    "获取压力数据。单日返回压力值（1-99）、平均值、最高值、最低值及全天读数。支持 startDate+endDate 范围查询，返回每日压力摘要数组。当用户询问压力变化、最近N天压力时使用范围模式。",
   displayName: "压力数据",
   category: "health" as const,
   icon: "brain",
@@ -220,23 +231,20 @@ export const getStressTool: PHATool<{ date: string }> = {
   label: "Get Stress",
   inputSchema: {
     type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
-      },
-    },
-    required: ["date"],
+    properties: dateRangeProperties,
   },
-  execute: async (args: { date: string }) => {
-    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+  execute: async (args: DateOrRangeArgs) => {
     const source = getDataSource();
+    if (args.startDate && args.endDate) {
+      if (!source.getStressRange) {
+        return { success: false, message: "Date range query not supported by this data source." };
+      }
+      const data = await source.getStressRange(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
     if (!source.getStress) {
-      return {
-        success: true,
-        data: null,
-        message: "Stress data not supported by this data source.",
-      };
+      return { success: true, data: null, message: "Stress data not supported by this data source." };
     }
     const stress = await source.getStress(date);
     if (!stress) {
@@ -246,10 +254,10 @@ export const getStressTool: PHATool<{ date: string }> = {
   },
 };
 
-export const getSpO2Tool: PHATool<{ date: string }> = {
+export const getSpO2Tool: PHATool<DateOrRangeArgs> = {
   name: "get_spo2",
   description:
-    "获取指定日期的血氧数据。返回当前血氧百分比、平均值、最高值、最低值及读数。当用户询问血氧或氧饱和度时调用。",
+    "获取血氧数据。单日返回血氧百分比、平均值、最高值、最低值及读数。支持 startDate+endDate 范围查询，返回每日血氧摘要数组。当用户询问血氧变化、最近N天血氧时使用范围模式。",
   displayName: "血氧数据",
   category: "health" as const,
   icon: "wind",
@@ -258,17 +266,18 @@ export const getSpO2Tool: PHATool<{ date: string }> = {
   label: "Get SpO2",
   inputSchema: {
     type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
-      },
-    },
-    required: ["date"],
+    properties: dateRangeProperties,
   },
-  execute: async (args: { date: string }) => {
-    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+  execute: async (args: DateOrRangeArgs) => {
     const source = getDataSource();
+    if (args.startDate && args.endDate) {
+      if (!source.getSpO2Range) {
+        return { success: false, message: "Date range query not supported by this data source." };
+      }
+      const data = await source.getSpO2Range(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
     if (!source.getSpO2) {
       return { success: true, data: null, message: "SpO2 data not supported by this data source." };
     }
@@ -280,162 +289,10 @@ export const getSpO2Tool: PHATool<{ date: string }> = {
   },
 };
 
-export const getHealthTrendsTool: PHATool<{ period: string; metrics?: string }> = {
-  name: "get_health_trends",
-  description:
-    "获取健康趋势数据（7 天到 2 年）。返回步数、睡眠、心率、卡路里、运动的逐日聚合数据。用于周回顾、趋势分析、进度追踪和长期模式识别。这是查询多日健康数据的首选工具（替代 get_weekly_summary）。",
-  displayName: "健康趋势",
-  category: "health" as const,
-  icon: "trending-up",
-  sessionBound: true,
-  label: "Get Health Trends",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      period: {
-        type: "string",
-        description:
-          "Time period: '7d' (1 week), '30d' (1 month), '90d' (3 months), '180d' (6 months), '365d' (1 year), '730d' (2 years).",
-      },
-      metrics: {
-        type: "string",
-        description:
-          "Comma-separated metrics to include: 'steps,sleep,heart_rate,calories,workouts'. Default: all.",
-      },
-    },
-    required: ["period"],
-  },
-  execute: async (args: { period: string; metrics?: string }) => {
-    const days = parseInt(args.period, 10) || 30;
-    const cappedDays = Math.min(days, 730); // Cap at 2 years
-
-    const requestedMetrics = args.metrics
-      ? args.metrics.split(",").map((m) => m.trim())
-      : ["steps", "sleep", "heart_rate", "calories", "workouts"];
-
-    const today = new Date();
-    const startDate = new Date(today);
-    startDate.setDate(startDate.getDate() - cappedDays);
-
-    const startStr = startDate.toISOString().split("T")[0];
-    const endStr = today.toISOString().split("T")[0];
-    const source = getDataSource();
-
-    const result: Record<string, unknown> = {
-      period: `${cappedDays} days`,
-      startDate: startStr,
-      endDate: endStr,
-    };
-
-    // For long periods, aggregate by week to keep response manageable
-    const aggregateByWeek = cappedDays > 90;
-
-    // Fetch metrics range if available, otherwise fall back to daily queries
-    if (requestedMetrics.some((m) => ["steps", "calories"].includes(m)) && source.getMetricsRange) {
-      const metricsData = await source.getMetricsRange(startStr, endStr);
-      if (aggregateByWeek) {
-        result.activity = aggregateWeekly(metricsData, (items) => ({
-          avgSteps: Math.round(items.reduce((s, d) => s + d.steps, 0) / items.length),
-          avgCalories: Math.round(items.reduce((s, d) => s + d.calories, 0) / items.length),
-          totalSteps: items.reduce((s, d) => s + d.steps, 0),
-        }));
-      } else {
-        result.activity = metricsData;
-      }
-    }
-
-    if (requestedMetrics.includes("sleep") && source.getSleepRange) {
-      const sleepData = await source.getSleepRange(startStr, endStr);
-      if (aggregateByWeek) {
-        result.sleep = aggregateWeekly(
-          sleepData.filter((d) => d.hours > 0),
-          (items) => ({
-            avgHours: Math.round((items.reduce((s, d) => s + d.hours, 0) / items.length) * 10) / 10,
-            avgQuality: items[0]?.qualityScore
-              ? Math.round(items.reduce((s, d) => s + (d.qualityScore || 0), 0) / items.length)
-              : undefined,
-          })
-        );
-      } else {
-        result.sleep = sleepData;
-      }
-    }
-
-    if (requestedMetrics.includes("heart_rate") && source.getHeartRateRange) {
-      const hrData = await source.getHeartRateRange(startStr, endStr);
-      if (aggregateByWeek) {
-        result.heartRate = aggregateWeekly(
-          hrData.filter((d) => d.avg > 0),
-          (items) => ({
-            avgResting: Math.round(items.reduce((s, d) => s + d.avg, 0) / items.length),
-            maxHR: Math.max(...items.map((d) => d.max)),
-            minHR: Math.min(...items.map((d) => d.min)),
-          })
-        );
-      } else {
-        result.heartRate = hrData;
-      }
-    }
-
-    if (requestedMetrics.includes("workouts") && source.getWorkoutsRange) {
-      const workouts = await source.getWorkoutsRange(startStr, endStr);
-      // Summarize workouts by type
-      const byType: Record<string, { count: number; totalMinutes: number; totalCalories: number }> =
-        {};
-      for (const w of workouts) {
-        if (!byType[w.type]) byType[w.type] = { count: 0, totalMinutes: 0, totalCalories: 0 };
-        byType[w.type].count++;
-        byType[w.type].totalMinutes += w.durationMinutes;
-        byType[w.type].totalCalories += w.caloriesBurned;
-      }
-      result.workouts = {
-        total: workouts.length,
-        byType,
-        avgPerWeek: Math.round((workouts.length / (cappedDays / 7)) * 10) / 10,
-      };
-    }
-
-    return { success: true, data: result };
-  },
-};
-
-/** Aggregate daily data into weekly buckets */
-function aggregateWeekly<T extends { date: string }, R>(
-  data: T[],
-  reducer: (items: T[]) => R
-): Array<{ weekStart: string; weekEnd: string } & R> {
-  if (data.length === 0) return [];
-
-  const weeks: Map<string, T[]> = new Map();
-  for (const item of data) {
-    const d = new Date(item.date);
-    // Get Monday of this week
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(d);
-    monday.setDate(diff);
-    const weekKey = monday.toISOString().split("T")[0];
-    if (!weeks.has(weekKey)) weeks.set(weekKey, []);
-    weeks.get(weekKey)!.push(item);
-  }
-
-  return Array.from(weeks.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([weekStart, items]) => {
-      const end = new Date(weekStart);
-      end.setDate(end.getDate() + 6);
-      return {
-        weekStart,
-        weekEnd: end.toISOString().split("T")[0],
-        ...reducer(items),
-      };
-    });
-}
-
-export const getBloodPressureTool: PHATool<{ date: string }> = {
+export const getBloodPressureTool: PHATool<DateOrRangeArgs> = {
   name: "get_blood_pressure",
   description:
-    "获取指定日期的血压数据。返回收缩压/舒张压读数、平均值及各次测量记录。当用户询问血压时调用。",
+    "获取血压数据。单日返回收缩压/舒张压读数、平均值及各次测量记录。支持 startDate+endDate 范围查询，返回每日血压摘要数组。当用户询问血压变化、最近N天血压时使用范围模式。",
   displayName: "血压数据",
   category: "health" as const,
   icon: "heart",
@@ -444,23 +301,20 @@ export const getBloodPressureTool: PHATool<{ date: string }> = {
   label: "Get Blood Pressure",
   inputSchema: {
     type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
-      },
-    },
-    required: ["date"],
+    properties: dateRangeProperties,
   },
-  execute: async (args: { date: string }) => {
-    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+  execute: async (args: DateOrRangeArgs) => {
     const source = getDataSource();
+    if (args.startDate && args.endDate) {
+      if (!source.getBloodPressureRange) {
+        return { success: false, message: "Date range query not supported by this data source." };
+      }
+      const data = await source.getBloodPressureRange(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
     if (!source.getBloodPressure) {
-      return {
-        success: true,
-        data: null,
-        message: "Blood pressure not supported by this data source.",
-      };
+      return { success: true, data: null, message: "Blood pressure not supported by this data source." };
     }
     const bp = await source.getBloodPressure(date);
     return bp
@@ -506,10 +360,10 @@ export const getBloodGlucoseTool: PHATool<{ date: string }> = {
   },
 };
 
-export const getBodyCompositionTool: PHATool<{ date: string }> = {
+export const getBodyCompositionTool: PHATool<DateOrRangeArgs> = {
   name: "get_body_composition",
   description:
-    "获取体成分数据，包括体重、身高、BMI 和体脂率。使用 30 天回溯查找最新测量值。当用户询问体重、BMI 或体脂时调用。",
+    "获取体成分数据，包括体重、身高、BMI 和体脂率。支持 startDate+endDate 范围查询，返回每日体重/BMI/体脂数组。当用户询问体重变化、最近N天体重趋势时使用范围模式。",
   displayName: "体成分数据",
   category: "health" as const,
   icon: "user",
@@ -518,23 +372,20 @@ export const getBodyCompositionTool: PHATool<{ date: string }> = {
   label: "Get Body Composition",
   inputSchema: {
     type: "object" as const,
-    properties: {
-      date: {
-        type: "string",
-        description: "Date in YYYY-MM-DD format. Use 'today' for today.",
-      },
-    },
-    required: ["date"],
+    properties: dateRangeProperties,
   },
-  execute: async (args: { date: string }) => {
-    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+  execute: async (args: DateOrRangeArgs) => {
     const source = getDataSource();
+    if (args.startDate && args.endDate) {
+      if (!source.getBodyCompositionRange) {
+        return { success: false, message: "Date range query not supported by this data source." };
+      }
+      const data = await source.getBodyCompositionRange(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
     if (!source.getBodyComposition) {
-      return {
-        success: true,
-        data: null,
-        message: "Body composition not supported by this data source.",
-      };
+      return { success: true, data: null, message: "Body composition not supported by this data source." };
     }
     const bc = await source.getBodyComposition(date);
     return bc
@@ -767,7 +618,6 @@ export const healthTools = [
   getWeeklySummaryTool,
   getStressTool,
   getSpO2Tool,
-  getHealthTrendsTool,
   getBloodPressureTool,
   getBloodGlucoseTool,
   getBodyCompositionTool,
@@ -787,24 +637,45 @@ export function createHealthTools(source: HealthDataSource) {
   return {
     getHealthData: {
       ...getHealthDataTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+      execute: async (args: DateOrRangeArgs) => {
+        if (args.startDate && args.endDate) {
+          if (!source.getMetricsRange) {
+            return { success: false, message: "Date range query not supported by this data source." };
+          }
+          const data = await source.getMetricsRange(args.startDate, args.endDate);
+          return { success: true, data, mode: "range" };
+        }
+        const date = resolveDate(args.date);
         const metrics = await source.getMetrics(date);
         return { success: true, data: metrics };
       },
     },
     getHeartRate: {
       ...getHeartRateTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+      execute: async (args: DateOrRangeArgs) => {
+        if (args.startDate && args.endDate) {
+          if (!source.getHeartRateRange) {
+            return { success: false, message: "Date range query not supported by this data source." };
+          }
+          const data = await source.getHeartRateRange(args.startDate, args.endDate);
+          return { success: true, data, mode: "range" };
+        }
+        const date = resolveDate(args.date);
         const heartRate = await source.getHeartRate(date);
         return { success: true, data: heartRate };
       },
     },
     getSleep: {
       ...getSleepTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+      execute: async (args: DateOrRangeArgs) => {
+        if (args.startDate && args.endDate) {
+          if (!source.getSleepRange) {
+            return { success: false, message: "Date range query not supported by this data source." };
+          }
+          const data = await source.getSleepRange(args.startDate, args.endDate);
+          return { success: true, data, mode: "range" };
+        }
+        const date = resolveDate(args.date);
         const sleep = await source.getSleep(date);
         if (!sleep) {
           return { success: true, data: null, message: "No sleep data available for this date." };
@@ -814,8 +685,15 @@ export function createHealthTools(source: HealthDataSource) {
     },
     getWorkouts: {
       ...getWorkoutsTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+      execute: async (args: DateOrRangeArgs) => {
+        if (args.startDate && args.endDate) {
+          if (!source.getWorkoutsRange) {
+            return { success: false, message: "Date range query not supported by this data source." };
+          }
+          const data = await source.getWorkoutsRange(args.startDate, args.endDate);
+          return { success: true, data, count: data.length, mode: "range" };
+        }
+        const date = resolveDate(args.date);
         const workouts = await source.getWorkouts(date);
         return { success: true, data: workouts, count: workouts.length };
       },
@@ -846,8 +724,15 @@ export function createHealthTools(source: HealthDataSource) {
     },
     getStress: {
       ...getStressTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+      execute: async (args: DateOrRangeArgs) => {
+        if (args.startDate && args.endDate) {
+          if (!source.getStressRange) {
+            return { success: false, message: "Date range query not supported by this data source." };
+          }
+          const data = await source.getStressRange(args.startDate, args.endDate);
+          return { success: true, data, mode: "range" };
+        }
+        const date = resolveDate(args.date);
         if (!source.getStress) {
           return { success: true, data: null, message: "Stress data not supported." };
         }
@@ -859,8 +744,15 @@ export function createHealthTools(source: HealthDataSource) {
     },
     getSpO2: {
       ...getSpO2Tool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+      execute: async (args: DateOrRangeArgs) => {
+        if (args.startDate && args.endDate) {
+          if (!source.getSpO2Range) {
+            return { success: false, message: "Date range query not supported by this data source." };
+          }
+          const data = await source.getSpO2Range(args.startDate, args.endDate);
+          return { success: true, data, mode: "range" };
+        }
+        const date = resolveDate(args.date);
         if (!source.getSpO2) {
           return { success: true, data: null, message: "SpO2 data not supported." };
         }
@@ -870,14 +762,17 @@ export function createHealthTools(source: HealthDataSource) {
           : { success: true, data: null, message: "No SpO2 data available." };
       },
     },
-    getHealthTrends: {
-      ...getHealthTrendsTool,
-      execute: getHealthTrendsTool.execute, // Uses getDataSource() internally, but we override here
-    },
     getBloodPressure: {
       ...getBloodPressureTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+      execute: async (args: DateOrRangeArgs) => {
+        if (args.startDate && args.endDate) {
+          if (!source.getBloodPressureRange) {
+            return { success: false, message: "Date range query not supported by this data source." };
+          }
+          const data = await source.getBloodPressureRange(args.startDate, args.endDate);
+          return { success: true, data, mode: "range" };
+        }
+        const date = resolveDate(args.date);
         if (!source.getBloodPressure) {
           return { success: true, data: null, message: "Blood pressure not supported." };
         }
@@ -902,8 +797,15 @@ export function createHealthTools(source: HealthDataSource) {
     },
     getBodyComposition: {
       ...getBodyCompositionTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+      execute: async (args: DateOrRangeArgs) => {
+        if (args.startDate && args.endDate) {
+          if (!source.getBodyCompositionRange) {
+            return { success: false, message: "Date range query not supported by this data source." };
+          }
+          const data = await source.getBodyCompositionRange(args.startDate, args.endDate);
+          return { success: true, data, mode: "range" };
+        }
+        const date = resolveDate(args.date);
         if (!source.getBodyComposition) {
           return { success: true, data: null, message: "Body composition not supported." };
         }

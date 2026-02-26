@@ -434,7 +434,7 @@ export interface LocaleMessages {
     latestRun: string;
     bestScoresAllTime: string;
     bestPerVersion: string;
-    // SHARP 2.0
+    // SHARP 3.0
     sharpSafety: string;
     sharpUsefulness: string;
     sharpAccuracy: string;

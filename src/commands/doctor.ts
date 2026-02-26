@@ -194,9 +194,10 @@ export function registerDoctorCommand(program: Command): void {
 
       // Check 7: Gateway health (if running)
       if (pidFileValid && config) {
+        const drBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
         let gatewayHealthy = false;
         try {
-          const response = await fetch(`http://localhost:${config.gateway.port}/health`, {
+          const response = await fetch(`http://localhost:${config.gateway.port}${drBasePath}/health`, {
             signal: AbortSignal.timeout(2000),
           });
           gatewayHealthy = response.ok;
@@ -208,7 +209,7 @@ export function registerDoctorCommand(program: Command): void {
           name: "Gateway Health",
           status: gatewayHealthy ? "pass" : "warn",
           message: gatewayHealthy ? "Gateway is responding" : "Gateway not responding",
-          detail: `http://localhost:${config.gateway.port}`,
+          detail: `http://localhost:${config.gateway.port}${drBasePath}`,
         });
       }
 

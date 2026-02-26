@@ -88,6 +88,8 @@ export function registerStartCommand(program: Command): void {
       const config = loadConfig();
       const host = config.gateway.host || "0.0.0.0";
       const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
+      const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+      const gwUrl = `http://localhost:${port}${gwBasePath}`;
       let agentModel: ReturnType<typeof resolveAgentModel> | null = null;
       let apiKey: string | undefined;
       try {
@@ -104,23 +106,23 @@ export function registerStartCommand(program: Command): void {
         const existingPid = getPid();
         if (existingPid && isRunning(existingPid)) {
           info(`PHA is already running ${c.dim(`(PID: ${existingPid})`)}`);
-          console.log(`\n  ${c.cyan(`http://localhost:${port}`)}\n`);
+          console.log(`\n  ${c.cyan(gwUrl)}\n`);
           if (options.open !== false) {
             // Open browser using spawn to avoid blocking exit
             const { spawn } = await import("child_process");
             const platform = process.platform;
             if (platform === "darwin") {
-              spawn("open", [`http://localhost:${port}`], {
+              spawn("open", [gwUrl], {
                 detached: true,
                 stdio: "ignore",
               }).unref();
             } else if (platform === "win32") {
-              spawn("cmd", ["/c", "start", "", `http://localhost:${port}`], {
+              spawn("cmd", ["/c", "start", "", gwUrl], {
                 detached: true,
                 stdio: "ignore",
               }).unref();
             } else {
-              spawn("xdg-open", [`http://localhost:${port}`], {
+              spawn("xdg-open", [gwUrl], {
                 detached: true,
                 stdio: "ignore",
               }).unref();
@@ -146,7 +148,7 @@ export function registerStartCommand(program: Command): void {
         console.log("");
         printHeader(`${icons.server} PHA Gateway`, "Foreground Mode");
 
-        printKV("URL", c.cyan(`http://localhost:${port}`));
+        printKV("URL", c.cyan(gwUrl));
         printKV("Provider", providerCfg?.name || agentModel?.provider || config.llm.provider);
         printKV("Model", agentModel?.modelId || config.llm.modelId || "default");
         printKV("Web UI", webDir ? c.green("Enabled") : c.yellow("Disabled"));
@@ -157,12 +159,13 @@ export function registerStartCommand(program: Command): void {
         console.log("");
 
         if (options.open !== false) {
-          setTimeout(() => openBrowser(`http://localhost:${port}`), 500);
+          setTimeout(() => openBrowser(gwUrl), 500);
         }
 
         await startGateway({
           host,
           port,
+          basePath: gwBasePath,
           provider: (agentModel?.provider || config.llm.provider) as LLMProvider,
           modelId: agentModel?.modelId || config.llm.modelId,
           baseUrl: agentModel?.baseUrl || config.llm.baseUrl,
@@ -201,7 +204,7 @@ export function registerStartCommand(program: Command): void {
           console.log("");
           console.log(`  ${c.bold("PHA is running!")}`);
           console.log("");
-          printKV("URL", c.cyan(`http://localhost:${port}`));
+          printKV("URL", c.cyan(gwUrl));
           printKV("PID", String(child.pid));
           printKV("Logs", c.dim(getLogFile()));
           console.log("");
@@ -216,17 +219,17 @@ export function registerStartCommand(program: Command): void {
             const { spawn: spawnBrowser } = await import("child_process");
             const platform = process.platform;
             if (platform === "darwin") {
-              spawnBrowser("open", [`http://localhost:${port}`], {
+              spawnBrowser("open", [gwUrl], {
                 detached: true,
                 stdio: "ignore",
               }).unref();
             } else if (platform === "win32") {
-              spawnBrowser("cmd", ["/c", "start", "", `http://localhost:${port}`], {
+              spawnBrowser("cmd", ["/c", "start", "", gwUrl], {
                 detached: true,
                 stdio: "ignore",
               }).unref();
             } else {
-              spawnBrowser("xdg-open", [`http://localhost:${port}`], {
+              spawnBrowser("xdg-open", [gwUrl], {
                 detached: true,
                 stdio: "ignore",
               }).unref();

@@ -40,12 +40,21 @@ export async function preComputeHealthContext(
     const source = dataSource || getDataSource();
     const today = new Date().toISOString().split("T")[0];
 
+    // Compute week start (Monday) for weekly workout range
+    const todayDate = new Date(today + "T00:00:00");
+    const dayOfWeek = todayDate.getDay(); // 0=Sun, 1=Mon, ...
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const weekStart = new Date(todayDate);
+    weekStart.setDate(todayDate.getDate() - mondayOffset);
+    const weekStartStr = weekStart.toISOString().split("T")[0];
+
     // Fetch data in parallel (including stress, SpO2, and new health types if available)
     const [
       weeklySteps,
       weeklySleep,
       todayHR,
       todayWorkouts,
+      weeklyWorkouts,
       todayStress,
       todaySpO2,
       todayBP,
@@ -58,6 +67,7 @@ export async function preComputeHealthContext(
       source.getWeeklySleep(today).catch(() => []),
       source.getHeartRate(today).catch(() => null),
       source.getWorkouts(today).catch(() => []),
+      source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
       source.getStress?.(today).catch(() => null) ?? Promise.resolve(null),
       source.getSpO2?.(today).catch(() => null) ?? Promise.resolve(null),
       source.getBloodPressure?.(today).catch(() => null) ?? Promise.resolve(null),
@@ -244,6 +254,7 @@ export async function preComputeHealthContext(
           weeklySleep,
           todayHR,
           todayWorkouts,
+          weeklyWorkouts,
           todayMetrics,
           todayBodyComp,
         });
@@ -390,6 +401,7 @@ export interface HealthSnapshot {
   weeklySleep: Array<{ date: string; hours: number }>;
   todayHR: { restingAvg: number } | null;
   todayWorkouts: Array<{ durationMinutes: number }>;
+  weeklyWorkouts: Array<{ durationMinutes: number }>;
   todayMetrics: HealthMetrics | null;
   todayBodyComp: BodyCompositionData | null;
 }
@@ -462,8 +474,8 @@ function resolveMetricValue(
     }
     case "exercise_count": {
       if (frequency === "weekly") {
-        // Count workout days in the week (approximate from todayWorkouts only)
-        return data.todayWorkouts.length;
+        // Count workout sessions across the entire week
+        return data.weeklyWorkouts.length;
       }
       return data.todayWorkouts.length;
     }

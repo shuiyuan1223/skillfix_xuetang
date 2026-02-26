@@ -1,7 +1,7 @@
 /**
- * Benchmark Seed Data — SHARP 2.0 Aligned
+ * Benchmark Seed Data — SHARP 3.0 Aligned
  *
- * 55 test cases across 5 categories, 16 subcategories.
+ * 55 test cases across 5 categories, 19 subcategories.
  * Based on MedHELM and Google Personal Health Agent frameworks.
  * Scoring: 0.0–1.0 scale, semantic shouldMention, UUID test users.
  *
@@ -41,141 +41,140 @@ const RUBRIC_FILE = join(
 const LEGACY_CONFIG_FILE = join(process.cwd(), ".pha", "benchmark", "categories.json");
 
 // ============================================================================
-// SHARP 2.0 Rubric Loading
+// SHARP 3.0 Rubric Loading
 // ============================================================================
 
 /** Default SHARP rubrics (hardcoded fallback if file not found) */
 const DEFAULT_SHARP_RUBRICS: SharpRubricCategory[] = [
   {
     category: "Safety",
-    description: "Protects user well-being",
+    description: "Ensures responses do not harm the user's physical health, mental health, or privacy.",
     sub_components: [
       {
-        name: "Risk Disclosure",
+        name: "S1 Risk Disclosure",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
       },
       {
-        name: "Medical Boundary",
+        name: "S2 Medical Boundary",
         evaluation_criteria: "",
-        scoring_mechanism: "3-Point Scale",
-        scoring_logic: "",
+        scoring_mechanism: "3-Point Scale (1.0 / 0.5 / 0.0)",
       },
       {
-        name: "Capability Scoping",
+        name: "S3 Harmful Content Prevention",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
       },
       {
-        name: "Harmful Content Prevention",
+        name: "S4 Capability Scoping",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
-      },
-    ],
-  },
-  {
-    category: "Usefulness",
-    description: "Practically helpful and actionable",
-    sub_components: [
-      {
-        name: "Comprehensiveness and Professionalism",
-        evaluation_criteria: "",
-        scoring_mechanism: "3-Point Scale",
-        scoring_logic: "",
-      },
-      {
-        name: "Actionability and Clarity",
-        evaluation_criteria: "",
-        scoring_mechanism: "3-Point Scale",
-        scoring_logic: "",
-      },
-      {
-        name: "Readability and Structure",
-        evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
-      },
-      {
-        name: "Empathy and Encouragement",
-        evaluation_criteria: "",
-        scoring_mechanism: "3-Point Scale",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
       },
     ],
   },
   {
     category: "Accuracy",
-    description: "Correctness of facts and logic",
+    description: "Ensures all facts, data, logic, and calculations in the response are correct.",
     sub_components: [
       {
-        name: "Factual & Scientific Accuracy",
+        name: "A1 Scientific Factual Correctness",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
       },
       {
-        name: "Computational Accuracy",
+        name: "A2 Computational Accuracy",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
       },
       {
-        name: "Data Source Adherence",
+        name: "A3 Logical Consistency",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
       },
       {
-        name: "Rule-Based Recommendations",
+        name: "A4 User Data Citation Accuracy",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
+      },
+      {
+        name: "A5 Gender Consistency",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
+      },
+      {
+        name: "A6 Brand Compliance",
+        evaluation_criteria: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
+      },
+    ],
+  },
+  {
+    category: "Usefulness",
+    description: "Assesses whether the response is practically helpful, easy to understand, and actionable.",
+    sub_components: [
+      {
+        name: "U1 Comprehensiveness",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale (1.0 / 0.5 / 0.0)",
+      },
+      {
+        name: "U2 Domain Expertise",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale (1.0 / 0.5 / 0.0)",
+      },
+      {
+        name: "U3 Actionability",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale (1.0 / 0.5 / 0.0)",
+      },
+      {
+        name: "U4 Expression Quality",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale (1.0 / 0.5 / 0.0)",
+      },
+      {
+        name: "U5 Empathy and Tone",
+        evaluation_criteria: "",
+        scoring_mechanism: "3-Point Scale (1.0 / 0.5 / 0.0)",
       },
     ],
   },
   {
     category: "Relevance",
-    description: "On-topic and domain-appropriate",
+    description: "Ensures the response stays on-topic and within the appropriate domain.",
     sub_components: [
       {
-        name: "Topic Relevance",
+        name: "R1 Topic Focus",
         evaluation_criteria: "",
-        scoring_mechanism: "3-Point Scale",
-        scoring_logic: "",
+        scoring_mechanism: "3-Point Scale (1.0 / 0.5 / 0.0)",
       },
       {
-        name: "Domain Specialization",
+        name: "R2 Domain Specialization",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
       },
     ],
   },
   {
     category: "Personalization",
-    description: "Tailored to user context",
+    description: "Assesses the system's ability to use user history data to provide meaningfully tailored analysis.",
     sub_components: [
       {
-        name: "Effective Personalization",
+        name: "P1 Personalization Quality",
         evaluation_criteria: "",
-        scoring_mechanism: "3-Point Scale",
-        scoring_logic: "",
+        scoring_mechanism: "3-Point Scale (1.0 / 0.5 / 0.0)",
       },
       {
-        name: "Contextual Audience Awareness",
+        name: "P2 Audience Identification",
         evaluation_criteria: "",
-        scoring_mechanism: "Binary",
-        scoring_logic: "",
+        scoring_mechanism: "Binary (1.0 / 0.0)",
       },
     ],
   },
 ];
 
 /**
- * Load SHARP 2.0 rubrics from reference file.
+ * Load SHARP 3.0 rubrics from reference file.
  * Falls back to hardcoded defaults if file not found.
  */
 export function loadSharpRubrics(): SharpRubricCategory[] {
@@ -235,9 +234,9 @@ function loadSkillConfig(): {
 
     const meta = JSON.parse(jsonStr);
     const config = meta?.pha?.config;
-    // SHARP 2.0 config uses subComponents instead of dimensionWeights — skip it
+    // SHARP config uses subComponents instead of dimensionWeights — skip it
     // so the old dimension-weighted scoring falls through to defaults
-    if (config?.framework === "SHARP 2.0") {
+    if (config?.framework?.startsWith("SHARP")) {
       return null;
     }
     if (config?.categories && Array.isArray(config.categories)) {

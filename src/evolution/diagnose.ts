@@ -1,11 +1,11 @@
 /**
- * Diagnose Mode — SHARP 2.0
+ * Diagnose Mode — SHARP 3.0
  *
  * Pipeline: load benchmark → compute SHARP category scores → identify weak dimensions
  *           → LLM root-cause analysis → actionable suggestions
  *
  * Analyses the 5 SHARP categories (Safety, Usefulness, Accuracy, Relevance, Personalization)
- * and their 16 sub-components to find the real weak dimensions.
+ * and their 19 sub-components to find the real weak dimensions.
  */
 
 import type {
@@ -490,9 +490,9 @@ ${failingSummary || "  (无)"}`;
     )
     .join("\n");
 
-  const prompt = `你是 PHA (Personal Health Agent) 的诊断分析师。请分析以下 SHARP 2.0 基准测试数据，找出薄弱维度的根因并给出改进建议。
+  const prompt = `你是 PHA (Personal Health Agent) 的诊断分析师。请分析以下 SHARP 3.0 基准测试数据，找出薄弱维度的根因并给出改进建议。
 
-${skillGuide ? `## 分析框架\n\n${skillGuide}\n\n` : ""}## SHARP 2.0 基准测试数据
+${skillGuide ? `## 分析框架\n\n${skillGuide}\n\n` : ""}## SHARP 3.0 基准测试数据
 
 ### 总体情况
 - 总分: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)}
@@ -524,7 +524,7 @@ ${passingSample || "无"}
   "suggestions": [
     {
       "category": "accuracy",
-      "description": "【根因】Agent 在回答中编造不在用户健康数据中的数值。【改进】在 SOUL.md 中添加数据引用规则，要求回复必须引用具体数据来源。【预期】Data Source Adherence 从 0.3 提升至 0.7+",
+      "description": "【根因】Agent 在回答中编造不在用户健康数据中的数值。【改进】在 SOUL.md 中添加数据引用规则，要求回复必须引用具体数据来源。【预期】A4 User Data Citation Accuracy 从 0.3 提升至 0.7+",
       "targetFiles": ["src/prompts/SOUL.md"],
       "priority": "high"
     }

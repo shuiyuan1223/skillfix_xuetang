@@ -7,6 +7,7 @@
 
 import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
 import { t } from "../locales/index.js";
+import { loadSharpRubrics } from "../evolution/benchmark-seed.js";
 
 // ============================================================================
 // Types
@@ -223,6 +224,49 @@ export const SHARP_CATEGORY_COLORS: Record<string, string> = {
   "personalization-memory": "#dda0dd",
 };
 
+/**
+ * SHARP 2.0 legacy name → SHARP 3.0 canonical name mapping.
+ * Used to normalize old benchmark data so the radar chart always shows 19 criteria.
+ */
+const SHARP_LEGACY_NAME_MAP: Record<string, string> = {
+  "risk disclosure": "S1 Risk Disclosure",
+  "medical boundary": "S2 Medical Boundary",
+  "harmful content prevention": "S3 Harmful Content Prevention",
+  "capability scoping": "S4 Capability Scoping",
+  "comprehensiveness and professionalism": "U1 Comprehensiveness",
+  "actionability and clarity": "U3 Actionability",
+  "readability and structure": "U4 Expression Quality",
+  "empathy and encouragement": "U5 Empathy and Tone",
+  "factual & scientific accuracy": "A1 Scientific Factual Correctness",
+  "computational accuracy": "A2 Computational Accuracy",
+  "data source adherence": "A4 User Data Citation Accuracy",
+  "rule-based recommendations": "A3 Logical Consistency",
+  "topic relevance": "R1 Topic Focus",
+  "domain specialization": "R2 Domain Specialization",
+  "effective personalization": "P1 Personalization Quality",
+  "contextual audience awareness": "P2 Audience Identification",
+};
+
+/** Normalize sub-component name: map SHARP 2.0 legacy names to SHARP 3.0 canonical names */
+function normalizeSubComponentName(name: string): string {
+  return SHARP_LEGACY_NAME_MAP[name.toLowerCase()] || name;
+}
+
+/**
+ * Get the canonical 19 SHARP 3.0 sub-component names in order, grouped by category.
+ * Used as the reference axis for criteria-mode radar charts.
+ */
+function getCanonicalCriteriaOrder(): Array<{ category: string; name: string }> {
+  const rubrics = loadSharpRubrics();
+  const order: Array<{ category: string; name: string }> = [];
+  for (const cat of rubrics) {
+    for (const sub of cat.sub_components) {
+      order.push({ category: cat.category.toLowerCase(), name: sub.name });
+    }
+  }
+  return order;
+}
+
 export const RUN_COLORS = [
   "rgb(99, 102, 241)",
   "rgb(236, 72, 153)",
@@ -242,6 +286,65 @@ function formatModelDisplay(presetName?: string, modelId?: string): string {
   return shortModel;
 }
 
+function getScoreColor(score: number): string {
+  if (score >= 0.9) return "#4ade80";
+  if (score >= 0.7) return "#fbbf24";
+  return "#f87171";
+}
+
+/**
+ * Build multiSeries radar data from comparison runs.
+ * categories mode: 5 SHARP data points per series.
+ * criteria mode: all sub-component data points per series.
+ */
+function buildMultiSeriesRadarData(
+  comparisonRuns: ComparisonRun[],
+  mode: "categories" | "criteria"
+): Array<{
+  label: string;
+  data: Array<{ label: string; value: number; maxValue: number }>;
+  color: string;
+}> {
+  if (mode === "categories") {
+    return comparisonRuns.map((run) => ({
+      label: run.label,
+      color: run.color,
+      data: run.categoryScores.map((cs) => ({
+        label: getCategoryLabel(cs.category),
+        value: Math.round((cs.score <= 1.0 ? cs.score : cs.score / 100) * 100),
+        maxValue: 100,
+      })),
+    }));
+  }
+  // criteria mode: use canonical 19 SHARP 3.0 sub-components as fixed axis
+  const criteriaOrder = getCanonicalCriteriaOrder();
+  if (criteriaOrder.length === 0) {
+    return buildMultiSeriesRadarData(comparisonRuns, "categories");
+  }
+  return comparisonRuns.map((run) => {
+    // Build normalized lookup: lowercased canonical name → score
+    const scoreMap = new Map<string, number>();
+    for (const cs of run.categoryScores) {
+      for (const sub of cs.subComponents || []) {
+        const key = normalizeSubComponentName(sub.name).toLowerCase();
+        scoreMap.set(key, sub.score);
+      }
+    }
+    return {
+      label: run.label,
+      color: run.color,
+      data: criteriaOrder.map((cr) => {
+        const score = scoreMap.get(cr.name.toLowerCase()) ?? 0;
+        return {
+          label: cr.name.length > 14 ? cr.name.slice(0, 12) + ".." : cr.name,
+          value: Math.round(score * 100),
+          maxValue: 100,
+        };
+      }),
+    };
+  });
+}
+
 /**
  * Build Recharts-compatible radar chart data from comparison runs.
  * Returns { data: [{subject, seriesKey1, seriesKey2, ...}], series: [{key, name, color}] }
@@ -253,23 +356,33 @@ export function buildRadarChartData(
   data: Array<Record<string, unknown>>;
   series: Array<{ key: string; name: string; color: string }>;
 } {
+  // Pre-load canonical criteria order once (avoids repeated file I/O inside the loop)
+  const canonicalOrder = mode === "criteria" ? getCanonicalCriteriaOrder() : [];
+
   // Build subjects (axis labels) and per-run scores
   const runDataPoints = runs.map((run) => {
     let dataPoints: Array<{ name: string; score: number }>;
     if (mode === "criteria") {
+      // Build a map from lowercased normalized name → scores for this run
       const criteriaMap = new Map<string, number[]>();
       for (const cs of run.categoryScores) {
         for (const sub of cs.subComponents || []) {
           const score = sub.score <= 1 ? sub.score : sub.score / 100;
-          if (!criteriaMap.has(sub.name)) criteriaMap.set(sub.name, []);
-          criteriaMap.get(sub.name)!.push(score);
+          const key = normalizeSubComponentName(sub.name).toLowerCase();
+          if (!criteriaMap.has(key)) criteriaMap.set(key, []);
+          criteriaMap.get(key)!.push(score);
         }
       }
-      dataPoints = Array.from(criteriaMap.entries()).map(([name, scores]) => ({
-        name,
-        score: scores.reduce((a, b) => a + b, 0) / scores.length,
-      }));
-      if (dataPoints.length === 0) {
+      // Use canonical 19 SHARP 3.0 criteria as axis reference (case-insensitive lookup)
+      dataPoints = canonicalOrder.map((cr) => {
+        const scores = criteriaMap.get(cr.name.toLowerCase());
+        return {
+          name: cr.name,
+          score: scores ? scores.reduce((a, b) => a + b, 0) / scores.length : 0,
+        };
+      });
+      if (dataPoints.every((d) => d.score === 0)) {
+        // Fallback to categories if no sub-component data at all
         dataPoints = run.categoryScores.map((cs) => ({
           name: getCategoryLabel(cs.category),
           score: cs.score <= 1 ? cs.score : cs.score / 100,
@@ -314,7 +427,7 @@ export function getCategoryLabel(category: string): string {
     "safety-boundaries": "Safety & Boundaries",
     "personalization-memory": "Personalization & Memory",
     "communication-quality": "Communication Quality",
-    // SHARP 2.0 categories
+    // SHARP categories
     safety: "Safety",
     usefulness: "Usefulness",
     accuracy: "Accuracy",
@@ -798,7 +911,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
 
   // SHARP Category Breakdown Cards (using arena_category_card style)
   if (data.latestRunCategoryScores && data.latestRunCategoryScores.length > 0) {
-    const sharpTitle = ui.text("SHARP 2.0 Evaluation", "h3");
+    const sharpTitle = ui.text("SHARP 3.0 Evaluation", "h3");
     const sharpCards: string[] = [];
 
     for (const cs of data.latestRunCategoryScores) {

@@ -333,7 +333,7 @@ export const en: LocaleMessages = {
     retry: "Retry",
     retryStep: "Retry Current Step",
     rerunQuick: "Rerun Quick (5)",
-    rerunFull: "Rerun Full (16)",
+    rerunFull: "Rerun Full (19)",
     // Auto-evolve
     autoEvolve: "Auto-Evolve",
     autoEvolveDesc: "Automatically optimize weak categories using Claude Code",
@@ -417,7 +417,7 @@ export const en: LocaleMessages = {
     latestRun: "Latest Run",
     bestScoresAllTime: "Best Scores (All-Time)",
     bestPerVersion: "Best per Version",
-    // SHARP 2.0
+    // SHARP 3.0
     sharpSafety: "Safety",
     sharpUsefulness: "Usefulness",
     sharpAccuracy: "Accuracy",
@@ -433,7 +433,7 @@ export const en: LocaleMessages = {
     // Arena dashboard
     selectRunsForComparison: "Select runs to compare",
     categoriesMode: "5 Categories",
-    criteriaMode: "16 Criteria",
+    criteriaMode: "19 Criteria",
     overallScores: "Overall Scores",
     categoryBreakdown: "Category Breakdown",
     clearSelection: "Clear",

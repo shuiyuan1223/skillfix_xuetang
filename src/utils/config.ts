@@ -202,6 +202,8 @@ export interface PHAConfig {
     host: string;
     port: number;
     autoStart: boolean;
+    /** URL path prefix, e.g. "/health_sport/pha" */
+    basePath?: string;
   };
   llm: LLMConfig;
   dataSources: {
