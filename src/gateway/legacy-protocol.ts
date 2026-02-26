@@ -2,7 +2,11 @@
  * Legacy Protocol Adapter
  *
  * State machine that converts Agent events into "边想边搜" SSE protocol.
- * All tool calls are retained — they map to the "searching" phase.
+ *
+ * Content is never emitted during streaming (message_update). Instead it is
+ * emitted at well-defined boundaries so each chunk has a confirmed role:
+ *   - Reasoning text  → flushed when tool_execution_start confirms it was thinking
+ *   - Final answer    → emitted at agent_end without content_type
  *
  * Protocol events:
  *   search_mode  — mode announcement
@@ -17,12 +21,11 @@ export interface LegacySSEEvent {
   content_type?: "reasoning";
 }
 
-type AdapterState = "initial" | "reasoning" | "searching" | "pending" | "content" | "done";
+type AdapterState = "initial" | "reasoning" | "searching" | "pending" | "done";
 
 export class LegacyProtocolAdapter {
   private state: AdapterState = "initial";
   private pendingText = "";
-  private allReasoningText = "";
   private finalText = "";
 
   constructor(private send: (event: LegacySSEEvent) => void) {}
@@ -33,79 +36,57 @@ export class LegacyProtocolAdapter {
         if (event.message?.role !== "assistant") break;
 
         if (this.state === "initial") {
-          // First message — emit mode announcement + start reasoning
           this.send({ event: "search_mode", content: "search_with_think" });
           this.send({ event: "rag_status", content: "start_search" });
           this.state = "reasoning";
         }
 
-        // Extract initial text
-        const content = event.message.content || [];
-        let text = "";
-        for (const block of content) {
-          if (block.type === "text") text += block.text;
-        }
-
-        if (text) {
-          this.pendingText = text;
-          this.allReasoningText += text;
-        }
+        this.pendingText = "";
         break;
       }
 
       case "message_update": {
         if (event.message?.role !== "assistant") break;
 
+        // Accumulate text only — do not emit yet.
+        // We don't know the role of this message (reasoning vs final answer)
+        // until we see what event follows message_end.
         const content = event.message.content || [];
         let text = "";
         for (const block of content) {
           if (block.type === "text") text += block.text;
         }
-
-        // Calculate delta from what we've already sent
-        const delta = text.slice(this.pendingText.length);
         this.pendingText = text;
-
-        if (delta && (this.state === "reasoning" || this.state === "searching")) {
-          // Flush reasoning text
-          this.send({ event: "data", content: delta, content_type: "reasoning" });
-          this.allReasoningText += delta;
-        } else if (delta) {
-          // Accumulate for later decision
-          this.allReasoningText += delta;
-        }
         break;
       }
 
       case "message_end": {
         if (event.message?.role !== "assistant") break;
 
-        // Flush remaining pending text as reasoning
-        // The text is complete for this turn. We move to "pending" state —
-        // waiting to see if next event is tool_execution_start (more reasoning)
-        // or agent_end (this was the final content).
+        // Capture the complete text for this turn.
+        // Use pendingText as fallback if content blocks are empty.
         const content = event.message.content || [];
         let text = "";
         for (const block of content) {
           if (block.type === "text") text += block.text;
         }
-
-        this.finalText = text;
+        this.finalText = text || this.pendingText;
         this.state = "pending";
         this.pendingText = "";
         break;
       }
 
       case "tool_execution_start": {
-        // We were in pending or reasoning — confirm this is still reasoning phase
-        if (this.state === "pending") {
-          // The pending text was reasoning, not final content
-          this.state = "searching";
-        } else if (this.state === "reasoning") {
+        // A tool call follows → the buffered text was reasoning, flush it now.
+        if (this.finalText.trim()) {
+          this.send({ event: "data", content: this.finalText, content_type: "reasoning" });
+          this.finalText = "";
+        }
+
+        if (this.state === "pending" || this.state === "reasoning") {
           this.state = "searching";
         }
 
-        // Emit a search indicator as reasoning text
         const toolName = event.toolName || "unknown";
         this.send({
           event: "data",
@@ -116,7 +97,6 @@ export class LegacyProtocolAdapter {
       }
 
       case "tool_execution_end": {
-        // Tool finished — back to reasoning, start new reasoning phase
         this.send({ event: "rag_status", content: "start_search" });
         this.state = "reasoning";
         this.pendingText = "";
@@ -126,15 +106,14 @@ export class LegacyProtocolAdapter {
       case "agent_end": {
         if (this.state === "done") break;
 
-        // Signal end of thinking phase
         this.send({ event: "rag_status", content: "search_with_think" });
 
-        // Emit final content
-        if (this.finalText.trim()) {
-          this.send({ event: "data", content: this.finalText });
+        // Emit final answer without content_type
+        const finalContent = this.finalText || this.pendingText;
+        if (finalContent.trim()) {
+          this.send({ event: "data", content: finalContent });
         }
 
-        // Finish
         this.send({ event: "finish" });
         this.state = "done";
         break;
