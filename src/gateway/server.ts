@@ -43,7 +43,6 @@ import {
   listAllModelRefs,
   stripLegacyFieldsForSave,
   type LLMProvider,
-  type BenchmarkModelConfig,
   type PHAConfig,
 } from "../utils/config.js";
 import { installFetchInterceptor, cleanupOldLlmLogs } from "../utils/llm-logger.js";
@@ -205,6 +204,7 @@ import { discoverPlugins } from "../plugins/discovery.js";
 import { loadPluginManifest } from "../plugins/manifest.js";
 import { createLogger, readLogFile, subscribeToLogs, type LogEntry } from "../utils/logger.js";
 import chokidar from "chokidar";
+import { dispatchAction } from "./action-handlers.js";
 
 const log = createLogger("Gateway");
 const logOAuth = log.child("OAuth");
@@ -212,59 +212,6 @@ const logSession = log.child("Session");
 const logAgent = log.child("Agent");
 const logMemory = log.child("Memory");
 const logEvolution = log.child("Evolution");
-
-// ============================================================================
-// Embedding settings → new format sync helper
-// ============================================================================
-
-/**
- * Sync embedding settings changes to the unified model repository format.
- * Called by settings_save_embedding and settings_save_advanced handlers.
- */
-function syncEmbeddingToNewFormat(config: PHAConfig, formData: Record<string, unknown>): void {
-  const enabled = formData.embeddingEnabled === "true";
-  const modelId = formData.embeddingModel ? String(formData.embeddingModel) : undefined;
-
-  if (!enabled || !modelId) {
-    // Disabled — clear the ref
-    if (!config.orchestrator) config.orchestrator = {};
-    config.orchestrator.embedding = undefined;
-    return;
-  }
-
-  // Ensure models.providers exists
-  if (!config.models) config.models = { providers: {} };
-
-  // Find or create a provider to hold the embedding model.
-  // Use the first available provider key, or the orchestrator.pha's provider.
-  let targetProvider: string | undefined;
-  const phaRef = config.orchestrator?.pha;
-  if (phaRef) {
-    const slashIdx = phaRef.indexOf("/");
-    if (slashIdx > 0) targetProvider = phaRef.substring(0, slashIdx);
-  }
-  if (!targetProvider) {
-    targetProvider = Object.keys(config.models.providers)[0] || "openrouter";
-  }
-  if (!config.models.providers[targetProvider]) {
-    config.models.providers[targetProvider] = { models: [] };
-  }
-
-  // Derive a short name for the embedding model
-  const parts = modelId.split("/");
-  const embName = parts[parts.length - 1];
-
-  // Add model to provider if not already present
-  const provModels = config.models.providers[targetProvider].models;
-  if (!provModels.find((m) => m.model === modelId)) {
-    provModels.push({ name: embName, model: modelId });
-  }
-
-  // Find the name of the model entry (might already exist with a different name)
-  const existing = provModels.find((m) => m.model === modelId);
-  if (!config.orchestrator) config.orchestrator = {};
-  config.orchestrator.embedding = `${targetProvider}/${existing?.name || embName}`;
-}
 
 // ============================================================================
 // Quick Reply Detection
@@ -1005,31 +952,33 @@ function generateOAuthErrorPage(message: string): string {
  * Gateway Session - Manages a single client session
  * AgentOS: Session manages chat state and generates all UI via A2UI
  */
+export type SendFn = (msg: unknown) => void;
+
 export class GatewaySession {
-  private agent: PHAAgent | null = null;
-  private systemAgent: SystemAgent | null = null;
+  agent: PHAAgent | null = null;
+  systemAgent: SystemAgent | null = null;
   private config: GatewayConfig;
-  private sessionId: string;
-  private saSessionId: string; // Separate session ID for System Agent persistence
+  sessionId: string;
+  saSessionId: string; // Separate session ID for System Agent persistence
   // System Agent sessions are global (not per-user) — use a fixed UUID for storage
-  private static readonly SA_GLOBAL_UUID = "system";
-  private dataSource: HealthDataSource;
+  static readonly SA_GLOBAL_UUID = "system";
+  dataSource: HealthDataSource;
 
   // User identification (from cookie)
   public userUuid: string | null = null;
 
   // Active push function — bound to the SSE connection on connect.
   // Async tasks (benchmark, agent streaming) use this to push updates.
-  private _activeSend: ((msg: unknown) => void) | null = null;
+  private _activeSend: SendFn | null = null;
 
   // Chat state (Parts model — AG-UI aligned)
-  private chatMessages: PartsChatMessage[] = [];
-  private isStreaming = false;
-  private streamingContent = "";
-  private currentAssistantMsgId: string | null = null;
+  chatMessages: PartsChatMessage[] = [];
+  isStreaming = false;
+  streamingContent = "";
+  currentAssistantMsgId: string | null = null;
   private currentRunId: string | null = null;
-  private lastStreamedText = "";
-  private currentView = "chat";
+  lastStreamedText = "";
+  currentView = "chat";
   // AG-UI chat streaming flag: when true, sendChatUpdate is skipped (AG-UI client manages chat state)
   public _sseMode = false;
   private _chatLock = false;
@@ -1038,49 +987,49 @@ export class GatewaySession {
   private extraToolsCache: AgentTool<any>[] | null = null;
 
   // Legacy-chat independent state
-  private legacyChatMessages: PartsChatMessage[] = [];
-  private legacyChatStreaming = false;
-  private legacyChatStreamingContent = "";
-  private legacyChatCurrentAssistantMsgId: string | null = null;
+  legacyChatMessages: PartsChatMessage[] = [];
+  legacyChatStreaming = false;
+  legacyChatStreamingContent = "";
+  legacyChatCurrentAssistantMsgId: string | null = null;
   private legacyChatCurrentRunId: string | null = null;
-  private legacyChatLastStreamedText = "";
-  private legacyChatSessionId: string = crypto.randomUUID();
-  private legacyChatAgent: PHAAgent | null = null;
+  legacyChatLastStreamedText = "";
+  legacyChatSessionId: string = crypto.randomUUID();
+  legacyChatAgent: PHAAgent | null = null;
   // Tracks which chat channel is active during handleUserMessage / handleAgentEvent
   private _chatChannel: "main" | "legacy" = "main";
 
   // Settings state
-  private selectedPrompt: string | null = null;
-  private selectedSkill: string | null = null;
-  private selectedSkillFile: string = "SKILL.md";
-  private editingPrompt = false;
-  private editingSkill = false;
-  private editBuffer: string | null = null;
+  selectedPrompt: string | null = null;
+  selectedSkill: string | null = null;
+  selectedSkillFile: string = "SKILL.md";
+  editingPrompt = false;
+  editingSkill = false;
+  editBuffer: string | null = null;
   // Track which agent collapsible to expand after tag operations
-  private _settingsExpandedAgent: string | undefined;
+  _settingsExpandedAgent: string | undefined;
 
   // Scope state for Prompts and Skills pages (PHA ↔ System Agent)
-  private promptsScope: "pha" | "system" = "pha";
-  private selectedPromptSource: "system" | "user" = "system";
-  private skillsCategory: string = "health-coaching";
-  private toolsCategory: string = "all";
+  promptsScope: "pha" | "system" = "pha";
+  selectedPromptSource: "system" | "user" = "system";
+  skillsCategory: string = "health-coaching";
+  toolsCategory: string = "all";
 
   // Memory consolidation counter (daily log → MEMORY.md every N exchanges)
   private exchangeCount = 0;
 
   // Custom dashboards (persisted per-user)
-  private customDashboards = new Map<string, DashboardDefinition>();
-  private activeDashboardTab: string | null = null;
+  customDashboards = new Map<string, DashboardDefinition>();
+  activeDashboardTab: string | null = null;
 
   /** Build a page with sidebar */
-  private buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
+  buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
     return generatePage(view, mainPage);
   }
 
   // Memory system-agent sub-state
-  private saSelectedMemoryFile: string | null = null;
-  private saEditingMemory = false;
-  private evolutionTab:
+  saSelectedMemoryFile: string | null = null;
+  saEditingMemory = false;
+  evolutionTab:
     | "overview"
     | "traces"
     | "evaluations"
@@ -1089,7 +1038,7 @@ export class GatewaySession {
     | "suggestions"
     | "config"
     | "versions" = "overview";
-  private tracesPage = 0;
+  tracesPage = 0;
   private runningBenchmarks = new Map<
     string,
     { modelId: string; presetName?: string; startedAt: number }
@@ -1100,15 +1049,15 @@ export class GatewaySession {
   }
 
   // Dashboard state
-  private dashboardTab: "overview" | "vitals" | "activity" | "sleep" | "body" | "heart" | "trends" =
+  dashboardTab: "overview" | "vitals" | "activity" | "sleep" | "body" | "heart" | "trends" =
     "overview";
-  private dashboardLoader: ProgressiveDashboardLoader | null = null;
-  private trendsMetric: string = "steps";
-  private trendsRange: string = "1m";
+  dashboardLoader: ProgressiveDashboardLoader | null = null;
+  trendsMetric: string = "steps";
+  trendsRange: string = "1m";
 
   // Integrations page state
-  private integrationsTab: "overview" | "issues" | "prs" | "branches" = "overview";
-  private integrationsCache: {
+  integrationsTab: "overview" | "issues" | "prs" | "branches" = "overview";
+  integrationsCache: {
     repo?: unknown;
     issues?: unknown[];
     prs?: unknown[];
@@ -1118,40 +1067,40 @@ export class GatewaySession {
   } | null = null;
 
   // Memory page state
-  private memoryTab: "profile" | "summary" | "logs" | "search" | "system-agent" = "profile";
-  private memorySearchQuery: string | undefined;
-  private memorySearchResults: MemorySearchResult[] | undefined;
-  private selectedLogDate: string | null = null;
+  memoryTab: "profile" | "summary" | "logs" | "search" | "system-agent" = "profile";
+  memorySearchQuery: string | undefined;
+  memorySearchResults: MemorySearchResult[] | undefined;
+  selectedLogDate: string | null = null;
 
   // Plans page state
-  private plansTab: PlansPageTab = "active";
+  plansTab: PlansPageTab = "active";
 
   // Logs page state
-  private logsTab: "system" | "llm" = "system";
-  private logsLevelFilter: string | undefined;
-  private logsSubsystemFilter: string | undefined;
+  logsTab: "system" | "llm" = "system";
+  logsLevelFilter: string | undefined;
+  logsSubsystemFilter: string | undefined;
   private logsUnsubscribe: (() => void) | null = null;
   private llmLogsUnsubscribe: (() => void) | null = null;
-  private llmProviderFilter: string | undefined;
-  private llmModelFilter: string | undefined;
-  private llmPage: number = 0;
+  llmProviderFilter: string | undefined;
+  llmModelFilter: string | undefined;
+  llmPage: number = 0;
 
-  private llmSelectedId: number | undefined;
+  llmSelectedId: number | undefined;
 
   // Evolution version state
-  private activeVersionBranch: string | null = null;
+  activeVersionBranch: string | null = null;
 
   // Evolution Lab state (5-Tab Dashboard)
-  private evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" = "overview";
-  private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
-  private evolutionSelectedVersion: string | null = null;
-  private systemAgentChatMessages: PartsChatMessage[] = [];
-  private systemAgentStreaming = false;
-  private systemAgentStreamingContent = "";
-  private saCurrentAssistantMsgId: string | null = null;
-  private saLastStreamedText = "";
-  private evolutionInspectedBranch: string | null = null;
-  private evolutionLabDiffContent: {
+  evolutionActiveTab: "overview" | "benchmark" | "versions" | "data" = "overview";
+  evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
+  evolutionSelectedVersion: string | null = null;
+  systemAgentChatMessages: PartsChatMessage[] = [];
+  systemAgentStreaming = false;
+  systemAgentStreamingContent = "";
+  saCurrentAssistantMsgId: string | null = null;
+  saLastStreamedText = "";
+  evolutionInspectedBranch: string | null = null;
+  evolutionLabDiffContent: {
     before: string;
     after: string;
     path: string;
@@ -1159,12 +1108,12 @@ export class GatewaySession {
   } | null = null;
 
   // Arena comparison state
-  private benchmarkSelectedRunIds: Set<string> = new Set();
-  private benchmarkRadarMode: "categories" | "criteria" = "categories";
+  benchmarkSelectedRunIds: Set<string> = new Set();
+  benchmarkRadarMode: "categories" | "criteria" = "categories";
 
   // Modal state
-  private modalRadarMode: "categories" | "criteria" = "categories";
-  private lastViewedBenchmarkRunId: string | null = null;
+  modalRadarMode: "categories" | "criteria" = "categories";
+  lastViewedBenchmarkRunId: string | null = null;
 
   constructor(config: GatewayConfig = {}, userUuid?: string) {
     this.config = config;
@@ -1228,7 +1177,7 @@ export class GatewaySession {
    * Persist a single message to the JSONL session file.
    * Two channels: "chat" → {sessionId}.jsonl, "system-agent" → sa-{sessionId}.jsonl
    */
-  private persistMessage(
+  persistMessage(
     channel: "chat" | "legacy-chat" | "system-agent",
     entry: SessionEntry
   ): void {
@@ -1818,7 +1767,7 @@ export class GatewaySession {
    * Get the full file path for a user-level file.
    */
   /** Open prompt detail modal with content + git history */
-  private async openPromptModal(send: (msg: unknown) => void): Promise<void> {
+  async openPromptModal(send: (msg: unknown) => void): Promise<void> {
     if (!this.selectedPrompt) return;
 
     let content = "";
@@ -1868,7 +1817,7 @@ export class GatewaySession {
     sendAll(send, modal);
   }
 
-  private getUserFilePath(name: string): string | null {
+  getUserFilePath(name: string): string | null {
     const filename = name.endsWith(".md") ? name : `${name}.md`;
     let dir: string;
     if (this.promptsScope === "system") {
@@ -1881,7 +1830,7 @@ export class GatewaySession {
     return join(dir, filename);
   }
 
-  private async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
+  async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
     // Unsubscribe from logs when navigating away
     if (this.currentView === "settings/logs" && view !== "settings/logs") {
       if (this.logsUnsubscribe) {
@@ -2547,7 +2496,7 @@ export class GatewaySession {
     sendAll(send, this.buildPage(view, mainPage));
   }
 
-  private async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
+  async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
     // Route to the correct channel based on current view
     const isLegacy = this.currentView === "legacy-chat";
     this._chatChannel = isLegacy ? "legacy" : "main";
@@ -2734,7 +2683,7 @@ export class GatewaySession {
     }
   }
 
-  private sendChatUpdate(send: (msg: unknown) => void): void {
+  sendChatUpdate(send: (msg: unknown) => void): void {
     const activeSend = this.getSend(send);
     if (this._sseMode) return; // SSE mode: client manages chat state
     if (this.currentView === "chat" || this.currentView === "legacy-chat") {
@@ -2974,7 +2923,7 @@ export class GatewaySession {
    * sends initial streaming UI update immediately, and returns.
    * This prevents the action lock from being held during LLM inference.
    */
-  private fireSystemAgentMessage(content: string, send: (msg: unknown) => void): void {
+  fireSystemAgentMessage(content: string, send: (msg: unknown) => void): void {
     // Use SSE send if available (preferred over HTTP collector)
     const sseSend = this.getSend(send);
     this.handleSystemAgentMessage(content, sseSend).catch((err: unknown) => {
@@ -3182,1842 +3131,14 @@ export class GatewaySession {
     payload: Record<string, unknown> | undefined,
     send: (msg: unknown) => void
   ): Promise<void> {
-    // Handle UI actions (button clicks, form submissions, etc.)
-    if (action === "clear_chat") {
-      // Clear chat history based on current view (main or legacy-chat)
-      if (this.currentView === "legacy-chat") {
-        this.legacyChatMessages = [];
-        this.legacyChatStreaming = false;
-        this.legacyChatStreamingContent = "";
-        this.legacyChatCurrentAssistantMsgId = null;
-        this.legacyChatLastStreamedText = "";
-        this.legacyChatSessionId = crypto.randomUUID();
-        if (this.userUuid) {
-          const p = getAgentProfile("pha4old");
-          const dir = p.sessionPath ? resolveSessionPath(p.sessionPath, this.userUuid) : undefined;
-          touchSession(this.userUuid, `legacy-${this.legacyChatSessionId}`, dir);
-        }
-        this.legacyChatAgent = null; // Force agent rebuild without old history
-      } else {
-        this.chatMessages = [];
-        this.isStreaming = false;
-        this.streamingContent = "";
-        this.currentAssistantMsgId = null;
-        this.lastStreamedText = "";
-        this.sessionId = crypto.randomUUID();
-        if (this.userUuid) {
-          const p = getAgentProfile("pha");
-          const dir = p.sessionPath ? resolveSessionPath(p.sessionPath, this.userUuid) : undefined;
-          touchSession(this.userUuid, this.sessionId, dir);
-        }
-        this.agent = null; // Force agent rebuild without old history
-      }
-      this.sendChatUpdate(send);
-    } else if (action === "sa_clear_chat") {
-      // Clear System Agent chat history and start a new session
-      this.systemAgentChatMessages = [];
-      this.systemAgentStreaming = false;
-      this.systemAgentStreamingContent = "";
-      this.saCurrentAssistantMsgId = null;
-      this.saLastStreamedText = "";
-      this.saSessionId = crypto.randomUUID();
-      const saP = getAgentProfile("sa");
-      const saDir = saP.sessionPath ? resolveSessionPath(saP.sessionPath, "system") : undefined;
-      touchSession(GatewaySession.SA_GLOBAL_UUID, `sa-${this.saSessionId}`, saDir);
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "send_message" && payload?.content) {
-      // Chat message from UI
-      await this.handleUserMessage(payload.content as string, send);
-    } else if (action === "stop_generation") {
-      // Stop streaming based on current view (main or legacy-chat)
-      if (this.currentView === "legacy-chat") {
-        if (this.legacyChatStreaming && this.legacyChatAgent) {
-          this.legacyChatAgent.abort();
-          if (this.legacyChatStreamingContent.trim() && this.legacyChatCurrentAssistantMsgId) {
-            this.persistMessage("legacy-chat", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: this.legacyChatStreamingContent,
-            });
-          } else if (this.legacyChatStreamingContent.trim()) {
-            this.legacyChatMessages.push({
-              id: crypto.randomUUID(),
-              role: "assistant",
-              parts: [{ type: "text", content: this.legacyChatStreamingContent }],
-            });
-            this.persistMessage("legacy-chat", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: this.legacyChatStreamingContent,
-            });
-          }
-          this.legacyChatStreaming = false;
-          this.legacyChatStreamingContent = "";
-          this.legacyChatCurrentAssistantMsgId = null;
-          this.legacyChatLastStreamedText = "";
-          this.sendChatUpdate(send);
-        }
-      } else {
-        // Main chat stop
-        if (this.isStreaming && this.agent) {
-          this.agent.abort();
-          if (this.streamingContent.trim() && this.currentAssistantMsgId) {
-            this.persistMessage("chat", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: this.streamingContent,
-            });
-          } else if (this.streamingContent.trim()) {
-            this.chatMessages.push({
-              id: crypto.randomUUID(),
-              role: "assistant",
-              parts: [{ type: "text", content: this.streamingContent }],
-            });
-            this.persistMessage("chat", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: this.streamingContent,
-            });
-          }
-          this.isStreaming = false;
-          this.streamingContent = "";
-          this.currentAssistantMsgId = null;
-          this.lastStreamedText = "";
-          this.sendChatUpdate(send);
-        }
-      }
-    } else if (action === "sa_stop_generation") {
-      // Stop System Agent streaming
-      if (this.systemAgentStreaming && this.systemAgent) {
-        this.systemAgent.abort();
-        // Save partial response if any
-        if (this.systemAgentStreamingContent.trim()) {
-          if (this.saCurrentAssistantMsgId) {
-            this.persistMessage("system-agent", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: this.systemAgentStreamingContent,
-            });
-          } else {
-            this.systemAgentChatMessages.push({
-              id: crypto.randomUUID(),
-              role: "assistant",
-              parts: [{ type: "text", content: this.systemAgentStreamingContent }],
-            });
-            this.persistMessage("system-agent", {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: this.systemAgentStreamingContent,
-            });
-          }
-        }
-        this.systemAgentStreaming = false;
-        this.systemAgentStreamingContent = "";
-        this.saCurrentAssistantMsgId = null;
-        this.saLastStreamedText = "";
-        this.sendEvolutionLabUpdate(send);
-      }
-    } else if (action.startsWith("navigate:")) {
-      const view = action.replace("navigate:", "");
-      await this.handleNavigate(view, send);
-    }
-    // Custom dashboard actions
-    else if (action.startsWith("refresh_dashboard:")) {
-      const dashId = action.replace("refresh_dashboard:", "");
-      const dashboard = this.customDashboards.get(dashId);
-      if (dashboard) {
-        // Send a message to the agent asking it to refresh the dashboard
-        const refreshMsg = `请刷新仪表盘「${dashboard.title}」的数据，使用 update_dashboard 工具更新 dashboardId="${dashboard.id}"`;
-        await this.handleUserMessage(refreshMsg, send);
-      }
-    }
-    // Plans actions
-    else if (action.startsWith("view_plan:")) {
-      const planId = action.replace("view_plan:", "");
-      const uuid = this.userUuid || getUserId() || "anonymous";
-      const plan = loadPlan(uuid, planId);
-      if (plan) {
-        // Sync latest health data into plan goals before displaying
-        try {
-          const today = new Date().toISOString().split("T")[0];
-          const source = this.dataSource;
-          const todayDate = new Date(`${today}T00:00:00`);
-          const dayOfWeek = todayDate.getDay();
-          const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-          const weekStart = new Date(todayDate);
-          weekStart.setDate(todayDate.getDate() - mondayOffset);
-          const weekStartStr = weekStart.toISOString().split("T")[0];
-          const [
-            weeklySteps,
-            weeklySleep,
-            todayHR,
-            todayWorkouts,
-            weeklyWorkouts,
-            todayMetrics,
-            todayBodyComp,
-          ] = await Promise.all([
-            source.getWeeklySteps(today).catch(() => []),
-            source.getWeeklySleep(today).catch(() => []),
-            source.getHeartRate(today).catch(() => null),
-            source.getWorkouts(today).catch(() => []),
-            source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
-            source.getMetrics(today).catch(() => null),
-            source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
-          ]);
-          const snapshot: HealthSnapshot = {
-            weeklySteps,
-            weeklySleep,
-            todayHR,
-            todayWorkouts,
-            weeklyWorkouts,
-            todayMetrics,
-            todayBodyComp,
-          };
-          autoSyncPlanProgress([plan], uuid, today, snapshot);
-        } catch {
-          // Sync failed — show plan with existing data
-        }
-        const modal = generatePlanDetailModal(plan);
-        sendAll(send, modal);
-      }
-    } else if (action.startsWith("update_plan_action:")) {
-      const parts = action.replace("update_plan_action:", "").split(":");
-      const planId = parts[0];
-      const newStatus = parts[1] as PlanStatus;
-      const uuid = this.userUuid || getUserId() || "anonymous";
-      const plan = loadPlan(uuid, planId);
-      if (plan) {
-        plan.status = newStatus;
-        if (newStatus === "completed") {
-          for (const goal of plan.goals) {
-            if (goal.status !== "completed" && goal.status !== "missed") {
-              goal.status =
-                goal.currentValue && goal.currentValue >= goal.targetValue ? "completed" : "missed";
-            }
-          }
-        }
-        savePlan(uuid, plan);
-        send({ deleteSurface: { surfaceId: "modal" } });
-        await this.handleNavigate("plans", send);
-      }
-    }
-    // Proactive actions
-    else if (action.startsWith("rec_dismiss:")) {
-      const recId = action.replace("rec_dismiss:", "");
-      const uuid = this.userUuid || getUserId() || "anonymous";
-      const rec = getRecommendation(uuid, recId);
-      if (rec) {
-        rec.status = "dismissed";
-        rec.dismissedAt = new Date().toISOString();
-        saveRecommendation(uuid, rec);
-        await this.handleNavigate("plans", send);
-      }
-    } else if (action.startsWith("rec_act:")) {
-      const recId = action.replace("rec_act:", "");
-      const uuid = this.userUuid || getUserId() || "anonymous";
-      const rec = getRecommendation(uuid, recId);
-      if (rec) {
-        rec.status = "acted";
-        rec.dismissedAt = new Date().toISOString();
-        saveRecommendation(uuid, rec);
-        await this.handleNavigate("plans", send);
-      }
-    } else if (action.startsWith("rem_complete:")) {
-      const remId = action.replace("rem_complete:", "");
-      const uuid = this.userUuid || getUserId() || "anonymous";
-      const rem = getReminder(uuid, remId);
-      if (rem) {
-        rem.status = "completed";
-        rem.completedAt = new Date().toISOString();
-        saveReminder(uuid, rem);
-        await this.handleNavigate("plans", send);
-      }
-    }
-    // OAuth actions
-    else if (action === "start_huawei_auth" || action === "start_reauth") {
-      // Clear scope error cache so re-auth can fix them
-      import("../data-sources/huawei/huawei-api.js").then(({ clearMissingScopeErrors }) =>
-        clearMissingScopeErrors()
-      );
-      // The frontend handles opening the OAuth popup
-      // We just need to send back confirmation and the user UUID
-      send({
-        type: "auth_start",
-        provider: "huawei",
-        uid: this.userUuid,
-      });
-    } else if (
-      (action === "set_uid" || action === "set_user_uuid") &&
-      (payload?.uid || payload?.uuid)
-    ) {
-      // Update the session's user ID (sent from frontend after generating/loading from cookie)
-      this.userUuid = (payload.uid || payload.uuid) as string;
-      // Reset agent so it gets recreated with memory context on next message
-      this.agent = null;
-      send({ type: "uid_set", uid: this.userUuid });
-    } else if (action === "auth_complete") {
-      // User completed OAuth — migrate session to authenticated user
-      if (payload?.userId) {
-        const newUserId = payload.userId as string;
-        this.userUuid = newUserId;
-        this.dataSource = createDataSourceForUser(newUserId);
-        ensureUserDir(newUserId);
-        // Reset agent so it gets recreated with new user context
-        this.agent = null;
-      }
-      // Full reset: clear all caches and re-fetch from scratch
-      const { clearMemoryCache } = await import("../data-sources/huawei/api-cache.js");
-      const { clearMissingScopeErrors } = await import("../data-sources/huawei/huawei-api.js");
-      clearMemoryCache();
-      clearMissingScopeErrors();
-      // Force dashboard loader to start fresh (discard stale null data)
-      this.dashboardLoader = null;
-      await this.handleNavigate(this.currentView, send);
-    }
-    // Memory search action
-    else if (action === "memory_search_submit" && payload?.query) {
-      const mm = getMemoryManager();
-      const uuid = this.userUuid || getUserId() || "anonymous";
-      this.memorySearchQuery = payload.query as string;
-      this.memorySearchResults = await mm.searchAsync(uuid, this.memorySearchQuery);
-      await this.handleNavigate("memory", send);
-    }
-    // Daily log detail actions
-    else if (action === "memory_log_select" && payload?.row) {
-      const row = payload.row as { date: string };
-      this.selectedLogDate = row.date;
-      await this.handleNavigate("memory", send);
-    } else if (action === "memory_log_back") {
-      this.selectedLogDate = null;
-      await this.handleNavigate("memory", send);
-    } else if (action === "show_toast" && payload?.message) {
-      // Show a toast notification
-      const variant = (payload.variant as "info" | "success" | "error") || "info";
-      const toast = generateToast(payload.message as string, variant);
-      sendAll(send, toast);
-    }
-    // Prompts actions — modal-based viewing/editing
-    else if (action === "select_file" && payload?.row) {
-      const row = payload.row as { name: string; source: string };
-      this.selectedPrompt = row.name;
-      this.selectedPromptSource = (row.source === "user" ? "user" : "system") as "system" | "user";
-      this.editingPrompt = false;
-      this.editBuffer = null;
-      await this.openPromptModal(send);
-    } else if (action === "edit_prompt_from_modal") {
-      this.editingPrompt = true;
-      await this.openPromptModal(send);
-    } else if (action === "cancel_edit_from_modal") {
-      this.editingPrompt = false;
-      this.editBuffer = null;
-      await this.openPromptModal(send);
-    } else if (action === "prompt_content_change" && payload?.value) {
-      this.editBuffer = payload.value as string;
-    } else if (action === "save_prompt_from_modal" && this.selectedPrompt && this.editBuffer) {
-      if (this.selectedPromptSource === "user") {
-        const filePath = this.getUserFilePath(this.selectedPrompt);
-        if (filePath) {
-          const { mkdirSync } = await import("fs");
-          const { dirname } = await import("path");
-          mkdirSync(dirname(filePath), { recursive: true });
-          writeFileSync(filePath, this.editBuffer, "utf-8");
-        }
-      } else {
-        setPromptsDir(
-          this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
-        );
-        try {
-          await updatePromptTool.execute({
-            name: this.selectedPrompt,
-            content: this.editBuffer,
-            commitMessage: `Update ${this.promptsScope === "system" ? "system-agent " : ""}prompt: ${this.selectedPrompt} via UI`,
-          });
-        } finally {
-          setPromptsDir("src/prompts/pha");
-        }
-      }
-      this.editingPrompt = false;
-      this.editBuffer = null;
-      // Re-open modal with saved content
-      await this.openPromptModal(send);
-    } else if (action === "select_commit" && payload?.hash) {
-      log.debug("Selected commit", { hash: payload.hash });
-    }
-    // Skills actions
-    else if (action === "select_skill" && payload?.row) {
-      const row = payload.row as { name: string };
-      // Extract skill name (remove emoji prefix)
-      const name = row.name.replace(/^[^\s]+\s+/, "");
-      // Open skill detail modal (same as tools page)
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = (await getSkillTool.execute({ name })) as any;
-        if (result?.success !== false) {
-          const modal = generateSkillDetailModal({
-            name,
-            description: result.description || "",
-            enabled: result.enabled !== false,
-            content: result.content || "",
-            emoji: result.metadata?.pha?.emoji,
-          });
-          sendAll(send, modal);
-        }
-      } catch {
-        /* skill not found — ignore */
-      }
-    } else if (action === "select_skill_file" && payload?.file) {
-      this.selectedSkillFile = payload.file as string;
-      this.editingSkill = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/skills", send);
-    } else if (action === "edit_skill") {
-      this.editingSkill = true;
-      await this.handleNavigate("settings/skills", send);
-    } else if (action === "cancel_edit") {
-      this.editingSkill = false;
-      this.editBuffer = null;
-      await this.handleNavigate(this.currentView, send);
-    } else if (action === "skill_content_change" && payload?.value) {
-      this.editBuffer = payload.value as string;
-    } else if (action === "save_skill" && this.selectedSkill && this.editBuffer) {
-      await updateSkillTool.execute({
-        name: this.selectedSkill,
-        content: this.editBuffer,
-        filePath: this.selectedSkillFile,
-      });
-      this.editingSkill = false;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/skills", send);
-    } else if (action === "toggle_skill" && this.selectedSkill) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const skillsResult = (await listSkillsTool.execute({})) as any;
-      const skill = skillsResult.skills?.find(
-        (s: { name: string }) => s.name === this.selectedSkill
-      );
-      if (skill) {
-        await toggleSkillTool.execute({
-          name: this.selectedSkill,
-          enabled: !skill.enabled,
-        });
-        await this.handleNavigate("settings/skills", send);
-      }
-    } else if (action === "toggle_skill_from_modal" && payload?.skillName) {
-      const skillName = payload.skillName as string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const skillsResult = (await listSkillsTool.execute({})) as any;
-      const skill = skillsResult.skills?.find((s: { name: string }) => s.name === skillName);
-      if (skill) {
-        await toggleSkillTool.execute({
-          name: skillName,
-          enabled: !skill.enabled,
-        });
-        // Re-open modal with updated state
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const updated = (await getSkillTool.execute({ name: skillName })) as any;
-        if (updated?.success !== false) {
-          const modal = generateSkillDetailModal({
-            name: skillName,
-            description: updated.description || "",
-            enabled: updated.enabled !== false,
-            content: updated.content || "",
-            emoji: updated.metadata?.pha?.emoji,
-          });
-          sendAll(send, modal);
-        }
-      }
-    } else if (action === "edit_skill_from_modal" && payload?.skillName) {
-      const skillName = payload.skillName as string;
-      // Close modal and navigate to skills page with skill selected for editing
-      send({ deleteSurface: { surfaceId: "modal" } });
-      this.selectedSkill = skillName;
-      this.selectedSkillFile = "SKILL.md";
-      this.editingSkill = true;
-      this.editBuffer = null;
-      await this.handleNavigate("settings/skills", send);
-    } else if (action === "create_skill") {
-      // Show create skill modal
-      const modal = generateCreateSkillModal();
-      sendAll(send, modal);
-    } else if (action === "submit_create_skill" && payload) {
-      const name = payload.name as string;
-      const description = payload.description as string;
-      const emoji = payload.emoji as string | undefined;
-      const content = payload.content as string | undefined;
-
-      await createSkillTool.execute({ name, description, emoji, content });
-      send({ deleteSurface: { surfaceId: "modal" } });
-      await this.handleNavigate("settings/skills", send);
-    }
-    // ================================================================
-    // System Agent Memory actions (Memory page → system-agent tab)
-    // ================================================================
-    else if (action === "sa_memory_select" && payload?.row) {
-      const row = payload.row as { name: string };
-      const name = row.name.replace(/\.md$/, "");
-      this.saSelectedMemoryFile = name;
-      this.saEditingMemory = false;
-      this.editBuffer = null;
-      await this.handleNavigate("memory", send);
-    } else if (action === "sa_memory_edit") {
-      this.saEditingMemory = true;
-      await this.handleNavigate("memory", send);
-    } else if (action === "sa_memory_content_change" && payload?.value) {
-      this.editBuffer = payload.value as string;
-    } else if (action === "sa_memory_save" && this.saSelectedMemoryFile && this.editBuffer) {
-      await systemMemoryWriteTool.execute({
-        file: this.saSelectedMemoryFile,
-        content: this.editBuffer,
-      });
-      this.saEditingMemory = false;
-      this.editBuffer = null;
-      await this.handleNavigate("memory", send);
-    } else if (action === "sa_memory_cancel") {
-      this.saEditingMemory = false;
-      this.editBuffer = null;
-      await this.handleNavigate("memory", send);
-    }
-    // System Agent action
-    else if (action === "sa_send_message" && (payload?.content || payload?.value)) {
-      const content = (payload.content || payload.value) as string;
-      this.fireSystemAgentMessage(content, send);
-    }
-    // Evolution Lab actions
-    else if (action === "evo_send_message" && payload?.value) {
-      this.fireSystemAgentMessage(payload.value as string, send);
-    } else if (action === "evo_tab_change" && payload?.tab) {
-      this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "evo_data_subtab_change" && payload?.tab) {
-      this.evolutionDataSubTab = payload.tab as "traces" | "evaluations" | "suggestions";
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "view_version" && payload?.row) {
-      const row = payload.row as { branch?: string };
-      if (row.branch) {
-        this.evolutionSelectedVersion = row.branch;
-        this.evolutionInspectedBranch = row.branch;
-        this.evolutionLabDiffContent = null;
-        this.sendEvolutionLabUpdate(send);
-      }
-    } else if (action === "view_version_from_list" && payload?.branch) {
-      this.evolutionSelectedVersion = payload.branch as string;
-      this.evolutionInspectedBranch = payload.branch as string;
-      this.evolutionLabDiffContent = null;
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "evo_timeline_click" && (payload?.id || payload?.eventId)) {
-      const eventId = (payload.id || payload.eventId) as string;
-      if (eventId.startsWith("ver_")) {
-        // Resolve branch: from payload or by looking up version by ID
-        let branch = payload.branch as string | undefined;
-        if (!branch) {
-          const versionId = eventId.replace("ver_", "");
-          const versions = listEvolutionVersions();
-          const ver = versions.find((v) => v.id === versionId);
-          branch = ver?.branch_name;
-        }
-        if (branch) {
-          this.evolutionSelectedVersion = branch;
-          this.evolutionInspectedBranch = branch;
-          this.evolutionLabDiffContent = null;
-          this.sendEvolutionLabUpdate(send);
-        }
-      }
-    } else if (action === "evo_file_select" && payload?.path) {
-      const inspectBranch = this.evolutionSelectedVersion || this.evolutionInspectedBranch;
-      if (inspectBranch) {
-        try {
-          const filePath = payload.path as string;
-          const afterContent = readFileFromBranch(inspectBranch, filePath) || "";
-
-          // For merged versions, use saved mergeBase as the "before" ref
-          let beforeContent: string;
-          const version = getEvolutionVersionByBranch(inspectBranch);
-          if (version?.status === "merged") {
-            const meta = version.metadata ? JSON.parse(version.metadata) : {};
-            const base = meta.mergeBase || "main";
-            beforeContent = readFileFromRef(base, filePath) || "";
-          } else {
-            beforeContent = readFileFromBranch("main", filePath) || "";
-          }
-
-          this.evolutionLabDiffContent = {
-            before: beforeContent,
-            after: afterContent,
-            path: filePath,
-          };
-          this.sendEvolutionLabUpdate(send);
-        } catch (e) {
-          logEvolution.error("File select error", { error: e });
-        }
-      }
-    }
-    // Evolution Lab: Approve/Reject proposal
-    else if (action === "evo_approve") {
-      this.fireSystemAgentMessage(
-        "I approve this proposal. Please proceed with applying the changes.",
-        send
-      );
-    } else if (action === "evo_reject") {
-      this.fireSystemAgentMessage(
-        "I reject this proposal. Please revise the plan and propose again.",
-        send
-      );
-    }
-    // Playground actions (simplified — SystemAgent drives the flow)
-    else if (action === "pg_send_message" && payload?.value) {
-      this.fireSystemAgentMessage(payload.value as string, send);
-    } else if (action === "pg_start_auto") {
-      this.fireSystemAgentMessage(
-        "Start a full evolution cycle: benchmark, diagnose, propose improvements, and wait for my approval before applying.",
-        send
-      );
-    }
-    // Tool detail modal
-    else if (action === "view_tool_detail" && payload?.row) {
-      const row = payload.row as Record<string, unknown>;
-      const toolName = row.name as string;
-      if (toolName) {
-        const tool = globalRegistry.get(toolName);
-        if (tool) {
-          const modal = generateToolDetailModal({
-            name: tool.name,
-            displayName: tool.displayName,
-            description: tool.description,
-            category: tool.category,
-            tags: categoryToAgentTags(tool.category),
-            icon: tool.icon,
-            companionSkill: tool.companionSkill,
-            inputSchema: tool.inputSchema,
-          });
-          sendAll(send, modal);
-        }
-      }
-    }
-    // Skill detail modal (from tools table skill column click)
-    else if (action === "view_skill_from_table" && payload?.value) {
-      const skillName = payload.value as string;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = (await getSkillTool.execute({ name: skillName })) as any;
-        if (result?.success !== false) {
-          const modal = generateSkillDetailModal({
-            name: skillName,
-            description: result.description || "",
-            enabled: result.enabled !== false,
-            content: result.content || "",
-            emoji: result.metadata?.pha?.emoji,
-          });
-          sendAll(send, modal);
-        }
-      } catch {
-        /* skill not found — ignore */
-      }
-    }
-    // Skill detail modal (from tool detail companion skill button)
-    else if (action === "view_skill_from_tool" && payload?.skillName) {
-      const skillName = payload.skillName as string;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result = (await getSkillTool.execute({ name: skillName })) as any;
-        if (result?.success !== false) {
-          const modal = generateSkillDetailModal({
-            name: skillName,
-            description: result.description || "",
-            enabled: result.enabled !== false,
-            content: result.content || "",
-            emoji: result.metadata?.pha?.emoji,
-          });
-          sendAll(send, modal);
-        }
-      } catch {
-        /* skill not found — ignore */
-      }
-    }
-    // Evolution actions (legacy)
-    else if (action === "tab_change" && payload?.tab) {
-      if (
-        this.currentView === "dashboard" ||
-        this.currentView === "health" ||
-        this.currentView === "sleep" ||
-        this.currentView === "activity"
-      ) {
-        type DashboardTab =
-          | "overview"
-          | "vitals"
-          | "activity"
-          | "sleep"
-          | "body"
-          | "heart"
-          | "trends";
-        this.dashboardTab = payload.tab as DashboardTab;
-        if (this.dashboardLoader) {
-          this.dashboardLoader.updateSend(send);
-          // Pre-set trends state so selectors show current values
-          if (this.dashboardTab === "trends") {
-            this.dashboardLoader.getData().trendsMetric = this.trendsMetric;
-            this.dashboardLoader.getData().trendsRange = this.trendsRange;
-          }
-          await this.dashboardLoader.load(this.dashboardTab);
-          // After loading Trends tab skeleton, load actual trend data
-          if (this.dashboardTab === "trends") {
-            await this.dashboardLoader.loadTrends(this.trendsMetric, this.trendsRange);
-          }
-        } else {
-          await this.handleNavigate("dashboard", send);
-        }
-      } else if (this.currentView === "memory") {
-        const tab = payload.tab as string;
-        if (tab === "system-agent") {
-          // Reset SA memory state when switching to system-agent tab
-          this.saSelectedMemoryFile = null;
-          this.saEditingMemory = false;
-          this.editBuffer = null;
-        }
-        // Reset log detail when switching away from logs tab
-        if (tab !== "logs") {
-          this.selectedLogDate = null;
-        }
-        this.memoryTab = tab as "profile" | "summary" | "logs" | "search" | "system-agent";
-        await this.handleNavigate("memory", send);
-      } else if (this.currentView === "plans") {
-        this.plansTab = payload.tab as PlansPageTab;
-        await this.handleNavigate("plans", send);
-      } else if (this.currentView === "settings/prompts") {
-        const tab = payload.tab as string;
-        if (tab === "pha" || tab === "system") {
-          this.promptsScope = tab;
-          this.selectedPrompt = null;
-          this.selectedPromptSource = "system";
-          this.editingPrompt = false;
-          this.editBuffer = null;
-          await this.handleNavigate("settings/prompts", send);
-        }
-      } else if (this.currentView === "settings/skills") {
-        const tab = payload.tab as string;
-        this.skillsCategory = tab;
-        this.selectedSkill = null;
-        this.selectedSkillFile = "SKILL.md";
-        this.editingSkill = false;
-        this.editBuffer = null;
-        await this.handleNavigate("settings/skills", send);
-      } else if (this.currentView === "settings/tools") {
-        this.toolsCategory = (payload.tab as string) || "all";
-        await this.handleNavigate("settings/tools", send);
-      } else if (this.currentView === "settings/integrations") {
-        this.integrationsTab = payload.tab as "overview" | "issues" | "prs" | "branches";
-        if (this.integrationsCache) {
-          // Cache available — instant tab switch
-          sendAll(
-            send,
-            this.buildPage(
-              "settings/integrations",
-              generateIntegrationsPage({
-                activeTab: this.integrationsTab,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                repo: this.integrationsCache.repo as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                issues: this.integrationsCache.issues as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                prs: this.integrationsCache.prs as any,
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                branchInfo: this.integrationsCache.branchInfo as any,
-                ghAvailable: this.integrationsCache.ghAvailable,
-              })
-            )
-          );
-          this.loadIntegrationsTabData(send).catch(() => {});
-        } else {
-          // Still loading — just show skeleton for the new tab (don't re-trigger full load)
-          sendAll(
-            send,
-            this.buildPage(
-              "settings/integrations",
-              generateIntegrationsPage({
-                activeTab: this.integrationsTab,
-                ghAvailable: true,
-                loading: true,
-              })
-            )
-          );
-        }
-      } else if (this.currentView === "experiment") {
-        this.activeDashboardTab = payload.tab as string;
-        await this.handleNavigate("experiment", send);
-      } else if (this.currentView === "evolution") {
-        this.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
-        this.sendEvolutionLabUpdate(send);
-      } else if (this.currentView === "settings/logs") {
-        this.logsTab = payload.tab as "system" | "llm";
-        await this.handleNavigate("settings/logs", send);
-      } else {
-        type EvolutionTab =
-          | "overview"
-          | "traces"
-          | "evaluations"
-          | "benchmark"
-          | "runs"
-          | "suggestions"
-          | "config"
-          | "versions";
-        this.evolutionTab = payload.tab as EvolutionTab;
-        await this.handleNavigate("settings/evolution-legacy", send);
-      }
-    } else if (action === "change_trends_range" && payload) {
-      // User changed time range selector
-      this.trendsRange = (payload.value as string) || "1m";
-      if (this.dashboardLoader) {
-        this.dashboardLoader.updateSend(send);
-        await this.dashboardLoader.loadTrends(this.trendsMetric, this.trendsRange);
-      }
-    } else if (action === "change_trends_metric" && payload) {
-      // User changed metric selector
-      this.trendsMetric = (payload.value as string) || "steps";
-      if (this.dashboardLoader) {
-        this.dashboardLoader.updateSend(send);
-        await this.dashboardLoader.loadTrends(this.trendsMetric, this.trendsRange);
-      }
-    } else if (action === "trends_config_change" && payload) {
-      // Legacy combined handler
-      this.trendsMetric = (payload.metric as string) || "steps";
-      this.trendsRange = (payload.range as string) || "1m";
-      if (this.dashboardLoader) {
-        this.dashboardLoader.updateSend(send);
-        await this.dashboardLoader.loadTrends(this.trendsMetric, this.trendsRange);
-      }
-    } else if (action === "traces_page_change" && payload?.page !== undefined) {
-      this.tracesPage = payload.page as number;
-      if (this.currentView === "evolution") {
-        this.sendEvolutionLabUpdate(send);
-      } else {
-        await this.handleNavigate("settings/evolution", send);
-      }
-    } else if (action === "view_trace" && payload?.row) {
-      const row = payload.row as { id: string };
-      const traceId = row.id.length === 8 ? this.findFullTraceId(row.id) : row.id;
-      if (traceId) {
-        const trace = getTrace(traceId);
-        if (trace) {
-          const modal = generateTraceDetailModal({
-            id: trace.id,
-            sessionId: trace.session_id,
-            timestamp: trace.timestamp,
-            userMessage: trace.user_message,
-            agentResponse: trace.agent_response,
-            toolCalls: trace.tool_calls ? JSON.parse(trace.tool_calls) : undefined,
-            durationMs: trace.duration_ms || undefined,
-          });
-          sendAll(send, modal);
-        }
-      }
-    } else if (action === "view_evaluation" && payload?.row) {
-      const row = payload.row as { id: string; traceId: string };
-      const evalId = row.id.length === 8 ? this.findFullEvaluationId(row.id) : row.id;
-      if (evalId) {
-        const evaluation = getEvaluation(evalId);
-        if (evaluation) {
-          const modal = generateEvaluationDetailModal({
-            id: evaluation.id,
-            traceId: evaluation.trace_id,
-            timestamp: evaluation.timestamp,
-            scores: JSON.parse(evaluation.scores),
-            overallScore: evaluation.overall_score,
-            feedback: evaluation.feedback || undefined,
-            issues: evaluation.issues ? JSON.parse(evaluation.issues) : undefined,
-          });
-          sendAll(send, modal);
-        }
-      }
-    } else if (action === "view_test_case" && payload?.row) {
-      const row = payload.row as { id: string };
-      const testId = row.id.length === 8 ? this.findFullTestCaseId(row.id) : row.id;
-      if (testId) {
-        const testCase = getTestCase(testId);
-        if (testCase) {
-          const modal = generateTestCaseDetailModal({
-            id: testCase.id,
-            category: testCase.category,
-            query: testCase.query,
-            context: testCase.context ? JSON.parse(testCase.context) : undefined,
-            expected: JSON.parse(testCase.expected),
-          });
-          sendAll(send, modal);
-        }
-      }
-    } else if (action === "view_suggestion" && payload?.row) {
-      const row = payload.row as { id: string };
-      const suggId = row.id.length === 8 ? this.findFullSuggestionId(row.id) : row.id;
-      if (suggId) {
-        const suggestion = getSuggestion(suggId);
-        if (suggestion) {
-          const modal = generateSuggestionDetailModal({
-            id: suggestion.id,
-            timestamp: suggestion.timestamp,
-            type: suggestion.type,
-            target: suggestion.target,
-            currentValue: suggestion.current_value || undefined,
-            suggestedValue: suggestion.suggested_value,
-            rationale: suggestion.rationale || undefined,
-            status: suggestion.status,
-            validationResults: suggestion.validation_results
-              ? JSON.parse(suggestion.validation_results)
-              : undefined,
-          });
-          sendAll(send, modal);
-        }
-      }
-    } else if (action === "create_test_case") {
-      const modal = generateCreateTestCaseModal();
-      sendAll(send, modal);
-    } else if (action === "submit_create_test_case" && payload) {
-      const category = payload.category as string;
-      const query = payload.query as string;
-      const minScore = payload.minScore ? Number(payload.minScore) : undefined;
-      const shouldMentionStr = payload.shouldMention as string | undefined;
-      const shouldNotMentionStr = payload.shouldNotMention as string | undefined;
-
-      const id = crypto.randomUUID();
-      insertTestCase({
-        id,
-        category,
-        query,
-        expected: {
-          minScore,
-          shouldMention: shouldMentionStr
-            ? shouldMentionStr
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean)
-            : undefined,
-          shouldNotMention: shouldNotMentionStr
-            ? shouldNotMentionStr
-                .split(",")
-                .map((s) => s.trim())
-                .filter(Boolean)
-            : undefined,
-        },
-      });
-
-      send({ deleteSurface: { surfaceId: "modal" } });
-      await this.handleNavigate("settings/evolution", send);
-    } else if (action === "delete_test_case" && payload?.id) {
-      deleteTestCase(payload.id as string);
-      send({ deleteSurface: { surfaceId: "modal" } });
-      await this.handleNavigate("settings/evolution", send);
-    } else if (action === "apply_suggestion" && payload?.id) {
-      updateSuggestionStatus(payload.id as string, "applied");
-      send({ deleteSurface: { surfaceId: "modal" } });
-      await this.handleNavigate("settings/evolution", send);
-    } else if (action === "reject_suggestion" && payload?.id) {
-      updateSuggestionStatus(payload.id as string, "rejected");
-      send({ deleteSurface: { surfaceId: "modal" } });
-      await this.handleNavigate("settings/evolution", send);
-    } else if (action === "test_suggestion" && payload?.id) {
-      updateSuggestionStatus(payload.id as string, "testing");
-      send({ deleteSurface: { surfaceId: "modal" } });
-      await this.handleNavigate("settings/evolution", send);
-    } else if (action === "close_modal") {
-      send({ deleteSurface: { surfaceId: "modal" } });
-    } else if (action === "revert_prompt" && this.selectedPrompt) {
-      // Show revert modal with commit history
-      setPromptsDir(
-        this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
-      );
-      try {
-        const historyResult = await getPromptHistoryTool.execute({
-          name: this.selectedPrompt,
-          limit: 20,
-        });
-        if (historyResult.success && historyResult.commits) {
-          const modal = generatePromptRevertModal(this.selectedPrompt, historyResult.commits);
-          sendAll(send, modal);
-        }
-      } finally {
-        setPromptsDir("src/prompts/pha");
-      }
-    } else if (action === "select_revert_commit" && payload?.commit && this.selectedPrompt) {
-      const commit = payload.commit as { hash: string };
-      setPromptsDir(
-        this.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
-      );
-      try {
-        await revertPromptTool.execute({ name: this.selectedPrompt, commitHash: commit.hash });
-      } finally {
-        setPromptsDir("src/prompts/pha");
-      }
-      send({ deleteSurface: { surfaceId: "modal" } });
-      await this.handleNavigate("settings/prompts", send);
-    } else if (action === "run_benchmark" || action === "open_benchmark_modal") {
-      // Check if CLI is running a benchmark (block UI runs while CLI is active)
-      const cliProgress = readBenchmarkProgress();
-      if (cliProgress && cliProgress.running && cliProgress.source !== "ui") {
-        const toast = generateToast(t("evolution.externalBenchmarkRunning"), "warning");
-        sendAll(send, toast);
-        return;
-      }
-
-      // Check if benchmarkModels is configured — show model selector modal
-      const benchmarkModels = getBenchmarkModels();
-      const hasMultipleModels =
-        Object.keys(benchmarkModels).length > 1 ||
-        (Object.keys(benchmarkModels).length === 1 && !benchmarkModels.default);
-
-      if (hasMultipleModels || action === "open_benchmark_modal") {
-        const models = Object.entries(benchmarkModels).map(([name, config]) => ({
-          name,
-          label: config.label || `${config.provider}/${config.modelId}`,
-        }));
-        const modal = generateBenchmarkModelSelectorModal(
-          models,
-          (payload?.profile as "quick" | "full") || "quick"
-        );
-        sendAll(send, modal);
-      } else {
-        const profile = (payload?.profile as "quick" | "full") || "quick";
-        this.runBenchmarkAsync(profile, send).catch((err: unknown) =>
-          logEvolution.error("Benchmark failed", { error: err })
-        );
-      }
-    } else if (action === "submit_run_benchmark") {
-      // From model selector modal
-      send({ deleteSurface: { surfaceId: "modal" } });
-
-      const profile = (payload?.profile as "quick" | "full") || "quick";
-      const modelPreset = payload?.modelPreset as string;
-
-      if (modelPreset === "__all_models__") {
-        // Run all configured models in parallel
-        const benchmarkModels = getBenchmarkModels();
-        for (const [name, modelConfig] of Object.entries(benchmarkModels)) {
-          const apiKey = resolveBenchmarkModelApiKey(modelConfig);
-          this.runBenchmarkAsync(profile, send, {
-            provider: modelConfig.provider,
-            modelId: modelConfig.modelId,
-            apiKey,
-            baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
-            presetName: name,
-          }).catch((err: unknown) =>
-            logEvolution.error("Benchmark failed", { preset: name, error: err })
-          );
-        }
-      } else if (modelPreset && modelPreset !== "__default__") {
-        const benchmarkModels = getBenchmarkModels();
-        const modelConfig = benchmarkModels[modelPreset];
-        if (modelConfig) {
-          const apiKey = resolveBenchmarkModelApiKey(modelConfig);
-          this.runBenchmarkAsync(profile, send, {
-            provider: modelConfig.provider,
-            modelId: modelConfig.modelId,
-            apiKey,
-            baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
-            presetName: modelPreset,
-          }).catch((err: unknown) =>
-            logEvolution.error("Benchmark failed", { preset: modelPreset, error: err })
-          );
-        } else {
-          this.runBenchmarkAsync(profile, send).catch((err: unknown) =>
-            logEvolution.error("Benchmark failed", { error: err })
-          );
-        }
-      } else {
-        this.runBenchmarkAsync(profile, send).catch((err: unknown) =>
-          logEvolution.error("Benchmark failed", { error: err })
-        );
-      }
-    } else if (action === "run_auto_loop") {
-      const toast = generateToast(t("evolution.autoLoopHint"), "warning");
-      sendAll(send, toast);
-    } else if (action === "run_diagnose") {
-      this.runDiagnoseAsync(send).catch((err: unknown) =>
-        logEvolution.error("Diagnose failed", { error: err })
-      );
-    } else if (action === "switch_version") {
-      const branch = (payload?.branch as string) || null;
-      try {
-        this.switchAgentVersion(branch);
-        const msg = branch
-          ? t("evolution.versionSwitched").replace("{branch}", branch)
-          : t("evolution.resetToMain");
-        const toast = generateToast(msg, "success");
-        sendAll(send, toast);
-        if (this.currentView === "evolution") {
-          this.sendEvolutionLabUpdate(send);
-        } else {
-          await this.handleNavigate("settings/evolution", send);
-        }
-      } catch (error) {
-        const toast = generateToast(
-          `Failed to switch version: ${error instanceof Error ? error.message : String(error)}`,
-          "error"
-        );
-        sendAll(send, toast);
-      }
-    } else if (action === "merge_version" && payload?.branch) {
-      // Show confirmation modal instead of merging directly
-      try {
-        const branch = payload.branch as string;
-        const filePaths = getChangedFilesForVersion(branch);
-        const changedFiles = filePaths.map((p) => ({ path: p, status: "modified" }));
-        const modal = generateMergeConfirmModal(branch, changedFiles);
-        sendAll(send, modal);
-      } catch (error) {
-        const toast = generateToast(
-          `Failed to prepare merge: ${error instanceof Error ? error.message : String(error)}`,
-          "error"
-        );
-        sendAll(send, toast);
-      }
-    } else if (action === "confirm_merge" && payload?.branch) {
-      // Actually execute the merge after user confirmation
-      try {
-        send({ deleteSurface: { surfaceId: "modal" } });
-        mergeVersion(payload.branch as string);
-        this.switchAgentVersion(null); // Reset to main after merge
-        const toast = generateToast(t("evolution.versionMerged"), "success");
-        sendAll(send, toast);
-        if (this.currentView === "evolution") {
-          this.sendEvolutionLabUpdate(send);
-        } else {
-          await this.handleNavigate("settings/evolution", send);
-        }
-      } catch (error) {
-        const toast = generateToast(
-          `Failed to merge: ${error instanceof Error ? error.message : String(error)}`,
-          "error"
-        );
-        sendAll(send, toast);
-      }
-    } else if (action === "abandon_version" && payload?.branch) {
-      try {
-        abandonVersion(payload.branch as string);
-        if (this.activeVersionBranch === payload.branch) {
-          this.switchAgentVersion(null); // Reset if abandoning active version
-        }
-        const toast = generateToast(t("evolution.versionAbandoned"), "success");
-        sendAll(send, toast);
-        if (this.currentView === "evolution") {
-          this.evolutionSelectedVersion = null;
-          this.sendEvolutionLabUpdate(send);
-        } else {
-          await this.handleNavigate("settings/evolution", send);
-        }
-      } catch (error) {
-        const toast = generateToast(
-          `Failed to abandon: ${error instanceof Error ? error.message : String(error)}`,
-          "error"
-        );
-        sendAll(send, toast);
-      }
-    } else if (action === "view_benchmark_run" && payload?.row) {
-      const row = payload.row as { id: string };
-      const runId = this.findFullBenchmarkRunId(row.id);
-      if (runId) {
-        this.lastViewedBenchmarkRunId = runId;
-        this.modalRadarMode = "categories";
-        this.sendBenchmarkRunModal(runId, send);
-      }
-    } else if (action === "delete_benchmark_run") {
-      const runId = payload?.runId as string;
-      if (runId) {
-        const fullId = this.findFullBenchmarkRunId(runId) || runId;
-        deleteBenchmarkRun(fullId);
-        this.benchmarkSelectedRunIds.delete(fullId);
-        // Close modal + refresh page
-        send({ deleteSurface: { surfaceId: "modal" } });
-        this.sendEvolutionLabUpdate(send);
-        const toast = generateToast("Benchmark run deleted", "success");
-        sendAll(send, toast);
-      }
-    } else if (action === "set_modal_radar_mode") {
-      this.modalRadarMode = (payload?.mode as string) === "criteria" ? "criteria" : "categories";
-      if (this.lastViewedBenchmarkRunId) {
-        this.sendBenchmarkRunModal(this.lastViewedBenchmarkRunId, send);
-      }
-    } else if (action === "toggle_benchmark_run") {
-      const runId = (payload?.runId as string) || (payload?.row as { id: string })?.id;
-      if (runId) {
-        const fullId = this.findFullBenchmarkRunId(runId) || runId;
-        if (this.benchmarkSelectedRunIds.has(fullId)) {
-          this.benchmarkSelectedRunIds.delete(fullId);
-        } else {
-          this.benchmarkSelectedRunIds.add(fullId);
-        }
-        this.sendEvolutionLabUpdate(send);
-      }
-    } else if (action === "set_radar_mode") {
-      const mode = payload?.mode as "categories" | "criteria";
-      if (mode === "categories" || mode === "criteria") {
-        this.benchmarkRadarMode = mode;
-        this.sendEvolutionLabUpdate(send);
-      }
-    } else if (action === "clear_run_selection") {
-      this.benchmarkSelectedRunIds.clear();
-      this.sendEvolutionLabUpdate(send);
-    } else if (action === "run_test_case" && payload?.id) {
-      const toast = generateToast("Running test case...", "info");
-      sendAll(send, toast);
-      send({ deleteSurface: { surfaceId: "modal" } });
-      logEvolution.info("Running test case", { id: payload.id });
-    }
-    // Integrations actions
-    else if (action === "refresh_integrations") {
-      this.integrationsCache = null; // Invalidate cache to force refetch
-      await this.handleNavigate("settings/integrations", send);
-    }
-    // Logs page actions
-    else if (action === "logs_filter_level") {
-      this.logsLevelFilter = payload?.value ? String(payload.value) : undefined;
-      await this.handleNavigate("settings/logs", send);
-    } else if (action === "logs_filter_subsystem") {
-      this.logsSubsystemFilter = payload?.value ? String(payload.value) : undefined;
-      await this.handleNavigate("settings/logs", send);
-    } else if (action === "logs_refresh") {
-      await this.handleNavigate("settings/logs", send);
-    }
-    // LLM log filter actions
-    else if (action === "llm_filter_provider") {
-      this.llmProviderFilter = payload?.value ? String(payload.value) : undefined;
-      this.llmPage = 0;
-      this.llmSelectedId = undefined;
-      await this.handleNavigate("settings/logs", send);
-    } else if (action === "llm_filter_model") {
-      this.llmModelFilter = payload?.value ? String(payload.value) : undefined;
-      this.llmPage = 0;
-      this.llmSelectedId = undefined;
-      await this.handleNavigate("settings/logs", send);
-    }
-    // LLM call detail expand
-    else if (action === "llm_call_detail") {
-      const clickedId = (payload?.row as Record<string, unknown> | undefined)?.id as
-        | number
-        | undefined;
-      // Toggle: click same row again to collapse
-      this.llmSelectedId = this.llmSelectedId === clickedId ? undefined : clickedId;
-      await this.handleNavigate("settings/logs", send);
-    }
-    // LLM pagination
-    else if (action === "llm_page_change") {
-      this.llmPage = Number(payload?.page) || 0;
-      this.llmSelectedId = undefined;
-      await this.handleNavigate("settings/logs", send);
-    }
-    // Settings actions
-    else if (
-      action === "settings_save_llm" ||
-      action === "settings_save_gateway" ||
-      action === "settings_save_datasource" ||
-      action === "settings_save_advanced" ||
-      action === "settings_save_tui" ||
-      action === "settings_save_embedding" ||
-      action === "settings_save_benchmark" ||
-      action === "settings_save_benchmark_v2" ||
-      action === "settings_save_benchmark_v3" ||
-      action === "settings_save_benchmark_v4" ||
-      action === "settings_save_benchmark_models" ||
-      action === "settings_save_benchmark_models_v2" ||
-      action === "settings_save_mcp" ||
-      action === "settings_save_mcp_chrome" ||
-      action === "settings_save_mcp_remote" ||
-      action === "settings_save_plugins" ||
-      action === "settings_save_plugins_v2" ||
-      action === "settings_save_judge" ||
-      action === "settings_save_model_repository" ||
-      action === "settings_save_model_assignments" ||
-      action === "settings_save_agents" ||
-      action === "settings_save_context" ||
-      action === "settings_save_infra_models" ||
-      action === "settings_provider_add" ||
-      action === "settings_provider_delete" ||
-      action === "settings_provider_model_add" ||
-      action === "settings_provider_model_delete" ||
-      action === "settings_bm_add" ||
-      action === "settings_bm_delete" ||
-      action === "settings_mcp_add" ||
-      action === "settings_mcp_delete" ||
-      action === "settings_save_scopes" ||
-      action === "settings_scope_toggle" ||
-      action === "settings_agent_add" ||
-      action === "settings_agent_delete" ||
-      action === "settings_agent_tag_toggle" ||
-      action === "settings_tags_toggle" ||
-      action === "settings_copy_config" ||
-      action === "settings_download_config"
-    ) {
-      try {
-        const config = loadConfig();
-        const formData = payload as Record<string, unknown>;
-
-        if (action === "settings_save_llm") {
-          if (formData.provider) config.llm.provider = formData.provider as LLMProvider;
-          if (formData.apiKey && formData.apiKey !== "••••••••")
-            config.llm.apiKey = String(formData.apiKey);
-          if (formData.modelId) config.llm.modelId = String(formData.modelId);
-          if (formData.baseUrl !== undefined)
-            config.llm.baseUrl = String(formData.baseUrl) || undefined;
-        } else if (action === "settings_save_gateway") {
-          if (formData.port) config.gateway.port = Number(formData.port) || 8000;
-          if (formData.autoStart !== undefined)
-            config.gateway.autoStart = formData.autoStart === "true";
-        } else if (action === "settings_save_datasource") {
-          if (formData.dataSourceType)
-            config.dataSources.type = formData.dataSourceType as "mock" | "huawei" | "apple";
-          // Huawei HealthKit config
-          if (config.dataSources.type === "huawei") {
-            if (!config.dataSources.huawei) config.dataSources.huawei = {};
-            const hw = config.dataSources.huawei;
-            if (formData.huaweiClientId !== undefined)
-              hw.clientId = String(formData.huaweiClientId) || undefined;
-            if (formData.huaweiClientSecret !== undefined)
-              hw.clientSecret = String(formData.huaweiClientSecret) || undefined;
-            if (formData.huaweiRedirectUri !== undefined)
-              hw.redirectUri = String(formData.huaweiRedirectUri) || undefined;
-            if (formData.huaweiAuthUrl !== undefined)
-              hw.authUrl = String(formData.huaweiAuthUrl) || undefined;
-            if (formData.huaweiTokenUrl !== undefined)
-              hw.tokenUrl = String(formData.huaweiTokenUrl) || undefined;
-            if (formData.huaweiApiBaseUrl !== undefined)
-              hw.apiBaseUrl = String(formData.huaweiApiBaseUrl) || undefined;
-          }
-        } else if (action === "settings_save_tui") {
-          if (!config.tui) config.tui = { theme: "dark", showToolCalls: true };
-          if (formData.tuiTheme) config.tui.theme = formData.tuiTheme as "dark" | "light";
-          if (formData.tuiShowToolCalls !== undefined)
-            config.tui.showToolCalls = formData.tuiShowToolCalls === "true";
-        } else if (action === "settings_save_advanced") {
-          if (!config.embedding) config.embedding = {};
-          if (formData.embeddingEnabled !== undefined)
-            config.embedding.enabled = formData.embeddingEnabled === "true";
-          if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
-          if (formData.applyEngine)
-            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
-          // Sync embedding to new format
-          syncEmbeddingToNewFormat(config, formData);
-        } else if (action === "settings_save_embedding") {
-          if (!config.embedding) config.embedding = {};
-          if (formData.embeddingEnabled !== undefined)
-            config.embedding.enabled = formData.embeddingEnabled === "true";
-          if (formData.embeddingModel) config.embedding.model = String(formData.embeddingModel);
-          // Sync embedding to new format
-          syncEmbeddingToNewFormat(config, formData);
-        } else if (action === "settings_save_benchmark") {
-          if (!config.benchmark) config.benchmark = {};
-          if (formData.benchmarkConcurrency !== undefined)
-            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
-          if (formData.applyEngine)
-            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
-          // Ensure judgeModel is an object for settings_save_benchmark
-          if (!config.judgeModel || typeof config.judgeModel === "string")
-            config.judgeModel = {
-              provider: config.llm.provider,
-              modelId: "",
-            } as BenchmarkModelConfig;
-          const jmBench = config.judgeModel as BenchmarkModelConfig;
-          if (formData.judgeProvider) jmBench.provider = formData.judgeProvider as LLMProvider;
-          if (formData.judgeModelId !== undefined) jmBench.modelId = String(formData.judgeModelId);
-          if (formData.judgeLabel !== undefined)
-            jmBench.label = String(formData.judgeLabel) || undefined;
-          config.judgeModel = jmBench;
-        } else if (action === "settings_save_benchmark_v2") {
-          // New: only concurrency + applyEngine
-          if (!config.benchmark) config.benchmark = {};
-          if (formData.benchmarkConcurrency !== undefined)
-            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
-          if (formData.applyEngine)
-            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
-        } else if (action === "settings_save_benchmark_v3") {
-          // Benchmark v3: concurrency + applyEngine + model refs from checkboxes
-          if (!config.benchmark) config.benchmark = {};
-          if (formData.benchmarkConcurrency !== undefined)
-            config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
-          if (formData.applyEngine)
-            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
-          // Collect selected benchmark model refs from bm_ref__* fields
-          const selectedRefs: string[] = [];
-          if (formData) {
-            for (const [k, v] of Object.entries(formData)) {
-              if (k.startsWith("bm_ref__") && v === "true") {
-                selectedRefs.push(k.replace("bm_ref__", ""));
-              }
-            }
-          }
-          config.benchmark.models = selectedRefs;
-        } else if (action === "settings_save_benchmark_v4") {
-          // Benchmark v4: judge model + concurrency + applyEngine (simplified)
-          if (!config.benchmark) config.benchmark = {};
-          config.benchmark.concurrency = Number(formData.benchmarkConcurrency) || 1;
-          if (formData.applyEngine)
-            config.applyEngine = formData.applyEngine as "claude-code" | "pi-coding-agent";
-          if (!config.orchestrator) config.orchestrator = {};
-          config.orchestrator.judge = String(formData.benchmarkJudgeModel || "") || undefined;
-        } else if (action === "settings_save_model_repository") {
-          // Parse mp__<key>__* fields to rebuild models.providers
-          if (!config.models) config.models = { providers: {} };
-          const newProviders: Record<
-            string,
-            {
-              baseUrl?: string;
-              apiKey?: string;
-              models: Array<{ name: string; model: string; label?: string }>;
-            }
-          > = {};
-          if (formData) {
-            for (const [k, v] of Object.entries(formData)) {
-              // mp__<provider>__baseUrl or mp__<provider>__apiKey
-              const provMatch = k.match(/^mp__(.+?)__(?:baseUrl|apiKey)$/);
-              if (provMatch) {
-                const provKey = provMatch[1];
-                if (!newProviders[provKey]) newProviders[provKey] = { models: [] };
-                if (k.endsWith("__baseUrl")) {
-                  newProviders[provKey].baseUrl = String(v) || undefined;
-                } else if (k.endsWith("__apiKey")) {
-                  const val = String(v);
-                  if (val && val !== "••••••••") {
-                    newProviders[provKey].apiKey = val;
-                  } else if (config.models.providers?.[provKey]?.apiKey) {
-                    // Preserve existing API key if masked
-                    newProviders[provKey].apiKey = config.models.providers[provKey].apiKey;
-                  }
-                }
-              }
-              // mp__<provider>__m__<idx>__name/model/label
-              const modelMatch = k.match(/^mp__(.+?)__m__(\d+)__(.+)$/);
-              if (modelMatch) {
-                const [, provKey, idxStr, field] = modelMatch;
-                if (!newProviders[provKey]) newProviders[provKey] = { models: [] };
-                const idx = parseInt(idxStr, 10);
-                while (newProviders[provKey].models.length <= idx) {
-                  newProviders[provKey].models.push({ name: "", model: "" });
-                }
-                if (field === "name") newProviders[provKey].models[idx].name = String(v);
-                else if (field === "model") newProviders[provKey].models[idx].model = String(v);
-                else if (field === "label")
-                  newProviders[provKey].models[idx].label = String(v) || undefined;
-              }
-            }
-          }
-          // Preserve providers that weren't in the form (shouldn't happen, but safe)
-          for (const [pk, pv] of Object.entries(config.models.providers || {})) {
-            if (!newProviders[pk]) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              newProviders[pk] = pv as any;
-            }
-          }
-          config.models.providers = newProviders;
-          // Sync llm config for backward compat
-          const phaRef = config.orchestrator?.pha;
-          if (phaRef) {
-            const parts = phaRef.split("/");
-            if (parts.length >= 2) {
-              const agentProvider = parts[0];
-              const agentProv = newProviders[agentProvider];
-              if (agentProv) {
-                config.llm.provider = agentProvider as LLMProvider;
-                if (agentProv.apiKey) config.llm.apiKey = agentProv.apiKey;
-                if (agentProv.baseUrl) config.llm.baseUrl = agentProv.baseUrl;
-              }
-            }
-          }
-        } else if (action === "settings_save_model_assignments") {
-          // Save model assignments to orchestrator
-          if (!config.orchestrator) config.orchestrator = {};
-          if (formData.orchestratorPha !== undefined)
-            config.orchestrator.pha = String(formData.orchestratorPha) || undefined;
-          if (formData.orchestratorSa !== undefined)
-            config.orchestrator.sa = String(formData.orchestratorSa) || undefined;
-          if (formData.orchestratorJudge !== undefined)
-            config.orchestrator.judge = String(formData.orchestratorJudge) || undefined;
-          if (formData.orchestratorEmbedding !== undefined)
-            config.orchestrator.embedding = String(formData.orchestratorEmbedding) || undefined;
-          // Sync llm config for backward compat when agent model changes
-          if (config.orchestrator.pha) {
-            const parts = config.orchestrator.pha.split("/");
-            if (parts.length >= 2 && config.models?.providers) {
-              const agentProvider = parts[0];
-              const agentName = parts.slice(1).join("/");
-              const agentProv = config.models.providers[agentProvider];
-              if (agentProv) {
-                config.llm.provider = agentProvider as LLMProvider;
-                if (agentProv.apiKey) config.llm.apiKey = agentProv.apiKey;
-                if (agentProv.baseUrl) config.llm.baseUrl = agentProv.baseUrl;
-                const model = agentProv.models?.find((m) => m.name === agentName);
-                if (model) config.llm.modelId = model.model;
-              }
-            }
-          }
-        } else if (action === "settings_save_agents") {
-          // Save per-agent configuration: model + skills tags + tool categories
-          if (!config.agents) config.agents = {};
-          const agentIds = new Set<string>();
-          for (const key of Object.keys(formData)) {
-            const m = key.match(/^ap__(.+?)__/);
-            if (m) agentIds.add(m[1]);
-          }
-          for (const agentId of agentIds) {
-            if (!config.agents[agentId]) config.agents[agentId] = {};
-            const ap = config.agents[agentId];
-            const pfx = `ap__${agentId}__`;
-            // Model
-            const modelRef = String(formData[`${pfx}model`] || "") || undefined;
-            if (modelRef) {
-              ap.model = modelRef;
-            } else {
-              delete ap.model;
-            }
-            // Workspace path
-            const workspace = String(formData[`${pfx}workspace`] || "").trim() || undefined;
-            if (workspace) {
-              ap.workspace = workspace;
-            } else {
-              delete ap.workspace;
-            }
-            // Session path
-            const sessionPath = String(formData[`${pfx}sessionPath`] || "").trim() || undefined;
-            if (sessionPath) {
-              ap.sessionPath = sessionPath;
-            } else {
-              delete ap.sessionPath;
-            }
-            // Tool categories and skill tags are managed separately via badge actions
-            // (settings_agent_tag_add / settings_agent_tag_delete)
-          }
-        } else if (action === "settings_save_context") {
-          // Save context & proactive configuration
-          if (!config.context) config.context = {};
-          config.context.location = String(formData.contextLocation || "").trim() || undefined;
-          config.context.hemisphere = formData.contextHemisphere === "south" ? "south" : "north";
-          if (!config.proactive) config.proactive = {};
-          config.proactive.enabled =
-            formData.proactiveEnabled === "true" || formData.proactiveEnabled === true;
-          config.proactive.checkIntervalMinutes =
-            parseInt(String(formData.proactiveCheckInterval), 10) || 5;
-        } else if (action === "settings_save_infra_models") {
-          // Save infrastructure model assignments (SA/Judge/Embedding)
-          if (!config.orchestrator) config.orchestrator = {};
-          config.orchestrator.sa = String(formData.orchestratorSa || "") || undefined;
-          config.orchestrator.judge = String(formData.orchestratorJudge || "") || undefined;
-          config.orchestrator.embedding = String(formData.orchestratorEmbedding || "") || undefined;
-        } else if (action === "settings_provider_add") {
-          // Add a new empty provider
-          if (!config.models) config.models = { providers: {} };
-          const newKey = `provider-${Date.now()}`;
-          config.models.providers[newKey] = { models: [] };
-        } else if (action === "settings_provider_delete") {
-          // Delete a provider by key
-          const key = formData?.provider as string;
-          if (key && config.models?.providers) {
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-            delete (config.models.providers as Record<string, unknown>)[key];
-          }
-        } else if (action === "settings_provider_model_add") {
-          // Add an empty model to a provider
-          const provKey = formData?.provider as string;
-          if (provKey && config.models?.providers?.[provKey]) {
-            config.models.providers[provKey].models.push({ name: "", model: "" });
-          }
-        } else if (action === "settings_provider_model_delete") {
-          // Delete a model from a provider by index
-          const provKey = formData?.provider as string;
-          const idx = Number(formData?.index ?? -1);
-          if (provKey && idx >= 0 && config.models?.providers?.[provKey]) {
-            config.models.providers[provKey].models.splice(idx, 1);
-          }
-        } else if (action === "settings_save_judge") {
-          // Judge model as independent card
-          if (!config.judgeModel || typeof config.judgeModel === "string")
-            config.judgeModel = {
-              provider: config.llm.provider,
-              modelId: "",
-            } as BenchmarkModelConfig;
-          const jmJudge = config.judgeModel as BenchmarkModelConfig;
-          if (formData.judgeProvider) jmJudge.provider = formData.judgeProvider as LLMProvider;
-          if (formData.judgeModelId !== undefined) jmJudge.modelId = String(formData.judgeModelId);
-          if (formData.judgeLabel !== undefined)
-            jmJudge.label = String(formData.judgeLabel) || undefined;
-          config.judgeModel = jmJudge;
-        } else if (action === "settings_save_benchmark_models") {
-          try {
-            const parsed = JSON.parse(String(formData.benchmarkModelsJson || "{}"));
-            config.benchmarkModels = parsed;
-          } catch {
-            // Invalid JSON — keep existing
-          }
-        } else if (action === "settings_save_benchmark_models_v2") {
-          // Parse bm__*__* prefixed fields from page form data
-          // The button sends no form data — we need to re-read from current page state
-          // Actually, the button action payload is empty. We need to collect form values
-          // from the page. Since buttons don't submit forms, we handle via a page re-render
-          // approach: read current config and apply. But we don't have form data here.
-          // Solution: make the save button part of a form, or handle on re-render.
-          // For now, this is handled via the page form data collected from all bm__ inputs.
-          const models: Record<string, { provider: string; modelId: string; label?: string }> = {};
-          if (formData) {
-            for (const [k, v] of Object.entries(formData)) {
-              const match = k.match(/^bm__(.+?)__(.+)$/);
-              if (match) {
-                const [, modelKey, field] = match;
-                if (!models[modelKey]) models[modelKey] = { provider: "", modelId: "" };
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                (models[modelKey] as any)[field] = String(v);
-              }
-            }
-          }
-          if (Object.keys(models).length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            config.benchmarkModels = models as any;
-          }
-        } else if (action === "settings_bm_add") {
-          // Add a default benchmark model entry
-          if (!config.benchmarkModels) config.benchmarkModels = {};
-          const newKey = `model-${Date.now()}`;
-          config.benchmarkModels[newKey] = {
-            provider: config.llm.provider,
-            modelId: "",
-            label: "New Model",
-          };
-        } else if (action === "settings_bm_delete") {
-          // Delete a benchmark model by key
-          const key = formData?.key as string;
-          if (key && config.benchmarkModels) {
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-            delete (config.benchmarkModels as Record<string, unknown>)[key];
-          }
-        } else if (action === "settings_save_mcp") {
-          try {
-            const parsed = JSON.parse(String(formData.mcpJson || "{}"));
-            config.mcp = parsed;
-          } catch {
-            // Invalid JSON — keep existing
-          }
-        } else if (action === "settings_save_mcp_chrome") {
-          // Save Chrome DevTools MCP config
-          if (!config.mcp) config.mcp = {};
-          if (!config.mcp.chromeMcp) config.mcp.chromeMcp = {};
-          if (formData.chromeMcpCommand !== undefined)
-            config.mcp.chromeMcp.command = String(formData.chromeMcpCommand) || undefined;
-          if (formData.chromeMcpArgs !== undefined) {
-            const argsStr = String(formData.chromeMcpArgs || "");
-            config.mcp.chromeMcp.args = argsStr
-              ? argsStr
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-              : undefined;
-          }
-          if (formData.chromeMcpBrowserUrl !== undefined)
-            config.mcp.chromeMcp.browserUrl = String(formData.chromeMcpBrowserUrl) || undefined;
-          if (formData.chromeMcpWsEndpoint !== undefined)
-            config.mcp.chromeMcp.wsEndpoint = String(formData.chromeMcpWsEndpoint) || undefined;
-        } else if (action === "settings_save_mcp_remote") {
-          // Parse mcp_remote__*__* prefixed fields
-          const servers: Record<
-            string,
-            { url: string; apiKey?: string; name?: string; enabled?: boolean }
-          > = {};
-          if (formData) {
-            for (const [k, v] of Object.entries(formData)) {
-              const match = k.match(/^mcp_remote__(.+?)__(.+)$/);
-              if (match) {
-                const [, srvKey, field] = match;
-                if (!servers[srvKey]) servers[srvKey] = { url: "" };
-                if (field === "enabled") {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  (servers[srvKey] as any)[field] = v === "true";
-                } else {
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  (servers[srvKey] as any)[field] = String(v);
-                }
-              }
-            }
-          }
-          if (!config.mcp) config.mcp = {};
-          if (Object.keys(servers).length > 0) {
-            config.mcp.remoteServers = servers;
-          }
-        } else if (action === "settings_mcp_add") {
-          // Add a default remote MCP server entry
-          if (!config.mcp) config.mcp = {};
-          if (!config.mcp.remoteServers) config.mcp.remoteServers = {};
-          const newKey = `server-${Date.now()}`;
-          config.mcp.remoteServers[newKey] = {
-            url: "",
-            name: "New Server",
-            enabled: true,
-          };
-        } else if (action === "settings_mcp_delete") {
-          // Delete a remote MCP server by key
-          const key = formData?.key as string;
-          if (key && config.mcp?.remoteServers) {
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-            delete (config.mcp.remoteServers as Record<string, unknown>)[key];
-          }
-        } else if (action === "settings_save_plugins") {
-          try {
-            const parsed = JSON.parse(String(formData.pluginsJson || "{}"));
-            config.plugins = parsed;
-          } catch {
-            // Invalid JSON — keep existing
-          }
-        } else if (action === "settings_save_plugins_v2") {
-          // Structured plugins save
-          if (!config.plugins) config.plugins = {};
-          if (formData.pluginEnabled !== undefined)
-            config.plugins.enabled = formData.pluginEnabled === "true";
-          if (formData.pluginPaths !== undefined) {
-            const pathsStr = String(formData.pluginPaths || "");
-            config.plugins.paths = pathsStr
-              ? pathsStr
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-              : [];
-          }
-        } else if (action === "settings_save_scopes") {
-          // Parse scope__N fields from form
-          if (!config.dataSources.huawei) config.dataSources.huawei = {};
-          const scopes: string[] = [];
-          if (formData) {
-            const scopeKeys = Object.keys(formData)
-              .filter((k) => k.startsWith("scope__"))
-              .sort((a, b) => {
-                const ai = parseInt(a.split("__")[1], 10);
-                const bi = parseInt(b.split("__")[1], 10);
-                return ai - bi;
-              });
-            for (const k of scopeKeys) {
-              const v = String(formData[k] || "").trim();
-              if (v) scopes.push(v);
-            }
-          }
-          config.dataSources.huawei.scopes = scopes;
-        } else if (action === "settings_scope_toggle") {
-          // Unified scope toggle from tag_picker: { tag, action: "add"|"remove" }
-          const scope = String(formData?.tag || "").trim();
-          const scopeAction = String(formData?.action || "");
-          if (scope) {
-            if (!config.dataSources.huawei) config.dataSources.huawei = {};
-            if (!config.dataSources.huawei.scopes) config.dataSources.huawei.scopes = [];
-            const scopes = config.dataSources.huawei.scopes;
-            if (scopeAction === "add" && !scopes.includes(scope)) {
-              scopes.push(scope);
-            } else if (scopeAction === "remove") {
-              const idx = scopes.indexOf(scope);
-              if (idx >= 0) scopes.splice(idx, 1);
-            }
-          }
-        } else if (action === "settings_agent_add") {
-          // Add a new agent with default config
-          if (!config.agents) config.agents = {};
-          const newId = `agent-${Date.now()}`;
-          config.agents[newId] = {
-            tools: { categories: ["health", "memory", "profile"], tags: [] },
-            skills: { tags: [] },
-          };
-        } else if (action === "settings_agent_delete") {
-          // Delete an agent by ID
-          const agentId = String(formData?.agentId || "");
-          if (agentId && config.agents) {
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-            delete (config.agents as Record<string, unknown>)[agentId];
-          }
-        } else if (action === "settings_agent_tag_toggle") {
-          // Unified tag toggle from tag_picker: { agentId, kind: "tool"|"skill", tag, action: "add"|"remove" }
-          // Read from MERGED profile (built-in + config) so we don't lose built-in tags
-          const agentId = String(formData?.agentId || "");
-          const tag = String(formData?.tag || "");
-          const kind = String(formData?.kind || "");
-          const tagAction = String(formData?.action || "");
-          if (agentId && tag) {
-            if (!config.agents) config.agents = {};
-            if (!config.agents[agentId]) config.agents[agentId] = {};
-            const ap = config.agents[agentId];
-            const merged = getAgentProfile(agentId);
-            if (kind === "tool") {
-              const tags = [...(merged.tools.tags || [])];
-              if (tagAction === "add" && !tags.includes(tag)) tags.push(tag);
-              else if (tagAction === "remove") {
-                const idx = tags.indexOf(tag);
-                if (idx >= 0) tags.splice(idx, 1);
-              }
-              ap.tools = { ...ap.tools, tags };
-            } else if (kind === "skill") {
-              const tags = [...(merged.skills?.tags || [])];
-              if (tagAction === "add" && !tags.includes(tag)) tags.push(tag);
-              else if (tagAction === "remove") {
-                const idx = tags.indexOf(tag);
-                if (idx >= 0) tags.splice(idx, 1);
-              }
-              ap.skills = { ...ap.skills, tags };
-            }
-            this._settingsExpandedAgent = agentId;
-          }
-        } else if (action === "settings_tags_toggle") {
-          // Unified toggle for master tags collection: { tag, action: "add"|"remove" }
-          const tag = String(formData?.tag || "").trim();
-          const tagAction = String(formData?.action || "");
-          if (tag) {
-            if (!config.tags) config.tags = [];
-            if (tagAction === "add" && !config.tags.includes(tag)) {
-              config.tags.push(tag);
-            } else if (tagAction === "remove") {
-              const idx = config.tags.indexOf(tag);
-              if (idx >= 0) config.tags.splice(idx, 1);
-            }
-          }
-        } else if (action === "settings_copy_config" || action === "settings_download_config") {
-          // Handled on frontend — just send toast
-          sendAll(send, generateToast(t("settings.saved"), "success"));
-          return;
-        }
-
-        saveConfig(config);
-        // Don't show "saved" toast for tag/scope toggle operations (the badge update is sufficient feedback)
-        const isTagOp =
-          action === "settings_agent_tag_toggle" ||
-          action === "settings_tags_toggle" ||
-          action === "settings_scope_toggle";
-        if (!isTagOp) {
-          sendAll(send, generateToast(t("settings.saved"), "success"));
-        }
-        await this.handleNavigate("settings/general", send);
-        this._settingsExpandedAgent = undefined;
-      } catch (_e) {
-        sendAll(send, generateToast(t("settings.saveError"), "error"));
-      }
-    }
-    // Default - log unhandled action (do NOT forward to agent as chat message)
-    else {
-      log.warn("Unhandled action", { action, payload });
-    }
-  }
-
-  // Helper methods to find full IDs from truncated IDs
-  private findFullTraceId(shortId: string): string | null {
-    const traces = listTraces({ limit: 100 });
-    const found = traces.find((t) => t.id.startsWith(shortId));
-    return found?.id || null;
-  }
-
-  private findFullEvaluationId(shortId: string): string | null {
-    const evals = listEvaluations({ limit: 100 });
-    const found = evals.find((e) => e.id.startsWith(shortId));
-    return found?.id || null;
-  }
-
-  private findFullTestCaseId(shortId: string): string | null {
-    const tests = listTestCases({ limit: 100 });
-    const found = tests.find((t) => t.id.startsWith(shortId));
-    return found?.id || null;
-  }
-
-  private findFullSuggestionId(shortId: string): string | null {
-    const suggs = listSuggestions({ limit: 100 });
-    const found = suggs.find((s) => s.id.startsWith(shortId));
-    return found?.id || null;
+    await dispatchAction(this, action, payload, send);
   }
 
   /**
    * Load integrations data asynchronously and re-send the page.
    * Caches results so tab switches are instant.
    */
-  private async loadIntegrationsAsync(send: (msg: unknown) => void): Promise<void> {
+  async loadIntegrationsAsync(send: (msg: unknown) => void): Promise<void> {
     let ghAvailable = true;
 
     try {
@@ -5071,7 +3192,7 @@ export class GatewaySession {
   /**
    * Load tab-specific integrations data that wasn't in the initial cache
    */
-  private async loadIntegrationsTabData(send: (msg: unknown) => void): Promise<void> {
+  async loadIntegrationsTabData(send: (msg: unknown) => void): Promise<void> {
     if (!this.integrationsCache) return;
 
     const { listIssues, listPRs, getBranchInfo } = await import("../integrations/github.js");
@@ -5543,7 +3664,7 @@ export class GatewaySession {
   /**
    * Send an Evolution Lab page update to the client.
    */
-  private sendEvolutionLabUpdate(send: (msg: unknown) => void): void {
+  sendEvolutionLabUpdate(send: (msg: unknown) => void): void {
     const activeSend = this.getSend(send);
     if (this.currentView === "system-agent") {
       this.sendSystemAgentUpdate(activeSend);
@@ -5755,13 +3876,13 @@ export class GatewaySession {
     };
   }
 
-  private findFullBenchmarkRunId(shortId: string): string | null {
+  findFullBenchmarkRunId(shortId: string): string | null {
     const runs = listBenchmarkRuns({ limit: 100 });
     const found = runs.find((r) => r.id === shortId || r.id.startsWith(shortId));
     return found?.id || null;
   }
 
-  private sendBenchmarkRunModal(runId: string, send: (msg: unknown) => void): void {
+  sendBenchmarkRunModal(runId: string, send: (msg: unknown) => void): void {
     const run = getBenchmarkRun(runId);
     if (!run) return;
     const scores = listCategoryScores(runId);
@@ -5790,7 +3911,7 @@ export class GatewaySession {
     sendAll(send, modal);
   }
 
-  private async runBenchmarkAsync(
+  async runBenchmarkAsync(
     profile: "quick" | "full",
     send: (msg: unknown) => void,
     modelConfig?: {
@@ -5948,7 +4069,7 @@ export class GatewaySession {
     }
   }
 
-  private async runDiagnoseAsync(send: (msg: unknown) => void): Promise<void> {
+  async runDiagnoseAsync(send: (msg: unknown) => void): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const liveSend = () => this.getSend(send);
 

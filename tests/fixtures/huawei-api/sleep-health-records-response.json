@@ -1,0 +1,45 @@
+{
+  "healthRecords": [
+    {
+      "startTime": 1770199200000,
+      "endTime": 1770228000000,
+      "value": [
+        { "fieldName": "sleep_type", "integerValue": 1 },
+        { "fieldName": "fall_asleep_time", "longValue": 1770199200000 },
+        { "fieldName": "wakeup_time", "longValue": 1770228000000 },
+        { "fieldName": "all_sleep_time", "integerValue": 480 },
+        { "fieldName": "sleep_score", "integerValue": 85 },
+        { "fieldName": "deep_sleep_time", "integerValue": 120 },
+        { "fieldName": "light_sleep_time", "integerValue": 240 },
+        { "fieldName": "dream_time", "integerValue": 90 },
+        { "fieldName": "awake_time", "integerValue": 30 }
+      ],
+      "subData": {
+        "com.huawei.continuous.sleep.fragment": {
+          "samplePoints": [
+            {
+              "startTime": 1770199200000,
+              "endTime": 1770206400000,
+              "value": [{ "fieldName": "sleep_state", "integerValue": 2 }]
+            },
+            {
+              "startTime": 1770206400000,
+              "endTime": 1770213600000,
+              "value": [{ "fieldName": "sleep_state", "integerValue": 3 }]
+            },
+            {
+              "startTime": 1770213600000,
+              "endTime": 1770220800000,
+              "value": [{ "fieldName": "sleep_state", "integerValue": 4 }]
+            },
+            {
+              "startTime": 1770220800000,
+              "endTime": 1770228000000,
+              "value": [{ "fieldName": "sleep_state", "integerValue": 2 }]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

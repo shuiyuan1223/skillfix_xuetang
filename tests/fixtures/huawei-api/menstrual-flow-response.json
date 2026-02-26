@@ -1,0 +1,30 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "endTime": 1770508800000,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-menstrual-collector",
+          "samplePoints": [
+            {
+              "startTime": 1770249600000000000,
+              "endTime": 1770249660000000000,
+              "value": [{ "fieldName": "volume", "integerValue": 3 }]
+            },
+            {
+              "startTime": 1770336000000000000,
+              "endTime": 1770336060000000000,
+              "value": [{ "fieldName": "volume", "integerValue": 2 }]
+            },
+            {
+              "startTime": 1770422400000000000,
+              "endTime": 1770422460000000000,
+              "value": [{ "fieldName": "volume", "integerValue": 1 }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

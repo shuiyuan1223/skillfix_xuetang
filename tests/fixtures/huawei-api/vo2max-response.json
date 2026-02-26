@@ -1,0 +1,20 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "endTime": 1770335999999,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-vo2max-collector",
+          "samplePoints": [
+            {
+              "startTime": 1770249600000000000,
+              "endTime": 1770249660000000000,
+              "value": [{ "fieldName": "vo2max", "floatValue": 42.5 }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

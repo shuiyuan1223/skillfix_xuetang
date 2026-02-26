@@ -1,0 +1,24 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "endTime": 1770335999999,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-weight-collector",
+          "samplePoints": [
+            {
+              "startTime": 1770249600000000000,
+              "endTime": 1770249660000000000,
+              "value": [
+                { "fieldName": "body_weight", "floatValue": 72.5 },
+                { "fieldName": "bmi", "floatValue": 23.8 },
+                { "fieldName": "body_fat_rate", "floatValue": 18.5 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
