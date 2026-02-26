@@ -254,7 +254,14 @@ async function showWeeklySummary(
     const barWidth = Math.round((d.hours / maxSleep) * 30);
     const bar = c.blue("█".repeat(barWidth)) + c.dim("░".repeat(30 - barWidth));
     const hoursStr = `${d.hours}h`.padStart(5);
-    const highlight = d.hours >= 7 ? c.green("✓") : d.hours < 6 ? c.yellow("!") : " ";
+    let highlight: string;
+    if (d.hours >= 7) {
+      highlight = c.green("✓");
+    } else if (d.hours < 6) {
+      highlight = c.yellow("!");
+    } else {
+      highlight = " ";
+    }
     console.log(`  ${c.dim(dayName)} ${bar} ${hoursStr} ${highlight}`);
   }
 

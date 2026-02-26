@@ -564,7 +564,14 @@ export function installFetchInterceptor(): void {
     input: string | URL | Request,
     init?: RequestInit
   ): Promise<Response> => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    let url: string;
+    if (typeof input === "string") {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else {
+      url = input.url;
+    }
 
     // Only intercept LLM API calls
     if (!isLLMEndpoint(url)) {

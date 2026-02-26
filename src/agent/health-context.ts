@@ -41,7 +41,7 @@ export async function preComputeHealthContext(
     const today = new Date().toISOString().split("T")[0];
 
     // Compute week start (Monday) for weekly workout range
-    const todayDate = new Date(today + "T00:00:00");
+    const todayDate = new Date(`${today}T00:00:00`);
     const dayOfWeek = todayDate.getDay(); // 0=Sun, 1=Mon, ...
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const weekStart = new Date(todayDate);
@@ -268,12 +268,8 @@ export async function preComputeHealthContext(
           for (const goal of plan.goals) {
             const current = goal.currentValue;
             const pct = current != null ? Math.round((current / goal.targetValue) * 100) : 0;
-            const arrow =
-              goal.status === "completed" || goal.status === "ahead"
-                ? "↑"
-                : goal.status === "behind"
-                  ? "↓"
-                  : "→";
+            const arrowMap: Record<string, string> = { completed: "↑", ahead: "↑", behind: "↓" };
+            const arrow = arrowMap[goal.status] ?? "→";
             result += `\n  - ${goal.label}: target ${goal.targetValue}${goal.unit}, current ${current ?? "?"}${goal.unit} (${pct}%) → ${goal.status} ${arrow}`;
           }
         }

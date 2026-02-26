@@ -468,7 +468,11 @@ function generateProfileMd(profile: UserProfile): string {
     "",
     "## 基本信息",
     `- 昵称: ${profile.nickname || "{待收集}"}`,
-    `- 性别: ${profile.gender === "male" ? "男" : profile.gender === "female" ? "女" : "{待收集}"}`,
+    `- 性别: ${(() => {
+      if (profile.gender === "male") return "男";
+      if (profile.gender === "female") return "女";
+      return "{待收集}";
+    })()}`,
     `- 出生年份: ${profile.birthYear || "{待收集}"}`,
     `- 身高: ${profile.height ? `${profile.height}cm` : "{待收集}"}`,
     `- 体重: ${profile.weight ? `${profile.weight}kg` : "{待收集}"}`,

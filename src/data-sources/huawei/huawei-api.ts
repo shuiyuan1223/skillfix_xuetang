@@ -198,6 +198,8 @@ export class HuaweiHealthApi {
         case HuaweiDataType.ACTIVE_MINUTES:
           aggregated.activeMinutes = Math.round(totalValue);
           break;
+        default:
+          break;
       }
     });
 
@@ -1014,17 +1016,23 @@ export class HuaweiHealthApi {
     segments.sort((a, b) => a.startTime - b.startTime);
 
     // Calculate bed/wake times
-    const bedTime = fallAsleepTime
-      ? formatTimeHHMM(fallAsleepTime)
-      : segments.length > 0
-        ? formatTimeHHMM(segments[0].startTime)
-        : "00:00";
+    let bedTime: string;
+    if (fallAsleepTime) {
+      bedTime = formatTimeHHMM(fallAsleepTime);
+    } else if (segments.length > 0) {
+      bedTime = formatTimeHHMM(segments[0].startTime);
+    } else {
+      bedTime = "00:00";
+    }
 
-    const wakeTime = wakeupTime
-      ? formatTimeHHMM(wakeupTime)
-      : segments.length > 0
-        ? formatTimeHHMM(segments[segments.length - 1].endTime)
-        : "00:00";
+    let wakeTime: string;
+    if (wakeupTime) {
+      wakeTime = formatTimeHHMM(wakeupTime);
+    } else if (segments.length > 0) {
+      wakeTime = formatTimeHHMM(segments[segments.length - 1].endTime);
+    } else {
+      wakeTime = "00:00";
+    }
 
     return {
       segments,

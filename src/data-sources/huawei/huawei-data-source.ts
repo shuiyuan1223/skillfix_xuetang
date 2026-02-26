@@ -193,6 +193,8 @@ export class HuaweiHealthDataSource implements HealthDataSource {
             case 5:
               stages.light += duration;
               break;
+            default:
+              break;
           }
         }
       }
@@ -903,11 +905,10 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       return data
         .map((d) => ({
           date: d.date,
-          weight: d.values.body_weight
-            ? Math.round(d.values.body_weight * 10) / 10
-            : d.values.value
-              ? Math.round(d.values.value * 10) / 10
-              : undefined,
+          weight: (() => {
+            const raw = d.values.body_weight ?? d.values.value;
+            return raw ? Math.round(raw * 10) / 10 : undefined;
+          })(),
           bmi: d.values.bmi ? Math.round(d.values.bmi * 10) / 10 : undefined,
           bodyFatRate: d.values.body_fat_rate
             ? Math.round(d.values.body_fat_rate * 10) / 10

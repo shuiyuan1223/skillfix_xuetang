@@ -1232,17 +1232,22 @@ export class GatewaySession {
     channel: "chat" | "legacy-chat" | "system-agent",
     entry: SessionEntry
   ): void {
-    const sid =
-      channel === "chat"
-        ? this.sessionId
-        : channel === "legacy-chat"
-          ? `legacy-${this.legacyChatSessionId}`
-          : `sa-${this.saSessionId}`;
+    const sidMap: Record<string, string> = {
+      chat: this.sessionId,
+      "legacy-chat": `legacy-${this.legacyChatSessionId}`,
+      "system-agent": `sa-${this.saSessionId}`,
+    };
+    const sid = sidMap[channel];
     const uuid = channel === "system-agent" ? GatewaySession.SA_GLOBAL_UUID : this.userUuid;
     if (!uuid) return;
     try {
       // Resolve session directory from agent profile
-      const profileId = channel === "chat" ? "pha" : channel === "legacy-chat" ? "pha4old" : "sa";
+      const profileMap: Record<string, string> = {
+        chat: "pha",
+        "legacy-chat": "pha4old",
+        "system-agent": "sa",
+      };
+      const profileId = profileMap[channel];
       const profile = getAgentProfile(profileId);
       const uidForPath = channel === "system-agent" ? "system" : uuid;
       const sessionDir = profile.sessionPath
@@ -5150,12 +5155,14 @@ export class GatewaySession {
           }
         }
         // Determine run status: -1 = interrupted, NULL/0 = running, >0 = completed
-        const status: "running" | "completed" | "failed" =
-          r.duration_ms != null && r.duration_ms < 0
-            ? "failed"
-            : r.duration_ms && r.duration_ms > 0
-              ? "completed"
-              : "running";
+        function getRunStatus(
+          durationMs: number | null | undefined
+        ): "running" | "completed" | "failed" {
+          if (durationMs != null && durationMs < 0) return "failed";
+          if (durationMs && durationMs > 0) return "completed";
+          return "running";
+        }
+        const status = getRunStatus(r.duration_ms);
         return {
           id: r.id,
           timestamp: r.timestamp,
@@ -5365,11 +5372,7 @@ export class GatewaySession {
             shortHash: c.shortHash,
             message: c.message,
             date: c.date,
-            benchmarkScore: matchedRun
-              ? matchedRun.overall_score <= 1
-                ? matchedRun.overall_score
-                : matchedRun.overall_score / 100
-              : null,
+            benchmarkScore: matchedRun ? normalizeScore(matchedRun.overall_score) : null,
             benchmarkTag: matchedRun?.version_tag || undefined,
           };
         });
@@ -5391,23 +5394,23 @@ export class GatewaySession {
         }));
 
         for (const v of versionRows) {
-          const eventType =
-            v.status === "merged" ? "merge" : v.status === "abandoned" ? "revert" : "branch";
+          const eventTypeMap: Record<string, "branch" | "merge" | "revert"> = {
+            merged: "merge",
+            abandoned: "revert",
+          };
+          const statusMap: Record<string, "success" | "failed" | "active" | "pending"> = {
+            merged: "success",
+            abandoned: "failed",
+            active: "active",
+          };
           timelineEvents.push({
             id: `ver_${v.id}`,
-            type: eventType as "branch" | "merge" | "revert",
+            type: eventTypeMap[v.status || ""] ?? "branch",
             label: v.branch_name,
             description: v.trigger_mode || undefined,
             timestamp: v.created_at,
             branch: v.branch_name,
-            status:
-              v.status === "merged"
-                ? "success"
-                : v.status === "abandoned"
-                  ? "failed"
-                  : v.status === "active"
-                    ? "active"
-                    : "pending",
+            status: statusMap[v.status || ""] ?? "pending",
           });
         }
       } catch {
@@ -6546,8 +6549,16 @@ export class GatewaySession {
 
         this.sendChatUpdate(send);
         break;
+
+      default:
+        break;
     }
   }
+}
+
+/** Normalize a benchmark score to 0-1 range (scores >1 are assumed to be percentages). */
+function normalizeScore(score: number): number {
+  return score <= 1 ? score : score / 100;
 }
 
 // Content type helper
