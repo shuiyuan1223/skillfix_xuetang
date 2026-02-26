@@ -9,6 +9,67 @@ import { getUserId, loadConfig } from "../utils/config.js";
 import { loadProfileFromFile } from "../memory/profile.js";
 import type { PHATool } from "./types.js";
 
+function resolveLocation(explicit?: string): string | undefined {
+  if (explicit) return explicit;
+
+  const uid = getUserId();
+  if (uid) {
+    try {
+      const profile = loadProfileFromFile(uid);
+      if (profile.location) return profile.location;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const config = loadConfig();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (config as any).context?.location;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseWeatherResponse(location: string, current: any): Record<string, string> {
+  const tempC = current.temp_C;
+  const feelsLikeC = current.FeelsLikeC;
+  const desc = current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value || "";
+  const humidity = current.humidity;
+  const windSpeed = current.windspeedKmph;
+  const visibility = current.visibility;
+
+  return {
+    location,
+    temperature: `${tempC}°C`,
+    feelsLike: `${feelsLikeC}°C`,
+    description: desc,
+    humidity: `${humidity}%`,
+    windSpeed: `${windSpeed} km/h`,
+    visibility: `${visibility} km`,
+    summary: `${location}: ${tempC}°C，${desc}，湿度 ${humidity}%`,
+  };
+}
+
+async function fetchWeather(location: string): Promise<Record<string, string> | { error: string }> {
+  const url = `https://wttr.in/${encodeURIComponent(location)}?format=j1`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  const resp = await fetch(url, { signal: controller.signal });
+  clearTimeout(timeout);
+
+  if (!resp.ok) {
+    return { error: `天气服务请求失败 (HTTP ${resp.status})` };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = (await resp.json()) as any;
+  const current = data?.current_condition?.[0];
+  if (!current) {
+    return { error: "无法解析天气数据" };
+  }
+
+  return parseWeatherResponse(location, current);
+}
+
 export const getWeatherTool: PHATool<{ location?: string }> = {
   name: "get_weather",
   description: "获取指定城市的当前天气信息（温度、天气状况、湿度）。默认使用用户档案中的城市。",
@@ -25,66 +86,13 @@ export const getWeatherTool: PHATool<{ location?: string }> = {
     },
   },
   execute: async (args: { location?: string }) => {
-    let location = args.location;
-
-    // Resolve location: explicit arg → user profile → config
-    if (!location) {
-      const uid = getUserId();
-      if (uid) {
-        try {
-          const profile = loadProfileFromFile(uid);
-          if (profile.location) location = profile.location;
-        } catch {
-          /* ignore */
-        }
-      }
-      if (!location) {
-        const config = loadConfig();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        location = (config as any).context?.location;
-      }
-    }
-
+    const location = resolveLocation(args.location);
     if (!location) {
       return { error: "未配置城市。请在参数中指定 location，或在用户档案/设置中配置默认城市。" };
     }
 
     try {
-      const url = `https://wttr.in/${encodeURIComponent(location)}?format=j1`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-
-      const resp = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
-
-      if (!resp.ok) {
-        return { error: `天气服务请求失败 (HTTP ${resp.status})` };
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = (await resp.json()) as any;
-      const current = data?.current_condition?.[0];
-      if (!current) {
-        return { error: "无法解析天气数据" };
-      }
-
-      const tempC = current.temp_C;
-      const feelsLikeC = current.FeelsLikeC;
-      const desc = current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value || "";
-      const humidity = current.humidity;
-      const windSpeed = current.windspeedKmph;
-      const visibility = current.visibility;
-
-      return {
-        location,
-        temperature: `${tempC}°C`,
-        feelsLike: `${feelsLikeC}°C`,
-        description: desc,
-        humidity: `${humidity}%`,
-        windSpeed: `${windSpeed} km/h`,
-        visibility: `${visibility} km`,
-        summary: `${location}: ${tempC}°C，${desc}，湿度 ${humidity}%`,
-      };
+      return await fetchWeather(location);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("abort")) {

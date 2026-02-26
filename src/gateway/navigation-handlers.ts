@@ -419,65 +419,48 @@ async function navigateLogs(session: GatewaySession, send: SendFn): Promise<A2UI
   return mainPage;
 }
 
-async function navigateGeneral(session: GatewaySession): Promise<A2UIMessage[] | null> {
-  const config = loadConfig();
-  const providers = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
-    value: key,
-    label: cfg.name,
-    hint: cfg.hint,
-  }));
-  const huawei = config.dataSources?.huawei || {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const judge: { provider?: any; modelId?: any; label?: any } =
-    typeof config.judgeModel === "object" && config.judgeModel ? config.judgeModel : {};
-
-  const bmRecord = config.benchmarkModels || {};
-  const benchmarkModels = Object.entries(bmRecord).map(([key, m]) => ({
-    key,
-    provider: m.provider || config.llm.provider,
-    modelId: m.modelId || "",
-    label: m.label || "",
-  }));
-
-  const modelProviders = buildModelProviders(config);
-  const allModelRefs = listAllModelRefs(config);
-
-  const chromeMcp = config.mcp?.chromeMcp || {};
-  const remoteServersRecord = config.mcp?.remoteServers || {};
-  const remoteServers = Object.entries(remoteServersRecord).map(([key, s]) => ({
-    key,
-    url: s.url || "",
-    apiKey: s.apiKey || "",
-    name: s.name || "",
-    enabled: s.enabled ?? true,
-  }));
-
-  const pluginsConfig = config.plugins || {};
-  const pluginEntries = buildPluginEntries(pluginsConfig);
-
-  const scopesArray = huawei.scopes || [];
-
-  const { agentProfiles, configTags } = await buildAgentProfilesAndTags(
-    config,
-    session._settingsExpandedAgent
-  );
-
-  return generateSettingsPage({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractLlmSettings(config: any): Record<string, unknown> {
+  return {
     provider: config.llm.provider,
-    providers,
     apiKeySet: !!config.llm.apiKey,
     modelId: config.llm.modelId || PROVIDER_CONFIGS[config.llm.provider]?.defaultModel || "",
     baseUrl: config.llm.baseUrl || PROVIDER_CONFIGS[config.llm.provider]?.baseUrl || "",
-    modelProviders,
-    allModelRefs,
     orchestratorPha: config.orchestrator?.pha || "",
     orchestratorSa: config.orchestrator?.sa || "",
     orchestratorJudge: config.orchestrator?.judge || "",
     orchestratorEmbedding: config.orchestrator?.embedding || "",
-    agentProfiles,
-    configTags,
-    expandedAgentId: session._settingsExpandedAgent,
-    benchmarkModelRefs: config.benchmark?.models || [],
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractHuaweiSettings(huawei: any): Record<string, unknown> {
+  return {
+    huaweiClientId: huawei.clientId || "",
+    huaweiClientSecret: huawei.clientSecret || "",
+    huaweiRedirectUri: huawei.redirectUri || "",
+    huaweiAuthUrl: huawei.authUrl || "",
+    huaweiTokenUrl: huawei.tokenUrl || "",
+    huaweiApiBaseUrl: huawei.apiBaseUrl || "",
+    huaweiScopes: huawei.scopes || [],
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractChromeAndPlugins(chromeMcp: any, pluginsConfig: any): Record<string, unknown> {
+  return {
+    chromeMcpCommand: chromeMcp.command || "npx",
+    chromeMcpArgs: (chromeMcp.args || []).join(", "),
+    chromeMcpBrowserUrl: chromeMcp.browserUrl || "",
+    chromeMcpWsEndpoint: chromeMcp.wsEndpoint || "",
+    pluginEnabled: pluginsConfig.enabled ?? true,
+    pluginPaths: (pluginsConfig.paths || []).join(", "),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractGatewayAndDataSettings(config: any): Record<string, unknown> {
+  return {
     gatewayPort: config.gateway?.port || 8000,
     gatewayAutoStart: config.gateway?.autoStart ?? false,
     dataSourceType: config.dataSources?.type || "mock",
@@ -485,34 +468,100 @@ async function navigateGeneral(session: GatewaySession): Promise<A2UIMessage[] |
     embeddingModel: config.embedding?.model || "openai/text-embedding-3-small",
     tuiTheme: config.tui?.theme || "dark",
     tuiShowToolCalls: config.tui?.showToolCalls ?? true,
-    huaweiClientId: huawei.clientId || "",
-    huaweiClientSecret: huawei.clientSecret || "",
-    huaweiRedirectUri: huawei.redirectUri || "",
-    huaweiAuthUrl: huawei.authUrl || "",
-    huaweiTokenUrl: huawei.tokenUrl || "",
-    huaweiApiBaseUrl: huawei.apiBaseUrl || "",
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractContextAndProactive(config: any): Record<string, unknown> {
+  return {
     applyEngine: config.applyEngine || "claude-code",
     benchmarkConcurrency: config.benchmark?.concurrency || 1,
-    judgeProvider: judge.provider || config.llm.provider,
-    judgeModelId: judge.modelId || "",
-    judgeLabel: judge.label || "",
-    benchmarkModels,
-    userId: session.userUuid || config.uid || "",
-    huaweiScopes: scopesArray,
-    chromeMcpCommand: chromeMcp.command || "npx",
-    chromeMcpArgs: (chromeMcp.args || []).join(", "),
-    chromeMcpBrowserUrl: chromeMcp.browserUrl || "",
-    chromeMcpWsEndpoint: chromeMcp.wsEndpoint || "",
-    remoteServers,
-    pluginEnabled: pluginsConfig.enabled ?? true,
-    pluginPaths: (pluginsConfig.paths || []).join(", "),
-    pluginEntries,
+    benchmarkModelRefs: config.benchmark?.models || [],
     contextLocation: config.context?.location || "",
     contextHemisphere: config.context?.hemisphere || "north",
     proactiveEnabled: config.proactive?.enabled !== false,
     proactiveCheckInterval: config.proactive?.checkIntervalMinutes ?? 5,
-    rawConfigJson: JSON.stringify(stripLegacyFieldsForSave(config), null, 2),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractInfraSettings(config: any): Record<string, unknown> {
+  return {
+    ...extractGatewayAndDataSettings(config),
+    ...extractHuaweiSettings(config.dataSources?.huawei || {}),
+    ...extractChromeAndPlugins(config.mcp?.chromeMcp || {}, config.plugins || {}),
+    ...extractContextAndProactive(config),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractBenchmarkAndJudge(config: any): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const judge: { provider?: any; modelId?: any; label?: any } =
+    typeof config.judgeModel === "object" && config.judgeModel ? config.judgeModel : {};
+  const bmRecord = config.benchmarkModels || {};
+  return {
+    judgeProvider: judge.provider || config.llm.provider,
+    judgeModelId: judge.modelId || "",
+    judgeLabel: judge.label || "",
+    benchmarkModels: Object.entries(bmRecord).map(([key, val]) => {
+      const m = val as { provider?: string; modelId?: string; label?: string };
+      return {
+        key,
+        provider: m.provider || config.llm.provider,
+        modelId: m.modelId || "",
+        label: m.label || "",
+      };
+    }),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractRemoteServers(
+  config: any
+): Array<{ key: string; url: string; apiKey: string; name: string; enabled: boolean }> {
+  const record = config.mcp?.remoteServers || {};
+  return Object.entries(record).map(([key, val]) => {
+    const s = val as { url?: string; apiKey?: string; name?: string; enabled?: boolean };
+    return {
+      key,
+      url: s.url || "",
+      apiKey: s.apiKey || "",
+      name: s.name || "",
+      enabled: s.enabled ?? true,
+    };
   });
+}
+
+async function navigateGeneral(session: GatewaySession): Promise<A2UIMessage[] | null> {
+  const config = loadConfig();
+  const providers = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
+    value: key,
+    label: cfg.name,
+    hint: cfg.hint,
+  }));
+  const pluginsConfig = config.plugins || {};
+  const { agentProfiles, configTags } = await buildAgentProfilesAndTags(
+    config,
+    session._settingsExpandedAgent
+  );
+
+  return generateSettingsPage({
+    providers,
+    ...extractLlmSettings(config),
+    modelProviders: buildModelProviders(config),
+    allModelRefs: listAllModelRefs(config),
+    agentProfiles,
+    configTags,
+    expandedAgentId: session._settingsExpandedAgent,
+    ...extractInfraSettings(config),
+    ...extractBenchmarkAndJudge(config),
+    userId: session.userUuid || config.uid || "",
+    remoteServers: extractRemoteServers(config),
+    pluginEntries: buildPluginEntries(pluginsConfig),
+    rawConfigJson: JSON.stringify(stripLegacyFieldsForSave(config), null, 2),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
 }
 
 async function navigateExperiment(session: GatewaySession): Promise<A2UIMessage[] | null> {
@@ -566,7 +615,6 @@ async function loadSAMemoryData(session: GatewaySession): Promise<{
 
   let saMemoryContent: string | undefined;
   if (session.saSelectedMemoryFile) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (await systemMemoryReadTool.execute({
       file: session.saSelectedMemoryFile,
     })) as any;

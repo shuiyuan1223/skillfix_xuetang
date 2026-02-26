@@ -105,6 +105,302 @@ interface GatewayMessage {
   title?: string;
 }
 
+/** Shared mutable state for the TUI session */
+interface TUIContext {
+  baseUrl: string;
+  tui: TUI;
+  editor: Editor;
+  chatMessages: ChatMessage[];
+  connected: boolean;
+  isProcessing: boolean;
+  currentAssistantMessage: string;
+  loader: Loader | null;
+  sessionId: string;
+  sseAbortController: AbortController | null;
+  currentView: string;
+  pageActions: TUIAction[];
+  contentContainer: Container;
+  headerText: Text;
+  messagesContainer: Container;
+  pageContainer: Container;
+  processMessage: (msg: GatewayMessage) => void;
+  addChatMessage: (role: "user" | "assistant" | "tool", content: string) => void;
+  finishResponse: () => void;
+}
+
+function createTransportHelpers(ctx: TUIContext): {
+  sendAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
+  sendNavigate: (view: string) => Promise<void>;
+  sendUserMessage: (content: string) => Promise<void>;
+  startSSE: () => Promise<void>;
+} {
+  function processUpdates(updates: unknown[]): void {
+    for (const msg of updates) ctx.processMessage(msg as GatewayMessage);
+  }
+
+  async function sendAction(action: string, payload?: Record<string, unknown>): Promise<void> {
+    try {
+      const res = await fetch(`${ctx.baseUrl}/api/a2ui/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "action", action, payload, sessionId: ctx.sessionId }),
+      });
+      const result = (await res.json()) as { updates: unknown[] };
+      processUpdates(result.updates);
+    } catch {
+      // Ignore fetch errors
+    }
+  }
+
+  async function sendNavigate(view: string): Promise<void> {
+    try {
+      const res = await fetch(`${ctx.baseUrl}/api/a2ui/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "navigate", view, sessionId: ctx.sessionId }),
+      });
+      const result = (await res.json()) as { updates: unknown[] };
+      processUpdates(result.updates);
+    } catch {
+      // Ignore fetch errors
+    }
+  }
+
+  async function sendUserMessage(content: string): Promise<void> {
+    try {
+      const res = await fetch(`${ctx.baseUrl}/api/a2ui/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "user_message",
+          payload: { content },
+          sessionId: ctx.sessionId,
+        }),
+      });
+      const result = (await res.json()) as { updates: unknown[] };
+      processUpdates(result.updates);
+    } catch {
+      // Ignore fetch errors
+    }
+  }
+
+  async function startSSE(): Promise<void> {
+    ctx.sseAbortController = new AbortController();
+    try {
+      const res = await fetch(`${ctx.baseUrl}/api/a2ui/events?sessionId=${ctx.sessionId}`, {
+        signal: ctx.sseAbortController.signal,
+      });
+      if (!res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const msg = JSON.parse(line.slice(6));
+              ctx.processMessage(msg);
+            } catch {
+              /* skip unparseable SSE data */
+            }
+          }
+        }
+      }
+    } catch (e: unknown) {
+      if ((e as { name?: string })?.name !== "AbortError") {
+        if (ctx.connected) setTimeout(() => startSSE(), 1000);
+      }
+    }
+  }
+
+  return { sendAction, sendNavigate, sendUserMessage, startSSE };
+}
+
+function setupEditorSubmit(
+  ctx: TUIContext,
+  transport: ReturnType<typeof createTransportHelpers>,
+  navigateTo: (view: string) => void,
+  showToast: (message: string) => void,
+  cleanup: () => void,
+  showHelp: () => void
+): void {
+  ctx.editor.onSubmit = (text) => {
+    if (!text.trim() || ctx.isProcessing) return;
+    const cmd = text.trim();
+
+    if (cmd === "/quit" || cmd === "/exit") {
+      cleanup();
+      return;
+    }
+    if (cmd === "/clear") {
+      ctx.chatMessages.length = 0;
+      updateChatMessages(ctx);
+      ctx.editor.setText("");
+      ctx.tui.requestRender();
+      return;
+    }
+    if (cmd === "/help") {
+      showHelp();
+      ctx.editor.setText("");
+      ctx.tui.requestRender();
+      return;
+    }
+
+    const navTarget = SLASH_NAV[cmd];
+    if (navTarget) {
+      navigateTo(navTarget);
+      ctx.editor.setText("");
+      return;
+    }
+
+    if (/^\d+$/.test(cmd) && ctx.pageActions.length > 0) {
+      const idx = parseInt(cmd, 10) - 1;
+      if (idx >= 0 && idx < ctx.pageActions.length) {
+        const action = ctx.pageActions[idx];
+        transport.sendAction(action.action, action.payload);
+        ctx.editor.setText("");
+        return;
+      }
+    }
+
+    if (ctx.currentView === "chat") {
+      ctx.addChatMessage("user", cmd);
+      ctx.editor.setText("");
+      ctx.editor.disableSubmit = true;
+      ctx.isProcessing = true;
+      ctx.currentAssistantMessage = "";
+      ctx.loader = new Loader(ctx.tui, colors.cyan, colors.dim, "Thinking...");
+      ctx.contentContainer.addChild(ctx.loader);
+      ctx.loader.start();
+      ctx.tui.requestRender();
+      transport.sendUserMessage(cmd);
+      return;
+    }
+
+    ctx.editor.setText("");
+    showToast("Type a number to select an action, or /help for commands");
+  };
+}
+
+function updateChatMessages(ctx: TUIContext): void {
+  ctx.messagesContainer.clear();
+  for (const msg of ctx.chatMessages) {
+    if (msg.role === "user") {
+      ctx.messagesContainer.addChild(
+        new Text(`${colors.green("You")} ${colors.dim(">")} ${msg.content}`, 1, 0)
+      );
+      ctx.messagesContainer.addChild(new Spacer(1));
+    } else if (msg.role === "assistant") {
+      ctx.messagesContainer.addChild(new Text(colors.cyan("Assistant"), 1, 0));
+      ctx.messagesContainer.addChild(new Markdown(msg.content, 1, 0, markdownTheme));
+      ctx.messagesContainer.addChild(new Spacer(1));
+    } else if (msg.role === "tool") {
+      ctx.messagesContainer.addChild(
+        new Text(`${colors.yellow("Tool")} ${colors.dim(">")} ${msg.content}`, 1, 0)
+      );
+    }
+  }
+}
+
+function switchToChatMode(ctx: TUIContext): void {
+  ctx.contentContainer.clear();
+  ctx.contentContainer.addChild(ctx.headerText);
+  ctx.contentContainer.addChild(new Spacer(1));
+  ctx.contentContainer.addChild(ctx.messagesContainer);
+}
+
+function switchToPageMode(ctx: TUIContext): void {
+  ctx.contentContainer.clear();
+  const viewLabels = ["chat", "dashboard", "memory", "evolution"];
+  const navBar = new Text(renderNavBar(ctx.currentView, viewLabels), 1, 0);
+  ctx.contentContainer.addChild(navBar);
+  ctx.contentContainer.addChild(new Spacer(1));
+  ctx.contentContainer.addChild(ctx.pageContainer);
+}
+
+function handlePageMessage(ctx: TUIContext, msg: GatewayMessage): void {
+  const surfaces = msg.surfaces;
+  if (!surfaces || !surfaces.main) return;
+
+  const main = surfaces.main;
+  const termWidth = ctx.tui.terminal.columns || 80;
+  const result = renderA2UIToTUI(main.components, main.root_id, termWidth);
+  ctx.pageActions = result.actions;
+
+  if (surfaces.sidebar) {
+    renderA2UIToTUI(surfaces.sidebar.components, surfaces.sidebar.root_id, termWidth);
+  }
+
+  if (ctx.currentView === "chat") return;
+
+  switchToPageMode(ctx);
+  ctx.pageContainer.clear();
+  const pageText = result.lines.join("\n");
+  if (pageText.trim()) {
+    ctx.pageContainer.addChild(new Markdown(pageText, 1, 0, markdownTheme));
+  }
+  if (ctx.pageActions.length > 0) {
+    ctx.pageContainer.addChild(new Spacer(1));
+    ctx.pageContainer.addChild(new Text(renderActionBar(ctx.pageActions), 1, 0));
+  }
+  ctx.tui.requestRender();
+}
+
+function showToastMessage(ctx: TUIContext, message: string, variant?: string): void {
+  let formatted: string;
+  switch (variant) {
+    case "error":
+      formatted = colors.red(`  ${message}`);
+      break;
+    case "warning":
+      formatted = colors.yellow(`  ${message}`);
+      break;
+    default:
+      formatted = colors.green(`  ${message}`);
+  }
+  const toastText = new Text(formatted, 0, 0);
+  ctx.contentContainer.addChild(toastText);
+  ctx.tui.requestRender();
+  setTimeout(() => {
+    ctx.contentContainer.removeChild(toastText);
+    ctx.tui.requestRender();
+  }, 3000);
+}
+
+function handleModal(ctx: TUIContext, msg: GatewayMessage): void {
+  if (!msg.components || !msg.root_id) return;
+  const termWidth = ctx.tui.terminal.columns || 80;
+  const result = renderA2UIToTUI(msg.components, msg.root_id, termWidth - 4);
+  const modalActions = result.actions;
+
+  const startNum = ctx.pageActions.length;
+  for (const action of modalActions) action.number = startNum + action.number;
+  ctx.pageActions.push(...modalActions);
+
+  const title = msg.title || "Details";
+  const border = colors.dim("=".repeat(Math.min(60, termWidth - 4)));
+
+  const modalContainer = new Container();
+  modalContainer.addChild(new Spacer(1));
+  modalContainer.addChild(new Text(border, 1, 0));
+  modalContainer.addChild(new Text(colors.bold(` ${title}`), 1, 0));
+  modalContainer.addChild(new Text(border, 1, 0));
+  modalContainer.addChild(new Markdown(result.lines.join("\n"), 1, 0, markdownTheme));
+  if (modalActions.length > 0) {
+    modalContainer.addChild(new Spacer(1));
+    modalContainer.addChild(new Text(renderActionBar(modalActions), 1, 0));
+  }
+  modalContainer.addChild(new Text(border, 1, 0));
+  ctx.contentContainer.addChild(modalContainer);
+  ctx.tui.requestRender();
+}
+
 // Slash command -> Gateway view mapping
 const SLASH_NAV: Record<string, string> = {
   "/chat": "chat",
@@ -188,6 +484,107 @@ function buildAutocompleteCommands(): Array<{ name: string; description: string 
   ];
 }
 
+function createTUIComponents(providerLabel: string): {
+  tui: TUI;
+  contentContainer: Container;
+  headerText: Text;
+  messagesContainer: Container;
+  pageContainer: Container;
+  editor: Editor;
+} {
+  const terminal = new ProcessTerminal();
+  const tui = new TUI(terminal);
+  const contentContainer = new Container();
+  const headerText = new Text(
+    `${colors.bold(colors.cyan("PHA"))} ${colors.dim("- Personal Health Agent")}\n` +
+      `${colors.dim(`Provider: ${providerLabel}`)}\n` +
+      `${colors.dim("Type /help for commands, /quit to exit")}`,
+    1,
+    0
+  );
+  contentContainer.addChild(headerText);
+  contentContainer.addChild(new Spacer(1));
+  const messagesContainer = new Container();
+  contentContainer.addChild(messagesContainer);
+  const pageContainer = new Container();
+  const editor = new Editor(tui, editorTheme, { paddingX: 1 });
+  const autocompleteProvider = new CombinedAutocompleteProvider(
+    buildAutocompleteCommands(),
+    process.cwd()
+  );
+  editor.setAutocompleteProvider(autocompleteProvider);
+  return { tui, contentContainer, headerText, messagesContainer, pageContainer, editor };
+}
+
+function buildTUIContext(
+  baseUrl: string,
+  components: ReturnType<typeof createTUIComponents>
+): TUIContext {
+  const ctx: TUIContext = {
+    baseUrl,
+    ...components,
+    chatMessages: [],
+    connected: false,
+    isProcessing: false,
+    currentAssistantMessage: "",
+    loader: null,
+    sessionId: "",
+    sseAbortController: null,
+    currentView: "chat",
+    pageActions: [],
+    processMessage: () => {},
+    addChatMessage: () => {},
+    finishResponse: () => {},
+  };
+  ctx.addChatMessage = (role, content) => {
+    ctx.chatMessages.push({ role, content });
+    updateChatMessages(ctx);
+  };
+  ctx.finishResponse = () => {
+    if (ctx.loader) {
+      ctx.loader.stop();
+      ctx.contentContainer.removeChild(ctx.loader);
+      ctx.loader = null;
+    }
+    if (ctx.currentAssistantMessage) ctx.addChatMessage("assistant", ctx.currentAssistantMessage);
+    ctx.currentAssistantMessage = "";
+    ctx.isProcessing = false;
+    ctx.editor.disableSubmit = false;
+    ctx.tui.requestRender();
+  };
+  return ctx;
+}
+
+function wireMessageHandlers(ctx: TUIContext): void {
+  const handlers: Record<string, (msg: GatewayMessage) => void> = {
+    page: (msg) => handlePageMessage(ctx, msg),
+    agent_text: (msg) => handleAgentText(ctx, msg),
+    tool_call: (msg) => {
+      if (ctx.loader) ctx.loader.setMessage(`Using ${msg.tool ?? "tool"}...`);
+    },
+    modal: (msg) => handleModal(ctx, msg),
+    toast: (msg) => showToastMessage(ctx, msg.message || msg.text || "", msg.variant),
+    a2ui: (msg) => {
+      if (msg.surfaces) handlePageMessage(ctx, msg);
+    },
+    error: (msg) => {
+      ctx.finishResponse();
+      ctx.addChatMessage("assistant", `**Error:** ${msg.message ?? "unknown error"}`);
+    },
+    clear_surface: () => {},
+    log_entry: () => {},
+    connected: () => {},
+  };
+  ctx.processMessage = (msg) => {
+    try {
+      const handler = handlers[msg.type];
+      if (handler) handler(msg);
+    } catch {
+      /* ignore */
+    }
+  };
+}
+
 async function runTUI(options: { port?: string }, config: PHAConfig): Promise<void> {
   const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
   const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
@@ -198,486 +595,86 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
 
   await ensureGatewayRunning(baseUrl);
 
-  // Create terminal and TUI
-  const terminal = new ProcessTerminal();
-  const tui = new TUI(terminal);
+  const components = createTUIComponents(providerCfg?.name || provider);
+  const { tui, contentContainer, editor } = components;
+  const ctx = buildTUIContext(baseUrl, components);
+  wireMessageHandlers(ctx);
 
-  // State
-  const chatMessages: ChatMessage[] = [];
-  let connected = false;
-  let isProcessing = false;
-  let currentAssistantMessage = "";
-  let loader: Loader | null = null;
-  let sessionId = "";
-  let sseAbortController: AbortController | null = null;
-
-  // View state
-  let currentView = "chat";
-  let pageActions: TUIAction[] = [];
-
-  // Main content container
-  const contentContainer = new Container();
-
-  // Header
-  const headerText = new Text(
-    `${colors.bold(colors.cyan("PHA"))} ${colors.dim("- Personal Health Agent")}\n` +
-      `${colors.dim(`Provider: ${providerCfg?.name || provider}`)}\n` +
-      `${colors.dim("Type /help for commands, /quit to exit")}`,
-    1,
-    0
-  );
-  contentContainer.addChild(headerText);
-  contentContainer.addChild(new Spacer(1));
-
-  // Messages container (for chat mode)
-  const messagesContainer = new Container();
-  contentContainer.addChild(messagesContainer);
-
-  // Page content container (for non-chat views)
-  const pageContainer = new Container();
-
-  // Editor with autocomplete
-  const editor = new Editor(tui, editorTheme, { paddingX: 1 });
-
-  const autocompleteProvider = new CombinedAutocompleteProvider(
-    buildAutocompleteCommands(),
-    process.cwd()
-  );
-  editor.setAutocompleteProvider(autocompleteProvider);
-
-  // ========================================================================
-  // HTTP+SSE transport helpers
-  // ========================================================================
-
-  function handleAgentText(msg: GatewayMessage): void {
-    if (msg.is_final) {
-      finishResponse();
+  const transport = createTransportHelpers(ctx);
+  const navigateTo = (view: string): void => {
+    ctx.currentView = view;
+    ctx.pageActions = [];
+    transport.sendNavigate(view);
+    if (view !== "chat") {
+      switchToPageMode(ctx);
+      ctx.pageContainer.clear();
+      ctx.pageContainer.addChild(new Text(colors.dim("Loading..."), 1, 0));
     } else {
-      currentAssistantMessage = msg.content ?? "";
-      if (loader) {
-        const msgContent = msg.content ?? "";
-        const preview = msgContent.length > 60 ? `${msgContent.substring(0, 60)}...` : msgContent;
-        loader.setMessage(preview);
-      }
+      switchToChatMode(ctx);
     }
-  }
-
-  const messageHandlers: Record<string, (msg: GatewayMessage) => void> = {
-    page: handlePageMessage,
-    agent_text: handleAgentText,
-    tool_call: (msg) => {
-      if (loader) loader.setMessage(`Using ${msg.tool ?? "tool"}...`);
-    },
-    modal: handleModal,
-    toast: handleToast,
-    a2ui: (msg) => {
-      if (msg.surfaces) handlePageMessage(msg);
-    },
-    error: (msg) => {
-      finishResponse();
-      addChatMessage("assistant", `**Error:** ${msg.message ?? "unknown error"}`);
-    },
-    clear_surface: () => {},
-    log_entry: () => {},
-    connected: () => {},
+    ctx.tui.requestRender();
+  };
+  const showToast = (message: string): void => showToastMessage(ctx, message);
+  let tuiStarted = false;
+  const cleanup = (): void => {
+    if (ctx.loader) ctx.loader.stop();
+    if (ctx.sseAbortController) ctx.sseAbortController.abort();
+    if (tuiStarted) ctx.tui.stop();
+    process.exit(0);
+  };
+  const showHelp = (): void => {
+    if (ctx.currentView === "chat") {
+      ctx.addChatMessage("assistant", CHAT_HELP);
+    } else {
+      ctx.pageContainer.clear();
+      ctx.pageContainer.addChild(new Markdown(PAGE_HELP, 1, 0, markdownTheme));
+      ctx.tui.requestRender();
+    }
   };
 
-  function processMessage(msg: GatewayMessage) {
-    try {
-      const handler = messageHandlers[msg.type];
-      if (handler) {
-        handler(msg);
-      }
-    } catch {
-      // Ignore processing errors
-    }
-  }
-
-  function processUpdates(updates: unknown[]) {
-    for (const msg of updates) {
-      processMessage(msg as GatewayMessage);
-    }
-  }
-
-  async function sendAction(action: string, payload?: Record<string, unknown>) {
-    try {
-      const res = await fetch(`${baseUrl}/api/a2ui/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "action", action, payload, sessionId }),
-      });
-      const result = (await res.json()) as { updates: unknown[] };
-      processUpdates(result.updates);
-    } catch {
-      // Ignore fetch errors
-    }
-  }
-
-  async function sendNavigate(view: string) {
-    try {
-      const res = await fetch(`${baseUrl}/api/a2ui/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "navigate", view, sessionId }),
-      });
-      const result = (await res.json()) as { updates: unknown[] };
-      processUpdates(result.updates);
-    } catch {
-      // Ignore fetch errors
-    }
-  }
-
-  async function sendUserMessage(content: string) {
-    try {
-      const res = await fetch(`${baseUrl}/api/a2ui/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "user_message", payload: { content }, sessionId }),
-      });
-      const result = (await res.json()) as { updates: unknown[] };
-      processUpdates(result.updates);
-    } catch {
-      // Ignore fetch errors
-    }
-  }
-
-  async function startSSE() {
-    sseAbortController = new AbortController();
-    try {
-      const res = await fetch(`${baseUrl}/api/a2ui/events?sessionId=${sessionId}`, {
-        signal: sseAbortController.signal,
-      });
-      if (!res.body) return;
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const msg = JSON.parse(line.slice(6));
-              processMessage(msg);
-            } catch {
-              /* skip unparseable SSE data */
-            }
-          }
-        }
-      }
-    } catch (e: unknown) {
-      // AbortError is expected on cleanup
-      if ((e as { name?: string })?.name !== "AbortError") {
-        // SSE connection lost - attempt reconnect if still connected
-        if (connected) {
-          setTimeout(() => startSSE(), 1000);
-        }
-      }
-    }
-  }
-
-  // ========================================================================
-  // Editor submit handler
-  // ========================================================================
-
-  editor.onSubmit = (text) => {
-    if (!text.trim()) return;
-    if (isProcessing) return;
-
-    const cmd = text.trim();
-
-    // System commands
-    if (cmd === "/quit" || cmd === "/exit") {
-      cleanup();
-      return;
-    }
-
-    if (cmd === "/clear") {
-      chatMessages.length = 0;
-      updateChatMessages();
-      editor.setText("");
-      tui.requestRender();
-      return;
-    }
-
-    if (cmd === "/help") {
-      showHelp();
-      editor.setText("");
-      tui.requestRender();
-      return;
-    }
-
-    // Navigation commands
-    const navTarget = SLASH_NAV[cmd];
-    if (navTarget) {
-      navigateTo(navTarget);
-      editor.setText("");
-      return;
-    }
-
-    // Action number input (works in both chat and page modes)
-    if (/^\d+$/.test(cmd) && pageActions.length > 0) {
-      const idx = parseInt(cmd, 10) - 1;
-      if (idx >= 0 && idx < pageActions.length) {
-        const action = pageActions[idx];
-        sendAction(action.action, action.payload);
-        editor.setText("");
-        return;
-      }
-    }
-
-    // In chat mode, send as user message
-    if (currentView === "chat") {
-      addChatMessage("user", cmd);
-      editor.setText("");
-      editor.disableSubmit = true;
-      isProcessing = true;
-      currentAssistantMessage = "";
-
-      // Show loader
-      loader = new Loader(tui, colors.cyan, colors.dim, "Thinking...");
-      contentContainer.addChild(loader);
-      loader.start();
-      tui.requestRender();
-
-      sendUserMessage(cmd);
-      return;
-    }
-
-    // In page mode, unrecognized input - show hint
-    editor.setText("");
-    showToast("Type a number to select an action, or /help for commands");
-  };
-
-  // Add to TUI
+  setupEditorSubmit(ctx, transport, navigateTo, showToast, cleanup, showHelp);
   tui.addChild(contentContainer);
   tui.addChild(new Spacer(1));
   tui.addChild(editor);
   tui.setFocus(editor);
 
-  // ========================================================================
-  // Chat message management
-  // ========================================================================
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
 
-  function addChatMessage(role: "user" | "assistant" | "tool", content: string) {
-    chatMessages.push({ role, content });
-    updateChatMessages();
-  }
+  await initializeSession(baseUrl, config, {
+    setSessionId: (id) => {
+      ctx.sessionId = id;
+    },
+    setConnected: (val) => {
+      ctx.connected = val;
+    },
+    processUpdates: (updates) => {
+      for (const msg of updates) ctx.processMessage(msg as GatewayMessage);
+    },
+    addChatMessage: ctx.addChatMessage,
+    startSSE: transport.startSSE,
+    tui,
+  });
 
-  function updateChatMessages() {
-    messagesContainer.clear();
-    for (const msg of chatMessages) {
-      if (msg.role === "user") {
-        messagesContainer.addChild(
-          new Text(`${colors.green("You")} ${colors.dim(">")} ${msg.content}`, 1, 0)
-        );
-        messagesContainer.addChild(new Spacer(1));
-      } else if (msg.role === "assistant") {
-        messagesContainer.addChild(new Text(colors.cyan("Assistant"), 1, 0));
-        messagesContainer.addChild(new Markdown(msg.content, 1, 0, markdownTheme));
-        messagesContainer.addChild(new Spacer(1));
-      } else if (msg.role === "tool") {
-        messagesContainer.addChild(
-          new Text(`${colors.yellow("Tool")} ${colors.dim(">")} ${msg.content}`, 1, 0)
-        );
-      }
+  hookStdinCtrlC(cleanup);
+  tuiStarted = true;
+  tui.start();
+}
+
+function handleAgentText(ctx: TUIContext, msg: GatewayMessage): void {
+  if (msg.is_final) {
+    ctx.finishResponse();
+  } else {
+    ctx.currentAssistantMessage = msg.content ?? "";
+    if (ctx.loader) {
+      const msgContent = msg.content ?? "";
+      const preview = msgContent.length > 60 ? `${msgContent.substring(0, 60)}...` : msgContent;
+      ctx.loader.setMessage(preview);
     }
   }
+}
 
-  function finishResponse() {
-    if (loader) {
-      loader.stop();
-      contentContainer.removeChild(loader);
-      loader = null;
-    }
-    if (currentAssistantMessage) {
-      addChatMessage("assistant", currentAssistantMessage);
-    }
-    currentAssistantMessage = "";
-    isProcessing = false;
-    editor.disableSubmit = false;
-    tui.requestRender();
-  }
-
-  // ========================================================================
-  // Navigation
-  // ========================================================================
-
-  function navigateTo(view: string) {
-    currentView = view;
-    pageActions = [];
-
-    sendNavigate(view);
-
-    // Show loading state
-    if (view !== "chat") {
-      switchToPageMode();
-      pageContainer.clear();
-      pageContainer.addChild(new Text(colors.dim("Loading..."), 1, 0));
-      tui.requestRender();
-    } else {
-      switchToChatMode();
-      tui.requestRender();
-    }
-  }
-
-  function switchToChatMode() {
-    contentContainer.clear();
-    contentContainer.addChild(headerText);
-    contentContainer.addChild(new Spacer(1));
-    contentContainer.addChild(messagesContainer);
-  }
-
-  function switchToPageMode() {
-    contentContainer.clear();
-
-    // Nav bar
-    const viewLabels = ["chat", "dashboard", "memory", "evolution"];
-    const navBar = new Text(renderNavBar(currentView, viewLabels), 1, 0);
-    contentContainer.addChild(navBar);
-    contentContainer.addChild(new Spacer(1));
-
-    contentContainer.addChild(pageContainer);
-  }
-
-  // ========================================================================
-  // A2UI Page rendering
-  // ========================================================================
-
-  function handlePageMessage(msg: GatewayMessage) {
-    const surfaces = msg.surfaces;
-    if (!surfaces || !surfaces.main) return;
-
-    const main = surfaces.main;
-    const termWidth = tui.terminal.columns || 80;
-
-    // Render A2UI components to terminal text
-    const result = renderA2UIToTUI(main.components, main.root_id, termWidth);
-    pageActions = result.actions;
-
-    // Detect current view from sidebar if available
-    if (surfaces.sidebar) {
-      const sidebarResult = renderA2UIToTUI(
-        surfaces.sidebar.components,
-        surfaces.sidebar.root_id,
-        termWidth
-      );
-      // sidebar rendering is for context only; we don't display it
-      void sidebarResult;
-    }
-
-    if (currentView === "chat") {
-      // In chat mode, page messages update the chat view.
-      // Don't switch to page mode - just update messages container
-      // since chat page sends page messages too.
-      return;
-    }
-
-    // Update page content
-    switchToPageMode();
-    pageContainer.clear();
-
-    // Render page content as Markdown (supports ANSI)
-    const pageText = result.lines.join("\n");
-    if (pageText.trim()) {
-      pageContainer.addChild(new Markdown(pageText, 1, 0, markdownTheme));
-    }
-
-    // Action bar
-    if (pageActions.length > 0) {
-      pageContainer.addChild(new Spacer(1));
-      pageContainer.addChild(new Text(renderActionBar(pageActions), 1, 0));
-    }
-
-    tui.requestRender();
-  }
-
-  // ========================================================================
-  // Toast and Modal
-  // ========================================================================
-
-  function showToast(message: string) {
-    const toastText = new Text(colors.green(`  ${message}`), 0, 0);
-    contentContainer.addChild(toastText);
-    tui.requestRender();
-
-    setTimeout(() => {
-      contentContainer.removeChild(toastText);
-      tui.requestRender();
-    }, 3000);
-  }
-
-  function handleToast(msg: GatewayMessage) {
-    const message = msg.message || msg.text || "";
-    const variant = msg.variant;
-
-    let formatted: string;
-    switch (variant) {
-      case "error":
-        formatted = colors.red(`  ${message}`);
-        break;
-      case "warning":
-        formatted = colors.yellow(`  ${message}`);
-        break;
-      default:
-        formatted = colors.green(`  ${message}`);
-    }
-
-    const toastText = new Text(formatted, 0, 0);
-    contentContainer.addChild(toastText);
-    tui.requestRender();
-
-    setTimeout(() => {
-      contentContainer.removeChild(toastText);
-      tui.requestRender();
-    }, 3000);
-  }
-
-  function handleModal(msg: GatewayMessage) {
-    // Render modal content as a bordered overlay-style block
-    if (!msg.components || !msg.root_id) return;
-
-    const termWidth = tui.terminal.columns || 80;
-    const result = renderA2UIToTUI(msg.components, msg.root_id, termWidth - 4);
-    const modalActions = result.actions;
-
-    // Add modal actions to current page actions
-    const startNum = pageActions.length;
-    for (const action of modalActions) {
-      action.number = startNum + action.number;
-    }
-    pageActions.push(...modalActions);
-
-    const title = msg.title || "Details";
-    const border = colors.dim("=".repeat(Math.min(60, termWidth - 4)));
-
-    const modalContainer = new Container();
-    modalContainer.addChild(new Spacer(1));
-    modalContainer.addChild(new Text(border, 1, 0));
-    modalContainer.addChild(new Text(colors.bold(` ${title}`), 1, 0));
-    modalContainer.addChild(new Text(border, 1, 0));
-    modalContainer.addChild(new Markdown(result.lines.join("\n"), 1, 0, markdownTheme));
-
-    if (modalActions.length > 0) {
-      modalContainer.addChild(new Spacer(1));
-      modalContainer.addChild(new Text(renderActionBar(modalActions), 1, 0));
-    }
-
-    modalContainer.addChild(new Text(border, 1, 0));
-
-    contentContainer.addChild(modalContainer);
-    tui.requestRender();
-  }
-
-  // ========================================================================
-  // Help
-  // ========================================================================
-
-  const CHAT_HELP = `**Navigation Commands:**
+const CHAT_HELP = `**Navigation Commands:**
 - \`/dashboard\` - Health Dashboard
 - \`/memory\` - Memory & Profile
 - \`/evolution\` - Evolution Lab
@@ -692,7 +689,7 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
 **Tips:** Press Enter to send, Alt+Enter for new line
 In page views, type a number to trigger an action.`;
 
-  const PAGE_HELP = `**Navigation Commands:**
+const PAGE_HELP = `**Navigation Commands:**
 - \`/chat\` - Back to Chat
 - \`/dashboard\` - Health Dashboard
 - \`/memory\` - Memory & Profile
@@ -704,58 +701,6 @@ In page views, type a number to trigger an action.`;
 - \`/quit\` - Exit TUI
 
 **Actions:** Type a number (e.g. \`1\`) to trigger the corresponding action.`;
-
-  function showHelp() {
-    if (currentView === "chat") {
-      addChatMessage("assistant", CHAT_HELP);
-    } else {
-      pageContainer.clear();
-      pageContainer.addChild(new Markdown(PAGE_HELP, 1, 0, markdownTheme));
-      tui.requestRender();
-    }
-  }
-
-  // ========================================================================
-  // Lifecycle
-  // ========================================================================
-
-  let tuiStarted = false;
-
-  function cleanup() {
-    if (loader) loader.stop();
-    if (sseAbortController) sseAbortController.abort();
-    if (tuiStarted) tui.stop();
-    process.exit(0);
-  }
-
-  // Handle Ctrl+C
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
-
-  // ========================================================================
-  // Initialize via HTTP+SSE
-  // ========================================================================
-
-  await initializeSession(baseUrl, config, {
-    setSessionId: (id) => {
-      sessionId = id;
-    },
-    setConnected: (val) => {
-      connected = val;
-    },
-    processUpdates,
-    addChatMessage,
-    startSSE,
-    tui,
-  });
-
-  // Handle Ctrl+C at raw input level (before pi-tui processes it)
-  hookStdinCtrlC(cleanup);
-
-  // Start TUI (this blocks and handles input)
-  tuiStarted = true;
-  tui.start();
-}
 
 async function initializeSession(
   baseUrl: string,

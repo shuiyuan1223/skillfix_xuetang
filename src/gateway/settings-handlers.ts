@@ -82,14 +82,12 @@ const saveLlm: ConfigMutator = (config, formData) => {
   if (formData.apiKey && formData.apiKey !== "••••••••")
     config.llm.apiKey = String(formData.apiKey);
   if (formData.modelId) config.llm.modelId = String(formData.modelId);
-  if (formData.baseUrl !== undefined)
-    config.llm.baseUrl = String(formData.baseUrl) || undefined;
+  if (formData.baseUrl !== undefined) config.llm.baseUrl = String(formData.baseUrl) || undefined;
 };
 
 const saveGateway: ConfigMutator = (config, formData) => {
   if (formData.port) config.gateway.port = Number(formData.port) || 8000;
-  if (formData.autoStart !== undefined)
-    config.gateway.autoStart = formData.autoStart === "true";
+  if (formData.autoStart !== undefined) config.gateway.autoStart = formData.autoStart === "true";
 };
 
 const saveDatasource: ConfigMutator = (config, formData) => {
@@ -185,7 +183,11 @@ const saveBenchmarkV4: ConfigMutator = (config, formData) => {
   config.orchestrator.judge = String(formData.benchmarkJudgeModel || "") || undefined;
 };
 
-type ProviderEntry = { baseUrl?: string; apiKey?: string; models: Array<{ name: string; model: string; label?: string }> };
+type ProviderEntry = {
+  baseUrl?: string;
+  apiKey?: string;
+  models: Array<{ name: string; model: string; label?: string }>;
+};
 
 function parseProviderFormFields(
   formData: FormData,
@@ -226,11 +228,7 @@ function parseProviderField(
   }
 }
 
-function parseModelField(
-  k: string,
-  v: unknown,
-  providers: Record<string, ProviderEntry>
-): void {
+function parseModelField(k: string, v: unknown, providers: Record<string, ProviderEntry>): void {
   const match = k.match(/^mp__(.+?)__m__(\d+)__(.+)$/);
   if (!match) return;
   const [, provKey, idxStr, field] = match;
@@ -436,7 +434,10 @@ const saveMcpChrome: ConfigMutator = (config, formData) => {
   if (formData.chromeMcpArgs !== undefined) {
     const argsStr = String(formData.chromeMcpArgs || "");
     config.mcp.chromeMcp.args = argsStr
-      ? argsStr.split(",").map((s) => s.trim()).filter(Boolean)
+      ? argsStr
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
       : undefined;
   }
   if (formData.chromeMcpBrowserUrl !== undefined)
@@ -505,7 +506,10 @@ const savePluginsV2: ConfigMutator = (config, formData) => {
   if (formData.pluginPaths !== undefined) {
     const pathsStr = String(formData.pluginPaths || "");
     config.plugins.paths = pathsStr
-      ? pathsStr.split(",").map((s) => s.trim()).filter(Boolean)
+      ? pathsStr
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
       : [];
   }
 };
@@ -560,35 +564,35 @@ const agentDelete: ConfigMutator = (config, formData) => {
   }
 };
 
+function applyTagAction(tags: string[], tag: string, action: string): string[] {
+  const result = [...tags];
+  if (action === "add" && !result.includes(tag)) {
+    result.push(tag);
+  } else if (action === "remove") {
+    const idx = result.indexOf(tag);
+    if (idx >= 0) result.splice(idx, 1);
+  }
+  return result;
+}
+
 const agentTagToggle: ConfigMutator = (config, formData, session) => {
   const agentId = String(formData?.agentId || "");
   const tag = String(formData?.tag || "");
   const kind = String(formData?.kind || "");
   const tagAction = String(formData?.action || "");
-  if (agentId && tag) {
-    if (!config.agents) config.agents = {};
-    if (!config.agents[agentId]) config.agents[agentId] = {};
-    const ap = config.agents[agentId];
-    const merged = getAgentProfile(agentId);
-    if (kind === "tool") {
-      const tags = [...(merged.tools.tags || [])];
-      if (tagAction === "add" && !tags.includes(tag)) tags.push(tag);
-      else if (tagAction === "remove") {
-        const idx = tags.indexOf(tag);
-        if (idx >= 0) tags.splice(idx, 1);
-      }
-      ap.tools = { ...ap.tools, tags };
-    } else if (kind === "skill") {
-      const tags = [...(merged.skills?.tags || [])];
-      if (tagAction === "add" && !tags.includes(tag)) tags.push(tag);
-      else if (tagAction === "remove") {
-        const idx = tags.indexOf(tag);
-        if (idx >= 0) tags.splice(idx, 1);
-      }
-      ap.skills = { ...ap.skills, tags };
-    }
-    session._settingsExpandedAgent = agentId;
+  if (!agentId || !tag) return;
+
+  if (!config.agents) config.agents = {};
+  if (!config.agents[agentId]) config.agents[agentId] = {};
+  const ap = config.agents[agentId];
+  const merged = getAgentProfile(agentId);
+
+  if (kind === "tool") {
+    ap.tools = { ...ap.tools, tags: applyTagAction(merged.tools.tags || [], tag, tagAction) };
+  } else if (kind === "skill") {
+    ap.skills = { ...ap.skills, tags: applyTagAction(merged.skills?.tags || [], tag, tagAction) };
   }
+  session._settingsExpandedAgent = agentId;
 };
 
 const tagsToggle: ConfigMutator = (config, formData) => {
@@ -659,10 +663,7 @@ const TAG_OPS = new Set([
   "settings_scope_toggle",
 ]);
 
-const COPY_OPS = new Set([
-  "settings_copy_config",
-  "settings_download_config",
-]);
+const COPY_OPS = new Set(["settings_copy_config", "settings_download_config"]);
 
 export async function handleSettingsAction(
   session: GatewaySession,

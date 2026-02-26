@@ -382,6 +382,58 @@ function addToolResultCards(
   } satisfies AGUIEvent);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function handleCreateDashboard(session: GatewaySession, event: any): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = (event.result as any)?.details;
+  const d = raw?.details ?? raw;
+  if (!d?.dashboardId || !d?.sections) return;
+  if (session.customDashboards.size >= MAX_DASHBOARDS_PER_SESSION) return;
+
+  session.customDashboards.set(d.dashboardId, {
+    id: d.dashboardId,
+    title: d.title,
+    subtitle: d.subtitle,
+    icon: d.icon || "activity",
+    sections: d.sections,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (session as any).saveDashboards();
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function handleUpdateDashboard(session: GatewaySession, event: any, send: SendFn): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = (event.result as any)?.details;
+  const d = raw?.details ?? raw;
+  if (!d?.dashboardId || !session.customDashboards.has(d.dashboardId)) return;
+
+  const existing = session.customDashboards.get(d.dashboardId)!;
+  session.customDashboards.set(d.dashboardId, {
+    ...existing,
+    ...(d.title && { title: d.title }),
+    ...(d.subtitle && { subtitle: d.subtitle }),
+    ...(d.icon && { icon: d.icon }),
+    ...(d.sections && { sections: d.sections }),
+    updatedAt: new Date().toISOString(),
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (session as any).saveDashboards();
+
+  if (session.currentView === "experiment" && session.activeDashboardTab === d.dashboardId) {
+    const experimentPage = generateExperimentPage(
+      session.customDashboards,
+      session.activeDashboardTab
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const activeSend = (session as any).getSend(send);
+    const buildPage = session.buildPage("experiment", experimentPage);
+    for (const msg of buildPage) activeSend(msg);
+  }
+}
+
 function interceptDashboardTools(
   session: GatewaySession,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -389,52 +441,10 @@ function interceptDashboardTools(
   send: SendFn
 ): void {
   if (event.toolName === "create_dashboard" && !event.isError) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = (event.result as any)?.details;
-    const d = raw?.details ?? raw;
-    if (d?.dashboardId && d?.sections) {
-      if (session.customDashboards.size < MAX_DASHBOARDS_PER_SESSION) {
-        session.customDashboards.set(d.dashboardId, {
-          id: d.dashboardId,
-          title: d.title,
-          subtitle: d.subtitle,
-          icon: d.icon || "activity",
-          sections: d.sections,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (session as any).saveDashboards();
-      }
-    }
+    handleCreateDashboard(session, event);
   }
   if (event.toolName === "update_dashboard" && !event.isError) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = (event.result as any)?.details;
-    const d = raw?.details ?? raw;
-    if (d?.dashboardId && session.customDashboards.has(d.dashboardId)) {
-      const existing = session.customDashboards.get(d.dashboardId)!;
-      session.customDashboards.set(d.dashboardId, {
-        ...existing,
-        ...(d.title && { title: d.title }),
-        ...(d.subtitle && { subtitle: d.subtitle }),
-        ...(d.icon && { icon: d.icon }),
-        ...(d.sections && { sections: d.sections }),
-        updatedAt: new Date().toISOString(),
-      });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (session as any).saveDashboards();
-      if (session.currentView === "experiment" && session.activeDashboardTab === d.dashboardId) {
-        const experimentPage = generateExperimentPage(
-          session.customDashboards,
-          session.activeDashboardTab
-        );
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const activeSend = (session as any).getSend(send);
-        const buildPage = session.buildPage("experiment", experimentPage);
-        for (const msg of buildPage) activeSend(msg);
-      }
-    }
+    handleUpdateDashboard(session, event, send);
   }
 }
 

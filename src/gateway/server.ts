@@ -179,7 +179,6 @@ function reAggregateToSharpCategories(sceneRows: SceneCategoryRow[]): SharpCateg
   for (const row of sceneRows) {
     if (!row.subComponents) continue;
     for (const _unused of row.subComponents) {
-      // eslint-disable-line @typescript-eslint/no-unused-vars
       // sub.name = e.g. "Risk Disclosure", and it has a SHARP category in the rating
       // But the subComponent doesn't carry its SHARP category directly.
       // We need to figure out which SHARP category it belongs to.
@@ -366,34 +365,21 @@ interface WSActionMessage extends WSMessage {
   payload?: Record<string, unknown>;
 }
 
-/**
- * Create the Gateway Hono app (HTTP routes only)
- */
-export function createGatewayApp(): Hono {
-  const app = new Hono();
+/** Resolve "today" to actual ISO date string for health endpoints. */
+function resolveHealthDate(dateParam: string): string {
+  return dateParam === "today" ? new Date().toISOString().split("T")[0] : dateParam;
+}
 
-  // CORS
-  app.use("/*", cors());
-
-  // Health check
-  app.get("/health", (c) => c.json({ status: "ok" }));
-
-  // MCP endpoints
+/** Register MCP + Slack API routes on the Hono app. */
+function registerAPIRoutes(app: Hono): void {
   app.post("/mcp/tools/list", async (c) => {
     const tools = await mcpHandler.listTools();
     return c.json({ tools });
   });
-
   app.post("/mcp/tools/call", async (c) => {
     const body = await c.req.json();
-    const result = await mcpHandler.callTool({
-      name: body.name,
-      arguments: body.arguments || {},
-    });
-    return c.json(result);
+    return c.json(await mcpHandler.callTool({ name: body.name, arguments: body.arguments || {} }));
   });
-
-  // Slack webhook endpoint
   app.post("/api/integrations/slack/webhook", async (c) => {
     try {
       const body = await c.req.json();
@@ -415,259 +401,163 @@ export function createGatewayApp(): Hono {
       );
     }
   });
+}
 
-  // REST API endpoints for health data
+/** Register health REST API routes on the Hono app. */
+function registerHealthRoutes(app: Hono): void {
   app.get("/api/health/summary", async (c) => {
-    const date = c.req.query("date") || "today";
-    const dataSource = getDataSource();
-    const actualDate = date === "today" ? new Date().toISOString().split("T")[0] : date;
-
+    const actualDate = resolveHealthDate(c.req.query("date") || "today");
+    const ds = getDataSource();
     const [metrics, heartRate, sleep, workouts] = await Promise.all([
-      dataSource.getMetrics(actualDate),
-      dataSource.getHeartRate(actualDate),
-      dataSource.getSleep(actualDate),
-      dataSource.getWorkouts(actualDate),
+      ds.getMetrics(actualDate),
+      ds.getHeartRate(actualDate),
+      ds.getSleep(actualDate),
+      ds.getWorkouts(actualDate),
     ]);
-
-    return c.json({
-      date: actualDate,
-      metrics,
-      heartRate,
-      sleep,
-      workouts,
-    });
+    return c.json({ date: actualDate, metrics, heartRate, sleep, workouts });
   });
-
   app.get("/api/health/metrics", async (c) => {
-    const date = c.req.query("date") || "today";
-    const dataSource = getDataSource();
-    const actualDate = date === "today" ? new Date().toISOString().split("T")[0] : date;
-    const metrics = await dataSource.getMetrics(actualDate);
-    return c.json(metrics);
+    return c.json(
+      await getDataSource().getMetrics(resolveHealthDate(c.req.query("date") || "today"))
+    );
   });
-
   app.get("/api/health/heart-rate", async (c) => {
-    const date = c.req.query("date") || "today";
-    const dataSource = getDataSource();
-    const actualDate = date === "today" ? new Date().toISOString().split("T")[0] : date;
-    const heartRate = await dataSource.getHeartRate(actualDate);
-    return c.json(heartRate);
+    return c.json(
+      await getDataSource().getHeartRate(resolveHealthDate(c.req.query("date") || "today"))
+    );
   });
-
   app.get("/api/health/sleep", async (c) => {
-    const date = c.req.query("date") || "today";
-    const dataSource = getDataSource();
-    const actualDate = date === "today" ? new Date().toISOString().split("T")[0] : date;
-    const sleep = await dataSource.getSleep(actualDate);
+    const sleep = await getDataSource().getSleep(resolveHealthDate(c.req.query("date") || "today"));
     return c.json(sleep || { message: "No sleep data available" });
   });
-
   app.get("/api/health/workouts", async (c) => {
-    const date = c.req.query("date") || "today";
-    const dataSource = getDataSource();
-    const actualDate = date === "today" ? new Date().toISOString().split("T")[0] : date;
-    const workouts = await dataSource.getWorkouts(actualDate);
-    return c.json(workouts);
+    return c.json(
+      await getDataSource().getWorkouts(resolveHealthDate(c.req.query("date") || "today"))
+    );
   });
-
   app.get("/api/health/weekly", async (c) => {
-    const dataSource = getDataSource();
+    const ds = getDataSource();
     const today = new Date().toISOString().split("T")[0];
     const [weeklySteps, weeklySleep] = await Promise.all([
-      dataSource.getWeeklySteps(today),
-      dataSource.getWeeklySleep(today),
+      ds.getWeeklySteps(today),
+      ds.getWeeklySleep(today),
     ]);
     return c.json({ weeklySteps, weeklySleep });
   });
+}
 
-  // ============================================================================
-  // OAuth Endpoints
-  // ============================================================================
-
-  /**
-   * Start OAuth flow - redirect to Huawei authorization page
-   */
+/** Register browser-facing OAuth routes (start, callback, status). */
+function registerOAuthBrowserRoutes(app: Hono): void {
   app.get("/auth/huawei/start", (c) => {
     const config = loadConfig();
     const huaweiConfig = config.dataSources.huawei;
-
-    if (!huaweiConfig?.clientId) {
+    if (!huaweiConfig?.clientId)
       return c.html(
         generateOAuthErrorPage("Huawei client ID not configured. Run 'pha huawei setup' first.")
       );
-    }
-
-    // Use the gateway callback URL
     const port = config.gateway.port || 8000;
     const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
     const redirectUri =
       huaweiConfig.redirectUri || `http://localhost:${port}${gwBasePath}/auth/huawei/callback`;
-
-    // Use a CSRF nonce as state (user ID comes from id_token after exchange)
     const nonce = crypto.randomUUID();
     const authUrl = huaweiAuth.getAuthUrl(huaweiConfig.clientId, redirectUri);
-    const urlWithState = `${authUrl}&state=${encodeURIComponent(nonce)}`;
-
-    return c.redirect(urlWithState);
+    return c.redirect(`${authUrl}&state=${encodeURIComponent(nonce)}`);
   });
-
-  /**
-   * OAuth callback - exchange code for tokens and store
-   */
   app.get("/auth/huawei/callback", async (c) => {
     const code = c.req.query("code");
-
-    if (!code) {
-      return c.html(generateOAuthErrorPage("Missing authorization code"));
-    }
-
+    if (!code) return c.html(generateOAuthErrorPage("Missing authorization code"));
     try {
       const config = loadConfig();
       const huaweiConfig = config.dataSources.huawei;
-
-      if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+      if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret)
         return c.html(generateOAuthErrorPage("Huawei credentials not configured"));
-      }
-
       const port = config.gateway.port || 8000;
       const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
       const redirectUri =
         huaweiConfig.redirectUri || `http://localhost:${port}${gwBasePath}/auth/huawei/callback`;
-
-      // Exchange code for token + extract Huawei user ID from id_token
       const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         code,
         huaweiConfig.clientId,
         huaweiConfig.clientSecret,
         redirectUri
       );
-
-      if (!huaweiUserId) {
+      if (!huaweiUserId)
         return c.html(
           generateOAuthErrorPage(
             "Could not extract user ID from id_token. Ensure 'openid' scope is requested."
           )
         );
-      }
-
-      // Store token in user store (SQLite) using Huawei user ID
-      const userStore = getUserStore();
-      userStore.saveToken(huaweiUserId, tokenData);
-
-      // Set pha_uid cookie so frontend picks up the real Huawei user ID
+      getUserStore().saveToken(huaweiUserId, tokenData);
       const expires = new Date();
       expires.setFullYear(expires.getFullYear() + 1);
       c.header(
         "Set-Cookie",
         `pha_uid=${huaweiUserId}; Path=/; Expires=${expires.toUTCString()}; SameSite=Strict`
       );
-
       return c.html(generateOAuthSuccessPage(huaweiUserId));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      return c.html(generateOAuthErrorPage(message));
+      return c.html(
+        generateOAuthErrorPage(error instanceof Error ? error.message : "Unknown error")
+      );
     }
   });
-
-  /**
-   * Check OAuth status for a user
-   */
   app.get("/auth/huawei/status", (c) => {
     const userId = c.req.query("user_id") || c.req.query("uuid");
-    if (!userId) {
-      return c.json({ authenticated: false });
-    }
-
+    if (!userId) return c.json({ authenticated: false });
     const userStore = getUserStore();
     const authenticated = userStore.isAuthenticated(userId);
     const token = userStore.getToken(userId);
-
     return c.json({
       authenticated,
       expiresAt: token?.expiresAt,
       needsRefresh: authenticated ? userStore.needsRefresh(userId) : undefined,
     });
   });
+}
 
-  /**
-   * Get OAuth URL for browser extension flow
-   * Returns the Huawei OAuth URL that the extension should open
-   */
+/** Register API-facing OAuth routes (get-auth-url, exchange, mcp-flow). */
+function registerOAuthAPIRoutes(app: Hono): void {
   app.get("/auth/huawei/get-auth-url", (c) => {
     const config = loadConfig();
     const huaweiConfig = config.dataSources.huawei;
-
-    if (!huaweiConfig?.clientId) {
-      return c.json({ error: "Huawei client ID not configured" }, 400);
-    }
-
-    // Use a CSRF nonce as state (no longer carries user UUID)
-    const nonce = crypto.randomUUID();
-    const authUrl = getHuaweiAuthUrl(nonce);
-    return c.json({ authUrl });
+    if (!huaweiConfig?.clientId) return c.json({ error: "Huawei client ID not configured" }, 400);
+    return c.json({ authUrl: getHuaweiAuthUrl(crypto.randomUUID()) });
   });
-
-  /**
-   * Exchange authorization code for token (used by browser extension)
-   */
   app.post("/auth/huawei/exchange", async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const { code, uuid } = body;
-
-    if (!code) {
-      return c.json({ success: false, error: "Missing authorization code" }, 400);
-    }
-
+    if (!code) return c.json({ success: false, error: "Missing authorization code" }, 400);
     const config = loadConfig();
     const huaweiConfig = config.dataSources.huawei;
-
-    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret)
       return c.json({ success: false, error: "Huawei credentials not configured" }, 400);
-    }
-
     try {
-      const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
-
       const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         code,
         huaweiConfig.clientId,
         huaweiConfig.clientSecret,
-        redirectUri
+        huaweiConfig.redirectUri || "hms://redirect_url"
       );
-
-      // Use Huawei user ID (from id_token or UserInfo), fallback to request UUID
       const userId = huaweiUserId || uuid;
-      if (!userId) {
+      if (!userId)
         return c.json({ success: false, error: "Could not determine user ID from Huawei" }, 400);
-      }
-
-      const userStore = getUserStore();
-      userStore.saveToken(userId, tokenData);
-
+      getUserStore().saveToken(userId, tokenData);
       logOAuth.info("Extension: successfully authenticated user", { userId: userId.slice(0, 8) });
       return c.json({ success: true, userId });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logOAuth.error("Extension: token exchange failed", { error: message });
-      return c.json({ success: false, error: message }, 500);
+      logOAuth.error("Extension: token exchange failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return c.json(
+        { success: false, error: error instanceof Error ? error.message : String(error) },
+        500
+      );
     }
   });
-
-  /**
-   * Chrome MCP OAuth flow - automates browser login using Chrome DevTools MCP
-   *
-   * This endpoint:
-   * 1. Launches Chrome via chrome-devtools-mcp
-   * 2. Opens Huawei OAuth page
-   * 3. Waits for user to complete login
-   * 4. Captures authorization code from redirect URL (hms://redirect_url?code=xxx)
-   * 5. Exchanges code for token and stores it
-   */
   app.post("/auth/huawei/mcp-flow", async (c) => {
     const config = loadConfig();
     const huaweiConfig = config.dataSources.huawei;
-
-    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret)
       return c.json(
         {
           success: false,
@@ -675,51 +565,50 @@ export function createGatewayApp(): Hono {
         },
         400
       );
-    }
-
-    // Generate auth URL with CSRF nonce as state
-    const nonce = crypto.randomUUID();
-    const authUrl = getHuaweiAuthUrl(nonce);
+    const authUrl = getHuaweiAuthUrl(crypto.randomUUID());
     logOAuth.info("MCP: starting Chrome flow");
-    logOAuth.debug("MCP: auth URL", { url: authUrl.slice(0, 100) });
-
     try {
-      // Run OAuth flow with Chrome MCP
       const result = await runOAuthFlowWithChrome(authUrl, { timeout: 180000 });
-
       if ("error" in result) {
         logOAuth.error("MCP: flow failed", { error: result.error });
         return c.json({ success: false, error: result.error }, 400);
       }
-
-      // Exchange code for token directly (no session needed for MCP flow)
-      const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
-
       const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         result.code,
         huaweiConfig.clientId,
         huaweiConfig.clientSecret,
-        redirectUri
+        huaweiConfig.redirectUri || "hms://redirect_url"
       );
-
       if (!huaweiUserId) {
         logOAuth.error("MCP: no user ID in id_token");
         return c.json({ success: false, error: "Could not extract user ID from id_token" }, 400);
       }
-
-      // Store token in user store (SQLite) using Huawei user ID
-      const userStore = getUserStore();
-      userStore.saveToken(huaweiUserId, tokenData);
-
+      getUserStore().saveToken(huaweiUserId, tokenData);
       logOAuth.info("MCP: successfully authenticated user", { userId: huaweiUserId.slice(0, 8) });
       return c.json({ success: true, userId: huaweiUserId });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logOAuth.error("MCP: token exchange failed", { error: message });
-      return c.json({ success: false, error: message }, 500);
+      logOAuth.error("MCP: token exchange failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return c.json(
+        { success: false, error: error instanceof Error ? error.message : String(error) },
+        500
+      );
     }
   });
+}
 
+/**
+ * Create the Gateway Hono app (HTTP routes only)
+ */
+export function createGatewayApp(): Hono {
+  const app = new Hono();
+  app.use("/*", cors());
+  app.get("/health", (c) => c.json({ status: "ok" }));
+  registerAPIRoutes(app);
+  registerHealthRoutes(app);
+  registerOAuthBrowserRoutes(app);
+  registerOAuthAPIRoutes(app);
   return app;
 }
 
@@ -1754,34 +1643,8 @@ export class GatewaySession {
     await dispatchNavigation(this, view, send);
   }
 
-  async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
-    // Route to the correct channel based on current view
-    const isLegacy = this.currentView === "legacy-chat";
-    this._chatChannel = isLegacy ? "legacy" : "main";
-
-    // Select the correct state based on channel
-    const messages = isLegacy ? this.legacyChatMessages : this.chatMessages;
-    const persistChannel = isLegacy ? ("legacy-chat" as const) : ("chat" as const);
-    const sessionId = isLegacy ? this.legacyChatSessionId : this.sessionId;
-
-    // Add user message to the correct chat history
-    messages.push({
-      id: crypto.randomUUID(),
-      role: "user",
-      parts: [{ type: "text", content }],
-    });
-    this.persistMessage(persistChannel, { timestamp: Date.now(), role: "user", content });
-
-    // Trigger message_received hook
-    const hr = getGlobalHookRunner();
-    if (hr) {
-      hr.runMessageReceived(
-        { from: this.userUuid || "unknown", content, timestamp: Date.now() },
-        { channelId: "http", conversationId: sessionId }
-      ).catch((err) => log.warn("Hook message_received error", { error: err }));
-    }
-
-    // Set streaming state on the correct channel
+  /** Set streaming flags at the start of a chat turn. */
+  private setStreamingStart(isLegacy: boolean): void {
     if (isLegacy) {
       this.legacyChatStreaming = true;
       this.legacyChatStreamingContent = "";
@@ -1795,155 +1658,191 @@ export class GatewaySession {
       this.currentRunId = null;
       this.lastStreamedText = "";
     }
+  }
 
-    // Send updated chat UI immediately
-    this.sendChatUpdate(send);
+  /** Clear streaming flags. Returns true if streaming was still active. */
+  private clearStreamingState(isLegacy: boolean): boolean {
+    const wasStreaming = isLegacy ? this.legacyChatStreaming : this.isStreaming;
+    if (isLegacy) {
+      this.legacyChatStreaming = false;
+      this.legacyChatStreamingContent = "";
+      this.legacyChatCurrentAssistantMsgId = null;
+      this.legacyChatLastStreamedText = "";
+    } else {
+      this.isStreaming = false;
+      this.streamingContent = "";
+      this.currentAssistantMsgId = null;
+      this.lastStreamedText = "";
+    }
+    return wasStreaming;
+  }
 
-    const chatMsgCountBefore = messages.length;
-
+  /** Run agent chat (with skill hint if applicable) and return called tool names. */
+  private async runAgentChat(
+    agent: PHAAgent,
+    content: string,
+    send: (msg: unknown) => void
+  ): Promise<Set<string>> {
+    const calledTools = new Set<string>();
+    const unsubscribe = agent.subscribe((event) => {
+      if (event.type === "tool_execution_end" && !event.isError) calledTools.add(event.toolName);
+      this.handleAgentEvent(event, send);
+    });
     try {
-      const agent = isLegacy ? await this.getLegacyChatAgent() : await this.getAgent();
-
-      // Subscribe to agent events; track which memory tools were called
-      const calledTools = new Set<string>();
-      const unsubscribe = agent.subscribe((event) => {
-        if (event.type === "tool_execution_end" && !event.isError) {
-          calledTools.add(event.toolName);
-        }
-        this.handleAgentEvent(event, send);
-      });
-
-      try {
-        // Legacy chat agent has skillHint in profile; main chat uses direct chat
-        const skillHint = agent.getSkillHint();
-        if (skillHint) {
-          await agent.chatWithSkill(content, skillHint);
-        } else {
-          await agent.chat(content);
-        }
-        await agent.getAgent().waitForIdle();
-
-        // Fallback: if handleAgentEvent didn't produce any assistant message,
-        // check the agent's internal messages for LLM errors
-        const hasNewAssistant = messages
-          .slice(chatMsgCountBefore)
-          .some((m) => m.role === "assistant");
-        if (!hasNewAssistant) {
-          const agentMsgs = agent.getMessages();
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const lastAgentMsg = agentMsgs[agentMsgs.length - 1] as any;
-          if (lastAgentMsg?.stopReason === "error" && lastAgentMsg?.errorMessage) {
-            const errContent = `⚠️ ${lastAgentMsg.errorMessage}`;
-            messages.push({
-              id: crypto.randomUUID(),
-              role: "assistant",
-              parts: [{ type: "text", content: errContent }],
-            });
-            this.persistMessage(persistChannel, {
-              timestamp: Date.now(),
-              role: "assistant",
-              content: errContent,
-            });
-            log.warn("LLM error caught by fallback (not by event handler)", {
-              errorMessage: lastAgentMsg.errorMessage,
-            });
-          }
-        }
-
-        // Ensure streaming state is always cleaned up
-        const stillStreaming = isLegacy ? this.legacyChatStreaming : this.isStreaming;
-        if (stillStreaming) {
-          if (isLegacy) {
-            this.legacyChatStreaming = false;
-            this.legacyChatStreamingContent = "";
-            this.legacyChatCurrentAssistantMsgId = null;
-            this.legacyChatLastStreamedText = "";
-          } else {
-            this.isStreaming = false;
-            this.streamingContent = "";
-            this.currentAssistantMsgId = null;
-            this.lastStreamedText = "";
-          }
-          this.sendChatUpdate(send);
-        }
-
-        // Index this exchange for memory search + auto-save memory fallback
-        if (this.userUuid) {
-          try {
-            const mm = getMemoryManager();
-            const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
-            if (lastAssistant) {
-              const assistantText = lastAssistant.parts
-                .filter((p): p is { type: "text"; content: string } => p.type === "text")
-                .map((p) => p.content)
-                .join("");
-              const exchangeText = `User: ${content}\nAssistant: ${assistantText}`;
-              mm.appendSessionTranscript(this.userUuid, sessionId, exchangeText);
-
-              // Auto-save daily log if agent didn't call daily_log itself
-              if (!calledTools.has("daily_log") && assistantText.length > 20) {
-                const preview = assistantText.replace(/\s+/g, " ").slice(0, 200);
-                const logEntry = `- 用户: ${content.slice(0, 100)}\n- 助手: ${preview}`;
-                mm.appendDailyLog(this.userUuid, logEntry);
-              }
-
-              // Consolidate daily log → MEMORY.md every 5 exchanges
-              this.exchangeCount++;
-              if (this.exchangeCount % 5 === 0 && !calledTools.has("memory_save")) {
-                void consolidateMemory(this.userUuid, this.getLLMConfig(), mm).catch(() => {});
-              }
-            }
-          } catch {
-            // Indexing/auto-save is best-effort
-          }
-        }
-      } finally {
-        unsubscribe();
-      }
-    } catch (error) {
-      // If already handled by stop_generation (streaming flag cleared), skip error handling
-      const stillStreaming = isLegacy ? this.legacyChatStreaming : this.isStreaming;
-      if (!stillStreaming) return;
-      if (isLegacy) {
-        this.legacyChatStreaming = false;
+      const skillHint = agent.getSkillHint();
+      if (skillHint) {
+        await agent.chatWithSkill(content, skillHint);
       } else {
-        this.isStreaming = false;
+        await agent.chat(content);
       }
+      await agent.getAgent().waitForIdle();
+    } finally {
+      unsubscribe();
+    }
+    return calledTools;
+  }
 
-      // Abort errors are expected when user clicks stop — not an actual error
-      const isAbort =
-        error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
-      if (isAbort) {
-        this.sendChatUpdate(send);
-        return;
+  /** Index a user/assistant exchange for memory search and auto-save daily log. */
+  private indexExchangeForMemory(
+    content: string,
+    messages: PartsChatMessage[],
+    sessionId: string,
+    calledTools: Set<string>
+  ): void {
+    if (!this.userUuid) return;
+    try {
+      const mm = getMemoryManager();
+      const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
+      if (!lastAssistant) return;
+      const assistantText = lastAssistant.parts
+        .filter((p): p is { type: "text"; content: string } => p.type === "text")
+        .map((p) => p.content)
+        .join("");
+      mm.appendSessionTranscript(
+        this.userUuid,
+        sessionId,
+        `User: ${content}\nAssistant: ${assistantText}`
+      );
+      if (!calledTools.has("daily_log") && assistantText.length > 20) {
+        mm.appendDailyLog(
+          this.userUuid,
+          `- 用户: ${content.slice(0, 100)}\n- 助手: ${assistantText.replace(/\s+/g, " ").slice(0, 200)}`
+        );
       }
+      this.exchangeCount++;
+      if (this.exchangeCount % 5 === 0 && !calledTools.has("memory_save")) {
+        void consolidateMemory(this.userUuid, this.getLLMConfig(), mm).catch(() => {});
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
 
-      const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+  /** Fallback: check agent internal messages for LLM errors not caught by event handler. */
+  private checkAgentFallbackError(
+    agent: PHAAgent,
+    messages: PartsChatMessage[],
+    countBefore: number,
+    persistChannel: "chat" | "legacy-chat"
+  ): void {
+    if (messages.slice(countBefore).some((m) => m.role === "assistant")) return;
+    const agentMsgs = agent.getMessages();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const last = agentMsgs[agentMsgs.length - 1] as any;
+    if (last?.stopReason === "error" && last?.errorMessage) {
+      const errContent = `⚠️ ${last.errorMessage}`;
       messages.push({
         id: crypto.randomUUID(),
         role: "assistant",
-        parts: [{ type: "text", content: errorContent }],
+        parts: [{ type: "text", content: errContent }],
       });
       this.persistMessage(persistChannel, {
         timestamp: Date.now(),
         role: "assistant",
-        content: errorContent,
+        content: errContent,
       });
+      log.warn("LLM error caught by fallback (not by event handler)", {
+        errorMessage: last.errorMessage,
+      });
+    }
+  }
+
+  /** Handle errors thrown during chat (A2UI mode). */
+  private handleChatError(
+    error: unknown,
+    isLegacy: boolean,
+    messages: PartsChatMessage[],
+    persistChannel: "chat" | "legacy-chat",
+    sessionId: string,
+    send: (msg: unknown) => void
+  ): void {
+    const stillStreaming = isLegacy ? this.legacyChatStreaming : this.isStreaming;
+    if (!stillStreaming) return;
+    if (isLegacy) {
+      this.legacyChatStreaming = false;
+    } else {
+      this.isStreaming = false;
+    }
+    const isAbort =
+      error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
+    if (isAbort) {
       this.sendChatUpdate(send);
+      return;
+    }
+    const errorContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
+    messages.push({
+      id: crypto.randomUUID(),
+      role: "assistant",
+      parts: [{ type: "text", content: errorContent }],
+    });
+    this.persistMessage(persistChannel, {
+      timestamp: Date.now(),
+      role: "assistant",
+      content: errorContent,
+    });
+    this.sendChatUpdate(send);
+    logAgent.error("Agent error", { sessionId, error });
+    send({
+      type: "error",
+      code: "agent_error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
 
-      logAgent.error("Agent error", { sessionId, error });
+  async handleUserMessage(content: string, send: (msg: unknown) => void): Promise<void> {
+    const isLegacy = this.currentView === "legacy-chat";
+    this._chatChannel = isLegacy ? "legacy" : "main";
+    const messages = isLegacy ? this.legacyChatMessages : this.chatMessages;
+    const persistChannel = isLegacy ? ("legacy-chat" as const) : ("chat" as const);
+    const sessionId = isLegacy ? this.legacyChatSessionId : this.sessionId;
 
-      send({
-        type: "error",
-        code: "agent_error",
-        message: error instanceof Error ? error.message : String(error),
-      });
+    messages.push({ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", content }] });
+    this.persistMessage(persistChannel, { timestamp: Date.now(), role: "user", content });
+    const hr = getGlobalHookRunner();
+    if (hr) {
+      hr.runMessageReceived(
+        { from: this.userUuid || "unknown", content, timestamp: Date.now() },
+        { channelId: "http", conversationId: sessionId }
+      ).catch((err) => log.warn("Hook message_received error", { error: err }));
+    }
+    this.setStreamingStart(isLegacy);
+    this.sendChatUpdate(send);
+    const countBefore = messages.length;
+
+    try {
+      const agent = isLegacy ? await this.getLegacyChatAgent() : await this.getAgent();
+      const calledTools = await this.runAgentChat(agent, content, send);
+      this.checkAgentFallbackError(agent, messages, countBefore, persistChannel);
+      if (this.clearStreamingState(isLegacy)) this.sendChatUpdate(send);
+      this.indexExchangeForMemory(content, messages, sessionId, calledTools);
+    } catch (error) {
+      this.handleChatError(error, isLegacy, messages, persistChannel, sessionId, send);
     }
   }
 
   sendChatUpdate(send: (msg: unknown) => void): void {
     const activeSend = this.getSend(send);
-    if (this._sseMode) return; // SSE mode: client manages chat state
+    if (this._sseMode) return;
     if (this.currentView === "chat" || this.currentView === "legacy-chat") {
       const isLegacy = this.currentView === "legacy-chat";
       const chatPage = generateChatPage({
@@ -1965,68 +1864,13 @@ export class GatewaySession {
     encoder: TextEncoder
   ): Promise<void> {
     if (this._chatLock) {
-      const err = JSON.stringify({ type: "error", message: "Chat is busy" });
-      try {
-        writer.write(encoder.encode(`data: ${err}\n\n`)).catch(() => {});
-      } catch {
-        /* noop */
-      }
-      try {
-        writer.close().catch(() => {});
-      } catch {
-        /* noop */
-      }
+      sseWriteAndClose(writer, encoder, JSON.stringify({ type: "error", message: "Chat is busy" }));
       return;
     }
     this._chatLock = true;
     this._sseMode = true;
-
-    let streamClosed = false;
-    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-    const safeWrite = (data: string) => {
-      if (streamClosed) return;
-      try {
-        writer.write(encoder.encode(data)).catch(() => {
-          streamClosed = true;
-        });
-      } catch {
-        streamClosed = true;
-      }
-    };
-    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-    const safeClose = () => {
-      if (streamClosed) return;
-      streamClosed = true;
-      try {
-        writer.close().catch(() => {
-          /* already closed */
-        });
-      } catch {
-        /* already closed */
-      }
-    };
-
-    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-    const sseSend = (msg: unknown) => {
-      // Only forward AG-UI events (not legacy a2ui / agent_text)
-      const m = msg as Record<string, unknown>;
-      const agTypes = [
-        "RunStarted",
-        "RunFinished",
-        "TextMessageStart",
-        "TextMessageContent",
-        "TextMessageEnd",
-        "ToolCallStart",
-        "ToolCallEnd",
-        "ToolCallResult",
-        "Custom",
-      ];
-      if (m.type && agTypes.includes(m.type as string)) {
-        safeWrite(`data: ${JSON.stringify(m)}\n\n`);
-      }
-    };
-
-    // Route to correct channel based on currentView
+    const stream = createSafeSSEStream(writer, encoder);
+    const sseSend = createAGUISender(stream.write);
     const isLegacy = this.currentView === "legacy-chat";
     this._chatChannel = isLegacy ? "legacy" : "main";
     const messages = isLegacy ? this.legacyChatMessages : this.chatMessages;
@@ -2034,125 +1878,26 @@ export class GatewaySession {
     const sessionId = isLegacy ? this.legacyChatSessionId : this.sessionId;
 
     try {
-      // Add user message to the correct channel
-      messages.push({
-        id: crypto.randomUUID(),
-        role: "user",
-        parts: [{ type: "text", content }],
-      });
+      messages.push({ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", content }] });
       this.persistMessage(persistChannel, { timestamp: Date.now(), role: "user", content });
-
-      if (isLegacy) {
-        this.legacyChatStreaming = true;
-        this.legacyChatStreamingContent = "";
-        this.legacyChatCurrentAssistantMsgId = null;
-        this.legacyChatCurrentRunId = null;
-        this.legacyChatLastStreamedText = "";
-      } else {
-        this.isStreaming = true;
-        this.streamingContent = "";
-        this.currentAssistantMsgId = null;
-        this.currentRunId = null;
-        this.lastStreamedText = "";
-      }
-
+      this.setStreamingStart(isLegacy);
       const agent = isLegacy ? await this.getLegacyChatAgent() : await this.getAgent();
-      const calledTools = new Set<string>();
-      const unsubscribe = agent.subscribe((event) => {
-        if (event.type === "tool_execution_end" && !event.isError) {
-          calledTools.add(event.toolName);
-        }
-        this.handleAgentEvent(event, sseSend);
-      });
-
-      try {
-        const skillHint = agent.getSkillHint();
-        if (skillHint) {
-          await agent.chatWithSkill(content, skillHint);
-        } else {
-          await agent.chat(content);
-        }
-        await agent.getAgent().waitForIdle();
-      } finally {
-        unsubscribe();
-      }
-
-      // Ensure streaming state is cleaned up
-      if (isLegacy) {
-        if (this.legacyChatStreaming) {
-          this.legacyChatStreaming = false;
-          this.legacyChatStreamingContent = "";
-          this.legacyChatCurrentAssistantMsgId = null;
-          this.legacyChatLastStreamedText = "";
-        }
-      } else {
-        if (this.isStreaming) {
-          this.isStreaming = false;
-          this.streamingContent = "";
-          this.currentAssistantMsgId = null;
-          this.lastStreamedText = "";
-        }
-      }
-
-      // Index exchange for memory search + auto-save memory fallback
-      if (this.userUuid) {
-        try {
-          const mm = getMemoryManager();
-          const lastAssistant = messages.filter((m) => m.role === "assistant").pop();
-          if (lastAssistant) {
-            const assistantText = lastAssistant.parts
-              .filter((p): p is { type: "text"; content: string } => p.type === "text")
-              .map((p) => p.content)
-              .join("");
-            mm.appendSessionTranscript(
-              this.userUuid,
-              sessionId,
-              `User: ${content}\nAssistant: ${assistantText}`
-            );
-
-            // Auto-save daily log if agent didn't call daily_log itself
-            if (!calledTools.has("daily_log") && assistantText.length > 20) {
-              const preview = assistantText.replace(/\s+/g, " ").slice(0, 200);
-              const logEntry = `- 用户: ${content.slice(0, 100)}\n- 助手: ${preview}`;
-              mm.appendDailyLog(this.userUuid, logEntry);
-            }
-
-            // Consolidate daily log → MEMORY.md every 5 exchanges
-            this.exchangeCount++;
-            if (this.exchangeCount % 5 === 0 && !calledTools.has("memory_save")) {
-              void consolidateMemory(this.userUuid, this.getLLMConfig(), mm).catch(() => {});
-            }
-          }
-        } catch {
-          // Indexing/auto-save is best-effort
-        }
-      }
+      const calledTools = await this.runAgentChat(agent, content, sseSend);
+      this.clearStreamingState(isLegacy);
+      this.indexExchangeForMemory(content, messages, sessionId, calledTools);
     } catch (error) {
       const isAbort =
         error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
       if (!isAbort) {
-        const errEvent = JSON.stringify({
-          type: "Custom",
-          name: "Error",
-          data: { message: error instanceof Error ? error.message : String(error) },
-        });
-        safeWrite(`data: ${errEvent}\n\n`);
+        stream.write(
+          `data: ${JSON.stringify({ type: "Custom", name: "Error", data: { message: error instanceof Error ? error.message : String(error) } })}\n\n`
+        );
       }
-      if (isLegacy) {
-        this.legacyChatStreaming = false;
-        this.legacyChatStreamingContent = "";
-        this.legacyChatCurrentAssistantMsgId = null;
-        this.legacyChatLastStreamedText = "";
-      } else {
-        this.isStreaming = false;
-        this.streamingContent = "";
-        this.currentAssistantMsgId = null;
-        this.lastStreamedText = "";
-      }
+      this.clearStreamingState(isLegacy);
     } finally {
       this._sseMode = false;
       this._chatLock = false;
-      safeClose();
+      stream.close();
     }
   }
 
@@ -2318,7 +2063,6 @@ export class GatewaySession {
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _handleSAMessageEnd(
     event: any,
     send: (msg: unknown) => void,
@@ -2810,163 +2554,15 @@ export class GatewaySession {
    */
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   private loadEvolutionData() {
-    let stats;
-    let traces;
-    let tracesTotal = 0;
-    let evaluations;
-    let testCases;
-    let suggestions;
-    let benchmarkRuns;
-    let latestCategoryScores;
-    let categoriesConfig;
-
-    if (this.evolutionTab === "overview") {
-      stats = getEvaluationStats();
-      const runs = listBenchmarkRuns({ limit: 5 });
-      benchmarkRuns = runs.map((r) => ({
-        id: r.id,
-        timestamp: r.timestamp,
-        versionTag: r.version_tag,
-        profile: r.profile,
-        overallScore: r.overall_score,
-        passedCount: r.passed_count,
-        failedCount: r.failed_count,
-        totalTestCases: r.total_test_cases,
-        durationMs: r.duration_ms,
-        metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
-      }));
-      // Use best scores across all runs for the radar chart
-      const bestScores = getBestCategoryScores();
-      if (bestScores.length > 0) {
-        latestCategoryScores = bestScores.map((s) => ({
-          category: s.category,
-          score: s.score,
-          testCount: s.test_count,
-          passedCount: s.passed_count,
-        }));
-      }
-    } else if (this.evolutionTab === "traces") {
-      const traceRows = listTraces({ limit: 20, offset: this.tracesPage * 20 });
-      tracesTotal = countTraces();
-      traces = traceRows.map((t) => {
-        const evalResult = getEvaluationByTraceId(t.id);
-        return {
-          id: t.id,
-          timestamp: t.timestamp,
-          userMessage: t.user_message,
-          score: evalResult?.overall_score,
-        };
-      });
-    } else if (this.evolutionTab === "evaluations") {
-      const evalRows = listEvaluations({ limit: 50 });
-      evaluations = evalRows.map((e) => ({
-        id: e.id,
-        traceId: e.trace_id,
-        timestamp: e.timestamp,
-        score: e.overall_score,
-        feedback: e.feedback,
-      }));
-    } else if (this.evolutionTab === "benchmark") {
-      const testRows = listTestCases({ limit: 50 });
-      testCases = testRows.map((tc) => ({
-        id: tc.id,
-        category: tc.category,
-        query: tc.query,
-        expected: JSON.parse(tc.expected),
-      }));
-    } else if (this.evolutionTab === "runs") {
-      const runs = listBenchmarkRuns({ limit: 20 });
-      benchmarkRuns = runs.map((r) => ({
-        id: r.id,
-        timestamp: r.timestamp,
-        versionTag: r.version_tag,
-        profile: r.profile,
-        overallScore: r.overall_score,
-        passedCount: r.passed_count,
-        failedCount: r.failed_count,
-        totalTestCases: r.total_test_cases,
-        durationMs: r.duration_ms,
-        metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
-      }));
-    } else if (this.evolutionTab === "suggestions") {
-      const suggRows = listSuggestions({ limit: 50 });
-      suggestions = suggRows.map((s) => ({
-        id: s.id,
-        timestamp: s.timestamp,
-        type: s.type,
-        target: s.target,
-        status: s.status,
-        rationale: s.rationale,
-      }));
-    } else if (this.evolutionTab === "config") {
-      const { loadCategoriesConfig } = require("../evolution/benchmark-seed.js");
-      categoriesConfig = loadCategoriesConfig();
-    } else if (this.evolutionTab === "versions") {
-      // Versions tab handled below
-    }
-
-    // Check for benchmark progress (UI or CLI started)
-    let externalProgress;
-    if (this.evolutionTab === "overview" || this.evolutionTab === "benchmark") {
-      const allProgress = readAllBenchmarkProgress();
-      const map: Record<
-        string,
-        {
-          current: number;
-          total: number;
-          category: string;
-          profile: string;
-          modelId?: string;
-          presetName?: string;
-        }
-      > = {};
-      for (const [trackingId, info] of Object.entries(allProgress)) {
-        if (info.running) {
-          map[trackingId] = {
-            current: info.current,
-            total: info.total,
-            category: info.category,
-            profile: info.profile,
-            modelId: info.modelId,
-            presetName: info.presetName,
-          };
-        }
-      }
-      if (Object.keys(map).length > 0) {
-        externalProgress = map;
-      }
-    }
-
-    // Load versions data for overview + versions tab
-    let versions;
-    if (this.evolutionTab === "overview" || this.evolutionTab === "versions") {
-      const versionRows = listEvolutionVersions();
-      versions = versionRows.map((v) => ({
-        id: v.id,
-        branchName: v.branch_name,
-        parentBranch: v.parent_branch || "main",
-        status: v.status || "active",
-        triggerMode: v.trigger_mode || "",
-        triggerRef: v.trigger_ref || "",
-        scoreDelta: v.score_delta,
-        filesChanged: v.files_changed ? JSON.parse(v.files_changed) : [],
-        createdAt: v.created_at,
-      }));
-    }
-
+    const tabData = loadEvolutionTabData(this.evolutionTab, this.tracesPage);
+    const externalProgress = loadEvolutionExternalProgress(this.evolutionTab);
+    const versions = loadEvolutionVersionsList(this.evolutionTab);
     return {
       activeTab: this.evolutionTab,
-      stats,
-      traces,
       tracesPage: this.tracesPage,
-      tracesTotal,
-      evaluations,
-      testCases,
-      suggestions,
-      benchmarkRuns,
-      latestCategoryScores,
+      tracesTotal: tabData.tracesTotal ?? 0,
+      ...tabData,
       externalProgress,
-      categoriesConfig,
       versions,
       activeVersionBranch: this.activeVersionBranch,
     };
@@ -3007,6 +2603,90 @@ export class GatewaySession {
     sendAll(send, modal);
   }
 
+  /** Check benchmark preconditions. Returns a warning message string if blocked, or null if ok. */
+  private checkBenchmarkPreConditions(modelConfig?: { modelId?: string }): string | null {
+    const externalProgress = readBenchmarkProgress();
+    if (externalProgress && externalProgress.source !== "ui")
+      return t("evolution.externalBenchmarkRunning");
+    const targetModelId = modelConfig?.modelId || "__default__";
+    for (const entry of this.runningBenchmarks.values()) {
+      if (entry.modelId === targetModelId) return t("evolution.modelAlreadyRunning");
+    }
+    return null;
+  }
+
+  /** Create a BenchmarkRunner with the given config. */
+  private createBenchmarkRunner(
+    profile: "quick" | "full",
+    trackingId: string,
+    liveSend: () => (msg: unknown) => void,
+    modelConfig?: {
+      provider: string;
+      modelId: string;
+      apiKey?: string;
+      baseUrl?: string;
+      presetName?: string;
+    }
+  ): BenchmarkRunner {
+    const agentApiKey = modelConfig?.apiKey || this.config.apiKey;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agentProvider = (modelConfig?.provider || this.config.provider) as any;
+    const agentModelId = modelConfig?.modelId || this.config.modelId;
+    const agentBaseUrl = modelConfig?.baseUrl || this.config.baseUrl;
+    const judgeConfig = getJudgeModel();
+    const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
+    const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
+
+    return new BenchmarkRunner({
+      agentCall: async (query: string, testCase) => {
+        const { seedTestUser, createBenchmarkDataSource, getTestUserUuid, loadTestUserFixture } =
+          await import("../evolution/test-user-seeder.js");
+        const fixture = loadTestUserFixture(testCase.userUuid);
+        seedTestUser(fixture);
+        const dataSource = createBenchmarkDataSource(testCase.userUuid, testCase.healthOverrides);
+        const testAgent = await createPHAAgent({
+          apiKey: agentApiKey,
+          provider: agentProvider,
+          modelId: agentModelId,
+          baseUrl: agentBaseUrl,
+          userUuid: getTestUserUuid(testCase.userUuid),
+          dataSource,
+          sessionMessages: testCase.sessionMessages,
+        });
+        return withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
+      },
+      llmCall: async (prompt: string) => {
+        const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+        const judgeAgent = await createPHAAgent({
+          apiKey: judgeApiKey,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          provider: judgeConfig.provider as any,
+          modelId: judgeConfig.modelId,
+          baseUrl: judgeBaseUrl,
+          dataSource: new JudgeMockDS(),
+        });
+        return withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
+      },
+      onProgress: (current, total, testCase) => {
+        writeBenchmarkProgressForRun(trackingId, {
+          running: true,
+          source: "ui",
+          profile,
+          current,
+          total,
+          category: testCase.category,
+          startedAt: Date.now(),
+          modelId: modelConfig?.modelId,
+          presetName: modelConfig?.presetName,
+          trackingId,
+          pid: process.pid,
+        });
+        this.sendEvolutionLabUpdateThrottled(liveSend());
+      },
+      concurrency: getBenchmarkConcurrency(),
+    });
+  }
+
   async runBenchmarkAsync(
     profile: "quick" | "full",
     send: (msg: unknown) => void,
@@ -3018,37 +2698,22 @@ export class GatewaySession {
       presetName?: string;
     }
   ): Promise<void> {
-    // Use live SSE connection for all sends in this async method
     // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const liveSend = () => this.getSend(send);
 
-    // Check if another benchmark is running externally (e.g., from CLI)
-    const externalProgress = readBenchmarkProgress();
-    if (externalProgress && externalProgress.source !== "ui") {
-      const toast = generateToast(t("evolution.externalBenchmarkRunning"), "warning");
-      sendAll(liveSend(), toast);
+    const blockMsg = this.checkBenchmarkPreConditions(modelConfig);
+    if (blockMsg) {
+      sendAll(liveSend(), generateToast(blockMsg, "warning"));
       return;
     }
 
-    // Check if the same model is already running
     const targetModelId = modelConfig?.modelId || "__default__";
-    for (const entry of this.runningBenchmarks.values()) {
-      if (entry.modelId === targetModelId) {
-        const toast = generateToast(t("evolution.modelAlreadyRunning"), "warning");
-        sendAll(liveSend(), toast);
-        return;
-      }
-    }
-
-    // Generate unique tracking ID for this run
     const trackingId = crypto.randomUUID();
     this.runningBenchmarks.set(trackingId, {
       modelId: targetModelId,
       presetName: modelConfig?.presetName,
       startedAt: Date.now(),
     });
-
-    // Write initial progress to per-run file
     writeBenchmarkProgressForRun(trackingId, {
       running: true,
       source: "ui",
@@ -3062,80 +2727,11 @@ export class GatewaySession {
       trackingId,
       pid: process.pid,
     });
-
-    // Refresh evolution lab to show running state in table
     this.sendEvolutionLabUpdate(liveSend());
 
     try {
-      // Resolve agent config: use override model or default session config
-      const agentApiKey = modelConfig?.apiKey || this.config.apiKey;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const agentProvider = (modelConfig?.provider || this.config.provider) as any;
-      const agentModelId = modelConfig?.modelId || this.config.modelId;
-      const agentBaseUrl = modelConfig?.baseUrl || this.config.baseUrl;
-
-      // Resolve judge config
-      const judgeConfig = getJudgeModel();
-      const judgeApiKey = resolveBenchmarkModelApiKey(judgeConfig);
-      const judgeBaseUrl = resolveBenchmarkModelBaseUrl(judgeConfig);
-
-      const runner = new BenchmarkRunner({
-        agentCall: async (query: string, testCase) => {
-          // Create fresh agent per test case with UUID test user
-          const { seedTestUser, createBenchmarkDataSource, getTestUserUuid, loadTestUserFixture } =
-            await import("../evolution/test-user-seeder.js");
-          const fixture = loadTestUserFixture(testCase.userUuid);
-          seedTestUser(fixture);
-          const dataSource = createBenchmarkDataSource(testCase.userUuid, testCase.healthOverrides);
-          const testAgent = await createPHAAgent({
-            apiKey: agentApiKey,
-            provider: agentProvider,
-            modelId: agentModelId,
-            baseUrl: agentBaseUrl,
-            userUuid: getTestUserUuid(testCase.userUuid),
-            dataSource,
-            sessionMessages: testCase.sessionMessages,
-          });
-          return withActivityTimeout(testAgent, () => testAgent.chatAndWaitWithTools(query));
-        },
-        llmCall: async (prompt: string) => {
-          // Create fresh judge agent per evaluation for concurrency safety
-          const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
-          const judgeAgent = await createPHAAgent({
-            apiKey: judgeApiKey,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            provider: judgeConfig.provider as any,
-            modelId: judgeConfig.modelId,
-            baseUrl: judgeBaseUrl,
-            dataSource: new JudgeMockDS(),
-          });
-          return withActivityTimeout(judgeAgent, () => judgeAgent.chatAndWait(prompt));
-        },
-        onProgress: (current, total, testCase) => {
-          // Update per-run progress file
-          writeBenchmarkProgressForRun(trackingId, {
-            running: true,
-            source: "ui",
-            profile,
-            current,
-            total,
-            category: testCase.category,
-            startedAt: Date.now(),
-            modelId: modelConfig?.modelId,
-            presetName: modelConfig?.presetName,
-            trackingId,
-            pid: process.pid,
-          });
-          // Refresh evolution lab with throttling to avoid flooding
-          this.sendEvolutionLabUpdateThrottled(liveSend());
-        },
-        concurrency: getBenchmarkConcurrency(),
-      });
-
-      // Seed test cases if needed
+      const runner = this.createBenchmarkRunner(profile, trackingId, liveSend, modelConfig);
       await runner.seedTestCases();
-
-      // Run benchmark with model override if specified
       const modelOverride = modelConfig
         ? {
             provider: modelConfig.provider,
@@ -3144,23 +2740,22 @@ export class GatewaySession {
           }
         : undefined;
       await runner.run({ profile, modelOverride });
-
-      // Refresh evolution page — table will now show completed run
       if (this.currentView === "evolution") {
         this.sendEvolutionLabUpdate(liveSend());
       } else {
         await this.handleNavigate("settings/evolution", liveSend());
       }
     } catch (error) {
-      const errorToast = generateToast(
-        `Benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
-        "error"
+      sendAll(
+        liveSend(),
+        generateToast(
+          `Benchmark failed: ${error instanceof Error ? error.message : String(error)}`,
+          "error"
+        )
       );
-      sendAll(liveSend(), errorToast);
     } finally {
       this.runningBenchmarks.delete(trackingId);
       clearBenchmarkProgressForRun(trackingId);
-      // Refresh table to reflect final state
       this.sendEvolutionLabUpdate(liveSend());
     }
   }
@@ -3381,7 +2976,6 @@ function getRunStatus(durationMs: number | null | undefined): "running" | "compl
   return "running";
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapBenchmarkRun(
   r: any,
   benchmarkModelsCfg: Record<string, { label?: string }>
@@ -3442,7 +3036,6 @@ const VERSION_STATUS_MAP: Record<string, "success" | "failed" | "active" | "pend
   active: "active",
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapVersionToTimelineEvent(
   v: any
 ): NonNullable<EvolutionLabData["timelineEvents"]>[number] {
@@ -3557,6 +3150,651 @@ function getContentType(filePath: string): string {
   return types[ext || ""] || "application/octet-stream";
 }
 
+// ---- SSE / AG-UI / JSON helpers ----
+
+/** Write a single SSE data frame and close the writer. */
+function sseWriteAndClose(
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  encoder: TextEncoder,
+  data: string
+): void {
+  try {
+    writer.write(encoder.encode(`data: ${data}\n\n`)).catch(() => {});
+  } catch {
+    /* noop */
+  }
+  try {
+    writer.close().catch(() => {});
+  } catch {
+    /* noop */
+  }
+}
+
+/** Create a safe writer/closer pair that silently ignores errors after the stream is closed. */
+function createSafeSSEStream(
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  encoder: TextEncoder
+): { write: (data: string) => void; close: () => void; isClosed: () => boolean } {
+  let closed = false;
+  return {
+    write(data: string): void {
+      if (closed) return;
+      try {
+        writer.write(encoder.encode(data)).catch(() => {
+          closed = true;
+        });
+      } catch {
+        closed = true;
+      }
+    },
+    close(): void {
+      if (closed) return;
+      closed = true;
+      try {
+        writer.close().catch(() => {});
+      } catch {
+        /* already closed */
+      }
+    },
+    isClosed(): boolean {
+      return closed;
+    },
+  };
+}
+
+/** Set of AG-UI event types that should be forwarded over SSE. */
+const AG_UI_EVENT_TYPES = new Set([
+  "RunStarted",
+  "RunFinished",
+  "TextMessageStart",
+  "TextMessageContent",
+  "TextMessageEnd",
+  "ToolCallStart",
+  "ToolCallEnd",
+  "ToolCallResult",
+  "Custom",
+]);
+
+/** Create an AG-UI SSE send function that only forwards recognised event types. */
+function createAGUISender(safeWrite: (data: string) => void): (msg: unknown) => void {
+  return (msg: unknown): void => {
+    const m = msg as Record<string, unknown>;
+    if (m.type && AG_UI_EVENT_TYPES.has(m.type as string)) {
+      safeWrite(`data: ${JSON.stringify(m)}\n\n`);
+    }
+  };
+}
+
+/** Common SSE response headers. */
+const SSE_HEADERS: Record<string, string> = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+  "Access-Control-Allow-Origin": "*",
+};
+
+/** Common JSON response headers. */
+const JSON_HEADERS: Record<string, string> = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+};
+
+/** Build a JSON error response. */
+function jsonError(e: unknown, status = 500): Response {
+  return new Response(JSON.stringify({ error: String(e) }), {
+    status,
+    headers: JSON_HEADERS,
+  });
+}
+
+/** Build a JSON-RPC parse error response. */
+function jsonRpcParseError(): Response {
+  return new Response(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32700, message: "Parse error" },
+    }),
+    { status: 400, headers: JSON_HEADERS }
+  );
+}
+
+// ---- Evolution Data Standalone Helpers ----
+
+/** Map a raw DB BenchmarkRun row to the UI-friendly shape. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapBenchmarkRunLegacy(r: any): Record<string, unknown> {
+  return {
+    id: r.id,
+    timestamp: r.timestamp,
+    versionTag: r.version_tag,
+    profile: r.profile,
+    overallScore: r.overall_score,
+    passedCount: r.passed_count,
+    failedCount: r.failed_count,
+    totalTestCases: r.total_test_cases,
+    durationMs: r.duration_ms,
+    metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+  };
+}
+
+/** Load tab-specific evolution data. */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+function loadEvolutionTabData(tab: string, tracesPage: number) {
+  if (tab === "overview") {
+    const stats = getEvaluationStats();
+    const benchmarkRuns = listBenchmarkRuns({ limit: 5 }).map(mapBenchmarkRunLegacy);
+    const bestScores = getBestCategoryScores();
+    const latestCategoryScores =
+      bestScores.length > 0
+        ? bestScores.map((s) => ({
+            category: s.category,
+            score: s.score,
+            testCount: s.test_count,
+            passedCount: s.passed_count,
+          }))
+        : undefined;
+    return { stats, benchmarkRuns, latestCategoryScores };
+  }
+  if (tab === "traces") {
+    const traceRows = listTraces({ limit: 20, offset: tracesPage * 20 });
+    const tracesTotal = countTraces();
+    const traces = traceRows.map((tr) => {
+      const evalResult = getEvaluationByTraceId(tr.id);
+      return {
+        id: tr.id,
+        timestamp: tr.timestamp,
+        userMessage: tr.user_message,
+        score: evalResult?.overall_score,
+      };
+    });
+    return { traces, tracesTotal };
+  }
+  if (tab === "evaluations") {
+    return {
+      evaluations: listEvaluations({ limit: 50 }).map((e) => ({
+        id: e.id,
+        traceId: e.trace_id,
+        timestamp: e.timestamp,
+        score: e.overall_score,
+        feedback: e.feedback,
+      })),
+    };
+  }
+  if (tab === "benchmark") {
+    return {
+      testCases: listTestCases({ limit: 50 }).map((tc) => ({
+        id: tc.id,
+        category: tc.category,
+        query: tc.query,
+        expected: JSON.parse(tc.expected),
+      })),
+    };
+  }
+  if (tab === "runs") {
+    return { benchmarkRuns: listBenchmarkRuns({ limit: 20 }).map(mapBenchmarkRunLegacy) };
+  }
+  if (tab === "suggestions") {
+    return {
+      suggestions: listSuggestions({ limit: 50 }).map((s) => ({
+        id: s.id,
+        timestamp: s.timestamp,
+        type: s.type,
+        target: s.target,
+        status: s.status,
+        rationale: s.rationale,
+      })),
+    };
+  }
+  if (tab === "config") {
+    const { loadCategoriesConfig } = require("../evolution/benchmark-seed.js");
+    return { categoriesConfig: loadCategoriesConfig() };
+  }
+  return {};
+}
+
+/** Load external benchmark progress for overview/benchmark tabs. */
+function loadEvolutionExternalProgress(
+  tab: string
+):
+  | Record<
+      string,
+      {
+        current: number;
+        total: number;
+        category: string;
+        profile: string;
+        modelId?: string;
+        presetName?: string;
+      }
+    >
+  | undefined {
+  if (tab !== "overview" && tab !== "benchmark") return undefined;
+  const allProgress = readAllBenchmarkProgress();
+  const map: Record<
+    string,
+    {
+      current: number;
+      total: number;
+      category: string;
+      profile: string;
+      modelId?: string;
+      presetName?: string;
+    }
+  > = {};
+  for (const [trackingId, info] of Object.entries(allProgress)) {
+    if (info.running) {
+      map[trackingId] = {
+        current: info.current,
+        total: info.total,
+        category: info.category,
+        profile: info.profile,
+        modelId: info.modelId,
+        presetName: info.presetName,
+      };
+    }
+  }
+  return Object.keys(map).length > 0 ? map : undefined;
+}
+
+/** Load evolution versions for overview/versions tabs. */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+function loadEvolutionVersionsList(tab: string) {
+  if (tab !== "overview" && tab !== "versions") return undefined;
+  return listEvolutionVersions().map((v) => ({
+    id: v.id,
+    branchName: v.branch_name,
+    parentBranch: v.parent_branch || "main",
+    status: v.status || "active",
+    triggerMode: v.trigger_mode || "",
+    triggerRef: v.trigger_ref || "",
+    scoreDelta: v.score_delta,
+    filesChanged: v.files_changed ? JSON.parse(v.files_changed) : [],
+    createdAt: v.created_at,
+  }));
+}
+
+// ---- Route Helpers ----
+
+/** Extract user ID from request cookie (pha_uid preferred, pha_user_id legacy fallback). */
+function extractUserId(req: Request): string | undefined {
+  const cookieHeader = req.headers.get("cookie") || "";
+  const match = cookieHeader.match(/pha_uid=([^;]+)/) || cookieHeader.match(/pha_user_id=([^;]+)/);
+  return match ? match[1] : undefined;
+}
+
+/** Get or create a GatewaySession from the sessions map. */
+function getOrCreateSessionFromMap(
+  sessions: Map<string, GatewaySession>,
+  config: GatewayConfig,
+  userId?: string
+): GatewaySession {
+  const key = userId || "__anonymous__";
+  let session = sessions.get(key);
+  if (!session) {
+    session = userId ? new GatewaySession(config, userId) : new GatewaySession(config);
+    sessions.set(key, session);
+  }
+  return session;
+}
+
+/** Create an SSE stream response for a chat handler. */
+function sseStreamResponse(
+  session: GatewaySession,
+  content: string,
+  handler: "chat" | "legacy-chat"
+): Response {
+  const { readable, writable } = new TransformStream<Uint8Array>();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const fn =
+    handler === "chat"
+      ? session.handleChatSSE.bind(session)
+      : session.handleLegacyChatSSE.bind(session);
+  fn(content, writer, encoder).catch(() => {
+    try {
+      writer.close().catch(() => {});
+    } catch {
+      /* noop */
+    }
+  });
+  return new Response(readable, { headers: SSE_HEADERS });
+}
+
+/** Inject basePath into index.html so frontend knows the prefix. */
+async function serveIndexWithBasePath(webDir: string, basePath: string): Promise<Response | null> {
+  const indexFile = Bun.file(`${webDir}/index.html`);
+  if (!(await indexFile.exists())) return null;
+  if (!basePath) return new Response(indexFile, { headers: { "Content-Type": "text/html" } });
+  let html = await indexFile.text();
+  html = html.replaceAll('"/assets/', `"${basePath}/assets/`);
+  html = html.replaceAll("'/assets/", `'${basePath}/assets/`);
+  html = html.replace("<head>", `<head><script>window.__PHA_BASE_PATH__="${basePath}";</script>`);
+  return new Response(html, { headers: { "Content-Type": "text/html" } });
+}
+
+/** Run one-time startup tasks (migration, seed, cleanup). */
+async function runStartupTasks(): Promise<void> {
+  migrateStateDir();
+  try {
+    const { seedAllTestUsers } = await import("../evolution/test-user-seeder.js");
+    seedAllTestUsers();
+  } catch {
+    /* optional */
+  }
+  cleanupOldLlmLogs();
+  const interrupted = markInterruptedBenchmarkRuns();
+  if (interrupted > 0) log.info("Cleaned up interrupted benchmark runs", { count: interrupted });
+  clearBenchmarkProgress();
+  clearAllUiBenchmarkProgress();
+}
+
+/** Load plugins and start skills hot-reload watcher + proactive engine. */
+async function initPluginsAndWatchers(sseManager: SSEConnectionManager): Promise<void> {
+  const phaConfig = loadConfig();
+  if (phaConfig.plugins?.enabled !== false) {
+    try {
+      const pluginRegistry = await loadPlugins({
+        workspaceDir: getStateDir(),
+        extraPaths: phaConfig.plugins?.paths,
+        pluginConfigs: phaConfig.plugins?.entries,
+      });
+      const loaded = pluginRegistry.plugins.filter((p) => p.status === "loaded");
+      if (loaded.length > 0)
+        log.info(`${loaded.length} plugin(s) loaded`, { plugins: loaded.map((p) => p.id) });
+    } catch (err) {
+      log.warn("Plugin loading failed", { error: err });
+    }
+  }
+  const skillsWatchDir = getSkillsDir();
+  if (existsSync(skillsWatchDir)) {
+    let skillDebounce: ReturnType<typeof setTimeout> | null = null;
+    chokidar
+      .watch(skillsWatchDir, {
+        ignoreInitial: true,
+        awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
+      })
+      .on("all", (event, changedPath) => {
+        if (!changedPath.endsWith("SKILL.md")) return;
+        if (skillDebounce) clearTimeout(skillDebounce);
+        skillDebounce = setTimeout(() => {
+          skillDebounce = null;
+          log.info("Skill file changed, notifying clients", { event, path: changedPath });
+          for (const msg of generateToast("技能文件已更新", "info")) sseManager.broadcast(msg);
+        }, 1000);
+      });
+  }
+  const { ProactiveTriggerEngine } = await import("../proactive/trigger-engine.js");
+  const triggerEngine = new ProactiveTriggerEngine(sseManager, {
+    intervalMinutes: phaConfig.proactive?.checkIntervalMinutes ?? 5,
+  });
+  if (phaConfig.proactive?.enabled !== false) triggerEngine.start();
+}
+
+/** Install process exit handlers for hooks and crash resilience. */
+function installProcessHandlers(port: number): void {
+  const hr = getGlobalHookRunner();
+  if (hr) {
+    hr.runGatewayStart({ port }, { port }).catch((err) =>
+      log.warn("Hook gateway_start error", { error: err })
+    );
+  }
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  const handleExit = () => {
+    const runner = getGlobalHookRunner();
+    if (runner) runner.runGatewayStop({ reason: "process_exit" }, { port }).catch(() => {});
+  };
+  process.on("SIGINT", handleExit);
+  process.on("SIGTERM", handleExit);
+  process.on("uncaughtException", (err) => {
+    log.error("Uncaught exception (process kept alive)", {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : new Error().stack,
+      type: typeof err,
+    });
+  });
+  process.on("unhandledRejection", (reason) => {
+    log.error("Unhandled rejection (process kept alive)", {
+      error: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack : new Error().stack,
+      type: typeof reason,
+    });
+  });
+}
+
+// ---- Individual route handlers (used by dispatchRoute) ----
+
+/** Context shared by all route handlers. */
+interface FetchContext {
+  config: GatewayConfig;
+  sessions: Map<string, GatewaySession>;
+  sseManager: SSEConnectionManager;
+  port: number;
+  basePath: string;
+  webDir?: string;
+  app: Hono;
+}
+
+/** Handle POST /api/ag-ui — AG-UI SSE chat. */
+async function handleAgUi(req: Request, ctx: FetchContext): Promise<Response> {
+  const body = (await req.json()) as {
+    thread_id?: string;
+    messages?: Array<{ role: string; content: string }>;
+  };
+  const userMessages = body.messages || [];
+  const lastUserMsg = userMessages.filter((m) => m.role === "user").pop();
+  if (!lastUserMsg?.content) return jsonError("No user message", 400);
+  const key = body.thread_id || crypto.randomUUID();
+  const session = getOrCreateSessionFromMap(ctx.sessions, ctx.config, key);
+  return sseStreamResponse(session, lastUserMsg.content, "chat");
+}
+
+/** Handle POST /api/legacy-chat — Legacy chat SSE. */
+async function handleLegacyChat(req: Request, ctx: FetchContext): Promise<Response> {
+  const body = (await req.json()) as { message?: string; user_id?: string; session_id?: string };
+  if (!body.message) return jsonError("No message", 400);
+  const key = body.user_id || body.session_id || crypto.randomUUID();
+  const session = getOrCreateSessionFromMap(ctx.sessions, ctx.config, key);
+  return sseStreamResponse(session, body.message, "legacy-chat");
+}
+
+/** Handle POST /api/a2ui/init — Create/resume session. */
+async function handleA2UIInit(req: Request, ctx: FetchContext): Promise<Response> {
+  const body = (await req.json().catch(() => ({}))) as { uuid?: string; view?: string };
+  const userId = body.uuid || extractUserId(req);
+  const session = getOrCreateSessionFromMap(ctx.sessions, ctx.config, userId);
+  const updates = await session.getFullPageState(body.view);
+  const headers: Record<string, string> = { ...JSON_HEADERS };
+  if (userId) {
+    const expires = new Date();
+    expires.setFullYear(expires.getFullYear() + 1);
+    headers["Set-Cookie"] =
+      `pha_session_id=${session.getSessionId()}; Path=/; Expires=${expires.toUTCString()}; SameSite=Strict`;
+  }
+  return new Response(
+    JSON.stringify({ sessionId: session.getSessionId(), uid: session.userUuid, updates }),
+    { headers }
+  );
+}
+
+/** Handle POST /api/a2ui/action — User actions and navigation. */
+async function handleA2UIAction(req: Request, ctx: FetchContext): Promise<Response> {
+  const body = (await req.json()) as {
+    type: string;
+    action?: string;
+    payload?: Record<string, unknown>;
+    view?: string;
+    sessionId?: string;
+  };
+  const session = getOrCreateSessionFromMap(ctx.sessions, ctx.config, extractUserId(req));
+  const result = await session.handleHTTPRequest(body);
+  return new Response(JSON.stringify(result), { headers: JSON_HEADERS });
+}
+
+/** Handle GET /api/a2ui/events — SSE long-lived connection. */
+function handleA2UIEvents(req: Request, ctx: FetchContext): Response {
+  const userId = extractUserId(req);
+  const session = getOrCreateSessionFromMap(ctx.sessions, ctx.config, userId);
+  const result = ctx.sseManager.createConnection(session.getSessionId());
+  if (!result) {
+    const encoder = new TextEncoder();
+    return new Response(encoder.encode(`retry: 5000\ndata: {"type":"throttled"}\n\n`), {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  }
+  const { readable, connection } = result;
+  connection.sendRetry(3000);
+  session.setSend((msg) => {
+    ctx.sseManager.send(session.getSessionId(), msg);
+  });
+  const lastEventId = req.headers.get("Last-Event-ID");
+  if (lastEventId) {
+    for (const event of ctx.sseManager.replayFrom(
+      session.getSessionId(),
+      parseInt(lastEventId, 10)
+    )) {
+      connection.send(JSON.parse(event.data), event.id);
+    }
+  }
+  const hookRunner = getGlobalHookRunner();
+  if (hookRunner) {
+    hookRunner
+      .runSessionStart({ sessionId: session.getSessionId() }, { sessionId: session.getSessionId() })
+      .catch((err) => log.warn("Hook session_start error", { error: err }));
+  }
+  return new Response(readable, { headers: SSE_HEADERS });
+}
+
+/** Handle POST /api/mcp — MCP JSON-RPC 2.0. */
+async function handleMCP(req: Request): Promise<Response> {
+  const body = await req.json();
+  const response = await handleMCPRequest(body);
+  if (!response) return new Response(null, { status: 204 });
+  return new Response(JSON.stringify(response), { headers: JSON_HEADERS });
+}
+
+/** Handle POST /api/a2a — A2A JSON-RPC 2.0 task management. */
+async function handleA2A(req: Request, ctx: FetchContext): Promise<Response> {
+  const body = await req.json();
+  const response = await handleA2ARequest(body, async (_taskId, message) => {
+    const session = new GatewaySession(ctx.config);
+    ctx.sessions.set(_taskId, session);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const agent = await (session as any).getAgent();
+      return await agent.chatAndWait(message);
+    } finally {
+      ctx.sessions.delete(_taskId);
+    }
+  });
+  return new Response(JSON.stringify(response), { headers: JSON_HEADERS });
+}
+
+// ---- Route dispatch (used by fetch) ----
+
+/** Dispatch POST API routes. Returns null if no match. */
+async function dispatchPostRoute(
+  pathname: string,
+  req: Request,
+  ctx: FetchContext
+): Promise<Response | null> {
+  if (pathname === "/api/ag-ui") {
+    try {
+      return await handleAgUi(req, ctx);
+    } catch (e) {
+      return jsonError(e);
+    }
+  }
+  if (pathname === "/api/legacy-chat") {
+    try {
+      return await handleLegacyChat(req, ctx);
+    } catch (e) {
+      return jsonError(e);
+    }
+  }
+  if (pathname === "/api/a2ui/init") {
+    try {
+      return await handleA2UIInit(req, ctx);
+    } catch (e) {
+      return jsonError(e);
+    }
+  }
+  if (pathname === "/api/a2ui/action") {
+    try {
+      return await handleA2UIAction(req, ctx);
+    } catch (e) {
+      return jsonError(e);
+    }
+  }
+  if (pathname === "/api/mcp") {
+    try {
+      return await handleMCP(req);
+    } catch {
+      return jsonRpcParseError();
+    }
+  }
+  if (pathname === "/api/a2a") {
+    try {
+      return await handleA2A(req, ctx);
+    } catch {
+      return jsonRpcParseError();
+    }
+  }
+  return null;
+}
+
+/** Dispatch GET API routes. Returns null if no match. */
+function dispatchGetRoute(pathname: string, req: Request, ctx: FetchContext): Response | null {
+  if (pathname === "/api/a2ui/events") return handleA2UIEvents(req, ctx);
+  if (pathname === "/.well-known/agent.json") {
+    return new Response(JSON.stringify(generateAgentCard(ctx.port, ctx.basePath)), {
+      headers: JSON_HEADERS,
+    });
+  }
+  return null;
+}
+
+/** Dispatch a request to the appropriate route handler. Returns null if no match. */
+async function dispatchRoute(
+  pathname: string,
+  req: Request,
+  ctx: FetchContext
+): Promise<Response | null> {
+  if (req.method === "POST") return dispatchPostRoute(pathname, req, ctx);
+  if (req.method === "GET") return dispatchGetRoute(pathname, req, ctx);
+  return null;
+}
+
+/** Try to serve a static file or SPA fallback from webDir. Returns null if not found. */
+async function tryServeStatic(
+  pathname: string,
+  webDir: string,
+  basePath: string
+): Promise<Response | null> {
+  let filePath = pathname;
+  if (filePath === "/" || filePath === "") filePath = "/index.html";
+  if (filePath === "/index.html") {
+    const resp = await serveIndexWithBasePath(webDir, basePath);
+    if (resp) return resp;
+  }
+  const file = Bun.file(webDir + filePath);
+  if (await file.exists())
+    return new Response(file, { headers: { "Content-Type": getContentType(filePath) } });
+  if (
+    !filePath.startsWith("/api") &&
+    !filePath.startsWith("/mcp") &&
+    !filePath.startsWith("/health") &&
+    !filePath.startsWith("/auth")
+  ) {
+    return serveIndexWithBasePath(webDir, basePath);
+  }
+  return null;
+}
+
 /**
  * Start the Gateway server with Bun
  */
@@ -3565,508 +3803,34 @@ export async function startGateway(
 ): Promise<ReturnType<typeof Bun.serve>> {
   const host = config.host ?? "0.0.0.0";
   const port = config.port ?? 8000;
-  const basePath = (config.basePath || "").replace(/\/+$/, ""); // strip trailing slash
+  const basePath = (config.basePath || "").replace(/\/+$/, "");
   const app = createGatewayApp();
   const sessions = new Map<string, GatewaySession>();
   const sseManager = new SSEConnectionManager();
   const webDir = config.webDir;
 
-  // Run state directory migration (creates db/, users/system/, etc.)
-  migrateStateDir();
+  await runStartupTasks();
+  await initPluginsAndWatchers(sseManager);
 
-  // Seed benchmark test users (ensures they exist for benchmark runs)
-  try {
-    const { seedAllTestUsers } = await import("../evolution/test-user-seeder.js");
-    seedAllTestUsers();
-  } catch {
-    // Ignore — test user fixtures may not exist in all environments
-  }
-
-  // Clean up old LLM logs (older than 30 days)
-  cleanupOldLlmLogs();
-
-  // Helper: get or create session by user ID
-  function getOrCreateSession(userId?: string): GatewaySession {
-    if (!userId) {
-      // Anonymous session — shared, no user directory
-      let session = sessions.get("__anonymous__");
-      if (!session) {
-        session = new GatewaySession(config);
-        sessions.set("__anonymous__", session);
-      }
-      return session;
-    }
-    let session = sessions.get(userId);
-    if (!session) {
-      session = new GatewaySession(config, userId);
-      sessions.set(userId, session);
-    }
-    return session;
-  }
-
-  // Helper: extract user ID from request cookie (pha_uid preferred, pha_user_id legacy fallback)
-  function extractUserId(req: Request): string | undefined {
-    const cookieHeader = req.headers.get("cookie") || "";
-    const match =
-      cookieHeader.match(/pha_uid=([^;]+)/) || cookieHeader.match(/pha_user_id=([^;]+)/);
-    return match ? match[1] : undefined;
-  }
-
-  // Load plugins
-  const phaConfig = loadConfig();
-  let pluginRegistry: PluginRegistry | undefined;
-  if (phaConfig.plugins?.enabled !== false) {
-    try {
-      pluginRegistry = await loadPlugins({
-        workspaceDir: getStateDir(),
-        extraPaths: phaConfig.plugins?.paths,
-        pluginConfigs: phaConfig.plugins?.entries,
-      });
-      const loaded = pluginRegistry.plugins.filter((p) => p.status === "loaded");
-      if (loaded.length > 0) {
-        log.info(`${loaded.length} plugin(s) loaded`, { plugins: loaded.map((p) => p.id) });
-      }
-    } catch (err) {
-      log.warn("Plugin loading failed", { error: err });
-    }
-  }
-
-  // Skills hot reload: watch for SKILL.md changes and notify connected clients
-  const skillsWatchDir = getSkillsDir();
-  if (existsSync(skillsWatchDir)) {
-    let skillDebounce: ReturnType<typeof setTimeout> | null = null;
-    const skillWatcher = chokidar.watch(skillsWatchDir, {
-      ignoreInitial: true,
-      awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
-    });
-    skillWatcher.on("all", (event, changedPath) => {
-      if (!changedPath.endsWith("SKILL.md")) return;
-      if (skillDebounce) clearTimeout(skillDebounce);
-      skillDebounce = setTimeout(() => {
-        skillDebounce = null;
-        log.info("Skill file changed, notifying clients", { event, path: changedPath });
-        for (const msg of generateToast("技能文件已更新", "info")) sseManager.broadcast(msg);
-      }, 1000);
-    });
-  }
-
-  // Clean up interrupted benchmark runs from previous process (deletes incomplete runs with no data)
-  const interrupted = markInterruptedBenchmarkRuns();
-  if (interrupted > 0) {
-    log.info("Cleaned up interrupted benchmark runs", { count: interrupted });
-  }
-  clearBenchmarkProgress();
-  clearAllUiBenchmarkProgress();
-
-  // Start Proactive Trigger Engine
-  const { ProactiveTriggerEngine } = await import("../proactive/trigger-engine.js");
-  const triggerEngine = new ProactiveTriggerEngine(sseManager, {
-    intervalMinutes: phaConfig.proactive?.checkIntervalMinutes ?? 5,
-  });
-  if (phaConfig.proactive?.enabled !== false) {
-    triggerEngine.start();
-  }
+  const ctx: FetchContext = { config, sessions, sseManager, port, basePath, webDir, app };
 
   const server = Bun.serve({
     hostname: host,
     port,
-    idleTimeout: 255, // SSE streams need long-lived connections (max 255s)
+    idleTimeout: 255,
     async fetch(req, _server) {
-      const url = new URL(req.url);
-
-      // ---- basePath guard & stripping ----
-      // If basePath is configured, reject requests outside it and strip the prefix
-      // so all downstream routing code works against unprefixed paths.
-      let pathname = url.pathname;
+      let pathname = new URL(req.url).pathname;
       if (basePath) {
-        if (!pathname.startsWith(`${basePath}/`) && pathname !== basePath) {
+        if (!pathname.startsWith(`${basePath}/`) && pathname !== basePath)
           return new Response("Not Found", { status: 404 });
-        }
         pathname = pathname.slice(basePath.length) || "/";
       }
-
-      // AG-UI SSE endpoint
-      if (pathname === "/api/ag-ui" && req.method === "POST") {
-        try {
-          const body = (await req.json()) as {
-            thread_id?: string;
-            messages?: Array<{ role: string; content: string }>;
-          };
-          const threadId = body.thread_id;
-          const userMessages = body.messages || [];
-          const lastUserMsg = userMessages.filter((m) => m.role === "user").pop();
-          if (!lastUserMsg?.content) {
-            return new Response(JSON.stringify({ error: "No user message" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            });
-          }
-
-          // Find or create session by thread_id
-          const key = threadId || crypto.randomUUID();
-          let session = sessions.get(key);
-          if (!session) {
-            session = new GatewaySession(config, key);
-            sessions.set(key, session);
-          }
-
-          const { readable, writable } = new TransformStream<Uint8Array>();
-          const writer = writable.getWriter();
-          const encoder = new TextEncoder();
-
-          // Run chat SSE in background (non-blocking)
-          session.handleChatSSE(lastUserMsg.content, writer, encoder).catch(() => {
-            try {
-              writer.close().catch(() => {});
-            } catch {
-              /* noop */
-            }
-          });
-
-          return new Response(readable, {
-            headers: {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        } catch (e) {
-          return new Response(JSON.stringify({ error: String(e) }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-      }
-
-      // ================================================================
-      // Legacy Chat SSE (边想边搜 external API)
-      // ================================================================
-
-      if (pathname === "/api/legacy-chat" && req.method === "POST") {
-        try {
-          const body = (await req.json()) as {
-            message?: string;
-            user_id?: string;
-            session_id?: string;
-          };
-
-          if (!body.message) {
-            return new Response(JSON.stringify({ error: "No message" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            });
-          }
-
-          const key = body.user_id || body.session_id || crypto.randomUUID();
-          let session = sessions.get(key);
-          if (!session) {
-            session = new GatewaySession(config, key);
-            sessions.set(key, session);
-          }
-
-          const { readable, writable } = new TransformStream<Uint8Array>();
-          const writer = writable.getWriter();
-          const encoder = new TextEncoder();
-
-          session.handleLegacyChatSSE(body.message, writer, encoder).catch(() => {
-            try {
-              writer.close().catch(() => {});
-            } catch {
-              // ignore
-            }
-          });
-
-          return new Response(readable, {
-            headers: {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        } catch (e) {
-          return new Response(JSON.stringify({ error: String(e) }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-      }
-
-      // ================================================================
-      // A2UI HTTP+SSE endpoints (replacing WebSocket for page/action/nav)
-      // ================================================================
-
-      // POST /api/a2ui/init — Create/resume session, return initial page state
-      if (pathname === "/api/a2ui/init" && req.method === "POST") {
-        try {
-          const body = (await req.json().catch(() => ({}))) as { uuid?: string; view?: string };
-          const userId = body.uuid || extractUserId(req);
-          const session = getOrCreateSession(userId);
-
-          const updates = await session.getFullPageState(body.view);
-
-          const headers: Record<string, string> = {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-          };
-          // Set session cookie
-          if (userId) {
-            const expires = new Date();
-            expires.setFullYear(expires.getFullYear() + 1);
-            headers["Set-Cookie"] =
-              `pha_session_id=${session.getSessionId()}; Path=/; Expires=${expires.toUTCString()}; SameSite=Strict`;
-          }
-
-          return new Response(
-            JSON.stringify({
-              sessionId: session.getSessionId(),
-              uid: session.userUuid,
-              updates,
-            }),
-            { headers }
-          );
-        } catch (e) {
-          return new Response(JSON.stringify({ error: String(e) }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-      }
-
-      // POST /api/a2ui/action — Handle user actions and navigation
-      if (pathname === "/api/a2ui/action" && req.method === "POST") {
-        try {
-          const body = (await req.json()) as {
-            type: string;
-            action?: string;
-            payload?: Record<string, unknown>;
-            view?: string;
-            sessionId?: string;
-          };
-
-          const userId = extractUserId(req);
-          const session = getOrCreateSession(userId);
-
-          const result = await session.handleHTTPRequest(body);
-
-          return new Response(JSON.stringify(result), {
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        } catch (e) {
-          return new Response(JSON.stringify({ error: String(e) }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-      }
-
-      // GET /api/a2ui/events — SSE long-lived connection for push updates
-      if (pathname === "/api/a2ui/events" && req.method === "GET") {
-        const userId = extractUserId(req);
-        const session = getOrCreateSession(userId);
-
-        const result = sseManager.createConnection(session.getSessionId());
-        if (!result) {
-          // Return a valid SSE stream with retry directive instead of HTTP 429.
-          // HTTP 429 causes EventSource to fire onerror then reconnect immediately,
-          // creating a cascade. A valid SSE with long retry lets the browser wait.
-          const encoder = new TextEncoder();
-          const body = encoder.encode(`retry: 5000\ndata: {"type":"throttled"}\n\n`);
-          return new Response(body, {
-            headers: {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        }
-        const { readable, connection } = result;
-
-        // Tell browser to wait at least 3s before auto-reconnecting
-        connection.sendRetry(3000);
-
-        // Bind session's active send to this SSE connection
-        session.setSend((msg) => {
-          sseManager.send(session.getSessionId(), msg);
-        });
-
-        // Replay missed events if reconnecting
-        const lastEventId = req.headers.get("Last-Event-ID");
-        if (lastEventId) {
-          const missed = sseManager.replayFrom(session.getSessionId(), parseInt(lastEventId, 10));
-          for (const event of missed) {
-            connection.send(JSON.parse(event.data), event.id);
-          }
-        }
-
-        // Trigger session_start hook
-        const hookRunner = getGlobalHookRunner();
-        if (hookRunner) {
-          hookRunner
-            .runSessionStart(
-              { sessionId: session.getSessionId() },
-              { sessionId: session.getSessionId() }
-            )
-            .catch((err) => log.warn("Hook session_start error", { error: err }));
-        }
-
-        return new Response(readable, {
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-            "Access-Control-Allow-Origin": "*",
-          },
-        });
-      }
-
-      // ================================================================
-      // MCP Streamable HTTP (JSON-RPC 2.0)
-      // ================================================================
-
-      if (pathname === "/api/mcp" && req.method === "POST") {
-        try {
-          const body = await req.json();
-          const response = await handleMCPRequest(body);
-          // Notifications (no id) don't get a response
-          if (!response) {
-            return new Response(null, { status: 204 });
-          }
-          return new Response(JSON.stringify(response), {
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        } catch {
-          return new Response(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: null,
-              error: { code: -32700, message: "Parse error" },
-            }),
-            {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            }
-          );
-        }
-      }
-
-      // ================================================================
-      // A2A Protocol
-      // ================================================================
-
-      // GET /.well-known/agent.json — Agent Card discovery
-      if (pathname === "/.well-known/agent.json" && req.method === "GET") {
-        return new Response(JSON.stringify(generateAgentCard(port, basePath)), {
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-          },
-        });
-      }
-
-      // POST /api/a2a — JSON-RPC 2.0 task management
-      if (pathname === "/api/a2a" && req.method === "POST") {
-        try {
-          const body = await req.json();
-          const response = await handleA2ARequest(body, async (_taskId, message) => {
-            // Create a temporary session for A2A tasks
-            const session = new GatewaySession(config);
-            sessions.set(_taskId, session);
-
-            // Use a simple chat-and-wait pattern
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const agent = await (session as any).getAgent();
-              const result = await agent.chatAndWait(message);
-              return result;
-            } finally {
-              sessions.delete(_taskId);
-            }
-          });
-
-          return new Response(JSON.stringify(response), {
-            headers: {
-              "Content-Type": "application/json",
-              "Access-Control-Allow-Origin": "*",
-            },
-          });
-        } catch {
-          return new Response(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: null,
-              error: { code: -32700, message: "Parse error" },
-            }),
-            {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            }
-          );
-        }
-      }
-
-      // Serve static files from web directory
+      const routeResponse = await dispatchRoute(pathname, req, ctx);
+      if (routeResponse) return routeResponse;
       if (webDir) {
-        let filePath = pathname;
-        if (filePath === "/" || filePath === "") {
-          filePath = "/index.html";
-        }
-
-        // Helper: inject basePath into index.html so frontend knows the prefix
-        // and rewrite asset paths (Vite builds absolute /assets/... paths)
-        const serveIndexWithBasePath = async (): Promise<Response | null> => {
-          const indexFile = Bun.file(`${webDir}/index.html`);
-          if (!(await indexFile.exists())) return null;
-          if (!basePath) {
-            return new Response(indexFile, { headers: { "Content-Type": "text/html" } });
-          }
-          let html = await indexFile.text();
-          // Rewrite Vite asset paths: /assets/ → /health_sport/pha/assets/
-          html = html.replaceAll('"/assets/', `"${basePath}/assets/`);
-          html = html.replaceAll("'/assets/", `'${basePath}/assets/`);
-          // Inject basePath for runtime JS
-          html = html.replace(
-            "<head>",
-            `<head><script>window.__PHA_BASE_PATH__="${basePath}";</script>`
-          );
-          return new Response(html, { headers: { "Content-Type": "text/html" } });
-        };
-
-        if (filePath === "/index.html") {
-          const resp = await serveIndexWithBasePath();
-          if (resp) return resp;
-        }
-
-        const fullPath = webDir + filePath;
-        const file = Bun.file(fullPath);
-
-        if (await file.exists()) {
-          const contentType = getContentType(filePath);
-          return new Response(file, {
-            headers: { "Content-Type": contentType },
-          });
-        }
-
-        // SPA fallback - serve index.html for non-API routes
-        if (
-          !filePath.startsWith("/api") &&
-          !filePath.startsWith("/mcp") &&
-          !filePath.startsWith("/health") &&
-          !filePath.startsWith("/auth")
-        ) {
-          const resp = await serveIndexWithBasePath();
-          if (resp) return resp;
-        }
+        const staticResp = await tryServeStatic(pathname, webDir, basePath);
+        if (staticResp) return staticResp;
       }
-
-      // Handle HTTP requests with Hono (strip basePath so Hono routes match)
       if (basePath) {
         const stripped = new URL(req.url);
         stripped.pathname = pathname;
@@ -4082,40 +3846,7 @@ export async function startGateway(
   log.info(`MCP JSON-RPC at http://${displayHost}:${port}${basePath}/api/mcp`);
   log.info(`A2A Agent Card at http://${displayHost}:${port}${basePath}/.well-known/agent.json`);
 
-  // Trigger gateway_start hook
-  const hr = getGlobalHookRunner();
-  if (hr) {
-    hr.runGatewayStart({ port }, { port }).catch((err) =>
-      log.warn("Hook gateway_start error", { error: err })
-    );
-  }
-
-  // Trigger gateway_stop hook on process exit
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  const handleExit = () => {
-    const runner = getGlobalHookRunner();
-    if (runner) {
-      runner.runGatewayStop({ reason: "process_exit" }, { port }).catch(() => {});
-    }
-  };
-  process.on("SIGINT", handleExit);
-  process.on("SIGTERM", handleExit);
-
-  // Prevent uncaught errors from crashing the process
-  process.on("uncaughtException", (err) => {
-    log.error("Uncaught exception (process kept alive)", {
-      error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : new Error().stack,
-      type: typeof err,
-    });
-  });
-  process.on("unhandledRejection", (reason) => {
-    log.error("Unhandled rejection (process kept alive)", {
-      error: reason instanceof Error ? reason.message : String(reason),
-      stack: reason instanceof Error ? reason.stack : new Error().stack,
-      type: typeof reason,
-    });
-  });
+  installProcessHandlers(port);
 
   return server;
 }

@@ -39,76 +39,62 @@ export function getDatabase(dbPath?: string): Database {
   return db;
 }
 
-/**
- * Initialize database schema
- */
-function initializeSchema(db: Database): void {
+function createTables(db: Database): void {
   db.exec(`
-    -- Traces: Recorded agent interactions
     CREATE TABLE IF NOT EXISTS traces (
       id TEXT PRIMARY KEY,
       session_id TEXT NOT NULL,
       timestamp INTEGER NOT NULL,
       user_message TEXT NOT NULL,
       agent_response TEXT NOT NULL,
-      tool_calls TEXT,  -- JSON
-      context TEXT,     -- JSON
+      tool_calls TEXT,
+      context TEXT,
       duration_ms INTEGER,
-      token_usage TEXT  -- JSON
+      token_usage TEXT
     );
-
-    -- Evaluations: LLM-judged quality scores
     CREATE TABLE IF NOT EXISTS evaluations (
       id TEXT PRIMARY KEY,
       trace_id TEXT NOT NULL REFERENCES traces(id),
       timestamp INTEGER NOT NULL,
-      scores TEXT NOT NULL,       -- JSON: {accuracy, relevance, helpfulness, safety, completeness}
+      scores TEXT NOT NULL,
       overall_score INTEGER NOT NULL,
       feedback TEXT,
-      issues TEXT                 -- JSON: [{type, description, severity}]
+      issues TEXT
     );
-
-    -- Test Cases: Benchmark test inputs/expectations
     CREATE TABLE IF NOT EXISTS test_cases (
       id TEXT PRIMARY KEY,
       category TEXT NOT NULL,
       query TEXT NOT NULL,
-      context TEXT,               -- JSON
-      expected TEXT NOT NULL,     -- JSON: {shouldMention, shouldNotMention, minScore, safetyConcerns}
+      context TEXT,
+      expected TEXT NOT NULL,
       created_at INTEGER,
       updated_at INTEGER
     );
-
-    -- Suggestions: AI-generated optimization proposals
     CREATE TABLE IF NOT EXISTS suggestions (
       id TEXT PRIMARY KEY,
       timestamp INTEGER NOT NULL,
-      type TEXT NOT NULL,         -- 'prompt' | 'tool' | 'behavior'
+      type TEXT NOT NULL,
       target TEXT NOT NULL,
       current_value TEXT,
       suggested_value TEXT NOT NULL,
       rationale TEXT,
-      status TEXT DEFAULT 'pending',  -- 'pending' | 'testing' | 'validated' | 'applied' | 'rejected'
-      validation_results TEXT     -- JSON: {before, after, improvement}
+      status TEXT DEFAULT 'pending',
+      validation_results TEXT
     );
-
-    -- Benchmark Runs: Each execution of the benchmark suite
     CREATE TABLE IF NOT EXISTS benchmark_runs (
       id TEXT PRIMARY KEY,
       timestamp INTEGER NOT NULL,
       version_tag TEXT,
-      prompt_versions TEXT,    -- JSON: {filename: gitHash}
-      skill_versions TEXT,     -- JSON: {filename: gitHash}
+      prompt_versions TEXT,
+      skill_versions TEXT,
       total_test_cases INTEGER NOT NULL,
       passed_count INTEGER NOT NULL DEFAULT 0,
       failed_count INTEGER NOT NULL DEFAULT 0,
       overall_score REAL NOT NULL DEFAULT 0,
       duration_ms INTEGER,
       profile TEXT DEFAULT 'quick',
-      metadata TEXT             -- JSON
+      metadata TEXT
     );
-
-    -- Category Scores: Per-category scores within a benchmark run
     CREATE TABLE IF NOT EXISTS category_scores (
       id TEXT PRIMARY KEY,
       run_id TEXT NOT NULL REFERENCES benchmark_runs(id),
@@ -117,43 +103,42 @@ function initializeSchema(db: Database): void {
       score REAL NOT NULL DEFAULT 0,
       test_count INTEGER NOT NULL DEFAULT 0,
       passed_count INTEGER NOT NULL DEFAULT 0,
-      details TEXT               -- JSON
+      details TEXT
     );
-
-    -- Benchmark Results: Per-test-case results within a benchmark run
     CREATE TABLE IF NOT EXISTS benchmark_results (
       id TEXT PRIMARY KEY,
       run_id TEXT NOT NULL REFERENCES benchmark_runs(id),
       test_case_id TEXT NOT NULL,
       timestamp INTEGER NOT NULL,
       agent_response TEXT,
-      tool_calls TEXT,           -- JSON
-      scores TEXT,               -- JSON: {accuracy, relevance, helpfulness, safety, completeness}
+      tool_calls TEXT,
+      scores TEXT,
       overall_score REAL NOT NULL DEFAULT 0,
       passed INTEGER NOT NULL DEFAULT 0,
       feedback TEXT,
-      issues TEXT,               -- JSON
+      issues TEXT,
       duration_ms INTEGER
     );
-
-    -- Evolution Versions: Agent version snapshots managed via git worktrees
     CREATE TABLE IF NOT EXISTS evolution_versions (
       id TEXT PRIMARY KEY,
       branch_name TEXT NOT NULL UNIQUE,
       parent_branch TEXT,
       created_at INTEGER NOT NULL,
-      status TEXT DEFAULT 'active',       -- active | merged | abandoned | rollback
-      trigger_mode TEXT,                  -- diagnose | auto-evolve | issue-fix
-      trigger_ref TEXT,                   -- issue number or description
+      status TEXT DEFAULT 'active',
+      trigger_mode TEXT,
+      trigger_ref TEXT,
       baseline_run_id TEXT,
       latest_run_id TEXT,
       score_delta REAL,
-      files_changed TEXT,                 -- JSON array
+      files_changed TEXT,
       worktree_path TEXT,
-      metadata TEXT                       -- JSON
+      metadata TEXT
     );
+  `);
+}
 
-    -- Indexes for common queries
+function createIndexes(db: Database): void {
+  db.exec(`
     CREATE INDEX IF NOT EXISTS idx_traces_timestamp ON traces(timestamp);
     CREATE INDEX IF NOT EXISTS idx_traces_session ON traces(session_id);
     CREATE INDEX IF NOT EXISTS idx_evaluations_trace ON evaluations(trace_id);
@@ -169,8 +154,14 @@ function initializeSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_evolution_versions_status ON evolution_versions(status);
     CREATE INDEX IF NOT EXISTS idx_evolution_versions_branch ON evolution_versions(branch_name);
   `);
+}
 
-  // Add columns to test_cases if they don't exist (safe migration)
+/**
+ * Initialize database schema
+ */
+function initializeSchema(db: Database): void {
+  createTables(db);
+  createIndexes(db);
   migrateTestCasesTable(db);
   migrateBenchmarkRunsTable(db);
 }

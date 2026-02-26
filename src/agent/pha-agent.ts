@@ -221,6 +221,94 @@ export interface PHAAgentConfig {
 
 // LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createCustomModel(provider: string, modelId: string, baseUrl: string): Model<any> {
+  return {
+    id: modelId,
+    name: modelId,
+    api: "openai-completions" as const,
+    provider: provider,
+    baseUrl: baseUrl,
+    reasoning: false,
+    input: ["text", "image"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 16384,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resolveModelInstance(provider: string, modelId: string, baseUrl?: string): Model<any> {
+  if (BUILTIN_PROVIDERS.includes(provider as LLMProvider)) {
+    // @ts-expect-error - dynamic model selection
+    const model = getModel(provider, modelId);
+    if (model) return model;
+    if (baseUrl) return createCustomModel(provider, modelId, baseUrl);
+  } else if (baseUrl) {
+    return createCustomModel(provider, modelId, baseUrl);
+  }
+
+  throw new Error(
+    baseUrl
+      ? `Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`
+      : `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(", ")}`
+  );
+}
+
+function buildAgentSystemPrompt(
+  userUuid: string | undefined,
+  profile?: PHAAgentConfig["profile"]
+): string {
+  const memoryManager = getMemoryManager();
+  if (userUuid) memoryManager.ensureUser(userUuid);
+
+  const skillOptions = profile?.skills
+    ? {
+        tags: profile.skills.tags,
+        include: profile.skills.include,
+        exclude: profile.skills.exclude ?? profile.skills.excludeTypes,
+      }
+    : undefined;
+  const contextOptions = profile
+    ? {
+        memory: profile.context.memory,
+        profile: profile.context.profile,
+        bootstrap: profile.context.bootstrap,
+      }
+    : undefined;
+
+  return memoryManager.buildSystemPrompt(userUuid || "anonymous", skillOptions, contextOptions);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resolveAgentTools(config: PHAAgentConfig, userUuid?: string): AgentTool<any>[] {
+  let registry = config.dataSource
+    ? globalRegistry.withDataSource(config.dataSource)
+    : globalRegistry;
+
+  if (userUuid) {
+    registry = registry.withUserUuid(userUuid);
+  }
+
+  const defaultCategories: ToolCategory[] = [
+    "health",
+    "memory",
+    "profile",
+    "config",
+    "skill",
+    "presentation",
+    "planning",
+    "proactive",
+  ];
+  const baseTools =
+    config.tools ||
+    registry.toAgentToolsByCategories(config.profile?.tools.categories || defaultCategories);
+
+  return config.extraTools && config.extraTools.length > 0
+    ? [...baseTools, ...config.extraTools]
+    : baseTools;
+}
+
 export class PHAAgent {
   private agent: Agent;
   private config: PHAAgentConfig;
@@ -240,132 +328,25 @@ export class PHAAgent {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let model: Model<any>;
+    const model = resolveModelInstance(provider, modelId, config.baseUrl);
+    const systemPrompt = buildAgentSystemPrompt(this.userUuid, config.profile);
+    const tools = resolveAgentTools(config, this.userUuid);
 
-    if (BUILTIN_PROVIDERS.includes(provider)) {
-      // Try built-in pi-ai provider first (has proper compat settings)
-      // @ts-expect-error - dynamic model selection
-      model = getModel(provider, modelId);
-
-      if (!model && config.baseUrl) {
-        // Model not in registry but provider is known — use custom baseUrl as fallback
-        model = {
-          id: modelId,
-          name: modelId,
-          api: "openai-completions" as const,
-          provider: provider,
-          baseUrl: config.baseUrl,
-          reasoning: false,
-          input: ["text", "image"],
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: 128000,
-          maxTokens: 16384,
-        };
-      }
-    } else if (config.baseUrl) {
-      // Non-built-in provider with custom baseUrl
-      model = {
-        id: modelId,
-        name: modelId,
-        api: "openai-completions" as const,
-        provider: provider,
-        baseUrl: config.baseUrl,
-        reasoning: false,
-        input: ["text", "image"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128000,
-        maxTokens: 16384,
-      };
-    } else {
-      // For non-built-in providers without baseUrl
-      throw new Error(
-        `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(", ")}`
-      );
-    }
-
-    if (!model) {
-      throw new Error(
-        `Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`
-      );
-    }
-
-    // Build system prompt with user profile + memory
-    const memoryManager = getMemoryManager();
-    if (this.userUuid) {
-      memoryManager.ensureUser(this.userUuid);
-    }
-    const skillOptions = config.profile?.skills
-      ? {
-          tags: config.profile.skills.tags,
-          include: config.profile.skills.include,
-          exclude: config.profile.skills.exclude ?? config.profile.skills.excludeTypes,
-        }
-      : undefined;
-    const contextOptions = config.profile
-      ? {
-          memory: config.profile.context.memory,
-          profile: config.profile.context.profile,
-          bootstrap: config.profile.context.bootstrap,
-        }
-      : undefined;
-    const systemPrompt = memoryManager.buildSystemPrompt(
-      this.userUuid || "anonymous",
-      skillOptions,
-      contextOptions
-    );
-
-    // Build LLM config for compaction summarization
     const llmConfig: LLMSummarizationConfig = {
-      provider: provider,
-      modelId: modelId,
-      apiKey: apiKey,
+      provider,
+      modelId,
+      apiKey,
       baseUrl: config.baseUrl,
       api: model.api,
     };
-
-    // Compaction flush: save context to memory before truncation
     const compactionFlush = createCompactionFlush(
-      {
-        contextWindow: model.contextWindow || 128000,
-        reserveTokens: 20000,
-        flushThreshold: 4000,
-      },
-      memoryManager,
+      { contextWindow: model.contextWindow || 128000, reserveTokens: 20000, flushThreshold: 4000 },
+      getMemoryManager(),
       this.userUuid || "anonymous",
       llmConfig,
       config.sessionId
     );
 
-    // Use per-session tools when a user-specific data source is provided
-    let registry = config.dataSource
-      ? globalRegistry.withDataSource(config.dataSource)
-      : globalRegistry;
-
-    // Bind session user UUID to all tools so getUserUuid() returns the correct UUID
-    if (this.userUuid) {
-      registry = registry.withUserUuid(this.userUuid);
-    }
-
-    const defaultCategories: ToolCategory[] = [
-      "health",
-      "memory",
-      "profile",
-      "config",
-      "skill",
-      "presentation",
-      "planning",
-      "proactive",
-    ];
-    const baseTools =
-      config.tools ||
-      registry.toAgentToolsByCategories(config.profile?.tools.categories || defaultCategories);
-    const tools =
-      config.extraTools && config.extraTools.length > 0
-        ? [...baseTools, ...config.extraTools]
-        : baseTools;
-
-    // Convert persisted session messages to AgentMessage[] for context recovery
     const messages = config.sessionMessages ? sessionToAgentMessages(config.sessionMessages) : [];
 
     this.agent = new Agent({
