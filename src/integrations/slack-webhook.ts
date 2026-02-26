@@ -138,20 +138,77 @@ export async function handleSlackWebhook(
     };
   }
 
-  const typeEmoji = { bug: "🐛", effect: "📉", unclassified: "❓" }[classification.type];
-  const confidencePct = (classification.confidence * 100).toFixed(0);
-
   return {
     id,
     classification,
     traceId,
     persisted: true,
-    message:
-      `${typeEmoji} Incident recorded (ID: \`${id.slice(0, 8)}\`)\n` +
-      `分类: *${classification.type}* (置信度 ${confidencePct}%)\n` +
-      `优先级: ${classification.priority}\n` +
-      `原因: ${classification.reason}\n${
-        traceId ? `Trace ID: \`${traceId}\`\n` : ""
-      }\n在 Evolution Lab → Incidents 查看详情。`,
+    message: buildReply(id, rawText, classification, traceId),
   };
+}
+
+/**
+ * Build a conversational Slack reply based on classification quality.
+ *
+ * - High confidence + enough context  → confirm + brief summary
+ * - Low confidence or too vague       → confirm + ask ONE targeted follow-up
+ * - Unclassified                      → confirm + ask what went wrong
+ */
+function buildReply(
+  id: string,
+  rawText: string,
+  classification: ClassificationResult,
+  traceId: string | undefined
+): string {
+  const shortId = id.slice(0, 8);
+  const isVague = rawText.length < 30 || classification.confidence < 0.55;
+
+  const followUp = getFollowUp(classification, rawText);
+
+  if (isVague || classification.type === "unclassified") {
+    // Acknowledge but ask for more context
+    return `已记录（\`${shortId}\`）。${traceId ? ` Trace: \`${traceId}\`` : ""}\n\n${followUp}`;
+  }
+
+  // Clear enough — confirm with light summary
+  const typeLabel: Record<string, string> = {
+    bug: "🐛 Bug",
+    effect: "📉 效果问题",
+    unclassified: "❓ 待分类",
+  };
+  const label = typeLabel[classification.type] ?? classification.type;
+  const priorityLabel: Record<string, string> = {
+    high: "⚠️ 高",
+    medium: "中",
+    low: "低",
+    ignore: "忽略",
+  };
+  const priority = priorityLabel[classification.priority] ?? classification.priority;
+
+  return `${label} 已记录（\`${shortId}\`），优先级 ${priority}。${
+    traceId ? ` Trace: \`${traceId}\`` : ""
+  }${followUp ? `\n\n${followUp}` : ""}`;
+}
+
+/**
+ * Pick the single most useful follow-up question based on context.
+ */
+function getFollowUp(classification: ClassificationResult, rawText: string): string {
+  const lower = rawText.toLowerCase();
+
+  if (classification.type === "bug") {
+    // Bug but short description
+    return "能描述一下具体的异常行为吗？比如：工具调用失败、返回了错误数据、页面报错等。";
+  }
+
+  if (classification.type === "effect") {
+    // Effect — ask what specifically was wrong
+    if (lower.includes("不好") || lower.includes("效果") || lower.includes("感觉")) {
+      return "能说说哪里不满意吗？是*回答太泛*、*建议不实用*、*答非所问*，还是*语气有问题*？";
+    }
+    return "Agent 的回答具体哪里不符合预期？";
+  }
+
+  // Unclassified or unclear
+  return "能多说一点吗？比如：Agent 具体回答了什么，以及哪里不对或不满意。";
 }
