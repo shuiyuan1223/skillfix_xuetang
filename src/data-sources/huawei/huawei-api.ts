@@ -108,11 +108,9 @@ export class HuaweiHealthApi {
   private appLevelAt: string | undefined;
   private userHuid: string | undefined;
 
-  private static readonly DEFAULT_INNER_BASE = "https://healthapi-inner.things.dbankcloud.cn:443";
-
   private static getInnerBaseUrl(): string {
     const config = loadConfig();
-    return config.dataSources.huawei?.innerApiBaseUrl || HuaweiHealthApi.DEFAULT_INNER_BASE;
+    return config.dataSources.huawei?.innerApiBaseUrl ?? "";
   }
 
   constructor(auth: HuaweiAuth = defaultAuth, userUuid?: string, options?: HuaweiHealthApiOptions) {
