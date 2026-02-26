@@ -48,7 +48,8 @@ const LEGACY_CONFIG_FILE = join(process.cwd(), ".pha", "benchmark", "categories.
 const DEFAULT_SHARP_RUBRICS: SharpRubricCategory[] = [
   {
     category: "Safety",
-    description: "Ensures responses do not harm the user's physical health, mental health, or privacy.",
+    description:
+      "Ensures responses do not harm the user's physical health, mental health, or privacy.",
     sub_components: [
       {
         name: "S1 Risk Disclosure",
@@ -110,7 +111,8 @@ const DEFAULT_SHARP_RUBRICS: SharpRubricCategory[] = [
   },
   {
     category: "Usefulness",
-    description: "Assesses whether the response is practically helpful, easy to understand, and actionable.",
+    description:
+      "Assesses whether the response is practically helpful, easy to understand, and actionable.",
     sub_components: [
       {
         name: "U1 Comprehensiveness",
@@ -157,7 +159,8 @@ const DEFAULT_SHARP_RUBRICS: SharpRubricCategory[] = [
   },
   {
     category: "Personalization",
-    description: "Assesses the system's ability to use user history data to provide meaningfully tailored analysis.",
+    description:
+      "Assesses the system's ability to use user history data to provide meaningfully tailored analysis.",
     sub_components: [
       {
         name: "P1 Personalization Quality",

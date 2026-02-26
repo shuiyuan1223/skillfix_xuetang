@@ -4151,15 +4151,25 @@ export function generateToolCards(toolName: string, result: unknown): ToolCardRe
   if (isRange) {
     switch (toolName) {
       case "get_sleep":
-        return generateSleepRangeCards(data as Array<{ date: string; hours: number; qualityScore?: number }>);
+        return generateSleepRangeCards(
+          data as Array<{ date: string; hours: number; qualityScore?: number }>
+        );
       case "get_heart_rate":
-        return generateHeartRateRangeCards(data as Array<{ date: string; avg: number; max: number; min: number }>);
+        return generateHeartRateRangeCards(
+          data as Array<{ date: string; avg: number; max: number; min: number }>
+        );
       case "get_health_data":
-        return generateHealthDataRangeCards(data as Array<{ date: string; steps: number; calories: number }>);
+        return generateHealthDataRangeCards(
+          data as Array<{ date: string; steps: number; calories: number }>
+        );
       case "get_stress":
-        return generateStressRangeCards(data as Array<{ date: string; avg: number; max: number; min: number }>);
+        return generateStressRangeCards(
+          data as Array<{ date: string; avg: number; max: number; min: number }>
+        );
       case "get_spo2":
-        return generateSpo2RangeCards(data as Array<{ date: string; avg: number; max: number; min: number }>);
+        return generateSpo2RangeCards(
+          data as Array<{ date: string; avg: number; max: number; min: number }>
+        );
       default:
         return generateGenericRangeCards(toolName, data as Array<Record<string, unknown>>);
     }
@@ -5084,7 +5094,9 @@ function generateSleepRangeCards(
   const avgQuality =
     withData.filter((d) => d.qualityScore != null).length > 0
       ? Math.round(
-          withData.filter((d) => d.qualityScore != null).reduce((s, d) => s + (d.qualityScore || 0), 0) /
+          withData
+            .filter((d) => d.qualityScore != null)
+            .reduce((s, d) => s + (d.qualityScore || 0), 0) /
             withData.filter((d) => d.qualityScore != null).length
         )
       : null;
@@ -5107,7 +5119,8 @@ function generateSleepRangeCards(
     color: "#f59e0b",
   });
 
-  const bestDay = withData.length > 0 ? withData.reduce((a, b) => (a.hours > b.hours ? a : b)) : null;
+  const bestDay =
+    withData.length > 0 ? withData.reduce((a, b) => (a.hours > b.hours ? a : b)) : null;
   const bestCard = ui.statCard({
     title: t("sleep.deepSleep"),
     value: bestDay ? `${bestDay.hours}h` : "--",
@@ -5153,26 +5166,56 @@ function generateHeartRateRangeCards(
   if (!data || data.length === 0) return null;
 
   const withData = data.filter((d) => d.avg > 0);
-  const avgHR = withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
+  const avgHR =
+    withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
   const maxHR = withData.length > 0 ? Math.max(...withData.map((d) => d.max)) : 0;
   const minHR = withData.length > 0 ? Math.min(...withData.map((d) => d.min)) : 0;
 
   const ui = new A2UIGenerator("ic-hr-range");
 
-  const avgCard = ui.statCard({ title: t("health.restingHR"), value: avgHR || "--", subtitle: t("health.bpmUnit"), icon: "heart", color: "#ef4444" });
-  const maxCard = ui.statCard({ title: t("health.maxHR"), value: maxHR || "--", subtitle: t("health.bpmMax"), icon: "trending-up", color: "#f97316" });
-  const minCard = ui.statCard({ title: t("health.minHR"), value: minHR || "--", subtitle: t("health.bpmMin"), icon: "trending-down", color: "#3b82f6" });
+  const avgCard = ui.statCard({
+    title: t("health.restingHR"),
+    value: avgHR || "--",
+    subtitle: t("health.bpmUnit"),
+    icon: "heart",
+    color: "#ef4444",
+  });
+  const maxCard = ui.statCard({
+    title: t("health.maxHR"),
+    value: maxHR || "--",
+    subtitle: t("health.bpmMax"),
+    icon: "trending-up",
+    color: "#f97316",
+  });
+  const minCard = ui.statCard({
+    title: t("health.minHR"),
+    value: minHR || "--",
+    subtitle: t("health.bpmMin"),
+    icon: "trending-down",
+    color: "#3b82f6",
+  });
 
   const statsGrid = ui.grid([avgCard, maxCard, minCard], { columns: 3, gap: 12 });
   const children: string[] = [statsGrid];
 
   const chartData = data.map((d) => ({ label: shortDateLabel(d.date), value: d.avg }));
   const chartLabel = ui.text(t("health.heartRateTrend"), "label");
-  const chart = ui.chart({ chartType: "line", data: chartData, xKey: "label", yKey: "value", height: 160, color: "#ef4444" });
+  const chart = ui.chart({
+    chartType: "line",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#ef4444",
+  });
   const chartCard = ui.card([chartLabel, chart], { padding: 12 });
   children.push(chartCard);
 
-  const viewBtn = ui.button(t("health.title"), "navigate:health", { variant: "outline", size: "sm", icon: "chevron-right" });
+  const viewBtn = ui.button(t("health.title"), "navigate:health", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
   children.push(viewBtn);
 
   const root = ui.column(children, { gap: 12 });
@@ -5185,25 +5228,57 @@ function generateHealthDataRangeCards(
   if (!data || data.length === 0) return null;
 
   const withData = data.filter((d) => d.steps > 0);
-  const avgSteps = withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.steps, 0) / withData.length) : 0;
+  const avgSteps =
+    withData.length > 0
+      ? Math.round(withData.reduce((s, d) => s + d.steps, 0) / withData.length)
+      : 0;
   const totalCal = data.reduce((s, d) => s + (d.calories || 0), 0);
 
   const ui = new A2UIGenerator("ic-health-range");
 
-  const avgCard = ui.statCard({ title: t("activity.steps"), value: avgSteps.toLocaleString(), subtitle: "avg/day", icon: "footprints", color: "#10b981" });
-  const calCard = ui.statCard({ title: t("activity.calories"), value: totalCal.toLocaleString(), subtitle: `${data.length} days`, icon: "flame", color: "#f97316" });
-  const daysCard = ui.statCard({ title: t("activity.activeTime"), value: `${withData.length}/${data.length}`, subtitle: "days", icon: "timer", color: "#3b82f6" });
+  const avgCard = ui.statCard({
+    title: t("activity.steps"),
+    value: avgSteps.toLocaleString(),
+    subtitle: "avg/day",
+    icon: "footprints",
+    color: "#10b981",
+  });
+  const calCard = ui.statCard({
+    title: t("activity.calories"),
+    value: totalCal.toLocaleString(),
+    subtitle: `${data.length} days`,
+    icon: "flame",
+    color: "#f97316",
+  });
+  const daysCard = ui.statCard({
+    title: t("activity.activeTime"),
+    value: `${withData.length}/${data.length}`,
+    subtitle: "days",
+    icon: "timer",
+    color: "#3b82f6",
+  });
 
   const statsGrid = ui.grid([avgCard, calCard, daysCard], { columns: 3, gap: 12 });
   const children: string[] = [statsGrid];
 
   const chartData = data.map((d) => ({ label: shortDateLabel(d.date), value: d.steps }));
   const chartLabel = ui.text(t("dashboard.stepsTrend"), "label");
-  const chart = ui.chart({ chartType: "bar", data: chartData, xKey: "label", yKey: "value", height: 160, color: "#10b981" });
+  const chart = ui.chart({
+    chartType: "bar",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#10b981",
+  });
   const chartCard = ui.card([chartLabel, chart], { padding: 12 });
   children.push(chartCard);
 
-  const viewBtn = ui.button(t("activity.title"), "navigate:activity", { variant: "outline", size: "sm", icon: "chevron-right" });
+  const viewBtn = ui.button(t("activity.title"), "navigate:activity", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
   children.push(viewBtn);
 
   const root = ui.column(children, { gap: 12 });
@@ -5216,21 +5291,47 @@ function generateStressRangeCards(
   if (!data || data.length === 0) return null;
 
   const withData = data.filter((d) => d.avg > 0);
-  const avgStress = withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
+  const avgStress =
+    withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
   const maxStress = withData.length > 0 ? Math.max(...withData.map((d) => d.max)) : 0;
 
   const ui = new A2UIGenerator("ic-stress-range");
 
-  const avgCard = ui.statCard({ title: t("health.stress"), value: avgStress || "--", subtitle: "/99 avg", icon: "brain", color: avgStress > 60 ? "#ef4444" : "#10b981" });
-  const maxCard = ui.statCard({ title: t("health.maxHR"), value: maxStress || "--", subtitle: "peak", icon: "trending-up", color: "#f97316" });
-  const daysCard = ui.statCard({ title: "Range", value: `${data.length}`, subtitle: "days", icon: "calendar", color: "#3b82f6" });
+  const avgCard = ui.statCard({
+    title: t("health.stress"),
+    value: avgStress || "--",
+    subtitle: "/99 avg",
+    icon: "brain",
+    color: avgStress > 60 ? "#ef4444" : "#10b981",
+  });
+  const maxCard = ui.statCard({
+    title: t("health.maxHR"),
+    value: maxStress || "--",
+    subtitle: "peak",
+    icon: "trending-up",
+    color: "#f97316",
+  });
+  const daysCard = ui.statCard({
+    title: "Range",
+    value: `${data.length}`,
+    subtitle: "days",
+    icon: "calendar",
+    color: "#3b82f6",
+  });
 
   const statsGrid = ui.grid([avgCard, maxCard, daysCard], { columns: 3, gap: 12 });
   const children: string[] = [statsGrid];
 
   const chartData = data.map((d) => ({ label: shortDateLabel(d.date), value: d.avg }));
   const chartLabel = ui.text(t("health.stressLevel"), "label");
-  const chart = ui.chart({ chartType: "area", data: chartData, xKey: "label", yKey: "value", height: 160, color: "#8b5cf6" });
+  const chart = ui.chart({
+    chartType: "area",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#8b5cf6",
+  });
   const chartCard = ui.card([chartLabel, chart], { padding: 12 });
   children.push(chartCard);
 
@@ -5244,21 +5345,46 @@ function generateSpo2RangeCards(
   if (!data || data.length === 0) return null;
 
   const withData = data.filter((d) => d.avg > 0);
-  const avgSpo2 = withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
+  const avgSpo2 =
+    withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
   const minSpo2 = withData.length > 0 ? Math.min(...withData.map((d) => d.min)) : 0;
 
   const ui = new A2UIGenerator("ic-spo2-range");
 
-  const avgCard = ui.statCard({ title: t("health.spo2"), value: avgSpo2 > 0 ? `${avgSpo2}%` : "--", icon: "wind", color: avgSpo2 < 95 ? "#ef4444" : "#10b981" });
-  const minCard = ui.statCard({ title: t("health.minHR"), value: minSpo2 > 0 ? `${minSpo2}%` : "--", subtitle: "lowest", icon: "trending-down", color: "#3b82f6" });
-  const daysCard = ui.statCard({ title: "Range", value: `${data.length}`, subtitle: "days", icon: "calendar", color: "#8b5cf6" });
+  const avgCard = ui.statCard({
+    title: t("health.spo2"),
+    value: avgSpo2 > 0 ? `${avgSpo2}%` : "--",
+    icon: "wind",
+    color: avgSpo2 < 95 ? "#ef4444" : "#10b981",
+  });
+  const minCard = ui.statCard({
+    title: t("health.minHR"),
+    value: minSpo2 > 0 ? `${minSpo2}%` : "--",
+    subtitle: "lowest",
+    icon: "trending-down",
+    color: "#3b82f6",
+  });
+  const daysCard = ui.statCard({
+    title: "Range",
+    value: `${data.length}`,
+    subtitle: "days",
+    icon: "calendar",
+    color: "#8b5cf6",
+  });
 
   const statsGrid = ui.grid([avgCard, minCard, daysCard], { columns: 3, gap: 12 });
   const children: string[] = [statsGrid];
 
   const chartData = data.map((d) => ({ label: shortDateLabel(d.date), value: d.avg }));
   const chartLabel = ui.text(t("health.spo2"), "label");
-  const chart = ui.chart({ chartType: "line", data: chartData, xKey: "label", yKey: "value", height: 160, color: "#10b981" });
+  const chart = ui.chart({
+    chartType: "line",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#10b981",
+  });
   const chartCard = ui.card([chartLabel, chart], { padding: 12 });
   children.push(chartCard);
 
@@ -5267,7 +5393,10 @@ function generateSpo2RangeCards(
 }
 
 /** Generic range fallback: renders array data as a data table */
-function generateGenericRangeCards(_toolName: string, data: Array<Record<string, unknown>>): ToolCardResult | null {
+function generateGenericRangeCards(
+  _toolName: string,
+  data: Array<Record<string, unknown>>
+): ToolCardResult | null {
   if (!data || data.length === 0) return null;
   return generateGenericToolCards(data);
 }

@@ -37,7 +37,10 @@ const log = createLogger("Huawei/DataSource");
 /** Serialize error for structured logging (Error objects stringify to {} by default) */
 function errMsg(error: unknown): { message: string; code?: string } {
   if (error instanceof Error) {
-    return { message: error.message, ...(("code" in error) ? { code: String((error as any).code) } : {}) };
+    return {
+      message: error.message,
+      ...("code" in error ? { code: String((error as any).code) } : {}),
+    };
   }
   return { message: String(error) };
 }

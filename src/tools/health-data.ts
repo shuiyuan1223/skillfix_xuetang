@@ -39,11 +39,13 @@ function resolveDate(date?: string): string {
 const dateRangeProperties = {
   date: {
     type: "string",
-    description: "Single date (YYYY-MM-DD). Use 'today' for today. Ignored when startDate+endDate provided.",
+    description:
+      "Single date (YYYY-MM-DD). Use 'today' for today. Ignored when startDate+endDate provided.",
   },
   startDate: {
     type: "string",
-    description: "Range start (YYYY-MM-DD). Use with endDate for multi-day queries like '最近一周/一个月'.",
+    description:
+      "Range start (YYYY-MM-DD). Use with endDate for multi-day queries like '最近一周/一个月'.",
   },
   endDate: {
     type: "string",
@@ -173,8 +175,7 @@ export const getWorkoutsTool: PHATool<DateOrRangeArgs> = {
 
 export const getWeeklySummaryTool: PHATool<{}> = {
   name: "get_weekly_summary",
-  description:
-    "获取 7 天步数和睡眠汇总。返回步数和睡眠两个维度的每日数据及平均值。",
+  description: "获取 7 天步数和睡眠汇总。返回步数和睡眠两个维度的每日数据及平均值。",
   displayName: "周报汇总",
   category: "health" as const,
   icon: "calendar",
@@ -244,7 +245,11 @@ export const getStressTool: PHATool<DateOrRangeArgs> = {
     }
     const date = resolveDate(args.date);
     if (!source.getStress) {
-      return { success: true, data: null, message: "Stress data not supported by this data source." };
+      return {
+        success: true,
+        data: null,
+        message: "Stress data not supported by this data source.",
+      };
     }
     const stress = await source.getStress(date);
     if (!stress) {
@@ -314,7 +319,11 @@ export const getBloodPressureTool: PHATool<DateOrRangeArgs> = {
     }
     const date = resolveDate(args.date);
     if (!source.getBloodPressure) {
-      return { success: true, data: null, message: "Blood pressure not supported by this data source." };
+      return {
+        success: true,
+        data: null,
+        message: "Blood pressure not supported by this data source.",
+      };
     }
     const bp = await source.getBloodPressure(date);
     return bp
@@ -385,7 +394,11 @@ export const getBodyCompositionTool: PHATool<DateOrRangeArgs> = {
     }
     const date = resolveDate(args.date);
     if (!source.getBodyComposition) {
-      return { success: true, data: null, message: "Body composition not supported by this data source." };
+      return {
+        success: true,
+        data: null,
+        message: "Body composition not supported by this data source.",
+      };
     }
     const bc = await source.getBodyComposition(date);
     return bc
@@ -640,7 +653,10 @@ export function createHealthTools(source: HealthDataSource) {
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
           if (!source.getMetricsRange) {
-            return { success: false, message: "Date range query not supported by this data source." };
+            return {
+              success: false,
+              message: "Date range query not supported by this data source.",
+            };
           }
           const data = await source.getMetricsRange(args.startDate, args.endDate);
           return { success: true, data, mode: "range" };
@@ -655,7 +671,10 @@ export function createHealthTools(source: HealthDataSource) {
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
           if (!source.getHeartRateRange) {
-            return { success: false, message: "Date range query not supported by this data source." };
+            return {
+              success: false,
+              message: "Date range query not supported by this data source.",
+            };
           }
           const data = await source.getHeartRateRange(args.startDate, args.endDate);
           return { success: true, data, mode: "range" };
@@ -670,7 +689,10 @@ export function createHealthTools(source: HealthDataSource) {
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
           if (!source.getSleepRange) {
-            return { success: false, message: "Date range query not supported by this data source." };
+            return {
+              success: false,
+              message: "Date range query not supported by this data source.",
+            };
           }
           const data = await source.getSleepRange(args.startDate, args.endDate);
           return { success: true, data, mode: "range" };
@@ -688,7 +710,10 @@ export function createHealthTools(source: HealthDataSource) {
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
           if (!source.getWorkoutsRange) {
-            return { success: false, message: "Date range query not supported by this data source." };
+            return {
+              success: false,
+              message: "Date range query not supported by this data source.",
+            };
           }
           const data = await source.getWorkoutsRange(args.startDate, args.endDate);
           return { success: true, data, count: data.length, mode: "range" };
@@ -727,7 +752,10 @@ export function createHealthTools(source: HealthDataSource) {
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
           if (!source.getStressRange) {
-            return { success: false, message: "Date range query not supported by this data source." };
+            return {
+              success: false,
+              message: "Date range query not supported by this data source.",
+            };
           }
           const data = await source.getStressRange(args.startDate, args.endDate);
           return { success: true, data, mode: "range" };
@@ -747,7 +775,10 @@ export function createHealthTools(source: HealthDataSource) {
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
           if (!source.getSpO2Range) {
-            return { success: false, message: "Date range query not supported by this data source." };
+            return {
+              success: false,
+              message: "Date range query not supported by this data source.",
+            };
           }
           const data = await source.getSpO2Range(args.startDate, args.endDate);
           return { success: true, data, mode: "range" };
@@ -767,7 +798,10 @@ export function createHealthTools(source: HealthDataSource) {
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
           if (!source.getBloodPressureRange) {
-            return { success: false, message: "Date range query not supported by this data source." };
+            return {
+              success: false,
+              message: "Date range query not supported by this data source.",
+            };
           }
           const data = await source.getBloodPressureRange(args.startDate, args.endDate);
           return { success: true, data, mode: "range" };
@@ -800,7 +834,10 @@ export function createHealthTools(source: HealthDataSource) {
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
           if (!source.getBodyCompositionRange) {
-            return { success: false, message: "Date range query not supported by this data source." };
+            return {
+              success: false,
+              message: "Date range query not supported by this data source.",
+            };
           }
           const data = await source.getBodyCompositionRange(args.startDate, args.endDate);
           return { success: true, data, mode: "range" };

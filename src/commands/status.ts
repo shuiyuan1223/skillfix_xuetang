@@ -78,7 +78,9 @@ export function registerStatusCommand(program: Command): void {
       if (gatewayRunning && config) {
         try {
           const statusBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
-          const response = await fetch(`http://localhost:${config.gateway.port}${statusBasePath}/health`);
+          const response = await fetch(
+            `http://localhost:${config.gateway.port}${statusBasePath}/health`
+          );
           gatewayHealth = (await response.json()) as { uptime?: number };
           if (gatewayHealth?.uptime) {
             const hours = Math.floor(gatewayHealth.uptime / 3600);

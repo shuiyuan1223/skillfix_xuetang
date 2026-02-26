@@ -121,22 +121,29 @@ export class ProactiveTriggerEngine {
     // Fetch health data for auto-sync
     try {
       const source = this.getDataSourceForUser(uuid);
-      const todayDate = new Date(today + "T00:00:00");
+      const todayDate = new Date(`${today}T00:00:00`);
       const dayOfWeek = todayDate.getDay();
       const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       const weekStart = new Date(todayDate);
       weekStart.setDate(todayDate.getDate() - mondayOffset);
       const weekStartStr = weekStart.toISOString().split("T")[0];
-      const [weeklySteps, weeklySleep, todayHR, todayWorkouts, weeklyWorkouts, todayMetrics, todayBodyComp] =
-        await Promise.all([
-          source.getWeeklySteps(today).catch(() => []),
-          source.getWeeklySleep(today).catch(() => []),
-          source.getHeartRate(today).catch(() => null),
-          source.getWorkouts(today).catch(() => []),
-          source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
-          source.getMetrics(today).catch(() => null),
-          source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
-        ]);
+      const [
+        weeklySteps,
+        weeklySleep,
+        todayHR,
+        todayWorkouts,
+        weeklyWorkouts,
+        todayMetrics,
+        todayBodyComp,
+      ] = await Promise.all([
+        source.getWeeklySteps(today).catch(() => []),
+        source.getWeeklySleep(today).catch(() => []),
+        source.getHeartRate(today).catch(() => null),
+        source.getWorkouts(today).catch(() => []),
+        source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
+        source.getMetrics(today).catch(() => null),
+        source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
+      ]);
 
       const snapshot: HealthSnapshot = {
         weeklySteps,

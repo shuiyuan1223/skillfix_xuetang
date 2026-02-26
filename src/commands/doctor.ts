@@ -197,9 +197,12 @@ export function registerDoctorCommand(program: Command): void {
         const drBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
         let gatewayHealthy = false;
         try {
-          const response = await fetch(`http://localhost:${config.gateway.port}${drBasePath}/health`, {
-            signal: AbortSignal.timeout(2000),
-          });
+          const response = await fetch(
+            `http://localhost:${config.gateway.port}${drBasePath}/health`,
+            {
+              signal: AbortSignal.timeout(2000),
+            }
+          );
           gatewayHealthy = response.ok;
         } catch {
           gatewayHealthy = false;
