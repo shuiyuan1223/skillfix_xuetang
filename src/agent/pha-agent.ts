@@ -560,7 +560,9 @@ export class PHAAgent {
           lines.push(`📊 ${args.title}`, "");
         }
 
-        const highlights = args?.highlights as Array<{ label: string; value: string | number; unit?: string; status?: string }> | undefined;
+        const highlights = args?.highlights as
+          | Array<{ label: string; value: string | number; unit?: string; status?: string }>
+          | undefined;
         if (highlights && highlights.length > 0) {
           for (const h of highlights) {
             const unit = h.unit ? h.unit : "";
