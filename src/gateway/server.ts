@@ -503,13 +503,68 @@ export function createGatewayApp(): Hono {
     return c.json(result);
   });
 
-  // Slack webhook endpoint
+  // Slack webhook endpoint — handles three integration modes:
+  //   1. url_verification  — Slack challenge during app setup
+  //   2. event_callback    — Events API (message in dedicated channel)
+  //   3. Slash Command / Outgoing Webhook — text + command/trigger_word fields
   app.post("/api/integrations/slack/webhook", async (c) => {
-    try {
-      const body = await c.req.json();
-      const { handleSlackWebhook } = await import("../integrations/slack-webhook.js");
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const body = await c.req.json();
 
-      // Provide LLM call for classification using the judge model config
+    // ── 1. URL verification (Slack sends this when you save the Request URL) ──
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (body.type === "url_verification") {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      return c.json({ challenge: body.challenge });
+    }
+
+    // ── 2. Events API: event_callback ─────────────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (body.type === "event_callback") {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const event = body.event as Record<string, unknown> | undefined;
+      if (!event || event.type !== "message" || event.bot_id) {
+        // Ignore non-message events and bot messages (avoid infinite loops)
+        return c.json({ ok: true });
+      }
+
+      // Respond 200 immediately — Slack requires response within 3 seconds
+      // Classification (LLM) runs asynchronously after response
+      void (async (): Promise<void> => {
+        try {
+          const { handleSlackWebhook } = await import("../integrations/slack-webhook.js");
+          const judgeModel = resolveAgentProfileModel("pha");
+          const llmCall = async (prompt: string): Promise<string> => {
+            const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
+            const judgeAgent = await createPHAAgent({
+              apiKey: judgeModel.apiKey,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              provider: judgeModel.provider as any,
+              modelId: judgeModel.modelId,
+              baseUrl: judgeModel.baseUrl,
+              dataSource: new JudgeMockDS(),
+            });
+            return judgeAgent.chatAndWait(prompt);
+          };
+          await handleSlackWebhook(
+            {
+              text: String(event.text ?? ""),
+              user_id: String(event.user ?? ""),
+              channel_id: String(event.channel ?? ""),
+            },
+            llmCall
+          );
+        } catch {
+          // Errors logged silently — not surfaced to Slack for async events
+        }
+      })();
+
+      return c.json({ ok: true });
+    }
+
+    // ── 3. Slash Command / Outgoing Webhook ───────────────────────────────────
+    try {
+      const { handleSlackWebhook } = await import("../integrations/slack-webhook.js");
       const judgeModel = resolveAgentProfileModel("pha");
       const llmCall = async (prompt: string): Promise<string> => {
         const { MockDataSource: JudgeMockDS } = await import("../data-sources/mock.js");
@@ -524,6 +579,7 @@ export function createGatewayApp(): Hono {
         return judgeAgent.chatAndWait(prompt);
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       const result = await handleSlackWebhook(body, llmCall);
       return c.json({
         response_type: "in_channel",
