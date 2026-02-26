@@ -1196,6 +1196,46 @@ async function createFixIssuePR(
   }
 }
 
+async function fetchAndPrintIssue(issueNumber: number): Promise<{ title: string; body: string }> {
+  const issueSpinner = new Spinner("Fetching issue...");
+  issueSpinner.start();
+
+  let issue: { title: string; body: string };
+  try {
+    issue = await fetchGitHubIssue(issueNumber);
+    issueSpinner.stop("success");
+  } catch (error) {
+    issueSpinner.stop("error");
+    return fatal(
+      "Failed to fetch issue",
+      `Make sure gh CLI is installed and authenticated. Error: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  printKV("Issue", `#${issueNumber}: ${issue.title}`);
+  console.log("");
+  return issue;
+}
+
+function resolveFixIssueConfig(options: Record<string, unknown>): {
+  provider: LLMProvider;
+  modelId: string;
+  apiKey: string;
+  baseUrl: string | undefined;
+} {
+  const config = loadConfig();
+  const provider = ((options.provider as string) || config.llm.provider) as LLMProvider;
+  const modelId = (options.model as string) || config.llm.modelId || "";
+  const apiKey = resolveApiKey(config, provider);
+
+  if (!apiKey) {
+    fatal("No API key found", "Set an API key in config or environment");
+  }
+
+  const baseUrl = provider === config.llm.provider ? config.llm.baseUrl : undefined;
+  return { provider, modelId, apiKey, baseUrl };
+}
+
 async function handleFixIssue(
   issueNumberStr: string,
   options: Record<string, unknown>
@@ -1208,27 +1248,7 @@ async function handleFixIssue(
   console.log("");
   printHeader("Auto-Fix Issue", `#${issueNumber}`);
 
-  const issueSpinner = new Spinner("Fetching issue...");
-  issueSpinner.start();
-
-  let issueTitle: string;
-  let issueBody: string;
-  try {
-    const issue = await fetchGitHubIssue(issueNumber);
-    issueTitle = issue.title;
-    issueBody = issue.body;
-    issueSpinner.stop("success");
-  } catch (error) {
-    issueSpinner.stop("error");
-    fatal(
-      "Failed to fetch issue",
-      `Make sure gh CLI is installed and authenticated. Error: ${error instanceof Error ? error.message : String(error)}`
-    );
-    return;
-  }
-
-  printKV("Issue", `#${issueNumber}: ${issueTitle}`);
-  console.log("");
+  const { title: issueTitle, body: issueBody } = await fetchAndPrintIssue(issueNumber);
 
   info("This will:");
   console.log(`  1. Create worktree with evolution branch`);
@@ -1237,28 +1257,23 @@ async function handleFixIssue(
   if (options.createPr) console.log(`  4. Create a PR if improvements are found`);
   console.log("");
 
-  const config = loadConfig();
-  const fixProvider = ((options.provider as string) || config.llm.provider) as LLMProvider;
-  const fixModelId = (options.model as string) || config.llm.modelId || "";
-  const apiKey = resolveApiKey(config, fixProvider);
-
-  if (!apiKey) {
-    fatal("No API key found", "Set an API key in config or environment");
-    return;
-  }
-
-  const fixBaseUrl = fixProvider === config.llm.provider ? config.llm.baseUrl : undefined;
+  const fixCfg = resolveFixIssueConfig(options);
   const fixMockSource = new MockDataSource();
   const createFixAgent = async (): Promise<Awaited<ReturnType<typeof createPHAAgent>>> =>
     createPHAAgent({
-      apiKey,
-      provider: fixProvider,
-      modelId: fixModelId,
-      baseUrl: fixBaseUrl,
+      apiKey: fixCfg.apiKey,
+      provider: fixCfg.provider,
+      modelId: fixCfg.modelId,
+      baseUrl: fixCfg.baseUrl,
       dataSource: fixMockSource,
     });
 
-  const fixRawLLMCall = createLLMCallWithFallback(fixProvider, fixModelId, apiKey, fixBaseUrl);
+  const fixRawLLMCall = createLLMCallWithFallback(
+    fixCfg.provider,
+    fixCfg.modelId,
+    fixCfg.apiKey,
+    fixCfg.baseUrl
+  );
   await convertIssueToTestCase(issueNumber, issueTitle, issueBody, fixRawLLMCall);
 
   const loopSpinner = new Spinner("Running auto-loop in worktree...");
@@ -1304,384 +1319,495 @@ async function handleFixIssue(
   }
 }
 
-export function registerEvalCommand(program: Command): void {
-  const evalCmd = program.command("eval").description("Self-evolution evaluation system");
+// --- Extracted eval subcommand handlers ---
 
-  // eval traces
+async function handleTraces(options: Record<string, unknown>): Promise<void> {
+  const traces = traceCollector.getAllTraces();
+  const limit = parseInt(options.limit as string, 10);
+  const recent = traces.slice(-limit);
+
+  if (options.json) {
+    console.log(JSON.stringify(recent, null, 2));
+    return;
+  }
+
+  console.log("");
+  printHeader("📊 Interaction Traces", `${traces.length} total`);
+
+  if (recent.length === 0) {
+    console.log(`\n  ${c.dim("No traces recorded yet.")}`);
+    console.log(
+      `  ${c.dim("Use")} ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")} ${c.dim("to generate traces.")}\n`
+    );
+    return;
+  }
+
+  printTable(
+    ["ID", "Time", "User Message", "Tools", "Duration"],
+    recent.map((trace) => [
+      c.dim(trace.id.substring(0, 8)),
+      formatRelativeTime(new Date(trace.timestamp)),
+      truncate(trace.userMessage, 25),
+      trace.toolCalls?.length ? String(trace.toolCalls.length) : c.dim("-"),
+      formatDuration(trace.duration),
+    ])
+  );
+
+  console.log("");
+  printDivider();
+  console.log(
+    `\n  ${c.dim("Showing")} ${recent.length} ${c.dim("of")} ${traces.length} ${c.dim("traces")}`
+  );
+  console.log(`  ${c.dim("Use")} ${c.cyan("pha eval run")} ${c.dim("to evaluate traces")}`);
+  console.log("");
+}
+
+function printEvalAnalysis(analysis: ReturnType<typeof analyzer.analyze>): void {
+  printSection("Analysis Summary", "📈");
+
+  const avgScore = analysis.metrics.averageScore;
+  const scoreBar = progressBar(avgScore, 100, 20);
+  const avgLabel = scoreLabel(avgScore, 80, 60, ["Excellent", "Good", "Needs Improvement"]);
+  const avgLabelColored = scoreColor(avgScore, 80, 60)(avgLabel);
+
+  printKV("Average Score", `${c.bold(String(avgScore))} ${scoreBar} ${avgLabelColored}`);
+  printKV("Trend", trendLabel(analysis.metrics.improvementTrend));
+
+  if (analysis.weaknesses.length > 0) {
+    console.log("");
+    console.log(`  ${c.yellow(icons.warning)} ${c.bold("Weaknesses:")}`);
+    for (const weakness of analysis.weaknesses) {
+      const ic = impactColor(weakness.impact);
+      console.log(`    ${ic("●")} ${weakness.category}: ${c.dim(weakness.description)}`);
+    }
+  }
+
+  if (analysis.patterns.length > 0) {
+    console.log("");
+    console.log(`  ${c.cyan(icons.info)} ${c.bold("Patterns:")}`);
+    for (const pattern of analysis.patterns.slice(0, 3)) {
+      const pct = Math.round(pattern.frequency * 100);
+      console.log(`    ${c.dim("•")} ${pattern.type}: ${c.cyan(`${pct}%`)} of traces`);
+    }
+  }
+}
+
+async function handleEvalRun(options: Record<string, unknown>): Promise<void> {
+  const config = loadConfig();
+  const evalProvider = (options.provider || config.llm.provider) as LLMProvider;
+  const apiKey = resolveApiKey(config, evalProvider);
+
+  if (!apiKey) {
+    fatal("No API key found for evaluation", "Set an API key in config or environment");
+  }
+
+  const traces = traceCollector.getAllTraces();
+  if (traces.length === 0) {
+    info("No traces to evaluate");
+    console.log(
+      `  ${c.dim("Generate some first with")} ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")}\n`
+    );
+    return;
+  }
+
+  console.log("");
+  printHeader("🔬 Evaluation", `${traces.length} traces`);
+
+  const spinner = new Spinner(`Evaluating traces...`);
+  spinner.start();
+
+  const evalMockSource = new MockDataSource();
+  const agent = await createPHAAgent({
+    apiKey,
+    provider: (options.provider || config.llm.provider) as "anthropic" | "openai" | "google",
+    modelId: (options.model as string) || config.llm.modelId,
+    dataSource: evalMockSource,
+  });
+
+  const evaluator = new Evaluator({
+    llmCall: async (prompt: string) => {
+      return agent.chatAndWait(prompt);
+    },
+  });
+
+  const results = await evaluator.evaluateTraces(traces);
+  spinner.stop("success");
+
+  if (options.json) {
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
+
+  printSection("Results");
+  printTable(
+    ["Trace", "Score", "Accuracy", "Relevance", "Helpful", "Safety", "Issues"],
+    results.map((result) => {
+      const sc = scoreColor(result.overallScore, 80, 60);
+      return [
+        c.dim(result.traceId.substring(0, 8)),
+        sc(`${result.overallScore}/100`),
+        String(result.scores.accuracy),
+        String(result.scores.relevance),
+        String(result.scores.helpfulness),
+        String(result.scores.safety),
+        result.issues.length > 0 ? c.yellow(String(result.issues.length)) : c.dim("-"),
+      ];
+    })
+  );
+
+  const analysis = analyzer.analyze(results);
+  printEvalAnalysis(analysis);
+
+  console.log("");
+  printDivider();
+  console.log(
+    `\n  ${c.dim("Run")} ${c.cyan("pha eval optimize")} ${c.dim("to generate improvement suggestions")}\n`
+  );
+}
+
+function handleOptimize(options: Record<string, unknown>): void {
+  console.log("");
+  printHeader("🔧 Optimization", "Generate improvement suggestions");
+
+  printSection("How it works");
+  console.log(`
+  This feature analyzes recent evaluations and suggests improvements
+  to the system prompt and tool configurations.
+`);
+
+  printSection("Workflow");
+  const steps = [
+    { num: "1", action: "Generate traces", cmd: "pha tui or pha chat" },
+    { num: "2", action: "Run evaluation", cmd: "pha eval run" },
+    { num: "3", action: "Get suggestions", cmd: "pha eval optimize" },
+    { num: "4", action: "Apply changes", cmd: "pha eval optimize --apply" },
+  ];
+
+  for (const step of steps) {
+    console.log(`  ${c.cyan(step.num)}. ${step.action}`);
+    console.log(`     ${c.dim(step.cmd)}`);
+  }
+
+  if (options.apply) {
+    console.log("");
+    warn("--apply will modify the system prompt based on suggestions");
+    console.log(`  ${c.dim("Make sure to review suggestions before applying.")}`);
+  }
+
+  console.log("");
+}
+
+function handleClear(options: Record<string, unknown>): void {
+  const traces = traceCollector.getAllTraces();
+
+  if (traces.length === 0) {
+    info("No traces to clear");
+    return;
+  }
+
+  if (!options.force) {
+    warn(`This will delete ${traces.length} traces`);
+    console.log(`  ${c.dim("Use")} ${c.cyan("--force")} ${c.dim("to confirm")}\n`);
+    return;
+  }
+
+  traceCollector.clear();
+  success(`Cleared ${traces.length} traces`);
+}
+
+async function handleExport(options: Record<string, unknown>): Promise<void> {
+  const traces = traceCollector.getAllTraces();
+
+  if (traces.length === 0) {
+    info("No traces to export");
+    return;
+  }
+
+  const spinner = new Spinner("Exporting traces...");
+  spinner.start();
+
+  const data = traceCollector.exportTraces();
+  const fs = await import("fs");
+  fs.writeFileSync(options.output as string, data);
+
+  spinner.stop("success");
+  success(`Exported ${traces.length} traces to ${c.cyan(options.output as string)}`);
+}
+
+async function handleImport(file: string): Promise<void> {
+  const fs = await import("fs");
+  if (!fs.existsSync(file)) {
+    fatal(`File not found: ${file}`);
+  }
+
+  const spinner = new Spinner("Importing traces...");
+  spinner.start();
+
+  const content = fs.readFileSync(file, "utf-8");
+  traceCollector.importTraces(content);
+
+  spinner.stop("success");
+  success(`Imported traces from ${c.cyan(file)}`);
+}
+
+async function handleStats(): Promise<void> {
+  const traces = traceCollector.getAllTraces();
+
+  console.log("");
+  printHeader("📈 Evaluation Statistics");
+
+  if (traces.length === 0) {
+    console.log(`\n  ${c.dim("No data yet. Start by generating traces:")}`);
+    console.log(`  ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")}\n`);
+    return;
+  }
+
+  printSection("Overview");
+  printKV("Total Traces", c.bold(String(traces.length)));
+
+  const timestamps = traces.map((t) => new Date(t.timestamp).getTime());
+  const oldest = new Date(Math.min(...timestamps));
+  const newest = new Date(Math.max(...timestamps));
+  printKV("First Trace", formatRelativeTime(oldest));
+  printKV("Last Trace", formatRelativeTime(newest));
+
+  const durations = traces.map((t) => t.duration);
+  const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
+  const maxDuration = Math.max(...durations);
+  printKV("Avg Duration", formatDuration(avgDuration));
+  printKV("Max Duration", formatDuration(maxDuration));
+
+  const toolCounts: Record<string, number> = {};
+  for (const trace of traces) {
+    for (const call of trace.toolCalls || []) {
+      toolCounts[call.tool] = (toolCounts[call.tool] || 0) + 1;
+    }
+  }
+
+  if (Object.keys(toolCounts).length > 0) {
+    printSection("Tool Usage");
+    const sorted = Object.entries(toolCounts).sort((a, b) => b[1] - a[1]);
+    for (const [tool, toolCount] of sorted.slice(0, 5)) {
+      const pct = Math.round((toolCount / traces.length) * 100);
+      console.log(
+        `  ${c.cyan(tool.padEnd(25))} ${progressBar(toolCount, sorted[0][1], 15)} ${toolCount} ${c.dim(`(${pct}%)`)}`
+      );
+    }
+  }
+
+  console.log("");
+}
+
+async function handleSeed(options: Record<string, unknown>): Promise<void> {
+  console.log("");
+  printHeader("Benchmark Seed", "Populating test cases");
+
+  const existing = countTestCases();
+  if (existing > 0 && !options.force) {
+    info(`${existing} test cases already exist in the database`);
+    console.log(`  ${c.dim("Use")} ${c.cyan("--force")} ${c.dim("to overwrite")}\n`);
+    return;
+  }
+
+  const spinner = new Spinner("Seeding test cases...");
+  spinner.start();
+
+  const runner = new BenchmarkRunner({
+    agentCall: async () => ({ response: "" }),
+    llmCall: async () => "",
+  });
+
+  const seededCount = await runner.seedTestCases();
+  spinner.stop("success");
+
+  success(`Seeded ${seededCount} benchmark test cases`);
+
+  printSection("Categories");
+  const categories = new Map<string, number>();
+  for (const tc of ALL_BENCHMARK_TESTS) {
+    categories.set(tc.category, (categories.get(tc.category) || 0) + 1);
+  }
+  for (const [cat, catCount] of categories) {
+    const label = CATEGORY_LABELS[cat as BenchmarkCategory] || cat;
+    printKV(label, String(catCount));
+  }
+
+  const coreCount = ALL_BENCHMARK_TESTS.filter((t) => t.difficulty === "core").length;
+  console.log("");
+  printKV("Quick profile (core)", String(coreCount));
+  printKV("Full profile (all)", String(ALL_BENCHMARK_TESTS.length));
+
+  console.log("");
+  console.log(
+    `  ${c.dim("Run")} ${c.cyan("pha eval benchmark")} ${c.dim("to execute benchmarks")}\n`
+  );
+  closeDatabase();
+  process.exit(0);
+}
+
+async function handleRuns(options: Record<string, unknown>): Promise<void> {
+  const limit = parseInt(options.limit as string, 10) || 10;
+  const runs = getRecentRuns(limit);
+
+  if (options.json) {
+    console.log(JSON.stringify(runs, null, 2));
+    return;
+  }
+
+  console.log("");
+  printHeader("Benchmark Run History", `${runs.length} runs`);
+
+  if (runs.length === 0) {
+    info("No benchmark runs yet");
+    console.log(
+      `  ${c.dim("Run")} ${c.cyan("pha eval benchmark")} ${c.dim("to execute a benchmark")}\n`
+    );
+    return;
+  }
+
+  printTable(
+    ["Run ID", "Date", "Profile", "Tests", "Pass", "Fail", "Score", "Duration"],
+    runs.map((run) => {
+      const ds = normalizeScoreForDisplay(run.overallScore);
+      const sc = scoreColor(ds, 0.8, 0.6);
+      return [
+        c.dim(run.id.substring(0, 8)),
+        new Date(run.timestamp).toLocaleDateString(),
+        run.profile,
+        String(run.totalTestCases),
+        c.green(String(run.passedCount)),
+        run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"),
+        sc(ds.toFixed(2)),
+        formatDuration(run.durationMs),
+      ];
+    })
+  );
+
+  console.log("");
+}
+
+async function handleCheckRegression(options: Record<string, unknown>): Promise<void> {
+  const report = checkRegression({
+    threshold: parseInt(options.threshold as string, 10) || 5,
+    baseRunId: options.baseRun as string | undefined,
+  });
+
+  if (options.json) {
+    console.log(JSON.stringify(report, null, 2));
+    if (report.hasRegression) process.exit(1);
+    return;
+  }
+
+  if (options.markdown) {
+    console.log(formatRegressionMarkdown(report));
+    if (report.hasRegression) process.exit(1);
+    return;
+  }
+
+  console.log("");
+  printHeader("Regression Check");
+
+  if (!report.baseRun || !report.currentRun) {
+    info(report.summary);
+    console.log("");
+    return;
+  }
+
+  printKV(
+    "Base Run",
+    `${c.dim(report.baseRun.id.substring(0, 8))} (${normalizeScoreForDisplay(report.baseRun.score).toFixed(2)})`
+  );
+  printKV(
+    "Current Run",
+    `${c.dim(report.currentRun.id.substring(0, 8))} (${normalizeScoreForDisplay(report.currentRun.score).toFixed(2)})`
+  );
+
+  const regDeltaColor = report.overallDelta >= 0 ? c.green : c.red;
+  printKV(
+    "Overall Delta",
+    regDeltaColor(`${report.overallDelta >= 0 ? "+" : ""}${report.overallDelta.toFixed(1)} pts`)
+  );
+
+  if (report.categoryRegressions.length > 0) {
+    printSection("Category Regressions");
+    printTable(
+      ["Category", "Base", "Current", "Delta"],
+      report.categoryRegressions.map((r) => [
+        r.label,
+        r.baseScore.toFixed(1),
+        r.currentScore.toFixed(1),
+        c.red(r.delta.toFixed(1)),
+      ])
+    );
+  }
+
+  if (report.newFailures.length > 0) {
+    printSection("Newly Failing Tests");
+    for (const fail of report.newFailures) {
+      console.log(
+        `  ${c.red("FAIL")} ${fail.testCaseId}: ${fail.baseScore} -> ${fail.currentScore}`
+      );
+    }
+  }
+
+  console.log("");
+  if (report.hasRegression) {
+    fatal("Regression detected", report.summary);
+  } else {
+    success(report.summary);
+    console.log("");
+  }
+}
+
+// --- Subcommand registration ---
+
+function registerTraceCommands(evalCmd: Command): void {
   evalCmd
     .command("traces")
     .description("Show recorded interaction traces")
     .option("-n, --limit <number>", "Limit number of traces", "10")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
-      const traces = traceCollector.getAllTraces();
-      const limit = parseInt(options.limit, 10);
-      const recent = traces.slice(-limit);
+    .action(handleTraces);
 
-      if (options.json) {
-        console.log(JSON.stringify(recent, null, 2));
-        return;
-      }
-
-      console.log("");
-      printHeader("📊 Interaction Traces", `${traces.length} total`);
-
-      if (recent.length === 0) {
-        console.log(`\n  ${c.dim("No traces recorded yet.")}`);
-        console.log(
-          `  ${c.dim("Use")} ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")} ${c.dim("to generate traces.")}\n`
-        );
-        return;
-      }
-
-      printTable(
-        ["ID", "Time", "User Message", "Tools", "Duration"],
-        recent.map((trace) => [
-          c.dim(trace.id.substring(0, 8)),
-          formatRelativeTime(new Date(trace.timestamp)),
-          truncate(trace.userMessage, 25),
-          trace.toolCalls?.length ? String(trace.toolCalls.length) : c.dim("-"),
-          formatDuration(trace.duration),
-        ])
-      );
-
-      console.log("");
-      printDivider();
-      console.log(
-        `\n  ${c.dim("Showing")} ${recent.length} ${c.dim("of")} ${traces.length} ${c.dim("traces")}`
-      );
-      console.log(`  ${c.dim("Use")} ${c.cyan("pha eval run")} ${c.dim("to evaluate traces")}`);
-      console.log("");
-    });
-
-  // eval run
   evalCmd
     .command("run")
     .description("Run evaluation on recorded traces")
     .option("--provider <string>", "LLM provider for evaluation")
     .option("--model <string>", "Model ID")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
-      const config = loadConfig();
-      const evalProvider = (options.provider || config.llm.provider) as LLMProvider;
-      const apiKey = resolveApiKey(config, evalProvider);
+    .action(handleEvalRun);
 
-      if (!apiKey) {
-        fatal("No API key found for evaluation", "Set an API key in config or environment");
-      }
-
-      const traces = traceCollector.getAllTraces();
-      if (traces.length === 0) {
-        info("No traces to evaluate");
-        console.log(
-          `  ${c.dim("Generate some first with")} ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")}\n`
-        );
-        return;
-      }
-
-      console.log("");
-      printHeader("🔬 Evaluation", `${traces.length} traces`);
-
-      const spinner = new Spinner(`Evaluating traces...`);
-      spinner.start();
-
-      const evalMockSource = new MockDataSource();
-      const agent = await createPHAAgent({
-        apiKey,
-        provider: (options.provider || config.llm.provider) as "anthropic" | "openai" | "google",
-        modelId: options.model || config.llm.modelId,
-        dataSource: evalMockSource,
-      });
-
-      const evaluator = new Evaluator({
-        llmCall: async (prompt: string) => {
-          return agent.chatAndWait(prompt);
-        },
-      });
-
-      const results = await evaluator.evaluateTraces(traces);
-      spinner.stop("success");
-
-      if (options.json) {
-        console.log(JSON.stringify(results, null, 2));
-        return;
-      }
-
-      // Results table
-      printSection("Results");
-
-      printTable(
-        ["Trace", "Score", "Accuracy", "Relevance", "Helpful", "Safety", "Issues"],
-        results.map((result) => {
-          const sc = scoreColor(result.overallScore, 80, 60);
-          return [
-            c.dim(result.traceId.substring(0, 8)),
-            sc(`${result.overallScore}/100`),
-            String(result.scores.accuracy),
-            String(result.scores.relevance),
-            String(result.scores.helpfulness),
-            String(result.scores.safety),
-            result.issues.length > 0 ? c.yellow(String(result.issues.length)) : c.dim("-"),
-          ];
-        })
-      );
-
-      // Run analysis
-      const analysis = analyzer.analyze(results);
-
-      // Analysis Summary
-      printSection("Analysis Summary", "📈");
-
-      const avgScore = analysis.metrics.averageScore;
-      const scoreBar = progressBar(avgScore, 100, 20);
-      const avgLabel = scoreLabel(avgScore, 80, 60, ["Excellent", "Good", "Needs Improvement"]);
-      const avgLabelColored = scoreColor(avgScore, 80, 60)(avgLabel);
-
-      printKV("Average Score", `${c.bold(String(avgScore))} ${scoreBar} ${avgLabelColored}`);
-
-      printKV("Trend", trendLabel(analysis.metrics.improvementTrend));
-
-      // Weaknesses
-      if (analysis.weaknesses.length > 0) {
-        console.log("");
-        console.log(`  ${c.yellow(icons.warning)} ${c.bold("Weaknesses:")}`);
-        for (const weakness of analysis.weaknesses) {
-          const ic = impactColor(weakness.impact);
-          console.log(`    ${ic("●")} ${weakness.category}: ${c.dim(weakness.description)}`);
-        }
-      }
-
-      // Patterns
-      if (analysis.patterns.length > 0) {
-        console.log("");
-        console.log(`  ${c.cyan(icons.info)} ${c.bold("Patterns:")}`);
-        for (const pattern of analysis.patterns.slice(0, 3)) {
-          const pct = Math.round(pattern.frequency * 100);
-          console.log(`    ${c.dim("•")} ${pattern.type}: ${c.cyan(`${pct}%`)} of traces`);
-        }
-      }
-
-      console.log("");
-      printDivider();
-      console.log(
-        `\n  ${c.dim("Run")} ${c.cyan("pha eval optimize")} ${c.dim("to generate improvement suggestions")}\n`
-      );
-    });
-
-  // eval optimize
   evalCmd
     .command("optimize")
     .description("Generate optimization suggestions")
     .option("--apply", "Apply the suggestions")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
-      console.log("");
-      printHeader("🔧 Optimization", "Generate improvement suggestions");
+    .action(handleOptimize);
 
-      printSection("How it works");
-      console.log(`
-  This feature analyzes recent evaluations and suggests improvements
-  to the system prompt and tool configurations.
-`);
-
-      printSection("Workflow");
-      const steps = [
-        { num: "1", action: "Generate traces", cmd: "pha tui or pha chat" },
-        { num: "2", action: "Run evaluation", cmd: "pha eval run" },
-        { num: "3", action: "Get suggestions", cmd: "pha eval optimize" },
-        { num: "4", action: "Apply changes", cmd: "pha eval optimize --apply" },
-      ];
-
-      for (const step of steps) {
-        console.log(`  ${c.cyan(step.num)}. ${step.action}`);
-        console.log(`     ${c.dim(step.cmd)}`);
-      }
-
-      if (options.apply) {
-        console.log("");
-        warn("--apply will modify the system prompt based on suggestions");
-        console.log(`  ${c.dim("Make sure to review suggestions before applying.")}`);
-      }
-
-      console.log("");
-    });
-
-  // eval clear
   evalCmd
     .command("clear")
     .description("Clear all recorded traces")
     .option("--force", "Skip confirmation")
-    .action((options) => {
-      const traces = traceCollector.getAllTraces();
+    .action(handleClear);
 
-      if (traces.length === 0) {
-        info("No traces to clear");
-        return;
-      }
-
-      if (!options.force) {
-        warn(`This will delete ${traces.length} traces`);
-        console.log(`  ${c.dim("Use")} ${c.cyan("--force")} ${c.dim("to confirm")}\n`);
-        return;
-      }
-
-      traceCollector.clear();
-      success(`Cleared ${traces.length} traces`);
-    });
-
-  // eval export
   evalCmd
     .command("export")
     .description("Export traces to file")
     .option("-o, --output <file>", "Output file path", "traces.json")
-    .action(async (options) => {
-      const traces = traceCollector.getAllTraces();
+    .action(handleExport);
 
-      if (traces.length === 0) {
-        info("No traces to export");
-        return;
-      }
+  evalCmd.command("import <file>").description("Import traces from file").action(handleImport);
 
-      const spinner = new Spinner("Exporting traces...");
-      spinner.start();
+  evalCmd.command("stats").description("Show evaluation statistics").action(handleStats);
+}
 
-      const data = traceCollector.exportTraces();
-      const fs = await import("fs");
-      fs.writeFileSync(options.output, data);
-
-      spinner.stop("success");
-      success(`Exported ${traces.length} traces to ${c.cyan(options.output)}`);
-    });
-
-  // eval import
-  evalCmd
-    .command("import <file>")
-    .description("Import traces from file")
-    .action(async (file) => {
-      const fs = await import("fs");
-      if (!fs.existsSync(file)) {
-        fatal(`File not found: ${file}`);
-      }
-
-      const spinner = new Spinner("Importing traces...");
-      spinner.start();
-
-      const content = fs.readFileSync(file, "utf-8");
-      traceCollector.importTraces(content);
-
-      spinner.stop("success");
-      success(`Imported traces from ${c.cyan(file)}`);
-    });
-
-  // eval stats - new command
-  evalCmd
-    .command("stats")
-    .description("Show evaluation statistics")
-    .action(async () => {
-      const traces = traceCollector.getAllTraces();
-
-      console.log("");
-      printHeader("📈 Evaluation Statistics");
-
-      if (traces.length === 0) {
-        console.log(`\n  ${c.dim("No data yet. Start by generating traces:")}`);
-        console.log(`  ${c.cyan("pha tui")} ${c.dim("or")} ${c.cyan("pha chat")}\n`);
-        return;
-      }
-
-      printSection("Overview");
-      printKV("Total Traces", c.bold(String(traces.length)));
-
-      // Time stats
-      const timestamps = traces.map((t) => new Date(t.timestamp).getTime());
-      const oldest = new Date(Math.min(...timestamps));
-      const newest = new Date(Math.max(...timestamps));
-      printKV("First Trace", formatRelativeTime(oldest));
-      printKV("Last Trace", formatRelativeTime(newest));
-
-      // Duration stats
-      const durations = traces.map((t) => t.duration);
-      const avgDuration = durations.reduce((a, b) => a + b, 0) / durations.length;
-      const maxDuration = Math.max(...durations);
-      printKV("Avg Duration", formatDuration(avgDuration));
-      printKV("Max Duration", formatDuration(maxDuration));
-
-      // Tool usage
-      const toolCounts: Record<string, number> = {};
-      for (const trace of traces) {
-        for (const call of trace.toolCalls || []) {
-          toolCounts[call.tool] = (toolCounts[call.tool] || 0) + 1;
-        }
-      }
-
-      if (Object.keys(toolCounts).length > 0) {
-        printSection("Tool Usage");
-        const sorted = Object.entries(toolCounts).sort((a, b) => b[1] - a[1]);
-        for (const [tool, count] of sorted.slice(0, 5)) {
-          const pct = Math.round((count / traces.length) * 100);
-          console.log(
-            `  ${c.cyan(tool.padEnd(25))} ${progressBar(count, sorted[0][1], 15)} ${count} ${c.dim(`(${pct}%)`)}`
-          );
-        }
-      }
-
-      console.log("");
-    });
-
-  // eval seed - populate benchmark test cases
+function registerBenchmarkCommands(evalCmd: Command): void {
   evalCmd
     .command("seed")
     .description("Seed benchmark test cases into the database")
     .option("--force", "Overwrite existing test cases")
-    .action(async (options) => {
-      console.log("");
-      printHeader("Benchmark Seed", "Populating test cases");
+    .action(handleSeed);
 
-      const existing = countTestCases();
-      if (existing > 0 && !options.force) {
-        info(`${existing} test cases already exist in the database`);
-        console.log(`  ${c.dim("Use")} ${c.cyan("--force")} ${c.dim("to overwrite")}\n`);
-        return;
-      }
-
-      const spinner = new Spinner("Seeding test cases...");
-      spinner.start();
-
-      const runner = new BenchmarkRunner({
-        agentCall: async () => ({ response: "" }),
-        llmCall: async () => "",
-      });
-
-      const count = await runner.seedTestCases();
-      spinner.stop("success");
-
-      success(`Seeded ${count} benchmark test cases`);
-
-      // Show breakdown by category
-      printSection("Categories");
-      const categories = new Map<string, number>();
-      for (const tc of ALL_BENCHMARK_TESTS) {
-        categories.set(tc.category, (categories.get(tc.category) || 0) + 1);
-      }
-      for (const [cat, count] of categories) {
-        const label = CATEGORY_LABELS[cat as BenchmarkCategory] || cat;
-        printKV(label, String(count));
-      }
-
-      const coreCount = ALL_BENCHMARK_TESTS.filter((t) => t.difficulty === "core").length;
-      console.log("");
-      printKV("Quick profile (core)", String(coreCount));
-      printKV("Full profile (all)", String(ALL_BENCHMARK_TESTS.length));
-
-      console.log("");
-      console.log(
-        `  ${c.dim("Run")} ${c.cyan("pha eval benchmark")} ${c.dim("to execute benchmarks")}\n`
-      );
-      closeDatabase();
-      process.exit(0);
-    });
-
-  // eval diagnose - run diagnose pipeline
   evalCmd
     .command("diagnose")
     .description("Run diagnose pipeline: benchmark → analyze weaknesses → suggest fixes")
@@ -1692,7 +1818,6 @@ export function registerEvalCommand(program: Command): void {
     .option("--json", "Output as JSON")
     .action(handleDiagnose);
 
-  // eval benchmark - run benchmark suite
   evalCmd
     .command("benchmark")
     .description("Run benchmark evaluation suite")
@@ -1708,7 +1833,6 @@ export function registerEvalCommand(program: Command): void {
     .option("--json", "Output as JSON")
     .action(handleBenchmark);
 
-  // eval compare - compare benchmark runs
   evalCmd
     .command("compare")
     .description("Compare benchmark runs side by side")
@@ -1719,54 +1843,13 @@ export function registerEvalCommand(program: Command): void {
     .option("--json", "Output as JSON")
     .action(handleCompare);
 
-  // eval runs - list benchmark run history
   evalCmd
     .command("runs")
     .description("List benchmark run history")
     .option("-n, --limit <number>", "Number of runs to show", "10")
     .option("--json", "Output as JSON")
-    .action(async (options) => {
-      const limit = parseInt(options.limit, 10) || 10;
-      const runs = getRecentRuns(limit);
+    .action(handleRuns);
 
-      if (options.json) {
-        console.log(JSON.stringify(runs, null, 2));
-        return;
-      }
-
-      console.log("");
-      printHeader("Benchmark Run History", `${runs.length} runs`);
-
-      if (runs.length === 0) {
-        info("No benchmark runs yet");
-        console.log(
-          `  ${c.dim("Run")} ${c.cyan("pha eval benchmark")} ${c.dim("to execute a benchmark")}\n`
-        );
-        return;
-      }
-
-      printTable(
-        ["Run ID", "Date", "Profile", "Tests", "Pass", "Fail", "Score", "Duration"],
-        runs.map((run) => {
-          const ds = normalizeScoreForDisplay(run.overallScore);
-          const sc = scoreColor(ds, 0.8, 0.6);
-          return [
-            c.dim(run.id.substring(0, 8)),
-            new Date(run.timestamp).toLocaleDateString(),
-            run.profile,
-            String(run.totalTestCases),
-            c.green(String(run.passedCount)),
-            run.failedCount > 0 ? c.red(String(run.failedCount)) : c.dim("0"),
-            sc(ds.toFixed(2)),
-            formatDuration(run.durationMs),
-          ];
-        })
-      );
-
-      console.log("");
-    });
-
-  // eval auto-loop - automated optimization loop
   evalCmd
     .command("auto-loop")
     .description("Run automated optimization loop with Claude Code CLI")
@@ -1779,7 +1862,6 @@ export function registerEvalCommand(program: Command): void {
     .option("--model <string>", "Model ID")
     .action(handleAutoLoop);
 
-  // eval check-regression - check for benchmark regressions
   evalCmd
     .command("check-regression")
     .description("Check for benchmark score regressions (for CI)")
@@ -1787,80 +1869,8 @@ export function registerEvalCommand(program: Command): void {
     .option("--base-run <id>", "Specific base run ID to compare against")
     .option("--json", "Output as JSON")
     .option("--markdown", "Output as markdown (for PR comments)")
-    .action(async (options) => {
-      const report = checkRegression({
-        threshold: parseInt(options.threshold, 10) || 5,
-        baseRunId: options.baseRun,
-      });
+    .action(handleCheckRegression);
 
-      if (options.json) {
-        console.log(JSON.stringify(report, null, 2));
-        if (report.hasRegression) process.exit(1);
-        return;
-      }
-
-      if (options.markdown) {
-        console.log(formatRegressionMarkdown(report));
-        if (report.hasRegression) process.exit(1);
-        return;
-      }
-
-      console.log("");
-      printHeader("Regression Check");
-
-      if (!report.baseRun || !report.currentRun) {
-        info(report.summary);
-        console.log("");
-        return;
-      }
-
-      printKV(
-        "Base Run",
-        `${c.dim(report.baseRun.id.substring(0, 8))} (${normalizeScoreForDisplay(report.baseRun.score).toFixed(2)})`
-      );
-      printKV(
-        "Current Run",
-        `${c.dim(report.currentRun.id.substring(0, 8))} (${normalizeScoreForDisplay(report.currentRun.score).toFixed(2)})`
-      );
-
-      const deltaColor = report.overallDelta >= 0 ? c.green : c.red;
-      printKV(
-        "Overall Delta",
-        deltaColor(`${report.overallDelta >= 0 ? "+" : ""}${report.overallDelta.toFixed(1)} pts`)
-      );
-
-      if (report.categoryRegressions.length > 0) {
-        printSection("Category Regressions");
-        printTable(
-          ["Category", "Base", "Current", "Delta"],
-          report.categoryRegressions.map((r) => [
-            r.label,
-            r.baseScore.toFixed(1),
-            r.currentScore.toFixed(1),
-            c.red(r.delta.toFixed(1)),
-          ])
-        );
-      }
-
-      if (report.newFailures.length > 0) {
-        printSection("Newly Failing Tests");
-        for (const fail of report.newFailures) {
-          console.log(
-            `  ${c.red("FAIL")} ${fail.testCaseId}: ${fail.baseScore} -> ${fail.currentScore}`
-          );
-        }
-      }
-
-      console.log("");
-      if (report.hasRegression) {
-        fatal("Regression detected", report.summary);
-      } else {
-        success(report.summary);
-        console.log("");
-      }
-    });
-
-  // eval fix-issue - auto-fix a GitHub issue using worktree
   evalCmd
     .command("fix-issue <issue-number>")
     .description(
@@ -1871,4 +1881,10 @@ export function registerEvalCommand(program: Command): void {
     .option("--model <string>", "Model ID")
     .option("--create-pr", "Create a PR after successful fix")
     .action(handleFixIssue);
+}
+
+export function registerEvalCommand(program: Command): void {
+  const evalCmd = program.command("eval").description("Self-evolution evaluation system");
+  registerTraceCommands(evalCmd);
+  registerBenchmarkCommands(evalCmd);
 }

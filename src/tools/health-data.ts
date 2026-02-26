@@ -701,11 +701,9 @@ function makeOptionalRangeExecute(
   };
 }
 
-/**
- * Create health tools bound to a specific data source (for per-session isolation).
- */
+/** Build core health metric tools. */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export function createHealthTools(source: HealthDataSource) {
+function buildCoreHealthTools(source: HealthDataSource) {
   return {
     getHealthData: {
       ...getHealthDataTool,
@@ -778,6 +776,13 @@ export function createHealthTools(source: HealthDataSource) {
         "No blood pressure data available."
       ),
     },
+  };
+}
+
+/** Build extended health metric tools. */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+function buildExtendedHealthTools(source: HealthDataSource) {
+  return {
     getBloodGlucose: {
       ...getBloodGlucoseTool,
       execute: makeSingleExecute(
@@ -845,4 +850,12 @@ export function createHealthTools(source: HealthDataSource) {
       ),
     },
   };
+}
+
+/**
+ * Create health tools bound to a specific data source (for per-session isolation).
+ */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+export function createHealthTools(source: HealthDataSource) {
+  return { ...buildCoreHealthTools(source), ...buildExtendedHealthTools(source) };
 }
