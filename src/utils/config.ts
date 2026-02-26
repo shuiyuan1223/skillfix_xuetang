@@ -451,140 +451,172 @@ export function ensureConfigDir(): void {
 // Migration: old flat config → new unified model repository
 // ============================================================================
 
+/** Ensure a provider entry exists in the map; merge apiKey/baseUrl if set */
+function ensureMigrationProvider(
+  providers: Record<string, ModelProviderConfig>,
+  key: string,
+  apiKey?: string,
+  baseUrl?: string
+): void {
+  if (!providers[key]) {
+    providers[key] = {
+      models: [],
+      ...(apiKey ? { apiKey } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
+    };
+  } else {
+    if (apiKey && !providers[key].apiKey) providers[key].apiKey = apiKey;
+    if (baseUrl && !providers[key].baseUrl) providers[key].baseUrl = baseUrl;
+  }
+}
+
+/** Add a model definition to a provider if not already present */
+function addMigrationModel(
+  providers: Record<string, ModelProviderConfig>,
+  providerKey: string,
+  name: string,
+  modelId: string,
+  label?: string
+): void {
+  const models = providers[providerKey].models;
+  if (!models.find((m) => m.name === name)) {
+    models.push({ name, model: modelId, ...(label ? { label } : {}) });
+  }
+}
+
+/** Migrate top-level model assignment fields to orchestrator */
+function migrateOrchestratorFields(config: PHAConfig): boolean {
+  if (config.orchestrator) return false;
+  if (
+    !config.agentModel &&
+    !config.systemAgentModel &&
+    !config.embeddingModel &&
+    typeof config.judgeModel !== "string"
+  ) {
+    return false;
+  }
+  config.orchestrator = {
+    pha: config.agentModel,
+    sa: config.systemAgentModel,
+    judge: typeof config.judgeModel === "string" ? config.judgeModel : undefined,
+    embedding: config.embeddingModel,
+  };
+  delete config.agentModel;
+  delete config.systemAgentModel;
+  delete config.embeddingModel;
+  if (typeof config.judgeModel === "string") delete config.judgeModel;
+  return true;
+}
+
+/** Migrate benchmark models to the provider map */
+function migrateBenchmarkModels(
+  config: PHAConfig,
+  providers: Record<string, ModelProviderConfig>,
+  fallbackProvider: string
+): void {
+  if (!config.benchmarkModels || Object.keys(config.benchmarkModels).length === 0) return;
+  const refs: string[] = [];
+  for (const [name, cfg] of Object.entries(config.benchmarkModels)) {
+    const bp = cfg.provider || fallbackProvider;
+    ensureMigrationProvider(
+      providers,
+      bp,
+      cfg.apiKey,
+      cfg.baseUrl || PROVIDER_CONFIGS[bp]?.baseUrl
+    );
+    addMigrationModel(providers, bp, name, cfg.modelId, cfg.label);
+    refs.push(`${bp}/${name}`);
+  }
+  if (!config.benchmark) config.benchmark = {};
+  config.benchmark.models = refs;
+}
+
+/** Migrate judge model (object format) to provider map + orchestrator */
+function migrateJudgeModel(
+  config: PHAConfig,
+  providers: Record<string, ModelProviderConfig>
+): void {
+  if (!config.judgeModel || typeof config.judgeModel !== "object") return;
+  const jm = config.judgeModel as BenchmarkModelConfig;
+  if (!jm.provider || !jm.modelId) return;
+  ensureMigrationProvider(
+    providers,
+    jm.provider,
+    jm.apiKey,
+    jm.baseUrl || PROVIDER_CONFIGS[jm.provider]?.baseUrl
+  );
+  const jn = deriveModelName(jm.modelId);
+  addMigrationModel(providers, jm.provider, jn, jm.modelId, jm.label);
+  if (config.orchestrator) config.orchestrator.judge = `${jm.provider}/${jn}`;
+  delete config.judgeModel;
+}
+
+/** Build new model repository from legacy config fields */
+function buildModelRepository(config: PHAConfig): Record<string, ModelProviderConfig> {
+  const providers: Record<string, ModelProviderConfig> = {};
+  const llmProvider = config.llm.provider || "anthropic";
+  const llmModelId = config.llm.modelId || PROVIDER_CONFIGS[llmProvider]?.defaultModel || "default";
+
+  // LLM → orchestrator.pha
+  ensureMigrationProvider(
+    providers,
+    llmProvider,
+    config.llm.apiKey,
+    config.llm.baseUrl || PROVIDER_CONFIGS[llmProvider]?.baseUrl
+  );
+  const agentModelName = deriveModelName(llmModelId);
+  addMigrationModel(providers, llmProvider, agentModelName, llmModelId);
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.pha = `${llmProvider}/${agentModelName}`;
+
+  migrateBenchmarkModels(config, providers, llmProvider);
+  migrateJudgeModel(config, providers);
+
+  // Embedding model
+  if (config.embedding?.model && config.embedding.enabled !== false) {
+    const ep = llmProvider === "openrouter" ? "openrouter" : llmProvider;
+    ensureMigrationProvider(providers, ep);
+    const en = deriveModelName(config.embedding.model);
+    addMigrationModel(providers, ep, en, config.embedding.model);
+    config.orchestrator.embedding = `${ep}/${en}`;
+  }
+
+  return providers;
+}
+
 /**
  * Migrate old config format to new unified model repository (in-memory only).
  * Idempotent: skips if `config.models.providers` already exists.
  */
 /** @returns true if config was modified (migration or cleanup) */
 function migrateConfig(config: PHAConfig): boolean {
-  // Clean up redundant old fields even if already migrated
   let modified = false;
+
+  // Clean up redundant old fields even if already migrated
   if (config.benchmarkModels && config.models?.providers) {
     delete config.benchmarkModels;
     modified = true;
   }
 
-  // 5. Migrate top-level model assignment fields → orchestrator
-  if (
-    !config.orchestrator &&
-    (config.agentModel ||
-      config.systemAgentModel ||
-      config.embeddingModel ||
-      typeof config.judgeModel === "string")
-  ) {
-    config.orchestrator = {
-      pha: config.agentModel,
-      sa: config.systemAgentModel,
-      judge: typeof config.judgeModel === "string" ? config.judgeModel : undefined,
-      embedding: config.embeddingModel,
-    };
-    delete config.agentModel;
-    delete config.systemAgentModel;
-    delete config.embeddingModel;
-    if (typeof config.judgeModel === "string") delete config.judgeModel;
-    modified = true;
-  }
+  // Migrate top-level model assignment fields → orchestrator
+  if (migrateOrchestratorFields(config)) modified = true;
 
   // Already migrated (model repository)
   if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
     return modified;
   }
 
-  const providers: Record<string, ModelProviderConfig> = {};
+  const providers = buildModelRepository(config);
 
-  // Helper: ensure provider exists in the map
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  const ensureProvider = (providerKey: string, apiKey?: string, baseUrl?: string) => {
-    if (!providers[providerKey]) {
-      providers[providerKey] = {
-        models: [],
-        ...(apiKey ? { apiKey } : {}),
-        ...(baseUrl ? { baseUrl } : {}),
-      };
-    } else {
-      // Merge apiKey/baseUrl if not already set
-      if (apiKey && !providers[providerKey].apiKey) {
-        providers[providerKey].apiKey = apiKey;
-      }
-      if (baseUrl && !providers[providerKey].baseUrl) {
-        providers[providerKey].baseUrl = baseUrl;
-      }
-    }
-  };
-
-  // Helper: add model if not already present
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  const addModel = (providerKey: string, name: string, modelId: string, label?: string) => {
-    const models = providers[providerKey].models;
-    if (!models.find((m) => m.name === name)) {
-      models.push({ name, model: modelId, ...(label ? { label } : {}) });
-    }
-  };
-
-  // 1. Migrate config.llm → orchestrator.pha
-  const llmProvider = config.llm.provider || "anthropic";
-  const llmModelId = config.llm.modelId || PROVIDER_CONFIGS[llmProvider]?.defaultModel || "default";
-  const defaultBaseUrl = config.llm.baseUrl || PROVIDER_CONFIGS[llmProvider]?.baseUrl;
-
-  ensureProvider(llmProvider, config.llm.apiKey, defaultBaseUrl);
-  // Derive a short name from the model ID
-  const agentModelName = deriveModelName(llmModelId);
-  addModel(llmProvider, agentModelName, llmModelId);
-  if (!config.orchestrator) config.orchestrator = {};
-  config.orchestrator.pha = `${llmProvider}/${agentModelName}`;
-
-  // 2. Migrate config.benchmarkModels
-  if (config.benchmarkModels && Object.keys(config.benchmarkModels).length > 0) {
-    const benchmarkRefs: string[] = [];
-    for (const [presetName, modelCfg] of Object.entries(config.benchmarkModels)) {
-      const bProvider = modelCfg.provider || llmProvider;
-      const bBaseUrl = modelCfg.baseUrl || PROVIDER_CONFIGS[bProvider]?.baseUrl;
-      ensureProvider(bProvider, modelCfg.apiKey, bBaseUrl);
-      addModel(bProvider, presetName, modelCfg.modelId, modelCfg.label);
-      benchmarkRefs.push(`${bProvider}/${presetName}`);
-    }
-    if (!config.benchmark) config.benchmark = {};
-    config.benchmark.models = benchmarkRefs;
-  }
-
-  // 3. Migrate config.judgeModel (object → orchestrator.judge string ref)
-  if (config.judgeModel && typeof config.judgeModel === "object") {
-    const jm = config.judgeModel as BenchmarkModelConfig;
-    if (jm.provider && jm.modelId) {
-      const jProvider = jm.provider;
-      const jBaseUrl = jm.baseUrl || PROVIDER_CONFIGS[jProvider]?.baseUrl;
-      ensureProvider(jProvider, jm.apiKey, jBaseUrl);
-      const judgeName = deriveModelName(jm.modelId);
-      addModel(jProvider, judgeName, jm.modelId, jm.label);
-      config.orchestrator.judge = `${jProvider}/${judgeName}`;
-      delete config.judgeModel;
-    }
-  }
-
-  // 4. Migrate config.embedding → orchestrator.embedding
-  if (config.embedding?.model && config.embedding.enabled !== false) {
-    // Embedding models typically use the same provider (openrouter) or separate
-    const embModel = config.embedding.model;
-    // If using openrouter and main provider is openrouter, add there
-    const embProvider = llmProvider === "openrouter" ? "openrouter" : llmProvider;
-    ensureProvider(embProvider);
-    const embName = deriveModelName(embModel);
-    addModel(embProvider, embName, embModel);
-    config.orchestrator.embedding = `${embProvider}/${embName}`;
-  }
-
-  // Only set if we actually found something to migrate
   if (Object.keys(providers).length > 0) {
     config.models = { providers };
-    // Remove fully redundant old fields (data now lives in models.providers + benchmark.models)
     delete config.benchmarkModels;
-    // Clean up legacy fields that are now in orchestrator
     delete config.agentModel;
     delete config.systemAgentModel;
     delete config.embeddingModel;
     return true;
   }
-  return false;
+  return modified;
 }
 
 /** Derive a short model name from a full model ID (e.g. "anthropic/claude-sonnet-4" → "claude-sonnet-4") */
@@ -794,42 +826,18 @@ export function resolveModel(ref: string, config?: PHAConfig): ResolvedModel {
   };
 }
 
-/**
- * Resolve the agent model. Falls back to legacy llm config if agentModel is not set.
- */
-export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
-  const cfg = config || loadConfig();
-
-  // Priority 1: agents.pha.model
-  const phaAgentModel = cfg.agents?.pha?.model;
-  if (phaAgentModel && cfg.models?.providers) {
-    try {
-      return resolveModel(phaAgentModel, cfg);
-    } catch {
-      // Fall through
-    }
+/** Try resolving a model ref, returning null on failure */
+function tryResolveModel(ref: string | undefined, cfg: PHAConfig): ResolvedModel | null {
+  if (!ref || !cfg.models?.providers) return null;
+  try {
+    return resolveModel(ref, cfg);
+  } catch {
+    return null;
   }
+}
 
-  // Priority 2: orchestrator.pha (legacy)
-  const phaRef = cfg.orchestrator?.pha;
-  if (phaRef && cfg.models?.providers) {
-    try {
-      return resolveModel(phaRef, cfg);
-    } catch {
-      // Fall through
-    }
-  }
-
-  // Legacy: agentModel ref
-  if (cfg.agentModel && cfg.models?.providers) {
-    try {
-      return resolveModel(cfg.agentModel, cfg);
-    } catch {
-      // Fall through to legacy
-    }
-  }
-
-  // Legacy fallback: build from config.llm
+/** Build a ResolvedModel from legacy config.llm fields */
+function buildLegacyAgentModel(cfg: PHAConfig): ResolvedModel {
   const provider = cfg.llm.provider || "anthropic";
   const modelId = cfg.llm.modelId || DEFAULT_MODELS[provider] || "default";
   const apiKey = cfg.llm.apiKey || process.env[ENV_KEY_MAP[provider]] || undefined;
@@ -840,17 +848,31 @@ export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
     );
   }
 
-  const baseUrl = cfg.llm.baseUrl || PROVIDER_CONFIGS[provider]?.baseUrl;
-  const providerName = PROVIDER_CONFIGS[provider]?.name || provider;
-
   return {
     provider,
     modelId,
     apiKey,
-    baseUrl,
-    label: `${providerName} (${modelId})`,
+    baseUrl: cfg.llm.baseUrl || PROVIDER_CONFIGS[provider]?.baseUrl,
+    label: `${PROVIDER_CONFIGS[provider]?.name || provider} (${modelId})`,
     name: deriveModelName(modelId),
   };
+}
+
+/**
+ * Resolve the agent model. Falls back to legacy llm config if agentModel is not set.
+ */
+export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
+  const cfg = config || loadConfig();
+
+  // Try model refs in priority order
+  const refs = [cfg.agents?.pha?.model, cfg.orchestrator?.pha, cfg.agentModel];
+  for (const ref of refs) {
+    const resolved = tryResolveModel(ref, cfg);
+    if (resolved) return resolved;
+  }
+
+  // Legacy fallback: build from config.llm
+  return buildLegacyAgentModel(cfg);
 }
 
 /**
@@ -991,58 +1013,42 @@ export function resolveBenchmarkModels(config?: PHAConfig): ResolvedModel[] {
   }
 }
 
+/** Build a ResolvedModel from legacy embedding config */
+function buildLegacyEmbeddingModel(cfg: PHAConfig): ResolvedModel | null {
+  if (!cfg.embedding?.model) return null;
+  const apiKey =
+    cfg.llm.apiKey || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || undefined;
+  if (!apiKey) return null;
+
+  return {
+    provider: cfg.llm.provider,
+    modelId: cfg.embedding.model,
+    apiKey,
+    baseUrl:
+      cfg.llm.baseUrl ||
+      PROVIDER_CONFIGS[cfg.llm.provider]?.baseUrl ||
+      "https://openrouter.ai/api/v1",
+    label: cfg.embedding.model,
+    name: deriveModelName(cfg.embedding.model),
+  };
+}
+
 /**
  * Resolve the embedding model. Returns null if embedding is disabled.
  */
 export function resolveEmbeddingModel(config?: PHAConfig): ResolvedModel | null {
   const cfg = config || loadConfig();
-
-  // Check if embedding is disabled
   if (cfg.embedding?.enabled === false) return null;
 
-  // Orchestrator format: orchestrator.embedding
-  const embRef = cfg.orchestrator?.embedding;
-  if (embRef && cfg.models?.providers) {
-    try {
-      return resolveModel(embRef, cfg);
-    } catch {
-      // Fall through
-    }
+  // Try model refs in priority order
+  const refs = [cfg.orchestrator?.embedding, cfg.embeddingModel];
+  for (const ref of refs) {
+    const resolved = tryResolveModel(ref, cfg);
+    if (resolved) return resolved;
   }
 
-  // Legacy: embeddingModel ref
-  if (cfg.embeddingModel && cfg.models?.providers) {
-    try {
-      return resolveModel(cfg.embeddingModel, cfg);
-    } catch {
-      // Fall through
-    }
-  }
-
-  // Legacy: derive from config.embedding.model + llm provider
-  if (cfg.embedding?.model) {
-    const embModel = cfg.embedding.model;
-    // Try to find an API key from the LLM config or env
-    const apiKey =
-      cfg.llm.apiKey || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || undefined;
-
-    if (apiKey) {
-      const baseUrl =
-        cfg.llm.baseUrl ||
-        PROVIDER_CONFIGS[cfg.llm.provider]?.baseUrl ||
-        "https://openrouter.ai/api/v1";
-      return {
-        provider: cfg.llm.provider,
-        modelId: embModel,
-        apiKey,
-        baseUrl,
-        label: embModel,
-        name: deriveModelName(embModel),
-      };
-    }
-  }
-
-  return null;
+  // Legacy fallback
+  return buildLegacyEmbeddingModel(cfg);
 }
 
 /**
