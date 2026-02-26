@@ -7,6 +7,7 @@
 
 import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
 import { t } from "../locales/index.js";
+import { loadConfig } from "../utils/config.js";
 import type { UserProfile, MemorySearchResult } from "../memory/types.js";
 import type { HealthPlan, PlanStatus } from "../plans/types.js";
 import type { Recommendation, Reminder, CalendarEvent } from "../proactive/types.js";
@@ -74,9 +75,20 @@ interface ChartData {
 
 export function generateSidebar(activeView: string): A2UIMessage[] {
   const ui = new A2UIGenerator("sidebar");
+  const sidebarConfig = loadConfig().gateway.sidebar;
+
+  const filterItems = <T extends { id: string }>(items: T[]): T[] => {
+    if (sidebarConfig?.include?.length) {
+      return items.filter((item) => sidebarConfig.include!.includes(item.id));
+    }
+    if (sidebarConfig?.exclude?.length) {
+      return items.filter((item) => !sidebarConfig.exclude!.includes(item.id));
+    }
+    return items;
+  };
 
   // Main navigation
-  const mainNavItems = [
+  const mainNavItems = filterItems([
     { id: "chat", label: t("nav.chat"), icon: "chat" },
     { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
     { id: "plans", label: t("nav.plans"), icon: "target" },
@@ -85,28 +97,35 @@ export function generateSidebar(activeView: string): A2UIMessage[] {
     { id: "legacy-chat", label: t("nav.legacyChat"), icon: "search" },
     { id: "evolution", label: t("nav.evolution"), icon: "test-tube" },
     { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
-  ];
-
-  const mainNav = ui.nav(mainNavItems, { activeId: activeView });
-
-  // Divider
-  const dividerId = `div_${Date.now()}`;
-  ui.addRaw(dividerId, "Divider", {});
+  ]);
 
   // Settings navigation
-  const settingsNav = ui.nav(
-    [
-      { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
-      { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
-      { id: "settings/tools", label: t("nav.tools"), icon: "stethoscope" },
-      { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
-      { id: "settings/logs", label: t("nav.logs"), icon: "bar-chart" },
-      { id: "settings/general", label: t("nav.settings"), icon: "settings" },
-    ],
-    { activeId: activeView }
-  );
+  const settingsItems = filterItems([
+    { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
+    { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
+    { id: "settings/tools", label: t("nav.tools"), icon: "stethoscope" },
+    { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
+    { id: "settings/logs", label: t("nav.logs"), icon: "bar-chart" },
+    { id: "settings/general", label: t("nav.settings"), icon: "settings" },
+  ]);
 
-  const root = ui.column([mainNav, dividerId, settingsNav], { gap: 0 });
+  const parts: string[] = [];
+
+  if (mainNavItems.length > 0) {
+    parts.push(ui.nav(mainNavItems, { activeId: activeView }));
+  }
+
+  if (mainNavItems.length > 0 && settingsItems.length > 0) {
+    const dividerId = `div_${Date.now()}`;
+    ui.addRaw(dividerId, "Divider", {});
+    parts.push(dividerId);
+  }
+
+  if (settingsItems.length > 0) {
+    parts.push(ui.nav(settingsItems, { activeId: activeView }));
+  }
+
+  const root = ui.column(parts, { gap: 0 });
 
   return ui.build(root);
 }
