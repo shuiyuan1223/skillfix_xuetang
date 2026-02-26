@@ -39,9 +39,9 @@ PHA (Personal Health Agent) is an AgentOS-based health management platform built
 
 ### POST /api/query
 
-外部查询接口（边想边搜），调用方直接传入 `refresh_token`，无需预先完成 OAuth 登录。
+外部查询接口（边想边搜），支持两种鉴权模式，响应均为 SSE 流。
 
-**Request — grant_type=refresh_token（默认）**
+**Request — grant_type=refresh_token（默认，用户级 AT）**
 
 ```http
 POST /api/query
@@ -55,16 +55,17 @@ Content-Type: application/json
 }
 ```
 
-**Request — grant_type=client_credentials（app-level AT 模式）**
+**Request — grant_type=client_credentials（app-level AT，走内部接口）**
 
 ```http
 POST /api/query
 Content-Type: application/json
 
 {
-  "grant_type": "client_credentials",  // 指定 app-level AT 模式
+  "grant_type": "client_credentials",  // 必填
   "Authorization": "app-at-xxxxxx",    // App 级别 Access Token（必填）
   "uid": "100xxxxxx",                  // 华为用户 ID（必填）
+  "client_id": "your-client-id",       // Client ID，用于 x-client-id 请求头（必填）
   "query": "我今天睡眠怎么样？",        // 用户问题（必填）
   "sn": "req-20260225-001"             // 请求序列号，用于日志追踪（可选）
 }
@@ -91,7 +92,7 @@ data: {"event":"finish"}
 **Error Response** — 参数缺失或 token 无效时，同样以 SSE 流返回：
 
 ```
-data: {"event":"error","content":"Missing required fields: refresh_token, query"}
+data: {"event":"error","content":"Missing required fields: Authorization, query"}
 
 data: {"event":"finish"}
 ```
@@ -102,12 +103,16 @@ data: {"event":"finish"}
 2. 通过 `access_token` 调用 `getTokenInfo` 解析 Huawei userId
 3. 将新 token 存入 UserStore，并确保用户数据目录存在
 4. 复用或新建该用户的 `GatewaySession`，走边想边搜（`handleLegacyChatSSE`）流程
+5. `x-client-id` 使用 `config.dataSources.huawei.clientId`
 
 **认证流程 — client_credentials 模式**
 
 1. `Authorization` 直接作为 app-level AT，`uid` 为华为用户 ID
-2. 创建 inner API 模式的 `HuaweiHealthApi`（域名 `healthapi-inner.things.dbankcloud.cn:443`，路径 `/healthkit-inner`，请求头 `x-huid: {uid}`）
-3. 确保用户数据目录存在，创建临时 `GatewaySession`（不缓存）
+2. 创建 inner API 模式的 `HuaweiHealthApi`：
+   - 域名：`config.dataSources.huawei.innerApiBaseUrl`
+   - 路径：`/healthkit-inner`（替换 `/healthkit`）
+   - 请求头：`x-huid: {uid}`，`x-client-id: {client_id}`（来自请求体）
+3. 确保用户数据目录存在，创建临时 `GatewaySession`（不缓存到 sessions map）
 
 **实现位置**
 
