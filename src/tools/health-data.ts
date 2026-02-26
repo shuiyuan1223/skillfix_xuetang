@@ -642,6 +642,65 @@ export const healthTools = [
   getHRVTool,
 ];
 
+/** Build a range+single-day execute handler for createHealthTools */
+function makeRangeExecute(
+  source: HealthDataSource,
+  rangeFn: ((s: string, e: string) => Promise<unknown>) | undefined,
+  singleFn: (d: string) => Promise<unknown>,
+  nullMsg?: string
+): (args: DateOrRangeArgs) => Promise<Record<string, unknown>> {
+  return async (args: DateOrRangeArgs) => {
+    if (args.startDate && args.endDate) {
+      if (!rangeFn)
+        return { success: false, message: "Date range query not supported by this data source." };
+      const data = await rangeFn(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
+    const data = await singleFn(date);
+    if (data === null || data === undefined) {
+      return { success: true, data: null, ...(nullMsg ? { message: nullMsg } : {}) };
+    }
+    return { success: true, data };
+  };
+}
+
+/** Build an optional single-date execute handler for createHealthTools */
+function makeSingleExecute(
+  getter: ((d: string) => Promise<unknown>) | undefined,
+  unsupportedMsg: string,
+  noDataMsg: string
+): (args: { date: string }) => Promise<Record<string, unknown>> {
+  return async (args: { date: string }) => {
+    const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
+    if (!getter) return { success: true, data: null, message: unsupportedMsg };
+    const data = await getter(date);
+    return data ? { success: true, data } : { success: true, data: null, message: noDataMsg };
+  };
+}
+
+/** Build range execute with optional single-day fallback (for tools that may not exist) */
+function makeOptionalRangeExecute(
+  source: HealthDataSource,
+  rangeFn: ((s: string, e: string) => Promise<unknown>) | undefined,
+  singleFn: ((d: string) => Promise<unknown>) | undefined,
+  unsupportedMsg: string,
+  noDataMsg: string
+): (args: DateOrRangeArgs) => Promise<Record<string, unknown>> {
+  return async (args: DateOrRangeArgs) => {
+    if (args.startDate && args.endDate) {
+      if (!rangeFn)
+        return { success: false, message: "Date range query not supported by this data source." };
+      const data = await rangeFn(args.startDate, args.endDate);
+      return { success: true, data, mode: "range" };
+    }
+    const date = resolveDate(args.date);
+    if (!singleFn) return { success: true, data: null, message: unsupportedMsg };
+    const data = await singleFn(date);
+    return data ? { success: true, data } : { success: true, data: null, message: noDataMsg };
+  };
+}
+
 /**
  * Create health tools bound to a specific data source (for per-session isolation).
  */
@@ -650,285 +709,140 @@ export function createHealthTools(source: HealthDataSource) {
   return {
     getHealthData: {
       ...getHealthDataTool,
-      execute: async (args: DateOrRangeArgs) => {
-        if (args.startDate && args.endDate) {
-          if (!source.getMetricsRange) {
-            return {
-              success: false,
-              message: "Date range query not supported by this data source.",
-            };
-          }
-          const data = await source.getMetricsRange(args.startDate, args.endDate);
-          return { success: true, data, mode: "range" };
-        }
-        const date = resolveDate(args.date);
-        const metrics = await source.getMetrics(date);
-        return { success: true, data: metrics };
-      },
+      execute: makeRangeExecute(source, source.getMetricsRange?.bind(source), (d) =>
+        source.getMetrics(d)
+      ),
     },
     getHeartRate: {
       ...getHeartRateTool,
-      execute: async (args: DateOrRangeArgs) => {
-        if (args.startDate && args.endDate) {
-          if (!source.getHeartRateRange) {
-            return {
-              success: false,
-              message: "Date range query not supported by this data source.",
-            };
-          }
-          const data = await source.getHeartRateRange(args.startDate, args.endDate);
-          return { success: true, data, mode: "range" };
-        }
-        const date = resolveDate(args.date);
-        const heartRate = await source.getHeartRate(date);
-        return { success: true, data: heartRate };
-      },
+      execute: makeRangeExecute(source, source.getHeartRateRange?.bind(source), (d) =>
+        source.getHeartRate(d)
+      ),
     },
     getSleep: {
       ...getSleepTool,
-      execute: async (args: DateOrRangeArgs) => {
-        if (args.startDate && args.endDate) {
-          if (!source.getSleepRange) {
-            return {
-              success: false,
-              message: "Date range query not supported by this data source.",
-            };
-          }
-          const data = await source.getSleepRange(args.startDate, args.endDate);
-          return { success: true, data, mode: "range" };
-        }
-        const date = resolveDate(args.date);
-        const sleep = await source.getSleep(date);
-        if (!sleep) {
-          return { success: true, data: null, message: "No sleep data available for this date." };
-        }
-        return { success: true, data: sleep };
-      },
+      execute: makeRangeExecute(
+        source,
+        source.getSleepRange?.bind(source),
+        (d) => source.getSleep(d),
+        "No sleep data available for this date."
+      ),
     },
     getWorkouts: {
       ...getWorkoutsTool,
       execute: async (args: DateOrRangeArgs) => {
         if (args.startDate && args.endDate) {
-          if (!source.getWorkoutsRange) {
+          if (!source.getWorkoutsRange)
             return {
               success: false,
               message: "Date range query not supported by this data source.",
             };
-          }
           const data = await source.getWorkoutsRange(args.startDate, args.endDate);
           return { success: true, data, count: data.length, mode: "range" };
         }
-        const date = resolveDate(args.date);
-        const workouts = await source.getWorkouts(date);
+        const workouts = await source.getWorkouts(resolveDate(args.date));
         return { success: true, data: workouts, count: workouts.length };
       },
     },
     getWeeklySummary: {
       ...getWeeklySummaryTool,
-      execute: async () => {
-        const today = new Date().toISOString().split("T")[0];
-        const [weeklySteps, weeklySleep] = await Promise.all([
-          source.getWeeklySteps(today),
-          source.getWeeklySleep(today),
-        ]);
-        const totalSteps = weeklySteps.reduce((sum, d) => sum + d.steps, 0);
-        const avgSteps = Math.round(totalSteps / 7);
-        const sleepDays = weeklySleep.filter((d) => d.hours > 0);
-        const totalSleep = sleepDays.reduce((sum, d) => sum + d.hours, 0);
-        const avgSleep =
-          sleepDays.length > 0 ? Math.round((totalSleep / sleepDays.length) * 10) / 10 : 0;
-        return {
-          success: true,
-          data: {
-            period: "Last 7 days",
-            steps: { total: totalSteps, average: avgSteps, daily: weeklySteps },
-            sleep: { averageHours: avgSleep, daily: weeklySleep },
-          },
-        };
-      },
+      execute: getWeeklySummaryTool.execute,
     },
     getStress: {
       ...getStressTool,
-      execute: async (args: DateOrRangeArgs) => {
-        if (args.startDate && args.endDate) {
-          if (!source.getStressRange) {
-            return {
-              success: false,
-              message: "Date range query not supported by this data source.",
-            };
-          }
-          const data = await source.getStressRange(args.startDate, args.endDate);
-          return { success: true, data, mode: "range" };
-        }
-        const date = resolveDate(args.date);
-        if (!source.getStress) {
-          return { success: true, data: null, message: "Stress data not supported." };
-        }
-        const stress = await source.getStress(date);
-        return stress
-          ? { success: true, data: stress }
-          : { success: true, data: null, message: "No stress data available." };
-      },
+      execute: makeOptionalRangeExecute(
+        source,
+        source.getStressRange?.bind(source),
+        source.getStress?.bind(source),
+        "Stress data not supported.",
+        "No stress data available."
+      ),
     },
     getSpO2: {
       ...getSpO2Tool,
-      execute: async (args: DateOrRangeArgs) => {
-        if (args.startDate && args.endDate) {
-          if (!source.getSpO2Range) {
-            return {
-              success: false,
-              message: "Date range query not supported by this data source.",
-            };
-          }
-          const data = await source.getSpO2Range(args.startDate, args.endDate);
-          return { success: true, data, mode: "range" };
-        }
-        const date = resolveDate(args.date);
-        if (!source.getSpO2) {
-          return { success: true, data: null, message: "SpO2 data not supported." };
-        }
-        const spo2 = await source.getSpO2(date);
-        return spo2
-          ? { success: true, data: spo2 }
-          : { success: true, data: null, message: "No SpO2 data available." };
-      },
+      execute: makeOptionalRangeExecute(
+        source,
+        source.getSpO2Range?.bind(source),
+        source.getSpO2?.bind(source),
+        "SpO2 data not supported.",
+        "No SpO2 data available."
+      ),
     },
     getBloodPressure: {
       ...getBloodPressureTool,
-      execute: async (args: DateOrRangeArgs) => {
-        if (args.startDate && args.endDate) {
-          if (!source.getBloodPressureRange) {
-            return {
-              success: false,
-              message: "Date range query not supported by this data source.",
-            };
-          }
-          const data = await source.getBloodPressureRange(args.startDate, args.endDate);
-          return { success: true, data, mode: "range" };
-        }
-        const date = resolveDate(args.date);
-        if (!source.getBloodPressure) {
-          return { success: true, data: null, message: "Blood pressure not supported." };
-        }
-        const bp = await source.getBloodPressure(date);
-        return bp
-          ? { success: true, data: bp }
-          : { success: true, data: null, message: "No blood pressure data available." };
-      },
+      execute: makeOptionalRangeExecute(
+        source,
+        source.getBloodPressureRange?.bind(source),
+        source.getBloodPressure?.bind(source),
+        "Blood pressure not supported.",
+        "No blood pressure data available."
+      ),
     },
     getBloodGlucose: {
       ...getBloodGlucoseTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-        if (!source.getBloodGlucose) {
-          return { success: true, data: null, message: "Blood glucose not supported." };
-        }
-        const bg = await source.getBloodGlucose(date);
-        return bg
-          ? { success: true, data: bg }
-          : { success: true, data: null, message: "No blood glucose data available." };
-      },
+      execute: makeSingleExecute(
+        source.getBloodGlucose?.bind(source),
+        "Blood glucose not supported.",
+        "No blood glucose data available."
+      ),
     },
     getBodyComposition: {
       ...getBodyCompositionTool,
-      execute: async (args: DateOrRangeArgs) => {
-        if (args.startDate && args.endDate) {
-          if (!source.getBodyCompositionRange) {
-            return {
-              success: false,
-              message: "Date range query not supported by this data source.",
-            };
-          }
-          const data = await source.getBodyCompositionRange(args.startDate, args.endDate);
-          return { success: true, data, mode: "range" };
-        }
-        const date = resolveDate(args.date);
-        if (!source.getBodyComposition) {
-          return { success: true, data: null, message: "Body composition not supported." };
-        }
-        const bc = await source.getBodyComposition(date);
-        return bc
-          ? { success: true, data: bc }
-          : { success: true, data: null, message: "No body composition data available." };
-      },
+      execute: makeOptionalRangeExecute(
+        source,
+        source.getBodyCompositionRange?.bind(source),
+        source.getBodyComposition?.bind(source),
+        "Body composition not supported.",
+        "No body composition data available."
+      ),
     },
     getBodyTemperature: {
       ...getBodyTemperatureTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-        if (!source.getBodyTemperature) {
-          return { success: true, data: null, message: "Body temperature not supported." };
-        }
-        const temp = await source.getBodyTemperature(date);
-        return temp
-          ? { success: true, data: temp }
-          : { success: true, data: null, message: "No body temperature data available." };
-      },
+      execute: makeSingleExecute(
+        source.getBodyTemperature?.bind(source),
+        "Body temperature not supported.",
+        "No body temperature data available."
+      ),
     },
     getNutrition: {
       ...getNutritionTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-        if (!source.getNutrition) {
-          return { success: true, data: null, message: "Nutrition data not supported." };
-        }
-        const nutrition = await source.getNutrition(date);
-        return nutrition
-          ? { success: true, data: nutrition }
-          : { success: true, data: null, message: "No nutrition data available." };
-      },
+      execute: makeSingleExecute(
+        source.getNutrition?.bind(source),
+        "Nutrition data not supported.",
+        "No nutrition data available."
+      ),
     },
     getMenstrualCycle: {
       ...getMenstrualCycleTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-        if (!source.getMenstrualCycle) {
-          return { success: true, data: null, message: "Menstrual cycle data not supported." };
-        }
-        const mc = await source.getMenstrualCycle(date);
-        return mc
-          ? { success: true, data: mc }
-          : { success: true, data: null, message: "No menstrual cycle data available." };
-      },
+      execute: makeSingleExecute(
+        source.getMenstrualCycle?.bind(source),
+        "Menstrual cycle data not supported.",
+        "No menstrual cycle data available."
+      ),
     },
     getVO2Max: {
       ...getVO2MaxTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-        if (!source.getVO2Max) {
-          return { success: true, data: null, message: "VO2 Max data not supported." };
-        }
-        const vo2max = await source.getVO2Max(date);
-        return vo2max
-          ? { success: true, data: vo2max }
-          : { success: true, data: null, message: "No VO2 Max data available." };
-      },
+      execute: makeSingleExecute(
+        source.getVO2Max?.bind(source),
+        "VO2 Max data not supported.",
+        "No VO2 Max data available."
+      ),
     },
     getEmotion: {
       ...getEmotionTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-        if (!source.getEmotion) {
-          return { success: true, data: null, message: "Emotion data not supported." };
-        }
-        const emotion = await source.getEmotion(date);
-        return emotion
-          ? { success: true, data: emotion }
-          : { success: true, data: null, message: "No emotion data available." };
-      },
+      execute: makeSingleExecute(
+        source.getEmotion?.bind(source),
+        "Emotion data not supported.",
+        "No emotion data available."
+      ),
     },
     getHRV: {
       ...getHRVTool,
-      execute: async (args: { date: string }) => {
-        const date = args.date === "today" ? new Date().toISOString().split("T")[0] : args.date;
-        if (!source.getHRV) {
-          return { success: true, data: null, message: "HRV data not supported." };
-        }
-        const hrv = await source.getHRV(date);
-        return hrv
-          ? { success: true, data: hrv }
-          : { success: true, data: null, message: "No HRV data available." };
-      },
+      execute: makeSingleExecute(
+        source.getHRV?.bind(source),
+        "HRV data not supported.",
+        "No HRV data available."
+      ),
     },
   };
 }

@@ -260,6 +260,79 @@ function softTrimToolResultMessage(
  *
  * Accepts either full ContextPruningSettings or simplified PruningConfig.
  */
+function softTrimPhase(
+  messages: AgentMessage[],
+  settings: ContextPruningSettings,
+  pruneStartIndex: number,
+  cutoffIndex: number,
+  totalChars: number
+): { next: AgentMessage[] | null; prunableToolIndexes: number[]; totalChars: number } {
+  const prunableToolIndexes: number[] = [];
+  let next: AgentMessage[] | null = null;
+  let chars = totalChars;
+
+  for (let i = pruneStartIndex; i < cutoffIndex; i++) {
+    const msg = messages[i];
+    if (!msg || msg.role !== "toolResult") continue;
+    if (hasImageBlocks(msg.content as ReadonlyArray<TextContent | ImageContent>)) continue;
+
+    prunableToolIndexes.push(i);
+
+    const updated = softTrimToolResultMessage(msg as unknown as ToolResultMessage, settings);
+    if (!updated) continue;
+
+    const beforeChars = estimateMessageChars(msg);
+    const afterChars = estimateMessageChars(updated as unknown as AgentMessage);
+    chars += afterChars - beforeChars;
+    if (!next) next = messages.slice();
+    next[i] = updated as unknown as AgentMessage;
+  }
+
+  return { next, prunableToolIndexes, totalChars: chars };
+}
+
+function hardClearPhase(
+  messages: AgentMessage[],
+  settings: ContextPruningSettings,
+  prunableToolIndexes: number[],
+  existingNext: AgentMessage[] | null,
+  totalChars: number,
+  charWindow: number
+): AgentMessage[] | null {
+  const outputAfterSoftTrim = existingNext ?? messages;
+  let prunableToolChars = 0;
+  for (const i of prunableToolIndexes) {
+    const msg = outputAfterSoftTrim[i];
+    if (!msg || msg.role !== "toolResult") continue;
+    prunableToolChars += estimateMessageChars(msg);
+  }
+  if (prunableToolChars < settings.minPrunableToolChars) return existingNext;
+
+  let next = existingNext;
+  let chars = totalChars;
+  let ratio = chars / charWindow;
+
+  for (const i of prunableToolIndexes) {
+    if (ratio < settings.hardClearRatio) break;
+
+    const msg = (next ?? messages)[i];
+    if (!msg || msg.role !== "toolResult") continue;
+
+    const beforeChars = estimateMessageChars(msg);
+    const cleared: ToolResultMessage = {
+      ...msg,
+      content: [asText(settings.hardClear.placeholder)],
+    };
+    if (!next) next = messages.slice();
+    next[i] = cleared as unknown as AgentMessage;
+    const afterChars = estimateMessageChars(cleared as unknown as AgentMessage);
+    chars += afterChars - beforeChars;
+    ratio = chars / charWindow;
+  }
+
+  return next;
+}
+
 export function pruneContextMessages(
   messages: AgentMessage[],
   config: PruningConfig,
@@ -276,67 +349,29 @@ export function pruneContextMessages(
   const cutoffIndex = findAssistantCutoffIndex(messages, settings.keepLastAssistants);
   if (cutoffIndex === null) return messages;
 
-  // Bootstrap safety: never prune anything before the first user message
   const firstUserIndex = findFirstUserIndex(messages);
   const pruneStartIndex = firstUserIndex === null ? messages.length : firstUserIndex;
 
-  const totalCharsBefore = estimateContextChars(messages);
-  let totalChars = totalCharsBefore;
+  let totalChars = estimateContextChars(messages);
   let ratio = totalChars / charWindow;
   if (ratio < settings.softTrimRatio) return messages;
 
-  const prunableToolIndexes: number[] = [];
-  let next: AgentMessage[] | null = null;
+  // Phase 1: Soft-trim
+  const phase1 = softTrimPhase(messages, settings, pruneStartIndex, cutoffIndex, totalChars);
+  totalChars = phase1.totalChars;
 
-  // Phase 1: Soft-trim eligible tool results
-  for (let i = pruneStartIndex; i < cutoffIndex; i++) {
-    const msg = messages[i];
-    if (!msg || msg.role !== "toolResult") continue;
-    if (hasImageBlocks(msg.content as ReadonlyArray<TextContent | ImageContent>)) continue;
-
-    prunableToolIndexes.push(i);
-
-    const updated = softTrimToolResultMessage(msg as unknown as ToolResultMessage, settings);
-    if (!updated) continue;
-
-    const beforeChars = estimateMessageChars(msg);
-    const afterChars = estimateMessageChars(updated as unknown as AgentMessage);
-    totalChars += afterChars - beforeChars;
-    if (!next) next = messages.slice();
-    next[i] = updated as unknown as AgentMessage;
-  }
-
-  const outputAfterSoftTrim = next ?? messages;
+  const outputAfterSoftTrim = phase1.next ?? messages;
   ratio = totalChars / charWindow;
-  if (ratio < settings.hardClearRatio) return outputAfterSoftTrim;
-  if (!settings.hardClear.enabled) return outputAfterSoftTrim;
+  if (ratio < settings.hardClearRatio || !settings.hardClear.enabled) return outputAfterSoftTrim;
 
-  // Phase 2: Hard-clear if still over threshold and enough prunable chars
-  let prunableToolChars = 0;
-  for (const i of prunableToolIndexes) {
-    const msg = outputAfterSoftTrim[i];
-    if (!msg || msg.role !== "toolResult") continue;
-    prunableToolChars += estimateMessageChars(msg);
-  }
-  if (prunableToolChars < settings.minPrunableToolChars) return outputAfterSoftTrim;
-
-  for (const i of prunableToolIndexes) {
-    if (ratio < settings.hardClearRatio) break;
-
-    const msg = (next ?? messages)[i];
-    if (!msg || msg.role !== "toolResult") continue;
-
-    const beforeChars = estimateMessageChars(msg);
-    const cleared: ToolResultMessage = {
-      ...msg,
-      content: [asText(settings.hardClear.placeholder)],
-    };
-    if (!next) next = messages.slice();
-    next[i] = cleared as unknown as AgentMessage;
-    const afterChars = estimateMessageChars(cleared as unknown as AgentMessage);
-    totalChars += afterChars - beforeChars;
-    ratio = totalChars / charWindow;
-  }
-
-  return next ?? messages;
+  // Phase 2: Hard-clear
+  const result = hardClearPhase(
+    messages,
+    settings,
+    phase1.prunableToolIndexes,
+    phase1.next,
+    totalChars,
+    charWindow
+  );
+  return result ?? messages;
 }

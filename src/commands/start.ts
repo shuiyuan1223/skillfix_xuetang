@@ -77,6 +77,108 @@ function getWebDir(): string {
   return "";
 }
 
+async function spawnBrowserDetached(url: string): Promise<void> {
+  const { spawn } = await import("child_process");
+  const platform = process.platform;
+  if (platform === "darwin") {
+    spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
+  } else if (platform === "win32") {
+    spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" }).unref();
+  } else {
+    spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
+  }
+}
+
+async function startForeground(
+  gwUrl: string,
+  options: { open?: boolean },
+  params: {
+    host: string;
+    port: number;
+    gwBasePath: string;
+    agentModel: ReturnType<typeof resolveAgentModel> | null;
+    config: ReturnType<typeof loadConfig>;
+    apiKey: string;
+    webDir: string;
+    providerCfg: (typeof PROVIDER_CONFIGS)[LLMProvider];
+  }
+): Promise<void> {
+  const { host, port, gwBasePath, agentModel, config, apiKey, webDir, providerCfg } = params;
+  console.log("");
+  printHeader(`${icons.server} PHA Gateway`, "Foreground Mode");
+  printKV("URL", c.cyan(gwUrl));
+  printKV("Provider", providerCfg?.name || agentModel?.provider || config.llm.provider);
+  printKV("Model", agentModel?.modelId || config.llm.modelId || "default");
+  printKV("Web UI", webDir ? c.green("Enabled") : c.yellow("Disabled"));
+  console.log("");
+  printDivider();
+  console.log(`  ${c.dim("Press")} ${c.cyan("Ctrl+C")} ${c.dim("to stop")}`);
+  console.log("");
+
+  if (options.open !== false) {
+    setTimeout(() => openBrowser(gwUrl), 500);
+  }
+
+  await startGateway({
+    host,
+    port,
+    basePath: gwBasePath,
+    provider: (agentModel?.provider || config.llm.provider) as LLMProvider,
+    modelId: agentModel?.modelId || config.llm.modelId,
+    baseUrl: agentModel?.baseUrl || config.llm.baseUrl,
+    apiKey,
+    webDir,
+  });
+}
+
+async function startBackground(
+  gwUrl: string,
+  options: { open?: boolean },
+  params: { port: number; apiKey: string }
+): Promise<void> {
+  const spinner = new Spinner("Starting PHA...");
+  spinner.start();
+
+  const { spawn } = await import("child_process");
+  const args = [process.argv[1], "start", "-f", "-p", String(params.port), "--no-open"];
+  ensureConfigDir();
+
+  const child = spawn(process.argv[0], args, {
+    detached: true,
+    stdio: ["ignore", fs.openSync(getLogFile(), "a"), fs.openSync(getLogFile(), "a")],
+    env: { ...process.env, PHA_API_KEY: params.apiKey, CLAUDECODE: undefined },
+  });
+
+  fs.writeFileSync(getPidFile(), String(child.pid));
+  child.unref();
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  if (isRunning(child.pid!)) {
+    spinner.stop("success");
+    console.log("");
+    console.log(`  ${c.bold("PHA is running!")}`);
+    console.log("");
+    printKV("URL", c.cyan(gwUrl));
+    printKV("PID", String(child.pid));
+    printKV("Logs", c.dim(getLogFile()));
+    console.log("");
+    printDivider();
+    console.log(`\n  ${c.cyan("pha stop")}    ${c.dim("Stop the server")}`);
+    console.log(`  ${c.cyan("pha logs -f")} ${c.dim("Follow the logs")}`);
+    console.log(`  ${c.cyan("pha status")}  ${c.dim("Check status")}`);
+    console.log("");
+
+    if (options.open !== false) {
+      await spawnBrowserDetached(gwUrl);
+    }
+    process.exit(0);
+  } else {
+    spinner.stop("error");
+    fatal("Failed to start PHA", `Check logs: ${getLogFile()}`);
+  }
+}
+
 export function registerStartCommand(program: Command): void {
   program
     .command("start")
@@ -101,32 +203,13 @@ export function registerStartCommand(program: Command): void {
       const webDir = getWebDir();
       const providerCfg = PROVIDER_CONFIGS[agentModel?.provider || config.llm.provider];
 
-      // Check if already running (skip this check in foreground mode, as we are the server)
       if (!options.foreground) {
         const existingPid = getPid();
         if (existingPid && isRunning(existingPid)) {
           info(`PHA is already running ${c.dim(`(PID: ${existingPid})`)}`);
           console.log(`\n  ${c.cyan(gwUrl)}\n`);
           if (options.open !== false) {
-            // Open browser using spawn to avoid blocking exit
-            const { spawn } = await import("child_process");
-            const platform = process.platform;
-            if (platform === "darwin") {
-              spawn("open", [gwUrl], {
-                detached: true,
-                stdio: "ignore",
-              }).unref();
-            } else if (platform === "win32") {
-              spawn("cmd", ["/c", "start", "", gwUrl], {
-                detached: true,
-                stdio: "ignore",
-              }).unref();
-            } else {
-              spawn("xdg-open", [gwUrl], {
-                detached: true,
-                stdio: "ignore",
-              }).unref();
-            }
+            await spawnBrowserDetached(gwUrl);
           }
           process.exit(0);
         }
@@ -144,102 +227,18 @@ export function registerStartCommand(program: Command): void {
       }
 
       if (options.foreground) {
-        // Run in foreground
-        console.log("");
-        printHeader(`${icons.server} PHA Gateway`, "Foreground Mode");
-
-        printKV("URL", c.cyan(gwUrl));
-        printKV("Provider", providerCfg?.name || agentModel?.provider || config.llm.provider);
-        printKV("Model", agentModel?.modelId || config.llm.modelId || "default");
-        printKV("Web UI", webDir ? c.green("Enabled") : c.yellow("Disabled"));
-
-        console.log("");
-        printDivider();
-        console.log(`  ${c.dim("Press")} ${c.cyan("Ctrl+C")} ${c.dim("to stop")}`);
-        console.log("");
-
-        if (options.open !== false) {
-          setTimeout(() => openBrowser(gwUrl), 500);
-        }
-
-        await startGateway({
+        await startForeground(gwUrl, options, {
           host,
           port,
-          basePath: gwBasePath,
-          provider: (agentModel?.provider || config.llm.provider) as LLMProvider,
-          modelId: agentModel?.modelId || config.llm.modelId,
-          baseUrl: agentModel?.baseUrl || config.llm.baseUrl,
+          gwBasePath,
+          agentModel,
+          config,
           apiKey,
           webDir,
+          providerCfg,
         });
       } else {
-        // Spawn as background process
-        const spinner = new Spinner("Starting PHA...");
-        spinner.start();
-
-        const { spawn } = await import("child_process");
-        const args = [process.argv[1], "start", "-f", "-p", String(port), "--no-open"];
-
-        ensureConfigDir();
-
-        const child = spawn(process.argv[0], args, {
-          detached: true,
-          stdio: ["ignore", fs.openSync(getLogFile(), "a"), fs.openSync(getLogFile(), "a")],
-          env: {
-            ...process.env,
-            PHA_API_KEY: apiKey,
-            CLAUDECODE: undefined,
-          },
-        });
-
-        fs.writeFileSync(getPidFile(), String(child.pid));
-        child.unref();
-
-        // Wait a moment to verify it started
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        if (isRunning(child.pid!)) {
-          spinner.stop("success");
-
-          console.log("");
-          console.log(`  ${c.bold("PHA is running!")}`);
-          console.log("");
-          printKV("URL", c.cyan(gwUrl));
-          printKV("PID", String(child.pid));
-          printKV("Logs", c.dim(getLogFile()));
-          console.log("");
-          printDivider();
-          console.log(`\n  ${c.cyan("pha stop")}    ${c.dim("Stop the server")}`);
-          console.log(`  ${c.cyan("pha logs -f")} ${c.dim("Follow the logs")}`);
-          console.log(`  ${c.cyan("pha status")}  ${c.dim("Check status")}`);
-          console.log("");
-
-          if (options.open !== false) {
-            // Open browser using spawn to avoid blocking
-            const { spawn: spawnBrowser } = await import("child_process");
-            const platform = process.platform;
-            if (platform === "darwin") {
-              spawnBrowser("open", [gwUrl], {
-                detached: true,
-                stdio: "ignore",
-              }).unref();
-            } else if (platform === "win32") {
-              spawnBrowser("cmd", ["/c", "start", "", gwUrl], {
-                detached: true,
-                stdio: "ignore",
-              }).unref();
-            } else {
-              spawnBrowser("xdg-open", [gwUrl], {
-                detached: true,
-                stdio: "ignore",
-              }).unref();
-            }
-          }
-          process.exit(0);
-        } else {
-          spinner.stop("error");
-          fatal("Failed to start PHA", `Check logs: ${getLogFile()}`);
-        }
+        await startBackground(gwUrl, options, { port, apiKey });
       }
     });
 

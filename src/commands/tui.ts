@@ -129,6 +129,65 @@ export function registerTuiCommand(program: Command): void {
     });
 }
 
+async function ensureGatewayRunning(baseUrl: string): Promise<void> {
+  try {
+    const healthCheck = await fetch(`${baseUrl}/health`, {
+      signal: AbortSignal.timeout(1000),
+    });
+    if (!healthCheck.ok) throw new Error("not healthy");
+    return;
+  } catch {
+    // Gateway not running, start it
+  }
+
+  console.log("Gateway not running, starting...");
+  const { execSync } = await import("child_process");
+  try {
+    execSync("pha start --no-open", { stdio: "ignore", timeout: 10000 });
+  } catch {
+    // Ignore - gateway startup is async
+  }
+
+  let ready = false;
+  for (let i = 0; i < 50; i++) {
+    await new Promise((r) => setTimeout(r, 200));
+    try {
+      const check = await fetch(`${baseUrl}/health`, {
+        signal: AbortSignal.timeout(500),
+      });
+      if (check.ok) {
+        ready = true;
+        break;
+      }
+    } catch {
+      // Retry
+    }
+  }
+  if (!ready) {
+    console.error("Failed to start gateway");
+    process.exit(1);
+  }
+  console.log("Gateway started");
+}
+
+function buildAutocompleteCommands(): Array<{ name: string; description: string }> {
+  return [
+    { name: "quit", description: "Exit the TUI" },
+    { name: "exit", description: "Exit the TUI" },
+    { name: "clear", description: "Clear chat history" },
+    { name: "help", description: "Show available commands" },
+    { name: "chat", description: "Switch to Chat" },
+    { name: "dashboard", description: "Switch to Dashboard" },
+    { name: "health", description: "Switch to Dashboard (vitals)" },
+    { name: "memory", description: "Switch to Memory" },
+    { name: "evolution", description: "Switch to Evolution Lab" },
+    { name: "prompts", description: "Switch to Prompts settings" },
+    { name: "skills", description: "Switch to Skills settings" },
+    { name: "integrations", description: "Switch to Integrations" },
+    { name: "back", description: "Back to Chat" },
+  ];
+}
+
 async function runTUI(options: { port?: string }, config: PHAConfig): Promise<void> {
   const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
   const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
@@ -137,42 +196,7 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
   const provider = (phaRef ? phaRef.split("/")[0] : config.llm.provider) as LLMProvider;
   const providerCfg = PROVIDER_CONFIGS[provider];
 
-  // Check gateway first (before starting TUI)
-  try {
-    const healthCheck = await fetch(`${baseUrl}/health`, {
-      signal: AbortSignal.timeout(1000),
-    });
-    if (!healthCheck.ok) throw new Error("not healthy");
-  } catch {
-    console.log("Gateway not running, starting...");
-    const { execSync } = await import("child_process");
-    try {
-      execSync("pha start --no-open", { stdio: "ignore", timeout: 10000 });
-    } catch {
-      // Ignore - gateway startup is async
-    }
-
-    let ready = false;
-    for (let i = 0; i < 50; i++) {
-      await new Promise((r) => setTimeout(r, 200));
-      try {
-        const check = await fetch(`${baseUrl}/health`, {
-          signal: AbortSignal.timeout(500),
-        });
-        if (check.ok) {
-          ready = true;
-          break;
-        }
-      } catch {
-        // Retry
-      }
-    }
-    if (!ready) {
-      console.error("Failed to start gateway");
-      process.exit(1);
-    }
-    console.log("Gateway started");
-  }
+  await ensureGatewayRunning(baseUrl);
 
   // Create terminal and TUI
   const terminal = new ProcessTerminal();
@@ -215,25 +239,8 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
   // Editor with autocomplete
   const editor = new Editor(tui, editorTheme, { paddingX: 1 });
 
-  // Build autocomplete commands list
-  const autocompleteCommands = [
-    { name: "quit", description: "Exit the TUI" },
-    { name: "exit", description: "Exit the TUI" },
-    { name: "clear", description: "Clear chat history" },
-    { name: "help", description: "Show available commands" },
-    { name: "chat", description: "Switch to Chat" },
-    { name: "dashboard", description: "Switch to Dashboard" },
-    { name: "health", description: "Switch to Dashboard (vitals)" },
-    { name: "memory", description: "Switch to Memory" },
-    { name: "evolution", description: "Switch to Evolution Lab" },
-    { name: "prompts", description: "Switch to Prompts settings" },
-    { name: "skills", description: "Switch to Skills settings" },
-    { name: "integrations", description: "Switch to Integrations" },
-    { name: "back", description: "Back to Chat" },
-  ];
-
   const autocompleteProvider = new CombinedAutocompleteProvider(
-    autocompleteCommands,
+    buildAutocompleteCommands(),
     process.cwd()
   );
   editor.setAutocompleteProvider(autocompleteProvider);
@@ -242,62 +249,44 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
   // HTTP+SSE transport helpers
   // ========================================================================
 
+  function handleAgentText(msg: GatewayMessage): void {
+    if (msg.is_final) {
+      finishResponse();
+    } else {
+      currentAssistantMessage = msg.content ?? "";
+      if (loader) {
+        const msgContent = msg.content ?? "";
+        const preview = msgContent.length > 60 ? `${msgContent.substring(0, 60)}...` : msgContent;
+        loader.setMessage(preview);
+      }
+    }
+  }
+
+  const messageHandlers: Record<string, (msg: GatewayMessage) => void> = {
+    page: handlePageMessage,
+    agent_text: handleAgentText,
+    tool_call: (msg) => {
+      if (loader) loader.setMessage(`Using ${msg.tool ?? "tool"}...`);
+    },
+    modal: handleModal,
+    toast: handleToast,
+    a2ui: (msg) => {
+      if (msg.surfaces) handlePageMessage(msg);
+    },
+    error: (msg) => {
+      finishResponse();
+      addChatMessage("assistant", `**Error:** ${msg.message ?? "unknown error"}`);
+    },
+    clear_surface: () => {},
+    log_entry: () => {},
+    connected: () => {},
+  };
+
   function processMessage(msg: GatewayMessage) {
     try {
-      switch (msg.type) {
-        case "page":
-          handlePageMessage(msg);
-          break;
-
-        case "agent_text":
-          if (msg.is_final) {
-            finishResponse();
-          } else {
-            currentAssistantMessage = msg.content ?? "";
-            if (loader) {
-              const msgContent = msg.content ?? "";
-              const preview =
-                msgContent.length > 60 ? `${msgContent.substring(0, 60)}...` : msgContent;
-              loader.setMessage(preview);
-            }
-          }
-          break;
-
-        case "tool_call":
-          if (loader) loader.setMessage(`Using ${msg.tool ?? "tool"}...`);
-          break;
-
-        case "modal":
-          handleModal(msg);
-          break;
-
-        case "toast":
-          handleToast(msg);
-          break;
-
-        case "clear_surface":
-          // Handle surface clearing if needed
-          break;
-
-        case "a2ui":
-          // Handle a2ui updates - delegate to page handler if it has surfaces
-          if (msg.surfaces) handlePageMessage(msg);
-          break;
-
-        case "log_entry":
-          // Log entries are for debug; ignore in TUI
-          break;
-
-        case "error":
-          finishResponse();
-          addChatMessage("assistant", `**Error:** ${msg.message ?? "unknown error"}`);
-          break;
-
-        case "connected":
-          // Session connected confirmation - ignore
-          break;
-        default:
-          break;
+      const handler = messageHandlers[msg.type];
+      if (handler) {
+        handler(msg);
       }
     } catch {
       // Ignore processing errors
@@ -688,10 +677,7 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
   // Help
   // ========================================================================
 
-  function showHelp() {
-    const helpText =
-      currentView === "chat"
-        ? `**Navigation Commands:**
+  const CHAT_HELP = `**Navigation Commands:**
 - \`/dashboard\` - Health Dashboard
 - \`/memory\` - Memory & Profile
 - \`/evolution\` - Evolution Lab
@@ -704,8 +690,9 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
 - \`/quit\` - Exit TUI
 
 **Tips:** Press Enter to send, Alt+Enter for new line
-In page views, type a number to trigger an action.`
-        : `**Navigation Commands:**
+In page views, type a number to trigger an action.`;
+
+  const PAGE_HELP = `**Navigation Commands:**
 - \`/chat\` - Back to Chat
 - \`/dashboard\` - Health Dashboard
 - \`/memory\` - Memory & Profile
@@ -718,11 +705,12 @@ In page views, type a number to trigger an action.`
 
 **Actions:** Type a number (e.g. \`1\`) to trigger the corresponding action.`;
 
+  function showHelp() {
     if (currentView === "chat") {
-      addChatMessage("assistant", helpText);
+      addChatMessage("assistant", CHAT_HELP);
     } else {
       pageContainer.clear();
-      pageContainer.addChild(new Markdown(helpText, 1, 0, markdownTheme));
+      pageContainer.addChild(new Markdown(PAGE_HELP, 1, 0, markdownTheme));
       tui.requestRender();
     }
   }
@@ -748,8 +736,40 @@ In page views, type a number to trigger an action.`
   // Initialize via HTTP+SSE
   // ========================================================================
 
+  await initializeSession(baseUrl, config, {
+    setSessionId: (id) => {
+      sessionId = id;
+    },
+    setConnected: (val) => {
+      connected = val;
+    },
+    processUpdates,
+    addChatMessage,
+    startSSE,
+    tui,
+  });
+
+  // Handle Ctrl+C at raw input level (before pi-tui processes it)
+  hookStdinCtrlC(cleanup);
+
+  // Start TUI (this blocks and handles input)
+  tuiStarted = true;
+  tui.start();
+}
+
+async function initializeSession(
+  baseUrl: string,
+  config: PHAConfig,
+  ctx: {
+    setSessionId: (id: string) => void;
+    setConnected: (val: boolean) => void;
+    processUpdates: (updates: unknown[]) => void;
+    addChatMessage: (role: "user" | "assistant" | "tool", content: string) => void;
+    startSSE: () => void;
+    tui: TUI;
+  }
+): Promise<void> {
   try {
-    // 1. Call /api/a2ui/init to get session and initial page state
     const defaultUserId = config.uid || undefined;
     const initRes = await fetch(`${baseUrl}/api/a2ui/init`, {
       method: "POST",
@@ -768,33 +788,28 @@ In page views, type a number to trigger an action.`
       uid: string;
       updates: unknown[];
     };
-    sessionId = initData.sessionId;
-    connected = true;
+    ctx.setSessionId(initData.sessionId);
+    ctx.setConnected(true);
 
-    // Process initial page state
-    processUpdates(initData.updates);
-
-    // Show welcome message
-    addChatMessage(
+    ctx.processUpdates(initData.updates);
+    ctx.addChatMessage(
       "assistant",
       `Welcome to **PHA**!\n\nAsk me about your health data, sleep, or activity.\nType \`/help\` for navigation commands.`
     );
-    tui.requestRender();
-
-    // 2. Start SSE listener for push updates (streaming, tool calls, etc.)
-    startSSE();
+    ctx.tui.requestRender();
+    ctx.startSSE();
   } catch (e) {
     console.error("Failed to connect to gateway:", e);
     process.exit(1);
   }
+}
 
-  // Handle Ctrl+C at raw input level (before pi-tui processes it)
+function hookStdinCtrlC(cleanup: () => void): void {
   const originalStdinOn = process.stdin.on.bind(process.stdin);
   process.stdin.on = function (event: string, listener: (...args: unknown[]) => void) {
     if (event === "data") {
       const wrappedListener = (data: Buffer | string) => {
         const str = data.toString();
-        // Check for Ctrl+C (\x03)
         if (str.includes("\x03")) {
           cleanup();
           return;
@@ -805,8 +820,4 @@ In page views, type a number to trigger an action.`
     }
     return originalStdinOn(event, listener);
   } as typeof process.stdin.on;
-
-  // Start TUI (this blocks and handles input)
-  tuiStarted = true;
-  tui.start();
 }
