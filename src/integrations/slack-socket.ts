@@ -23,6 +23,9 @@ const SLACK_CONNECTIONS_OPEN = "https://slack.com/api/apps.connections.open";
 const RECONNECT_DELAY_MS = 5_000;
 const MAX_RECONNECT_DELAY_MS = 60_000;
 
+/** Tracks users who have been asked a follow-up question after a vague incident report. */
+const pendingFollowups = new Map<string, { incidentId: string; originalText: string }>();
+
 interface SlackSocketEnvelope {
   type: string;
   envelope_id?: string;
@@ -333,7 +336,8 @@ export function startSlackSocketMode(
 
           let replyText: string;
           if (parsed.isIncident) {
-            // Direct ingestion path
+            // New explicit incident report — clear any pending follow-up for this user
+            pendingFollowups.delete(userId);
             try {
               const { handleSlackWebhook } = await import("./slack-webhook.js");
               const result = await handleSlackWebhook(
@@ -341,12 +345,33 @@ export function startSlackSocketMode(
                 llmCall
               );
               replyText = result.message;
+              // If the report was vague, track so the next reply gets appended
+              if (result.needsFollowUp && result.persisted) {
+                pendingFollowups.set(userId, {
+                  incidentId: result.id,
+                  originalText: parsed.cleanText,
+                });
+              }
             } catch {
               replyText = "❌ Incident 上报失败，请稍后重试。";
             }
           } else {
-            // SA Chat path
-            replyText = await handleSaChat(text, llmCall);
+            // Check if this is a follow-up answer to a previous vague incident
+            const pending = pendingFollowups.get(userId);
+            if (pending) {
+              pendingFollowups.delete(userId);
+              try {
+                const { updateIncidentRawText } = await import("../memory/db.js");
+                const combined = `${pending.originalText}\n追加信息: ${text}`;
+                updateIncidentRawText(pending.incidentId, combined);
+                replyText = `已补充到之前的记录（\`${pending.incidentId.slice(0, 8)}\`），谢谢！`;
+              } catch {
+                replyText = "❌ 补充信息更新失败，请稍后重试。";
+              }
+            } else {
+              // SA Chat path
+              replyText = await handleSaChat(text, llmCall);
+            }
           }
 
           if (botToken && channel && ts) {

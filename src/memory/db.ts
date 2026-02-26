@@ -1391,6 +1391,11 @@ export function updateIncidentNotes(id: string, notes: string): void {
   database.prepare("UPDATE incidents SET notes = ? WHERE id = ?").run(notes, id);
 }
 
+export function updateIncidentRawText(id: string, rawText: string): void {
+  const database = getDatabase();
+  database.prepare("UPDATE incidents SET raw_text = ? WHERE id = ?").run(rawText, id);
+}
+
 export interface IncidentStats {
   total: number;
   pending: number;

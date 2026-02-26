@@ -41,6 +41,7 @@ export interface IncidentIngestResult {
   classification: ClassificationResult;
   traceId?: string;
   persisted: boolean;
+  needsFollowUp: boolean; // true when confidence low or text too short — caller should track for follow-up
   message: string;
 }
 
@@ -134,15 +135,19 @@ export async function handleSlackWebhook(
       classification,
       traceId,
       persisted: false,
+      needsFollowUp: false,
       message: `Failed to persist incident: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+
+  const needsFollowUp = rawText.length < 10 || classification.confidence < 0.55;
 
   return {
     id,
     classification,
     traceId,
     persisted: true,
+    needsFollowUp,
     message: buildReply(id, rawText, classification, traceId),
   };
 }
@@ -161,7 +166,7 @@ function buildReply(
   traceId: string | undefined
 ): string {
   const shortId = id.slice(0, 8);
-  const isVague = rawText.length < 30 || classification.confidence < 0.55;
+  const isVague = rawText.length < 10 || classification.confidence < 0.55;
 
   const followUp = getFollowUp(classification, rawText);
 
