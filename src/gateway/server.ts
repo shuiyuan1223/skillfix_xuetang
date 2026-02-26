@@ -630,7 +630,8 @@ export function createGatewayApp(): Hono {
     // Use the gateway callback URL
     const port = config.gateway.port || 8000;
     const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
-    const redirectUri = huaweiConfig.redirectUri || `http://localhost:${port}${gwBasePath}/auth/huawei/callback`;
+    const redirectUri =
+      huaweiConfig.redirectUri || `http://localhost:${port}${gwBasePath}/auth/huawei/callback`;
 
     // Use a CSRF nonce as state (user ID comes from id_token after exchange)
     const nonce = crypto.randomUUID();
@@ -3335,22 +3336,29 @@ export class GatewaySession {
         try {
           const today = new Date().toISOString().split("T")[0];
           const source = this.dataSource;
-          const todayDate = new Date(today + "T00:00:00");
+          const todayDate = new Date(`${today}T00:00:00`);
           const dayOfWeek = todayDate.getDay();
           const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
           const weekStart = new Date(todayDate);
           weekStart.setDate(todayDate.getDate() - mondayOffset);
           const weekStartStr = weekStart.toISOString().split("T")[0];
-          const [weeklySteps, weeklySleep, todayHR, todayWorkouts, weeklyWorkouts, todayMetrics, todayBodyComp] =
-            await Promise.all([
-              source.getWeeklySteps(today).catch(() => []),
-              source.getWeeklySleep(today).catch(() => []),
-              source.getHeartRate(today).catch(() => null),
-              source.getWorkouts(today).catch(() => []),
-              source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
-              source.getMetrics(today).catch(() => null),
-              source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
-            ]);
+          const [
+            weeklySteps,
+            weeklySleep,
+            todayHR,
+            todayWorkouts,
+            weeklyWorkouts,
+            todayMetrics,
+            todayBodyComp,
+          ] = await Promise.all([
+            source.getWeeklySteps(today).catch(() => []),
+            source.getWeeklySleep(today).catch(() => []),
+            source.getHeartRate(today).catch(() => null),
+            source.getWorkouts(today).catch(() => []),
+            source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
+            source.getMetrics(today).catch(() => null),
+            source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
+          ]);
           const snapshot: HealthSnapshot = {
             weeklySteps,
             weeklySleep,
@@ -6684,7 +6692,7 @@ export async function startGateway(
       // so all downstream routing code works against unprefixed paths.
       let pathname = url.pathname;
       if (basePath) {
-        if (!pathname.startsWith(basePath + "/") && pathname !== basePath) {
+        if (!pathname.startsWith(`${basePath}/`) && pathname !== basePath) {
           return new Response("Not Found", { status: 404 });
         }
         pathname = pathname.slice(basePath.length) || "/";
@@ -7027,8 +7035,8 @@ export async function startGateway(
 
         // Helper: inject basePath into index.html so frontend knows the prefix
         // and rewrite asset paths (Vite builds absolute /assets/... paths)
-        const serveIndexWithBasePath = async () => {
-          const indexFile = Bun.file(webDir + "/index.html");
+        const serveIndexWithBasePath = async (): Promise<Response | null> => {
+          const indexFile = Bun.file(`${webDir}/index.html`);
           if (!(await indexFile.exists())) return null;
           if (!basePath) {
             return new Response(indexFile, { headers: { "Content-Type": "text/html" } });
