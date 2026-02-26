@@ -1384,6 +1384,40 @@ function generateBadCasesTab(ui: A2UIGenerator, data: EvolutionLabData): string 
       { onRowClick: "view_bad_case" }
     );
     children.push(table);
+
+    // ---- Inline reclassify panel (shown below table for quick edits) ----
+    const typeEditBtns = (["bug", "effect", "unclassified"] as const).map((t2) =>
+      ui.button(t2, "bad_cases_retype", {
+        variant: "outline",
+        size: "sm",
+        // payload applied per-click — row must be selected via view_bad_case first
+        payload: { type: t2 },
+      })
+    );
+    const priorityEditBtns = (["high", "medium", "low", "ignore"] as const).map((p) =>
+      ui.button(p, "bad_cases_reprioritize", {
+        variant: "outline",
+        size: "sm",
+        payload: { priority: p },
+      })
+    );
+    children.push(
+      ui.column(
+        [
+          ui.text("点击行查看详情 · 快速改标签：", "caption"),
+          ui.row(
+            [
+              ui.text("类型 →", "caption"),
+              ...typeEditBtns,
+              ui.text("优先级 →", "caption"),
+              ...priorityEditBtns,
+            ],
+            { gap: 6, align: "center" }
+          ),
+        ],
+        { gap: 4, padding: 8 }
+      )
+    );
   } else {
     children.push(
       ui.column(

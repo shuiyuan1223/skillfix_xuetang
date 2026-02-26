@@ -176,6 +176,7 @@ import {
   type BadCaseRow,
   type BadCaseStatus,
   type BadCaseType,
+  type BadCasePriority,
 } from "../memory/db.js";
 import { BenchmarkRunner } from "../evolution/benchmark-runner.js";
 import {
@@ -1194,6 +1195,7 @@ export class GatewaySession {
   private evolutionDataSubTab: "traces" | "evaluations" | "suggestions" = "traces";
   private evolutionSelectedVersion: string | null = null;
   private badCasesFilter: { status?: string; type?: string } = {};
+  private selectedBadCaseId: string | null = null;
   private systemAgentChatMessages: PartsChatMessage[] = [];
   private systemAgentStreaming = false;
   private systemAgentStreamingContent = "";
@@ -3733,6 +3735,8 @@ export class GatewaySession {
       const row = payload.row as { _fullId?: string; id?: string };
       const badCaseId = row._fullId ?? row.id;
       if (badCaseId) {
+        // Store selected ID so retype/reprioritize buttons know which case to edit
+        this.selectedBadCaseId = badCaseId;
         const { getBadCase } = await import("../memory/db.js");
         const bc = getBadCase(badCaseId);
         if (bc) {
@@ -3768,6 +3772,35 @@ export class GatewaySession {
       const { generateToast } = await import("./pages.js");
       sendAll(send, generateToast("Bad case 已解决 ✓", "success"));
       this.sendEvolutionLabUpdate(send);
+    } else if (action === "bad_cases_retype" && payload?.type) {
+      const id = (payload.id as string | undefined) ?? this.selectedBadCaseId;
+      if (id) {
+        const { updateBadCaseType } = await import("../memory/db.js");
+        const { generateToast } = await import("./pages.js");
+        updateBadCaseType(
+          id,
+          payload.type as BadCaseType,
+          payload.priority as BadCasePriority | undefined
+        );
+        sendAll(send, generateToast(`类型已更新为 ${String(payload.type)}`, "success"));
+        this.sendEvolutionLabUpdate(send);
+      }
+    } else if (action === "bad_cases_reprioritize" && payload?.priority) {
+      const id = (payload.id as string | undefined) ?? this.selectedBadCaseId;
+      if (id) {
+        const { updateBadCaseType, getBadCase } = await import("../memory/db.js");
+        const { generateToast } = await import("./pages.js");
+        const existing = getBadCase(id);
+        if (existing) {
+          updateBadCaseType(
+            existing.id,
+            existing.type as BadCaseType,
+            payload.priority as BadCasePriority
+          );
+          sendAll(send, generateToast(`优先级已更新为 ${String(payload.priority)}`, "success"));
+          this.sendEvolutionLabUpdate(send);
+        }
+      }
     } else if (action === "evo_data_subtab_change" && payload?.tab) {
       this.evolutionDataSubTab = payload.tab as "traces" | "evaluations" | "suggestions";
       this.sendEvolutionLabUpdate(send);
@@ -7207,7 +7240,12 @@ export async function startGateway(
           });
           return slackAgent.chatAndWait(prompt);
         };
-        startSlackSocketMode(slackConfig.appToken!, slackConfig.channelId, slackLlmCall);
+        startSlackSocketMode(
+          slackConfig.appToken!,
+          slackConfig.botToken,
+          slackConfig.channelId,
+          slackLlmCall
+        );
         log.info("Slack Socket Mode started", {
           channelId: slackConfig.channelId ?? "all channels",
         });

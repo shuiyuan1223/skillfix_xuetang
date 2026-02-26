@@ -260,6 +260,8 @@ export interface PHAConfig {
   slack?: {
     /** App-Level Token (xapp-...) for Socket Mode — obtained from Slack App settings */
     appToken?: string;
+    /** Bot Token (xoxb-...) for posting replies and resolving user names */
+    botToken?: string;
     /** Optional: only ingest messages from this channel ID (e.g. "C01234ABCDE") */
     channelId?: string;
   };

@@ -4,14 +4,16 @@
  * Maintains a persistent outbound WebSocket connection to Slack.
  * No inbound port required — works behind firewalls / internal networks.
  *
- * Protocol:
- *   1. POST apps.connections.open  → get WSS URL (App-Level Token)
- *   2. Connect WebSocket           → receive events
- *   3. ACK each envelope_id        → within 3 seconds
- *   4. Auto-reconnect on close
+ * Behavior:
+ *   - Only processes messages that @mention the bot (avoids noise)
+ *   - Skips system messages (channel_join, channel_leave, etc.)
+ *   - Resolves Slack user ID → display name via users.info API
+ *   - Posts a thread reply after ingestion with classification result
+ *   - Auto-reconnects with exponential backoff
  *
  * Config (.pha/config.json):
  *   slack.appToken   — xapp-... (App-Level Token, connections:write scope)
+ *   slack.botToken   — xoxb-... (Bot Token, channels:history + chat:write)
  *   slack.channelId  — optional channel ID filter (e.g. "C01234ABCDE")
  */
 
@@ -29,49 +31,110 @@ interface SlackSocketEnvelope {
   payload?: {
     event?: {
       type?: string;
+      subtype?: string; // present for system msgs: channel_join, channel_leave, etc.
       text?: string;
       user?: string;
       channel?: string;
       bot_id?: string;
+      ts?: string; // message timestamp, used as thread_ts for replies
     };
   };
   reason?: string;
 }
 
-/**
- * Call apps.connections.open to get a fresh WSS URL.
- * The URL is single-use and expires after the connection closes.
- */
+// ── Slack API helpers ──────────────────────────────────────────────────────────
+
 async function getWssUrl(appToken: string): Promise<string> {
   const resp = await fetch(SLACK_CONNECTIONS_OPEN, {
     method: "POST",
     headers: { Authorization: `Bearer ${appToken}`, "Content-Type": "application/json" },
   });
-
-  if (!resp.ok) {
-    throw new Error(`apps.connections.open HTTP ${resp.status}`);
-  }
-
+  if (!resp.ok) throw new Error(`apps.connections.open HTTP ${resp.status}`);
   const raw: unknown = await resp.json();
   const data = raw as Record<string, unknown>;
   if (!data.ok) throw new Error(`apps.connections.open error: ${String(data.error)}`);
   return String(data.url);
 }
 
+/** Resolve bot's own user ID so we can detect @mentions. */
+async function getBotUserId(botToken: string): Promise<string | undefined> {
+  try {
+    const resp = await fetch("https://slack.com/api/auth.test", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${botToken}` },
+    });
+    const raw: unknown = await resp.json();
+    const data = raw as Record<string, unknown>;
+    if (!data.ok) return undefined;
+    return String(data.user_id);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Resolve Slack user ID → display name. Falls back to userId on any error. */
+async function resolveDisplayName(userId: string, botToken: string): Promise<string> {
+  try {
+    const resp = await fetch(`https://slack.com/api/users.info?user=${userId}`, {
+      headers: { Authorization: `Bearer ${botToken}` },
+    });
+    const raw: unknown = await resp.json();
+    const data = raw as Record<string, unknown>;
+    const user = data.user as Record<string, unknown> | undefined;
+    const profile = user?.profile as Record<string, unknown> | undefined;
+    const name =
+      String(profile?.display_name ?? "").trim() ||
+      String(profile?.real_name ?? "").trim() ||
+      userId;
+    return name;
+  } catch {
+    return userId;
+  }
+}
+
+/** Post a reply in the same thread so reporters get immediate feedback. */
+async function postThreadReply(
+  channel: string,
+  threadTs: string,
+  text: string,
+  botToken: string
+): Promise<void> {
+  try {
+    await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${botToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ channel, thread_ts: threadTs, text }),
+    });
+  } catch (err) {
+    log.warn("Failed to post Slack thread reply", { error: String(err) });
+  }
+}
+
+// ── Main entry ─────────────────────────────────────────────────────────────────
+
 /**
  * Start the Socket Mode connection loop.
  * Reconnects automatically with exponential backoff on disconnect.
- *
- * @param appToken   Slack App-Level Token (xapp-...)
- * @param channelId  Optional channel filter
- * @param llmCall    LLM inference function for classification
  */
 export function startSlackSocketMode(
   appToken: string,
+  botToken: string | undefined,
   channelId: string | undefined,
   llmCall: (prompt: string) => Promise<string>
 ): void {
   let reconnectDelay = RECONNECT_DELAY_MS;
+
+  // Resolve bot user ID once at startup (needed for mention detection)
+  let botUserId: string | undefined;
+  if (botToken) {
+    void getBotUserId(botToken).then((id) => {
+      botUserId = id;
+      if (id) log.info("Slack bot user ID resolved", { botUserId: id });
+    });
+  }
 
   const connect = (): void => {
     void (async (): Promise<void> => {
@@ -92,7 +155,7 @@ export function startSlackSocketMode(
 
       ws.addEventListener("open", () => {
         log.info("Slack Socket Mode: connected");
-        reconnectDelay = RECONNECT_DELAY_MS; // reset backoff on success
+        reconnectDelay = RECONNECT_DELAY_MS;
       });
 
       ws.addEventListener("message", (ev: MessageEvent) => {
@@ -103,7 +166,7 @@ export function startSlackSocketMode(
           return;
         }
 
-        // Always acknowledge immediately to prevent Slack retry storm
+        // Always ACK immediately
         if (envelope.envelope_id) {
           ws.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
         }
@@ -114,7 +177,7 @@ export function startSlackSocketMode(
         }
 
         if (envelope.type === "disconnect") {
-          log.info("Slack Socket Mode: server requested disconnect, reconnecting", {
+          log.info("Slack Socket Mode: server requested disconnect", {
             reason: envelope.reason,
           });
           ws.close();
@@ -125,35 +188,73 @@ export function startSlackSocketMode(
 
         const event = envelope.payload?.event;
         if (!event || event.type !== "message") return;
-        if (event.bot_id) return; // ignore bot messages
-        if (channelId && event.channel !== channelId) return; // channel filter
 
+        // ── Fix 4a: Skip system messages (channel_join, channel_leave, etc.) ──
+        if (event.subtype) return;
+
+        // Skip bot messages to avoid loops
+        if (event.bot_id) return;
+
+        // ── Fix 4b: Mention-triggered — only process if @bot is mentioned ──
         const text = (event.text ?? "").trim();
         if (!text) return;
 
+        // If we know the bot's user ID, require a mention; otherwise fall through
+        if (botUserId) {
+          const mentionPattern = new RegExp(`<@${botUserId}>`, "i");
+          if (!mentionPattern.test(text)) return;
+        }
+
+        // Strip the @mention and any leading/trailing whitespace from the text
+        const cleanText = botUserId
+          ? text.replace(new RegExp(`<@${botUserId}>\\s*`, "gi"), "").trim()
+          : text;
+
+        if (!cleanText) return;
+
+        // Channel filter
+        if (channelId && event.channel !== channelId) return;
+
+        const userId = event.user ?? "";
+        const channel = event.channel ?? "";
+        const ts = event.ts ?? "";
+
         // Process asynchronously — ACK was already sent above
         void (async (): Promise<void> => {
+          // ── Fix 3: Resolve display name ──────────────────────────────────────
+          const displayName =
+            botToken && userId ? await resolveDisplayName(userId, botToken) : userId;
+
           try {
             const { handleSlackWebhook } = await import("./slack-webhook.js");
-            await handleSlackWebhook(
-              { text, user_id: event.user ?? "", channel_id: event.channel ?? "" },
+            const result = await handleSlackWebhook(
+              { text: cleanText, user_id: displayName, channel_id: channel },
               llmCall
             );
+
+            // ── Fix 1: Reply in thread with classification result ─────────────
+            if (botToken && channel && ts) {
+              await postThreadReply(channel, ts, result.message, botToken);
+            }
           } catch (err) {
             log.warn("Slack event processing failed", { error: String(err) });
+            if (botToken && channel && ts) {
+              await postThreadReply(channel, ts, "❌ 上报失败，请稍后重试。", botToken);
+            }
           }
         })();
       });
 
       ws.addEventListener("close", () => {
-        log.info("Slack Socket Mode: connection closed, reconnecting", { retryMs: reconnectDelay });
+        log.info("Slack Socket Mode: connection closed, reconnecting", {
+          retryMs: reconnectDelay,
+        });
         setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
       });
 
       ws.addEventListener("error", (err) => {
         log.warn("Slack Socket Mode: WebSocket error", { error: String(err) });
-        // 'close' event fires after 'error', reconnect handled there
       });
     })();
   };
