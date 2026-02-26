@@ -171,6 +171,7 @@ export interface HuaweiHealthKitConfig {
   authUrl?: string;
   tokenUrl?: string;
   apiBaseUrl?: string;
+  innerApiBaseUrl?: string;
 }
 
 export interface RemoteMCPServerConfig {

@@ -108,7 +108,12 @@ export class HuaweiHealthApi {
   private appLevelAt: string | undefined;
   private userHuid: string | undefined;
 
-  private static readonly INNER_BASE = "https://healthapi-inner.things.dbankcloud.cn:443";
+  private static readonly DEFAULT_INNER_BASE = "https://healthapi-inner.things.dbankcloud.cn:443";
+
+  private static getInnerBaseUrl(): string {
+    const config = loadConfig();
+    return config.dataSources.huawei?.innerApiBaseUrl || HuaweiHealthApi.DEFAULT_INNER_BASE;
+  }
 
   constructor(auth: HuaweiAuth = defaultAuth, userUuid?: string, options?: HuaweiHealthApiOptions) {
     this.auth = auth;
@@ -139,7 +144,7 @@ export class HuaweiHealthApi {
   private async apiFetch(url: string, options: RequestInit): Promise<Response> {
     if (this.innerMode) {
       const outerPrefix = getApiBaseUrl() + "/healthkit";
-      const innerPrefix = HuaweiHealthApi.INNER_BASE + "/healthkit-inner";
+      const innerPrefix = HuaweiHealthApi.getInnerBaseUrl() + "/healthkit-inner";
       if (url.startsWith(outerPrefix)) {
         url = innerPrefix + url.slice(outerPrefix.length);
       }
