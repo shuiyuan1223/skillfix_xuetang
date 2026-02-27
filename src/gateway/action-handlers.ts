@@ -5,9 +5,9 @@
  * The dispatch map eliminates the 130+ if/else chain (CC=781 → CC<20).
  */
 
-import { writeFileSync } from "fs";
-import { GatewaySession, type SendFn } from "./server.js";
-import { t } from "../locales/index.js";
+import { writeFileSync } from 'fs';
+import { GatewaySession, type SendFn } from './server.js';
+import { t } from '../locales/index.js';
 import {
   loadConfig,
   saveConfig,
@@ -17,10 +17,10 @@ import {
   type LLMProvider,
   type BenchmarkModelConfig,
   type PHAConfig,
-} from "../utils/config.js";
-import { getUserId, getStateDir } from "../utils/config.js";
-import { getAgentProfile } from "../agent/pha-agent.js";
-import { getMemoryManager } from "../memory/index.js";
+} from '../utils/config.js';
+import { getUserId, getStateDir } from '../utils/config.js';
+import { getAgentProfile } from '../agent/pha-agent.js';
+import { getMemoryManager } from '../memory/index.js';
 import {
   generateToast,
   generateBenchmarkRunDetailModal,
@@ -38,34 +38,24 @@ import {
   generatePlanDetailModal,
   generateIntegrationsPage,
   type PlansPageTab,
-} from "./pages.js";
-import type { A2UIMessage } from "./a2ui.js";
-import { loadPlan, savePlan } from "../plans/store.js";
-import type { PlanStatus } from "../plans/types.js";
-import {
-  saveRecommendation,
-  getRecommendation,
-  saveReminder,
-  getReminder,
-} from "../proactive/store.js";
-import { autoSyncPlanProgress, type HealthSnapshot } from "../agent/health-context.js";
-import { createDataSourceForUser } from "../data-sources/index.js";
-import { ensureUserDir } from "../memory/profile.js";
-import {
-  getPromptHistoryTool,
-  updatePromptTool,
-  revertPromptTool,
-  setPromptsDir,
-} from "../tools/prompt-tools.js";
+} from './pages.js';
+import type { A2UIMessage } from './a2ui.js';
+import { loadPlan, savePlan } from '../plans/store.js';
+import type { PlanStatus } from '../plans/types.js';
+import { saveRecommendation, getRecommendation, saveReminder, getReminder } from '../proactive/store.js';
+import { autoSyncPlanProgress, type HealthSnapshot } from '../agent/health-context.js';
+import { createDataSourceForUser } from '../data-sources/index.js';
+import { ensureUserDir } from '../memory/profile.js';
+import { getPromptHistoryTool, updatePromptTool, revertPromptTool, setPromptsDir } from '../tools/prompt-tools.js';
 import {
   listSkillsTool,
   getSkillTool,
   toggleSkillTool,
   updateSkillTool,
   createSkillTool,
-} from "../tools/skill-tools.js";
-import { systemMemoryWriteTool } from "../tools/system-memory-tools.js";
-import { globalRegistry, categoryToAgentTags } from "../tools/index.js";
+} from '../tools/skill-tools.js';
+import { systemMemoryWriteTool } from '../tools/system-memory-tools.js';
+import { globalRegistry, categoryToAgentTags } from '../tools/index.js';
 import {
   getTrace,
   listTraces,
@@ -81,20 +71,20 @@ import {
   deleteBenchmarkRun,
   listEvolutionVersions,
   getEvolutionVersionByBranch,
-} from "../memory/db.js";
-import { readBenchmarkProgress } from "../evolution/benchmark-progress.js";
+} from '../memory/db.js';
+import { readBenchmarkProgress } from '../evolution/benchmark-progress.js';
 import {
   readFileFromBranch,
   readFileFromRef,
   getChangedFilesForVersion,
   mergeVersion,
   abandonVersion,
-} from "../evolution/version-manager.js";
-import { resolveSessionPath, touchSession } from "../memory/session-store.js";
-import { createLogger } from "../utils/logger.js";
+} from '../evolution/version-manager.js';
+import { resolveSessionPath, touchSession } from '../memory/session-store.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Gateway/Actions");
-const logEvolution = log.child("Evolution");
+const log = createLogger('Gateway/Actions');
+const logEvolution = log.child('Evolution');
 
 // ============================================================================
 // Types
@@ -103,16 +93,13 @@ const logEvolution = log.child("Evolution");
 type Payload = Record<string, unknown> | undefined;
 
 /** Handler signature: returns true if handled, false if not */
-export type ActionHandler = (
-  session: GatewaySession,
-  action: string,
-  payload: Payload,
-  send: SendFn
-) => Promise<void>;
+export type ActionHandler = (session: GatewaySession, action: string, payload: Payload, send: SendFn) => Promise<void>;
 
 /** Send an array of A2UIMessage objects one by one through the send function */
 function sendAll(send: SendFn, messages: A2UIMessage[]): void {
-  for (const msg of messages) send(msg);
+  for (const msg of messages) {
+    send(msg);
+  }
 }
 
 // ============================================================================
@@ -152,15 +139,15 @@ function findFullBenchmarkRunId(session: GatewaySession, shortId: string): strin
 // ============================================================================
 
 const handleClearChat: ActionHandler = async (session, _action, _payload, send) => {
-  if (session.currentView === "legacy-chat") {
+  if (session.currentView === 'legacy-chat') {
     session.legacyChatMessages = [];
     session.legacyChatStreaming = false;
-    session.legacyChatStreamingContent = "";
+    session.legacyChatStreamingContent = '';
     session.legacyChatCurrentAssistantMsgId = null;
-    session.legacyChatLastStreamedText = "";
+    session.legacyChatLastStreamedText = '';
     session.legacyChatSessionId = crypto.randomUUID();
     if (session.userUuid) {
-      const p = getAgentProfile("pha4old");
+      const p = getAgentProfile('pha4old');
       const dir = p.sessionPath ? resolveSessionPath(p.sessionPath, session.userUuid) : undefined;
       touchSession(session.userUuid, `legacy-${session.legacyChatSessionId}`, dir);
     }
@@ -168,12 +155,12 @@ const handleClearChat: ActionHandler = async (session, _action, _payload, send) 
   } else {
     session.chatMessages = [];
     session.isStreaming = false;
-    session.streamingContent = "";
+    session.streamingContent = '';
     session.currentAssistantMsgId = null;
-    session.lastStreamedText = "";
+    session.lastStreamedText = '';
     session.sessionId = crypto.randomUUID();
     if (session.userUuid) {
-      const p = getAgentProfile("pha");
+      const p = getAgentProfile('pha');
       const dir = p.sessionPath ? resolveSessionPath(p.sessionPath, session.userUuid) : undefined;
       touchSession(session.userUuid, session.sessionId, dir);
     }
@@ -185,12 +172,12 @@ const handleClearChat: ActionHandler = async (session, _action, _payload, send) 
 const handleSaClearChat: ActionHandler = async (session, _action, _payload, send) => {
   session.systemAgentChatMessages = [];
   session.systemAgentStreaming = false;
-  session.systemAgentStreamingContent = "";
+  session.systemAgentStreamingContent = '';
   session.saCurrentAssistantMsgId = null;
-  session.saLastStreamedText = "";
+  session.saLastStreamedText = '';
   session.saSessionId = crypto.randomUUID();
-  const saP = getAgentProfile("sa");
-  const saDir = saP.sessionPath ? resolveSessionPath(saP.sessionPath, "system") : undefined;
+  const saP = getAgentProfile('sa');
+  const saDir = saP.sessionPath ? resolveSessionPath(saP.sessionPath, 'system') : undefined;
   touchSession(GatewaySession.SA_GLOBAL_UUID, `sa-${session.saSessionId}`, saDir);
   session.sendEvolutionLabUpdate(send);
 };
@@ -202,58 +189,58 @@ const handleSendMessage: ActionHandler = async (session, _action, payload, send)
 };
 
 const handleStopGeneration: ActionHandler = async (session, _action, _payload, send) => {
-  if (session.currentView === "legacy-chat") {
+  if (session.currentView === 'legacy-chat') {
     if (session.legacyChatStreaming && session.legacyChatAgent) {
       session.legacyChatAgent.abort();
       if (session.legacyChatStreamingContent.trim() && session.legacyChatCurrentAssistantMsgId) {
-        session.persistMessage("legacy-chat", {
+        session.persistMessage('legacy-chat', {
           timestamp: Date.now(),
-          role: "assistant",
+          role: 'assistant',
           content: session.legacyChatStreamingContent,
         });
       } else if (session.legacyChatStreamingContent.trim()) {
         session.legacyChatMessages.push({
           id: crypto.randomUUID(),
-          role: "assistant",
-          parts: [{ type: "text", content: session.legacyChatStreamingContent }],
+          role: 'assistant',
+          parts: [{ type: 'text', content: session.legacyChatStreamingContent }],
         });
-        session.persistMessage("legacy-chat", {
+        session.persistMessage('legacy-chat', {
           timestamp: Date.now(),
-          role: "assistant",
+          role: 'assistant',
           content: session.legacyChatStreamingContent,
         });
       }
       session.legacyChatStreaming = false;
-      session.legacyChatStreamingContent = "";
+      session.legacyChatStreamingContent = '';
       session.legacyChatCurrentAssistantMsgId = null;
-      session.legacyChatLastStreamedText = "";
+      session.legacyChatLastStreamedText = '';
       session.sendChatUpdate(send);
     }
   } else {
     if (session.isStreaming && session.agent) {
       session.agent.abort();
       if (session.streamingContent.trim() && session.currentAssistantMsgId) {
-        session.persistMessage("chat", {
+        session.persistMessage('chat', {
           timestamp: Date.now(),
-          role: "assistant",
+          role: 'assistant',
           content: session.streamingContent,
         });
       } else if (session.streamingContent.trim()) {
         session.chatMessages.push({
           id: crypto.randomUUID(),
-          role: "assistant",
-          parts: [{ type: "text", content: session.streamingContent }],
+          role: 'assistant',
+          parts: [{ type: 'text', content: session.streamingContent }],
         });
-        session.persistMessage("chat", {
+        session.persistMessage('chat', {
           timestamp: Date.now(),
-          role: "assistant",
+          role: 'assistant',
           content: session.streamingContent,
         });
       }
       session.isStreaming = false;
-      session.streamingContent = "";
+      session.streamingContent = '';
       session.currentAssistantMsgId = null;
-      session.lastStreamedText = "";
+      session.lastStreamedText = '';
       session.sendChatUpdate(send);
     }
   }
@@ -264,28 +251,28 @@ const handleSaStopGeneration: ActionHandler = async (session, _action, _payload,
     session.systemAgent.abort();
     if (session.systemAgentStreamingContent.trim()) {
       if (session.saCurrentAssistantMsgId) {
-        session.persistMessage("system-agent", {
+        session.persistMessage('system-agent', {
           timestamp: Date.now(),
-          role: "assistant",
+          role: 'assistant',
           content: session.systemAgentStreamingContent,
         });
       } else {
         session.systemAgentChatMessages.push({
           id: crypto.randomUUID(),
-          role: "assistant",
-          parts: [{ type: "text", content: session.systemAgentStreamingContent }],
+          role: 'assistant',
+          parts: [{ type: 'text', content: session.systemAgentStreamingContent }],
         });
-        session.persistMessage("system-agent", {
+        session.persistMessage('system-agent', {
           timestamp: Date.now(),
-          role: "assistant",
+          role: 'assistant',
           content: session.systemAgentStreamingContent,
         });
       }
     }
     session.systemAgentStreaming = false;
-    session.systemAgentStreamingContent = "";
+    session.systemAgentStreamingContent = '';
     session.saCurrentAssistantMsgId = null;
-    session.saLastStreamedText = "";
+    session.saLastStreamedText = '';
     session.sendEvolutionLabUpdate(send);
   }
 };
@@ -295,12 +282,10 @@ const handleSaStopGeneration: ActionHandler = async (session, _action, _payload,
 // ============================================================================
 
 const handleStartAuth: ActionHandler = async (session, _action, _payload, send) => {
-  import("../data-sources/huawei/huawei-api.js").then(({ clearMissingScopeErrors }) =>
-    clearMissingScopeErrors()
-  );
+  import('../data-sources/huawei/huawei-api.js').then(({ clearMissingScopeErrors }) => clearMissingScopeErrors());
   send({
-    type: "auth_start",
-    provider: "huawei",
+    type: 'auth_start',
+    provider: 'huawei',
     uid: session.userUuid,
   });
 };
@@ -309,7 +294,7 @@ const handleSetUid: ActionHandler = async (session, _action, payload, send) => {
   if (payload?.uid || payload?.uuid) {
     session.userUuid = (payload.uid || payload.uuid) as string;
     session.agent = null;
-    send({ type: "uid_set", uid: session.userUuid });
+    send({ type: 'uid_set', uid: session.userUuid });
   }
 };
 
@@ -321,8 +306,8 @@ const handleAuthComplete: ActionHandler = async (session, _action, payload, send
     ensureUserDir(newUserId);
     session.agent = null;
   }
-  const { clearMemoryCache } = await import("../data-sources/huawei/api-cache.js");
-  const { clearMissingScopeErrors } = await import("../data-sources/huawei/huawei-api.js");
+  const { clearMemoryCache } = await import('../data-sources/huawei/api-cache.js');
+  const { clearMissingScopeErrors } = await import('../data-sources/huawei/huawei-api.js');
   clearMemoryCache();
   clearMissingScopeErrors();
   session.dashboardLoader = null;
@@ -336,10 +321,10 @@ const handleAuthComplete: ActionHandler = async (session, _action, payload, send
 const handleMemorySearchSubmit: ActionHandler = async (session, _action, payload, send) => {
   if (payload?.query) {
     const mm = getMemoryManager();
-    const uuid = session.userUuid || getUserId() || "anonymous";
+    const uuid = session.userUuid || getUserId() || 'anonymous';
     session.memorySearchQuery = payload.query as string;
     session.memorySearchResults = await mm.searchAsync(uuid, session.memorySearchQuery);
-    await session.handleNavigate("memory", send);
+    await session.handleNavigate('memory', send);
   }
 };
 
@@ -347,18 +332,18 @@ const handleMemoryLogSelect: ActionHandler = async (session, _action, payload, s
   if (payload?.row) {
     const row = payload.row as { date: string };
     session.selectedLogDate = row.date;
-    await session.handleNavigate("memory", send);
+    await session.handleNavigate('memory', send);
   }
 };
 
 const handleMemoryLogBack: ActionHandler = async (session, _action, _payload, send) => {
   session.selectedLogDate = null;
-  await session.handleNavigate("memory", send);
+  await session.handleNavigate('memory', send);
 };
 
 const handleShowToast: ActionHandler = async (_session, _action, payload, send) => {
   if (payload?.message) {
-    const variant = (payload.variant as "info" | "success" | "error") || "info";
+    const variant = (payload.variant as 'info' | 'success' | 'error') || 'info';
     const toast = generateToast(payload.message as string, variant);
     sendAll(send, toast);
   }
@@ -372,7 +357,7 @@ const handleSelectFile: ActionHandler = async (session, _action, payload, send) 
   if (payload?.row) {
     const row = payload.row as { name: string; source: string };
     session.selectedPrompt = row.name;
-    session.selectedPromptSource = (row.source === "user" ? "user" : "system") as "system" | "user";
+    session.selectedPromptSource = (row.source === 'user' ? 'user' : 'system') as 'system' | 'user';
     session.editingPrompt = false;
     session.editBuffer = null;
     await session.openPromptModal(send);
@@ -397,27 +382,27 @@ const handlePromptContentChange: ActionHandler = async (session, _action, payloa
 };
 
 const handleSavePromptFromModal: ActionHandler = async (session, _action, _payload, send) => {
-  if (!session.selectedPrompt || !session.editBuffer) return;
-  if (session.selectedPromptSource === "user") {
+  if (!session.selectedPrompt || !session.editBuffer) {
+    return;
+  }
+  if (session.selectedPromptSource === 'user') {
     const filePath = session.getUserFilePath(session.selectedPrompt);
     if (filePath) {
-      const { mkdirSync } = await import("fs");
-      const { dirname } = await import("path");
+      const { mkdirSync } = await import('fs');
+      const { dirname } = await import('path');
       mkdirSync(dirname(filePath), { recursive: true });
-      writeFileSync(filePath, session.editBuffer, "utf-8");
+      writeFileSync(filePath, session.editBuffer, 'utf-8');
     }
   } else {
-    setPromptsDir(
-      session.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
-    );
+    setPromptsDir(session.promptsScope === 'system' ? 'src/prompts/system-agent' : 'src/prompts/pha');
     try {
       await updatePromptTool.execute({
         name: session.selectedPrompt,
         content: session.editBuffer,
-        commitMessage: `Update ${session.promptsScope === "system" ? "system-agent " : ""}prompt: ${session.selectedPrompt} via UI`,
+        commitMessage: `Update ${session.promptsScope === 'system' ? 'system-agent ' : ''}prompt: ${session.selectedPrompt} via UI`,
       });
     } finally {
-      setPromptsDir("src/prompts/pha");
+      setPromptsDir('src/prompts/pha');
     }
   }
   session.editingPrompt = false;
@@ -427,13 +412,15 @@ const handleSavePromptFromModal: ActionHandler = async (session, _action, _paylo
 
 const handleSelectCommit: ActionHandler = async (_session, _action, payload, _send) => {
   if (payload?.hash) {
-    log.debug("Selected commit", { hash: payload.hash });
+    log.debug('Selected commit', { hash: payload.hash });
   }
 };
 
 const handleRevertPrompt: ActionHandler = async (session, _action, _payload, send) => {
-  if (!session.selectedPrompt) return;
-  setPromptsDir(session.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha");
+  if (!session.selectedPrompt) {
+    return;
+  }
+  setPromptsDir(session.promptsScope === 'system' ? 'src/prompts/system-agent' : 'src/prompts/pha');
   try {
     const historyResult = await getPromptHistoryTool.execute({
       name: session.selectedPrompt,
@@ -444,21 +431,23 @@ const handleRevertPrompt: ActionHandler = async (session, _action, _payload, sen
       sendAll(send, modal);
     }
   } finally {
-    setPromptsDir("src/prompts/pha");
+    setPromptsDir('src/prompts/pha');
   }
 };
 
 const handleSelectRevertCommit: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.commit || !session.selectedPrompt) return;
+  if (!payload?.commit || !session.selectedPrompt) {
+    return;
+  }
   const commit = payload.commit as { hash: string };
-  setPromptsDir(session.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha");
+  setPromptsDir(session.promptsScope === 'system' ? 'src/prompts/system-agent' : 'src/prompts/pha');
   try {
     await revertPromptTool.execute({ name: session.selectedPrompt, commitHash: commit.hash });
   } finally {
-    setPromptsDir("src/prompts/pha");
+    setPromptsDir('src/prompts/pha');
   }
-  send({ deleteSurface: { surfaceId: "modal" } });
-  await session.handleNavigate("settings/prompts", send);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await session.handleNavigate('settings/prompts', send);
 };
 
 // ============================================================================
@@ -466,18 +455,20 @@ const handleSelectRevertCommit: ActionHandler = async (session, _action, payload
 // ============================================================================
 
 const handleSelectSkill: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as { name: string };
-  const name = row.name.replace(/^[^\s]+\s+/, "");
+  const name = row.name.replace(/^[^\s]+\s+/, '');
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = (await getSkillTool.execute({ name })) as any;
     if (result?.success !== false) {
       const modal = generateSkillDetailModal({
         name,
-        description: result.description || "",
+        description: result.description || '',
         enabled: result.enabled !== false,
-        content: result.content || "",
+        content: result.content || '',
         emoji: result.metadata?.pha?.emoji,
       });
       sendAll(send, modal);
@@ -492,13 +483,13 @@ const handleSelectSkillFile: ActionHandler = async (session, _action, payload, s
     session.selectedSkillFile = payload.file as string;
     session.editingSkill = false;
     session.editBuffer = null;
-    await session.handleNavigate("settings/skills", send);
+    await session.handleNavigate('settings/skills', send);
   }
 };
 
 const handleEditSkill: ActionHandler = async (session, _action, _payload, send) => {
   session.editingSkill = true;
-  await session.handleNavigate("settings/skills", send);
+  await session.handleNavigate('settings/skills', send);
 };
 
 const handleCancelEdit: ActionHandler = async (session, _action, _payload, send) => {
@@ -514,7 +505,9 @@ const handleSkillContentChange: ActionHandler = async (session, _action, payload
 };
 
 const handleSaveSkill: ActionHandler = async (session, _action, _payload, send) => {
-  if (!session.selectedSkill || !session.editBuffer) return;
+  if (!session.selectedSkill || !session.editBuffer) {
+    return;
+  }
   await updateSkillTool.execute({
     name: session.selectedSkill,
     content: session.editBuffer,
@@ -522,27 +515,29 @@ const handleSaveSkill: ActionHandler = async (session, _action, _payload, send) 
   });
   session.editingSkill = false;
   session.editBuffer = null;
-  await session.handleNavigate("settings/skills", send);
+  await session.handleNavigate('settings/skills', send);
 };
 
 const handleToggleSkill: ActionHandler = async (session, _action, _payload, send) => {
-  if (!session.selectedSkill) return;
+  if (!session.selectedSkill) {
+    return;
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const skillsResult = (await listSkillsTool.execute({})) as any;
-  const skill = skillsResult.skills?.find(
-    (s: { name: string }) => s.name === session.selectedSkill
-  );
+  const skill = skillsResult.skills?.find((s: { name: string }) => s.name === session.selectedSkill);
   if (skill) {
     await toggleSkillTool.execute({
       name: session.selectedSkill,
       enabled: !skill.enabled,
     });
-    await session.handleNavigate("settings/skills", send);
+    await session.handleNavigate('settings/skills', send);
   }
 };
 
 const handleToggleSkillFromModal: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.skillName) return;
+  if (!payload?.skillName) {
+    return;
+  }
   const skillName = payload.skillName as string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const skillsResult = (await listSkillsTool.execute({})) as any;
@@ -554,9 +549,9 @@ const handleToggleSkillFromModal: ActionHandler = async (_session, _action, payl
     if (updated?.success !== false) {
       const modal = generateSkillDetailModal({
         name: skillName,
-        description: updated.description || "",
+        description: updated.description || '',
         enabled: updated.enabled !== false,
-        content: updated.content || "",
+        content: updated.content || '',
         emoji: updated.metadata?.pha?.emoji,
       });
       sendAll(send, modal);
@@ -565,14 +560,16 @@ const handleToggleSkillFromModal: ActionHandler = async (_session, _action, payl
 };
 
 const handleEditSkillFromModal: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.skillName) return;
+  if (!payload?.skillName) {
+    return;
+  }
   const skillName = payload.skillName as string;
-  send({ deleteSurface: { surfaceId: "modal" } });
+  send({ deleteSurface: { surfaceId: 'modal' } });
   session.selectedSkill = skillName;
-  session.selectedSkillFile = "SKILL.md";
+  session.selectedSkillFile = 'SKILL.md';
   session.editingSkill = true;
   session.editBuffer = null;
-  await session.handleNavigate("settings/skills", send);
+  await session.handleNavigate('settings/skills', send);
 };
 
 const handleCreateSkill: ActionHandler = async (_session, _action, _payload, send) => {
@@ -581,14 +578,16 @@ const handleCreateSkill: ActionHandler = async (_session, _action, _payload, sen
 };
 
 const handleSubmitCreateSkill: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload) return;
+  if (!payload) {
+    return;
+  }
   const name = payload.name as string;
   const description = payload.description as string;
   const emoji = payload.emoji as string | undefined;
   const content = payload.content as string | undefined;
   await createSkillTool.execute({ name, description, emoji, content });
-  send({ deleteSurface: { surfaceId: "modal" } });
-  await _session.handleNavigate("settings/skills", send);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await _session.handleNavigate('settings/skills', send);
 };
 
 // ============================================================================
@@ -596,18 +595,20 @@ const handleSubmitCreateSkill: ActionHandler = async (_session, _action, payload
 // ============================================================================
 
 const handleSaMemorySelect: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as { name: string };
-  const name = row.name.replace(/\.md$/, "");
+  const name = row.name.replace(/\.md$/, '');
   session.saSelectedMemoryFile = name;
   session.saEditingMemory = false;
   session.editBuffer = null;
-  await session.handleNavigate("memory", send);
+  await session.handleNavigate('memory', send);
 };
 
 const handleSaMemoryEdit: ActionHandler = async (session, _action, _payload, send) => {
   session.saEditingMemory = true;
-  await session.handleNavigate("memory", send);
+  await session.handleNavigate('memory', send);
 };
 
 const handleSaMemoryContentChange: ActionHandler = async (session, _action, payload, _send) => {
@@ -617,20 +618,22 @@ const handleSaMemoryContentChange: ActionHandler = async (session, _action, payl
 };
 
 const handleSaMemorySave: ActionHandler = async (session, _action, _payload, send) => {
-  if (!session.saSelectedMemoryFile || !session.editBuffer) return;
+  if (!session.saSelectedMemoryFile || !session.editBuffer) {
+    return;
+  }
   await systemMemoryWriteTool.execute({
     file: session.saSelectedMemoryFile,
     content: session.editBuffer,
   });
   session.saEditingMemory = false;
   session.editBuffer = null;
-  await session.handleNavigate("memory", send);
+  await session.handleNavigate('memory', send);
 };
 
 const handleSaMemoryCancel: ActionHandler = async (session, _action, _payload, send) => {
   session.saEditingMemory = false;
   session.editBuffer = null;
-  await session.handleNavigate("memory", send);
+  await session.handleNavigate('memory', send);
 };
 
 // ============================================================================
@@ -652,20 +655,22 @@ const handleEvoSendMessage: ActionHandler = async (session, _action, payload, se
 
 const handleEvoTabChange: ActionHandler = async (session, _action, payload, send) => {
   if (payload?.tab) {
-    session.evolutionActiveTab = payload.tab as "overview" | "benchmark" | "versions" | "data";
+    session.evolutionActiveTab = payload.tab as 'overview' | 'benchmark' | 'versions' | 'data';
     session.sendEvolutionLabUpdate(send);
   }
 };
 
 const handleEvoDataSubtabChange: ActionHandler = async (session, _action, payload, send) => {
   if (payload?.tab) {
-    session.evolutionDataSubTab = payload.tab as "traces" | "evaluations" | "suggestions";
+    session.evolutionDataSubTab = payload.tab as 'traces' | 'evaluations' | 'suggestions';
     session.sendEvolutionLabUpdate(send);
   }
 };
 
 const handleViewVersion: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as { branch?: string };
   if (row.branch) {
     session.evolutionSelectedVersion = row.branch;
@@ -686,11 +691,13 @@ const handleViewVersionFromList: ActionHandler = async (session, _action, payloa
 
 const handleEvoTimelineClick: ActionHandler = async (session, _action, payload, send) => {
   const eventId = (payload?.id || payload?.eventId) as string;
-  if (!eventId?.startsWith("ver_")) return;
+  if (!eventId?.startsWith('ver_')) {
+    return;
+  }
 
   let branch = payload?.branch as string | undefined;
   if (!branch) {
-    const versionId = eventId.replace("ver_", "");
+    const versionId = eventId.replace('ver_', '');
     const versions = listEvolutionVersions();
     const ver = versions.find((v) => v.id === versionId);
     branch = ver?.branch_name;
@@ -704,22 +711,26 @@ const handleEvoTimelineClick: ActionHandler = async (session, _action, payload, 
 };
 
 const handleEvoFileSelect: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.path) return;
+  if (!payload?.path) {
+    return;
+  }
   const inspectBranch = session.evolutionSelectedVersion || session.evolutionInspectedBranch;
-  if (!inspectBranch) return;
+  if (!inspectBranch) {
+    return;
+  }
 
   try {
     const filePath = payload.path as string;
-    const afterContent = readFileFromBranch(inspectBranch, filePath) || "";
+    const afterContent = readFileFromBranch(inspectBranch, filePath) || '';
 
     let beforeContent: string;
     const version = getEvolutionVersionByBranch(inspectBranch);
-    if (version?.status === "merged") {
+    if (version?.status === 'merged') {
       const meta = version.metadata ? JSON.parse(version.metadata) : {};
-      const base = meta.mergeBase || "main";
-      beforeContent = readFileFromRef(base, filePath) || "";
+      const base = meta.mergeBase || 'main';
+      beforeContent = readFileFromRef(base, filePath) || '';
     } else {
-      beforeContent = readFileFromBranch("main", filePath) || "";
+      beforeContent = readFileFromBranch('main', filePath) || '';
     }
 
     session.evolutionLabDiffContent = {
@@ -729,22 +740,16 @@ const handleEvoFileSelect: ActionHandler = async (session, _action, payload, sen
     };
     session.sendEvolutionLabUpdate(send);
   } catch (e) {
-    logEvolution.error("File select error", { error: e });
+    logEvolution.error('File select error', { error: e });
   }
 };
 
 const handleEvoApprove: ActionHandler = async (session, _action, _payload, send) => {
-  session.fireSystemAgentMessage(
-    "I approve this proposal. Please proceed with applying the changes.",
-    send
-  );
+  session.fireSystemAgentMessage('I approve this proposal. Please proceed with applying the changes.', send);
 };
 
 const handleEvoReject: ActionHandler = async (session, _action, _payload, send) => {
-  session.fireSystemAgentMessage(
-    "I reject this proposal. Please revise the plan and propose again.",
-    send
-  );
+  session.fireSystemAgentMessage('I reject this proposal. Please revise the plan and propose again.', send);
 };
 
 // ============================================================================
@@ -759,7 +764,7 @@ const handlePgSendMessage: ActionHandler = async (session, _action, payload, sen
 
 const handlePgStartAuto: ActionHandler = async (session, _action, _payload, send) => {
   session.fireSystemAgentMessage(
-    "Start a full evolution cycle: benchmark, diagnose, propose improvements, and wait for my approval before applying.",
+    'Start a full evolution cycle: benchmark, diagnose, propose improvements, and wait for my approval before applying.',
     send
   );
 };
@@ -769,10 +774,14 @@ const handlePgStartAuto: ActionHandler = async (session, _action, _payload, send
 // ============================================================================
 
 const handleViewToolDetail: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as Record<string, unknown>;
   const toolName = row.name as string;
-  if (!toolName) return;
+  if (!toolName) {
+    return;
+  }
   const tool = globalRegistry.get(toolName);
   if (tool) {
     const modal = generateToolDetailModal({
@@ -790,7 +799,9 @@ const handleViewToolDetail: ActionHandler = async (_session, _action, payload, s
 };
 
 const handleViewSkillFromTable: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.value) return;
+  if (!payload?.value) {
+    return;
+  }
   const skillName = payload.value as string;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -798,9 +809,9 @@ const handleViewSkillFromTable: ActionHandler = async (_session, _action, payloa
     if (result?.success !== false) {
       const modal = generateSkillDetailModal({
         name: skillName,
-        description: result.description || "",
+        description: result.description || '',
         enabled: result.enabled !== false,
-        content: result.content || "",
+        content: result.content || '',
         emoji: result.metadata?.pha?.emoji,
       });
       sendAll(send, modal);
@@ -811,7 +822,9 @@ const handleViewSkillFromTable: ActionHandler = async (_session, _action, payloa
 };
 
 const handleViewSkillFromTool: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.skillName) return;
+  if (!payload?.skillName) {
+    return;
+  }
   const skillName = payload.skillName as string;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -819,9 +832,9 @@ const handleViewSkillFromTool: ActionHandler = async (_session, _action, payload
     if (result?.success !== false) {
       const modal = generateSkillDetailModal({
         name: skillName,
-        description: result.description || "",
+        description: result.description || '',
         enabled: result.enabled !== false,
-        content: result.content || "",
+        content: result.content || '',
         emoji: result.metadata?.pha?.emoji,
       });
       sendAll(send, modal);
@@ -836,129 +849,111 @@ const handleViewSkillFromTool: ActionHandler = async (_session, _action, payload
 // ============================================================================
 
 const handleTabChange: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.tab) return;
+  if (!payload?.tab) {
+    return;
+  }
   const tab = payload.tab as string;
 
   const view = session.currentView;
 
-  if (view === "dashboard" || view === "health" || view === "sleep" || view === "activity") {
+  if (view === 'dashboard' || view === 'health' || view === 'sleep' || view === 'activity') {
     await handleDashboardTabChange(session, tab, send);
-  } else if (view === "memory") {
+  } else if (view === 'memory') {
     await handleMemoryTabChange(session, tab, send);
-  } else if (view === "plans") {
+  } else if (view === 'plans') {
     session.plansTab = tab as PlansPageTab;
-    await session.handleNavigate("plans", send);
-  } else if (view === "settings/prompts") {
+    await session.handleNavigate('plans', send);
+  } else if (view === 'settings/prompts') {
     await handlePromptsTabChange(session, tab, send);
-  } else if (view === "settings/skills") {
+  } else if (view === 'settings/skills') {
     await handleSkillsTabChange(session, tab, send);
-  } else if (view === "settings/tools") {
-    session.toolsCategory = tab || "all";
-    await session.handleNavigate("settings/tools", send);
-  } else if (view === "settings/integrations") {
+  } else if (view === 'settings/tools') {
+    session.toolsCategory = tab || 'all';
+    await session.handleNavigate('settings/tools', send);
+  } else if (view === 'settings/integrations') {
     await handleIntegrationsTabChange(session, tab, send);
-  } else if (view === "experiment") {
+  } else if (view === 'experiment') {
     session.activeDashboardTab = tab;
-    await session.handleNavigate("experiment", send);
-  } else if (view === "evolution") {
-    session.evolutionActiveTab = tab as "overview" | "benchmark" | "versions" | "data";
+    await session.handleNavigate('experiment', send);
+  } else if (view === 'evolution') {
+    session.evolutionActiveTab = tab as 'overview' | 'benchmark' | 'versions' | 'data';
     session.sendEvolutionLabUpdate(send);
-  } else if (view === "settings/logs") {
-    session.logsTab = tab as "system" | "llm";
-    await session.handleNavigate("settings/logs", send);
+  } else if (view === 'settings/logs') {
+    session.logsTab = tab as 'system' | 'llm';
+    await session.handleNavigate('settings/logs', send);
   } else {
     type EvolutionTab =
-      | "overview"
-      | "traces"
-      | "evaluations"
-      | "benchmark"
-      | "runs"
-      | "suggestions"
-      | "config"
-      | "versions";
+      | 'overview'
+      | 'traces'
+      | 'evaluations'
+      | 'benchmark'
+      | 'runs'
+      | 'suggestions'
+      | 'config'
+      | 'versions';
     session.evolutionTab = tab as EvolutionTab;
-    await session.handleNavigate("settings/evolution-legacy", send);
+    await session.handleNavigate('settings/evolution-legacy', send);
   }
 };
 
-async function handleDashboardTabChange(
-  session: GatewaySession,
-  tab: string,
-  send: SendFn
-): Promise<void> {
-  type DashboardTab = "overview" | "vitals" | "activity" | "sleep" | "body" | "heart" | "trends";
+async function handleDashboardTabChange(session: GatewaySession, tab: string, send: SendFn): Promise<void> {
+  type DashboardTab = 'overview' | 'vitals' | 'activity' | 'sleep' | 'body' | 'heart' | 'trends';
   session.dashboardTab = tab as DashboardTab;
   if (session.dashboardLoader) {
     session.dashboardLoader.updateSend(send);
-    if (session.dashboardTab === "trends") {
+    if (session.dashboardTab === 'trends') {
       session.dashboardLoader.getData().trendsMetric = session.trendsMetric;
       session.dashboardLoader.getData().trendsRange = session.trendsRange;
     }
     await session.dashboardLoader.load(session.dashboardTab);
-    if (session.dashboardTab === "trends") {
+    if (session.dashboardTab === 'trends') {
       await session.dashboardLoader.loadTrends(session.trendsMetric, session.trendsRange);
     }
   } else {
-    await session.handleNavigate("dashboard", send);
+    await session.handleNavigate('dashboard', send);
   }
 }
 
-async function handleMemoryTabChange(
-  session: GatewaySession,
-  tab: string,
-  send: SendFn
-): Promise<void> {
-  if (tab === "system-agent") {
+async function handleMemoryTabChange(session: GatewaySession, tab: string, send: SendFn): Promise<void> {
+  if (tab === 'system-agent') {
     session.saSelectedMemoryFile = null;
     session.saEditingMemory = false;
     session.editBuffer = null;
   }
-  if (tab !== "logs") {
+  if (tab !== 'logs') {
     session.selectedLogDate = null;
   }
-  session.memoryTab = tab as "profile" | "summary" | "logs" | "search" | "system-agent";
-  await session.handleNavigate("memory", send);
+  session.memoryTab = tab as 'profile' | 'summary' | 'logs' | 'search' | 'system-agent';
+  await session.handleNavigate('memory', send);
 }
 
-async function handlePromptsTabChange(
-  session: GatewaySession,
-  tab: string,
-  send: SendFn
-): Promise<void> {
-  if (tab === "pha" || tab === "system") {
+async function handlePromptsTabChange(session: GatewaySession, tab: string, send: SendFn): Promise<void> {
+  if (tab === 'pha' || tab === 'system') {
     session.promptsScope = tab;
     session.selectedPrompt = null;
-    session.selectedPromptSource = "system";
+    session.selectedPromptSource = 'system';
     session.editingPrompt = false;
     session.editBuffer = null;
-    await session.handleNavigate("settings/prompts", send);
+    await session.handleNavigate('settings/prompts', send);
   }
 }
 
-async function handleSkillsTabChange(
-  session: GatewaySession,
-  tab: string,
-  send: SendFn
-): Promise<void> {
+async function handleSkillsTabChange(session: GatewaySession, tab: string, send: SendFn): Promise<void> {
   session.skillsCategory = tab;
   session.selectedSkill = null;
-  session.selectedSkillFile = "SKILL.md";
+  session.selectedSkillFile = 'SKILL.md';
   session.editingSkill = false;
   session.editBuffer = null;
-  await session.handleNavigate("settings/skills", send);
+  await session.handleNavigate('settings/skills', send);
 }
 
-async function handleIntegrationsTabChange(
-  session: GatewaySession,
-  tab: string,
-  send: SendFn
-): Promise<void> {
-  session.integrationsTab = tab as "overview" | "issues" | "prs" | "branches";
+async function handleIntegrationsTabChange(session: GatewaySession, tab: string, send: SendFn): Promise<void> {
+  session.integrationsTab = tab as 'overview' | 'issues' | 'prs' | 'branches';
   if (session.integrationsCache) {
     sendAll(
       send,
       session.buildPage(
-        "settings/integrations",
+        'settings/integrations',
         generateIntegrationsPage({
           activeTab: session.integrationsTab,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -978,7 +973,7 @@ async function handleIntegrationsTabChange(
     sendAll(
       send,
       session.buildPage(
-        "settings/integrations",
+        'settings/integrations',
         generateIntegrationsPage({
           activeTab: session.integrationsTab,
           ghAvailable: true,
@@ -994,8 +989,10 @@ async function handleIntegrationsTabChange(
 // ============================================================================
 
 const handleChangeTrendsRange: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload) return;
-  session.trendsRange = (payload.value as string) || "1m";
+  if (!payload) {
+    return;
+  }
+  session.trendsRange = (payload.value as string) || '1m';
   if (session.dashboardLoader) {
     session.dashboardLoader.updateSend(send);
     await session.dashboardLoader.loadTrends(session.trendsMetric, session.trendsRange);
@@ -1003,8 +1000,10 @@ const handleChangeTrendsRange: ActionHandler = async (session, _action, payload,
 };
 
 const handleChangeTrendsMetric: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload) return;
-  session.trendsMetric = (payload.value as string) || "steps";
+  if (!payload) {
+    return;
+  }
+  session.trendsMetric = (payload.value as string) || 'steps';
   if (session.dashboardLoader) {
     session.dashboardLoader.updateSend(send);
     await session.dashboardLoader.loadTrends(session.trendsMetric, session.trendsRange);
@@ -1012,9 +1011,11 @@ const handleChangeTrendsMetric: ActionHandler = async (session, _action, payload
 };
 
 const handleTrendsConfigChange: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload) return;
-  session.trendsMetric = (payload.metric as string) || "steps";
-  session.trendsRange = (payload.range as string) || "1m";
+  if (!payload) {
+    return;
+  }
+  session.trendsMetric = (payload.metric as string) || 'steps';
+  session.trendsRange = (payload.range as string) || '1m';
   if (session.dashboardLoader) {
     session.dashboardLoader.updateSend(send);
     await session.dashboardLoader.loadTrends(session.trendsMetric, session.trendsRange);
@@ -1026,20 +1027,26 @@ const handleTrendsConfigChange: ActionHandler = async (session, _action, payload
 // ============================================================================
 
 const handleTracesPageChange: ActionHandler = async (session, _action, payload, send) => {
-  if (payload?.page === undefined) return;
+  if (payload?.page === undefined) {
+    return;
+  }
   session.tracesPage = payload.page as number;
-  if (session.currentView === "evolution") {
+  if (session.currentView === 'evolution') {
     session.sendEvolutionLabUpdate(send);
   } else {
-    await session.handleNavigate("settings/evolution", send);
+    await session.handleNavigate('settings/evolution', send);
   }
 };
 
 const handleViewTrace: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as { id: string };
   const traceId = row.id.length === 8 ? findFullTraceId(row.id) : row.id;
-  if (!traceId) return;
+  if (!traceId) {
+    return;
+  }
   const trace = getTrace(traceId);
   if (trace) {
     const modal = generateTraceDetailModal({
@@ -1056,10 +1063,14 @@ const handleViewTrace: ActionHandler = async (_session, _action, payload, send) 
 };
 
 const handleViewEvaluation: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as { id: string; traceId: string };
   const evalId = row.id.length === 8 ? findFullEvaluationId(row.id) : row.id;
-  if (!evalId) return;
+  if (!evalId) {
+    return;
+  }
   const evaluation = getEvaluation(evalId);
   if (evaluation) {
     const modal = generateEvaluationDetailModal({
@@ -1076,10 +1087,14 @@ const handleViewEvaluation: ActionHandler = async (_session, _action, payload, s
 };
 
 const handleViewTestCase: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as { id: string };
   const testId = row.id.length === 8 ? findFullTestCaseId(row.id) : row.id;
-  if (!testId) return;
+  if (!testId) {
+    return;
+  }
   const testCase = getTestCase(testId);
   if (testCase) {
     const modal = generateTestCaseDetailModal({
@@ -1094,10 +1109,14 @@ const handleViewTestCase: ActionHandler = async (_session, _action, payload, sen
 };
 
 const handleViewSuggestion: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as { id: string };
   const suggId = row.id.length === 8 ? findFullSuggestionId(row.id) : row.id;
-  if (!suggId) return;
+  if (!suggId) {
+    return;
+  }
   const suggestion = getSuggestion(suggId);
   if (suggestion) {
     const modal = generateSuggestionDetailModal({
@@ -1109,9 +1128,7 @@ const handleViewSuggestion: ActionHandler = async (_session, _action, payload, s
       suggestedValue: suggestion.suggested_value,
       rationale: suggestion.rationale || undefined,
       status: suggestion.status,
-      validationResults: suggestion.validation_results
-        ? JSON.parse(suggestion.validation_results)
-        : undefined,
+      validationResults: suggestion.validation_results ? JSON.parse(suggestion.validation_results) : undefined,
     });
     sendAll(send, modal);
   }
@@ -1123,7 +1140,9 @@ const handleCreateTestCase: ActionHandler = async (_session, _action, _payload, 
 };
 
 const handleSubmitCreateTestCase: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload) return;
+  if (!payload) {
+    return;
+  }
   const category = payload.category as string;
   const query = payload.query as string;
   const minScore = payload.minScore ? Number(payload.minScore) : undefined;
@@ -1139,53 +1158,61 @@ const handleSubmitCreateTestCase: ActionHandler = async (session, _action, paylo
       minScore,
       shouldMention: shouldMentionStr
         ? shouldMentionStr
-            .split(",")
+            .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
         : undefined,
       shouldNotMention: shouldNotMentionStr
         ? shouldNotMentionStr
-            .split(",")
+            .split(',')
             .map((s) => s.trim())
             .filter(Boolean)
         : undefined,
     },
   });
 
-  send({ deleteSurface: { surfaceId: "modal" } });
-  await session.handleNavigate("settings/evolution", send);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await session.handleNavigate('settings/evolution', send);
 };
 
 const handleDeleteTestCase: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.id) return;
+  if (!payload?.id) {
+    return;
+  }
   deleteTestCase(payload.id as string);
-  send({ deleteSurface: { surfaceId: "modal" } });
-  await session.handleNavigate("settings/evolution", send);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await session.handleNavigate('settings/evolution', send);
 };
 
 const handleApplySuggestion: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.id) return;
-  updateSuggestionStatus(payload.id as string, "applied");
-  send({ deleteSurface: { surfaceId: "modal" } });
-  await session.handleNavigate("settings/evolution", send);
+  if (!payload?.id) {
+    return;
+  }
+  updateSuggestionStatus(payload.id as string, 'applied');
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await session.handleNavigate('settings/evolution', send);
 };
 
 const handleRejectSuggestion: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.id) return;
-  updateSuggestionStatus(payload.id as string, "rejected");
-  send({ deleteSurface: { surfaceId: "modal" } });
-  await session.handleNavigate("settings/evolution", send);
+  if (!payload?.id) {
+    return;
+  }
+  updateSuggestionStatus(payload.id as string, 'rejected');
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await session.handleNavigate('settings/evolution', send);
 };
 
 const handleTestSuggestion: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.id) return;
-  updateSuggestionStatus(payload.id as string, "testing");
-  send({ deleteSurface: { surfaceId: "modal" } });
-  await session.handleNavigate("settings/evolution", send);
+  if (!payload?.id) {
+    return;
+  }
+  updateSuggestionStatus(payload.id as string, 'testing');
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await session.handleNavigate('settings/evolution', send);
 };
 
 const handleCloseModal: ActionHandler = async (_session, _action, _payload, send) => {
-  send({ deleteSurface: { surfaceId: "modal" } });
+  send({ deleteSurface: { surfaceId: 'modal' } });
 };
 
 // ============================================================================
@@ -1194,41 +1221,37 @@ const handleCloseModal: ActionHandler = async (_session, _action, _payload, send
 
 const handleRunBenchmark: ActionHandler = async (session, action, payload, send) => {
   const cliProgress = readBenchmarkProgress();
-  if (cliProgress && cliProgress.running && cliProgress.source !== "ui") {
-    const toast = generateToast(t("evolution.externalBenchmarkRunning"), "warning");
+  if (cliProgress && cliProgress.running && cliProgress.source !== 'ui') {
+    const toast = generateToast(t('evolution.externalBenchmarkRunning'), 'warning');
     sendAll(send, toast);
     return;
   }
 
   const benchmarkModels = getBenchmarkModels();
   const hasMultipleModels =
-    Object.keys(benchmarkModels).length > 1 ||
-    (Object.keys(benchmarkModels).length === 1 && !benchmarkModels.default);
+    Object.keys(benchmarkModels).length > 1 || (Object.keys(benchmarkModels).length === 1 && !benchmarkModels.default);
 
-  if (hasMultipleModels || action === "open_benchmark_modal") {
+  if (hasMultipleModels || action === 'open_benchmark_modal') {
     const models = Object.entries(benchmarkModels).map(([name, config]) => ({
       name,
       label: config.label || `${config.provider}/${config.modelId}`,
     }));
-    const modal = generateBenchmarkModelSelectorModal(
-      models,
-      (payload?.profile as "quick" | "full") || "quick"
-    );
+    const modal = generateBenchmarkModelSelectorModal(models, (payload?.profile as 'quick' | 'full') || 'quick');
     sendAll(send, modal);
   } else {
-    const profile = (payload?.profile as "quick" | "full") || "quick";
+    const profile = (payload?.profile as 'quick' | 'full') || 'quick';
     session
       .runBenchmarkAsync(profile, send)
-      .catch((err: unknown) => logEvolution.error("Benchmark failed", { error: err }));
+      .catch((err: unknown) => logEvolution.error('Benchmark failed', { error: err }));
   }
 };
 
 const handleSubmitRunBenchmark: ActionHandler = async (session, _action, payload, send) => {
-  send({ deleteSurface: { surfaceId: "modal" } });
-  const profile = (payload?.profile as "quick" | "full") || "quick";
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  const profile = (payload?.profile as 'quick' | 'full') || 'quick';
   const modelPreset = payload?.modelPreset as string;
 
-  if (modelPreset === "__all_models__") {
+  if (modelPreset === '__all_models__') {
     const benchmarkModels = getBenchmarkModels();
     for (const [name, modelConfig] of Object.entries(benchmarkModels)) {
       const apiKey = resolveBenchmarkModelApiKey(modelConfig);
@@ -1240,11 +1263,9 @@ const handleSubmitRunBenchmark: ActionHandler = async (session, _action, payload
           baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
           presetName: name,
         })
-        .catch((err: unknown) =>
-          logEvolution.error("Benchmark failed", { preset: name, error: err })
-        );
+        .catch((err: unknown) => logEvolution.error('Benchmark failed', { preset: name, error: err }));
     }
-  } else if (modelPreset && modelPreset !== "__default__") {
+  } else if (modelPreset && modelPreset !== '__default__') {
     const benchmarkModels = getBenchmarkModels();
     const modelConfig = benchmarkModels[modelPreset];
     if (modelConfig) {
@@ -1257,143 +1278,144 @@ const handleSubmitRunBenchmark: ActionHandler = async (session, _action, payload
           baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
           presetName: modelPreset,
         })
-        .catch((err: unknown) =>
-          logEvolution.error("Benchmark failed", { preset: modelPreset, error: err })
-        );
+        .catch((err: unknown) => logEvolution.error('Benchmark failed', { preset: modelPreset, error: err }));
     } else {
       session
         .runBenchmarkAsync(profile, send)
-        .catch((err: unknown) => logEvolution.error("Benchmark failed", { error: err }));
+        .catch((err: unknown) => logEvolution.error('Benchmark failed', { error: err }));
     }
   } else {
     session
       .runBenchmarkAsync(profile, send)
-      .catch((err: unknown) => logEvolution.error("Benchmark failed", { error: err }));
+      .catch((err: unknown) => logEvolution.error('Benchmark failed', { error: err }));
   }
 };
 
 const handleRunAutoLoop: ActionHandler = async (_session, _action, _payload, send) => {
-  const toast = generateToast(t("evolution.autoLoopHint"), "warning");
+  const toast = generateToast(t('evolution.autoLoopHint'), 'warning');
   sendAll(send, toast);
 };
 
 const handleRunDiagnose: ActionHandler = async (session, _action, _payload, send) => {
-  session
-    .runDiagnoseAsync(send)
-    .catch((err: unknown) => logEvolution.error("Diagnose failed", { error: err }));
+  session.runDiagnoseAsync(send).catch((err: unknown) => logEvolution.error('Diagnose failed', { error: err }));
 };
 
 const handleSwitchVersion: ActionHandler = async (session, _action, payload, send) => {
   const branch = (payload?.branch as string) || null;
   try {
     session.switchAgentVersion(branch);
-    const msg = branch
-      ? t("evolution.versionSwitched").replace("{branch}", branch)
-      : t("evolution.resetToMain");
-    const toast = generateToast(msg, "success");
+    const msg = branch ? t('evolution.versionSwitched').replace('{branch}', branch) : t('evolution.resetToMain');
+    const toast = generateToast(msg, 'success');
     sendAll(send, toast);
-    if (session.currentView === "evolution") {
+    if (session.currentView === 'evolution') {
       session.sendEvolutionLabUpdate(send);
     } else {
-      await session.handleNavigate("settings/evolution", send);
+      await session.handleNavigate('settings/evolution', send);
     }
   } catch (error) {
     const toast = generateToast(
       `Failed to switch version: ${error instanceof Error ? error.message : String(error)}`,
-      "error"
+      'error'
     );
     sendAll(send, toast);
   }
 };
 
 const handleMergeVersion: ActionHandler = async (_session, _action, payload, send) => {
-  if (!payload?.branch) return;
+  if (!payload?.branch) {
+    return;
+  }
   try {
     const branch = payload.branch as string;
     const filePaths = getChangedFilesForVersion(branch);
-    const changedFiles = filePaths.map((p) => ({ path: p, status: "modified" }));
+    const changedFiles = filePaths.map((p) => ({ path: p, status: 'modified' }));
     const modal = generateMergeConfirmModal(branch, changedFiles);
     sendAll(send, modal);
   } catch (error) {
     const toast = generateToast(
       `Failed to prepare merge: ${error instanceof Error ? error.message : String(error)}`,
-      "error"
+      'error'
     );
     sendAll(send, toast);
   }
 };
 
 const handleConfirmMerge: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.branch) return;
+  if (!payload?.branch) {
+    return;
+  }
   try {
-    send({ deleteSurface: { surfaceId: "modal" } });
+    send({ deleteSurface: { surfaceId: 'modal' } });
     mergeVersion(payload.branch as string);
     session.switchAgentVersion(null);
-    const toast = generateToast(t("evolution.versionMerged"), "success");
+    const toast = generateToast(t('evolution.versionMerged'), 'success');
     sendAll(send, toast);
-    if (session.currentView === "evolution") {
+    if (session.currentView === 'evolution') {
       session.sendEvolutionLabUpdate(send);
     } else {
-      await session.handleNavigate("settings/evolution", send);
+      await session.handleNavigate('settings/evolution', send);
     }
   } catch (error) {
-    const toast = generateToast(
-      `Failed to merge: ${error instanceof Error ? error.message : String(error)}`,
-      "error"
-    );
+    const toast = generateToast(`Failed to merge: ${error instanceof Error ? error.message : String(error)}`, 'error');
     sendAll(send, toast);
   }
 };
 
 const handleAbandonVersion: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.branch) return;
+  if (!payload?.branch) {
+    return;
+  }
   try {
     abandonVersion(payload.branch as string);
     if (session.activeVersionBranch === payload.branch) {
       session.switchAgentVersion(null);
     }
-    const toast = generateToast(t("evolution.versionAbandoned"), "success");
+    const toast = generateToast(t('evolution.versionAbandoned'), 'success');
     sendAll(send, toast);
-    if (session.currentView === "evolution") {
+    if (session.currentView === 'evolution') {
       session.evolutionSelectedVersion = null;
       session.sendEvolutionLabUpdate(send);
     } else {
-      await session.handleNavigate("settings/evolution", send);
+      await session.handleNavigate('settings/evolution', send);
     }
   } catch (error) {
     const toast = generateToast(
       `Failed to abandon: ${error instanceof Error ? error.message : String(error)}`,
-      "error"
+      'error'
     );
     sendAll(send, toast);
   }
 };
 
 const handleViewBenchmarkRun: ActionHandler = async (session, _action, payload, send) => {
-  if (!payload?.row) return;
+  if (!payload?.row) {
+    return;
+  }
   const row = payload.row as { id: string };
   const runId = findFullBenchmarkRunId(session, row.id);
   if (runId) {
     session.lastViewedBenchmarkRunId = runId;
-    session.modalRadarMode = "categories";
+    session.modalRadarMode = 'categories';
     session.sendBenchmarkRunModal(runId, send);
   }
 };
 
 const handleDeleteBenchmarkRun: ActionHandler = async (session, _action, payload, send) => {
   const runId = payload?.runId as string;
-  if (!runId) return;
+  if (!runId) {
+    return;
+  }
   const fullId = findFullBenchmarkRunId(session, runId) || runId;
   deleteBenchmarkRun(fullId);
   session.benchmarkSelectedRunIds.delete(fullId);
-  send({ deleteSurface: { surfaceId: "modal" } });
+  send({ deleteSurface: { surfaceId: 'modal' } });
   session.sendEvolutionLabUpdate(send);
-  const toast = generateToast("Benchmark run deleted", "success");
+  const toast = generateToast('Benchmark run deleted', 'success');
   sendAll(send, toast);
 };
 
 const handleSetModalRadarMode: ActionHandler = async (session, _action, payload, send) => {
-  session.modalRadarMode = (payload?.mode as string) === "criteria" ? "criteria" : "categories";
+  session.modalRadarMode = (payload?.mode as string) === 'criteria' ? 'criteria' : 'categories';
   if (session.lastViewedBenchmarkRunId) {
     session.sendBenchmarkRunModal(session.lastViewedBenchmarkRunId, send);
   }
@@ -1401,7 +1423,9 @@ const handleSetModalRadarMode: ActionHandler = async (session, _action, payload,
 
 const handleToggleBenchmarkRun: ActionHandler = async (session, _action, payload, send) => {
   const runId = (payload?.runId as string) || (payload?.row as { id: string })?.id;
-  if (!runId) return;
+  if (!runId) {
+    return;
+  }
   const fullId = findFullBenchmarkRunId(session, runId) || runId;
   if (session.benchmarkSelectedRunIds.has(fullId)) {
     session.benchmarkSelectedRunIds.delete(fullId);
@@ -1412,8 +1436,8 @@ const handleToggleBenchmarkRun: ActionHandler = async (session, _action, payload
 };
 
 const handleSetRadarMode: ActionHandler = async (session, _action, payload, send) => {
-  const mode = payload?.mode as "categories" | "criteria";
-  if (mode === "categories" || mode === "criteria") {
+  const mode = payload?.mode as 'categories' | 'criteria';
+  if (mode === 'categories' || mode === 'criteria') {
     session.benchmarkRadarMode = mode;
     session.sendEvolutionLabUpdate(send);
   }
@@ -1425,10 +1449,10 @@ const handleClearRunSelection: ActionHandler = async (session, _action, _payload
 };
 
 const handleRunTestCase: ActionHandler = async (_session, _action, payload, send) => {
-  const toast = generateToast("Running test case...", "info");
+  const toast = generateToast('Running test case...', 'info');
   sendAll(send, toast);
-  send({ deleteSurface: { surfaceId: "modal" } });
-  logEvolution.info("Running test case", { id: payload?.id });
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  logEvolution.info('Running test case', { id: payload?.id });
 };
 
 // ============================================================================
@@ -1437,7 +1461,7 @@ const handleRunTestCase: ActionHandler = async (_session, _action, payload, send
 
 const handleRefreshIntegrations: ActionHandler = async (session, _action, _payload, send) => {
   session.integrationsCache = null;
-  await session.handleNavigate("settings/integrations", send);
+  await session.handleNavigate('settings/integrations', send);
 };
 
 // ============================================================================
@@ -1446,86 +1470,81 @@ const handleRefreshIntegrations: ActionHandler = async (session, _action, _paylo
 
 const handleLogsFilterLevel: ActionHandler = async (session, _action, payload, send) => {
   session.logsLevelFilter = payload?.value ? String(payload.value) : undefined;
-  await session.handleNavigate("settings/logs", send);
+  await session.handleNavigate('settings/logs', send);
 };
 
 const handleLogsFilterSubsystem: ActionHandler = async (session, _action, payload, send) => {
   session.logsSubsystemFilter = payload?.value ? String(payload.value) : undefined;
-  await session.handleNavigate("settings/logs", send);
+  await session.handleNavigate('settings/logs', send);
 };
 
 const handleLogsRefresh: ActionHandler = async (session, _action, _payload, send) => {
-  await session.handleNavigate("settings/logs", send);
+  await session.handleNavigate('settings/logs', send);
 };
 
 const handleLlmFilterProvider: ActionHandler = async (session, _action, payload, send) => {
   session.llmProviderFilter = payload?.value ? String(payload.value) : undefined;
   session.llmPage = 0;
   session.llmSelectedId = undefined;
-  await session.handleNavigate("settings/logs", send);
+  await session.handleNavigate('settings/logs', send);
 };
 
 const handleLlmFilterModel: ActionHandler = async (session, _action, payload, send) => {
   session.llmModelFilter = payload?.value ? String(payload.value) : undefined;
   session.llmPage = 0;
   session.llmSelectedId = undefined;
-  await session.handleNavigate("settings/logs", send);
+  await session.handleNavigate('settings/logs', send);
 };
 
 const handleLlmCallDetail: ActionHandler = async (session, _action, payload, send) => {
   const clickedId = (payload?.row as Record<string, unknown> | undefined)?.id as number | undefined;
   session.llmSelectedId = session.llmSelectedId === clickedId ? undefined : clickedId;
-  await session.handleNavigate("settings/logs", send);
+  await session.handleNavigate('settings/logs', send);
 };
 
 const handleLlmPageChange: ActionHandler = async (session, _action, payload, send) => {
   session.llmPage = Number(payload?.page) || 0;
   session.llmSelectedId = undefined;
-  await session.handleNavigate("settings/logs", send);
+  await session.handleNavigate('settings/logs', send);
 };
 
 // ============================================================================
 // Settings handler (single handler for all settings_* actions)
 // ============================================================================
 
-export { handleSettingsAction } from "./settings-handlers.js";
+export { handleSettingsAction } from './settings-handlers.js';
 
 // ============================================================================
 // Plan view/update handlers (prefix-based)
 // ============================================================================
 
 const handleViewPlan: ActionHandler = async (session, action, _payload, send) => {
-  const planId = action.replace("view_plan:", "");
-  const uuid = session.userUuid || getUserId() || "anonymous";
+  const planId = action.replace('view_plan:', '');
+  const uuid = session.userUuid || getUserId() || 'anonymous';
   const plan = loadPlan(uuid, planId);
-  if (!plan) return;
+  if (!plan) {
+    return;
+  }
 
   try {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split('T')[0];
     const source = session.dataSource;
     const todayDate = new Date(`${today}T00:00:00`);
     const dayOfWeek = todayDate.getDay();
     const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const weekStart = new Date(todayDate);
     weekStart.setDate(todayDate.getDate() - mondayOffset);
-    const weekStartStr = weekStart.toISOString().split("T")[0];
-    const [
-      weeklySteps,
-      weeklySleep,
-      todayHR,
-      todayWorkouts,
-      weeklyWorkouts,
-      todayMetrics,
-      todayBodyComp,
-    ] = await Promise.all([
-      source.getWeeklySteps(today).catch(() => []),
-      source.getWeeklySleep(today).catch(() => []),
-      source.getHeartRate(today).catch(() => null),
-      source.getWorkouts(today).catch(() => []),
-      source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
-      source.getMetrics(today).catch(() => null),
-      source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
-    ]);
+    const weekStartStr = weekStart.toISOString().split('T')[0];
+    const [weeklySteps, weeklySleep, todayHR, todayWorkouts, weeklyWorkouts, todayMetrics, todayBodyComp] =
+      await Promise.all([
+        source.getWeeklySteps(today).catch(() => []),
+        source.getWeeklySleep(today).catch(() => []),
+        source.getHeartRate(today).catch(() => null),
+        source.getWorkouts(today).catch(() => []),
+        source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
+        source.getMetrics(today).catch(() => null),
+        source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
+      ]);
     const snapshot: HealthSnapshot = {
       weeklySteps,
       weeklySleep,
@@ -1546,25 +1565,26 @@ const handleViewPlan: ActionHandler = async (session, action, _payload, send) =>
 };
 
 const handleUpdatePlanAction: ActionHandler = async (session, action, _payload, send) => {
-  const parts = action.replace("update_plan_action:", "").split(":");
+  const parts = action.replace('update_plan_action:', '').split(':');
   const planId = parts[0];
   const newStatus = parts[1] as PlanStatus;
-  const uuid = session.userUuid || getUserId() || "anonymous";
+  const uuid = session.userUuid || getUserId() || 'anonymous';
   const plan = loadPlan(uuid, planId);
-  if (!plan) return;
+  if (!plan) {
+    return;
+  }
 
   plan.status = newStatus;
-  if (newStatus === "completed") {
+  if (newStatus === 'completed') {
     for (const goal of plan.goals) {
-      if (goal.status !== "completed" && goal.status !== "missed") {
-        goal.status =
-          goal.currentValue && goal.currentValue >= goal.targetValue ? "completed" : "missed";
+      if (goal.status !== 'completed' && goal.status !== 'missed') {
+        goal.status = goal.currentValue && goal.currentValue >= goal.targetValue ? 'completed' : 'missed';
       }
     }
   }
   savePlan(uuid, plan);
-  send({ deleteSurface: { surfaceId: "modal" } });
-  await session.handleNavigate("plans", send);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await session.handleNavigate('plans', send);
 };
 
 // ============================================================================
@@ -1572,38 +1592,38 @@ const handleUpdatePlanAction: ActionHandler = async (session, action, _payload, 
 // ============================================================================
 
 const handleRecDismiss: ActionHandler = async (session, action, _payload, send) => {
-  const recId = action.replace("rec_dismiss:", "");
-  const uuid = session.userUuid || getUserId() || "anonymous";
+  const recId = action.replace('rec_dismiss:', '');
+  const uuid = session.userUuid || getUserId() || 'anonymous';
   const rec = getRecommendation(uuid, recId);
   if (rec) {
-    rec.status = "dismissed";
+    rec.status = 'dismissed';
     rec.dismissedAt = new Date().toISOString();
     saveRecommendation(uuid, rec);
-    await session.handleNavigate("plans", send);
+    await session.handleNavigate('plans', send);
   }
 };
 
 const handleRecAct: ActionHandler = async (session, action, _payload, send) => {
-  const recId = action.replace("rec_act:", "");
-  const uuid = session.userUuid || getUserId() || "anonymous";
+  const recId = action.replace('rec_act:', '');
+  const uuid = session.userUuid || getUserId() || 'anonymous';
   const rec = getRecommendation(uuid, recId);
   if (rec) {
-    rec.status = "acted";
+    rec.status = 'acted';
     rec.dismissedAt = new Date().toISOString();
     saveRecommendation(uuid, rec);
-    await session.handleNavigate("plans", send);
+    await session.handleNavigate('plans', send);
   }
 };
 
 const handleRemComplete: ActionHandler = async (session, action, _payload, send) => {
-  const remId = action.replace("rem_complete:", "");
-  const uuid = session.userUuid || getUserId() || "anonymous";
+  const remId = action.replace('rem_complete:', '');
+  const uuid = session.userUuid || getUserId() || 'anonymous';
   const rem = getReminder(uuid, remId);
   if (rem) {
-    rem.status = "completed";
+    rem.status = 'completed';
     rem.completedAt = new Date().toISOString();
     saveReminder(uuid, rem);
-    await session.handleNavigate("plans", send);
+    await session.handleNavigate('plans', send);
   }
 };
 
@@ -1612,7 +1632,7 @@ const handleRemComplete: ActionHandler = async (session, action, _payload, send)
 // ============================================================================
 
 const handleRefreshDashboard: ActionHandler = async (session, action, _payload, send) => {
-  const dashId = action.replace("refresh_dashboard:", "");
+  const dashId = action.replace('refresh_dashboard:', '');
   const dashboard = session.customDashboards.get(dashId);
   if (dashboard) {
     const refreshMsg = `请刷新仪表盘「${dashboard.title}」的数据，使用 update_dashboard 工具更新 dashboardId="${dashboard.id}"`;
@@ -1625,7 +1645,7 @@ const handleRefreshDashboard: ActionHandler = async (session, action, _payload, 
 // ============================================================================
 
 const handleNavigatePrefix: ActionHandler = async (session, action, _payload, send) => {
-  const view = action.replace("navigate:", "");
+  const view = action.replace('navigate:', '');
   await session.handleNavigate(view, send);
 };
 
@@ -1763,13 +1783,13 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
 // ============================================================================
 
 export const PREFIX_HANDLERS: Array<{ prefix: string; handler: ActionHandler }> = [
-  { prefix: "navigate:", handler: handleNavigatePrefix },
-  { prefix: "refresh_dashboard:", handler: handleRefreshDashboard },
-  { prefix: "view_plan:", handler: handleViewPlan },
-  { prefix: "update_plan_action:", handler: handleUpdatePlanAction },
-  { prefix: "rec_dismiss:", handler: handleRecDismiss },
-  { prefix: "rec_act:", handler: handleRecAct },
-  { prefix: "rem_complete:", handler: handleRemComplete },
+  { prefix: 'navigate:', handler: handleNavigatePrefix },
+  { prefix: 'refresh_dashboard:', handler: handleRefreshDashboard },
+  { prefix: 'view_plan:', handler: handleViewPlan },
+  { prefix: 'update_plan_action:', handler: handleUpdatePlanAction },
+  { prefix: 'rec_dismiss:', handler: handleRecDismiss },
+  { prefix: 'rec_act:', handler: handleRecAct },
+  { prefix: 'rem_complete:', handler: handleRemComplete },
 ];
 
 // ============================================================================
@@ -1777,45 +1797,45 @@ export const PREFIX_HANDLERS: Array<{ prefix: string; handler: ActionHandler }> 
 // ============================================================================
 
 export const SETTINGS_ACTIONS = new Set([
-  "settings_save_llm",
-  "settings_save_gateway",
-  "settings_save_datasource",
-  "settings_save_advanced",
-  "settings_save_tui",
-  "settings_save_embedding",
-  "settings_save_benchmark",
-  "settings_save_benchmark_v2",
-  "settings_save_benchmark_v3",
-  "settings_save_benchmark_v4",
-  "settings_save_benchmark_models",
-  "settings_save_benchmark_models_v2",
-  "settings_save_mcp",
-  "settings_save_mcp_chrome",
-  "settings_save_mcp_remote",
-  "settings_save_plugins",
-  "settings_save_plugins_v2",
-  "settings_save_judge",
-  "settings_save_model_repository",
-  "settings_save_model_assignments",
-  "settings_save_agents",
-  "settings_save_context",
-  "settings_save_infra_models",
-  "settings_provider_add",
-  "settings_provider_delete",
-  "settings_provider_model_add",
-  "settings_provider_model_delete",
-  "settings_bm_add",
-  "settings_bm_delete",
-  "settings_mcp_add",
-  "settings_mcp_delete",
-  "settings_save_scopes",
-  "settings_scope_toggle",
-  "settings_agent_add",
-  "settings_agent_delete",
-  "settings_agent_tag_toggle",
-  "settings_tags_toggle",
-  "settings_copy_config",
-  "settings_download_config",
+  'settings_save_llm',
+  'settings_save_gateway',
+  'settings_save_datasource',
+  'settings_save_advanced',
+  'settings_save_tui',
+  'settings_save_embedding',
+  'settings_save_benchmark',
+  'settings_save_benchmark_v2',
+  'settings_save_benchmark_v3',
+  'settings_save_benchmark_v4',
+  'settings_save_benchmark_models',
+  'settings_save_benchmark_models_v2',
+  'settings_save_mcp',
+  'settings_save_mcp_chrome',
+  'settings_save_mcp_remote',
+  'settings_save_plugins',
+  'settings_save_plugins_v2',
+  'settings_save_judge',
+  'settings_save_model_repository',
+  'settings_save_model_assignments',
+  'settings_save_agents',
+  'settings_save_context',
+  'settings_save_infra_models',
+  'settings_provider_add',
+  'settings_provider_delete',
+  'settings_provider_model_add',
+  'settings_provider_model_delete',
+  'settings_bm_add',
+  'settings_bm_delete',
+  'settings_mcp_add',
+  'settings_mcp_delete',
+  'settings_save_scopes',
+  'settings_scope_toggle',
+  'settings_agent_add',
+  'settings_agent_delete',
+  'settings_agent_tag_toggle',
+  'settings_tags_toggle',
+  'settings_copy_config',
+  'settings_download_config',
 ]);
 
 /**
@@ -1837,7 +1857,7 @@ export async function dispatchAction(
 
   // 2. Settings actions (share try/catch + saveConfig pattern)
   if (SETTINGS_ACTIONS.has(action)) {
-    const { handleSettingsAction } = await import("./settings-handlers.js");
+    const { handleSettingsAction } = await import('./settings-handlers.js');
     await handleSettingsAction(session, action, payload, send);
     return;
   }
@@ -1851,5 +1871,5 @@ export async function dispatchAction(
   }
 
   // 4. Unhandled
-  log.warn("Unhandled action", { action, payload });
+  log.warn('Unhandled action', { action, payload });
 }

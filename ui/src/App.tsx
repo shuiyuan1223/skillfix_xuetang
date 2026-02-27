@@ -52,7 +52,7 @@ async function postAction(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    if (!res.ok) return;
+    if (!res.ok) { return; }
     const { updates } = (await res.json()) as { updates: unknown[] };
     if (updates) {
       for (const msg of updates) {
@@ -131,7 +131,7 @@ export function App() {
       }, 2000);
 
       const handler = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
+        if (event.origin !== window.location.origin) { return; }
         if (event.data?.type?.startsWith("PHA_")) {
           console.log("[OAuth] Received message:", event.data.type, event.data);
         }
@@ -161,7 +161,7 @@ export function App() {
         }, 180000); // 3 minute timeout
 
         const handler = (event: MessageEvent) => {
-          if (event.origin !== window.location.origin) return;
+          if (event.origin !== window.location.origin) { return; }
           if (event.data?.type === "PHA_OAUTH_RESULT") {
             clearTimeout(timeout);
             window.removeEventListener("message", handler);
@@ -336,7 +336,7 @@ export function App() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) { break; }
         buffer += decoder.decode(value, { stream: true });
 
         // Parse SSE lines
@@ -387,8 +387,8 @@ export function App() {
       }
 
       const urlData = await urlResponse.json();
-      if (urlData.error) throw new Error(urlData.error);
-      if (!urlData.authUrl) throw new Error("No auth URL returned");
+      if (urlData.error) { throw new Error(urlData.error); }
+      if (!urlData.authUrl) { throw new Error("No auth URL returned"); }
 
       console.log("[OAuth] Got auth URL, requesting extension...");
       const result = await requestExtensionOAuth(urlData.authUrl);
@@ -550,7 +550,7 @@ export function App() {
       ) {
         const text = String(payload.content || payload.value);
         setMainData((prev) => {
-          if (!prev) return prev;
+          if (!prev) { return prev; }
           return {
             ...prev,
             components: prev.components.map((c) => {
@@ -574,7 +574,7 @@ export function App() {
         chatInitializedRef.current = false;
         // Clear messages from mainData so welcome screen shows immediately
         setMainData((prev) => {
-          if (!prev) return prev;
+          if (!prev) { return prev; }
           return {
             ...prev,
             components: prev.components.map((c) => {
@@ -681,11 +681,11 @@ export function App() {
 
   // Extract chat history from a2ui surface data (for initial sync)
   const extractChatHistory = useCallback((surface: A2UISurfaceData) => {
-    if (chatInitializedRef.current) return;
+    if (chatInitializedRef.current) { return; }
     const chatComp = surface.components.find((c) => componentType(c) === "ChatMessages" && (!prop(c, "action") || prop(c, "action") === "send_message"));
-    if (!chatComp) return;
+    if (!chatComp) { return; }
     const rawMessages = (prop(chatComp, "messages") as any[]) || [];
-    if (rawMessages.length === 0) return;
+    if (rawMessages.length === 0) { return; }
     chatInitializedRef.current = true;
     const normalized: ChatMessage[] = [];
     for (const raw of rawMessages) {
@@ -759,7 +759,7 @@ export function App() {
       if ("beginRendering" in msg) {
         const { surfaceId, root } = msg.beginRendering;
         const components = pendingSurface.current.get(surfaceId);
-        if (!components) return;
+        if (!components) { return; }
         pendingSurface.current.delete(surfaceId);
         applySurface(surfaceId, { components, root_id: root });
         return;
@@ -777,7 +777,7 @@ export function App() {
             const agentMsg = msg as { type: "agent_text"; content: string; is_final: boolean };
             if (!agentMsg.is_final) {
               setMainData((prev) => {
-                if (!prev) return prev;
+                if (!prev) { return prev; }
                 const updated = { ...prev, components: prev.components.map((c) => {
                   if (componentType(c) === "ChatMessages") {
                     return withProp(c, "streamingContent", agentMsg.content);
@@ -793,7 +793,7 @@ export function App() {
           case "log_entry": {
             // Append new log entry to current main surface log_viewer component
             setMainData((prev) => {
-              if (!prev) return prev;
+              if (!prev) { return prev; }
               const updated = { ...prev, components: prev.components.map((c) => {
                 if (componentType(c) === "LogViewer") {
                   const entries = (prop(c, "entries") as any[]) || [];
@@ -806,7 +806,7 @@ export function App() {
             // Auto-scroll to bottom
             requestAnimationFrame(() => {
               const el = document.getElementById("log-viewer-scroll");
-              if (el) el.scrollTop = el.scrollHeight;
+              if (el) { el.scrollTop = el.scrollHeight; }
             });
             break;
           }
@@ -913,7 +913,7 @@ export function App() {
 
     // Listen for OAuth completion from callback popup/tab
     const oauthHandler = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
+      if (event.origin !== window.location.origin) { return; }
       if (event.data?.type === "PHA_OAUTH_COMPLETE" && event.data.userId) {
         setUserIdCookie(event.data.userId);
         uidRef.current = event.data.userId;
@@ -938,10 +938,10 @@ export function App() {
   // ---------------------------------------------------------------------------
 
   const enhancedMainData = useMemo(() => {
-    if (!mainData) return null;
+    if (!mainData) { return null; }
     // Check if mainData has a ChatMessages component (i.e. we're on chat page)
     const hasChatMessages = mainData.components.some((c) => componentType(c) === "ChatMessages");
-    if (!hasChatMessages || chatMessages.length === 0) return mainData;
+    if (!hasChatMessages || chatMessages.length === 0) { return mainData; }
 
     // Override chat_messages component with client-managed state
     // Only override PHA chat (action="send_message"), NOT system-agent (action="sa_send_message")
@@ -975,7 +975,7 @@ export function App() {
       isAutoScrollingRef.current = true;
       requestAnimationFrame(() => {
         const el = document.querySelector(".chat-scroll-container");
-        if (el) el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior });
+        if (el) { el.scrollTo({ top: el.scrollHeight, behavior: "instant" as ScrollBehavior }); }
         // Release guard after scroll settles
         setTimeout(() => {
           isAutoScrollingRef.current = false;
@@ -1133,7 +1133,7 @@ export function App() {
               : "bg-transparent pointer-events-none"
           }`}
           onClick={(e) => {
-            if (e.target === e.currentTarget) closeModal();
+            if (e.target === e.currentTarget) { closeModal(); }
           }}
         >
           <div

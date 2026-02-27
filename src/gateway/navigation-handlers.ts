@@ -5,9 +5,9 @@
  * The dispatch map replaces a CC=148, Lines=568 method.
  */
 
-import { join } from "path";
-import { existsSync, readFileSync } from "fs";
-import { t } from "../locales/index.js";
+import { join } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { t } from '../locales/index.js';
 import {
   loadConfig,
   saveConfig,
@@ -16,20 +16,16 @@ import {
   PROVIDER_CONFIGS,
   listAllModelRefs,
   stripLegacyFieldsForSave,
-} from "../utils/config.js";
-import { getAgentProfile, getAgentProfileIds } from "../agent/pha-agent.js";
-import { getMemoryManager } from "../memory/index.js";
-import { getRecentDailyLogs, getUserDir } from "../memory/profile.js";
-import { listPlans } from "../plans/store.js";
-import type { PlanStatus } from "../plans/types.js";
-import {
-  listRecommendations,
-  listReminders as listRemindersStore,
-  listCalendarEvents,
-} from "../proactive/store.js";
-import { listSkillsTool, getSkillTool, getSkillsDir } from "../tools/skill-tools.js";
-import { globalRegistry } from "../tools/index.js";
-import { systemMemoryReadTool } from "../tools/system-memory-tools.js";
+} from '../utils/config.js';
+import { getAgentProfile, getAgentProfileIds } from '../agent/pha-agent.js';
+import { getMemoryManager } from '../memory/index.js';
+import { getRecentDailyLogs, getUserDir } from '../memory/profile.js';
+import { listPlans } from '../plans/store.js';
+import type { PlanStatus } from '../plans/types.js';
+import { listRecommendations, listReminders as listRemindersStore, listCalendarEvents } from '../proactive/store.js';
+import { listSkillsTool, getSkillTool, getSkillsDir } from '../tools/skill-tools.js';
+import { globalRegistry } from '../tools/index.js';
+import { systemMemoryReadTool } from '../tools/system-memory-tools.js';
 import {
   generateChatPage,
   generateMemoryPage,
@@ -43,24 +39,26 @@ import {
   generatePlansPage,
   generateAuthRequiredPage,
   generateExperimentPage,
-} from "./pages.js";
-import { generateEvolutionLab } from "./evolution-lab.js";
-import { discoverPlugins } from "../plugins/discovery.js";
-import { loadPluginManifest } from "../plugins/manifest.js";
-import { readLogFile, subscribeToLogs, type LogEntry, createLogger } from "../utils/logger.js";
-import { basename } from "path";
-import type { GatewaySession } from "./server.js";
-import type { A2UIMessage } from "./a2ui.js";
+} from './pages.js';
+import { generateEvolutionLab } from './evolution-lab.js';
+import { discoverPlugins } from '../plugins/discovery.js';
+import { loadPluginManifest } from '../plugins/manifest.js';
+import { readLogFile, subscribeToLogs, type LogEntry, createLogger } from '../utils/logger.js';
+import { basename } from 'path';
+import type { GatewaySession } from './server.js';
+import type { A2UIMessage } from './a2ui.js';
 
-const log = createLogger("Gateway");
-const logMemory = log.child("Memory");
-const logEvolution = log.child("Evolution");
+const log = createLogger('Gateway');
+const logMemory = log.child('Memory');
+const logEvolution = log.child('Evolution');
 
 type SendFn = (msg: unknown) => void;
 
 /** Send an array of A2UIMessage objects one by one through the send function */
 function sendAll(send: SendFn, messages: A2UIMessage[]): void {
-  for (const msg of messages) send(msg);
+  for (const msg of messages) {
+    send(msg);
+  }
 }
 
 // ── View handlers ──────────────────────────────────────────────────
@@ -90,21 +88,23 @@ async function navigateLegacyChat(session: GatewaySession): Promise<A2UIMessage[
   });
 }
 
-async function navigateDashboard(
-  session: GatewaySession,
-  view: string,
-  send: SendFn
-): Promise<"early-return"> {
+async function navigateDashboard(session: GatewaySession, view: string, send: SendFn): Promise<'early-return'> {
   // Map legacy views to dashboard tabs
-  if (view === "health") session.dashboardTab = "vitals";
-  else if (view === "sleep") session.dashboardTab = "sleep";
-  else if (view === "activity") session.dashboardTab = "activity";
+  if (view === 'health') {
+    session.dashboardTab = 'vitals';
+  } else if (view === 'sleep') {
+    session.dashboardTab = 'sleep';
+  } else if (view === 'activity') {
+    session.dashboardTab = 'activity';
+  }
 
   // Use progressive loader for dashboard
   if (!(session as unknown as { dashboardLoader: unknown }).dashboardLoader) {
-    const { ProgressiveDashboardLoader } = await import("./progressive-loader.js");
-    (session as unknown as { dashboardLoader: unknown }).dashboardLoader =
-      new ProgressiveDashboardLoader(session.dataSource, send);
+    const { ProgressiveDashboardLoader } = await import('./progressive-loader.js');
+    (session as unknown as { dashboardLoader: unknown }).dashboardLoader = new ProgressiveDashboardLoader(
+      session.dataSource,
+      send
+    );
   } else {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (session as any).dashboardLoader.updateSend(send);
@@ -113,40 +113,40 @@ async function navigateDashboard(
   const loader = (session as any).dashboardLoader;
   loader.whitelisted = session.isWhitelisted();
   await loader.load(session.dashboardTab);
-  return "early-return";
+  return 'early-return';
 }
 
 async function navigatePlans(session: GatewaySession): Promise<A2UIMessage[] | null> {
-  const uuid = session.userUuid || getUserId() || "anonymous";
+  const uuid = session.userUuid || getUserId() || 'anonymous';
   const tab = session.plansTab;
   const planStatusMap: Record<string, PlanStatus> = {
-    active: "active",
-    completed: "completed",
-    archived: "archived",
+    active: 'active',
+    completed: 'completed',
+    archived: 'archived',
   };
   const filterStatus = planStatusMap[tab];
   const plans = filterStatus ? listPlans(uuid, filterStatus) : [];
   return generatePlansPage({
     activeTab: tab,
     plans,
-    recommendations: tab === "recommendations" ? listRecommendations(uuid, "active") : undefined,
-    reminders: tab === "reminders" ? listRemindersStore(uuid) : undefined,
-    events: tab === "calendar" ? listCalendarEvents(uuid) : undefined,
+    recommendations: tab === 'recommendations' ? listRecommendations(uuid, 'active') : undefined,
+    reminders: tab === 'reminders' ? listRemindersStore(uuid) : undefined,
+    events: tab === 'calendar' ? listCalendarEvents(uuid) : undefined,
   });
 }
 
-async function navigateMemory(session: GatewaySession, send: SendFn): Promise<"early-return"> {
+async function navigateMemory(session: GatewaySession, send: SendFn): Promise<'early-return'> {
   // Send loading page immediately
   sendAll(
     send,
     session.buildPage(
-      "memory",
+      'memory',
       generateMemoryPage({
         activeTab: session.memoryTab,
         profileCompleteness: 0,
         profile: {} as never,
         missingFields: [],
-        memorySummary: "",
+        memorySummary: '',
         dailyLogs: [],
         loading: true,
       })
@@ -154,7 +154,7 @@ async function navigateMemory(session: GatewaySession, send: SendFn): Promise<"e
   );
 
   const mm = getMemoryManager();
-  const uuid = session.userUuid || getUserId() || "anonymous";
+  const uuid = session.userUuid || getUserId() || 'anonymous';
   try {
     const saMemoryData = await loadSAMemoryData(session);
     const selectedLogContent = loadSelectedLogContent(session, uuid);
@@ -172,18 +172,18 @@ async function navigateMemory(session: GatewaySession, send: SendFn): Promise<"e
       selectedLogContent,
       ...saMemoryData,
     });
-    sendAll(send, session.buildPage("memory", memoryPage));
+    sendAll(send, session.buildPage('memory', memoryPage));
   } catch (e) {
-    logMemory.error("Load error", { error: e });
+    logMemory.error('Load error', { error: e });
   }
-  return "early-return";
+  return 'early-return';
 }
 
-async function navigatePrompts(session: GatewaySession, send: SendFn): Promise<"early-return"> {
+async function navigatePrompts(session: GatewaySession, send: SendFn): Promise<'early-return'> {
   sendAll(
     send,
     session.buildPage(
-      "settings/prompts",
+      'settings/prompts',
       generatePromptsPage({
         files: [],
         loading: true,
@@ -198,7 +198,7 @@ async function navigatePrompts(session: GatewaySession, send: SendFn): Promise<"
     sendAll(
       send,
       session.buildPage(
-        "settings/prompts",
+        'settings/prompts',
         generatePromptsPage({
           files,
           scope: session.promptsScope,
@@ -206,16 +206,16 @@ async function navigatePrompts(session: GatewaySession, send: SendFn): Promise<"
       )
     );
   } catch (e) {
-    log.error("Prompts load error", { error: e });
+    log.error('Prompts load error', { error: e });
   }
-  return "early-return";
+  return 'early-return';
 }
 
-async function navigateSkills(session: GatewaySession, send: SendFn): Promise<"early-return"> {
+async function navigateSkills(session: GatewaySession, send: SendFn): Promise<'early-return'> {
   sendAll(
     send,
     session.buildPage(
-      "settings/skills",
+      'settings/skills',
       generateSkillsPage({
         skills: [],
         editing: false,
@@ -237,7 +237,7 @@ async function navigateSkills(session: GatewaySession, send: SendFn): Promise<"e
         filePath: session.selectedSkillFile,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       })) as any;
-      if (skillResult.success && "content" in skillResult) {
+      if (skillResult.success && 'content' in skillResult) {
         content = session.editBuffer ?? skillResult.content;
         language = skillResult.language as string | undefined;
       }
@@ -258,7 +258,7 @@ async function navigateSkills(session: GatewaySession, send: SendFn): Promise<"e
     sendAll(
       send,
       session.buildPage(
-        "settings/skills",
+        'settings/skills',
         generateSkillsPage({
           skills: enrichedSkills,
           selectedSkill: session.selectedSkill || undefined,
@@ -271,47 +271,44 @@ async function navigateSkills(session: GatewaySession, send: SendFn): Promise<"e
       )
     );
   } catch (e) {
-    log.error("Skills load error", { error: e });
+    log.error('Skills load error', { error: e });
   }
-  return "early-return";
+  return 'early-return';
 }
 
-async function navigateTools(session: GatewaySession, send: SendFn): Promise<"early-return"> {
+async function navigateTools(session: GatewaySession, send: SendFn): Promise<'early-return'> {
   const toolsData = globalRegistry.getToolsPageData();
   sendAll(
     send,
     session.buildPage(
-      "settings/tools",
+      'settings/tools',
       generateToolsPage({
         tools: toolsData,
         selectedCategory: session.toolsCategory,
       })
     )
   );
-  return "early-return";
+  return 'early-return';
 }
 
-async function navigateEvolution(session: GatewaySession, send: SendFn): Promise<"early-return"> {
-  session.currentView = "evolution";
+async function navigateEvolution(session: GatewaySession, send: SendFn): Promise<'early-return'> {
+  session.currentView = 'evolution';
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const labData = (session as any).buildEvolutionLabData();
     const labPage = generateEvolutionLab(labData);
-    sendAll(send, session.buildPage("evolution", labPage));
+    sendAll(send, session.buildPage('evolution', labPage));
   } catch (e) {
-    logEvolution.error("Lab load error", { error: e });
+    logEvolution.error('Lab load error', { error: e });
   }
-  return "early-return";
+  return 'early-return';
 }
 
-async function navigateIntegrations(
-  session: GatewaySession,
-  send: SendFn
-): Promise<"early-return"> {
+async function navigateIntegrations(session: GatewaySession, send: SendFn): Promise<'early-return'> {
   sendAll(
     send,
     session.buildPage(
-      "settings/integrations",
+      'settings/integrations',
       generateIntegrationsPage({
         activeTab: session.integrationsTab,
         ghAvailable: true,
@@ -321,9 +318,9 @@ async function navigateIntegrations(
   );
 
   session.loadIntegrationsAsync(send).catch((e: unknown) => {
-    log.error("Integrations load error", { error: e });
+    log.error('Integrations load error', { error: e });
   });
-  return "early-return";
+  return 'early-return';
 }
 
 async function navigateLogs(session: GatewaySession, send: SendFn): Promise<A2UIMessage[] | null> {
@@ -349,7 +346,7 @@ async function navigateLogs(session: GatewaySession, send: SendFn): Promise<A2UI
   const subsystems = [...new Set(allEntries.map((e) => e.subsystem))].sort();
 
   // Read LLM call logs
-  const { readLlmLogFile, getLlmProviders, getLlmModels } = await import("../utils/llm-logger.js");
+  const { readLlmLogFile, getLlmProviders, getLlmModels } = await import('../utils/llm-logger.js');
   let allLlmCalls = readLlmLogFile(undefined, 1000);
   const llmProviders = getLlmProviders();
   const llmModels = getLlmModels();
@@ -361,10 +358,7 @@ async function navigateLogs(session: GatewaySession, send: SendFn): Promise<A2UI
   }
   const llmTotal = allLlmCalls.length;
   const llmPageSize = 20;
-  const pagedCalls = allLlmCalls.slice(
-    session.llmPage * llmPageSize,
-    (session.llmPage + 1) * llmPageSize
-  );
+  const pagedCalls = allLlmCalls.slice(session.llmPage * llmPageSize, (session.llmPage + 1) * llmPageSize);
 
   const mainPage = generateLogsPage({
     activeTab: session.logsTab,
@@ -392,10 +386,14 @@ async function navigateLogs(session: GatewaySession, send: SendFn): Promise<A2UI
 
   // Subscribe to real-time log entries (system logs)
   s.logsUnsubscribe = subscribeToLogs((entry: LogEntry) => {
-    if (session.logsLevelFilter && entry.level !== session.logsLevelFilter) return;
-    if (session.logsSubsystemFilter && entry.subsystem !== session.logsSubsystemFilter) return;
+    if (session.logsLevelFilter && entry.level !== session.logsLevelFilter) {
+      return;
+    }
+    if (session.logsSubsystemFilter && entry.subsystem !== session.logsSubsystemFilter) {
+      return;
+    }
     send({
-      type: "log_entry",
+      type: 'log_entry',
       entry: {
         time: entry.time,
         level: entry.level,
@@ -411,10 +409,10 @@ async function navigateLogs(session: GatewaySession, send: SendFn): Promise<A2UI
     s.llmLogsUnsubscribe();
     s.llmLogsUnsubscribe = null;
   }
-  const { subscribeToLlmLogs } = await import("../utils/llm-logger.js");
+  const { subscribeToLlmLogs } = await import('../utils/llm-logger.js');
   s.llmLogsUnsubscribe = subscribeToLlmLogs(() => {
-    if (session.logsTab === "llm" && session.currentView === "settings/logs") {
-      session.handleNavigate("settings/logs", send).catch(() => {});
+    if (session.logsTab === 'llm' && session.currentView === 'settings/logs') {
+      session.handleNavigate('settings/logs', send).catch(() => {});
     }
   });
 
@@ -426,24 +424,24 @@ function extractLlmSettings(config: any): Record<string, unknown> {
   return {
     provider: config.llm.provider,
     apiKeySet: !!config.llm.apiKey,
-    modelId: config.llm.modelId || PROVIDER_CONFIGS[config.llm.provider]?.defaultModel || "",
-    baseUrl: config.llm.baseUrl || PROVIDER_CONFIGS[config.llm.provider]?.baseUrl || "",
-    orchestratorPha: config.orchestrator?.pha || "",
-    orchestratorSa: config.orchestrator?.sa || "",
-    orchestratorJudge: config.orchestrator?.judge || "",
-    orchestratorEmbedding: config.orchestrator?.embedding || "",
+    modelId: config.llm.modelId || PROVIDER_CONFIGS[config.llm.provider]?.defaultModel || '',
+    baseUrl: config.llm.baseUrl || PROVIDER_CONFIGS[config.llm.provider]?.baseUrl || '',
+    orchestratorPha: config.orchestrator?.pha || '',
+    orchestratorSa: config.orchestrator?.sa || '',
+    orchestratorJudge: config.orchestrator?.judge || '',
+    orchestratorEmbedding: config.orchestrator?.embedding || '',
   };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractHuaweiSettings(huawei: any): Record<string, unknown> {
   return {
-    huaweiClientId: huawei.clientId || "",
-    huaweiClientSecret: huawei.clientSecret || "",
-    huaweiRedirectUri: huawei.redirectUri || "",
-    huaweiAuthUrl: huawei.authUrl || "",
-    huaweiTokenUrl: huawei.tokenUrl || "",
-    huaweiApiBaseUrl: huawei.apiBaseUrl || "",
+    huaweiClientId: huawei.clientId || '',
+    huaweiClientSecret: huawei.clientSecret || '',
+    huaweiRedirectUri: huawei.redirectUri || '',
+    huaweiAuthUrl: huawei.authUrl || '',
+    huaweiTokenUrl: huawei.tokenUrl || '',
+    huaweiApiBaseUrl: huawei.apiBaseUrl || '',
     huaweiScopes: huawei.scopes || [],
   };
 }
@@ -451,12 +449,12 @@ function extractHuaweiSettings(huawei: any): Record<string, unknown> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractChromeAndPlugins(chromeMcp: any, pluginsConfig: any): Record<string, unknown> {
   return {
-    chromeMcpCommand: chromeMcp.command || "npx",
-    chromeMcpArgs: (chromeMcp.args || []).join(", "),
-    chromeMcpBrowserUrl: chromeMcp.browserUrl || "",
-    chromeMcpWsEndpoint: chromeMcp.wsEndpoint || "",
+    chromeMcpCommand: chromeMcp.command || 'npx',
+    chromeMcpArgs: (chromeMcp.args || []).join(', '),
+    chromeMcpBrowserUrl: chromeMcp.browserUrl || '',
+    chromeMcpWsEndpoint: chromeMcp.wsEndpoint || '',
     pluginEnabled: pluginsConfig.enabled ?? true,
-    pluginPaths: (pluginsConfig.paths || []).join(", "),
+    pluginPaths: (pluginsConfig.paths || []).join(', '),
   };
 }
 
@@ -465,10 +463,10 @@ function extractGatewayAndDataSettings(config: any): Record<string, unknown> {
   return {
     gatewayPort: config.gateway?.port || 8000,
     gatewayAutoStart: config.gateway?.autoStart ?? false,
-    dataSourceType: config.dataSources?.type || "mock",
+    dataSourceType: config.dataSources?.type || 'mock',
     embeddingEnabled: config.embedding?.enabled ?? false,
-    embeddingModel: config.embedding?.model || "openai/text-embedding-3-small",
-    tuiTheme: config.tui?.theme || "dark",
+    embeddingModel: config.embedding?.model || 'openai/text-embedding-3-small',
+    tuiTheme: config.tui?.theme || 'dark',
     tuiShowToolCalls: config.tui?.showToolCalls ?? true,
   };
 }
@@ -476,11 +474,11 @@ function extractGatewayAndDataSettings(config: any): Record<string, unknown> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractContextAndProactive(config: any): Record<string, unknown> {
   return {
-    applyEngine: config.applyEngine || "claude-code",
+    applyEngine: config.applyEngine || 'claude-code',
     benchmarkConcurrency: config.benchmark?.concurrency || 1,
     benchmarkModelRefs: config.benchmark?.models || [],
-    contextLocation: config.context?.location || "",
-    contextHemisphere: config.context?.hemisphere || "north",
+    contextLocation: config.context?.location || '',
+    contextHemisphere: config.context?.hemisphere || 'north',
     proactiveEnabled: config.proactive?.enabled !== false,
     proactiveCheckInterval: config.proactive?.checkIntervalMinutes ?? 5,
   };
@@ -500,19 +498,19 @@ function extractInfraSettings(config: any): Record<string, unknown> {
 function extractBenchmarkAndJudge(config: any): Record<string, unknown> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const judge: { provider?: any; modelId?: any; label?: any } =
-    typeof config.judgeModel === "object" && config.judgeModel ? config.judgeModel : {};
+    typeof config.judgeModel === 'object' && config.judgeModel ? config.judgeModel : {};
   const bmRecord = config.benchmarkModels || {};
   return {
     judgeProvider: judge.provider || config.llm.provider,
-    judgeModelId: judge.modelId || "",
-    judgeLabel: judge.label || "",
+    judgeModelId: judge.modelId || '',
+    judgeLabel: judge.label || '',
     benchmarkModels: Object.entries(bmRecord).map(([key, val]) => {
       const m = val as { provider?: string; modelId?: string; label?: string };
       return {
         key,
         provider: m.provider || config.llm.provider,
-        modelId: m.modelId || "",
-        label: m.label || "",
+        modelId: m.modelId || '',
+        label: m.label || '',
       };
     }),
   };
@@ -526,9 +524,9 @@ function extractRemoteServers(
     const s = val as { url?: string; apiKey?: string; name?: string; enabled?: boolean };
     return {
       key,
-      url: s.url || "",
-      apiKey: s.apiKey || "",
-      name: s.name || "",
+      url: s.url || '',
+      apiKey: s.apiKey || '',
+      name: s.name || '',
       enabled: s.enabled ?? true,
     };
   });
@@ -542,10 +540,7 @@ async function navigateGeneral(session: GatewaySession): Promise<A2UIMessage[] |
     hint: cfg.hint,
   }));
   const pluginsConfig = config.plugins || {};
-  const { agentProfiles, configTags } = await buildAgentProfilesAndTags(
-    config,
-    session._settingsExpandedAgent
-  );
+  const { agentProfiles, configTags } = await buildAgentProfilesAndTags(config, session._settingsExpandedAgent);
 
   return generateSettingsPage({
     providers,
@@ -557,7 +552,7 @@ async function navigateGeneral(session: GatewaySession): Promise<A2UIMessage[] |
     expandedAgentId: session._settingsExpandedAgent,
     ...extractInfraSettings(config),
     ...extractBenchmarkAndJudge(config),
-    userId: session.userUuid || config.uid || "",
+    userId: session.userUuid || config.uid || '',
     remoteServers: extractRemoteServers(config),
     pluginEntries: buildPluginEntries(pluginsConfig),
     rawConfigJson: JSON.stringify(stripLegacyFieldsForSave(config), null, 2),
@@ -572,11 +567,11 @@ async function navigateExperiment(session: GatewaySession): Promise<A2UIMessage[
 // ── Helpers ──────────────────────────────────────────────────────
 
 function readMemorySummary(uuid: string): string {
-  const memPath = join(getUserDir(uuid), "MEMORY.md");
+  const memPath = join(getUserDir(uuid), 'MEMORY.md');
   try {
-    return existsSync(memPath) ? readFileSync(memPath, "utf-8") : "";
+    return existsSync(memPath) ? readFileSync(memPath, 'utf-8') : '';
   } catch {
-    return "";
+    return '';
   }
 }
 
@@ -586,7 +581,7 @@ async function loadSAMemoryData(session: GatewaySession): Promise<{
   saMemoryContent?: string;
   saEditingMemory?: boolean;
 }> {
-  if (session.memoryTab !== "system-agent") {
+  if (session.memoryTab !== 'system-agent') {
     return {
       saSelectedMemoryFile: session.saSelectedMemoryFile || undefined,
       saEditingMemory: session.saEditingMemory,
@@ -594,22 +589,22 @@ async function loadSAMemoryData(session: GatewaySession): Promise<{
   }
 
   const SA_MEMORY_FILES = [
-    { name: "memory", displayName: "memory.md" },
-    { name: "evolution-log", displayName: "evolution-log.md" },
-    { name: "tool-wishlist", displayName: "tool-wishlist.md" },
-    { name: "experience", displayName: "experience.md" },
+    { name: 'memory', displayName: 'memory.md' },
+    { name: 'evolution-log', displayName: 'evolution-log.md' },
+    { name: 'tool-wishlist', displayName: 'tool-wishlist.md' },
+    { name: 'experience', displayName: 'experience.md' },
   ];
 
   const saMemoryFiles = await Promise.all(
     SA_MEMORY_FILES.map(async (f) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = (await systemMemoryReadTool.execute({ file: f.name })) as any;
-      const fileContent = result.content === "(empty)" ? "" : result.content;
+      const fileContent = result.content === '(empty)' ? '' : result.content;
       return {
         name: f.name,
         displayName: f.displayName,
         lines: result.lines || 0,
-        preview: fileContent ? fileContent.split("\n").slice(0, 2).join(" ").slice(0, 80) : "",
+        preview: fileContent ? fileContent.split('\n').slice(0, 2).join(' ').slice(0, 80) : '',
       };
     })
   );
@@ -619,7 +614,7 @@ async function loadSAMemoryData(session: GatewaySession): Promise<{
     const result = (await systemMemoryReadTool.execute({
       file: session.saSelectedMemoryFile,
     })) as any;
-    const raw = result.content === "(empty)" ? "" : result.content;
+    const raw = result.content === '(empty)' ? '' : result.content;
     saMemoryContent = session.editBuffer ?? raw;
   }
 
@@ -632,12 +627,14 @@ async function loadSAMemoryData(session: GatewaySession): Promise<{
 }
 
 function loadSelectedLogContent(session: GatewaySession, uuid: string): string | undefined {
-  if (session.memoryTab !== "logs" || !session.selectedLogDate) return undefined;
-  const logPath = join(getUserDir(uuid), "memory", `${session.selectedLogDate}.md`);
+  if (session.memoryTab !== 'logs' || !session.selectedLogDate) {
+    return undefined;
+  }
+  const logPath = join(getUserDir(uuid), 'memory', `${session.selectedLogDate}.md`);
   try {
-    return readFileSync(logPath, "utf-8");
+    return readFileSync(logPath, 'utf-8');
   } catch {
-    return "";
+    return '';
   }
 }
 
@@ -660,12 +657,12 @@ function buildModelProviders(config: any): Array<{
       const p = providerCfg as any;
       result.push({
         key,
-        baseUrl: p.baseUrl || "",
+        baseUrl: p.baseUrl || '',
         apiKeySet: !!p.apiKey,
         models: (p.models || []).map((m: { name: string; model: string; label?: string }) => ({
           name: m.name,
           model: m.model,
-          label: m.label || "",
+          label: m.label || '',
         })),
       });
     }
@@ -694,11 +691,11 @@ function buildPluginEntries(pluginsConfig: any): Array<{
     return {
       id,
       name: manifest.ok ? manifest.manifest.name || id : id,
-      description: manifest.ok ? manifest.manifest.description || "" : "",
-      version: manifest.ok ? manifest.manifest.version || "" : "",
+      description: manifest.ok ? manifest.manifest.description || '' : '',
+      version: manifest.ok ? manifest.manifest.version || '' : '',
       origin: c.origin,
       enabled: cfgEntry?.enabled ?? true,
-      config: cfgEntry?.config ? JSON.stringify(cfgEntry.config, null, 2) : "{}",
+      config: cfgEntry?.config ? JSON.stringify(cfgEntry.config, null, 2) : '{}',
     };
   });
 }
@@ -725,9 +722,9 @@ async function buildAgentProfilesAndTags(
     return {
       id,
       label: id,
-      model: p.model || "",
-      workspace: p.workspace || "",
-      sessionPath: p.sessionPath || "",
+      model: p.model || '',
+      workspace: p.workspace || '',
+      sessionPath: p.sessionPath || '',
       toolTags: p.tools.tags || [],
       skillTags: p.skills?.tags || [],
     };
@@ -740,15 +737,21 @@ async function buildAgentProfilesAndTags(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const skillsResult = (await listSkillsTool.execute({})) as any;
       for (const s of skillsResult.skills || []) {
-        for (const tag of s.tags || []) tagSet.add(tag);
+        for (const tag of s.tags || []) {
+          tagSet.add(tag);
+        }
       }
     } catch {
-      tagSet.add("pha");
-      tagSet.add("sa");
+      tagSet.add('pha');
+      tagSet.add('sa');
     }
     for (const ap of agentProfiles) {
-      for (const t2 of ap.toolTags) tagSet.add(t2);
-      for (const t2 of ap.skillTags) tagSet.add(t2);
+      for (const t2 of ap.toolTags) {
+        tagSet.add(t2);
+      }
+      for (const t2 of ap.skillTags) {
+        tagSet.add(t2);
+      }
     }
     configTags = [...tagSet].sort();
     config.tags = configTags;
@@ -760,42 +763,42 @@ async function buildAgentProfilesAndTags(
 
 // ── Dispatch map ────────────────────────────────────────────────
 
-type NavResult = A2UIMessage[] | null | "early-return";
+type NavResult = A2UIMessage[] | null | 'early-return';
 type NavHandler = (session: GatewaySession, view: string, send: SendFn) => Promise<NavResult>;
 
 const NAV_HANDLERS: Record<string, NavHandler> = {
   chat: async (s) => navigateChat(s),
-  "system-agent": async (s) => navigateSystemAgent(s),
-  "legacy-chat": async (s) => navigateLegacyChat(s),
+  'system-agent': async (s) => navigateSystemAgent(s),
+  'legacy-chat': async (s) => navigateLegacyChat(s),
   dashboard: async (s, v, send) => navigateDashboard(s, v, send),
   health: async (s, v, send) => navigateDashboard(s, v, send),
   sleep: async (s, v, send) => navigateDashboard(s, v, send),
   activity: async (s, v, send) => navigateDashboard(s, v, send),
   plans: async (s) => navigatePlans(s),
   memory: async (s, _v, send) => navigateMemory(s, send),
-  "settings/prompts": async (s, _v, send) => navigatePrompts(s, send),
-  "settings/skills": async (s, _v, send) => navigateSkills(s, send),
-  "settings/tools": async (s, _v, send) => navigateTools(s, send),
-  "settings/system-agent": async (s, _v, send) => {
-    s.promptsScope = "system";
-    s.currentView = "settings/prompts";
-    await s.handleNavigate("settings/prompts", send);
-    return "early-return";
+  'settings/prompts': async (s, _v, send) => navigatePrompts(s, send),
+  'settings/skills': async (s, _v, send) => navigateSkills(s, send),
+  'settings/tools': async (s, _v, send) => navigateTools(s, send),
+  'settings/system-agent': async (s, _v, send) => {
+    s.promptsScope = 'system';
+    s.currentView = 'settings/prompts';
+    await s.handleNavigate('settings/prompts', send);
+    return 'early-return';
   },
   evolution: async (s, _v, send) => navigateEvolution(s, send),
-  "settings/evolution": async (s, _v, send) => {
-    s.currentView = "evolution";
-    await s.handleNavigate("evolution", send);
-    return "early-return";
+  'settings/evolution': async (s, _v, send) => {
+    s.currentView = 'evolution';
+    await s.handleNavigate('evolution', send);
+    return 'early-return';
   },
-  "settings/evolution-legacy": async (s, _v, send) => {
-    s.currentView = "evolution";
-    await s.handleNavigate("evolution", send);
-    return "early-return";
+  'settings/evolution-legacy': async (s, _v, send) => {
+    s.currentView = 'evolution';
+    await s.handleNavigate('evolution', send);
+    return 'early-return';
   },
-  "settings/integrations": async (s, _v, send) => navigateIntegrations(s, send),
-  "settings/logs": async (s, _v, send) => navigateLogs(s, send),
-  "settings/general": async (s) => navigateGeneral(s),
+  'settings/integrations': async (s, _v, send) => navigateIntegrations(s, send),
+  'settings/logs': async (s, _v, send) => navigateLogs(s, send),
+  'settings/general': async (s) => navigateGeneral(s),
   experiment: async (s) => navigateExperiment(s),
 };
 
@@ -803,15 +806,11 @@ const NAV_HANDLERS: Record<string, NavHandler> = {
  * Dispatch navigation to the appropriate handler.
  * Returns the page data to be wrapped in buildPage, or null if the handler already sent.
  */
-export async function dispatchNavigation(
-  session: GatewaySession,
-  view: string,
-  send: SendFn
-): Promise<void> {
+export async function dispatchNavigation(session: GatewaySession, view: string, send: SendFn): Promise<void> {
   // Unsubscribe from logs when navigating away
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = session as any;
-  if (session.currentView === "settings/logs" && view !== "settings/logs") {
+  if (session.currentView === 'settings/logs' && view !== 'settings/logs') {
     if (s.logsUnsubscribe) {
       s.logsUnsubscribe();
       s.logsUnsubscribe = null;
@@ -826,36 +825,38 @@ export async function dispatchNavigation(
 
   // Auth check (all views except settings/*)
   const authExemptViews = [
-    "settings/general",
-    "settings/integrations",
-    "settings/prompts",
-    "settings/skills",
-    "settings/tools",
-    "settings/logs",
-    "settings/evolution",
-    "settings/evolution-legacy",
+    'settings/general',
+    'settings/integrations',
+    'settings/prompts',
+    'settings/skills',
+    'settings/tools',
+    'settings/logs',
+    'settings/evolution',
+    'settings/evolution-legacy',
   ];
   const authConfig = loadConfig();
-  if (authConfig.dataSources.type === "huawei" && !session.isUserAuthenticated()) {
+  if (authConfig.dataSources.type === 'huawei' && !session.isUserAuthenticated()) {
     if (!authExemptViews.some((v) => view.startsWith(v))) {
       const mainPage = generateAuthRequiredPage();
-      sendAll(send, session.buildPage("auth", mainPage));
+      sendAll(send, session.buildPage('auth', mainPage));
       return;
     }
   }
 
   // Whitelist check: non-whitelisted users can only access chat + dashboard
-  const WHITELIST_ALLOWED_VIEWS = ["chat", "dashboard"];
+  const WHITELIST_ALLOWED_VIEWS = ['chat', 'dashboard'];
   if (!session.isWhitelisted() && !WHITELIST_ALLOWED_VIEWS.includes(view)) {
-    session.currentView = "chat";
-    await dispatchNavigation(session, "chat", send);
+    session.currentView = 'chat';
+    await dispatchNavigation(session, 'chat', send);
     return;
   }
 
   const handler = NAV_HANDLERS[view];
   if (handler) {
     const result = await handler(session, view, send);
-    if (result === "early-return" || result === null) return;
+    if (result === 'early-return' || result === null) {
+      return;
+    }
     // result is A2UIMessage[]
     sendAll(send, session.buildPage(view, result));
   } else {

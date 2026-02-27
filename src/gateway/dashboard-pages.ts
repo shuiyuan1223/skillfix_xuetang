@@ -5,8 +5,8 @@
  * All UI is generated server-side via A2UI protocol.
  */
 
-import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
-import { t } from "../locales/index.js";
+import { A2UIGenerator, type A2UIMessage } from './a2ui.js';
+import { t } from '../locales/index.js';
 import type {
   HealthMetrics,
   HeartRateData,
@@ -23,7 +23,7 @@ import type {
   EmotionData,
   HRVData,
   WorkoutData,
-} from "../data-sources/interface.js";
+} from '../data-sources/interface.js';
 
 // ============================================================================
 // Dashboard Data Interface
@@ -67,7 +67,7 @@ export interface DashboardOptions {
   loading?: boolean; // Show skeletons for missing data
 }
 
-export type TabId = "overview" | "vitals" | "activity" | "sleep" | "body" | "heart" | "trends";
+export type TabId = 'overview' | 'vitals' | 'activity' | 'sleep' | 'body' | 'heart' | 'trends';
 
 // ============================================================================
 // Health Score Calculation
@@ -119,7 +119,9 @@ function calculateHealthScore(data: DashboardData): number {
     data.spo2 ? spo2Score : null,
   ].filter((s): s is number => s !== null);
 
-  if (scores.length === 0) return 0;
+  if (scores.length === 0) {
+    return 0;
+  }
   return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
 }
 
@@ -130,7 +132,7 @@ function calculateHealthScore(data: DashboardData): number {
 interface Anomaly {
   label: string;
   value: string;
-  severity: "warning" | "error";
+  severity: 'warning' | 'error';
 }
 
 function detectAnomalies(data: DashboardData): Anomaly[] {
@@ -138,50 +140,50 @@ function detectAnomalies(data: DashboardData): Anomaly[] {
 
   if (data.bloodPressure && data.bloodPressure.latestSystolic > 140) {
     anomalies.push({
-      label: t("health.bloodPressure"),
+      label: t('health.bloodPressure'),
       value: `${data.bloodPressure.latestSystolic}/${data.bloodPressure.latestDiastolic} mmHg`,
-      severity: "warning",
+      severity: 'warning',
     });
   }
   if (data.bloodPressure && data.bloodPressure.latestDiastolic > 90) {
-    if (!anomalies.find((a) => a.label === t("health.bloodPressure"))) {
+    if (!anomalies.find((a) => a.label === t('health.bloodPressure'))) {
       anomalies.push({
-        label: t("health.bloodPressure"),
+        label: t('health.bloodPressure'),
         value: `${data.bloodPressure.latestSystolic}/${data.bloodPressure.latestDiastolic} mmHg`,
-        severity: "warning",
+        severity: 'warning',
       });
     }
   }
 
   if (data.spo2 && data.spo2.current < 95) {
     anomalies.push({
-      label: t("health.spo2"),
+      label: t('health.spo2'),
       value: `${data.spo2.current}%`,
-      severity: data.spo2.current < 90 ? "error" : "warning",
+      severity: data.spo2.current < 90 ? 'error' : 'warning',
     });
   }
 
   if (data.heartRate && data.heartRate.restingAvg > 100) {
     anomalies.push({
-      label: t("health.heartRate"),
-      value: `${data.heartRate.restingAvg} ${t("health.bpmUnit")}`,
-      severity: "warning",
+      label: t('health.heartRate'),
+      value: `${data.heartRate.restingAvg} ${t('health.bpmUnit')}`,
+      severity: 'warning',
     });
   }
 
   if (data.stress && data.stress.current > 70) {
     anomalies.push({
-      label: t("health.stress"),
+      label: t('health.stress'),
       value: `${data.stress.current}`,
-      severity: "warning",
+      severity: 'warning',
     });
   }
 
   if (data.bloodGlucose && data.bloodGlucose.latest > 7.0) {
     anomalies.push({
-      label: t("health.bloodGlucose"),
+      label: t('health.bloodGlucose'),
       value: `${data.bloodGlucose.latest} mmol/L`,
-      severity: "warning",
+      severity: 'warning',
     });
   }
 
@@ -199,11 +201,11 @@ function statOrSkeleton(
   opts: { title: string; value: string; subtitle?: string; icon: string; color: string }
 ): string {
   if (!available && loading) {
-    return ui.skeleton({ variant: "card" });
+    return ui.skeleton({ variant: 'card' });
   }
   return ui.statCard({
     title: opts.title,
-    value: available ? opts.value : "--",
+    value: available ? opts.value : '--',
     subtitle: opts.subtitle,
     icon: opts.icon,
     color: available ? opts.color : undefined,
@@ -215,20 +217,21 @@ function statOrSkeleton(
 // ============================================================================
 
 function buildScopeErrorBanner(ui: A2UIGenerator, scopeErrors: string[]): string {
-  const warnIcon = ui.text("!", "h2");
-  const reAuthTitle = ui.text(t("dashboard.scopeErrorTitle"), "body");
-  const reAuthHint = ui.text(t("dashboard.scopeErrorHint"), "caption");
-  const reAuthBtn = ui.button(t("dashboard.reAuth"), "start_huawei_auth", {
-    variant: "accent",
-    size: "sm",
+  const warnIcon = ui.text('!', 'h2');
+  const reAuthTitle = ui.text(t('dashboard.scopeErrorTitle'), 'body');
+  const reAuthHint = ui.text(t('dashboard.scopeErrorHint'), 'caption');
+  const reAuthBtn = ui.button(t('dashboard.reAuth'), 'start_huawei_auth', {
+    variant: 'accent',
+    size: 'sm',
   });
-  const reAuthContent = ui.row(
-    [warnIcon, ui.column([reAuthTitle, reAuthHint], { gap: 4 }), reAuthBtn],
-    { justify: "between", align: "center", gap: 12 }
-  );
+  const reAuthContent = ui.row([warnIcon, ui.column([reAuthTitle, reAuthHint], { gap: 4 }), reAuthBtn], {
+    justify: 'between',
+    align: 'center',
+    gap: 12,
+  });
   return ui.card([reAuthContent], {
     padding: 16,
-    className: "border-l-4 border-l-warning",
+    className: 'border-l-4 border-l-warning',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 }
@@ -243,18 +246,18 @@ function buildHeroSection(ui: A2UIGenerator, data: DashboardData): string {
 
   const rings = ui.activityRings(
     [
-      { value: currentSteps, max: stepsGoal, label: t("activity.steps"), color: "#FA114F" },
+      { value: currentSteps, max: stepsGoal, label: t('activity.steps'), color: '#FA114F' },
       {
         value: currentActiveHours,
         max: activeHoursGoal,
-        label: t("activity.activeTime"),
-        color: "#92E82A",
+        label: t('activity.activeTime'),
+        color: '#92E82A',
       },
       {
         value: currentCalories,
         max: caloriesGoal,
-        label: t("activity.calories"),
-        color: "#00CEFF",
+        label: t('activity.calories'),
+        color: '#00CEFF',
       },
     ],
     { size: 180 }
@@ -263,58 +266,56 @@ function buildHeroSection(ui: A2UIGenerator, data: DashboardData): string {
   const score = calculateHealthScore(data);
   const gauge = ui.scoreGauge(score, {
     max: 100,
-    label: t("dashboard.healthScoreLabel"),
+    label: t('dashboard.healthScoreLabel'),
     showValue: true,
-    size: "md",
+    size: 'md',
     thresholds: [
-      { value: 40, color: "#ef4444" },
-      { value: 70, color: "#f59e0b" },
-      { value: 100, color: "#10b981" },
+      { value: 40, color: '#ef4444' },
+      { value: 70, color: '#f59e0b' },
+      { value: 100, color: '#10b981' },
     ],
   });
 
   const quickStatsChildren: string[] = [gauge];
   if (data.metricsIsYesterday) {
-    quickStatsChildren.push(ui.badge(t("dashboard.yesterdayData"), { variant: "info" }));
+    quickStatsChildren.push(ui.badge(t('dashboard.yesterdayData'), { variant: 'info' }));
   }
-  const quickStatsCol = ui.column(quickStatsChildren, { gap: 8, align: "center" });
+  const quickStatsCol = ui.column(quickStatsChildren, { gap: 8, align: 'center' });
 
-  const heroRow = ui.row([rings, quickStatsCol], { gap: 32, justify: "center", align: "center" });
+  const heroRow = ui.row([rings, quickStatsCol], { gap: 32, justify: 'center', align: 'center' });
   return ui.card([heroRow], { padding: 28 });
 }
 
 function buildVitalSignsRow(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
-  const hrSubtitle = data.heartRateIsYesterday
-    ? t("dashboard.yesterdayData")
-    : t("health.bpmResting");
+  const hrSubtitle = data.heartRateIsYesterday ? t('dashboard.yesterdayData') : t('health.bpmResting');
   const vitalCards = [
     statOrSkeleton(ui, !!data.heartRate, loading, {
-      title: t("health.heartRate"),
-      value: data.heartRate ? `${data.heartRate.restingAvg}` : "--",
+      title: t('health.heartRate'),
+      value: data.heartRate ? `${data.heartRate.restingAvg}` : '--',
       subtitle: hrSubtitle,
-      icon: "heart",
-      color: "#ef4444",
+      icon: 'heart',
+      color: '#ef4444',
     }),
     statOrSkeleton(ui, !!data.spo2, loading, {
-      title: t("health.spo2"),
-      value: data.spo2 ? `${data.spo2.current}%` : "--",
-      subtitle: t("health.oxygen"),
-      icon: "wind",
-      color: "#10b981",
+      title: t('health.spo2'),
+      value: data.spo2 ? `${data.spo2.current}%` : '--',
+      subtitle: t('health.oxygen'),
+      icon: 'wind',
+      color: '#10b981',
     }),
     statOrSkeleton(ui, !!data.stress, loading, {
-      title: t("health.stress"),
-      value: data.stress ? `${data.stress.current}` : "--",
-      subtitle: t("health.stressLevel"),
-      icon: "brain",
-      color: "#8b5cf6",
+      title: t('health.stress'),
+      value: data.stress ? `${data.stress.current}` : '--',
+      subtitle: t('health.stressLevel'),
+      icon: 'brain',
+      color: '#8b5cf6',
     }),
     statOrSkeleton(ui, !!data.sleep, loading, {
-      title: t("sleep.duration"),
-      value: data.sleep ? `${data.sleep.durationHours.toFixed(1)}h` : "--",
-      subtitle: t("sleep.hours"),
-      icon: "moon",
-      color: "#6366f1",
+      title: t('sleep.duration'),
+      value: data.sleep ? `${data.sleep.durationHours.toFixed(1)}h` : '--',
+      subtitle: t('sleep.hours'),
+      icon: 'moon',
+      color: '#6366f1',
     }),
   ];
   return ui.grid(vitalCards, { columns: 4, gap: 12 });
@@ -323,32 +324,30 @@ function buildVitalSignsRow(ui: A2UIGenerator, data: DashboardData, loading: boo
 function buildSecondaryStatsRow(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
   const secondaryCards = [
     statOrSkeleton(ui, !!data.bodyComposition, loading, {
-      title: t("health.bodyWeight"),
-      value: data.bodyComposition?.weight ? `${data.bodyComposition.weight} kg` : "--",
-      icon: "activity",
-      color: "#0ea5e9",
+      title: t('health.bodyWeight'),
+      value: data.bodyComposition?.weight ? `${data.bodyComposition.weight} kg` : '--',
+      icon: 'activity',
+      color: '#0ea5e9',
     }),
     statOrSkeleton(ui, !!data.bodyTemperature, loading, {
-      title: t("health.bodyTemperature"),
-      value: data.bodyTemperature ? `${data.bodyTemperature.latest}°C` : "--",
-      icon: "flame",
-      color: "#f59e0b",
+      title: t('health.bodyTemperature'),
+      value: data.bodyTemperature ? `${data.bodyTemperature.latest}°C` : '--',
+      icon: 'flame',
+      color: '#f59e0b',
     }),
     statOrSkeleton(ui, !!data.bloodPressure, loading, {
-      title: t("health.bloodPressure"),
-      value: data.bloodPressure
-        ? `${data.bloodPressure.latestSystolic}/${data.bloodPressure.latestDiastolic}`
-        : "--",
-      subtitle: "mmHg",
-      icon: "stethoscope",
-      color: "#f97316",
+      title: t('health.bloodPressure'),
+      value: data.bloodPressure ? `${data.bloodPressure.latestSystolic}/${data.bloodPressure.latestDiastolic}` : '--',
+      subtitle: 'mmHg',
+      icon: 'stethoscope',
+      color: '#f97316',
     }),
     statOrSkeleton(ui, !!data.emotion, loading, {
-      title: t("dashboard.emotion"),
-      value: data.emotion ? data.emotion.current : "--",
+      title: t('dashboard.emotion'),
+      value: data.emotion ? data.emotion.current : '--',
       subtitle: data.emotion ? `${data.emotion.score}/100` : undefined,
-      icon: "star",
-      color: "#ec4899",
+      icon: 'star',
+      color: '#ec4899',
     }),
   ];
   return ui.grid(secondaryCards, { columns: 4, gap: 12 });
@@ -358,27 +357,27 @@ function buildOverviewCharts(ui: A2UIGenerator, data: DashboardData): string[] {
   const chartChildren: string[] = [];
 
   if (data.weeklySteps && data.weeklySteps.length > 0) {
-    const stepsChartTitle = ui.text(t("activity.chartTitle"), "h3");
+    const stepsChartTitle = ui.text(t('activity.chartTitle'), 'h3');
     const stepsChart = ui.chart({
-      chartType: "bar",
+      chartType: 'bar',
       data: data.weeklySteps.map((d) => ({ label: d.date.slice(5), value: d.steps })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 200,
-      color: "#10b981",
+      color: '#10b981',
     });
     chartChildren.push(ui.card([stepsChartTitle, stepsChart], { padding: 20 }));
   }
 
   if (data.heartRate && data.heartRate.readings.length > 0) {
-    const hrChartTitle = ui.text(t("health.heartRateTrend"), "h3");
+    const hrChartTitle = ui.text(t('health.heartRateTrend'), 'h3');
     const hrChart = ui.chart({
-      chartType: "line",
+      chartType: 'line',
       data: data.heartRate.readings.map((r) => ({ label: r.time, value: r.value })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 200,
-      color: "#ef4444",
+      color: '#ef4444',
     });
     chartChildren.push(ui.card([hrChartTitle, hrChart], { padding: 20 }));
   }
@@ -391,14 +390,14 @@ function buildOverviewCharts(ui: A2UIGenerator, data: DashboardData): string[] {
   }
 
   if (data.weeklySleep && data.weeklySleep.length > 0) {
-    const sleepChartTitle = ui.text(t("dashboard.sleepTrend"), "h3");
+    const sleepChartTitle = ui.text(t('dashboard.sleepTrend'), 'h3');
     const sleepChart = ui.chart({
-      chartType: "bar",
+      chartType: 'bar',
       data: data.weeklySleep.map((d) => ({ label: d.date.slice(5), value: d.hours })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 160,
-      color: "#8b5cf6",
+      color: '#8b5cf6',
     });
     result.push(ui.card([sleepChartTitle, sleepChart], { padding: 20 }));
   }
@@ -420,7 +419,7 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
   const anomalies = detectAnomalies(data);
   if (anomalies.length > 0) {
     const alertBadges = anomalies.map((a) =>
-      ui.badge(`${a.label}: ${a.value}`, { variant: a.severity === "error" ? "error" : "warning" })
+      ui.badge(`${a.label}: ${a.value}`, { variant: a.severity === 'error' ? 'error' : 'warning' })
     );
     const alertRow = ui.row(alertBadges, { gap: 8, wrap: true });
     children.push(ui.card([alertRow], { padding: 16 }));
@@ -438,62 +437,60 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
 function buildVitalsStatCards(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
   const cards = [
     statOrSkeleton(ui, !!data.heartRate, loading, {
-      title: t("health.heartRate"),
-      value: data.heartRate ? `${data.heartRate.restingAvg}` : "--",
-      subtitle: t("health.bpmResting"),
-      icon: "heart",
-      color: "#ef4444",
+      title: t('health.heartRate'),
+      value: data.heartRate ? `${data.heartRate.restingAvg}` : '--',
+      subtitle: t('health.bpmResting'),
+      icon: 'heart',
+      color: '#ef4444',
     }),
     statOrSkeleton(ui, !!data.heartRate, loading, {
-      title: t("health.restingHR"),
-      value: data.heartRate ? `${data.heartRate.restingAvg}` : "--",
-      subtitle: t("health.bpmUnit"),
-      icon: "heart-pulse",
-      color: "#f97316",
+      title: t('health.restingHR'),
+      value: data.heartRate ? `${data.heartRate.restingAvg}` : '--',
+      subtitle: t('health.bpmUnit'),
+      icon: 'heart-pulse',
+      color: '#f97316',
     }),
     statOrSkeleton(ui, !!data.hrv, loading, {
-      title: t("dashboard.hrv"),
-      value: data.hrv ? `${data.hrv.rmssd}` : "--",
-      subtitle: "ms",
-      icon: "activity",
-      color: "#6366f1",
+      title: t('dashboard.hrv'),
+      value: data.hrv ? `${data.hrv.rmssd}` : '--',
+      subtitle: 'ms',
+      icon: 'activity',
+      color: '#6366f1',
     }),
     statOrSkeleton(ui, !!data.spo2, loading, {
-      title: t("health.spo2"),
-      value: data.spo2 ? `${data.spo2.current}%` : "--",
-      subtitle: t("health.oxygen"),
-      icon: "wind",
-      color: "#10b981",
+      title: t('health.spo2'),
+      value: data.spo2 ? `${data.spo2.current}%` : '--',
+      subtitle: t('health.oxygen'),
+      icon: 'wind',
+      color: '#10b981',
     }),
     statOrSkeleton(ui, !!data.stress, loading, {
-      title: t("health.stress"),
-      value: data.stress ? `${data.stress.current}` : "--",
-      subtitle: t("health.stressLevel"),
-      icon: "brain",
-      color: "#8b5cf6",
+      title: t('health.stress'),
+      value: data.stress ? `${data.stress.current}` : '--',
+      subtitle: t('health.stressLevel'),
+      icon: 'brain',
+      color: '#8b5cf6',
     }),
     statOrSkeleton(ui, !!data.bloodPressure, loading, {
-      title: t("health.bloodPressure"),
-      value: data.bloodPressure
-        ? `${data.bloodPressure.latestSystolic}/${data.bloodPressure.latestDiastolic}`
-        : "--",
-      subtitle: "mmHg",
-      icon: "stethoscope",
-      color: "#f97316",
+      title: t('health.bloodPressure'),
+      value: data.bloodPressure ? `${data.bloodPressure.latestSystolic}/${data.bloodPressure.latestDiastolic}` : '--',
+      subtitle: 'mmHg',
+      icon: 'stethoscope',
+      color: '#f97316',
     }),
     statOrSkeleton(ui, !!data.bloodGlucose, loading, {
-      title: t("health.bloodGlucose"),
-      value: data.bloodGlucose ? `${data.bloodGlucose.latest}` : "--",
-      subtitle: "mmol/L",
-      icon: "zap",
-      color: "#3b82f6",
+      title: t('health.bloodGlucose'),
+      value: data.bloodGlucose ? `${data.bloodGlucose.latest}` : '--',
+      subtitle: 'mmol/L',
+      icon: 'zap',
+      color: '#3b82f6',
     }),
     statOrSkeleton(ui, !!data.bodyTemperature, loading, {
-      title: t("health.bodyTemperature"),
-      value: data.bodyTemperature ? `${data.bodyTemperature.latest}` : "--",
-      subtitle: "C",
-      icon: "flame",
-      color: "#f59e0b",
+      title: t('health.bodyTemperature'),
+      value: data.bodyTemperature ? `${data.bodyTemperature.latest}` : '--',
+      subtitle: 'C',
+      icon: 'flame',
+      color: '#f59e0b',
     }),
   ];
   return ui.grid(cards, { columns: 4, gap: 16 });
@@ -503,38 +500,38 @@ function buildVitalsCharts(ui: A2UIGenerator, data: DashboardData): string[] {
   const result: string[] = [];
 
   if (data.heartRate && data.heartRate.readings.length > 0) {
-    const hrChartTitle = ui.text(t("health.heartRateTrend"), "h3");
+    const hrChartTitle = ui.text(t('health.heartRateTrend'), 'h3');
     const hrChart = ui.chart({
-      chartType: "line",
+      chartType: 'line',
       data: data.heartRate.readings.map((r) => ({ label: r.time, value: r.value })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 200,
-      color: "#ef4444",
+      color: '#ef4444',
     });
     result.push(ui.card([hrChartTitle, hrChart], { padding: 20 }));
   }
 
   if (data.stress && data.stress.readings.length > 0) {
-    const stressChartTitle = ui.text(t("health.stress"), "h3");
+    const stressChartTitle = ui.text(t('health.stress'), 'h3');
     const stressChart = ui.chart({
-      chartType: "line",
+      chartType: 'line',
       data: data.stress.readings.map((r) => ({ label: r.time, value: r.value })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 200,
-      color: "#8b5cf6",
+      color: '#8b5cf6',
     });
     result.push(ui.card([stressChartTitle, stressChart], { padding: 20 }));
   }
 
   if (data.bloodPressure && data.bloodPressure.readings.length > 0) {
-    const bpTitle = ui.text(t("health.bloodPressure"), "h3");
+    const bpTitle = ui.text(t('health.bloodPressure'), 'h3');
     const bpTable = ui.table(
       [
-        { key: "time", label: t("health.recordTime") },
-        { key: "systolic", label: t("health.systolic") },
-        { key: "diastolic", label: t("health.diastolic") },
+        { key: 'time', label: t('health.recordTime') },
+        { key: 'systolic', label: t('health.systolic') },
+        { key: 'diastolic', label: t('health.diastolic') },
       ],
       data.bloodPressure.readings.map((r) => ({
         time: r.time,
@@ -546,11 +543,11 @@ function buildVitalsCharts(ui: A2UIGenerator, data: DashboardData): string[] {
   }
 
   if (data.bloodGlucose && data.bloodGlucose.readings.length > 0) {
-    const bgTitle = ui.text(t("health.bloodGlucose"), "h3");
+    const bgTitle = ui.text(t('health.bloodGlucose'), 'h3');
     const bgTable = ui.table(
       [
-        { key: "time", label: t("health.recordTime") },
-        { key: "value", label: t("health.bloodGlucose") },
+        { key: 'time', label: t('health.recordTime') },
+        { key: 'value', label: t('health.bloodGlucose') },
       ],
       data.bloodGlucose.readings.map((r) => ({
         time: r.time,
@@ -582,51 +579,51 @@ function buildActivityTab(ui: A2UIGenerator, data: DashboardData, loading: boole
 
   cards.push(
     statOrSkeleton(ui, !!data.metrics, loading, {
-      title: t("activity.steps"),
-      value: data.metrics ? `${data.metrics.steps.toLocaleString()}` : "--",
-      subtitle: t("activity.stepsToday"),
-      icon: "footprints",
-      color: "#10b981",
+      title: t('activity.steps'),
+      value: data.metrics ? `${data.metrics.steps.toLocaleString()}` : '--',
+      subtitle: t('activity.stepsToday'),
+      icon: 'footprints',
+      color: '#10b981',
     })
   );
 
   cards.push(
     statOrSkeleton(ui, !!data.metrics, loading, {
-      title: t("activity.calories"),
-      value: data.metrics ? `${data.metrics.calories}` : "--",
-      subtitle: t("activity.kcalBurned"),
-      icon: "flame",
-      color: "#f97316",
+      title: t('activity.calories'),
+      value: data.metrics ? `${data.metrics.calories}` : '--',
+      subtitle: t('activity.kcalBurned'),
+      icon: 'flame',
+      color: '#f97316',
     })
   );
 
   cards.push(
     statOrSkeleton(ui, !!data.metrics, loading, {
-      title: t("dashboard.distance"),
-      value: data.metrics ? `${(data.metrics.distance / 1000).toFixed(1)}` : "--",
-      subtitle: "km",
-      icon: "activity",
-      color: "#3b82f6",
+      title: t('dashboard.distance'),
+      value: data.metrics ? `${(data.metrics.distance / 1000).toFixed(1)}` : '--',
+      subtitle: 'km',
+      icon: 'activity',
+      color: '#3b82f6',
     })
   );
 
   cards.push(
     statOrSkeleton(ui, !!data.metrics, loading, {
-      title: t("activity.activeTime"),
-      value: data.metrics ? `${Math.round((data.metrics.activeMinutes || 0) / 60)}h` : "--",
-      subtitle: t("sleep.hours"),
-      icon: "timer",
-      color: "#8b5cf6",
+      title: t('activity.activeTime'),
+      value: data.metrics ? `${Math.round((data.metrics.activeMinutes || 0) / 60)}h` : '--',
+      subtitle: t('sleep.hours'),
+      icon: 'timer',
+      color: '#8b5cf6',
     })
   );
 
   cards.push(
     statOrSkeleton(ui, !!data.vo2max, loading, {
-      title: t("dashboard.vo2max"),
-      value: data.vo2max ? `${data.vo2max.value}` : "--",
-      subtitle: data.vo2max ? data.vo2max.level : "mL/kg/min",
-      icon: "trending-up",
-      color: "#10b981",
+      title: t('dashboard.vo2max'),
+      value: data.vo2max ? `${data.vo2max.value}` : '--',
+      subtitle: data.vo2max ? data.vo2max.level : 'mL/kg/min',
+      icon: 'trending-up',
+      color: '#10b981',
     })
   );
 
@@ -634,35 +631,35 @@ function buildActivityTab(ui: A2UIGenerator, data: DashboardData, loading: boole
 
   // 7-day steps chart
   if (data.weeklySteps && data.weeklySteps.length > 0) {
-    const chartTitle = ui.text(t("activity.chartTitle"), "h3");
+    const chartTitle = ui.text(t('activity.chartTitle'), 'h3');
     const chart = ui.chart({
-      chartType: "bar",
+      chartType: 'bar',
       data: data.weeklySteps.map((d) => ({ label: d.date, value: d.steps })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 200,
-      color: "#10b981",
+      color: '#10b981',
     });
     children.push(ui.card([chartTitle, chart], { padding: 20 }));
   }
 
   // Recent workouts table
   if (data.workouts && data.workouts.length > 0) {
-    const workoutTitle = ui.text(t("dashboard.recentWorkouts"), "h3");
+    const workoutTitle = ui.text(t('dashboard.recentWorkouts'), 'h3');
     const workoutTable = ui.table(
       [
-        { key: "type", label: t("evolution.type") },
-        { key: "duration", label: t("evolution.duration") },
-        { key: "calories", label: t("activity.calories") },
-        { key: "distance", label: t("dashboard.distance") },
-        { key: "avgHR", label: t("health.heartRate") },
+        { key: 'type', label: t('evolution.type') },
+        { key: 'duration', label: t('evolution.duration') },
+        { key: 'calories', label: t('activity.calories') },
+        { key: 'distance', label: t('dashboard.distance') },
+        { key: 'avgHR', label: t('health.heartRate') },
       ],
       data.workouts.map((w) => ({
         type: w.type,
-        duration: `${w.durationMinutes} ${t("sleep.minutes")}`,
+        duration: `${w.durationMinutes} ${t('sleep.minutes')}`,
         calories: `${w.caloriesBurned} kcal`,
-        distance: w.distanceKm ? `${w.distanceKm.toFixed(1)} km` : "--",
-        avgHR: w.avgHeartRate ? `${w.avgHeartRate} ${t("health.bpmUnit")}` : "--",
+        distance: w.distanceKm ? `${w.distanceKm.toFixed(1)} km` : '--',
+        avgHR: w.avgHeartRate ? `${w.avgHeartRate} ${t('health.bpmUnit')}` : '--',
       }))
     );
     children.push(ui.card([workoutTitle, workoutTable], { padding: 20 }));
@@ -683,31 +680,31 @@ function buildSleepTab(ui: A2UIGenerator, data: DashboardData, loading: boolean)
 
   cards.push(
     statOrSkeleton(ui, !!data.sleep, loading, {
-      title: t("sleep.duration"),
-      value: data.sleep ? `${data.sleep.durationHours.toFixed(1)}` : "--",
-      subtitle: t("sleep.hours"),
-      icon: "moon",
-      color: "#8b5cf6",
+      title: t('sleep.duration'),
+      value: data.sleep ? `${data.sleep.durationHours.toFixed(1)}` : '--',
+      subtitle: t('sleep.hours'),
+      icon: 'moon',
+      color: '#8b5cf6',
     })
   );
 
   cards.push(
     statOrSkeleton(ui, !!data.sleep, loading, {
-      title: t("sleep.quality"),
-      value: data.sleep ? `${data.sleep.qualityScore}` : "--",
-      subtitle: "/100",
-      icon: "star",
-      color: "#f59e0b",
+      title: t('sleep.quality'),
+      value: data.sleep ? `${data.sleep.qualityScore}` : '--',
+      subtitle: '/100',
+      icon: 'star',
+      color: '#f59e0b',
     })
   );
 
   cards.push(
     statOrSkeleton(ui, !!data.sleep, loading, {
-      title: t("sleep.deepSleep"),
-      value: data.sleep ? `${data.sleep.stages.deep}` : "--",
-      subtitle: t("sleep.minutes"),
-      icon: "bed",
-      color: "#6366f1",
+      title: t('sleep.deepSleep'),
+      value: data.sleep ? `${data.sleep.stages.deep}` : '--',
+      subtitle: t('sleep.minutes'),
+      icon: 'bed',
+      color: '#6366f1',
     })
   );
 
@@ -715,41 +712,41 @@ function buildSleepTab(ui: A2UIGenerator, data: DashboardData, loading: boolean)
 
   // Sleep stages chart
   if (data.sleep) {
-    const stagesTitle = ui.text(t("dashboard.sleepStages"), "h3");
+    const stagesTitle = ui.text(t('dashboard.sleepStages'), 'h3');
     const stagesChart = ui.chart({
-      chartType: "bar",
+      chartType: 'bar',
       data: [
-        { label: t("sleep.deepSleep"), value: data.sleep.stages.deep },
-        { label: "Light", value: data.sleep.stages.light },
-        { label: "REM", value: data.sleep.stages.rem },
-        { label: "Awake", value: data.sleep.stages.awake },
+        { label: t('sleep.deepSleep'), value: data.sleep.stages.deep },
+        { label: 'Light', value: data.sleep.stages.light },
+        { label: 'REM', value: data.sleep.stages.rem },
+        { label: 'Awake', value: data.sleep.stages.awake },
       ],
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 200,
-      color: "#8b5cf6",
+      color: '#8b5cf6',
     });
     children.push(ui.card([stagesTitle, stagesChart], { padding: 20 }));
   }
 
   // 7-day sleep duration chart
   if (data.weeklySleep && data.weeklySleep.length > 0) {
-    const trendTitle = ui.text(t("dashboard.sleepTrend"), "h3");
+    const trendTitle = ui.text(t('dashboard.sleepTrend'), 'h3');
     const trendChart = ui.chart({
-      chartType: "bar",
+      chartType: 'bar',
       data: data.weeklySleep.map((d) => ({ label: d.date, value: d.hours })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 200,
-      color: "#8b5cf6",
+      color: '#8b5cf6',
     });
     children.push(ui.card([trendTitle, trendChart], { padding: 20 }));
   }
 
   // Sleep breathing collapsible
-  const breathingText = ui.text(t("dashboard.loadingData"), "caption");
-  const breathingCollapsible = ui.collapsible(t("dashboard.sleepBreathing"), [breathingText], {
-    icon: "wind",
+  const breathingText = ui.text(t('dashboard.loadingData'), 'caption');
+  const breathingCollapsible = ui.collapsible(t('dashboard.sleepBreathing'), [breathingText], {
+    icon: 'wind',
   });
   children.push(breathingCollapsible);
 
@@ -763,56 +760,54 @@ function buildSleepTab(ui: A2UIGenerator, data: DashboardData, loading: boolean)
 function buildBodyStatCards(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
   const cards = [
     statOrSkeleton(ui, !!data.bodyComposition?.weight, loading, {
-      title: t("health.bodyWeight"),
-      value: data.bodyComposition?.weight ? `${data.bodyComposition.weight}` : "--",
-      subtitle: "kg",
-      icon: "activity",
-      color: "#6366f1",
+      title: t('health.bodyWeight'),
+      value: data.bodyComposition?.weight ? `${data.bodyComposition.weight}` : '--',
+      subtitle: 'kg',
+      icon: 'activity',
+      color: '#6366f1',
     }),
     statOrSkeleton(ui, !!data.bodyComposition?.bmi, loading, {
-      title: t("health.bmi"),
-      value: data.bodyComposition?.bmi ? `${data.bodyComposition.bmi.toFixed(1)}` : "--",
-      icon: "bar-chart",
-      color: "#3b82f6",
+      title: t('health.bmi'),
+      value: data.bodyComposition?.bmi ? `${data.bodyComposition.bmi.toFixed(1)}` : '--',
+      icon: 'bar-chart',
+      color: '#3b82f6',
     }),
     statOrSkeleton(ui, !!data.bodyComposition?.bodyFatRate, loading, {
-      title: t("health.bodyFat"),
-      value: data.bodyComposition?.bodyFatRate
-        ? `${data.bodyComposition.bodyFatRate.toFixed(1)}%`
-        : "--",
-      icon: "trending-up",
-      color: "#f97316",
+      title: t('health.bodyFat'),
+      value: data.bodyComposition?.bodyFatRate ? `${data.bodyComposition.bodyFatRate.toFixed(1)}%` : '--',
+      icon: 'trending-up',
+      color: '#f97316',
     }),
     statOrSkeleton(ui, !!data.bodyComposition?.height, loading, {
-      title: t("dashboard.height"),
-      value: data.bodyComposition?.height ? `${data.bodyComposition.height}` : "--",
-      subtitle: "cm",
-      icon: "activity",
-      color: "#10b981",
+      title: t('dashboard.height'),
+      value: data.bodyComposition?.height ? `${data.bodyComposition.height}` : '--',
+      subtitle: 'cm',
+      icon: 'activity',
+      color: '#10b981',
     }),
   ];
   return ui.grid(cards, { columns: 4, gap: 16 });
 }
 
 function buildNutritionCard(ui: A2UIGenerator, nutrition: NutritionData): string {
-  const nutritionTitle = ui.text(t("dashboard.nutritionSummary"), "h3");
+  const nutritionTitle = ui.text(t('dashboard.nutritionSummary'), 'h3');
   const nutritionItems: string[] = [];
 
   nutritionItems.push(
     ui.statCard({
-      title: t("activity.calories"),
+      title: t('activity.calories'),
       value: `${nutrition.totalCalories}`,
-      subtitle: "kcal",
-      icon: "flame",
-      color: "#f97316",
+      subtitle: 'kcal',
+      icon: 'flame',
+      color: '#f97316',
     })
   );
 
   const macros: Array<{ key: keyof NutritionData; label: string; color: string }> = [
-    { key: "protein", label: "dashboard.protein", color: "#ef4444" },
-    { key: "fat", label: "dashboard.fat", color: "#f59e0b" },
-    { key: "carbs", label: "dashboard.carbs", color: "#3b82f6" },
-    { key: "water", label: "dashboard.water", color: "#10b981" },
+    { key: 'protein', label: 'dashboard.protein', color: '#ef4444' },
+    { key: 'fat', label: 'dashboard.fat', color: '#f59e0b' },
+    { key: 'carbs', label: 'dashboard.carbs', color: '#3b82f6' },
+    { key: 'water', label: 'dashboard.water', color: '#10b981' },
   ];
   for (const m of macros) {
     const val = nutrition[m.key];
@@ -821,8 +816,8 @@ function buildNutritionCard(ui: A2UIGenerator, nutrition: NutritionData): string
         ui.statCard({
           title: t(m.label as Parameters<typeof t>[0]),
           value: `${val}`,
-          subtitle: m.key === "water" ? "mL" : "g",
-          icon: "zap",
+          subtitle: m.key === 'water' ? 'mL' : 'g',
+          icon: 'zap',
           color: m.color,
         })
       );
@@ -842,9 +837,9 @@ function buildBodyTab(ui: A2UIGenerator, data: DashboardData, loading: boolean):
     children.push(buildNutritionCard(ui, data.nutrition));
   }
 
-  const menstrualText = ui.text(t("dashboard.loadingData"), "caption");
-  const menstrualCollapsible = ui.collapsible(t("health.menstrualCycle"), [menstrualText], {
-    icon: "heart",
+  const menstrualText = ui.text(t('dashboard.loadingData'), 'caption');
+  const menstrualCollapsible = ui.collapsible(t('health.menstrualCycle'), [menstrualText], {
+    icon: 'heart',
   });
   children.push(menstrualCollapsible);
 
@@ -863,31 +858,31 @@ function buildHeartTab(ui: A2UIGenerator, data: DashboardData, loading: boolean)
 
   cards.push(
     statOrSkeleton(ui, !!data.heartRate, loading, {
-      title: t("health.heartRate"),
-      value: data.heartRate ? `${data.heartRate.restingAvg}` : "--",
-      subtitle: t("health.bpmResting"),
-      icon: "heart",
-      color: "#ef4444",
+      title: t('health.heartRate'),
+      value: data.heartRate ? `${data.heartRate.restingAvg}` : '--',
+      subtitle: t('health.bpmResting'),
+      icon: 'heart',
+      color: '#ef4444',
     })
   );
 
   cards.push(
     statOrSkeleton(ui, !!data.heartRate, loading, {
-      title: t("health.restingHR"),
-      value: data.heartRate ? `${data.heartRate.restingAvg}` : "--",
-      subtitle: t("health.bpmUnit"),
-      icon: "heart-pulse",
-      color: "#f97316",
+      title: t('health.restingHR'),
+      value: data.heartRate ? `${data.heartRate.restingAvg}` : '--',
+      subtitle: t('health.bpmUnit'),
+      icon: 'heart-pulse',
+      color: '#f97316',
     })
   );
 
   cards.push(
     statOrSkeleton(ui, !!data.hrv, loading, {
-      title: t("dashboard.hrv"),
-      value: data.hrv ? `${data.hrv.rmssd}` : "--",
-      subtitle: "ms",
-      icon: "activity",
-      color: "#6366f1",
+      title: t('dashboard.hrv'),
+      value: data.hrv ? `${data.hrv.rmssd}` : '--',
+      subtitle: 'ms',
+      icon: 'activity',
+      color: '#6366f1',
     })
   );
 
@@ -895,30 +890,30 @@ function buildHeartTab(ui: A2UIGenerator, data: DashboardData, loading: boolean)
 
   // Heart rate trend chart
   if (data.heartRate && data.heartRate.readings.length > 0) {
-    const hrChartTitle = ui.text(t("health.heartRateTrend"), "h3");
+    const hrChartTitle = ui.text(t('health.heartRateTrend'), 'h3');
     const hrChart = ui.chart({
-      chartType: "line",
+      chartType: 'line',
       data: data.heartRate.readings.map((r) => ({ label: r.time, value: r.value })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 200,
-      color: "#ef4444",
+      color: '#ef4444',
     });
     children.push(ui.card([hrChartTitle, hrChart], { padding: 20 }));
   }
 
   // ECG records table
   if (data.ecg && data.ecg.records.length > 0) {
-    const ecgTitle = ui.text(t("dashboard.ecgRecords"), "h3");
+    const ecgTitle = ui.text(t('dashboard.ecgRecords'), 'h3');
     const ecgTable = ui.table(
       [
-        { key: "time", label: t("health.recordTime") },
-        { key: "avgHeartRate", label: t("health.heartRate") },
-        { key: "result", label: t("health.ecgResult") },
+        { key: 'time', label: t('health.recordTime') },
+        { key: 'avgHeartRate', label: t('health.heartRate') },
+        { key: 'result', label: t('health.ecgResult') },
       ],
       data.ecg.records.map((r) => ({
         time: r.time,
-        avgHeartRate: `${r.avgHeartRate} ${t("health.bpmUnit")}`,
+        avgHeartRate: `${r.avgHeartRate} ${t('health.bpmUnit')}`,
         result: r.arrhythmiaLabel,
       }))
     );
@@ -926,11 +921,8 @@ function buildHeartTab(ui: A2UIGenerator, data: DashboardData, loading: boolean)
   }
 
   // Heart events card (placeholder)
-  const heartEventsTitle = ui.text(t("dashboard.heartEvents"), "h3");
-  const heartEventsText = ui.text(
-    `${t("dashboard.tachycardia")} / ${t("dashboard.bradycardia")}`,
-    "caption"
-  );
+  const heartEventsTitle = ui.text(t('dashboard.heartEvents'), 'h3');
+  const heartEventsText = ui.text(`${t('dashboard.tachycardia')} / ${t('dashboard.bradycardia')}`, 'caption');
   children.push(ui.card([heartEventsTitle, heartEventsText], { padding: 20 }));
 
   return ui.column(children, { gap: 24 });
@@ -944,33 +936,33 @@ function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
   const children: string[] = [];
 
   // Time range selector
-  const rangeSelect = ui.formInput("trends_range", "select", {
-    label: t("dashboard.timeRange"),
-    value: data.trendsRange || "1w",
+  const rangeSelect = ui.formInput('trends_range', 'select', {
+    label: t('dashboard.timeRange'),
+    value: data.trendsRange || '1w',
     options: [
-      { value: "1w", label: t("dashboard.oneWeek") },
-      { value: "1m", label: t("dashboard.oneMonth") },
-      { value: "3m", label: t("dashboard.threeMonths") },
-      { value: "6m", label: t("dashboard.sixMonths") },
-      { value: "1y", label: t("dashboard.oneYear") },
-      { value: "2y", label: t("dashboard.twoYears") },
+      { value: '1w', label: t('dashboard.oneWeek') },
+      { value: '1m', label: t('dashboard.oneMonth') },
+      { value: '3m', label: t('dashboard.threeMonths') },
+      { value: '6m', label: t('dashboard.sixMonths') },
+      { value: '1y', label: t('dashboard.oneYear') },
+      { value: '2y', label: t('dashboard.twoYears') },
     ],
-    onChange: "change_trends_range",
+    onChange: 'change_trends_range',
   });
 
   // Metric selector
-  const metricSelect = ui.formInput("trends_metric", "select", {
-    label: t("dashboard.selectMetric"),
-    value: data.trendsMetric || "steps",
+  const metricSelect = ui.formInput('trends_metric', 'select', {
+    label: t('dashboard.selectMetric'),
+    value: data.trendsMetric || 'steps',
     options: [
-      { value: "steps", label: t("activity.steps") },
-      { value: "heart_rate", label: t("health.heartRate") },
-      { value: "sleep", label: t("sleep.duration") },
-      { value: "weight", label: t("health.bodyWeight") },
-      { value: "blood_pressure", label: t("health.bloodPressure") },
-      { value: "spo2", label: t("health.spo2") },
+      { value: 'steps', label: t('activity.steps') },
+      { value: 'heart_rate', label: t('health.heartRate') },
+      { value: 'sleep', label: t('sleep.duration') },
+      { value: 'weight', label: t('health.bodyWeight') },
+      { value: 'blood_pressure', label: t('health.bloodPressure') },
+      { value: 'spo2', label: t('health.spo2') },
     ],
-    onChange: "change_trends_metric",
+    onChange: 'change_trends_metric',
   });
 
   const selectorsRow = ui.row([rangeSelect, metricSelect], { gap: 16 });
@@ -979,44 +971,46 @@ function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
   // Trends chart
   if (data.trendsData && data.trendsData.length > 0) {
     const metricLabels: Record<string, string> = {
-      steps: t("activity.steps"),
-      heart_rate: t("health.heartRate"),
-      sleep: t("sleep.duration"),
-      weight: t("health.bodyWeight"),
-      blood_pressure: t("health.bloodPressure"),
-      spo2: t("health.spo2"),
+      steps: t('activity.steps'),
+      heart_rate: t('health.heartRate'),
+      sleep: t('sleep.duration'),
+      weight: t('health.bodyWeight'),
+      blood_pressure: t('health.bloodPressure'),
+      spo2: t('health.spo2'),
     };
     const metricUnits: Record<string, string> = {
-      steps: "",
-      heart_rate: t("health.bpmUnit"),
-      sleep: "h",
-      weight: "kg",
-      blood_pressure: "mmHg",
-      spo2: "%",
+      steps: '',
+      heart_rate: t('health.bpmUnit'),
+      sleep: 'h',
+      weight: 'kg',
+      blood_pressure: 'mmHg',
+      spo2: '%',
     };
-    const metricLabel = metricLabels[data.trendsMetric || "steps"] || "";
-    const metricUnit = metricUnits[data.trendsMetric || "steps"] || "";
+    const metricLabel = metricLabels[data.trendsMetric || 'steps'] || '';
+    const metricUnit = metricUnits[data.trendsMetric || 'steps'] || '';
 
-    const chartTitle = ui.text(metricLabel, "h3");
+    const chartTitle = ui.text(metricLabel, 'h3');
     const chart = ui.chart({
-      chartType: "line",
+      chartType: 'line',
       data: data.trendsData.map((d) => ({
         label: d.date.slice(5), // MM-DD format
         value: d.value,
       })),
-      xKey: "label",
-      yKey: "value",
+      xKey: 'label',
+      yKey: 'value',
       height: 300,
-      color: "#3b82f6",
+      color: '#3b82f6',
     });
     children.push(ui.card([chartTitle, chart], { padding: 20 }));
 
     // Monthly summary table (computed from trends data)
-    const summaryTitle = ui.text(t("dashboard.monthlySummary"), "h3");
+    const summaryTitle = ui.text(t('dashboard.monthlySummary'), 'h3');
     const monthMap = new Map<string, number[]>();
     for (const pt of data.trendsData) {
       const monthKey = pt.date.slice(0, 7); // YYYY-MM
-      if (!monthMap.has(monthKey)) monthMap.set(monthKey, []);
+      if (!monthMap.has(monthKey)) {
+        monthMap.set(monthKey, []);
+      }
       monthMap.get(monthKey)!.push(pt.value);
     }
     const summaryRows = Array.from(monthMap.entries())
@@ -1035,18 +1029,18 @@ function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
       });
     const summaryTable = ui.table(
       [
-        { key: "period", label: t("dashboard.timeRange") },
-        { key: "average", label: t("dashboard.weeklyAverage") },
-        { key: "max", label: "Max" },
-        { key: "min", label: "Min" },
-        { key: "days", label: t("dashboard.days") },
+        { key: 'period', label: t('dashboard.timeRange') },
+        { key: 'average', label: t('dashboard.weeklyAverage') },
+        { key: 'max', label: 'Max' },
+        { key: 'min', label: 'Min' },
+        { key: 'days', label: t('dashboard.days') },
       ],
       summaryRows
     );
     children.push(ui.card([summaryTitle, summaryTable], { padding: 20 }));
   } else if (data.trendsData && data.trendsData.length === 0) {
-    const emptyText = ui.text(t("dashboard.noTrendsData"), "caption");
-    children.push(ui.card([emptyText], { padding: 20, align: "center" }));
+    const emptyText = ui.text(t('dashboard.noTrendsData'), 'caption');
+    children.push(ui.card([emptyText], { padding: 20, align: 'center' }));
   }
 
   return ui.column(children, { gap: 24 });
@@ -1058,15 +1052,15 @@ function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
 
 export function generateDashboardPage(
   data: DashboardData,
-  activeTab: TabId = "overview",
+  activeTab: TabId = 'overview',
   options?: DashboardOptions
 ): A2UIMessage[] {
-  const ui = new A2UIGenerator("main");
+  const ui = new A2UIGenerator('main');
   const loading = options?.loading ?? false;
 
   // Header
-  const title = ui.text(t("dashboard.title"), "h2");
-  const subtitle = ui.text(t("dashboard.subtitle"), "caption");
+  const title = ui.text(t('dashboard.title'), 'h2');
+  const subtitle = ui.text(t('dashboard.subtitle'), 'caption');
   const header = ui.column([title, subtitle], { gap: 4, padding: 24 });
 
   // Build all tab contents
@@ -1080,13 +1074,13 @@ export function generateDashboardPage(
 
   // Tabs component
   const tabsDef = [
-    { id: "overview", label: t("dashboard.tabOverview"), icon: "bar-chart" },
-    { id: "vitals", label: t("dashboard.tabVitals"), icon: "heart-pulse" },
-    { id: "activity", label: t("dashboard.tabActivity"), icon: "footprints" },
-    { id: "sleep", label: t("dashboard.tabSleep"), icon: "moon" },
-    { id: "body", label: t("dashboard.tabBody"), icon: "activity" },
-    { id: "heart", label: t("dashboard.tabHeart"), icon: "heart" },
-    { id: "trends", label: t("dashboard.tabTrends"), icon: "trending-up" },
+    { id: 'overview', label: t('dashboard.tabOverview'), icon: 'bar-chart' },
+    { id: 'vitals', label: t('dashboard.tabVitals'), icon: 'heart-pulse' },
+    { id: 'activity', label: t('dashboard.tabActivity'), icon: 'footprints' },
+    { id: 'sleep', label: t('dashboard.tabSleep'), icon: 'moon' },
+    { id: 'body', label: t('dashboard.tabBody'), icon: 'activity' },
+    { id: 'heart', label: t('dashboard.tabHeart'), icon: 'heart' },
+    { id: 'trends', label: t('dashboard.tabTrends'), icon: 'trending-up' },
   ];
 
   const contentIds: Record<string, string> = {
@@ -1102,11 +1096,11 @@ export function generateDashboardPage(
   const tabsComponent = ui.tabs(tabsDef, activeTab, contentIds);
 
   // Re-auth action (accent glow, right-aligned above tabs)
-  const reAuthBtn = ui.button(t("dashboard.reAuth"), "start_huawei_auth", {
-    variant: "accent",
-    size: "sm",
+  const reAuthBtn = ui.button(t('dashboard.reAuth'), 'start_huawei_auth', {
+    variant: 'accent',
+    size: 'sm',
   });
-  const toolbar = ui.row([reAuthBtn], { justify: "end" });
+  const toolbar = ui.row([reAuthBtn], { justify: 'end' });
 
   // Content container
   const content = ui.column([toolbar, tabsComponent], { gap: 8, padding: 24 });

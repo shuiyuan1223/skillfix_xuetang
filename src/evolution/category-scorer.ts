@@ -9,14 +9,8 @@
  * SHARP ratings (16 in 2.0, 19 in 3.0) that are aggregated for the SHARP breakdown.
  */
 
-import type {
-  BenchmarkCategory,
-  CategoryScore,
-  BenchmarkResult,
-  RadarDataPoint,
-  SharpRating,
-} from "./types.js";
-import { loadCategoryWeights, loadCategoryLabels } from "./benchmark-seed.js";
+import type { BenchmarkCategory, CategoryScore, BenchmarkResult, RadarDataPoint, SharpRating } from './types.js';
+import { loadCategoryWeights, loadCategoryLabels } from './benchmark-seed.js';
 
 /**
  * Normalize score for display: always return 0.00-1.00 (SHARP standard).
@@ -32,15 +26,15 @@ export function normalizeScoreForDisplay(score: number): number {
 // ============================================================================
 
 /** SHARP category names */
-const SHARP_CATEGORIES = ["safety", "usefulness", "accuracy", "relevance", "personalization"];
+const SHARP_CATEGORIES = ['safety', 'usefulness', 'accuracy', 'relevance', 'personalization'];
 
 /** SHARP category display labels */
 const SHARP_LABELS: Record<string, string> = {
-  safety: "Safety",
-  usefulness: "Usefulness",
-  accuracy: "Accuracy",
-  relevance: "Relevance",
-  personalization: "Personalization",
+  safety: 'Safety',
+  usefulness: 'Usefulness',
+  accuracy: 'Accuracy',
+  relevance: 'Relevance',
+  personalization: 'Personalization',
 };
 
 /**
@@ -80,9 +74,7 @@ export function computeSharpCategoryScores(
 /**
  * Compute SHARP overall score (0.0-1.0): equal-weight average of 5 SHARP categories.
  */
-export function computeSharpOverall(
-  catScores: Map<string, { score: number; subScores: SharpRating[] }>
-): number {
+export function computeSharpOverall(catScores: Map<string, { score: number; subScores: SharpRating[] }>): number {
   let sum = 0;
   let count = 0;
   for (const cat of SHARP_CATEGORIES) {
@@ -144,14 +136,14 @@ export function aggregateSharpResults(
  * Group results by test-case category and compute aggregate scores.
  * Score is now SHARP-based: average of per-result overallScore (0.0-1.0).
  */
-export function aggregateByCategory(
-  results: BenchmarkResult[]
-): Map<BenchmarkCategory, CategoryScore> {
+export function aggregateByCategory(results: BenchmarkResult[]): Map<BenchmarkCategory, CategoryScore> {
   const grouped = new Map<BenchmarkCategory, BenchmarkResult[]>();
 
   for (const result of results) {
     const category = getCategoryFromTestId(result.testCaseId);
-    if (!category) continue;
+    if (!category) {
+      continue;
+    }
 
     const list = grouped.get(category) || [];
     list.push(result);
@@ -174,7 +166,7 @@ export function aggregateByCategory(
 
     scores.set(category, {
       id: crypto.randomUUID(),
-      runId: categoryResults[0]?.runId || "",
+      runId: categoryResults[0]?.runId || '',
       category,
       score: Math.round(avgScore * 1000) / 1000,
       testCount: categoryResults.length,
@@ -196,7 +188,9 @@ export function aggregateBySubcategory(
 
   for (const result of results) {
     const subcategory = getSubcategoryFromTestId(result.testCaseId);
-    if (!subcategory) continue;
+    if (!subcategory) {
+      continue;
+    }
 
     const list = grouped.get(subcategory) || [];
     list.push(result);
@@ -236,7 +230,9 @@ export function computeOverallScore(categoryScores: Map<BenchmarkCategory, Categ
     }
   }
 
-  if (totalWeight === 0) return 0;
+  if (totalWeight === 0) {
+    return 0;
+  }
   return Math.round((weightedSum / totalWeight) * 1000) / 1000;
 }
 
@@ -244,9 +240,7 @@ export function computeOverallScore(categoryScores: Map<BenchmarkCategory, Categ
  * Generate radar chart data from SHARP category scores.
  * 5 SHARP categories, maxValue = 1.0.
  */
-export function generateRadarData(
-  categoryScores: Map<BenchmarkCategory, CategoryScore>
-): RadarDataPoint[] {
+export function generateRadarData(categoryScores: Map<BenchmarkCategory, CategoryScore>): RadarDataPoint[] {
   const labels = loadCategoryLabels();
   return loadCategoryWeights().map((config) => {
     const catScore = categoryScores.get(config.category);
@@ -305,35 +299,35 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
   const lines: string[] = [];
   const maxLabelLen = Math.max(...data.map((d) => d.label.length));
 
-  lines.push("");
-  lines.push("  Benchmark Radar Chart");
-  lines.push(`  ${"=".repeat(width + maxLabelLen + 10)}`);
-  lines.push("");
+  lines.push('');
+  lines.push('  Benchmark Radar Chart');
+  lines.push(`  ${'='.repeat(width + maxLabelLen + 10)}`);
+  lines.push('');
 
   for (const point of data) {
     const pct = point.maxScore > 0 ? point.score / point.maxScore : 0;
     const barLen = Math.round(pct * width);
-    const bar = "\u2588".repeat(barLen) + "\u2591".repeat(width - barLen);
+    const bar = '\u2588'.repeat(barLen) + '\u2591'.repeat(width - barLen);
     const label = point.label.padEnd(maxLabelLen);
     const displayScore = point.score.toFixed(2);
     const scoreStr = displayScore.padStart(6);
     let indicator: string;
     if (pct >= 0.8) {
-      indicator = " +";
+      indicator = ' +';
     } else if (pct >= 0.6) {
-      indicator = " ~";
+      indicator = ' ~';
     } else {
-      indicator = " !";
+      indicator = ' !';
     }
 
     lines.push(`  ${label}  ${bar} ${scoreStr}${indicator}`);
   }
 
-  lines.push("");
-  lines.push("  Legend: + Good (>=80%)  ~ Fair (>=60%)  ! Needs Work (<60%)");
-  lines.push(`  ${"=".repeat(width + maxLabelLen + 10)}`);
+  lines.push('');
+  lines.push('  Legend: + Good (>=80%)  ~ Fair (>=60%)  ! Needs Work (<60%)');
+  lines.push(`  ${'='.repeat(width + maxLabelLen + 10)}`);
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 // ============================================================================
@@ -342,44 +336,44 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
 
 // Test ID prefix to category mapping
 const TEST_ID_CATEGORY_MAP: Record<string, BenchmarkCategory> = {
-  hda: "health-data-analysis",
-  hc: "health-coaching",
-  sb: "safety-boundaries",
-  pm: "personalization-memory",
-  cq: "communication-quality",
+  hda: 'health-data-analysis',
+  hc: 'health-coaching',
+  sb: 'safety-boundaries',
+  pm: 'personalization-memory',
+  cq: 'communication-quality',
 };
 
 // Test ID prefix to subcategory mapping
 const TEST_ID_SUBCATEGORY_MAP: Record<string, string> = {
-  "hda-sleep": "sleep-analysis",
-  "hda-hr": "heart-rate",
-  "hda-activity": "activity-tracking",
-  "hda-workout": "workout-analysis",
-  "hc-goal": "goal-setting",
-  "hc-motiv": "motivation",
-  "hc-habit": "habit-formation",
-  "hc-progress": "progress-tracking",
-  "sb-medical": "medical-escalation",
-  "sb-scope": "out-of-scope",
-  "sb-emergency": "emergency-protocol",
-  "sb-data": "data-integrity",
-  "pm-profile": "user-profile",
-  "pm-memory": "memory-recall",
-  "pm-context": "context-awareness",
-  "cq-tone": "tone-sensitivity",
-  "cq-action": "actionability",
-  "cq-data": "data-grounding",
-  "cq-clarity": "clarity",
+  'hda-sleep': 'sleep-analysis',
+  'hda-hr': 'heart-rate',
+  'hda-activity': 'activity-tracking',
+  'hda-workout': 'workout-analysis',
+  'hc-goal': 'goal-setting',
+  'hc-motiv': 'motivation',
+  'hc-habit': 'habit-formation',
+  'hc-progress': 'progress-tracking',
+  'sb-medical': 'medical-escalation',
+  'sb-scope': 'out-of-scope',
+  'sb-emergency': 'emergency-protocol',
+  'sb-data': 'data-integrity',
+  'pm-profile': 'user-profile',
+  'pm-memory': 'memory-recall',
+  'pm-context': 'context-awareness',
+  'cq-tone': 'tone-sensitivity',
+  'cq-action': 'actionability',
+  'cq-data': 'data-grounding',
+  'cq-clarity': 'clarity',
 };
 
 function getCategoryFromTestId(testId: string): BenchmarkCategory | null {
-  const prefix = testId.split("-")[0];
+  const prefix = testId.split('-')[0];
   return TEST_ID_CATEGORY_MAP[prefix] || null;
 }
 
 function getSubcategoryFromTestId(testId: string): string | null {
-  const parts = testId.split("-");
-  const prefix = parts.slice(0, 2).join("-");
+  const parts = testId.split('-');
+  const prefix = parts.slice(0, 2).join('-');
   return TEST_ID_SUBCATEGORY_MAP[prefix] || null;
 }
 

@@ -10,11 +10,11 @@ import {
   type AgentEvent,
   type AgentMessage,
   type AgentTool,
-} from "@mariozechner/pi-agent-core";
-import { getModel, type Model } from "@mariozechner/pi-ai";
-import { globalRegistry } from "../tools/index.js";
-import { getMemoryManager } from "../memory/index.js";
-import { createCompactionFlush, type LLMSummarizationConfig } from "../memory/compaction.js";
+} from '@mariozechner/pi-agent-core';
+import { getModel, type Model } from '@mariozechner/pi-ai';
+import { globalRegistry } from '../tools/index.js';
+import { getMemoryManager } from '../memory/index.js';
+import { createCompactionFlush, type LLMSummarizationConfig } from '../memory/compaction.js';
 import {
   getUserId,
   type LLMProvider,
@@ -22,23 +22,18 @@ import {
   ENV_KEY_MAP,
   BUILTIN_PROVIDERS,
   type ResolvedModel,
-} from "../utils/config.js";
-import { createLogger } from "../utils/logger.js";
+} from '../utils/config.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Agent/PHA");
+const log = createLogger('Agent/PHA');
 // Health/weather context is now tool-based (get_weather, health tools).
 // No pre-computation into system prompt.
-import { sessionToAgentMessages } from "../memory/session-store.js";
+import { sessionToAgentMessages } from '../memory/session-store.js';
 
-export type { LLMProvider } from "../utils/config.js";
-import {
-  loadConfig,
-  resolveModel,
-  resolveAgentModel,
-  resolveSystemAgentModel,
-} from "../utils/config.js";
-import type { ToolCategory } from "../tools/types.js";
-import type { HealthDataSource } from "../data-sources/interface.js";
+export type { LLMProvider } from '../utils/config.js';
+import { loadConfig, resolveModel, resolveAgentModel, resolveSystemAgentModel } from '../utils/config.js';
+import type { ToolCategory } from '../tools/types.js';
+import type { HealthDataSource } from '../data-sources/interface.js';
 
 /** Declarative agent configuration profile (runtime, fully typed) */
 export interface AgentProfile {
@@ -67,41 +62,41 @@ export interface AgentProfile {
 
 /** Default tool categories shared across PHA agents */
 const PHA_TOOL_CATEGORIES: ToolCategory[] = [
-  "health",
-  "memory",
-  "profile",
-  "config",
-  "skill",
-  "presentation",
-  "planning",
-  "proactive",
+  'health',
+  'memory',
+  'profile',
+  'config',
+  'skill',
+  'presentation',
+  'planning',
+  'proactive',
 ];
 
 /** Built-in agent profile defaults (used when config.json has no overrides) */
 const BUILTIN_PROFILES: Record<string, AgentProfile> = {
   pha: {
-    id: "pha",
-    workspace: "users/{uid}",
-    sessionPath: "users/{uid}/sessions/pha",
-    tools: { categories: PHA_TOOL_CATEGORIES, tags: ["pha"] },
-    skills: { tags: ["pha"] },
+    id: 'pha',
+    workspace: 'users/{uid}',
+    sessionPath: 'users/{uid}/sessions/pha',
+    tools: { categories: PHA_TOOL_CATEGORIES, tags: ['pha'] },
+    skills: { tags: ['pha'] },
     context: { bootstrap: true },
   },
   pha4old: {
-    id: "pha4old",
-    workspace: "users/{uid}",
-    sessionPath: "users/{uid}/sessions/pha4old",
-    tools: { categories: PHA_TOOL_CATEGORIES, tags: ["pha"] },
-    skills: { tags: ["pha", "pha-markdown"] },
+    id: 'pha4old',
+    workspace: 'users/{uid}',
+    sessionPath: 'users/{uid}/sessions/pha4old',
+    tools: { categories: PHA_TOOL_CATEGORIES, tags: ['pha'] },
+    skills: { tags: ['pha', 'pha-markdown'] },
     context: { bootstrap: true },
-    skillHint: "legacy-streaming",
+    skillHint: 'legacy-streaming',
   },
   sa: {
-    id: "sa",
-    workspace: "users/system",
-    sessionPath: "users/system/sessions/sa",
-    tools: { categories: ["git", "evolution", "skill", "config"] as ToolCategory[], tags: ["sa"] },
-    skills: { tags: ["sa"] },
+    id: 'sa',
+    workspace: 'users/system',
+    sessionPath: 'users/system/sessions/sa',
+    tools: { categories: ['git', 'evolution', 'skill', 'config'] as ToolCategory[], tags: ['sa'] },
+    skills: { tags: ['sa'] },
     context: { bootstrap: true },
   },
 };
@@ -149,7 +144,9 @@ export function getAgentProfileIds(): string[] {
   const config = loadConfig();
   const ids = new Set(Object.keys(BUILTIN_PROFILES));
   if (config.agents) {
-    for (const k of Object.keys(config.agents)) ids.add(k);
+    for (const k of Object.keys(config.agents)) {
+      ids.add(k);
+    }
   }
   return [...ids];
 }
@@ -172,7 +169,7 @@ export function resolveAgentProfileModel(agentId: string): ResolvedModel {
   }
 
   // 2. SA has its own legacy fallback chain
-  if (agentId === "sa") {
+  if (agentId === 'sa') {
     return resolveSystemAgentModel(config);
   }
 
@@ -226,11 +223,11 @@ function createCustomModel(provider: string, modelId: string, baseUrl: string): 
   return {
     id: modelId,
     name: modelId,
-    api: "openai-completions" as const,
+    api: 'openai-completions' as const,
     provider: provider,
     baseUrl: baseUrl,
     reasoning: false,
-    input: ["text", "image"],
+    input: ['text', 'image'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 128000,
     maxTokens: 16384,
@@ -242,7 +239,9 @@ function resolveModelInstance(provider: string, modelId: string, baseUrl?: strin
   if (BUILTIN_PROVIDERS.includes(provider as LLMProvider)) {
     // @ts-expect-error - dynamic model selection
     const model = getModel(provider, modelId);
-    if (model) return model;
+    if (model) {
+      return model;
+    }
   }
 
   if (baseUrl) {
@@ -253,16 +252,15 @@ function resolveModelInstance(provider: string, modelId: string, baseUrl?: strin
   throw new Error(
     isBuiltin
       ? `Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`
-      : `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(", ")}`
+      : `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(', ')}`
   );
 }
 
-function buildAgentSystemPrompt(
-  userUuid: string | undefined,
-  profile?: PHAAgentConfig["profile"]
-): string {
+function buildAgentSystemPrompt(userUuid: string | undefined, profile?: PHAAgentConfig['profile']): string {
   const memoryManager = getMemoryManager();
-  if (userUuid) memoryManager.ensureUser(userUuid);
+  if (userUuid) {
+    memoryManager.ensureUser(userUuid);
+  }
 
   const skillOptions = profile?.skills
     ? {
@@ -279,36 +277,31 @@ function buildAgentSystemPrompt(
       }
     : undefined;
 
-  return memoryManager.buildSystemPrompt(userUuid || "anonymous", skillOptions, contextOptions);
+  return memoryManager.buildSystemPrompt(userUuid || 'anonymous', skillOptions, contextOptions);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function resolveAgentTools(config: PHAAgentConfig, userUuid?: string): AgentTool<any>[] {
-  let registry = config.dataSource
-    ? globalRegistry.withDataSource(config.dataSource)
-    : globalRegistry;
+  let registry = config.dataSource ? globalRegistry.withDataSource(config.dataSource) : globalRegistry;
 
   if (userUuid) {
     registry = registry.withUserUuid(userUuid);
   }
 
   const defaultCategories: ToolCategory[] = [
-    "health",
-    "memory",
-    "profile",
-    "config",
-    "skill",
-    "presentation",
-    "planning",
-    "proactive",
+    'health',
+    'memory',
+    'profile',
+    'config',
+    'skill',
+    'presentation',
+    'planning',
+    'proactive',
   ];
   const baseTools =
-    config.tools ||
-    registry.toAgentToolsByCategories(config.profile?.tools.categories || defaultCategories);
+    config.tools || registry.toAgentToolsByCategories(config.profile?.tools.categories || defaultCategories);
 
-  return config.extraTools && config.extraTools.length > 0
-    ? [...baseTools, ...config.extraTools]
-    : baseTools;
+  return config.extraTools && config.extraTools.length > 0 ? [...baseTools, ...config.extraTools] : baseTools;
 }
 
 /**
@@ -317,11 +310,13 @@ function resolveAgentTools(config: PHAAgentConfig, userUuid?: string): AgentTool
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function formatInsightFallback(args: any): string {
-  if (!args) return "";
+  if (!args) {
+    return '';
+  }
   const lines: string[] = [];
 
   if (args.title) {
-    lines.push(`📊 ${args.title}`, "");
+    lines.push(`📊 ${args.title}`, '');
   }
 
   const highlights = args.highlights as
@@ -329,11 +324,11 @@ function formatInsightFallback(args: any): string {
     | undefined;
   if (highlights && highlights.length > 0) {
     for (const h of highlights) {
-      const unit = h.unit || "";
-      const status = h.status ? ` ${h.status}` : "";
+      const unit = h.unit || '';
+      const status = h.status ? ` ${h.status}` : '';
       lines.push(`• ${h.label}: ${h.value}${unit}${status}`);
     }
-    lines.push("");
+    lines.push('');
   }
 
   const insights = args.insights as string[] | undefined;
@@ -341,7 +336,7 @@ function formatInsightFallback(args: any): string {
     for (const insight of insights) {
       lines.push(`💡 ${insight}`);
     }
-    lines.push("");
+    lines.push('');
   }
 
   const recommendations = args.recommendations as string[] | undefined;
@@ -351,16 +346,18 @@ function formatInsightFallback(args: any): string {
     }
   }
 
-  return lines.join("\n").trim();
+  return lines.join('\n').trim();
 }
 
 /** Extract text content from an AgentMessage's content blocks. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractTextContent(message: any): string {
-  if (!message?.content) return "";
-  let text = "";
+  if (!message?.content) {
+    return '';
+  }
+  let text = '';
   for (const block of message.content) {
-    if (block.type === "text") {
+    if (block.type === 'text') {
       text += block.text;
     }
   }
@@ -376,7 +373,7 @@ export class PHAAgent {
     this.config = config;
     this.userUuid = config.userUuid || getUserId() || undefined;
 
-    const provider = config.provider || "anthropic";
+    const provider = config.provider || 'anthropic';
     const modelId = config.modelId || DEFAULT_MODELS[provider];
     const apiKey = config.apiKey || this.getEnvApiKey(provider);
 
@@ -400,7 +397,7 @@ export class PHAAgent {
     const compactionFlush = createCompactionFlush(
       { contextWindow: model.contextWindow || 128000, reserveTokens: 20000, flushThreshold: 4000 },
       getMemoryManager(),
-      this.userUuid || "anonymous",
+      this.userUuid || 'anonymous',
       llmConfig,
       config.sessionId
     );
@@ -439,12 +436,12 @@ export class PHAAgent {
    * Used by benchmark runner to pass agent context to the Judge.
    */
   getSystemPrompt(): string {
-    return this.agent.state.systemPrompt || "";
+    return this.agent.state.systemPrompt || '';
   }
 
   private getEnvApiKey(provider: LLMProvider): string | undefined {
     const envKey = ENV_KEY_MAP[provider];
-    if (envKey && typeof process !== "undefined" && process.env[envKey]) {
+    if (envKey && typeof process !== 'undefined' && process.env[envKey]) {
       return process.env[envKey];
     }
     return undefined;
@@ -485,7 +482,7 @@ export class PHAAgent {
     extraEventHandler?: (event: AgentEvent) => void
   ): Promise<{ finalContent: string; hasError: boolean }> {
     let hasError = false;
-    let llmErrorMessage = "";
+    let llmErrorMessage = '';
     let lastAssistantMessage: AgentMessage | null = null;
 
     const handleEvent = (event: AgentEvent): void => {
@@ -508,7 +505,7 @@ export class PHAAgent {
       await this.agent.prompt(message);
       await this.agent.waitForIdle();
     } catch (err) {
-      log.warn("prompt/idle error", err);
+      log.warn('prompt/idle error', err);
       throw err;
     } finally {
       unsubscribe();
@@ -527,14 +524,15 @@ export class PHAAgent {
     event: AgentEvent,
     onMessage: (msg: AgentMessage, errorMessage?: string) => void
   ): void {
-    if (event.type !== "message_end" || event.message.role !== "assistant") return;
+    if (event.type !== 'message_end' || event.message.role !== 'assistant') {
+      return;
+    }
     // pi-agent-core event types lack property declarations
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const msg = event.message as any;
-    const errorMessage =
-      msg.stopReason === "error" && msg.errorMessage ? msg.errorMessage : undefined;
+    const errorMessage = msg.stopReason === 'error' && msg.errorMessage ? msg.errorMessage : undefined;
     if (errorMessage) {
-      log.error("LLM returned error", { errorMessage, model: msg.model });
+      log.error('LLM returned error', { errorMessage, model: msg.model });
     }
     onMessage(event.message, errorMessage);
   }
@@ -544,9 +542,9 @@ export class PHAAgent {
     // pi-agent-core event types lack property declarations
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ev = event as any;
-    if (ev.type === "error" || ev.error) {
+    if (ev.type === 'error' || ev.error) {
       onError();
-      log.warn("Agent error event", ev.error || event);
+      log.warn('Agent error event', ev.error || event);
     }
   }
 
@@ -558,7 +556,7 @@ export class PHAAgent {
     const { finalContent, hasError } = await this.runPromptAndCollect(message);
 
     if (!finalContent && hasError) {
-      log.warn("chatAndWait completed with empty response and errors");
+      log.warn('chatAndWait completed with empty response and errors');
     }
 
     return finalContent;
@@ -573,7 +571,7 @@ export class PHAAgent {
     toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
   }> {
     const toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }> = [];
-    let pendingToolName = "";
+    let pendingToolName = '';
     let pendingToolArgs: unknown;
 
     const { finalContent } = await this.runPromptAndCollect(message, (event) => {
@@ -594,7 +592,7 @@ export class PHAAgent {
       return { response: finalContent, toolCalls };
     }
 
-    log.warn("chatAndWaitWithTools completed with empty response", {
+    log.warn('chatAndWaitWithTools completed with empty response', {
       toolCallCount: toolCalls.length,
     });
 
@@ -609,18 +607,18 @@ export class PHAAgent {
     setPending: (name: string, args: unknown) => void,
     pushCall: (call: { tool: string; arguments: unknown; result: unknown }) => void
   ): void {
-    if (event.type === "tool_execution_start") {
+    if (event.type === 'tool_execution_start') {
       // pi-agent-core event types lack property declarations
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ev = event as any;
-      setPending(ev.toolName || "", ev.arguments);
+      setPending(ev.toolName || '', ev.arguments);
       return;
     }
-    if (event.type === "tool_execution_end") {
+    if (event.type === 'tool_execution_end') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ev = event as any;
       pushCall({
-        tool: pending.pendingToolName || ev.toolName || "unknown",
+        tool: pending.pendingToolName || ev.toolName || 'unknown',
         arguments: pending.pendingToolArgs,
         result: ev.result,
       });
@@ -631,11 +629,11 @@ export class PHAAgent {
    * Attempt to reconstruct a fallback response from a present_insight tool call.
    * Returns the formatted string, or empty string if no insight call was found.
    */
-  private buildInsightFallback(
-    toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>
-  ): string {
-    const insightCall = toolCalls.find((tc) => tc.tool === "present_insight");
-    if (!insightCall) return "";
+  private buildInsightFallback(toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>): string {
+    const insightCall = toolCalls.find((tc) => tc.tool === 'present_insight');
+    if (!insightCall) {
+      return '';
+    }
     return formatInsightFallback(insightCall.arguments);
   }
 
@@ -703,7 +701,9 @@ export async function withActivityTimeout<T>(
 
     // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const fail = (reason: string) => {
-      if (settled) return;
+      if (settled) {
+        return;
+      }
       settled = true;
       cleanup();
       agent.abort();
@@ -728,13 +728,17 @@ export async function withActivityTimeout<T>(
 
     operation().then(
       (result) => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         settled = true;
         cleanup();
         resolve(result);
       },
       (err) => {
-        if (settled) return;
+        if (settled) {
+          return;
+        }
         settled = true;
         cleanup();
         reject(err);
@@ -750,9 +754,9 @@ export async function withActivityTimeout<T>(
 export async function createPHAAgent(config: PHAAgentConfig = {}): Promise<PHAAgent> {
   // Try to get API key from environment if not provided
   if (!config.apiKey) {
-    const provider = config.provider || "anthropic";
+    const provider = config.provider || 'anthropic';
     const envKey = ENV_KEY_MAP[provider];
-    if (envKey && typeof process !== "undefined" && process.env[envKey]) {
+    if (envKey && typeof process !== 'undefined' && process.env[envKey]) {
       config.apiKey = process.env[envKey];
     }
   }

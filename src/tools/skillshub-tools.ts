@@ -5,11 +5,11 @@
  * Handles format adaptation: OpenClaw metadata.openclaw → PHA metadata.pha
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { join, basename } from "path";
-import { gitCommitFiles } from "../evolution/version-manager.js";
-import { getSkillsDir } from "./skill-tools.js";
-import type { PHATool } from "./types.js";
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { join, basename } from 'path';
+import { gitCommitFiles } from '../evolution/version-manager.js';
+import { getSkillsDir } from './skill-tools.js';
+import type { PHATool } from './types.js';
 
 /**
  * Adapt OpenClaw skill metadata to PHA format.
@@ -21,7 +21,7 @@ function adaptOpenClawMetadata(content: string): string {
 
   // Rename OpenClaw-specific subdirectory references
   // openclaw uses instructions/ → PHA uses reference/
-  adapted = adapted.replace(/instructions\//g, "reference/");
+  adapted = adapted.replace(/instructions\//g, 'reference/');
 
   return adapted;
 }
@@ -40,15 +40,15 @@ async function fetchSkillFromUrl(url: string): Promise<{
 } | null> {
   try {
     const res = await fetch(url, {
-      headers: { Accept: "text/plain, text/markdown, */*" },
+      headers: { Accept: 'text/plain, text/markdown, */*' },
     });
     if (!res.ok) {
       return null;
     }
     const content = await res.text();
     // Extract name from URL slug
-    const urlParts = new URL(url).pathname.split("/").filter(Boolean);
-    const name = urlParts[urlParts.length - 1]?.replace(/\.md$/, "") || "unknown";
+    const urlParts = new URL(url).pathname.split('/').filter(Boolean);
+    const name = urlParts[urlParts.length - 1]?.replace(/\.md$/, '') || 'unknown';
     return { content, name, source: url };
   } catch {
     return null;
@@ -67,10 +67,12 @@ async function fetchSkillFromGitHub(url: string): Promise<{
   source: string;
 } | null> {
   const ghMatch = url.match(/github\.com\/([^/]+)\/([^/]+)\/(tree|blob)\/([^/]+)\/(.+)/);
-  if (!ghMatch) return null;
+  if (!ghMatch) {
+    return null;
+  }
 
   const [, owner, repo, , branch, pathPart] = ghMatch;
-  const skillPath = pathPart.replace(/\/SKILL\.md$/, "");
+  const skillPath = pathPart.replace(/\/SKILL\.md$/, '');
   const name = basename(skillPath);
 
   // Fetch SKILL.md via raw.githubusercontent.com
@@ -78,11 +80,13 @@ async function fetchSkillFromGitHub(url: string): Promise<{
   const skillMdUrl = `${rawBase}/SKILL.md`;
 
   const res = await fetch(skillMdUrl);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    return null;
+  }
 
   const content = await res.text();
   const files = new Map<string, string>();
-  files.set("SKILL.md", content);
+  files.set('SKILL.md', content);
 
   return { content, name, files, source: url };
 }
@@ -95,31 +99,31 @@ export const installSkillFromUrlTool: PHATool<{
   name?: string;
   force?: boolean;
 }> = {
-  name: "install_skill_from_url",
+  name: 'install_skill_from_url',
   description:
-    "从 SkillsHub、GitHub 或其他来源安装技能。支持 GitHub 仓库 URL、ClawHub URL、或直接 SKILL.md URL。自动适配 OpenClaw 格式。",
-  displayName: "安装外部技能",
-  category: "skill",
-  icon: "link",
-  label: "Install Skill from URL",
+    '从 SkillsHub、GitHub 或其他来源安装技能。支持 GitHub 仓库 URL、ClawHub URL、或直接 SKILL.md URL。自动适配 OpenClaw 格式。',
+  displayName: '安装外部技能',
+  category: 'skill',
+  icon: 'link',
+  label: 'Install Skill from URL',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
       source: {
-        type: "string",
+        type: 'string',
         description:
-          "Skill source URL. Supports: GitHub repo URL (github.com/.../skills/name), raw SKILL.md URL, or skill registry URL",
+          'Skill source URL. Supports: GitHub repo URL (github.com/.../skills/name), raw SKILL.md URL, or skill registry URL',
       },
       name: {
-        type: "string",
-        description: "Override skill folder name (default: derived from URL slug)",
+        type: 'string',
+        description: 'Override skill folder name (default: derived from URL slug)',
       },
       force: {
-        type: "boolean",
-        description: "Overwrite existing skill if it exists (default: false)",
+        type: 'boolean',
+        description: 'Overwrite existing skill if it exists (default: false)',
       },
     },
-    required: ["source"],
+    required: ['source'],
   },
   execute: async (args: { source: string; name?: string; force?: boolean }) => {
     const skillsDir = getSkillsDir();
@@ -137,15 +141,15 @@ export const installSkillFromUrlTool: PHATool<{
       source: string;
     } | null = null;
 
-    if (url.includes("github.com")) {
+    if (url.includes('github.com')) {
       result = await fetchSkillFromGitHub(url);
     }
 
     // Fallback to direct URL fetch
     if (!result) {
       // If it's a ClawHub URL, try to resolve to raw content
-      if (url.includes("clawhub.ai/skills/")) {
-        const slug = url.split("/skills/")[1]?.split(/[?#]/)[0];
+      if (url.includes('clawhub.ai/skills/')) {
+        const slug = url.split('/skills/')[1]?.split(/[?#]/)[0];
         if (slug) {
           const apiUrls = [
             `https://clawhub.ai/api/skills/${slug}/raw`,
@@ -153,7 +157,9 @@ export const installSkillFromUrlTool: PHATool<{
           ];
           for (const apiUrl of apiUrls) {
             result = await fetchSkillFromUrl(apiUrl);
-            if (result) break;
+            if (result) {
+              break;
+            }
           }
           if (!result) {
             result = await fetchSkillFromUrl(url);
@@ -168,7 +174,7 @@ export const installSkillFromUrlTool: PHATool<{
       return {
         success: false,
         error: `Failed to fetch skill from: ${url}`,
-        hint: "Supported sources: GitHub repo URL, raw SKILL.md URL, or skill registry URL",
+        hint: 'Supported sources: GitHub repo URL, raw SKILL.md URL, or skill registry URL',
       };
     }
 
@@ -176,7 +182,7 @@ export const installSkillFromUrlTool: PHATool<{
     const adaptedContent = adaptOpenClawMetadata(result.content);
 
     // Determine skill name
-    const skillName = args.name || result.name.replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+    const skillName = args.name || result.name.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
     const skillDir = join(skillsDir, skillName);
 
     // Check if already exists
@@ -191,19 +197,21 @@ export const installSkillFromUrlTool: PHATool<{
     mkdirSync(skillDir, { recursive: true });
 
     // Write SKILL.md
-    const skillFile = join(skillDir, "SKILL.md");
-    writeFileSync(skillFile, adaptedContent, "utf-8");
+    const skillFile = join(skillDir, 'SKILL.md');
+    writeFileSync(skillFile, adaptedContent, 'utf-8');
 
     // Write additional files if available
     if (result.files) {
       for (const [filePath, fileContent] of result.files) {
-        if (filePath === "SKILL.md") continue;
+        if (filePath === 'SKILL.md') {
+          continue;
+        }
         const fullPath = join(skillDir, filePath);
-        const parentDir = join(fullPath, "..");
+        const parentDir = join(fullPath, '..');
         if (!existsSync(parentDir)) {
           mkdirSync(parentDir, { recursive: true });
         }
-        writeFileSync(fullPath, fileContent, "utf-8");
+        writeFileSync(fullPath, fileContent, 'utf-8');
       }
     }
 
@@ -227,25 +235,25 @@ export const searchSkillsHubTool: PHATool<{
   query: string;
   limit?: number;
 }> = {
-  name: "search_skillshub",
-  description: "在 SkillsHub 搜索社区技能。返回匹配的技能列表。",
-  displayName: "搜索 SkillsHub",
-  category: "skill",
-  icon: "search",
-  label: "Search SkillsHub",
+  name: 'search_skillshub',
+  description: '在 SkillsHub 搜索社区技能。返回匹配的技能列表。',
+  displayName: '搜索 SkillsHub',
+  category: 'skill',
+  icon: 'search',
+  label: 'Search SkillsHub',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
       query: {
-        type: "string",
-        description: "Search query (natural language or keywords)",
+        type: 'string',
+        description: 'Search query (natural language or keywords)',
       },
       limit: {
-        type: "number",
-        description: "Maximum results to return (default: 10)",
+        type: 'number',
+        description: 'Maximum results to return (default: 10)',
       },
     },
-    required: ["query"],
+    required: ['query'],
   },
   execute: async (args: { query: string; limit?: number }) => {
     const limit = args.limit || 10;
@@ -259,15 +267,13 @@ export const searchSkillsHubTool: PHATool<{
     for (const searchUrl of searchUrls) {
       try {
         const res = await fetch(searchUrl, {
-          headers: { Accept: "application/json" },
+          headers: { Accept: 'application/json' },
         });
         if (res.ok) {
           const data = await res.json();
           const skills = Array.isArray(data)
             ? data
-            : (data as Record<string, unknown>).skills ||
-              (data as Record<string, unknown>).results ||
-              [];
+            : (data as Record<string, unknown>).skills || (data as Record<string, unknown>).results || [];
           return {
             success: true,
             skills: (skills as Array<Record<string, unknown>>).slice(0, limit).map((s) => ({
@@ -279,7 +285,7 @@ export const searchSkillsHubTool: PHATool<{
               tags: s.tags,
             })),
             count: (skills as unknown[]).length,
-            source: "skillshub",
+            source: 'skillshub',
           };
         }
       } catch {
@@ -290,7 +296,7 @@ export const searchSkillsHubTool: PHATool<{
     // API not available — return guidance
     return {
       success: false,
-      error: "SkillsHub search is currently unavailable",
+      error: 'SkillsHub search is currently unavailable',
       hint: `Browse skills at https://clawhub.ai and use install_skill_from_url to install. Search query: "${args.query}"`,
       browseUrl: `https://clawhub.ai/?q=${encodeURIComponent(args.query)}`,
     };

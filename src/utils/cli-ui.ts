@@ -6,32 +6,32 @@
 
 // ANSI color codes
 export const colors = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  italic: "\x1b[3m",
-  underline: "\x1b[4m",
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  italic: '\x1b[3m',
+  underline: '\x1b[4m',
 
   // Foreground colors
-  black: "\x1b[30m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  magenta: "\x1b[35m",
-  cyan: "\x1b[36m",
-  white: "\x1b[37m",
-  gray: "\x1b[90m",
+  black: '\x1b[30m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  white: '\x1b[37m',
+  gray: '\x1b[90m',
 
   // Background colors
-  bgBlack: "\x1b[40m",
-  bgRed: "\x1b[41m",
-  bgGreen: "\x1b[42m",
-  bgYellow: "\x1b[43m",
-  bgBlue: "\x1b[44m",
-  bgMagenta: "\x1b[45m",
-  bgCyan: "\x1b[46m",
-  bgWhite: "\x1b[47m",
+  bgBlack: '\x1b[40m',
+  bgRed: '\x1b[41m',
+  bgGreen: '\x1b[42m',
+  bgYellow: '\x1b[43m',
+  bgBlue: '\x1b[44m',
+  bgMagenta: '\x1b[45m',
+  bgCyan: '\x1b[46m',
+  bgWhite: '\x1b[47m',
 };
 
 // Shorthand functions
@@ -62,74 +62,74 @@ export const c = {
 // Icons
 export const icons = {
   // Status
-  success: "✓",
-  error: "✗",
-  warning: "⚠",
-  info: "ℹ",
-  pending: "○",
-  running: "●",
+  success: '✓',
+  error: '✗',
+  warning: '⚠',
+  info: 'ℹ',
+  pending: '○',
+  running: '●',
 
   // Actions
-  arrow: "→",
-  arrowRight: "▶",
-  arrowDown: "▼",
-  check: "✓",
-  cross: "✗",
-  dot: "•",
-  star: "★",
+  arrow: '→',
+  arrowRight: '▶',
+  arrowDown: '▼',
+  check: '✓',
+  cross: '✗',
+  dot: '•',
+  star: '★',
 
   // Objects
-  folder: "📁",
-  file: "📄",
-  config: "⚙",
-  key: "🔑",
-  link: "🔗",
-  clock: "⏱",
-  calendar: "📅",
+  folder: '📁',
+  file: '📄',
+  config: '⚙',
+  key: '🔑',
+  link: '🔗',
+  clock: '⏱',
+  calendar: '📅',
 
   // Health
-  health: "🏥",
-  heart: "❤",
-  sleep: "🌙",
-  activity: "🏃",
-  steps: "👟",
+  health: '🏥',
+  heart: '❤',
+  sleep: '🌙',
+  activity: '🏃',
+  steps: '👟',
 
   // System
-  server: "🌐",
-  terminal: "💻",
-  robot: "🤖",
-  tools: "🔧",
-  doctor: "🩺",
+  server: '🌐',
+  terminal: '💻',
+  robot: '🤖',
+  tools: '🔧',
+  doctor: '🩺',
 };
 
 // Box drawing characters
 export const box = {
   // Single line
-  h: "─",
-  v: "│",
-  tl: "┌",
-  tr: "┐",
-  bl: "└",
-  br: "┘",
-  t: "┬",
-  b: "┴",
-  l: "├",
-  r: "┤",
-  x: "┼",
+  h: '─',
+  v: '│',
+  tl: '┌',
+  tr: '┐',
+  bl: '└',
+  br: '┘',
+  t: '┬',
+  b: '┴',
+  l: '├',
+  r: '┤',
+  x: '┼',
 
   // Heavy/Double
-  hh: "━",
-  vv: "┃",
-  ttl: "┏",
-  ttr: "┓",
-  bbl: "┗",
-  bbr: "┛",
+  hh: '━',
+  vv: '┃',
+  ttl: '┏',
+  ttr: '┓',
+  bbl: '┗',
+  bbr: '┛',
 
   // Rounded
-  rtl: "╭",
-  rtr: "╮",
-  rbl: "╰",
-  rbr: "╯",
+  rtl: '╭',
+  rtr: '╮',
+  rbl: '╰',
+  rbr: '╯',
 };
 
 /**
@@ -141,15 +141,11 @@ export function printHeader(title: string, subtitle?: string): void {
   const paddingRight = width - title.length - 2 - padding;
 
   console.log(`${c.cyan(box.ttl + box.hh.repeat(width) + box.ttr)}`);
-  console.log(
-    `${c.cyan(box.vv)}${" ".repeat(padding)} ${c.bold(title)} ${" ".repeat(paddingRight)}${c.cyan(box.vv)}`
-  );
+  console.log(`${c.cyan(box.vv)}${' '.repeat(padding)} ${c.bold(title)} ${' '.repeat(paddingRight)}${c.cyan(box.vv)}`);
   if (subtitle) {
     const sp = Math.max(0, Math.floor((width - subtitle.length) / 2));
     const spr = width - subtitle.length - sp;
-    console.log(
-      `${c.cyan(box.vv)}${" ".repeat(sp)}${c.dim(subtitle)}${" ".repeat(spr)}${c.cyan(box.vv)}`
-    );
+    console.log(`${c.cyan(box.vv)}${' '.repeat(sp)}${c.dim(subtitle)}${' '.repeat(spr)}${c.cyan(box.vv)}`);
   }
   console.log(`${c.cyan(box.bbl + box.hh.repeat(width) + box.bbr)}`);
 }
@@ -158,8 +154,8 @@ export function printHeader(title: string, subtitle?: string): void {
  * Print a section header
  */
 export function printSection(title: string, icon?: string): void {
-  console.log("");
-  console.log(`${icon ? `${icon} ` : ""}${c.bold(title)}`);
+  console.log('');
+  console.log(`${icon ? `${icon} ` : ''}${c.bold(title)}`);
   console.log(c.dim(box.h.repeat(50)));
 }
 
@@ -182,7 +178,7 @@ export function printKV(key: string, value: string, keyWidth = 14): void {
  * Print a status line with icon
  */
 export function printStatus(
-  status: "success" | "error" | "warning" | "info" | "pending",
+  status: 'success' | 'error' | 'warning' | 'info' | 'pending',
   message: string,
   detail?: string
 ): void {
@@ -195,7 +191,7 @@ export function printStatus(
   };
 
   const cfg = statusConfig[status];
-  const detailStr = detail ? ` ${c.dim(detail)}` : "";
+  const detailStr = detail ? ` ${c.dim(detail)}` : '';
   console.log(`  ${cfg.color(cfg.icon)} ${message}${detailStr}`);
 }
 
@@ -212,23 +208,21 @@ export function printTable(
 
   // Calculate column widths
   const widths = headers.map((h, i) => {
-    const maxRowWidth = Math.max(0, ...rows.map((r) => (r[i] || "").length));
+    const maxRowWidth = Math.max(0, ...rows.map((r) => (r[i] || '').length));
     return Math.max(h.length, maxRowWidth);
   });
 
   // Print header
-  const headerRow = headers
-    .map((h, i) => headerColor(h.padEnd(widths[i])))
-    .join(" ".repeat(padding));
+  const headerRow = headers.map((h, i) => headerColor(h.padEnd(widths[i]))).join(' '.repeat(padding));
   console.log(`  ${headerRow}`);
 
   // Print separator
-  const separator = widths.map((w) => box.h.repeat(w)).join(" ".repeat(padding));
+  const separator = widths.map((w) => box.h.repeat(w)).join(' '.repeat(padding));
   console.log(`  ${c.dim(separator)}`);
 
   // Print rows
   for (const row of rows) {
-    const rowStr = row.map((cell, i) => (cell || "").padEnd(widths[i])).join(" ".repeat(padding));
+    const rowStr = row.map((cell, i) => (cell || '').padEnd(widths[i])).join(' '.repeat(padding));
     console.log(`  ${rowStr}`);
   }
 }
@@ -237,7 +231,7 @@ export function printTable(
  * Progress spinner
  */
 export class Spinner {
-  private frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  private frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
   private current = 0;
   private interval: Timer | null = null;
   private message: string;
@@ -254,7 +248,7 @@ export class Spinner {
     }, 80);
   }
 
-  stop(status: "success" | "error" | "warning" = "success"): void {
+  stop(status: 'success' | 'error' | 'warning' = 'success'): void {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
@@ -282,7 +276,7 @@ export function progressBar(current: number, total: number, width = 30): string 
   const filled = Math.round((current / total) * width);
   const empty = width - filled;
 
-  const bar = c.green("█".repeat(filled)) + c.dim("░".repeat(empty));
+  const bar = c.green('█'.repeat(filled)) + c.dim('░'.repeat(empty));
   return `${bar} ${percent}%`;
 }
 
@@ -290,7 +284,7 @@ export function progressBar(current: number, total: number, width = 30): string 
  * Format bytes to human readable
  */
 export function formatBytes(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let unitIndex = 0;
 
@@ -306,9 +300,15 @@ export function formatBytes(bytes: number): string {
  * Format duration in ms to human readable
  */
 export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  if (ms < 60000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  if (ms < 3600000) {
+    return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+  }
   return `${Math.floor(ms / 3600000)}h ${Math.floor((ms % 3600000) / 60000)}m`;
 }
 
@@ -317,7 +317,7 @@ export function formatDuration(ms: number): string {
  */
 export function formatRelativeTime(date: Date | string): string {
   const now = new Date();
-  const then = typeof date === "string" ? new Date(date) : date;
+  const then = typeof date === 'string' ? new Date(date) : date;
   const diff = now.getTime() - then.getTime();
 
   const seconds = Math.floor(diff / 1000);
@@ -325,18 +325,28 @@ export function formatRelativeTime(date: Date | string): string {
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
 
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  if (seconds > 5) return `${seconds}s ago`;
-  return "just now";
+  if (days > 0) {
+    return `${days}d ago`;
+  }
+  if (hours > 0) {
+    return `${hours}h ago`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ago`;
+  }
+  if (seconds > 5) {
+    return `${seconds}s ago`;
+  }
+  return 'just now';
 }
 
 /**
  * Truncate string with ellipsis
  */
 export function truncate(str: string, maxLength: number): string {
-  if (str.length <= maxLength) return str;
+  if (str.length <= maxLength) {
+    return str;
+  }
   return `${str.slice(0, maxLength - 3)}...`;
 }
 
@@ -351,11 +361,15 @@ export function formatNumber(n: number): string {
  * Create a mini bar chart
  */
 export function miniChart(values: number[], width = 20): string {
-  if (values.length === 0) return "";
+  if (values.length === 0) {
+    return '';
+  }
   const max = Math.max(...values);
-  if (max === 0) return "▁".repeat(width);
+  if (max === 0) {
+    return '▁'.repeat(width);
+  }
 
-  const bars = "▁▂▃▄▅▆▇█";
+  const bars = '▁▂▃▄▅▆▇█';
   const normalized = values.map((v) => Math.round((v / max) * 7));
 
   // Sample if too many values
@@ -365,18 +379,18 @@ export function miniChart(values: number[], width = 20): string {
     sampled.push(normalized[i]);
   }
 
-  return sampled.map((v) => bars[v]).join("");
+  return sampled.map((v) => bars[v]).join('');
 }
 
 /**
  * Print error and exit
  */
 export function fatal(message: string, detail?: string): never {
-  console.error(`\n${c.red(icons.error)} ${c.red("Error:")} ${message}`);
+  console.error(`\n${c.red(icons.error)} ${c.red('Error:')} ${message}`);
   if (detail) {
     console.error(`  ${c.dim(detail)}`);
   }
-  console.error("");
+  console.error('');
   process.exit(1);
 }
 
@@ -384,7 +398,7 @@ export function fatal(message: string, detail?: string): never {
  * Print warning
  */
 export function warn(message: string, detail?: string): void {
-  console.log(`${c.yellow(icons.warning)} ${c.yellow("Warning:")} ${message}`);
+  console.log(`${c.yellow(icons.warning)} ${c.yellow('Warning:')} ${message}`);
   if (detail) {
     console.log(`  ${c.dim(detail)}`);
   }
@@ -408,5 +422,5 @@ export function info(message: string): void {
  * Clear screen
  */
 export function clearScreen(): void {
-  process.stdout.write("\x1b[2J\x1b[H");
+  process.stdout.write('\x1b[2J\x1b[H');
 }

@@ -8,11 +8,11 @@
  * Files are the source of truth; OpenClaw's per-user index handles all search.
  */
 
-import { join } from "path";
-import { getStateDir, loadConfig, type PHAConfig } from "../utils/config.js";
+import { join } from 'path';
+import { getStateDir, loadConfig, type PHAConfig } from '../utils/config.js';
 // Side-effect import: macOS SQLite compat patch
-import "./schema.js";
-import { loadSoul } from "./soul.js";
+import './schema.js';
+import { loadSoul } from './soul.js';
 import {
   loadProfileFromFile,
   saveProfileToFile,
@@ -23,20 +23,20 @@ import {
   ensureUserDir,
   loadBootstrap,
   deleteBootstrap,
-} from "./profile.js";
-import { buildSkillRegistry } from "../agent/system-prompt.js";
+} from './profile.js';
+import { buildSkillRegistry } from '../agent/system-prompt.js';
 import {
   getNextMissingField,
   getAllMissingFields,
   getAllMissingProfileKeys,
   getProfileCompleteness,
-} from "./info-collector.js";
-import { MemoryIndexManager, type MemoryProviderStatus } from "./memory-index.js";
-import { emitSessionTranscriptUpdate } from "./compat.js";
-import type { UserProfile, MemorySearchResult, RequiredField } from "./types.js";
-import { createLogger } from "../utils/logger.js";
+} from './info-collector.js';
+import { MemoryIndexManager, type MemoryProviderStatus } from './memory-index.js';
+import { emitSessionTranscriptUpdate } from './compat.js';
+import type { UserProfile, MemorySearchResult, RequiredField } from './types.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Memory");
+const log = createLogger('Memory');
 
 export interface MemoryManagerConfig {
   /** Reserved for future configuration */
@@ -100,15 +100,33 @@ export class MemoryManager {
     const current = this.getProfile(uuid);
     const merged: UserProfile = { ...current };
 
-    if (updates.nickname !== undefined) merged.nickname = updates.nickname;
-    if (updates.gender !== undefined) merged.gender = updates.gender;
-    if (updates.birthYear !== undefined) merged.birthYear = updates.birthYear;
-    if (updates.height !== undefined) merged.height = updates.height;
-    if (updates.weight !== undefined) merged.weight = updates.weight;
-    if (updates.location !== undefined) merged.location = updates.location;
-    if (updates.conditions !== undefined) merged.conditions = updates.conditions;
-    if (updates.allergies !== undefined) merged.allergies = updates.allergies;
-    if (updates.medications !== undefined) merged.medications = updates.medications;
+    if (updates.nickname !== undefined) {
+      merged.nickname = updates.nickname;
+    }
+    if (updates.gender !== undefined) {
+      merged.gender = updates.gender;
+    }
+    if (updates.birthYear !== undefined) {
+      merged.birthYear = updates.birthYear;
+    }
+    if (updates.height !== undefined) {
+      merged.height = updates.height;
+    }
+    if (updates.weight !== undefined) {
+      merged.weight = updates.weight;
+    }
+    if (updates.location !== undefined) {
+      merged.location = updates.location;
+    }
+    if (updates.conditions !== undefined) {
+      merged.conditions = updates.conditions;
+    }
+    if (updates.allergies !== undefined) {
+      merged.allergies = updates.allergies;
+    }
+    if (updates.medications !== undefined) {
+      merged.medications = updates.medications;
+    }
 
     if (updates.goals) {
       merged.goals = { ...(current.goals || {}), ...updates.goals };
@@ -196,7 +214,7 @@ export class MemoryManager {
           snippet: r.snippet,
         }));
       } catch (err) {
-        log.warn("Index search failed", err);
+        log.warn('Index search failed', err);
       }
     }
 
@@ -212,8 +230,8 @@ export class MemoryManager {
     // Trigger OpenClaw index sync (fire-and-forget)
     this.getIndex(uuid).then((index) => {
       if (index) {
-        void index.sync({ reason: "memory-write" }).catch((err) => {
-          log.warn("Sync after memory write failed", err);
+        void index.sync({ reason: 'memory-write' }).catch((err) => {
+          log.warn('Sync after memory write failed', err);
         });
       }
     });
@@ -226,8 +244,8 @@ export class MemoryManager {
     // Trigger OpenClaw index sync
     this.getIndex(uuid).then((index) => {
       if (index) {
-        void index.sync({ reason: "daily-log" }).catch((err) => {
-          log.warn("Sync after daily log failed", err);
+        void index.sync({ reason: 'daily-log' }).catch((err) => {
+          log.warn('Sync after daily log failed', err);
         });
       }
     });
@@ -237,7 +255,7 @@ export class MemoryManager {
     this.ensureUser(uuid);
 
     // Notify OpenClaw session listener (triggers async index sync)
-    const sessionFile = join(getStateDir(), "users", uuid, "sessions", `${sessionId}.jsonl`);
+    const sessionFile = join(getStateDir(), 'users', uuid, 'sessions', `${sessionId}.jsonl`);
     emitSessionTranscriptUpdate(sessionFile);
   }
 
@@ -260,20 +278,17 @@ export class MemoryManager {
     const bootstrap = contextOptions?.bootstrap !== false ? loadBootstrap(uuid) : null;
 
     const profileSection = profile ? formatProfileForPrompt(profile) : null;
-    const memorySection =
-      memorySummary || (contextOptions?.memory !== false ? "No historical memory yet" : null);
+    const memorySection = memorySummary || (contextOptions?.memory !== false ? 'No historical memory yet' : null);
     const skillRegistry = buildSkillRegistry(skillOptions);
 
     const sessionContext = buildSessionContext();
 
     const bootstrapSection = bootstrap
       ? `\n## ⚠️ 新用户首次对话 — 必须执行引导\n\n**请严格遵循以下引导流程。这是最高优先级任务。**\n\n${bootstrap}\n`
-      : "";
+      : '';
 
-    const profileBlock = profileSection
-      ? `\n## Current User Information\n\n${profileSection}\n`
-      : "";
-    const memoryBlock = memorySection ? `\n## User Memory\n\n${memorySection}\n` : "";
+    const profileBlock = profileSection ? `\n## Current User Information\n\n${profileSection}\n` : '';
+    const memoryBlock = memorySection ? `\n## User Memory\n\n${memorySection}\n` : '';
 
     const prompt = `${soul}
 
@@ -313,50 +328,64 @@ Based on the information above, provide personalized health services.`;
 
 // ============ Session Context Builder ============
 
-const WEEKDAYS_ZH = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const WEEKDAYS_ZH = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
 function getTimeOfDay(hour: number): string {
-  if (hour < 6) return "深夜";
-  if (hour < 9) return "早晨";
-  if (hour < 12) return "上午";
-  if (hour < 13) return "中午";
-  if (hour < 17) return "下午";
-  if (hour < 19) return "傍晚";
-  if (hour < 23) return "晚上";
-  return "深夜";
+  if (hour < 6) {
+    return '深夜';
+  }
+  if (hour < 9) {
+    return '早晨';
+  }
+  if (hour < 12) {
+    return '上午';
+  }
+  if (hour < 13) {
+    return '中午';
+  }
+  if (hour < 17) {
+    return '下午';
+  }
+  if (hour < 19) {
+    return '傍晚';
+  }
+  if (hour < 23) {
+    return '晚上';
+  }
+  return '深夜';
 }
 
-function getSeason(month: number, hemisphere: "north" | "south" = "north"): string {
+function getSeason(month: number, hemisphere: 'north' | 'south' = 'north'): string {
   // month: 1-12
   const northSeasons: Record<number, string> = {
-    1: "冬季",
-    2: "冬季",
-    3: "春季",
-    4: "春季",
-    5: "春季",
-    6: "夏季",
-    7: "夏季",
-    8: "夏季",
-    9: "秋季",
-    10: "秋季",
-    11: "秋季",
-    12: "冬季",
+    1: '冬季',
+    2: '冬季',
+    3: '春季',
+    4: '春季',
+    5: '春季',
+    6: '夏季',
+    7: '夏季',
+    8: '夏季',
+    9: '秋季',
+    10: '秋季',
+    11: '秋季',
+    12: '冬季',
   };
   const southSeasons: Record<number, string> = {
-    1: "夏季",
-    2: "夏季",
-    3: "秋季",
-    4: "秋季",
-    5: "秋季",
-    6: "冬季",
-    7: "冬季",
-    8: "冬季",
-    9: "春季",
-    10: "春季",
-    11: "春季",
-    12: "夏季",
+    1: '夏季',
+    2: '夏季',
+    3: '秋季',
+    4: '秋季',
+    5: '秋季',
+    6: '冬季',
+    7: '冬季',
+    8: '冬季',
+    9: '春季',
+    10: '春季',
+    11: '春季',
+    12: '夏季',
   };
-  return hemisphere === "south" ? southSeasons[month] : northSeasons[month];
+  return hemisphere === 'south' ? southSeasons[month] : northSeasons[month];
 }
 
 /**
@@ -365,22 +394,22 @@ function getSeason(month: number, hemisphere: "north" | "south" = "north"): stri
  */
 function buildSessionContext(): string {
   const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
+  const dateStr = now.toISOString().split('T')[0];
   const weekday = WEEKDAYS_ZH[now.getDay()];
   const hour = now.getHours();
-  const minute = String(now.getMinutes()).padStart(2, "0");
+  const minute = String(now.getMinutes()).padStart(2, '0');
   const timeOfDay = getTimeOfDay(hour);
   const month = now.getMonth() + 1;
 
   // Detect timezone
   const offsetMin = -now.getTimezoneOffset();
-  const sign = offsetMin >= 0 ? "+" : "-";
+  const sign = offsetMin >= 0 ? '+' : '-';
   const absH = Math.floor(Math.abs(offsetMin) / 60);
   const absM = Math.abs(offsetMin) % 60;
-  const tzOffset = `UTC${sign}${absH}${absM > 0 ? `:${String(absM).padStart(2, "0")}` : ""}`;
+  const tzOffset = `UTC${sign}${absH}${absM > 0 ? `:${String(absM).padStart(2, '0')}` : ''}`;
 
   // Try to get timezone name
-  let tzName = "";
+  let tzName = '';
   try {
     tzName = Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch {
@@ -390,7 +419,7 @@ function buildSessionContext(): string {
 
   // Season from config hemisphere or default north
   const config = loadConfig() as PHAConfig;
-  const hemisphere = config.context?.hemisphere ?? "north";
+  const hemisphere = config.context?.hemisphere ?? 'north';
   const season = getSeason(month, hemisphere);
 
   const lines = [
@@ -400,7 +429,7 @@ function buildSessionContext(): string {
     `- **季节**: ${season}`,
   ];
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 // Singleton instance

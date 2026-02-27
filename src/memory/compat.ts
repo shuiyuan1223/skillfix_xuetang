@@ -5,9 +5,9 @@
  * This is the single file that bridges all OpenClaw-specific imports.
  */
 
-import { Database } from "bun:sqlite";
-import path from "node:path";
-import { findProjectRoot, getStateDir } from "../utils/config.js";
+import { Database } from 'bun:sqlite';
+import path from 'node:path';
+import { findProjectRoot, getStateDir } from '../utils/config.js';
 
 // ============ SQLite Adapter ============
 // OpenClaw uses node:sqlite DatabaseSync; PHA uses bun:sqlite Database.
@@ -19,8 +19,8 @@ export type { Database as DatabaseSyncType };
 
 // ============ Logger Adapter ============
 
-export { createLogger as createSubsystemLogger } from "../utils/logger.js";
-export type { SubsystemLogger } from "../utils/logger.js";
+export { createLogger as createSubsystemLogger } from '../utils/logger.js';
+export type { SubsystemLogger } from '../utils/logger.js';
 
 // ============ Path Adapter ============
 
@@ -30,19 +30,15 @@ export type { SubsystemLogger } from "../utils/logger.js";
  * @param agentId User UUID (used as {uid} in template)
  * @param workspaceTemplate Optional workspace template from AgentProfile (e.g. "users/{uid}")
  */
-export function resolveAgentWorkspaceDir(
-  _cfg: unknown,
-  agentId: string,
-  workspaceTemplate?: string
-): string {
+export function resolveAgentWorkspaceDir(_cfg: unknown, agentId: string, workspaceTemplate?: string): string {
   if (workspaceTemplate) {
     return path.join(getStateDir(), workspaceTemplate.replace(/\{uid\}/g, agentId));
   }
-  return path.join(findProjectRoot(), ".pha", "users", agentId);
+  return path.join(findProjectRoot(), '.pha', 'users', agentId);
 }
 
 export function resolveAgentDir(_cfg: unknown, agentId: string): string {
-  return path.join(findProjectRoot(), ".pha", "users", agentId);
+  return path.join(findProjectRoot(), '.pha', 'users', agentId);
 }
 
 /**
@@ -50,14 +46,11 @@ export function resolveAgentDir(_cfg: unknown, agentId: string): string {
  * @param agentId User UUID (used as {uid} in template)
  * @param sessionPathTemplate Optional session path template from AgentProfile (e.g. "users/{uid}/sessions/pha")
  */
-export function resolveSessionTranscriptsDirForAgent(
-  agentId: string,
-  sessionPathTemplate?: string
-): string {
+export function resolveSessionTranscriptsDirForAgent(agentId: string, sessionPathTemplate?: string): string {
   if (sessionPathTemplate) {
     return path.join(getStateDir(), sessionPathTemplate.replace(/\{uid\}/g, agentId));
   }
-  return path.join(findProjectRoot(), ".pha", "users", agentId || "default", "sessions");
+  return path.join(findProjectRoot(), '.pha', 'users', agentId || 'default', 'sessions');
 }
 
 // ============ Session Events ============
@@ -91,12 +84,7 @@ export function truncateUtf16Safe(input: string, maxLen: number): string {
   }
   // Avoid splitting in the middle of a surrogate pair
   let end = limit;
-  if (
-    end > 0 &&
-    end < input.length &&
-    input.charCodeAt(end - 1) >= 0xd800 &&
-    input.charCodeAt(end - 1) <= 0xdbff
-  ) {
+  if (end > 0 && end < input.length && input.charCodeAt(end - 1) >= 0xd800 && input.charCodeAt(end - 1) <= 0xdbff) {
     end -= 1;
   }
   return input.slice(0, end);
@@ -108,9 +96,11 @@ export function truncateUtf16Safe(input: string, maxLen: number): string {
  */
 export function resolveUserPath(input: string): string {
   const trimmed = input.trim();
-  if (!trimmed) return trimmed;
-  if (trimmed.startsWith("~")) {
-    const home = process.env.HOME || process.env.USERPROFILE || "";
+  if (!trimmed) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('~')) {
+    const home = process.env.HOME || process.env.USERPROFILE || '';
     return path.join(home, trimmed.slice(1));
   }
   return path.resolve(trimmed);
@@ -121,7 +111,9 @@ export function resolveUserPath(input: string): string {
  * Replaces OpenClaw's formatErrorMessage from infra/errors.ts.
  */
 export function formatErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) {
+    return err.message;
+  }
   return String(err);
 }
 

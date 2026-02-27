@@ -30,35 +30,63 @@ export interface DeleteSurfaceMessage {
 }
 
 export function componentType(c: A2UIComponent): string {
-  return Object.keys(c.component)[0] || "";
+  return Object.keys(c.component)[0] || '';
 }
 
 export function prop(c: A2UIComponent, key: string): unknown {
   const props = c.component[componentType(c)];
-  if (!props) return undefined;
+  if (!props) {
+    return undefined;
+  }
   const bv = props[key];
-  if (!bv) return undefined;
-  if ("literalString" in bv) return bv.literalString;
-  if ("literalNumber" in bv) return bv.literalNumber;
-  if ("literalBoolean" in bv) return bv.literalBoolean;
-  if ("literalArray" in bv) return bv.literalArray;
-  if ("literalObject" in bv) return bv.literalObject;
-  if ("explicitList" in bv) return bv.explicitList;
-  if ("path" in bv) return bv.path;
+  if (!bv) {
+    return undefined;
+  }
+  if ('literalString' in bv) {
+    return bv.literalString;
+  }
+  if ('literalNumber' in bv) {
+    return bv.literalNumber;
+  }
+  if ('literalBoolean' in bv) {
+    return bv.literalBoolean;
+  }
+  if ('literalArray' in bv) {
+    return bv.literalArray;
+  }
+  if ('literalObject' in bv) {
+    return bv.literalObject;
+  }
+  if ('explicitList' in bv) {
+    return bv.explicitList;
+  }
+  if ('path' in bv) {
+    return bv.path;
+  }
   return undefined;
 }
 
 export function getChildren(c: A2UIComponent): string[] {
   const ch = c.component[componentType(c)]?.children;
-  if (ch && "explicitList" in ch) return ch.explicitList;
+  if (ch && 'explicitList' in ch) {
+    return ch.explicitList;
+  }
   return [];
 }
 
 export function toBoundValue(v: unknown): BoundValue {
-  if (typeof v === "string") return { literalString: v };
-  if (typeof v === "number") return { literalNumber: v };
-  if (typeof v === "boolean") return { literalBoolean: v };
-  if (Array.isArray(v)) return { literalArray: v };
+  if (typeof v === 'string') {
+    return { literalString: v };
+  }
+  if (typeof v === 'number') {
+    return { literalNumber: v };
+  }
+  if (typeof v === 'boolean') {
+    return { literalBoolean: v };
+  }
+  if (Array.isArray(v)) {
+    return { literalArray: v };
+  }
   return { literalObject: v };
 }
 
@@ -73,53 +101,53 @@ export function withProp(c: A2UIComponent, key: string, value: unknown): A2UICom
 }
 
 export interface AgentTextMessage {
-  type: "agent_text";
+  type: 'agent_text';
   content: string;
   is_final: boolean;
 }
 
 export interface ToolCallMessage {
-  type: "tool_call";
+  type: 'tool_call';
   tool: string;
 }
 
 export interface ErrorMessage {
-  type: "error";
+  type: 'error';
   message: string;
 }
 
 // AG-UI Standard Events
 export interface AGUIRunStarted {
-  type: "RunStarted";
+  type: 'RunStarted';
   threadId: string;
   runId: string;
 }
 
 export interface AGUIRunFinished {
-  type: "RunFinished";
+  type: 'RunFinished';
   threadId: string;
   runId: string;
 }
 
 export interface AGUITextMessageStart {
-  type: "TextMessageStart";
+  type: 'TextMessageStart';
   messageId: string;
-  role: "assistant";
+  role: 'assistant';
 }
 
 export interface AGUITextMessageContent {
-  type: "TextMessageContent";
+  type: 'TextMessageContent';
   messageId: string;
   delta: string;
 }
 
 export interface AGUITextMessageEnd {
-  type: "TextMessageEnd";
+  type: 'TextMessageEnd';
   messageId: string;
 }
 
 export interface AGUIToolCallStart {
-  type: "ToolCallStart";
+  type: 'ToolCallStart';
   toolCallId: string;
   toolCallName: string;
   parentMessageId?: string;
@@ -127,12 +155,12 @@ export interface AGUIToolCallStart {
 }
 
 export interface AGUIToolCallEnd {
-  type: "ToolCallEnd";
+  type: 'ToolCallEnd';
   toolCallId: string;
 }
 
 export interface AGUIToolCallResult {
-  type: "ToolCallResult";
+  type: 'ToolCallResult';
   messageId: string;
   toolCallId: string;
   content?: string;
@@ -140,7 +168,7 @@ export interface AGUIToolCallResult {
 }
 
 export interface AGUICustom {
-  type: "Custom";
+  type: 'Custom';
   name: string;
   data: unknown;
 }
@@ -149,7 +177,7 @@ export interface QuickReply {
   label: string;
   content: string;
   icon?: string;
-  variant?: "primary" | "danger";
+  variant?: 'primary' | 'danger';
 }
 
 export type AGUIEvent =
@@ -165,16 +193,16 @@ export type AGUIEvent =
 
 // Parts message model
 export type MessagePart =
-  | { type: "text"; content: string }
+  | { type: 'text'; content: string }
   | {
-      type: "tool_use";
+      type: 'tool_use';
       toolCallId: string;
       toolName: string;
-      status: "running" | "completed" | "error";
+      status: 'running' | 'completed' | 'error';
       displayName?: string;
       progressData?: { current: number; total: number };
     }
-  | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
+  | { type: 'tool_result'; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
 
 export type WSMessage =
   | SurfaceUpdateMessage

@@ -3,16 +3,16 @@
  * Stores user health profile as Markdown files
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from "fs";
-import { join } from "path";
-import { getStateDir } from "../utils/config.js";
-import type { UserProfile } from "./types.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, unlinkSync } from 'fs';
+import { join } from 'path';
+import { getStateDir } from '../utils/config.js';
+import type { UserProfile } from './types.js';
 
 /**
  * Get the users directory
  */
 export function getUsersDir(): string {
-  return join(getStateDir(), "users");
+  return join(getStateDir(), 'users');
 }
 
 /**
@@ -30,36 +30,33 @@ export function ensureUserDir(uuid: string): string {
   const userDir = getUserDir(uuid);
 
   mkdirSync(userDir, { recursive: true });
-  mkdirSync(join(userDir, "memory"), { recursive: true });
-  mkdirSync(join(userDir, "sessions"), { recursive: true });
+  mkdirSync(join(userDir, 'memory'), { recursive: true });
+  mkdirSync(join(userDir, 'sessions'), { recursive: true });
 
   // Ensure all 3 OpenClaw user-level files exist
-  const userMdPath = join(userDir, "USER.md");
+  const userMdPath = join(userDir, 'USER.md');
   if (!existsSync(userMdPath)) {
     // Check legacy PROFILE.md — migrate if exists
-    const legacyPath = join(userDir, "PROFILE.md");
+    const legacyPath = join(userDir, 'PROFILE.md');
     if (existsSync(legacyPath)) {
       // Copy legacy content to USER.md
-      writeFileSync(userMdPath, readFileSync(legacyPath, "utf-8"));
+      writeFileSync(userMdPath, readFileSync(legacyPath, 'utf-8'));
     } else {
       writeFileSync(userMdPath, generateProfileMd({}));
     }
   }
 
-  const memoryMdPath = join(userDir, "MEMORY.md");
+  const memoryMdPath = join(userDir, 'MEMORY.md');
   if (!existsSync(memoryMdPath)) {
-    writeFileSync(
-      memoryMdPath,
-      "# MEMORY.md - 长期记忆\n\n_(Agent 会在对话中自动积累这部分内容。)_\n"
-    );
+    writeFileSync(memoryMdPath, '# MEMORY.md - 长期记忆\n\n_(Agent 会在对话中自动积累这部分内容。)_\n');
   }
 
-  const bootstrapPath = join(userDir, "BOOTSTRAP.md");
+  const bootstrapPath = join(userDir, 'BOOTSTRAP.md');
   if (!existsSync(bootstrapPath)) {
     // Only create BOOTSTRAP for users that haven't been onboarded yet
     // (i.e., USER.md is still the empty template)
-    const userContent = readFileSync(userMdPath, "utf-8");
-    const hasRealData = userContent.includes("昵称:") && !userContent.includes("{待收集}");
+    const userContent = readFileSync(userMdPath, 'utf-8');
+    const hasRealData = userContent.includes('昵称:') && !userContent.includes('{待收集}');
     if (!hasRealData) {
       writeFileSync(bootstrapPath, BOOTSTRAP_TEMPLATE);
     }
@@ -72,67 +69,64 @@ export function ensureUserDir(uuid: string): string {
  * Ensure System Agent directory has all 3 OpenClaw user-level files.
  */
 export function ensureSystemAgentFiles(): void {
-  const dir = join(getStateDir(), "users", "system");
+  const dir = join(getStateDir(), 'users', 'system');
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
 
-  const userMdPath = join(dir, "USER.md");
+  const userMdPath = join(dir, 'USER.md');
   if (!existsSync(userMdPath)) {
     writeFileSync(
       userMdPath,
       [
-        "# USER.md - 关于系统 Agent",
-        "",
-        "## 身份",
-        "- 名称: PHA System Agent",
-        "- 类型: 系统运维与进化 Agent",
-        "- 职责: 管理 PHA 系统的持续改进",
-        "",
-        "## 配置",
-        "- 进化模式: 手动",
-        "- Benchmark 频率: 按需",
-        "",
-        "## 上下文",
-        "_(系统 Agent 的运行上下文，随时间积累。)_",
-        "",
-      ].join("\n")
+        '# USER.md - 关于系统 Agent',
+        '',
+        '## 身份',
+        '- 名称: PHA System Agent',
+        '- 类型: 系统运维与进化 Agent',
+        '- 职责: 管理 PHA 系统的持续改进',
+        '',
+        '## 配置',
+        '- 进化模式: 手动',
+        '- Benchmark 频率: 按需',
+        '',
+        '## 上下文',
+        '_(系统 Agent 的运行上下文，随时间积累。)_',
+        '',
+      ].join('\n')
     );
   }
 
-  const memoryMdPath = join(dir, "MEMORY.md");
+  const memoryMdPath = join(dir, 'MEMORY.md');
   if (!existsSync(memoryMdPath)) {
     // If legacy memory.md exists, copy its content
-    const legacyPath = join(dir, "memory.md");
+    const legacyPath = join(dir, 'memory.md');
     if (existsSync(legacyPath)) {
-      writeFileSync(memoryMdPath, readFileSync(legacyPath, "utf-8"));
+      writeFileSync(memoryMdPath, readFileSync(legacyPath, 'utf-8'));
     } else {
-      writeFileSync(
-        memoryMdPath,
-        "# MEMORY.md - 系统 Agent 记忆\n\n_(系统 Agent 会在运行中自动积累这部分内容。)_\n"
-      );
+      writeFileSync(memoryMdPath, '# MEMORY.md - 系统 Agent 记忆\n\n_(系统 Agent 会在运行中自动积累这部分内容。)_\n');
     }
   }
 
-  const bootstrapPath = join(dir, "BOOTSTRAP.md");
+  const bootstrapPath = join(dir, 'BOOTSTRAP.md');
   if (!existsSync(bootstrapPath)) {
     writeFileSync(
       bootstrapPath,
       [
-        "# BOOTSTRAP.md - 系统 Agent 初始化",
-        "",
-        "## 首次运行",
-        "",
-        "1. 检查系统状态（git status、构建状态）",
-        "2. 读取 evolution-log.md 了解历史进化记录",
-        "3. 运行 benchmark 获取当前基线分数",
-        "4. 记录初始状态到 MEMORY.md",
-        "",
-        "## 完成初始化后",
-        "",
-        "此文件可以被删除或保留作为参考。",
-        "",
-      ].join("\n")
+        '# BOOTSTRAP.md - 系统 Agent 初始化',
+        '',
+        '## 首次运行',
+        '',
+        '1. 检查系统状态（git status、构建状态）',
+        '2. 读取 evolution-log.md 了解历史进化记录',
+        '3. 运行 benchmark 获取当前基线分数',
+        '4. 记录初始状态到 MEMORY.md',
+        '',
+        '## 完成初始化后',
+        '',
+        '此文件可以被删除或保留作为参考。',
+        '',
+      ].join('\n')
     );
   }
 }
@@ -142,11 +136,15 @@ export function ensureSystemAgentFiles(): void {
  * Falls back to PROFILE.md for backward compatibility
  */
 export function getProfilePath(uuid: string): string {
-  const userMdPath = join(getUserDir(uuid), "USER.md");
-  if (existsSync(userMdPath)) return userMdPath;
+  const userMdPath = join(getUserDir(uuid), 'USER.md');
+  if (existsSync(userMdPath)) {
+    return userMdPath;
+  }
   // Backward compatibility: fall back to PROFILE.md
-  const legacyPath = join(getUserDir(uuid), "PROFILE.md");
-  if (existsSync(legacyPath)) return legacyPath;
+  const legacyPath = join(getUserDir(uuid), 'PROFILE.md');
+  if (existsSync(legacyPath)) {
+    return legacyPath;
+  }
   // Default to USER.md for new users
   return userMdPath;
 }
@@ -155,14 +153,14 @@ export function getProfilePath(uuid: string): string {
  * Get path to user's BOOTSTRAP.md
  */
 export function getBootstrapPath(uuid: string): string {
-  return join(getUserDir(uuid), "BOOTSTRAP.md");
+  return join(getUserDir(uuid), 'BOOTSTRAP.md');
 }
 
 /**
  * Get path to user's MEMORY.md
  */
 export function getMemoryPath(uuid: string): string {
-  return join(getUserDir(uuid), "MEMORY.md");
+  return join(getUserDir(uuid), 'MEMORY.md');
 }
 
 /**
@@ -170,8 +168,8 @@ export function getMemoryPath(uuid: string): string {
  */
 export function getDailyLogPath(uuid: string, date?: Date): string {
   const d = date || new Date();
-  const dateStr = d.toISOString().split("T")[0];
-  return join(getUserDir(uuid), "memory", `${dateStr}.md`);
+  const dateStr = d.toISOString().split('T')[0];
+  return join(getUserDir(uuid), 'memory', `${dateStr}.md`);
 }
 
 /**
@@ -184,7 +182,7 @@ export function loadProfileFromFile(uuid: string): UserProfile {
     return {};
   }
 
-  const content = readFileSync(profilePath, "utf-8");
+  const content = readFileSync(profilePath, 'utf-8');
   return parseProfileMd(content);
 }
 
@@ -194,7 +192,7 @@ export function loadProfileFromFile(uuid: string): UserProfile {
 export function saveProfileToFile(uuid: string, profile: UserProfile): void {
   ensureUserDir(uuid);
   // Always write to USER.md
-  const userMdPath = join(getUserDir(uuid), "USER.md");
+  const userMdPath = join(getUserDir(uuid), 'USER.md');
   const content = generateProfileMd(profile);
   writeFileSync(userMdPath, content);
 }
@@ -216,16 +214,18 @@ export function loadMemorySummary(uuid: string, maxChars = 12000): string | null
     return null;
   }
 
-  const full = readFileSync(memoryPath, "utf-8");
-  if (!full.trim()) return null;
+  const full = readFileSync(memoryPath, 'utf-8');
+  if (!full.trim()) {
+    return null;
+  }
 
   // Append recent daily log summaries
   const recentLogs = getRecentDailyLogs(uuid, 3);
-  let dailyLogSection = "";
+  let dailyLogSection = '';
   if (recentLogs.length > 0) {
     dailyLogSection = `\n\n## Recent Daily Logs\n\n${recentLogs
       .map((l) => `- **${l.date}**: ${l.preview}`)
-      .join("\n")}`;
+      .join('\n')}`;
   }
 
   // If everything fits, return as-is
@@ -277,7 +277,7 @@ export function loadMemorySummary(uuid: string, maxChars = 12000): string | null
   parts.push(...kept);
   parts.push(dailyLogSection);
 
-  return parts.join("\n");
+  return parts.join('\n');
 }
 
 /**
@@ -285,19 +285,19 @@ export function loadMemorySummary(uuid: string, maxChars = 12000): string | null
  * Each section includes the heading line and all content until the next heading.
  */
 function splitBySections(content: string): string[] {
-  const lines = content.split("\n");
+  const lines = content.split('\n');
   const sections: string[] = [];
   let current: string[] = [];
 
   for (const line of lines) {
-    if (line.startsWith("## ") && current.length > 0) {
-      sections.push(current.join("\n"));
+    if (line.startsWith('## ') && current.length > 0) {
+      sections.push(current.join('\n'));
       current = [];
     }
     current.push(line);
   }
   if (current.length > 0) {
-    sections.push(current.join("\n"));
+    sections.push(current.join('\n'));
   }
 
   return sections;
@@ -310,11 +310,11 @@ export function appendToMemory(uuid: string, content: string): void {
   ensureUserDir(uuid);
   const memoryPath = getMemoryPath(uuid);
 
-  let existing = "";
+  let existing = '';
   if (existsSync(memoryPath)) {
-    existing = readFileSync(memoryPath, "utf-8");
+    existing = readFileSync(memoryPath, 'utf-8');
   } else {
-    existing = "# 健康记忆\n\n";
+    existing = '# 健康记忆\n\n';
   }
 
   const updated = `${existing}\n${content}`;
@@ -328,11 +328,11 @@ export function appendToDailyLog(uuid: string, content: string): void {
   ensureUserDir(uuid);
   const logPath = getDailyLogPath(uuid);
 
-  let existing = "";
+  let existing = '';
   if (existsSync(logPath)) {
-    existing = readFileSync(logPath, "utf-8");
+    existing = readFileSync(logPath, 'utf-8');
   } else {
-    const date = new Date().toISOString().split("T")[0];
+    const date = new Date().toISOString().split('T')[0];
     existing = `# ${date} 对话记录\n\n`;
   }
 
@@ -344,23 +344,22 @@ export function appendToDailyLog(uuid: string, content: string): void {
 /**
  * Get recent daily logs for a user
  */
-export function getRecentDailyLogs(
-  uuid: string,
-  days: number
-): Array<{ date: string; preview: string }> {
-  const memoryDir = join(getUserDir(uuid), "memory");
-  if (!existsSync(memoryDir)) return [];
+export function getRecentDailyLogs(uuid: string, days: number): Array<{ date: string; preview: string }> {
+  const memoryDir = join(getUserDir(uuid), 'memory');
+  if (!existsSync(memoryDir)) {
+    return [];
+  }
 
   const files = readdirSync(memoryDir)
-    .filter((f) => f.endsWith(".md"))
+    .filter((f) => f.endsWith('.md'))
     .sort()
     .reverse()
     .slice(0, days);
 
   return files.map((f) => {
-    const date = f.replace(".md", "");
-    const content = readFileSync(join(memoryDir, f), "utf-8");
-    const preview = content.split("\n").slice(0, 3).join(" ").slice(0, 100);
+    const date = f.replace('.md', '');
+    const content = readFileSync(join(memoryDir, f), 'utf-8');
+    const preview = content.split('\n').slice(0, 3).join(' ').slice(0, 100);
     return { date, preview };
   });
 }
@@ -368,7 +367,9 @@ export function getRecentDailyLogs(
 /** Extract a string field, excluding placeholder values */
 function parseStringField(content: string, pattern: RegExp): string | undefined {
   const m = content.match(pattern);
-  if (m && !m[1].includes("{待收集}")) return m[1].trim();
+  if (m && !m[1].includes('{待收集}')) {
+    return m[1].trim();
+  }
   return undefined;
 }
 
@@ -387,7 +388,7 @@ function parseFloatField(content: string, pattern: RegExp): number | undefined {
 /** Extract a comma-separated list field, excluding "无" and placeholders */
 function parseListField(content: string, pattern: RegExp): string[] | undefined {
   const m = content.match(pattern);
-  if (m && m[1] !== "无" && !m[1].includes("{")) {
+  if (m && m[1] !== '无' && !m[1].includes('{')) {
     return m[1].split(/[,，]/).map((s) => s.trim());
   }
   return undefined;
@@ -403,7 +404,7 @@ function parseProfileMd(content: string): UserProfile {
 
   const genderMatch = content.match(/性别:\s*(男|女)/);
   if (genderMatch) {
-    profile.gender = genderMatch[1] === "男" ? "male" : "female";
+    profile.gender = genderMatch[1] === '男' ? 'male' : 'female';
   }
 
   profile.birthYear = parseIntField(content, /出生年份:\s*(\d{4})/);
@@ -426,25 +427,31 @@ function parseProfileMd(content: string): UserProfile {
   // Huawei connection
   const huaweiMatch = content.match(/华为健康:\s*(已连接|未连接)/);
   if (huaweiMatch) {
-    profile.dataSources = { huawei: { connected: huaweiMatch[1] === "已连接" } };
+    profile.dataSources = { huawei: { connected: huaweiMatch[1] === '已连接' } };
   }
 
   return profile;
 }
 
-function formatGender(gender?: "male" | "female"): string {
-  if (gender === "male") return "男";
-  if (gender === "female") return "女";
-  return "{待收集}";
+function formatGender(gender?: 'male' | 'female'): string {
+  if (gender === 'male') {
+    return '男';
+  }
+  if (gender === 'female') {
+    return '女';
+  }
+  return '{待收集}';
 }
 
 function formatOptional(value: string | number | undefined, suffix?: string): string {
-  if (value == null) return "{待收集}";
+  if (value == null) {
+    return '{待收集}';
+  }
   return suffix ? `${value}${suffix}` : String(value);
 }
 
 function formatList(items?: string[]): string {
-  return items?.length ? items.join(", ") : "{待收集}";
+  return items?.length ? items.join(', ') : '{待收集}';
 }
 
 /**
@@ -452,72 +459,100 @@ function formatList(items?: string[]): string {
  */
 function generateProfileMd(profile: UserProfile): string {
   const lines = [
-    "# USER.md - 关于你的用户",
-    "",
-    "## 基本信息",
-    `- 昵称: ${profile.nickname || "{待收集}"}`,
+    '# USER.md - 关于你的用户',
+    '',
+    '## 基本信息',
+    `- 昵称: ${profile.nickname || '{待收集}'}`,
     `- 性别: ${formatGender(profile.gender)}`,
     `- 出生年份: ${formatOptional(profile.birthYear)}`,
-    `- 身高: ${formatOptional(profile.height, "cm")}`,
-    `- 体重: ${formatOptional(profile.weight, "kg")}`,
-    `- 所在城市: ${profile.location || "{待收集}"}`,
-    "",
-    "## 健康状况",
+    `- 身高: ${formatOptional(profile.height, 'cm')}`,
+    `- 体重: ${formatOptional(profile.weight, 'kg')}`,
+    `- 所在城市: ${profile.location || '{待收集}'}`,
+    '',
+    '## 健康状况',
     `- 慢性病: ${formatList(profile.conditions)}`,
     `- 过敏史: ${formatList(profile.allergies)}`,
-    "",
-    "## 健康目标",
-    `- 主要目标: ${profile.goals?.primary || "{待收集}"}`,
+    '',
+    '## 健康目标',
+    `- 主要目标: ${profile.goals?.primary || '{待收集}'}`,
     `- 每日步数: ${profile.goals?.dailySteps || 8000}`,
     `- 睡眠时长: ${profile.goals?.sleepHours || 7}小时`,
     `- 运动频率: 每周${profile.goals?.exercisePerWeek || 3}次`,
-    "",
-    "## 上下文",
+    '',
+    '## 上下文',
     `_(用户关心什么？在做什么？什么习惯？随时间积累这部分。)_`,
-    "",
-    "## 数据来源",
-    `- 华为健康: ${profile.dataSources?.huawei?.connected ? "已连接" : "未连接"}`,
-    "",
-    "---",
+    '',
+    '## 数据来源',
+    `- 华为健康: ${profile.dataSources?.huawei?.connected ? '已连接' : '未连接'}`,
+    '',
+    '---',
     `最后更新: ${new Date().toISOString()}`,
   ];
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /** Collect known profile fields as formatted lines */
 function collectKnownFields(profile: UserProfile): string[] {
   const lines: string[] = [];
-  if (profile.nickname) lines.push(`- Nickname: ${profile.nickname}`);
-  if (profile.gender) lines.push(`- Gender: ${profile.gender}`);
+  if (profile.nickname) {
+    lines.push(`- Nickname: ${profile.nickname}`);
+  }
+  if (profile.gender) {
+    lines.push(`- Gender: ${profile.gender}`);
+  }
   if (profile.birthYear) {
     const age = new Date().getFullYear() - profile.birthYear;
     lines.push(`- Age: ${age} (born ${profile.birthYear})`);
   }
-  if (profile.height) lines.push(`- Height: ${profile.height}cm`);
-  if (profile.weight) lines.push(`- Weight: ${profile.weight}kg`);
+  if (profile.height) {
+    lines.push(`- Height: ${profile.height}cm`);
+  }
+  if (profile.weight) {
+    lines.push(`- Weight: ${profile.weight}kg`);
+  }
   if (profile.height && profile.weight) {
     const bmi = profile.weight / Math.pow(profile.height / 100, 2);
     lines.push(`- BMI: ${bmi.toFixed(1)}`);
   }
-  if (profile.location) lines.push(`- Location: ${profile.location}`);
-  if (profile.conditions?.length) lines.push(`- Conditions: ${profile.conditions.join(", ")}`);
-  if (profile.allergies?.length) lines.push(`- Allergies: ${profile.allergies.join(", ")}`);
-  if (profile.goals?.primary) lines.push(`- Health goal: ${profile.goals.primary}`);
+  if (profile.location) {
+    lines.push(`- Location: ${profile.location}`);
+  }
+  if (profile.conditions?.length) {
+    lines.push(`- Conditions: ${profile.conditions.join(', ')}`);
+  }
+  if (profile.allergies?.length) {
+    lines.push(`- Allergies: ${profile.allergies.join(', ')}`);
+  }
+  if (profile.goals?.primary) {
+    lines.push(`- Health goal: ${profile.goals.primary}`);
+  }
   return lines;
 }
 
 /** Collect missing profile field names, split into core vs optional */
 function collectMissingFields(profile: UserProfile): { core: string[]; optional: string[] } {
   const core: string[] = [];
-  if (!profile.gender) core.push("gender");
-  if (!profile.birthYear) core.push("birthYear");
-  if (!profile.height) core.push("height");
-  if (!profile.weight) core.push("weight");
+  if (!profile.gender) {
+    core.push('gender');
+  }
+  if (!profile.birthYear) {
+    core.push('birthYear');
+  }
+  if (!profile.height) {
+    core.push('height');
+  }
+  if (!profile.weight) {
+    core.push('weight');
+  }
 
   const optional: string[] = [];
-  if (!profile.goals?.primary) optional.push("goals.primary");
-  if (!profile.conditions) optional.push("conditions");
+  if (!profile.goals?.primary) {
+    optional.push('goals.primary');
+  }
+  if (!profile.conditions) {
+    optional.push('conditions');
+  }
 
   return { core, optional };
 }
@@ -531,20 +566,24 @@ export function formatProfileForPrompt(profile: UserProfile): string {
   const { core, optional } = collectMissingFields(profile);
 
   if (core.length > 0 || optional.length > 0) {
-    lines.push("", "### Missing Profile Fields");
-    if (core.length > 0) lines.push(`**Core:** ${core.join(", ")}`);
-    if (optional.length > 0) lines.push(`**Optional:** ${optional.join(", ")}`);
+    lines.push('', '### Missing Profile Fields');
+    if (core.length > 0) {
+      lines.push(`**Core:** ${core.join(', ')}`);
+    }
+    if (optional.length > 0) {
+      lines.push(`**Optional:** ${optional.join(', ')}`);
+    }
     lines.push(
       "Refer to the loaded skill's「所需个人信息」section to decide when and how to ask.",
-      "When you learn any of these, call `update_user_profile` immediately to save."
+      'When you learn any of these, call `update_user_profile` immediately to save.'
     );
   }
 
   if (lines.length === 0) {
-    return "User basic info not yet collected. Ask at an appropriate moment.";
+    return 'User basic info not yet collected. Ask at an appropriate moment.';
   }
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 // ============ BOOTSTRAP ============
@@ -584,8 +623,10 @@ const BOOTSTRAP_TEMPLATE = `# BOOTSTRAP.md — 新用户首次引导
  */
 export function loadBootstrap(uuid: string): string | null {
   const bsPath = getBootstrapPath(uuid);
-  if (!existsSync(bsPath)) return null;
-  return readFileSync(bsPath, "utf-8");
+  if (!existsSync(bsPath)) {
+    return null;
+  }
+  return readFileSync(bsPath, 'utf-8');
 }
 
 /**
@@ -593,7 +634,9 @@ export function loadBootstrap(uuid: string): string | null {
  */
 export function deleteBootstrap(uuid: string): boolean {
   const bsPath = getBootstrapPath(uuid);
-  if (!existsSync(bsPath)) return false;
+  if (!existsSync(bsPath)) {
+    return false;
+  }
   unlinkSync(bsPath);
   return true;
 }

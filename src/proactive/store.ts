@@ -5,13 +5,13 @@
  * This is the internal implementation; production deploys can swap with real APIs.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { getUserDir } from "../memory/profile.js";
-import type { Recommendation, Reminder, CalendarEvent } from "./types.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { getUserDir } from '../memory/profile.js';
+import type { Recommendation, Reminder, CalendarEvent } from './types.js';
 
 function getProactiveDir(uuid: string): string {
-  return join(getUserDir(uuid), "proactive");
+  return join(getUserDir(uuid), 'proactive');
 }
 
 function ensureDir(uuid: string): string {
@@ -23,9 +23,11 @@ function ensureDir(uuid: string): string {
 }
 
 function readJson<T>(filePath: string, fallback: T[]): T[] {
-  if (!existsSync(filePath)) return fallback;
+  if (!existsSync(filePath)) {
+    return fallback;
+  }
   try {
-    return JSON.parse(readFileSync(filePath, "utf-8")) as T[];
+    return JSON.parse(readFileSync(filePath, 'utf-8')) as T[];
   } catch {
     return fallback;
   }
@@ -40,20 +42,22 @@ function writeJson<T>(filePath: string, data: T[]): void {
 // ============================================================================
 
 export function listRecommendations(uuid: string, statusFilter?: string): Recommendation[] {
-  const file = join(getProactiveDir(uuid), "recommendations.json");
+  const file = join(getProactiveDir(uuid), 'recommendations.json');
   let items = readJson<Recommendation>(file, []);
 
   // Auto-expire
   const now = new Date().toISOString();
   let changed = false;
   for (const item of items) {
-    if (item.status === "active" && item.expiresAt && item.expiresAt < now) {
-      item.status = "dismissed";
+    if (item.status === 'active' && item.expiresAt && item.expiresAt < now) {
+      item.status = 'dismissed';
       item.dismissedAt = now;
       changed = true;
     }
   }
-  if (changed) writeJson(file, items);
+  if (changed) {
+    writeJson(file, items);
+  }
 
   if (statusFilter) {
     items = items.filter((r) => r.status === statusFilter);
@@ -63,11 +67,14 @@ export function listRecommendations(uuid: string, statusFilter?: string): Recomm
 
 export function saveRecommendation(uuid: string, rec: Recommendation): void {
   const dir = ensureDir(uuid);
-  const file = join(dir, "recommendations.json");
+  const file = join(dir, 'recommendations.json');
   const items = readJson<Recommendation>(file, []);
   const idx = items.findIndex((r) => r.id === rec.id);
-  if (idx >= 0) items[idx] = rec;
-  else items.push(rec);
+  if (idx >= 0) {
+    items[idx] = rec;
+  } else {
+    items.push(rec);
+  }
   writeJson(file, items);
 }
 
@@ -81,19 +88,21 @@ export function getRecommendation(uuid: string, id: string): Recommendation | nu
 // ============================================================================
 
 export function listReminders(uuid: string, statusFilter?: string): Reminder[] {
-  const file = join(getProactiveDir(uuid), "reminders.json");
+  const file = join(getProactiveDir(uuid), 'reminders.json');
   let items = readJson<Reminder>(file, []);
 
   // Auto-expire past reminders (non-repeating, not completed)
   const now = new Date().toISOString();
   let changed = false;
   for (const item of items) {
-    if (item.status === "pending" && item.repeatRule === "none" && item.scheduledAt < now) {
-      item.status = "expired";
+    if (item.status === 'pending' && item.repeatRule === 'none' && item.scheduledAt < now) {
+      item.status = 'expired';
       changed = true;
     }
   }
-  if (changed) writeJson(file, items);
+  if (changed) {
+    writeJson(file, items);
+  }
 
   if (statusFilter) {
     items = items.filter((r) => r.status === statusFilter);
@@ -103,11 +112,14 @@ export function listReminders(uuid: string, statusFilter?: string): Reminder[] {
 
 export function saveReminder(uuid: string, reminder: Reminder): void {
   const dir = ensureDir(uuid);
-  const file = join(dir, "reminders.json");
+  const file = join(dir, 'reminders.json');
   const items = readJson<Reminder>(file, []);
   const idx = items.findIndex((r) => r.id === reminder.id);
-  if (idx >= 0) items[idx] = reminder;
-  else items.push(reminder);
+  if (idx >= 0) {
+    items[idx] = reminder;
+  } else {
+    items.push(reminder);
+  }
   writeJson(file, items);
 }
 
@@ -118,10 +130,12 @@ export function getReminder(uuid: string, id: string): Reminder | null {
 
 export function deleteReminder(uuid: string, id: string): boolean {
   const dir = getProactiveDir(uuid);
-  const file = join(dir, "reminders.json");
+  const file = join(dir, 'reminders.json');
   const items = readJson<Reminder>(file, []);
   const filtered = items.filter((r) => r.id !== id);
-  if (filtered.length === items.length) return false;
+  if (filtered.length === items.length) {
+    return false;
+  }
   writeJson(file, filtered);
   return true;
 }
@@ -134,7 +148,7 @@ export function listCalendarEvents(
   uuid: string,
   opts?: { from?: string; to?: string; status?: string }
 ): CalendarEvent[] {
-  const file = join(getProactiveDir(uuid), "calendar.json");
+  const file = join(getProactiveDir(uuid), 'calendar.json');
   let items = readJson<CalendarEvent>(file, []);
 
   if (opts?.status) {
@@ -151,11 +165,14 @@ export function listCalendarEvents(
 
 export function saveCalendarEvent(uuid: string, event: CalendarEvent): void {
   const dir = ensureDir(uuid);
-  const file = join(dir, "calendar.json");
+  const file = join(dir, 'calendar.json');
   const items = readJson<CalendarEvent>(file, []);
   const idx = items.findIndex((e) => e.id === event.id);
-  if (idx >= 0) items[idx] = event;
-  else items.push(event);
+  if (idx >= 0) {
+    items[idx] = event;
+  } else {
+    items.push(event);
+  }
   writeJson(file, items);
 }
 
@@ -166,10 +183,12 @@ export function getCalendarEvent(uuid: string, id: string): CalendarEvent | null
 
 export function deleteCalendarEvent(uuid: string, id: string): boolean {
   const dir = getProactiveDir(uuid);
-  const file = join(dir, "calendar.json");
+  const file = join(dir, 'calendar.json');
   const items = readJson<CalendarEvent>(file, []);
   const filtered = items.filter((e) => e.id !== id);
-  if (filtered.length === items.length) return false;
+  if (filtered.length === items.length) {
+    return false;
+  }
   writeJson(file, filtered);
   return true;
 }

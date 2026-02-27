@@ -5,18 +5,22 @@
  * pre-computing it into the system prompt.
  */
 
-import { getUserId, loadConfig } from "../utils/config.js";
-import { loadProfileFromFile } from "../memory/profile.js";
-import type { PHATool } from "./types.js";
+import { getUserId, loadConfig } from '../utils/config.js';
+import { loadProfileFromFile } from '../memory/profile.js';
+import type { PHATool } from './types.js';
 
 function resolveLocation(explicit?: string): string | undefined {
-  if (explicit) return explicit;
+  if (explicit) {
+    return explicit;
+  }
 
   const uid = getUserId();
   if (uid) {
     try {
       const profile = loadProfileFromFile(uid);
-      if (profile.location) return profile.location;
+      if (profile.location) {
+        return profile.location;
+      }
     } catch {
       /* ignore */
     }
@@ -31,7 +35,7 @@ function resolveLocation(explicit?: string): string | undefined {
 function parseWeatherResponse(location: string, current: any): Record<string, string> {
   const tempC = current.temp_C;
   const feelsLikeC = current.FeelsLikeC;
-  const desc = current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value || "";
+  const desc = current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value || '';
   const humidity = current.humidity;
   const windSpeed = current.windspeedKmph;
   const visibility = current.visibility;
@@ -64,23 +68,23 @@ async function fetchWeather(location: string): Promise<Record<string, string> | 
   const data = (await resp.json()) as any;
   const current = data?.current_condition?.[0];
   if (!current) {
-    return { error: "无法解析天气数据" };
+    return { error: '无法解析天气数据' };
   }
 
   return parseWeatherResponse(location, current);
 }
 
 export const getWeatherTool: PHATool<{ location?: string }> = {
-  name: "get_weather",
-  description: "获取指定城市的当前天气信息（温度、天气状况、湿度）。默认使用用户档案中的城市。",
-  displayName: "天气查询",
-  category: "health",
-  icon: "wind",
+  name: 'get_weather',
+  description: '获取指定城市的当前天气信息（温度、天气状况、湿度）。默认使用用户档案中的城市。',
+  displayName: '天气查询',
+  category: 'health',
+  icon: 'wind',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
       location: {
-        type: "string",
+        type: 'string',
         description: "城市名称（如 '北京', 'Shanghai'）。不传则使用用户档案/配置中的默认城市。",
       },
     },
@@ -88,15 +92,15 @@ export const getWeatherTool: PHATool<{ location?: string }> = {
   execute: async (args: { location?: string }) => {
     const location = resolveLocation(args.location);
     if (!location) {
-      return { error: "未配置城市。请在参数中指定 location，或在用户档案/设置中配置默认城市。" };
+      return { error: '未配置城市。请在参数中指定 location，或在用户档案/设置中配置默认城市。' };
     }
 
     try {
       return await fetchWeather(location);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("abort")) {
-        return { error: "天气服务请求超时" };
+      if (msg.includes('abort')) {
+        return { error: '天气服务请求超时' };
       }
       return { error: `天气查询失败: ${msg}` };
     }

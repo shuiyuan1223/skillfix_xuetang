@@ -44,7 +44,7 @@ export default function CountUp({
     const str = num.toString();
     if (str.includes(".")) {
       const decimals = str.split(".")[1];
-      if (parseInt(decimals) !== 0) return decimals.length;
+      if (parseInt(decimals) !== 0) { return decimals.length; }
     }
     return 0;
   };
@@ -73,13 +73,13 @@ export default function CountUp({
 
   useEffect(() => {
     if (isInView && startWhen) {
-      if (typeof onStart === "function") onStart();
+      if (typeof onStart === "function") { onStart(); }
       const timeoutId = setTimeout(() => {
         motionValue.set(direction === "down" ? from : to);
       }, delay * 1000);
       const durationTimeoutId = setTimeout(
         () => {
-          if (typeof onEnd === "function") onEnd();
+          if (typeof onEnd === "function") { onEnd(); }
         },
         delay * 1000 + duration * 1000,
       );

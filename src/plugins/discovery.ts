@@ -6,10 +6,10 @@
  * 2. config.plugins.paths[] (config-specified paths)
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { resolvePluginManifestPath } from "./manifest.js";
-import type { PluginOrigin } from "./types.js";
+import fs from 'node:fs';
+import path from 'node:path';
+import { resolvePluginManifestPath } from './manifest.js';
+import type { PluginOrigin } from './types.js';
 
 export type PluginCandidate = {
   /** Resolved directory of the plugin */
@@ -25,18 +25,20 @@ export type PluginDiscoveryResult = {
   errors: string[];
 };
 
-const ENTRY_EXTENSIONS = [".ts", ".js", ".mjs", ".cjs"];
+const ENTRY_EXTENSIONS = ['.ts', '.js', '.mjs', '.cjs'];
 
 function resolveEntry(dir: string): string | null {
   // Check package.json main/module
-  const pkgPath = path.join(dir, "package.json");
+  const pkgPath = path.join(dir, 'package.json');
   if (fs.existsSync(pkgPath)) {
     try {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       const main = pkg.main || pkg.module;
-      if (typeof main === "string") {
+      if (typeof main === 'string') {
         const resolved = path.resolve(dir, main);
-        if (fs.existsSync(resolved)) return resolved;
+        if (fs.existsSync(resolved)) {
+          return resolved;
+        }
       }
     } catch {
       // ignore
@@ -46,7 +48,9 @@ function resolveEntry(dir: string): string | null {
   // Check index files
   for (const ext of ENTRY_EXTENSIONS) {
     const candidate = path.join(dir, `index${ext}`);
-    if (fs.existsSync(candidate)) return candidate;
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
   }
 
   return null;
@@ -62,7 +66,9 @@ function scanDirectory(
   const candidates: PluginCandidate[] = [];
   const errors: string[] = [];
 
-  if (!fs.existsSync(baseDir)) return { candidates, errors };
+  if (!fs.existsSync(baseDir)) {
+    return { candidates, errors };
+  }
 
   let entries: fs.Dirent[];
   try {
@@ -72,12 +78,18 @@ function scanDirectory(
   }
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (entry.name.startsWith(".")) continue;
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    if (entry.name.startsWith('.')) {
+      continue;
+    }
 
     const dir = path.join(baseDir, entry.name);
     const manifestPath = resolvePluginManifestPath(dir);
-    if (!manifestPath) continue;
+    if (!manifestPath) {
+      continue;
+    }
 
     const source = resolveEntry(dir);
     if (!source) {
@@ -91,17 +103,14 @@ function scanDirectory(
   return { candidates, errors };
 }
 
-export function discoverPlugins(options: {
-  workspaceDir: string;
-  extraPaths?: string[];
-}): PluginDiscoveryResult {
+export function discoverPlugins(options: { workspaceDir: string; extraPaths?: string[] }): PluginDiscoveryResult {
   const allCandidates: PluginCandidate[] = [];
   const allErrors: string[] = [];
   const seen = new Set<string>();
 
   // 1. Workspace plugins: .pha/plugins/
-  const workspacePluginsDir = path.join(options.workspaceDir, "plugins");
-  const workspace = scanDirectory(workspacePluginsDir, "workspace");
+  const workspacePluginsDir = path.join(options.workspaceDir, 'plugins');
+  const workspace = scanDirectory(workspacePluginsDir, 'workspace');
   for (const c of workspace.candidates) {
     const key = fs.realpathSync(c.dir);
     if (!seen.has(key)) {
@@ -130,14 +139,14 @@ export function discoverPlugins(options: {
             const key = fs.realpathSync(resolved);
             if (!seen.has(key)) {
               seen.add(key);
-              allCandidates.push({ dir: resolved, source, origin: "config" });
+              allCandidates.push({ dir: resolved, source, origin: 'config' });
             }
           } else {
             allErrors.push(`configured plugin ${resolved}: has manifest but no entry file`);
           }
         } else {
           // Treat as a directory containing multiple plugins
-          const config = scanDirectory(resolved, "config");
+          const config = scanDirectory(resolved, 'config');
           for (const c of config.candidates) {
             const key = fs.realpathSync(c.dir);
             if (!seen.has(key)) {

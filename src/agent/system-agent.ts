@@ -13,29 +13,24 @@
  * - Tools: git, benchmark/diagnose, claude_code, file ops, memory, skills, tool feedback
  */
 
-import { Agent, type AgentEvent, type AgentMessage } from "@mariozechner/pi-agent-core";
-import { getModel, type Model } from "@mariozechner/pi-ai";
-import type { AgentTool } from "@mariozechner/pi-agent-core";
-import { readFileSync, existsSync, readdirSync } from "fs";
-import { join } from "path";
-import { globalRegistry } from "../tools/index.js";
-import { buildSkillRegistry } from "./system-prompt.js";
-import { claudeCodeAgentTool } from "./claude-code-tool.js";
-import { fileAgentTools } from "./file-tools.js";
+import { Agent, type AgentEvent, type AgentMessage } from '@mariozechner/pi-agent-core';
+import { getModel, type Model } from '@mariozechner/pi-ai';
+import type { AgentTool } from '@mariozechner/pi-agent-core';
+import { readFileSync, existsSync, readdirSync } from 'fs';
+import { join } from 'path';
+import { globalRegistry } from '../tools/index.js';
+import { buildSkillRegistry } from './system-prompt.js';
+import { claudeCodeAgentTool } from './claude-code-tool.js';
+import { fileAgentTools } from './file-tools.js';
 // Skill loading is now LLM-driven via system prompt skill registry + get_skill tool.
-import { sessionToAgentMessages } from "../memory/session-store.js";
-import { createSACompactionFlush } from "../memory/compaction.js";
-import { readMemoryFile, appendMemoryFile } from "../tools/system-memory-tools.js";
-import {
-  type LLMProvider,
-  DEFAULT_MODELS,
-  ENV_KEY_MAP,
-  BUILTIN_PROVIDERS,
-} from "../utils/config.js";
-import type { AgentProfile } from "./pha-agent.js";
-import { createLogger } from "../utils/logger.js";
+import { sessionToAgentMessages } from '../memory/session-store.js';
+import { createSACompactionFlush } from '../memory/compaction.js';
+import { readMemoryFile, appendMemoryFile } from '../tools/system-memory-tools.js';
+import { type LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS } from '../utils/config.js';
+import type { AgentProfile } from './pha-agent.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Agent/System");
+const log = createLogger('Agent/System');
 
 export interface SystemAgentConfig {
   apiKey?: string;
@@ -58,41 +53,45 @@ const FALLBACK_PROMPT = `你是 PHA 系统 Agent，负责管理和进化 PHA 系
  * Priority order: SOUL.md, AGENTS.md, then alphabetical.
  */
 function loadSystemAgentPrompt(): string {
-  const dir = join("src", "prompts", "system-agent");
+  const dir = join('src', 'prompts', 'system-agent');
   try {
     if (!existsSync(dir)) {
-      log.warn("system-agent prompts dir not found, using fallback");
+      log.warn('system-agent prompts dir not found, using fallback');
       return FALLBACK_PROMPT;
     }
 
-    const ordered = ["SOUL.md", "IDENTITY.md", "AGENTS.md", "TOOLS.md", "HEARTBEAT.md"];
-    const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
+    const ordered = ['SOUL.md', 'IDENTITY.md', 'AGENTS.md', 'TOOLS.md', 'HEARTBEAT.md'];
+    const files = readdirSync(dir).filter((f) => f.endsWith('.md'));
     const sections: string[] = [];
 
     // Load priority files first
     for (const name of ordered) {
       if (files.includes(name)) {
-        const content = readFileSync(join(dir, name), "utf-8").trim();
-        if (content) sections.push(content);
+        const content = readFileSync(join(dir, name), 'utf-8').trim();
+        if (content) {
+          sections.push(content);
+        }
       }
     }
 
     // Load remaining files alphabetically
     for (const file of files.sort()) {
       if (!ordered.includes(file)) {
-        const content = readFileSync(join(dir, file), "utf-8").trim();
-        if (content) sections.push(content);
+        const content = readFileSync(join(dir, file), 'utf-8').trim();
+        if (content) {
+          sections.push(content);
+        }
       }
     }
 
     if (sections.length === 0) {
-      log.warn("No prompt files found, using fallback");
+      log.warn('No prompt files found, using fallback');
       return FALLBACK_PROMPT;
     }
 
-    return sections.join("\n\n---\n\n");
+    return sections.join('\n\n---\n\n');
   } catch {
-    log.warn("Failed to load system-agent prompts, using fallback");
+    log.warn('Failed to load system-agent prompts, using fallback');
     return FALLBACK_PROMPT;
   }
 }
@@ -114,12 +113,14 @@ function buildSASystemPrompt(): string {
   const skillRegistry = buildSkillRegistry();
 
   // Load memory files (tail to get most recent content)
-  const memoryRaw = readMemoryFile("memory.md");
-  const evolutionRaw = readMemoryFile("evolution-log.md");
-  const experienceRaw = readMemoryFile("experience.md");
+  const memoryRaw = readMemoryFile('memory.md');
+  const evolutionRaw = readMemoryFile('evolution-log.md');
+  const experienceRaw = readMemoryFile('experience.md');
 
   const tailSlice = (text: string, maxChars: number): string => {
-    if (!text || text.length <= maxChars) return text;
+    if (!text || text.length <= maxChars) {
+      return text;
+    }
     return `...\n${text.slice(-maxChars)}`;
   };
 
@@ -127,8 +128,8 @@ function buildSASystemPrompt(): string {
   const evolution = tailSlice(evolutionRaw, SA_MEMORY_BUDGET.evolutionLog);
   const experience = tailSlice(experienceRaw, SA_MEMORY_BUDGET.experience);
 
-  const today = new Date().toISOString().split("T")[0];
-  const sections: string[] = [soul, "\n---\n", `## Session Context\n\n- **Date**: ${today}\n`];
+  const today = new Date().toISOString().split('T')[0];
+  const sections: string[] = [soul, '\n---\n', `## Session Context\n\n- **Date**: ${today}\n`];
 
   if (memory) {
     sections.push(`## System Memory\n\n${memory}\n`);
@@ -143,7 +144,7 @@ function buildSASystemPrompt(): string {
     sections.push(skillRegistry);
   }
 
-  const prompt = sections.join("\n");
+  const prompt = sections.join('\n');
 
   // Token distribution report (debug)
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
@@ -167,7 +168,7 @@ export class SystemAgent {
   private agent: Agent;
 
   constructor(config: SystemAgentConfig) {
-    const provider = config.provider || "anthropic";
+    const provider = config.provider || 'anthropic';
     const modelId = config.modelId || DEFAULT_MODELS[provider];
     const apiKey = config.apiKey || this.getEnvApiKey(provider);
 
@@ -183,13 +184,7 @@ export class SystemAgent {
     const systemPrompt = buildSASystemPrompt();
 
     // Assemble tools: registry-derived (profile-driven) + standalone tools
-    const categories = config.profile?.tools?.categories || [
-      "git",
-      "evolution",
-      "system",
-      "feedback",
-      "skill",
-    ];
+    const categories = config.profile?.tools?.categories || ['git', 'evolution', 'system', 'feedback', 'skill'];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: AgentTool<any>[] = [
       ...globalRegistry.toAgentToolsByCategories(categories),
@@ -206,15 +201,9 @@ export class SystemAgent {
       reserveTokens: 20000,
       flushThreshold: 4000,
       onFlush: (summary, transcript) => {
-        const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
-        appendMemoryFile(
-          "memory.md",
-          `\n## ${timestamp} (auto-saved before compaction)\n\n${summary}\n`
-        );
-        appendMemoryFile(
-          "experience.md",
-          `\n## ${timestamp} (conversation transcript)\n\n${transcript}\n`
-        );
+        const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        appendMemoryFile('memory.md', `\n## ${timestamp} (auto-saved before compaction)\n\n${summary}\n`);
+        appendMemoryFile('experience.md', `\n## ${timestamp} (conversation transcript)\n\n${transcript}\n`);
       },
     });
 
@@ -232,7 +221,7 @@ export class SystemAgent {
 
   private getEnvApiKey(provider: LLMProvider): string | undefined {
     const envKey = ENV_KEY_MAP[provider];
-    if (envKey && typeof process !== "undefined" && process.env[envKey]) {
+    if (envKey && typeof process !== 'undefined' && process.env[envKey]) {
       return process.env[envKey];
     }
     return undefined;
@@ -251,11 +240,11 @@ export class SystemAgent {
         model = {
           id: modelId,
           name: modelId,
-          api: "openai-completions" as const,
+          api: 'openai-completions' as const,
           provider: provider,
           baseUrl,
           reasoning: false,
-          input: ["text", "image"],
+          input: ['text', 'image'],
           cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
           contextWindow: 128000,
           maxTokens: 16384,
@@ -265,25 +254,23 @@ export class SystemAgent {
       model = {
         id: modelId,
         name: modelId,
-        api: "openai-completions" as const,
+        api: 'openai-completions' as const,
         provider: provider,
         baseUrl,
         reasoning: false,
-        input: ["text", "image"],
+        input: ['text', 'image'],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: 128000,
         maxTokens: 16384,
       };
     } else {
       throw new Error(
-        `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(", ")}`
+        `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(', ')}`
       );
     }
 
     if (!model) {
-      throw new Error(
-        `Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`
-      );
+      throw new Error(`Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`);
     }
 
     return model;
@@ -319,7 +306,7 @@ export class SystemAgent {
     let lastAssistantMessage: AgentMessage | null = null;
 
     const unsubscribe = this.subscribe((event) => {
-      if (event.type === "message_end" && event.message.role === "assistant") {
+      if (event.type === 'message_end' && event.message.role === 'assistant') {
         lastAssistantMessage = event.message;
       }
     });
@@ -331,12 +318,12 @@ export class SystemAgent {
       unsubscribe();
     }
 
-    let finalContent = "";
+    let finalContent = '';
     if (lastAssistantMessage) {
       // pi-agent-core event types lack property declarations
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const block of (lastAssistantMessage as any).content) {
-        if (block.type === "text") {
+        if (block.type === 'text') {
           finalContent += block.text;
         }
       }

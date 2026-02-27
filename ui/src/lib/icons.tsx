@@ -104,6 +104,6 @@ export function getIcon(nameOrEmoji: string): string {
 
 export function Icon({ name, className }: { name: string; className?: string }) {
   const svg = getIcon(name);
-  if (svg === name) return <span className={className}>{name}</span>;
+  if (svg === name) { return <span className={className}>{name}</span>; }
   return <span className={className} dangerouslySetInnerHTML={{ __html: svg }} />;
 }

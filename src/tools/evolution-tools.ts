@@ -23,22 +23,18 @@ import {
   getSuggestion,
   insertSuggestion,
   updateSuggestionStatus,
-} from "../memory/db.js";
-import { BenchmarkRunner, type BenchmarkRunnerConfig } from "../evolution/benchmark-runner.js";
-import {
-  diagnose,
-  type DiagnoseResult,
-  type ExistingBenchmarkData,
-} from "../evolution/diagnose.js";
+} from '../memory/db.js';
+import { BenchmarkRunner, type BenchmarkRunnerConfig } from '../evolution/benchmark-runner.js';
+import { diagnose, type DiagnoseResult, type ExistingBenchmarkData } from '../evolution/diagnose.js';
 import type {
   BenchmarkProfile,
   BenchmarkCategory,
   BenchmarkRun,
   BenchmarkResult,
   CategoryScore,
-} from "../evolution/types.js";
-import { appendEvolutionLog } from "./system-memory-tools.js";
-import type { PHATool } from "./types.js";
+} from '../evolution/types.js';
+import { appendEvolutionLog } from './system-memory-tools.js';
+import type { PHATool } from './types.js';
 
 // ============================================================================
 // Runtime config for benchmark/diagnose (injected by server.ts)
@@ -55,9 +51,7 @@ export function setEvolutionRunnerConfig(config: BenchmarkRunnerConfig): void {
 
 function getRunnerConfig(): BenchmarkRunnerConfig {
   if (!_runnerConfig) {
-    throw new Error(
-      "Evolution runner not configured. Start the server or initialize the agent first."
-    );
+    throw new Error('Evolution runner not configured. Start the server or initialize the agent first.');
   }
   return _runnerConfig;
 }
@@ -67,26 +61,26 @@ function getRunnerConfig(): BenchmarkRunnerConfig {
 // ============================================================================
 
 export const listTracesTool: PHATool<{ limit?: number; offset?: number; sessionId?: string }> = {
-  name: "list_traces",
-  description: "列出 Agent 交互追踪记录，支持筛选",
-  displayName: "追踪列表",
-  category: "evolution" as const,
-  icon: "search",
-  label: "List Traces",
+  name: 'list_traces',
+  description: '列出 Agent 交互追踪记录，支持筛选',
+  displayName: '追踪列表',
+  category: 'evolution' as const,
+  icon: 'search',
+  label: 'List Traces',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       limit: {
-        type: "number",
-        description: "Maximum number of traces to return (default: 20)",
+        type: 'number',
+        description: 'Maximum number of traces to return (default: 20)',
       },
       offset: {
-        type: "number",
-        description: "Number of traces to skip for pagination",
+        type: 'number',
+        description: 'Number of traces to skip for pagination',
       },
       sessionId: {
-        type: "string",
-        description: "Filter by session ID",
+        type: 'string',
+        description: 'Filter by session ID',
       },
     },
   },
@@ -106,9 +100,8 @@ export const listTracesTool: PHATool<{ limit?: number; offset?: number; sessionI
         id: r.id,
         sessionId: r.session_id,
         timestamp: r.timestamp,
-        userMessage: r.user_message.slice(0, 100) + (r.user_message.length > 100 ? "..." : ""),
-        responsePreview:
-          r.agent_response.slice(0, 100) + (r.agent_response.length > 100 ? "..." : ""),
+        userMessage: r.user_message.slice(0, 100) + (r.user_message.length > 100 ? '...' : ''),
+        responsePreview: r.agent_response.slice(0, 100) + (r.agent_response.length > 100 ? '...' : ''),
         durationMs: r.duration_ms,
         hasToolCalls: !!r.tool_calls,
       })),
@@ -120,21 +113,21 @@ export const listTracesTool: PHATool<{ limit?: number; offset?: number; sessionI
 };
 
 export const getTraceTool: PHATool<{ id: string }> = {
-  name: "get_trace",
-  description: "获取特定追踪记录的完整详情",
-  displayName: "追踪详情",
-  category: "evolution" as const,
-  icon: "search",
-  label: "Get Trace",
+  name: 'get_trace',
+  description: '获取特定追踪记录的完整详情',
+  displayName: '追踪详情',
+  category: 'evolution' as const,
+  icon: 'search',
+  label: 'Get Trace',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       id: {
-        type: "string",
-        description: "Trace ID",
+        type: 'string',
+        description: 'Trace ID',
       },
     },
-    required: ["id"],
+    required: ['id'],
   },
   execute: async (args: { id: string }) => {
     const row = getTrace(args.id);
@@ -179,14 +172,14 @@ export const getTraceTool: PHATool<{ id: string }> = {
 // ============================================================================
 
 export const getEvaluationStatsTool: PHATool<Record<string, never>> = {
-  name: "get_evaluation_stats",
-  description: "获取评估统计汇总",
-  displayName: "评估统计",
-  category: "evolution" as const,
-  icon: "bar-chart",
-  label: "Get Evaluation Stats",
+  name: 'get_evaluation_stats',
+  description: '获取评估统计汇总',
+  displayName: '评估统计',
+  category: 'evolution' as const,
+  icon: 'bar-chart',
+  label: 'Get Evaluation Stats',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {},
   },
   execute: async () => {
@@ -208,26 +201,26 @@ export const listEvaluationsTool: PHATool<{
   minScore?: number;
   maxScore?: number;
 }> = {
-  name: "list_evaluations",
-  description: "列出评估结果，支持按分数筛选",
-  displayName: "评估列表",
-  category: "evolution" as const,
-  icon: "bar-chart",
-  label: "List Evaluations",
+  name: 'list_evaluations',
+  description: '列出评估结果，支持按分数筛选',
+  displayName: '评估列表',
+  category: 'evolution' as const,
+  icon: 'bar-chart',
+  label: 'List Evaluations',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       limit: {
-        type: "number",
-        description: "Maximum number of evaluations to return (default: 20)",
+        type: 'number',
+        description: 'Maximum number of evaluations to return (default: 20)',
       },
       minScore: {
-        type: "number",
-        description: "Minimum overall score filter",
+        type: 'number',
+        description: 'Minimum overall score filter',
       },
       maxScore: {
-        type: "number",
-        description: "Maximum overall score filter",
+        type: 'number',
+        description: 'Maximum overall score filter',
       },
     },
   },
@@ -260,22 +253,22 @@ export const listEvaluationsTool: PHATool<{
 // ============================================================================
 
 export const listTestCasesTool: PHATool<{ category?: string; limit?: number }> = {
-  name: "list_test_cases",
-  description: "列出基准测试用例",
-  displayName: "测试用例列表",
-  category: "evolution" as const,
-  icon: "test-tube",
-  label: "List Test Cases",
+  name: 'list_test_cases',
+  description: '列出基准测试用例',
+  displayName: '测试用例列表',
+  category: 'evolution' as const,
+  icon: 'test-tube',
+  label: 'List Test Cases',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       category: {
-        type: "string",
-        description: "Filter by category",
+        type: 'string',
+        description: 'Filter by category',
       },
       limit: {
-        type: "number",
-        description: "Maximum number of test cases to return",
+        type: 'number',
+        description: 'Maximum number of test cases to return',
       },
     },
   },
@@ -291,7 +284,7 @@ export const listTestCasesTool: PHATool<{ category?: string; limit?: number }> =
       testCases: rows.map((r) => ({
         id: r.id,
         category: r.category,
-        query: r.query.slice(0, 100) + (r.query.length > 100 ? "..." : ""),
+        query: r.query.slice(0, 100) + (r.query.length > 100 ? '...' : ''),
         expected: JSON.parse(r.expected),
         createdAt: r.created_at,
       })),
@@ -301,21 +294,21 @@ export const listTestCasesTool: PHATool<{ category?: string; limit?: number }> =
 };
 
 export const getTestCaseTool: PHATool<{ id: string }> = {
-  name: "get_test_case",
-  description: "获取测试用例的完整详情",
-  displayName: "测试用例详情",
-  category: "evolution" as const,
-  icon: "test-tube",
-  label: "Get Test Case",
+  name: 'get_test_case',
+  description: '获取测试用例的完整详情',
+  displayName: '测试用例详情',
+  category: 'evolution' as const,
+  icon: 'test-tube',
+  label: 'Get Test Case',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       id: {
-        type: "string",
-        description: "Test case ID",
+        type: 'string',
+        description: 'Test case ID',
       },
     },
-    required: ["id"],
+    required: ['id'],
   },
   execute: async (args: { id: string }) => {
     const row = getTestCase(args.id);
@@ -350,43 +343,43 @@ export const createTestCaseTool: PHATool<{
   shouldNotMention?: string[];
   minScore?: number;
 }> = {
-  name: "create_test_case",
-  description: "创建新的基准测试用例",
-  displayName: "创建测试用例",
-  category: "evolution" as const,
-  icon: "test-tube",
-  label: "Create Test Case",
+  name: 'create_test_case',
+  description: '创建新的基准测试用例',
+  displayName: '创建测试用例',
+  category: 'evolution' as const,
+  icon: 'test-tube',
+  label: 'Create Test Case',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       category: {
-        type: "string",
+        type: 'string',
         description: "Test category (e.g., 'sleep', 'heart', 'activity', 'safety')",
       },
       query: {
-        type: "string",
-        description: "The user query to test",
+        type: 'string',
+        description: 'The user query to test',
       },
       context: {
-        type: "object",
-        description: "Optional context (health data) for the test",
+        type: 'object',
+        description: 'Optional context (health data) for the test',
       },
       shouldMention: {
-        type: "array",
-        items: { type: "string" },
-        description: "Keywords the response should mention",
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Keywords the response should mention',
       },
       shouldNotMention: {
-        type: "array",
-        items: { type: "string" },
-        description: "Keywords the response should NOT mention",
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Keywords the response should NOT mention',
       },
       minScore: {
-        type: "number",
-        description: "Minimum acceptable score (0-100)",
+        type: 'number',
+        description: 'Minimum acceptable score (0-100)',
       },
     },
-    required: ["category", "query"],
+    required: ['category', 'query'],
   },
   execute: async (args: {
     category: string;
@@ -418,21 +411,21 @@ export const createTestCaseTool: PHATool<{
 };
 
 export const deleteTestCaseTool: PHATool<{ id: string }> = {
-  name: "delete_test_case",
-  description: "删除基准测试用例",
-  displayName: "删除测试用例",
-  category: "evolution" as const,
-  icon: "test-tube",
-  label: "Delete Test Case",
+  name: 'delete_test_case',
+  description: '删除基准测试用例',
+  displayName: '删除测试用例',
+  category: 'evolution' as const,
+  icon: 'test-tube',
+  label: 'Delete Test Case',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       id: {
-        type: "string",
-        description: "Test case ID to delete",
+        type: 'string',
+        description: 'Test case ID to delete',
       },
     },
-    required: ["id"],
+    required: ['id'],
   },
   execute: async (args: { id: string }) => {
     const existing = getTestCase(args.id);
@@ -457,26 +450,26 @@ export const deleteTestCaseTool: PHATool<{ id: string }> = {
 // ============================================================================
 
 export const listSuggestionsTool: PHATool<{ status?: string; type?: string; limit?: number }> = {
-  name: "list_suggestions",
-  description: "列出优化建议",
-  displayName: "建议列表",
-  category: "evolution" as const,
-  icon: "lightbulb",
-  label: "List Suggestions",
+  name: 'list_suggestions',
+  description: '列出优化建议',
+  displayName: '建议列表',
+  category: 'evolution' as const,
+  icon: 'lightbulb',
+  label: 'List Suggestions',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       status: {
-        type: "string",
-        description: "Filter by status: pending, testing, validated, applied, rejected",
+        type: 'string',
+        description: 'Filter by status: pending, testing, validated, applied, rejected',
       },
       type: {
-        type: "string",
-        description: "Filter by type: prompt, tool, behavior",
+        type: 'string',
+        description: 'Filter by type: prompt, tool, behavior',
       },
       limit: {
-        type: "number",
-        description: "Maximum number of suggestions to return",
+        type: 'number',
+        description: 'Maximum number of suggestions to return',
       },
     },
   },
@@ -496,7 +489,7 @@ export const listSuggestionsTool: PHATool<{ status?: string; type?: string; limi
         type: r.type,
         target: r.target,
         status: r.status,
-        rationale: r.rationale?.slice(0, 100) + ((r.rationale?.length || 0) > 100 ? "..." : ""),
+        rationale: r.rationale?.slice(0, 100) + ((r.rationale?.length || 0) > 100 ? '...' : ''),
         hasValidation: !!r.validation_results,
       })),
       count: rows.length,
@@ -505,21 +498,21 @@ export const listSuggestionsTool: PHATool<{ status?: string; type?: string; limi
 };
 
 export const getSuggestionTool: PHATool<{ id: string }> = {
-  name: "get_suggestion",
-  description: "获取建议的完整详情",
-  displayName: "建议详情",
-  category: "evolution" as const,
-  icon: "lightbulb",
-  label: "Get Suggestion",
+  name: 'get_suggestion',
+  description: '获取建议的完整详情',
+  displayName: '建议详情',
+  category: 'evolution' as const,
+  icon: 'lightbulb',
+  label: 'Get Suggestion',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       id: {
-        type: "string",
-        description: "Suggestion ID",
+        type: 'string',
+        description: 'Suggestion ID',
       },
     },
-    required: ["id"],
+    required: ['id'],
   },
   execute: async (args: { id: string }) => {
     const row = getSuggestion(args.id);
@@ -549,46 +542,46 @@ export const getSuggestionTool: PHATool<{ id: string }> = {
 };
 
 export const createSuggestionTool: PHATool<{
-  type: "prompt" | "tool" | "behavior";
+  type: 'prompt' | 'tool' | 'behavior';
   target: string;
   currentValue?: string;
   suggestedValue: string;
   rationale?: string;
 }> = {
-  name: "create_suggestion",
-  description: "创建优化建议",
-  displayName: "创建建议",
-  category: "evolution" as const,
-  icon: "lightbulb",
-  label: "Create Suggestion",
+  name: 'create_suggestion',
+  description: '创建优化建议',
+  displayName: '创建建议',
+  category: 'evolution' as const,
+  icon: 'lightbulb',
+  label: 'Create Suggestion',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       type: {
-        type: "string",
-        description: "Type: prompt, tool, or behavior",
+        type: 'string',
+        description: 'Type: prompt, tool, or behavior',
       },
       target: {
-        type: "string",
+        type: 'string',
         description: "What to change (e.g., 'SOUL.md', 'get_health_data')",
       },
       currentValue: {
-        type: "string",
-        description: "Current value/behavior",
+        type: 'string',
+        description: 'Current value/behavior',
       },
       suggestedValue: {
-        type: "string",
-        description: "Suggested new value/behavior",
+        type: 'string',
+        description: 'Suggested new value/behavior',
       },
       rationale: {
-        type: "string",
-        description: "Why this change would improve performance",
+        type: 'string',
+        description: 'Why this change would improve performance',
       },
     },
-    required: ["type", "target", "suggestedValue"],
+    required: ['type', 'target', 'suggestedValue'],
   },
   execute: async (args: {
-    type: "prompt" | "tool" | "behavior";
+    type: 'prompt' | 'tool' | 'behavior';
     target: string;
     currentValue?: string;
     suggestedValue: string;
@@ -616,41 +609,41 @@ export const createSuggestionTool: PHATool<{
 
 export const updateSuggestionStatusTool: PHATool<{
   id: string;
-  status: "pending" | "testing" | "validated" | "applied" | "rejected";
+  status: 'pending' | 'testing' | 'validated' | 'applied' | 'rejected';
   validationResults?: { before: number; after: number; improvement: number };
 }> = {
-  name: "update_suggestion_status",
-  description: "更新建议的状态",
-  displayName: "更新建议状态",
-  category: "evolution" as const,
-  icon: "lightbulb",
-  label: "Update Suggestion Status",
+  name: 'update_suggestion_status',
+  description: '更新建议的状态',
+  displayName: '更新建议状态',
+  category: 'evolution' as const,
+  icon: 'lightbulb',
+  label: 'Update Suggestion Status',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       id: {
-        type: "string",
-        description: "Suggestion ID",
+        type: 'string',
+        description: 'Suggestion ID',
       },
       status: {
-        type: "string",
-        description: "New status: pending, testing, validated, applied, rejected",
+        type: 'string',
+        description: 'New status: pending, testing, validated, applied, rejected',
       },
       validationResults: {
-        type: "object",
+        type: 'object',
         properties: {
-          before: { type: "number" },
-          after: { type: "number" },
-          improvement: { type: "number" },
+          before: { type: 'number' },
+          after: { type: 'number' },
+          improvement: { type: 'number' },
         },
         description: "Optional validation results when status is 'validated'",
       },
     },
-    required: ["id", "status"],
+    required: ['id', 'status'],
   },
   execute: async (args: {
     id: string;
-    status: "pending" | "testing" | "validated" | "applied" | "rejected";
+    status: 'pending' | 'testing' | 'validated' | 'applied' | 'rejected';
     validationResults?: { before: number; after: number; improvement: number };
   }) => {
     const existing = getSuggestion(args.id);
@@ -675,23 +668,23 @@ export const updateSuggestionStatusTool: PHATool<{
 // ============================================================================
 
 export const listBenchmarkRunsTool: PHATool<{ limit?: number }> = {
-  name: "list_benchmark_runs",
-  description: "列出基准评测运行历史，含分数和通过/失败计数",
-  displayName: "评测列表",
-  category: "evolution" as const,
-  icon: "flask",
-  label: "List Benchmark Runs",
+  name: 'list_benchmark_runs',
+  description: '列出基准评测运行历史，含分数和通过/失败计数',
+  displayName: '评测列表',
+  category: 'evolution' as const,
+  icon: 'flask',
+  label: 'List Benchmark Runs',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       limit: {
-        type: "number",
-        description: "Maximum number of runs to return (default: 10)",
+        type: 'number',
+        description: 'Maximum number of runs to return (default: 10)',
       },
     },
   },
   execute: async (args?: { limit?: number }) => {
-    const { listBenchmarkRuns } = await import("../memory/db.js");
+    const { listBenchmarkRuns } = await import('../memory/db.js');
     const rows = listBenchmarkRuns({ limit: args?.limit || 10 });
 
     return {
@@ -713,25 +706,24 @@ export const listBenchmarkRunsTool: PHATool<{ limit?: number }> = {
 };
 
 export const getBenchmarkRunDetailsTool: PHATool<{ runId: string }> = {
-  name: "get_benchmark_run_details",
-  description: "获取基准评测运行的详细结果，含各维度分数",
-  displayName: "评测详情",
-  category: "evolution" as const,
-  icon: "flask",
-  label: "Get Benchmark Run Details",
+  name: 'get_benchmark_run_details',
+  description: '获取基准评测运行的详细结果，含各维度分数',
+  displayName: '评测详情',
+  category: 'evolution' as const,
+  icon: 'flask',
+  label: 'Get Benchmark Run Details',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       runId: {
-        type: "string",
-        description: "Benchmark run ID",
+        type: 'string',
+        description: 'Benchmark run ID',
       },
     },
-    required: ["runId"],
+    required: ['runId'],
   },
   execute: async (args: { runId: string }) => {
-    const { getBenchmarkRun, listCategoryScores, listBenchmarkResults } =
-      await import("../memory/db.js");
+    const { getBenchmarkRun, listCategoryScores, listBenchmarkResults } = await import('../memory/db.js');
 
     const run = getBenchmarkRun(args.runId);
     if (!run) {
@@ -777,35 +769,34 @@ export const runBenchmarkTool: PHATool<{
   category?: string;
   versionTag?: string;
 }> = {
-  name: "run_benchmark",
+  name: 'run_benchmark',
   description:
-    "运行基准评测套件，从五个维度衡量 Agent 能力：健康数据分析、健康指导、安全边界、个性化记忆、沟通质量。返回分数和雷达图数据。",
-  displayName: "运行评测",
-  category: "evolution" as const,
-  icon: "play",
-  label: "Run Benchmark",
+    '运行基准评测套件，从五个维度衡量 Agent 能力：健康数据分析、健康指导、安全边界、个性化记忆、沟通质量。返回分数和雷达图数据。',
+  displayName: '运行评测',
+  category: 'evolution' as const,
+  icon: 'play',
+  label: 'Run Benchmark',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       profile: {
-        type: "string",
-        description:
-          "Benchmark profile: 'quick' (20 core tests) or 'full' (80+ tests). Default: 'quick'",
+        type: 'string',
+        description: "Benchmark profile: 'quick' (20 core tests) or 'full' (80+ tests). Default: 'quick'",
       },
       category: {
-        type: "string",
+        type: 'string',
         description:
-          "Optional: run only a specific category (health-data-analysis, health-coaching, safety-boundaries, personalization-memory, communication-quality)",
+          'Optional: run only a specific category (health-data-analysis, health-coaching, safety-boundaries, personalization-memory, communication-quality)',
       },
       versionTag: {
-        type: "string",
-        description: "Optional version tag for this benchmark run",
+        type: 'string',
+        description: 'Optional version tag for this benchmark run',
       },
     },
   },
   execute: async (args?: { profile?: string; category?: string; versionTag?: string }) => {
     const config = getRunnerConfig();
-    const profile = (args?.profile || "quick") as BenchmarkProfile;
+    const profile = (args?.profile || 'quick') as BenchmarkProfile;
 
     const runner = new BenchmarkRunner(config);
     await runner.seedTestCases();
@@ -816,8 +807,7 @@ export const runBenchmarkTool: PHATool<{
       versionTag: args?.versionTag,
     });
 
-    const categories: Array<{ category: string; score: number; passed: number; total: number }> =
-      [];
+    const categories: Array<{ category: string; score: number; passed: number; total: number }> = [];
     for (const [cat, catScore] of categoryScores) {
       categories.push({
         category: cat,
@@ -829,9 +819,7 @@ export const runBenchmarkTool: PHATool<{
 
     // Auto-log benchmark result to evolution-log.md
     try {
-      const catSummary = categories
-        .map((c) => `  - ${c.category}: ${c.score} (${c.passed}/${c.total})`)
-        .join("\n");
+      const catSummary = categories.map((c) => `  - ${c.category}: ${c.score} (${c.passed}/${c.total})`).join('\n');
       appendEvolutionLog(
         `**Benchmark Run** (${profile})\n` +
           `Overall: ${run.overallScore.toFixed(3)} | Passed: ${run.passedCount}/${run.totalTestCases} | Duration: ${run.durationMs}ms\n` +
@@ -867,17 +855,13 @@ export const runBenchmarkTool: PHATool<{
 // Diagnose helpers
 // ============================================================================
 
-async function loadExistingBenchmarkData(
-  runId: string
-): Promise<ExistingBenchmarkData | undefined> {
-  const {
-    getBenchmarkRun,
-    listBenchmarkResults: listBR,
-    listCategoryScores: listCS,
-  } = await import("../memory/db.js");
+async function loadExistingBenchmarkData(runId: string): Promise<ExistingBenchmarkData | undefined> {
+  const { getBenchmarkRun, listBenchmarkResults: listBR, listCategoryScores: listCS } = await import('../memory/db.js');
 
   const runRow = getBenchmarkRun(runId);
-  if (!runRow) return undefined;
+  if (!runRow) {
+    return undefined;
+  }
 
   const run: BenchmarkRun = {
     id: runRow.id,
@@ -890,7 +874,7 @@ async function loadExistingBenchmarkData(
     failedCount: runRow.failed_count,
     overallScore: runRow.overall_score,
     durationMs: runRow.duration_ms ?? 0,
-    profile: runRow.profile as "quick" | "full",
+    profile: runRow.profile as 'quick' | 'full',
     metadata: runRow.metadata ? JSON.parse(runRow.metadata) : undefined,
   };
 
@@ -899,12 +883,12 @@ async function loadExistingBenchmarkData(
     runId: r.run_id,
     testCaseId: r.test_case_id,
     timestamp: r.timestamp,
-    agentResponse: r.agent_response ?? "",
+    agentResponse: r.agent_response ?? '',
     toolCalls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
     scores: r.scores ? JSON.parse(r.scores) : [],
     overallScore: r.overall_score,
     passed: r.passed === 1,
-    feedback: r.feedback ?? "",
+    feedback: r.feedback ?? '',
     issues: r.issues ? JSON.parse(r.issues) : undefined,
     durationMs: r.duration_ms ?? 0,
   }));
@@ -930,22 +914,18 @@ async function loadExistingBenchmarkData(
 function logDiagnoseResult(result: DiagnoseResult): void {
   try {
     const weakSummary = result.weaknesses
-      .map(
-        (w) =>
-          `  - ${w.label}: ${w.score.toFixed(2)} (gap: ${w.gap.toFixed(2)}, ${w.failingTests.length} failing)`
-      )
-      .join("\n");
+      .map((w) => `  - ${w.label}: ${w.score.toFixed(2)} (gap: ${w.gap.toFixed(2)}, ${w.failingTests.length} failing)`)
+      .join('\n');
     const sugSummary = result.suggestions
       .slice(0, 5)
       .map((s) => `  - [${s.priority}] ${s.category}: ${s.description.slice(0, 80)}`)
-      .join("\n");
-    const gapSummary =
-      result.dataGaps.length > 0 ? `Data Gaps: ${result.dataGaps.length} issues found` : "";
+      .join('\n');
+    const gapSummary = result.dataGaps.length > 0 ? `Data Gaps: ${result.dataGaps.length} issues found` : '';
     appendEvolutionLog(
       `**Diagnose Result**\n` +
         `Overall: ${result.overallScore.toFixed(3)} | ${result.run.passedCount}/${result.run.totalTestCases} passed\n${
-          weakSummary ? `Weaknesses:\n${weakSummary}\n` : ""
-        }${sugSummary ? `Top Suggestions:\n${sugSummary}\n` : ""}${gapSummary ? `${gapSummary}\n` : ""}`
+          weakSummary ? `Weaknesses:\n${weakSummary}\n` : ''
+        }${sugSummary ? `Top Suggestions:\n${sugSummary}\n` : ''}${gapSummary ? `${gapSummary}\n` : ''}`
     );
   } catch {
     /* best-effort logging */
@@ -994,35 +974,34 @@ export const runDiagnoseTool: PHATool<{
   profile?: string;
   createIssues?: boolean;
 }> = {
-  name: "run_diagnose",
+  name: 'run_diagnose',
   description:
-    "运行诊断流水线：使用 LLM 分析评测弱项并生成改进建议。如提供 runId 则使用数据库中已有的评测结果（快速，无需重跑）；否则先运行新的基准评测。",
-  displayName: "运行诊断",
-  category: "evolution" as const,
-  icon: "stethoscope",
-  label: "Run Diagnose",
+    '运行诊断流水线：使用 LLM 分析评测弱项并生成改进建议。如提供 runId 则使用数据库中已有的评测结果（快速，无需重跑）；否则先运行新的基准评测。',
+  displayName: '运行诊断',
+  category: 'evolution' as const,
+  icon: 'stethoscope',
+  label: 'Run Diagnose',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       runId: {
-        type: "string",
+        type: 'string',
         description:
-          "Existing benchmark run ID to analyze. If provided, loads results from DB instead of re-running benchmark. Use list_benchmark_runs to find available run IDs.",
+          'Existing benchmark run ID to analyze. If provided, loads results from DB instead of re-running benchmark. Use list_benchmark_runs to find available run IDs.',
       },
       profile: {
-        type: "string",
-        description:
-          "Benchmark profile: 'quick' or 'full'. Only used when runId is not provided. Default: 'quick'",
+        type: 'string',
+        description: "Benchmark profile: 'quick' or 'full'. Only used when runId is not provided. Default: 'quick'",
       },
       createIssues: {
-        type: "boolean",
-        description: "Whether to create GitHub issues for each weakness. Default: false",
+        type: 'boolean',
+        description: 'Whether to create GitHub issues for each weakness. Default: false',
       },
     },
   },
   execute: async (args?: { runId?: string; profile?: string; createIssues?: boolean }) => {
     const config = getRunnerConfig();
-    const profile = (args?.profile || "quick") as BenchmarkProfile;
+    const profile = (args?.profile || 'quick') as BenchmarkProfile;
 
     const existingBenchmark = args?.runId ? await loadExistingBenchmarkData(args.runId) : undefined;
     if (args?.runId && !existingBenchmark) {

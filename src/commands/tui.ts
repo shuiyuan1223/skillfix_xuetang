@@ -10,8 +10,8 @@
  * Transport: HTTP+SSE (POST /api/a2ui/init, POST /api/a2ui/action, GET /api/a2ui/events)
  */
 
-import type { Command } from "commander";
-import { loadConfig, PROVIDER_CONFIGS, type LLMProvider, type PHAConfig } from "../utils/config.js";
+import type { Command } from 'commander';
+import { loadConfig, PROVIDER_CONFIGS, type LLMProvider, type PHAConfig } from '../utils/config.js';
 import {
   TUI,
   ProcessTerminal,
@@ -25,13 +25,8 @@ import {
   type EditorTheme,
   type MarkdownTheme,
   type SelectListTheme,
-} from "@mariozechner/pi-tui";
-import {
-  renderA2UIToTUI,
-  renderNavBar,
-  renderActionBar,
-  type TUIAction,
-} from "../gateway/tui-renderer.js";
+} from '@mariozechner/pi-tui';
+import { renderA2UIToTUI, renderNavBar, renderActionBar, type TUIAction } from '../gateway/tui-renderer.js';
 
 // Theme colors
 const colors = {
@@ -82,7 +77,7 @@ const editorTheme: EditorTheme = {
 };
 
 interface ChatMessage {
-  role: "user" | "assistant" | "tool";
+  role: 'user' | 'assistant' | 'tool';
   content: string;
 }
 
@@ -124,7 +119,7 @@ interface TUIContext {
   messagesContainer: Container;
   pageContainer: Container;
   processMessage: (msg: GatewayMessage) => void;
-  addChatMessage: (role: "user" | "assistant" | "tool", content: string) => void;
+  addChatMessage: (role: 'user' | 'assistant' | 'tool', content: string) => void;
   finishResponse: () => void;
 }
 
@@ -135,15 +130,17 @@ function createTransportHelpers(ctx: TUIContext): {
   startSSE: () => Promise<void>;
 } {
   function processUpdates(updates: unknown[]): void {
-    for (const msg of updates) ctx.processMessage(msg as GatewayMessage);
+    for (const msg of updates) {
+      ctx.processMessage(msg as GatewayMessage);
+    }
   }
 
   async function sendAction(action: string, payload?: Record<string, unknown>): Promise<void> {
     try {
       const res = await fetch(`${ctx.baseUrl}/api/a2ui/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "action", action, payload, sessionId: ctx.sessionId }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'action', action, payload, sessionId: ctx.sessionId }),
       });
       const result = (await res.json()) as { updates: unknown[] };
       processUpdates(result.updates);
@@ -155,9 +152,9 @@ function createTransportHelpers(ctx: TUIContext): {
   async function sendNavigate(view: string): Promise<void> {
     try {
       const res = await fetch(`${ctx.baseUrl}/api/a2ui/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "navigate", view, sessionId: ctx.sessionId }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'navigate', view, sessionId: ctx.sessionId }),
       });
       const result = (await res.json()) as { updates: unknown[] };
       processUpdates(result.updates);
@@ -169,10 +166,10 @@ function createTransportHelpers(ctx: TUIContext): {
   async function sendUserMessage(content: string): Promise<void> {
     try {
       const res = await fetch(`${ctx.baseUrl}/api/a2ui/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: "user_message",
+          type: 'user_message',
           payload: { content },
           sessionId: ctx.sessionId,
         }),
@@ -190,19 +187,23 @@ function createTransportHelpers(ctx: TUIContext): {
       const res = await fetch(`${ctx.baseUrl}/api/a2ui/events?sessionId=${ctx.sessionId}`, {
         signal: ctx.sseAbortController.signal,
       });
-      if (!res.body) return;
+      if (!res.body) {
+        return;
+      }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
+      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
+          if (line.startsWith('data: ')) {
             try {
               const msg = JSON.parse(line.slice(6));
               ctx.processMessage(msg);
@@ -213,8 +214,10 @@ function createTransportHelpers(ctx: TUIContext): {
         }
       }
     } catch (e: unknown) {
-      if ((e as { name?: string })?.name !== "AbortError") {
-        if (ctx.connected) setTimeout(() => startSSE(), 1000);
+      if ((e as { name?: string })?.name !== 'AbortError') {
+        if (ctx.connected) {
+          setTimeout(() => startSSE(), 1000);
+        }
       }
     }
   }
@@ -231,23 +234,25 @@ function setupEditorSubmit(
   showHelp: () => void
 ): void {
   ctx.editor.onSubmit = (text) => {
-    if (!text.trim() || ctx.isProcessing) return;
+    if (!text.trim() || ctx.isProcessing) {
+      return;
+    }
     const cmd = text.trim();
 
-    if (cmd === "/quit" || cmd === "/exit") {
+    if (cmd === '/quit' || cmd === '/exit') {
       cleanup();
       return;
     }
-    if (cmd === "/clear") {
+    if (cmd === '/clear') {
       ctx.chatMessages.length = 0;
       updateChatMessages(ctx);
-      ctx.editor.setText("");
+      ctx.editor.setText('');
       ctx.tui.requestRender();
       return;
     }
-    if (cmd === "/help") {
+    if (cmd === '/help') {
       showHelp();
-      ctx.editor.setText("");
+      ctx.editor.setText('');
       ctx.tui.requestRender();
       return;
     }
@@ -255,7 +260,7 @@ function setupEditorSubmit(
     const navTarget = SLASH_NAV[cmd];
     if (navTarget) {
       navigateTo(navTarget);
-      ctx.editor.setText("");
+      ctx.editor.setText('');
       return;
     }
 
@@ -264,18 +269,18 @@ function setupEditorSubmit(
       if (idx >= 0 && idx < ctx.pageActions.length) {
         const action = ctx.pageActions[idx];
         transport.sendAction(action.action, action.payload);
-        ctx.editor.setText("");
+        ctx.editor.setText('');
         return;
       }
     }
 
-    if (ctx.currentView === "chat") {
-      ctx.addChatMessage("user", cmd);
-      ctx.editor.setText("");
+    if (ctx.currentView === 'chat') {
+      ctx.addChatMessage('user', cmd);
+      ctx.editor.setText('');
       ctx.editor.disableSubmit = true;
       ctx.isProcessing = true;
-      ctx.currentAssistantMessage = "";
-      ctx.loader = new Loader(ctx.tui, colors.cyan, colors.dim, "Thinking...");
+      ctx.currentAssistantMessage = '';
+      ctx.loader = new Loader(ctx.tui, colors.cyan, colors.dim, 'Thinking...');
       ctx.contentContainer.addChild(ctx.loader);
       ctx.loader.start();
       ctx.tui.requestRender();
@@ -283,27 +288,23 @@ function setupEditorSubmit(
       return;
     }
 
-    ctx.editor.setText("");
-    showToast("Type a number to select an action, or /help for commands");
+    ctx.editor.setText('');
+    showToast('Type a number to select an action, or /help for commands');
   };
 }
 
 function updateChatMessages(ctx: TUIContext): void {
   ctx.messagesContainer.clear();
   for (const msg of ctx.chatMessages) {
-    if (msg.role === "user") {
-      ctx.messagesContainer.addChild(
-        new Text(`${colors.green("You")} ${colors.dim(">")} ${msg.content}`, 1, 0)
-      );
+    if (msg.role === 'user') {
+      ctx.messagesContainer.addChild(new Text(`${colors.green('You')} ${colors.dim('>')} ${msg.content}`, 1, 0));
       ctx.messagesContainer.addChild(new Spacer(1));
-    } else if (msg.role === "assistant") {
-      ctx.messagesContainer.addChild(new Text(colors.cyan("Assistant"), 1, 0));
+    } else if (msg.role === 'assistant') {
+      ctx.messagesContainer.addChild(new Text(colors.cyan('Assistant'), 1, 0));
       ctx.messagesContainer.addChild(new Markdown(msg.content, 1, 0, markdownTheme));
       ctx.messagesContainer.addChild(new Spacer(1));
-    } else if (msg.role === "tool") {
-      ctx.messagesContainer.addChild(
-        new Text(`${colors.yellow("Tool")} ${colors.dim(">")} ${msg.content}`, 1, 0)
-      );
+    } else if (msg.role === 'tool') {
+      ctx.messagesContainer.addChild(new Text(`${colors.yellow('Tool')} ${colors.dim('>')} ${msg.content}`, 1, 0));
     }
   }
 }
@@ -317,7 +318,7 @@ function switchToChatMode(ctx: TUIContext): void {
 
 function switchToPageMode(ctx: TUIContext): void {
   ctx.contentContainer.clear();
-  const viewLabels = ["chat", "dashboard", "memory", "evolution"];
+  const viewLabels = ['chat', 'dashboard', 'memory', 'evolution'];
   const navBar = new Text(renderNavBar(ctx.currentView, viewLabels), 1, 0);
   ctx.contentContainer.addChild(navBar);
   ctx.contentContainer.addChild(new Spacer(1));
@@ -326,7 +327,9 @@ function switchToPageMode(ctx: TUIContext): void {
 
 function handlePageMessage(ctx: TUIContext, msg: GatewayMessage): void {
   const surfaces = msg.surfaces;
-  if (!surfaces || !surfaces.main) return;
+  if (!surfaces || !surfaces.main) {
+    return;
+  }
 
   const main = surfaces.main;
   const termWidth = ctx.tui.terminal.columns || 80;
@@ -337,11 +340,13 @@ function handlePageMessage(ctx: TUIContext, msg: GatewayMessage): void {
     renderA2UIToTUI(surfaces.sidebar.components, surfaces.sidebar.root_id, termWidth);
   }
 
-  if (ctx.currentView === "chat") return;
+  if (ctx.currentView === 'chat') {
+    return;
+  }
 
   switchToPageMode(ctx);
   ctx.pageContainer.clear();
-  const pageText = result.lines.join("\n");
+  const pageText = result.lines.join('\n');
   if (pageText.trim()) {
     ctx.pageContainer.addChild(new Markdown(pageText, 1, 0, markdownTheme));
   }
@@ -355,10 +360,10 @@ function handlePageMessage(ctx: TUIContext, msg: GatewayMessage): void {
 function showToastMessage(ctx: TUIContext, message: string, variant?: string): void {
   let formatted: string;
   switch (variant) {
-    case "error":
+    case 'error':
       formatted = colors.red(`  ${message}`);
       break;
-    case "warning":
+    case 'warning':
       formatted = colors.yellow(`  ${message}`);
       break;
     default:
@@ -374,24 +379,28 @@ function showToastMessage(ctx: TUIContext, message: string, variant?: string): v
 }
 
 function handleModal(ctx: TUIContext, msg: GatewayMessage): void {
-  if (!msg.components || !msg.root_id) return;
+  if (!msg.components || !msg.root_id) {
+    return;
+  }
   const termWidth = ctx.tui.terminal.columns || 80;
   const result = renderA2UIToTUI(msg.components, msg.root_id, termWidth - 4);
   const modalActions = result.actions;
 
   const startNum = ctx.pageActions.length;
-  for (const action of modalActions) action.number = startNum + action.number;
+  for (const action of modalActions) {
+    action.number = startNum + action.number;
+  }
   ctx.pageActions.push(...modalActions);
 
-  const title = msg.title || "Details";
-  const border = colors.dim("=".repeat(Math.min(60, termWidth - 4)));
+  const title = msg.title || 'Details';
+  const border = colors.dim('='.repeat(Math.min(60, termWidth - 4)));
 
   const modalContainer = new Container();
   modalContainer.addChild(new Spacer(1));
   modalContainer.addChild(new Text(border, 1, 0));
   modalContainer.addChild(new Text(colors.bold(` ${title}`), 1, 0));
   modalContainer.addChild(new Text(border, 1, 0));
-  modalContainer.addChild(new Markdown(result.lines.join("\n"), 1, 0, markdownTheme));
+  modalContainer.addChild(new Markdown(result.lines.join('\n'), 1, 0, markdownTheme));
   if (modalActions.length > 0) {
     modalContainer.addChild(new Spacer(1));
     modalContainer.addChild(new Text(renderActionBar(modalActions), 1, 0));
@@ -403,22 +412,22 @@ function handleModal(ctx: TUIContext, msg: GatewayMessage): void {
 
 // Slash command -> Gateway view mapping
 const SLASH_NAV: Record<string, string> = {
-  "/chat": "chat",
-  "/dashboard": "dashboard",
-  "/health": "dashboard",
-  "/memory": "memory",
-  "/evolution": "evolution",
-  "/prompts": "settings/prompts",
-  "/skills": "settings/skills",
-  "/integrations": "settings/integrations",
-  "/back": "chat",
+  '/chat': 'chat',
+  '/dashboard': 'dashboard',
+  '/health': 'dashboard',
+  '/memory': 'memory',
+  '/evolution': 'evolution',
+  '/prompts': 'settings/prompts',
+  '/skills': 'settings/skills',
+  '/integrations': 'settings/integrations',
+  '/back': 'chat',
 };
 
 export function registerTuiCommand(program: Command): void {
   program
-    .command("tui")
-    .description("Open terminal UI for interactive chat")
-    .option("--port <number>", "Gateway port number")
+    .command('tui')
+    .description('Open terminal UI for interactive chat')
+    .option('--port <number>', 'Gateway port number')
     .action(async (options) => {
       const config = loadConfig();
       await runTUI(options, config);
@@ -430,16 +439,18 @@ async function ensureGatewayRunning(baseUrl: string): Promise<void> {
     const healthCheck = await fetch(`${baseUrl}/health`, {
       signal: AbortSignal.timeout(1000),
     });
-    if (!healthCheck.ok) throw new Error("not healthy");
+    if (!healthCheck.ok) {
+      throw new Error('not healthy');
+    }
     return;
   } catch {
     // Gateway not running, start it
   }
 
-  console.log("Gateway not running, starting...");
-  const { execSync } = await import("child_process");
+  console.log('Gateway not running, starting...');
+  const { execSync } = await import('child_process');
   try {
-    execSync("pha start --no-open", { stdio: "ignore", timeout: 10000 });
+    execSync('pha start --no-open', { stdio: 'ignore', timeout: 10000 });
   } catch {
     // Ignore - gateway startup is async
   }
@@ -460,27 +471,27 @@ async function ensureGatewayRunning(baseUrl: string): Promise<void> {
     }
   }
   if (!ready) {
-    console.error("Failed to start gateway");
+    console.error('Failed to start gateway');
     process.exit(1);
   }
-  console.log("Gateway started");
+  console.log('Gateway started');
 }
 
 function buildAutocompleteCommands(): Array<{ name: string; description: string }> {
   return [
-    { name: "quit", description: "Exit the TUI" },
-    { name: "exit", description: "Exit the TUI" },
-    { name: "clear", description: "Clear chat history" },
-    { name: "help", description: "Show available commands" },
-    { name: "chat", description: "Switch to Chat" },
-    { name: "dashboard", description: "Switch to Dashboard" },
-    { name: "health", description: "Switch to Dashboard (vitals)" },
-    { name: "memory", description: "Switch to Memory" },
-    { name: "evolution", description: "Switch to Evolution Lab" },
-    { name: "prompts", description: "Switch to Prompts settings" },
-    { name: "skills", description: "Switch to Skills settings" },
-    { name: "integrations", description: "Switch to Integrations" },
-    { name: "back", description: "Back to Chat" },
+    { name: 'quit', description: 'Exit the TUI' },
+    { name: 'exit', description: 'Exit the TUI' },
+    { name: 'clear', description: 'Clear chat history' },
+    { name: 'help', description: 'Show available commands' },
+    { name: 'chat', description: 'Switch to Chat' },
+    { name: 'dashboard', description: 'Switch to Dashboard' },
+    { name: 'health', description: 'Switch to Dashboard (vitals)' },
+    { name: 'memory', description: 'Switch to Memory' },
+    { name: 'evolution', description: 'Switch to Evolution Lab' },
+    { name: 'prompts', description: 'Switch to Prompts settings' },
+    { name: 'skills', description: 'Switch to Skills settings' },
+    { name: 'integrations', description: 'Switch to Integrations' },
+    { name: 'back', description: 'Back to Chat' },
   ];
 }
 
@@ -496,9 +507,9 @@ function createTUIComponents(providerLabel: string): {
   const tui = new TUI(terminal);
   const contentContainer = new Container();
   const headerText = new Text(
-    `${colors.bold(colors.cyan("PHA"))} ${colors.dim("- Personal Health Agent")}\n` +
+    `${colors.bold(colors.cyan('PHA'))} ${colors.dim('- Personal Health Agent')}\n` +
       `${colors.dim(`Provider: ${providerLabel}`)}\n` +
-      `${colors.dim("Type /help for commands, /quit to exit")}`,
+      `${colors.dim('Type /help for commands, /quit to exit')}`,
     1,
     0
   );
@@ -508,29 +519,23 @@ function createTUIComponents(providerLabel: string): {
   contentContainer.addChild(messagesContainer);
   const pageContainer = new Container();
   const editor = new Editor(tui, editorTheme, { paddingX: 1 });
-  const autocompleteProvider = new CombinedAutocompleteProvider(
-    buildAutocompleteCommands(),
-    process.cwd()
-  );
+  const autocompleteProvider = new CombinedAutocompleteProvider(buildAutocompleteCommands(), process.cwd());
   editor.setAutocompleteProvider(autocompleteProvider);
   return { tui, contentContainer, headerText, messagesContainer, pageContainer, editor };
 }
 
-function buildTUIContext(
-  baseUrl: string,
-  components: ReturnType<typeof createTUIComponents>
-): TUIContext {
+function buildTUIContext(baseUrl: string, components: ReturnType<typeof createTUIComponents>): TUIContext {
   const ctx: TUIContext = {
     baseUrl,
     ...components,
     chatMessages: [],
     connected: false,
     isProcessing: false,
-    currentAssistantMessage: "",
+    currentAssistantMessage: '',
     loader: null,
-    sessionId: "",
+    sessionId: '',
     sseAbortController: null,
-    currentView: "chat",
+    currentView: 'chat',
     pageActions: [],
     processMessage: () => {},
     addChatMessage: () => {},
@@ -546,8 +551,10 @@ function buildTUIContext(
       ctx.contentContainer.removeChild(ctx.loader);
       ctx.loader = null;
     }
-    if (ctx.currentAssistantMessage) ctx.addChatMessage("assistant", ctx.currentAssistantMessage);
-    ctx.currentAssistantMessage = "";
+    if (ctx.currentAssistantMessage) {
+      ctx.addChatMessage('assistant', ctx.currentAssistantMessage);
+    }
+    ctx.currentAssistantMessage = '';
     ctx.isProcessing = false;
     ctx.editor.disableSubmit = false;
     ctx.tui.requestRender();
@@ -560,16 +567,20 @@ function wireMessageHandlers(ctx: TUIContext): void {
     page: (msg) => handlePageMessage(ctx, msg),
     agent_text: (msg) => handleAgentText(ctx, msg),
     tool_call: (msg) => {
-      if (ctx.loader) ctx.loader.setMessage(`Using ${msg.tool ?? "tool"}...`);
+      if (ctx.loader) {
+        ctx.loader.setMessage(`Using ${msg.tool ?? 'tool'}...`);
+      }
     },
     modal: (msg) => handleModal(ctx, msg),
-    toast: (msg) => showToastMessage(ctx, msg.message || msg.text || "", msg.variant),
+    toast: (msg) => showToastMessage(ctx, msg.message || msg.text || '', msg.variant),
     a2ui: (msg) => {
-      if (msg.surfaces) handlePageMessage(ctx, msg);
+      if (msg.surfaces) {
+        handlePageMessage(ctx, msg);
+      }
     },
     error: (msg) => {
       ctx.finishResponse();
-      ctx.addChatMessage("assistant", `**Error:** ${msg.message ?? "unknown error"}`);
+      ctx.addChatMessage('assistant', `**Error:** ${msg.message ?? 'unknown error'}`);
     },
     clear_surface: () => {},
     log_entry: () => {},
@@ -578,7 +589,9 @@ function wireMessageHandlers(ctx: TUIContext): void {
   ctx.processMessage = (msg) => {
     try {
       const handler = handlers[msg.type];
-      if (handler) handler(msg);
+      if (handler) {
+        handler(msg);
+      }
     } catch {
       /* ignore */
     }
@@ -587,10 +600,10 @@ function wireMessageHandlers(ctx: TUIContext): void {
 
 async function runTUI(options: { port?: string }, config: PHAConfig): Promise<void> {
   const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
-  const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+  const gwBasePath = (config.gateway.basePath || '').replace(/\/+$/, '');
   const baseUrl = `http://localhost:${port}${gwBasePath}`;
   const phaRef = config.orchestrator?.pha;
-  const provider = (phaRef ? phaRef.split("/")[0] : config.llm.provider) as LLMProvider;
+  const provider = (phaRef ? phaRef.split('/')[0] : config.llm.provider) as LLMProvider;
   const providerCfg = PROVIDER_CONFIGS[provider];
 
   await ensureGatewayRunning(baseUrl);
@@ -605,10 +618,10 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
     ctx.currentView = view;
     ctx.pageActions = [];
     transport.sendNavigate(view);
-    if (view !== "chat") {
+    if (view !== 'chat') {
       switchToPageMode(ctx);
       ctx.pageContainer.clear();
-      ctx.pageContainer.addChild(new Text(colors.dim("Loading..."), 1, 0));
+      ctx.pageContainer.addChild(new Text(colors.dim('Loading...'), 1, 0));
     } else {
       switchToChatMode(ctx);
     }
@@ -617,14 +630,20 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
   const showToast = (message: string): void => showToastMessage(ctx, message);
   let tuiStarted = false;
   const cleanup = (): void => {
-    if (ctx.loader) ctx.loader.stop();
-    if (ctx.sseAbortController) ctx.sseAbortController.abort();
-    if (tuiStarted) ctx.tui.stop();
+    if (ctx.loader) {
+      ctx.loader.stop();
+    }
+    if (ctx.sseAbortController) {
+      ctx.sseAbortController.abort();
+    }
+    if (tuiStarted) {
+      ctx.tui.stop();
+    }
     process.exit(0);
   };
   const showHelp = (): void => {
-    if (ctx.currentView === "chat") {
-      ctx.addChatMessage("assistant", CHAT_HELP);
+    if (ctx.currentView === 'chat') {
+      ctx.addChatMessage('assistant', CHAT_HELP);
     } else {
       ctx.pageContainer.clear();
       ctx.pageContainer.addChild(new Markdown(PAGE_HELP, 1, 0, markdownTheme));
@@ -638,8 +657,8 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
   tui.addChild(editor);
   tui.setFocus(editor);
 
-  process.on("SIGINT", cleanup);
-  process.on("SIGTERM", cleanup);
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
 
   await initializeSession(baseUrl, config, {
     setSessionId: (id) => {
@@ -649,7 +668,9 @@ async function runTUI(options: { port?: string }, config: PHAConfig): Promise<vo
       ctx.connected = val;
     },
     processUpdates: (updates) => {
-      for (const msg of updates) ctx.processMessage(msg as GatewayMessage);
+      for (const msg of updates) {
+        ctx.processMessage(msg as GatewayMessage);
+      }
     },
     addChatMessage: ctx.addChatMessage,
     startSSE: transport.startSSE,
@@ -665,9 +686,9 @@ function handleAgentText(ctx: TUIContext, msg: GatewayMessage): void {
   if (msg.is_final) {
     ctx.finishResponse();
   } else {
-    ctx.currentAssistantMessage = msg.content ?? "";
+    ctx.currentAssistantMessage = msg.content ?? '';
     if (ctx.loader) {
-      const msgContent = msg.content ?? "";
+      const msgContent = msg.content ?? '';
       const preview = msgContent.length > 60 ? `${msgContent.substring(0, 60)}...` : msgContent;
       ctx.loader.setMessage(preview);
     }
@@ -709,7 +730,7 @@ async function initializeSession(
     setSessionId: (id: string) => void;
     setConnected: (val: boolean) => void;
     processUpdates: (updates: unknown[]) => void;
-    addChatMessage: (role: "user" | "assistant" | "tool", content: string) => void;
+    addChatMessage: (role: 'user' | 'assistant' | 'tool', content: string) => void;
     startSSE: () => void;
     tui: TUI;
   }
@@ -717,8 +738,8 @@ async function initializeSession(
   try {
     const defaultUserId = config.uid || undefined;
     const initRes = await fetch(`${baseUrl}/api/a2ui/init`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ uuid: defaultUserId }),
       signal: AbortSignal.timeout(5000),
     });
@@ -738,13 +759,13 @@ async function initializeSession(
 
     ctx.processUpdates(initData.updates);
     ctx.addChatMessage(
-      "assistant",
+      'assistant',
       `Welcome to **PHA**!\n\nAsk me about your health data, sleep, or activity.\nType \`/help\` for navigation commands.`
     );
     ctx.tui.requestRender();
     ctx.startSSE();
   } catch (e) {
-    console.error("Failed to connect to gateway:", e);
+    console.error('Failed to connect to gateway:', e);
     process.exit(1);
   }
 }
@@ -752,10 +773,10 @@ async function initializeSession(
 function hookStdinCtrlC(cleanup: () => void): void {
   const originalStdinOn = process.stdin.on.bind(process.stdin);
   process.stdin.on = function (event: string, listener: (...args: unknown[]) => void) {
-    if (event === "data") {
+    if (event === 'data') {
       const wrappedListener = (data: Buffer | string) => {
         const str = data.toString();
-        if (str.includes("\x03")) {
+        if (str.includes('\x03')) {
           cleanup();
           return;
         }

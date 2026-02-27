@@ -104,8 +104,8 @@ function ThinkingMessage({
   // Start expanded; auto-collapse when streaming ends and answer exists
   const [expanded, setExpanded] = React.useState(true);
   React.useEffect(() => {
-    if (!isActiveMsg && hasAnswer) setExpanded(false);
-    if (isActiveMsg) setExpanded(true);
+    if (!isActiveMsg && hasAnswer) { setExpanded(false); }
+    if (isActiveMsg) { setExpanded(true); }
   }, [isActiveMsg, hasAnswer]);
 
   // If no tool calls, render parts normally (no thinking/answer split)
@@ -167,7 +167,7 @@ function ThinkingMessage({
         <div className="border-l-2 border-border/50 pl-3 flex flex-col gap-1.5 ml-1">
           {thinkingParts.map((part, pi) => {
             if (part.type === "text") {
-              if (!part.content?.trim()) return null;
+              if (!part.content?.trim()) { return null; }
               return (
                 <div key={pi} className="text-xs text-text-secondary opacity-80 leading-relaxed">
                   <Markdown>{part.content}</Markdown>
@@ -217,7 +217,7 @@ export function A2UIRenderer({
 
   function renderComponent(id: string): React.ReactNode {
     const c = components.get(id);
-    if (!c) return null;
+    if (!c) { return null; }
     switch (componentType(c)) {
       case "Column": return rcColumn(c);
       case "Row": return rcRow(c);
@@ -270,7 +270,7 @@ export function A2UIRenderer({
   }
 
   function renderChildren(ids?: string[]): React.ReactNode[] {
-    if (!ids) return [];
+    if (!ids) { return []; }
     return ids.map((id) => <React.Fragment key={id}>{renderComponent(id)}</React.Fragment>);
   }
 
@@ -331,8 +331,8 @@ export function A2UIRenderer({
     const columns = (prop(c, "columns") as number) || 2;
     const gap = (prop(c, "gap") as number) || 16;
     let minColWidth = 240;
-    if (columns >= 4) minColWidth = 160;
-    else if (columns >= 3) minColWidth = 200;
+    if (columns >= 4) { minColWidth = 160; }
+    else if (columns >= 3) { minColWidth = 200; }
     return (
       <div className="grid stagger-children"
            style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${minColWidth}px, 100%), 1fr))`, gap }}>
@@ -773,7 +773,7 @@ export function A2UIRenderer({
       <div
         className="chat-scroll-container flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-6"
         onScroll={(e) => {
-          if (isAutoScrollingRef.current) return;
+          if (isAutoScrollingRef.current) { return; }
           const el = e.currentTarget;
           chatAutoScrollRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80;
         }}
@@ -1131,7 +1131,7 @@ function renderMessagePart(
   renderInline: (data: { components: A2UIComponent[]; root_id: string }) => React.ReactNode,
 ): React.ReactNode {
   if (part.type === "text") {
-    if (!part.content?.trim()) return null;
+    if (!part.content?.trim()) { return null; }
     return (
       <div key={partIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }}>
         <Markdown>{part.content}</Markdown>
@@ -1208,7 +1208,7 @@ function renderAssistantMessage(
   );
   const isActiveMsg = streaming && index === totalMessages - 1;
 
-  if (!isActiveMsg && !hasVisibleParts) return null;
+  if (!isActiveMsg && !hasVisibleParts) { return null; }
 
   const hasToolCalls = msg.parts.some((p) => p.type === "tool_use");
 
@@ -1298,9 +1298,9 @@ function renderQuickReplies(
   streaming: boolean,
   sendAction: (action: string, payload?: Record<string, unknown>) => void,
 ): React.ReactNode {
-  if (streaming) return null;
+  if (streaming) { return null; }
   const quickReplies = prop(c, "quickReplies") as Array<{ label: string; content: string; icon?: string; variant?: string }> | undefined;
-  if (!quickReplies || quickReplies.length === 0) return null;
+  if (!quickReplies || quickReplies.length === 0) { return null; }
 
   const actionName = (prop(c, "action") as string) || "send_message";
   return (
@@ -1321,15 +1321,15 @@ function renderQuickReplies(
 
 // Helper: get trend direction arrow
 function getTrendArrow(direction: string): string {
-  if (direction === "up") return "↑";
-  if (direction === "down") return "↓";
+  if (direction === "up") { return "↑"; }
+  if (direction === "down") { return "↓"; }
   return "→";
 }
 
 // Helper: get skeleton border radius class
 function getSkeletonRadiusClass(variant: string): string {
-  if (variant === "circular") return "rounded-full";
-  if (variant === "text") return "rounded";
+  if (variant === "circular") { return "rounded-full"; }
+  if (variant === "text") { return "rounded"; }
   return "rounded-xl";
 }
 
@@ -1340,8 +1340,8 @@ function toDimensionStr(value: string | number): string {
 
 // Helper: get status dot class for tool_use
 function getStatusDotClass(status: string): string {
-  if (status === "running") return "bg-primary motion-safe:animate-pulse";
-  if (status === "error") return "bg-error";
+  if (status === "running") { return "bg-primary motion-safe:animate-pulse"; }
+  if (status === "error") { return "bg-error"; }
   return "bg-success";
 }
 
@@ -1358,15 +1358,15 @@ function getStatusIcon(status: string): React.ReactNode {
 
 // Helper: get status progress bar class for tool_use
 function getStatusProgressClass(status: string): string {
-  if (status === "running") return "bg-primary animate-status-pulse";
-  if (status === "error") return "bg-error";
+  if (status === "running") { return "bg-primary animate-status-pulse"; }
+  if (status === "error") { return "bg-error"; }
   return "bg-success";
 }
 
 // Helper: get quick reply variant class
 function getQuickReplyVariantClass(variant: string | undefined): string {
-  if (variant === "danger") return "border-error/30 text-error bg-error/10 hover:bg-error/20 hover:border-error/50";
-  if (variant === "primary") return "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50";
+  if (variant === "danger") { return "border-error/30 text-error bg-error/10 hover:bg-error/20 hover:border-error/50"; }
+  if (variant === "primary") { return "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50"; }
   return "border-border text-text-secondary bg-surface hover:bg-surface-hover hover:border-border-hover";
 }
 
@@ -1420,7 +1420,7 @@ function TagPickerComponent({
   const [dropPos, setDropPos] = React.useState<{ top: number; left: number }>({ top: 0, left: 0 });
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) { return; }
     const handler = (e: MouseEvent) => {
       if (
         dropRef.current && !dropRef.current.contains(e.target as Node) &&

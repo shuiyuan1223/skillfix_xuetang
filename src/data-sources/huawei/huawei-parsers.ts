@@ -11,16 +11,18 @@
 
 /** Convert a nanosecond timestamp (19 digits) to milliseconds. */
 function toMs(timestamp: number): number {
-  if (timestamp > 1e15) return Math.floor(timestamp / 1e6);
+  if (timestamp > 1e15) {
+    return Math.floor(timestamp / 1e6);
+  }
   return timestamp;
 }
 
 /** Format a timestamp (ms) to "HH:MM" in Asia/Shanghai timezone. */
 function fmtTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleTimeString("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    hour: "2-digit",
-    minute: "2-digit",
+  return new Date(timestamp).toLocaleTimeString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    hour: '2-digit',
+    minute: '2-digit',
     hour12: false,
   });
 }
@@ -39,7 +41,9 @@ function getFieldValue(
   fieldName: string
 ): number | null {
   const field = values.find((v) => v.fieldName === fieldName);
-  if (!field) return null;
+  if (!field) {
+    return null;
+  }
   return field.integerValue ?? field.longValue ?? field.floatValue ?? null;
 }
 
@@ -100,8 +104,10 @@ function parseSimpleReadings(json: AnyJson, opts?: SimpleReadingsOptions): TimeV
   const readings: TimeValueReading[] = [];
   for (const point of iteratePoints(json)) {
     let timestamp = point.startTime;
-    if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-    const time = timestamp ? fmtTime(timestamp) : "00:00";
+    if (timestamp > 1e15) {
+      timestamp = Math.floor(timestamp / 1e6);
+    }
+    const time = timestamp ? fmtTime(timestamp) : '00:00';
     const fieldValue = point.value?.[0];
     const raw: number = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
     if (raw > 0) {
@@ -113,7 +119,9 @@ function parseSimpleReadings(json: AnyJson, opts?: SimpleReadingsOptions): TimeV
 }
 
 function computeStats(values: number[]): { avg: number; max: number; min: number } {
-  if (values.length === 0) return { avg: 0, max: 0, min: 0 };
+  if (values.length === 0) {
+    return { avg: 0, max: 0, min: 0 };
+  }
   return {
     avg: Math.round(values.reduce((a, b) => a + b, 0) / values.length),
     max: Math.max(...values),
@@ -122,7 +130,9 @@ function computeStats(values: number[]): { avg: number; max: number; min: number
 }
 
 function computeStatsDecimal(values: number[]): { avg: number; max: number; min: number } {
-  if (values.length === 0) return { avg: 0, max: 0, min: 0 };
+  if (values.length === 0) {
+    return { avg: 0, max: 0, min: 0 };
+  }
   return {
     avg: Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10,
     max: Math.max(...values),
@@ -147,7 +157,9 @@ export function parseHeartRateResponse(json: AnyJson): ReadingsWithStats {
 
 export function parseStressResponse(json: AnyJson): ReadingsWithStatsCurrent | null {
   const readings = parseSimpleReadings(json);
-  if (readings.length === 0) return null;
+  if (readings.length === 0) {
+    return null;
+  }
   const values = readings.map((r) => r.value);
   const stats = computeStats(values);
   return { readings, current: values[values.length - 1], ...stats };
@@ -159,7 +171,9 @@ export function parseStressResponse(json: AnyJson): ReadingsWithStatsCurrent | n
 
 export function parseSpO2Response(json: AnyJson): ReadingsWithStatsCurrent | null {
   const readings = parseSimpleReadings(json);
-  if (readings.length === 0) return null;
+  if (readings.length === 0) {
+    return null;
+  }
   const values = readings.map((r) => r.value);
   const stats = computeStats(values);
   return { readings, current: values[values.length - 1], ...stats };
@@ -184,17 +198,19 @@ export interface ECGResult {
 }
 
 const ARRHYTHMIA_LABELS: Record<number, string> = {
-  1: "Normal",
-  2: "Sinus Arrhythmia",
-  3: "Atrial Fibrillation",
-  4: "Premature Ventricular Contraction",
-  5: "Wide QRS Complex",
-  6: "Unknown",
+  1: 'Normal',
+  2: 'Sinus Arrhythmia',
+  3: 'Atrial Fibrillation',
+  4: 'Premature Ventricular Contraction',
+  5: 'Wide QRS Complex',
+  6: 'Unknown',
 };
 
 export function parseECGResponse(json: AnyJson): ECGResult | null {
   const healthRecords: AnyJson[] = json?.healthRecords || [];
-  if (healthRecords.length === 0) return null;
+  if (healthRecords.length === 0) {
+    return null;
+  }
 
   const records: ECGRecord[] = [];
 
@@ -205,18 +221,20 @@ export function parseECGResponse(json: AnyJson): ECGResult | null {
     };
 
     let timestamp = record.startTime;
-    if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
+    if (timestamp > 1e15) {
+      timestamp = Math.floor(timestamp / 1e6);
+    }
     const time = new Date(timestamp).toISOString();
 
-    const avgHeartRate = recGetValue("avg_heart_rate") || 0;
-    const arrhythmiaType = recGetValue("ecg_arrhythmia_type") || 1;
-    const ecgType = recGetValue("ecg_type") || 1;
+    const avgHeartRate = recGetValue('avg_heart_rate') || 0;
+    const arrhythmiaType = recGetValue('ecg_arrhythmia_type') || 1;
+    const ecgType = recGetValue('ecg_type') || 1;
 
     records.push({
       time,
       avgHeartRate: Math.round(avgHeartRate),
       arrhythmiaType,
-      arrhythmiaLabel: ARRHYTHMIA_LABELS[arrhythmiaType] || "Unknown",
+      arrhythmiaLabel: ARRHYTHMIA_LABELS[arrhythmiaType] || 'Unknown',
       ecgType,
     });
   }
@@ -250,12 +268,12 @@ export interface SleepResult {
 function filterNormalSleepRecords(healthRecords: AnyJson[]): AnyJson[] {
   return healthRecords
     .filter((r: AnyJson) => {
-      const sleepType = r.value?.find((v: AnyJson) => v.fieldName === "sleep_type")?.integerValue;
+      const sleepType = r.value?.find((v: AnyJson) => v.fieldName === 'sleep_type')?.integerValue;
       return sleepType !== 3;
     })
     .sort((a: AnyJson, b: AnyJson) => {
-      const timeA = a.value?.find((v: AnyJson) => v.fieldName === "wakeup_time")?.longValue || 0;
-      const timeB = b.value?.find((v: AnyJson) => v.fieldName === "wakeup_time")?.longValue || 0;
+      const timeA = a.value?.find((v: AnyJson) => v.fieldName === 'wakeup_time')?.longValue || 0;
+      const timeB = b.value?.find((v: AnyJson) => v.fieldName === 'wakeup_time')?.longValue || 0;
       return timeB - timeA;
     });
 }
@@ -268,7 +286,7 @@ function findMainSleepRecord(records: AnyJson[], targetDate: string): AnyJson {
   targetDayEnd.setHours(23, 59, 59, 999);
 
   const match = records.find((r: AnyJson) => {
-    const wakeupTime = r.value?.find((v: AnyJson) => v.fieldName === "wakeup_time")?.longValue;
+    const wakeupTime = r.value?.find((v: AnyJson) => v.fieldName === 'wakeup_time')?.longValue;
     if (wakeupTime) {
       const wakeupDate = new Date(wakeupTime);
       return wakeupDate >= targetDayStart && wakeupDate <= targetDayEnd;
@@ -279,18 +297,17 @@ function findMainSleepRecord(records: AnyJson[], targetDate: string): AnyJson {
 }
 
 /** Parse sleep fragment segments from a record's subData. */
-function parseSleepFragments(
-  record: AnyJson
-): Array<{ startTime: number; endTime: number; sleepType: number }> {
+function parseSleepFragments(record: AnyJson): Array<{ startTime: number; endTime: number; sleepType: number }> {
   const segments: Array<{ startTime: number; endTime: number; sleepType: number }> = [];
-  const fragmentData = record.subData?.["com.huawei.continuous.sleep.fragment"];
-  if (!fragmentData?.samplePoints) return segments;
+  const fragmentData = record.subData?.['com.huawei.continuous.sleep.fragment'];
+  if (!fragmentData?.samplePoints) {
+    return segments;
+  }
 
   for (const point of fragmentData.samplePoints) {
     const start = toMs(point.startTime || 0);
     const end = toMs(point.endTime || 0);
-    const sleepState =
-      point.value?.find((v: AnyJson) => v.fieldName === "sleep_state")?.integerValue || 0;
+    const sleepState = point.value?.find((v: AnyJson) => v.fieldName === 'sleep_state')?.integerValue || 0;
     if (start && end && sleepState) {
       segments.push({ startTime: start, endTime: end, sleepType: sleepState });
     }
@@ -301,10 +318,14 @@ function parseSleepFragments(
 
 export function parseSleepResponse(json: AnyJson, targetDate: string): SleepResult | null {
   const healthRecords: AnyJson[] = json?.healthRecords || [];
-  if (healthRecords.length === 0) return null;
+  if (healthRecords.length === 0) {
+    return null;
+  }
 
   const normalSleepRecords = filterNormalSleepRecords(healthRecords);
-  if (normalSleepRecords.length === 0) return null;
+  if (normalSleepRecords.length === 0) {
+    return null;
+  }
 
   const mainRecord = findMainSleepRecord(normalSleepRecords, targetDate);
 
@@ -314,21 +335,21 @@ export function parseSleepResponse(json: AnyJson, targetDate: string): SleepResu
     return field?.integerValue ?? field?.longValue ?? null;
   };
 
-  const fallAsleepTime = getValue("fall_asleep_time");
-  const wakeupTime = getValue("wakeup_time");
-  const allSleepTime = getValue("all_sleep_time");
-  const sleepScore = getValue("sleep_score");
+  const fallAsleepTime = getValue('fall_asleep_time');
+  const wakeupTime = getValue('wakeup_time');
+  const allSleepTime = getValue('all_sleep_time');
+  const sleepScore = getValue('sleep_score');
 
   const segments = parseSleepFragments(mainRecord);
 
-  let bedTime = "00:00";
+  let bedTime = '00:00';
   if (fallAsleepTime) {
     bedTime = fmtTime(fallAsleepTime);
   } else if (segments.length > 0) {
     bedTime = fmtTime(segments[0].startTime);
   }
 
-  let wakeTime = "00:00";
+  let wakeTime = '00:00';
   if (wakeupTime) {
     wakeTime = fmtTime(wakeupTime);
   } else if (segments.length > 0) {
@@ -341,10 +362,10 @@ export function parseSleepResponse(json: AnyJson, targetDate: string): SleepResu
     bedTime,
     wakeTime,
     sleepScore: sleepScore || undefined,
-    deepSleepMinutes: getValue("deep_sleep_time") || undefined,
-    lightSleepMinutes: getValue("light_sleep_time") || undefined,
-    remMinutes: getValue("dream_time") || undefined,
-    awakeMinutes: getValue("awake_time") || undefined,
+    deepSleepMinutes: getValue('deep_sleep_time') || undefined,
+    lightSleepMinutes: getValue('light_sleep_time') || undefined,
+    remMinutes: getValue('dream_time') || undefined,
+    awakeMinutes: getValue('awake_time') || undefined,
   };
 }
 
@@ -354,7 +375,7 @@ export function parseSleepResponse(json: AnyJson, targetDate: string): SleepResu
 
 /** Format a Date to "YYYY-MM-DD" string. */
 function formatDateStr(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** Get a named field value from a Huawei healthRecord value array. */
@@ -364,21 +385,23 @@ function getRecordFieldValue(record: AnyJson, fieldName: string): number | undef
 }
 
 /** Build a Map of date -> best sleep data from healthRecords (skips naps). */
-function buildSleepByDateMap(
-  healthRecords: AnyJson[]
-): Map<string, { hours: number; sleepScore?: number }> {
+function buildSleepByDateMap(healthRecords: AnyJson[]): Map<string, { hours: number; sleepScore?: number }> {
   const sleepByDate = new Map<string, { hours: number; sleepScore?: number }>();
 
   for (const record of healthRecords) {
-    if (getRecordFieldValue(record, "sleep_type") === 3) continue;
+    if (getRecordFieldValue(record, 'sleep_type') === 3) {
+      continue;
+    }
 
-    const wakeupTime = getRecordFieldValue(record, "wakeup_time");
-    const allSleepTime = getRecordFieldValue(record, "all_sleep_time");
-    if (!wakeupTime || !allSleepTime) continue;
+    const wakeupTime = getRecordFieldValue(record, 'wakeup_time');
+    const allSleepTime = getRecordFieldValue(record, 'all_sleep_time');
+    if (!wakeupTime || !allSleepTime) {
+      continue;
+    }
 
     const wakeupDate = formatDateStr(new Date(wakeupTime));
     const hours = Math.round((allSleepTime / 60) * 10) / 10;
-    const sleepScore = getRecordFieldValue(record, "sleep_score");
+    const sleepScore = getRecordFieldValue(record, 'sleep_score');
 
     if (!sleepByDate.has(wakeupDate) || sleepByDate.get(wakeupDate)!.hours < hours) {
       sleepByDate.set(wakeupDate, { hours, sleepScore });
@@ -434,9 +457,13 @@ function extractBPValues(point: AnyJson): { systolic: number; diastolic: number;
   const values = point.value || [];
   for (const v of values) {
     const val = Math.round(v.floatValue ?? v.integerValue ?? 0);
-    if (v.fieldName === "systolic_pressure") systolic = val;
-    else if (v.fieldName === "diastolic_pressure") diastolic = val;
-    else if (v.fieldName === "sphygmus") pulse = val;
+    if (v.fieldName === 'systolic_pressure') {
+      systolic = val;
+    } else if (v.fieldName === 'diastolic_pressure') {
+      diastolic = val;
+    } else if (v.fieldName === 'sphygmus') {
+      pulse = val;
+    }
   }
   // Fallback: positional (value[0] = systolic, value[1] = diastolic)
   if (systolic === 0 && diastolic === 0 && values.length >= 2) {
@@ -451,8 +478,10 @@ export function parseBloodPressureResponse(json: AnyJson): BloodPressureResult |
 
   for (const point of iteratePoints(json)) {
     let timestamp = point.startTime;
-    if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-    const time = timestamp ? fmtTime(timestamp) : "00:00";
+    if (timestamp > 1e15) {
+      timestamp = Math.floor(timestamp / 1e6);
+    }
+    const time = timestamp ? fmtTime(timestamp) : '00:00';
 
     const { systolic, diastolic, pulse } = extractBPValues(point);
     if (systolic > 0 || diastolic > 0) {
@@ -460,7 +489,9 @@ export function parseBloodPressureResponse(json: AnyJson): BloodPressureResult |
     }
   }
 
-  if (readings.length === 0) return null;
+  if (readings.length === 0) {
+    return null;
+  }
 
   const systolicValues = readings.map((r) => r.systolic);
   const diastolicValues = readings.map((r) => r.diastolic);
@@ -487,7 +518,9 @@ export interface BloodGlucoseResult {
 
 export function parseBloodGlucoseResponse(json: AnyJson): BloodGlucoseResult | null {
   const readings = parseSimpleReadings(json, { decimalPlace: true });
-  if (readings.length === 0) return null;
+  if (readings.length === 0) {
+    return null;
+  }
   const values = readings.map((r) => r.value);
   const stats = computeStatsDecimal(values);
   return { readings, latest: values[values.length - 1], ...stats };
@@ -505,19 +538,24 @@ export interface WeightData {
 }
 
 /** Extract weight, bmi, bodyFatRate from a single body composition data point. */
-function extractWeightFields(point: AnyJson): Omit<WeightData, "date"> {
-  const entry: Omit<WeightData, "date"> = {};
+function extractWeightFields(point: AnyJson): Omit<WeightData, 'date'> {
+  const entry: Omit<WeightData, 'date'> = {};
   for (const v of point.value || []) {
     const val: number = v.floatValue ?? v.integerValue ?? 0;
-    if (v.fieldName === "body_weight" && val > 0) entry.weight = Math.round(val * 10) / 10;
-    else if (v.fieldName === "bmi" && val > 0) entry.bmi = Math.round(val * 10) / 10;
-    else if (v.fieldName === "body_fat_rate" && val > 0)
+    if (v.fieldName === 'body_weight' && val > 0) {
+      entry.weight = Math.round(val * 10) / 10;
+    } else if (v.fieldName === 'bmi' && val > 0) {
+      entry.bmi = Math.round(val * 10) / 10;
+    } else if (v.fieldName === 'body_fat_rate' && val > 0) {
       entry.bodyFatRate = Math.round(val * 10) / 10;
+    }
   }
   // Fallback: positional value[0] as weight
   if (!entry.weight && point.value?.[0]) {
     const val: number = point.value[0].floatValue ?? point.value[0].integerValue ?? 0;
-    if (val > 0) entry.weight = Math.round(val * 10) / 10;
+    if (val > 0) {
+      entry.weight = Math.round(val * 10) / 10;
+    }
   }
   return entry;
 }
@@ -526,8 +564,10 @@ export function parseBodyCompositionWeightResponse(json: AnyJson): WeightData | 
   let latest: WeightData | null = null;
   for (const point of iteratePoints(json)) {
     let timestamp = point.startTime;
-    if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-    const pointDate = timestamp ? new Date(timestamp).toISOString().split("T")[0] : undefined;
+    if (timestamp > 1e15) {
+      timestamp = Math.floor(timestamp / 1e6);
+    }
+    const pointDate = timestamp ? new Date(timestamp).toISOString().split('T')[0] : undefined;
 
     const fields = extractWeightFields(point);
     if (fields.weight) {
@@ -542,7 +582,7 @@ export function parseBodyCompositionHeightResponse(json: AnyJson): number | null
   for (const point of iteratePoints(json)) {
     let heightVal = 0;
     for (const v of point.value || []) {
-      if (v.fieldName === "height") {
+      if (v.fieldName === 'height') {
         heightVal = v.floatValue ?? v.integerValue ?? 0;
       }
     }
@@ -551,8 +591,7 @@ export function parseBodyCompositionHeightResponse(json: AnyJson): number | null
     }
     if (heightVal > 0) {
       // Huawei API returns height in meters; convert to cm
-      latestHeight =
-        heightVal <= 3 ? Math.round(heightVal * 100 * 10) / 10 : Math.round(heightVal * 10) / 10;
+      latestHeight = heightVal <= 3 ? Math.round(heightVal * 100 * 10) / 10 : Math.round(heightVal * 10) / 10;
     }
   }
   return latestHeight;
@@ -572,7 +611,9 @@ export interface BodyTemperatureResult {
 
 export function parseBodyTemperatureResponse(json: AnyJson): BodyTemperatureResult | null {
   const readings = parseSimpleReadings(json, { decimalPlace: true });
-  if (readings.length === 0) return null;
+  if (readings.length === 0) {
+    return null;
+  }
   const values = readings.map((r) => r.value);
   const stats = computeStatsDecimal(values);
   return { readings, latest: values[values.length - 1], ...stats };
@@ -593,7 +634,9 @@ export interface NutritionResult {
 
 export function parseNutritionResponse(json: AnyJson): NutritionResult | null {
   const healthRecords: AnyJson[] = json?.healthRecords || [];
-  if (healthRecords.length === 0) return null;
+  if (healthRecords.length === 0) {
+    return null;
+  }
 
   const meals: Array<{ time: string; calories: number }> = [];
   let totalCalories = 0;
@@ -608,24 +651,34 @@ export function parseNutritionResponse(json: AnyJson): NutritionResult | null {
     };
 
     let timestamp = record.startTime;
-    if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-    const time = timestamp ? fmtTime(timestamp) : "00:00";
+    if (timestamp > 1e15) {
+      timestamp = Math.floor(timestamp / 1e6);
+    }
+    const time = timestamp ? fmtTime(timestamp) : '00:00';
 
-    const energy = recGetValue("dietaryEnergy") || 0;
-    const mealProtein = recGetValue("protein");
-    const mealFat = recGetValue("fat");
-    const mealCarbs = recGetValue("carbohydrates");
+    const energy = recGetValue('dietaryEnergy') || 0;
+    const mealProtein = recGetValue('protein');
+    const mealFat = recGetValue('fat');
+    const mealCarbs = recGetValue('carbohydrates');
 
     if (energy > 0) {
       totalCalories += Math.round(energy);
       meals.push({ time, calories: Math.round(energy) });
     }
-    if (mealProtein !== null) protein = (protein || 0) + Math.round(mealProtein * 10) / 10;
-    if (mealFat !== null) fat = (fat || 0) + Math.round(mealFat * 10) / 10;
-    if (mealCarbs !== null) carbs = (carbs || 0) + Math.round(mealCarbs * 10) / 10;
+    if (mealProtein !== null) {
+      protein = (protein || 0) + Math.round(mealProtein * 10) / 10;
+    }
+    if (mealFat !== null) {
+      fat = (fat || 0) + Math.round(mealFat * 10) / 10;
+    }
+    if (mealCarbs !== null) {
+      carbs = (carbs || 0) + Math.round(mealCarbs * 10) / 10;
+    }
   }
 
-  if (totalCalories === 0 && meals.length === 0) return null;
+  if (totalCalories === 0 && meals.length === 0) {
+    return null;
+  }
 
   return { totalCalories, protein, fat, carbs, water: undefined, meals };
 }
@@ -636,7 +689,7 @@ export function parseNutritionResponse(json: AnyJson): NutritionResult | null {
 
 export interface MenstrualCycleResult {
   cycleDay?: number;
-  phase?: "menstrual" | "follicular" | "ovulatory" | "luteal";
+  phase?: 'menstrual' | 'follicular' | 'ovulatory' | 'luteal';
   periodStartDate?: string;
   cycleLength?: number;
   records: Array<{ date: string; status: string }>;
@@ -649,17 +702,19 @@ export function parseMenstrualFlowResponse(
   const records: Array<{ date: string; status: string }> = [];
   for (const point of iteratePoints(json)) {
     let timestamp = point.startTime;
-    if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-    const pointDate = timestamp ? new Date(timestamp).toISOString().split("T")[0] : fallbackDate;
+    if (timestamp > 1e15) {
+      timestamp = Math.floor(timestamp / 1e6);
+    }
+    const pointDate = timestamp ? new Date(timestamp).toISOString().split('T')[0] : fallbackDate;
 
     let volume = 0;
     for (const v of point.value || []) {
-      if (v.fieldName === "volume") {
+      if (v.fieldName === 'volume') {
         volume = v.integerValue ?? v.floatValue ?? 0;
       }
     }
     if (volume > 0) {
-      records.push({ date: pointDate, status: "menstrual" });
+      records.push({ date: pointDate, status: 'menstrual' });
     }
   }
   return records;
@@ -669,21 +724,28 @@ export function deriveMenstrualCycleInfo(
   records: Array<{ date: string; status: string }>,
   queryDate: string
 ): MenstrualCycleResult | null {
-  if (records.length === 0) return null;
+  if (records.length === 0) {
+    return null;
+  }
 
   records.sort((a, b) => a.date.localeCompare(b.date));
   const periodStartDate = records[0].date;
 
   let cycleDay: number | undefined;
-  let phase: "menstrual" | "follicular" | "ovulatory" | "luteal" | undefined;
+  let phase: 'menstrual' | 'follicular' | 'ovulatory' | 'luteal' | undefined;
   const daysDiff = Math.floor(
     (new Date(queryDate).getTime() - new Date(periodStartDate).getTime()) / (1000 * 60 * 60 * 24)
   );
   cycleDay = daysDiff + 1;
-  if (cycleDay <= 5) phase = "menstrual";
-  else if (cycleDay <= 13) phase = "follicular";
-  else if (cycleDay <= 16) phase = "ovulatory";
-  else phase = "luteal";
+  if (cycleDay <= 5) {
+    phase = 'menstrual';
+  } else if (cycleDay <= 13) {
+    phase = 'follicular';
+  } else if (cycleDay <= 16) {
+    phase = 'ovulatory';
+  } else {
+    phase = 'luteal';
+  }
 
   return { cycleDay, phase, periodStartDate, cycleLength: undefined, records };
 }
@@ -694,7 +756,7 @@ export function deriveMenstrualCycleInfo(
 
 export interface VO2MaxResult {
   value: number;
-  level: "low" | "fair" | "good" | "excellent" | "superior";
+  level: 'low' | 'fair' | 'good' | 'excellent' | 'superior';
 }
 
 export function parseVO2MaxResponse(json: AnyJson): VO2MaxResult | null {
@@ -702,17 +764,27 @@ export function parseVO2MaxResponse(json: AnyJson): VO2MaxResult | null {
   for (const point of iteratePoints(json)) {
     const fieldValue = point.value?.[0];
     const value: number = fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0;
-    if (value > 0) latestValue = value;
+    if (value > 0) {
+      latestValue = value;
+    }
   }
 
-  if (latestValue === 0) return null;
+  if (latestValue === 0) {
+    return null;
+  }
 
-  let level: "low" | "fair" | "good" | "excellent" | "superior";
-  if (latestValue < 30) level = "low";
-  else if (latestValue < 37) level = "fair";
-  else if (latestValue < 48) level = "good";
-  else if (latestValue < 55) level = "excellent";
-  else level = "superior";
+  let level: 'low' | 'fair' | 'good' | 'excellent' | 'superior';
+  if (latestValue < 30) {
+    level = 'low';
+  } else if (latestValue < 37) {
+    level = 'fair';
+  } else if (latestValue < 48) {
+    level = 'good';
+  } else if (latestValue < 55) {
+    level = 'excellent';
+  } else {
+    level = 'superior';
+  }
 
   return { value: Math.round(latestValue * 10) / 10, level };
 }
@@ -734,17 +806,15 @@ export function parseHRVResponse(json: AnyJson): HRVResult | null {
 
   for (const point of iteratePoints(json)) {
     let timestamp = point.startTime;
-    if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-    const time = timestamp ? fmtTime(timestamp) : "00:00";
+    if (timestamp > 1e15) {
+      timestamp = Math.floor(timestamp / 1e6);
+    }
+    const time = timestamp ? fmtTime(timestamp) : '00:00';
 
     let hrvValue = 0;
     for (const v of point.value || []) {
       const val: number = v.floatValue ?? v.integerValue ?? 0;
-      if (
-        v.fieldName === "rmssd" ||
-        v.fieldName === "hrv" ||
-        v.fieldName === "heart_rate_variability"
-      ) {
+      if (v.fieldName === 'rmssd' || v.fieldName === 'hrv' || v.fieldName === 'heart_rate_variability') {
         hrvValue = val;
         break;
       }
@@ -758,7 +828,9 @@ export function parseHRVResponse(json: AnyJson): HRVResult | null {
     }
   }
 
-  if (readings.length === 0) return null;
+  if (readings.length === 0) {
+    return null;
+  }
 
   const values = readings.map((r) => r.value);
   return {
@@ -787,11 +859,19 @@ export interface EmotionResult {
 }
 
 function emotionFromScore(score: number): string {
-  if (score >= 80) return "happy";
-  if (score >= 60) return "calm";
-  if (score >= 40) return "neutral";
-  if (score >= 20) return "stressed";
-  return "anxious";
+  if (score >= 80) {
+    return 'happy';
+  }
+  if (score >= 60) {
+    return 'calm';
+  }
+  if (score >= 40) {
+    return 'neutral';
+  }
+  if (score >= 20) {
+    return 'stressed';
+  }
+  return 'anxious';
 }
 
 export function parseEmotionResponse(json: AnyJson): EmotionResult | null {
@@ -799,8 +879,10 @@ export function parseEmotionResponse(json: AnyJson): EmotionResult | null {
 
   for (const point of iteratePoints(json)) {
     let timestamp = point.startTime;
-    if (timestamp > 1e15) timestamp = Math.floor(timestamp / 1e6);
-    const time = timestamp ? fmtTime(timestamp) : "00:00";
+    if (timestamp > 1e15) {
+      timestamp = Math.floor(timestamp / 1e6);
+    }
+    const time = timestamp ? fmtTime(timestamp) : '00:00';
 
     const fieldValue = point.value?.[0];
     const score = Math.round(fieldValue?.floatValue ?? fieldValue?.integerValue ?? 0);
@@ -809,7 +891,9 @@ export function parseEmotionResponse(json: AnyJson): EmotionResult | null {
     }
   }
 
-  if (readings.length === 0) return null;
+  if (readings.length === 0) {
+    return null;
+  }
 
   const latestReading = readings[readings.length - 1];
   return { current: latestReading.emotion, score: latestReading.score, readings };
@@ -819,17 +903,19 @@ export function parseEmotionResponse(json: AnyJson): EmotionResult | null {
 // parsePolymerizeDataRangeChunk
 // ---------------------------------------------------------------------------
 
-export function parsePolymerizeDataRangeChunk(
-  json: AnyJson
-): Array<{ date: string; values: Record<string, number> }> {
+export function parsePolymerizeDataRangeChunk(json: AnyJson): Array<{ date: string; values: Record<string, number> }> {
   const result: Array<{ date: string; values: Record<string, number> }> = [];
   const groups: AnyJson[] = json?.group || [];
 
   for (const group of groups) {
     let groupStart = group.startTime;
-    if (groupStart > 1e15) groupStart = Math.floor(groupStart / 1e6);
-    const groupDate = groupStart ? new Date(groupStart).toISOString().split("T")[0] : undefined;
-    if (!groupDate) continue;
+    if (groupStart > 1e15) {
+      groupStart = Math.floor(groupStart / 1e6);
+    }
+    const groupDate = groupStart ? new Date(groupStart).toISOString().split('T')[0] : undefined;
+    if (!groupDate) {
+      continue;
+    }
 
     const dayValues: Record<string, number> = {};
     for (const sampleSet of group.sampleSet || []) {

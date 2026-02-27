@@ -5,9 +5,9 @@
  * Each session gets one SSE connection for server-push events.
  */
 
-import { createLogger } from "../utils/logger.js";
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("SSE");
+const log = createLogger('SSE');
 
 // ---------------------------------------------------------------------------
 // SSE Event
@@ -34,12 +34,16 @@ class RingBuffer<T> {
   push(item: T): void {
     this.buf[this.head] = item;
     this.head = (this.head + 1) % this.capacity;
-    if (this.size < this.capacity) this.size++;
+    if (this.size < this.capacity) {
+      this.size++;
+    }
   }
 
   /** Return items in insertion order. */
   toArray(): T[] {
-    if (this.size === 0) return [];
+    if (this.size === 0) {
+      return [];
+    }
     const start = (this.head - this.size + this.capacity) % this.capacity;
     const result: T[] = [];
     for (let i = 0; i < this.size; i++) {
@@ -67,8 +71,10 @@ export class SSEConnection {
 
   /** Send an SSE event with id + data fields. */
   send(msg: unknown, eventId?: number): void {
-    if (this.closed) return;
-    let frame = "";
+    if (this.closed) {
+      return;
+    }
+    let frame = '';
     if (eventId !== undefined) {
       frame += `id: ${eventId}\n`;
     }
@@ -80,7 +86,9 @@ export class SSEConnection {
 
   /** Send SSE retry field to control browser reconnect interval. */
   sendRetry(ms: number): void {
-    if (this.closed) return;
+    if (this.closed) {
+      return;
+    }
     this.writer.write(this.encoder.encode(`retry: ${ms}\n\n`)).catch(() => {
       this.closed = true;
     });
@@ -88,8 +96,10 @@ export class SSEConnection {
 
   /** SSE comment line as heartbeat. */
   sendHeartbeat(): void {
-    if (this.closed) return;
-    this.writer.write(this.encoder.encode(": heartbeat\n\n")).catch(() => {
+    if (this.closed) {
+      return;
+    }
+    this.writer.write(this.encoder.encode(': heartbeat\n\n')).catch(() => {
       this.closed = true;
     });
   }
@@ -100,7 +110,9 @@ export class SSEConnection {
    * time to establish before the old stream terminates cleanly.
    */
   detach(): void {
-    if (this.closed) return;
+    if (this.closed) {
+      return;
+    }
     this.closed = true;
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
@@ -117,7 +129,9 @@ export class SSEConnection {
 
   /** Close the underlying stream. */
   close(): void {
-    if (this.closed) return;
+    if (this.closed) {
+      return;
+    }
     this.closed = true;
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
@@ -161,7 +175,7 @@ export class SSEConnectionManager {
     const now = Date.now();
     const lastTime = this.lastConnectTime.get(sessionId) || 0;
     if (now - lastTime < SSE_RECONNECT_MIN_INTERVAL) {
-      log.warn("SSE reconnect too fast, throttled", { sessionId: sessionId.slice(0, 8) });
+      log.warn('SSE reconnect too fast, throttled', { sessionId: sessionId.slice(0, 8) });
       return null;
     }
     this.lastConnectTime.set(sessionId, now);
@@ -186,7 +200,7 @@ export class SSEConnectionManager {
       this.eventCounters.set(sessionId, 0);
     }
 
-    log.info("SSE connection created", { sessionId: sessionId.slice(0, 8) });
+    log.info('SSE connection created', { sessionId: sessionId.slice(0, 8) });
     return { readable, connection };
   }
 
@@ -211,7 +225,9 @@ export class SSEConnectionManager {
    */
   replayFrom(sessionId: string, lastEventId: number): SSEEvent[] {
     const buffer = this.eventBuffers.get(sessionId);
-    if (!buffer) return [];
+    if (!buffer) {
+      return [];
+    }
     return buffer.toArray().filter((e) => e.id > lastEventId);
   }
 
@@ -220,7 +236,9 @@ export class SSEConnectionManager {
    */
   broadcast(msg: unknown): void {
     for (const [sessionId, conn] of this.connections) {
-      if (conn.isClosed) continue;
+      if (conn.isClosed) {
+        continue;
+      }
       const counter = (this.eventCounters.get(sessionId) || 0) + 1;
       this.eventCounters.set(sessionId, counter);
       const event: SSEEvent = { id: counter, data: JSON.stringify(msg) };

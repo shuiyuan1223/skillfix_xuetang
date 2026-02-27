@@ -9,12 +9,12 @@
  * and grouped by category in the output.
  */
 
-import { existsSync, readdirSync, readFileSync } from "fs";
-import { join } from "path";
-import { getSkillsDir } from "../tools/skill-tools.js";
-import { createLogger } from "../utils/logger.js";
+import { existsSync, readdirSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { getSkillsDir } from '../tools/skill-tools.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Agent/SystemPrompt");
+const log = createLogger('Agent/SystemPrompt');
 
 interface SkillEntry {
   name: string;
@@ -25,11 +25,11 @@ interface SkillEntry {
 
 /** Category display order and labels */
 const CATEGORY_LABELS: Record<string, string> = {
-  "health-coaching": "健康教练",
-  "health-management": "健康管理",
-  evolution: "进化系统",
-  development: "开发工具",
-  utility: "工具",
+  'health-coaching': '健康教练',
+  'health-management': '健康管理',
+  evolution: '进化系统',
+  development: '开发工具',
+  utility: '工具',
 };
 
 const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS);
@@ -44,12 +44,16 @@ function parseSkillMetadata(content: string): {
   type?: string;
 } {
   const metadataMatch = content.match(/metadata:\s*\n\s*(\{.+\})/s);
-  if (!metadataMatch) return {};
+  if (!metadataMatch) {
+    return {};
+  }
 
   try {
     const meta = JSON.parse(metadataMatch[1]);
     const pha = meta?.pha;
-    if (!pha) return {};
+    if (!pha) {
+      return {};
+    }
     return {
       category: pha.category,
       tags: pha.tags,
@@ -72,9 +76,15 @@ function parseSkillMetadata(content: string): {
  */
 function matchesFilter(skill: SkillEntry, filters: string[]): boolean {
   for (const filter of filters) {
-    if (skill.name === filter) return true;
-    if (skill.category === filter) return true;
-    if (skill.tags?.includes(filter)) return true;
+    if (skill.name === filter) {
+      return true;
+    }
+    if (skill.category === filter) {
+      return true;
+    }
+    if (skill.tags?.includes(filter)) {
+      return true;
+    }
   }
   return false;
 }
@@ -90,16 +100,24 @@ function passesFilters(
   }
 ): boolean {
   if (options?.excludeTypes?.length) {
-    if (metadata.type && options.excludeTypes.includes(metadata.type)) return false;
+    if (metadata.type && options.excludeTypes.includes(metadata.type)) {
+      return false;
+    }
   }
   if (options?.tags?.length) {
-    if (!metadata.tags?.some((t) => options.tags!.includes(t))) return false;
+    if (!metadata.tags?.some((t) => options.tags!.includes(t))) {
+      return false;
+    }
   }
   if (options?.include?.length) {
-    if (!matchesFilter(skill, options.include)) return false;
+    if (!matchesFilter(skill, options.include)) {
+      return false;
+    }
   }
   if (options?.exclude?.length) {
-    if (matchesFilter(skill, options.exclude)) return false;
+    if (matchesFilter(skill, options.exclude)) {
+      return false;
+    }
   }
   return true;
 }
@@ -117,20 +135,26 @@ function loadFilteredSkills(
   try {
     const entries = readdirSync(skillsDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (entry.name.endsWith("_disabled")) continue;
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      if (entry.name.endsWith('_disabled')) {
+        continue;
+      }
 
-      const skillFile = join(skillsDir, entry.name, "SKILL.md");
-      if (!existsSync(skillFile)) continue;
+      const skillFile = join(skillsDir, entry.name, 'SKILL.md');
+      if (!existsSync(skillFile)) {
+        continue;
+      }
 
-      const content = readFileSync(skillFile, "utf-8");
+      const content = readFileSync(skillFile, 'utf-8');
       const metadata = parseSkillMetadata(content);
       const nameMatch = content.match(/^name:\s*(.+)$/m);
       const descMatch = content.match(/^description:\s*"?([^"]+)"?$/m);
 
       const skill: SkillEntry = {
         name: nameMatch?.[1]?.trim() || entry.name,
-        description: descMatch?.[1]?.trim() || "",
+        description: descMatch?.[1]?.trim() || '',
         category: metadata.category,
         tags: metadata.tags,
       };
@@ -140,7 +164,7 @@ function loadFilteredSkills(
       }
     }
   } catch (e) {
-    log.warn("Failed to load skill registry", { error: String(e) });
+    log.warn('Failed to load skill registry', { error: String(e) });
   }
   return skills;
 }
@@ -148,32 +172,38 @@ function loadFilteredSkills(
 function formatSkillRegistryText(skills: SkillEntry[]): string {
   const grouped = new Map<string, SkillEntry[]>();
   for (const skill of skills) {
-    const cat = skill.category || "utility";
-    if (!grouped.has(cat)) grouped.set(cat, []);
+    const cat = skill.category || 'utility';
+    if (!grouped.has(cat)) {
+      grouped.set(cat, []);
+    }
     grouped.get(cat)!.push(skill);
   }
 
   const lines = [
-    "",
-    "## Skills (mandatory)",
-    "",
-    "Before replying, scan the skill descriptions below.",
+    '',
+    '## Skills (mandatory)',
+    '',
+    'Before replying, scan the skill descriptions below.',
     "- If exactly one skill clearly applies to the user's question: call `get_skill(name)` to load its full guide, then follow it.",
-    "- If multiple could apply: choose the most specific one, load it, then follow it.",
-    "- If none clearly apply: do not load any skill.",
-    "- Never load more than one skill upfront.",
-    "",
-    "<available_skills>",
+    '- If multiple could apply: choose the most specific one, load it, then follow it.',
+    '- If none clearly apply: do not load any skill.',
+    '- Never load more than one skill upfront.',
+    '',
+    '<available_skills>',
   ];
 
   const orderedCategories = [...CATEGORY_ORDER.filter((c) => grouped.has(c))];
   for (const cat of grouped.keys()) {
-    if (!orderedCategories.includes(cat)) orderedCategories.push(cat);
+    if (!orderedCategories.includes(cat)) {
+      orderedCategories.push(cat);
+    }
   }
 
   for (const cat of orderedCategories) {
     const catSkills = grouped.get(cat);
-    if (!catSkills?.length) continue;
+    if (!catSkills?.length) {
+      continue;
+    }
 
     const label = CATEGORY_LABELS[cat] || cat;
     lines.push(`\n### ${label}`);
@@ -182,9 +212,9 @@ function formatSkillRegistryText(skills: SkillEntry[]): string {
     }
   }
 
-  lines.push("</available_skills>");
-  lines.push("");
-  return lines.join("\n");
+  lines.push('</available_skills>');
+  lines.push('');
+  return lines.join('\n');
 }
 
 /**
@@ -202,10 +232,14 @@ export function buildSkillRegistry(options?: {
   excludeTypes?: string[];
 }): string {
   const skillsDir = getSkillsDir();
-  if (!existsSync(skillsDir)) return "";
+  if (!existsSync(skillsDir)) {
+    return '';
+  }
 
   const skills = loadFilteredSkills(skillsDir, options);
-  if (skills.length === 0) return "";
+  if (skills.length === 0) {
+    return '';
+  }
 
   return formatSkillRegistryText(skills);
 }

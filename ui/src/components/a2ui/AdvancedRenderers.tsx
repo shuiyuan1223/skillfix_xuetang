@@ -11,39 +11,39 @@ import {
 
 /** Map a diff line type to its prefix symbol */
 function diffLineSymbol(type: string): string {
-  if (type === "add") return "+";
-  if (type === "remove") return "-";
-  if (type === "hunk") return "@@";
+  if (type === "add") { return "+"; }
+  if (type === "remove") { return "-"; }
+  if (type === "hunk") { return "@@"; }
   return " ";
 }
 
 /** Map a score to a CSS class: high / mid / low */
 function scoreClass(s: number): string {
-  if (s >= 0.9) return "score-high";
-  if (s >= 0.7) return "score-mid";
+  if (s >= 0.9) { return "score-high"; }
+  if (s >= 0.7) { return "score-mid"; }
   return "score-low";
 }
 
 /** Map a score to a hex color */
 function scoreColor(s: number): string {
-  if (s >= 0.9) return "#4ade80";
-  if (s >= 0.7) return "#fbbf24";
+  if (s >= 0.9) { return "#4ade80"; }
+  if (s >= 0.7) { return "#fbbf24"; }
   return "#f87171";
 }
 
 /** Map step status to the circle CSS class */
 function stepCircleClass(status: string): string {
-  if (status === "completed") return "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]";
-  if (status === "active") return "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]";
-  if (status === "failed") return "bg-red-500 border-red-500 text-white";
-  if (status === "skipped") return "bg-transparent border-slate-600 border-dashed text-slate-500";
+  if (status === "completed") { return "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]"; }
+  if (status === "active") { return "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]"; }
+  if (status === "failed") { return "bg-red-500 border-red-500 text-white"; }
+  if (status === "skipped") { return "bg-transparent border-slate-600 border-dashed text-slate-500"; }
   return "bg-transparent border-slate-600 text-slate-500";
 }
 
 /** Map step status to the label CSS class */
 function stepLabelClass(status: string): string {
-  if (status === "active") return "text-indigo-400 font-semibold";
-  if (status === "completed") return "text-emerald-400 font-medium";
+  if (status === "active") { return "text-indigo-400 font-semibold"; }
+  if (status === "completed") { return "text-emerald-400 font-medium"; }
   return "text-slate-500 font-medium";
 }
 
@@ -59,15 +59,15 @@ function stepIconSize(status: string): string {
 
 /** Map evolution version status to dot color */
 function versionDotColor(status: string): string {
-  if (status === "active") return "rgb(var(--color-primary))";
-  if (status === "merged") return "rgb(var(--color-success))";
+  if (status === "active") { return "rgb(var(--color-primary))"; }
+  if (status === "merged") { return "rgb(var(--color-success))"; }
   return "rgb(var(--color-text-muted))";
 }
 
 /** Map recommendation to badge CSS class */
 function recommendationBadgeClass(recommendation: string): string {
-  if (recommendation === "merge") return "bg-emerald-500/15 text-emerald-400";
-  if (recommendation === "revert") return "bg-red-500/15 text-red-400";
+  if (recommendation === "merge") { return "bg-emerald-500/15 text-emerald-400"; }
+  if (recommendation === "revert") { return "bg-red-500/15 text-red-400"; }
   return "bg-amber-500/15 text-amber-400";
 }
 
@@ -102,12 +102,12 @@ function relativeTimeStr(ts: number | string): string {
   const d = typeof ts === "string" ? new Date(ts).getTime() : ts;
   const diff = Date.now() - d;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) { return "just now"; }
+  if (mins < 60) { return `${mins}m ago`; }
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) { return `${hrs}h ago`; }
   const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) { return `${days}d ago`; }
   return `${Math.floor(days / 30)}mo ago`;
 }
 
@@ -134,7 +134,7 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
   const syncScroll = lineNumbers ? (e: React.UIEvent) => {
     const el = e.currentTarget as HTMLElement;
     const ln = el.closest(".code-editor-container")?.querySelector(".code-line-numbers") as HTMLElement | null;
-    if (ln) ln.scrollTop = el.scrollTop;
+    if (ln) { ln.scrollTop = el.scrollTop; }
   } : undefined;
 
   if (readonly) {
@@ -197,7 +197,7 @@ export function renderDiffView(c: A2UIComponent, ctx: RenderContext) {
   const title = prop(c, "title") as string;
   const unifiedDiff = prop(c, "unifiedDiff") as string | undefined;
 
-  if (unifiedDiff) return renderUnifiedDiff(title, unifiedDiff);
+  if (unifiedDiff) { return renderUnifiedDiff(title, unifiedDiff); }
 
   const beforeLines = before.split("\n");
   const afterLines = after.split("\n");
@@ -236,11 +236,11 @@ function renderUnifiedDiff(title: string, diff: string) {
   const lines = diff.split("\n");
   const bodyLines: { text: string; type: "add" | "remove" | "context" | "hunk" }[] = [];
   for (const line of lines) {
-    if (line.startsWith("@@")) bodyLines.push({ text: line, type: "hunk" });
-    else if (line.startsWith("+") && !line.startsWith("+++")) bodyLines.push({ text: line, type: "add" });
-    else if (line.startsWith("-") && !line.startsWith("---")) bodyLines.push({ text: line, type: "remove" });
+    if (line.startsWith("@@")) { bodyLines.push({ text: line, type: "hunk" }); }
+    else if (line.startsWith("+") && !line.startsWith("+++")) { bodyLines.push({ text: line, type: "add" }); }
+    else if (line.startsWith("-") && !line.startsWith("---")) { bodyLines.push({ text: line, type: "remove" }); }
     else if (line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) { /* skip */ }
-    else bodyLines.push({ text: line, type: "context" });
+    else { bodyLines.push({ text: line, type: "context" }); }
   }
   const lineClass = (type: string) => {
     switch (type) {
@@ -297,9 +297,9 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
       if (str.includes("|")) {
         const [n, v] = str.split("|");
         num = Number(n) || 0;
-        if (v === "success") barCls = "bg-success";
-        else if (v === "error") barCls = "bg-error";
-        else if (v === "running") anim = "animate-status-pulse";
+        if (v === "success") { barCls = "bg-success"; }
+        else if (v === "error") { barCls = "bg-error"; }
+        else if (v === "running") { anim = "animate-status-pulse"; }
       } else { num = Number(str) || 0; }
       return (
         <div className="flex items-center gap-2">
@@ -310,10 +310,10 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
         </div>
       );
     }
-    if (render === "date") return new Date(Number(value)).toLocaleString();
+    if (render === "date") { return new Date(Number(value)).toLocaleString(); }
     if (render === "link") {
       const text = String(value ?? "");
-      if (!text || text === "-") return text;
+      if (!text || text === "-") { return text; }
       return <span className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary">{text}</span>;
     }
     return String(value ?? "");
@@ -410,7 +410,7 @@ export function renderActivityRings(c: A2UIComponent, _ctx: RenderContext) {
       <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
         {rings.map((ring, i) => {
           const radius = center - strokeWidth / 2 - i * (strokeWidth + gap);
-          if (radius <= 0) return null;
+          if (radius <= 0) { return null; }
           const circumference = 2 * Math.PI * radius;
           const pct = Math.min(ring.value / ring.max, 1);
           const dashOffset = circumference - pct * circumference;
@@ -534,7 +534,7 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
   const required = prop(c, "required") as boolean | undefined;
   const onChange = prop(c, "onChange") as string | undefined;
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    if (onChange) ctx.sendAction(onChange, { name, value: e.target.value });
+    if (onChange) { ctx.sendAction(onChange, { name, value: e.target.value }); }
   };
   const inputCls = "w-full py-2.5 px-3.5 bg-surface border border-border rounded-[10px] text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-surface-hover focus:ring-4 focus:ring-primary/10";
 
@@ -567,7 +567,7 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
                   const wrapper = (e.currentTarget as HTMLElement).closest(".custom-select") as HTMLElement;
                   if (wrapper) {
                     const hidden = wrapper.querySelector('input[type="hidden"]') as HTMLInputElement;
-                    if (hidden) hidden.value = opt.value;
+                    if (hidden) { hidden.value = opt.value; }
                     const lbl = wrapper.querySelector(".select-label") as HTMLElement;
                     if (lbl) { lbl.textContent = opt.label; lbl.className = "select-label text-text"; }
                     wrapper.querySelectorAll(".select-option").forEach((el) => {
@@ -577,7 +577,7 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
                     });
                     wrapper.classList.remove("open");
                   }
-                  if (onChange) ctx.sendAction(onChange, { name, value: opt.value });
+                  if (onChange) { ctx.sendAction(onChange, { name, value: opt.value }); }
                 }}
               >{opt.label}</div>
             ))}
@@ -599,8 +599,8 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
               defaultChecked={checked}
               onChange={(e) => {
                 const hidden = e.currentTarget.previousElementSibling as HTMLInputElement;
-                if (hidden) hidden.value = e.currentTarget.checked ? "true" : "false";
-                if (onChange) ctx.sendAction(onChange, { name, value: String(e.currentTarget.checked) });
+                if (hidden) { hidden.value = e.currentTarget.checked ? "true" : "false"; }
+                if (onChange) { ctx.sendAction(onChange, { name, value: String(e.currentTarget.checked) }); }
               }}
             />
             <div className="w-9 h-5 bg-border rounded-full peer peer-checked:bg-primary peer-focus:ring-4 peer-focus:ring-primary/10 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
@@ -655,7 +655,7 @@ export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
           </div>
           {group.events.map(({ evt, idx }) => (
             <div key={idx} className={`flex gap-3 p-2 rounded-lg transition-colors relative ${selectedEventId === evt.id ? "bg-primary/10" : "hover:bg-surface-hover"}`} onClick={() => onEventClick && ctx.sendAction(onEventClick, { eventId: evt.id })} onContextMenu={(e) => {
-              if (!onContextAction) return;
+              if (!onContextAction) { return; }
               e.preventDefault();
               const menu = (e.currentTarget as HTMLElement).querySelector(".timeline-context-menu") as HTMLElement;
               if (menu) {
@@ -755,7 +755,7 @@ export function renderFileTree(c: A2UIComponent, ctx: RenderContext) {
   for (const f of files) {
     const parts = (f.path as string).split("/");
     const dir = parts.length > 1 ? parts.slice(0, -1).join("/") : ".";
-    if (!tree.has(dir)) tree.set(dir, []);
+    if (!tree.has(dir)) { tree.set(dir, []); }
     tree.get(dir)!.push(f);
   }
   return (

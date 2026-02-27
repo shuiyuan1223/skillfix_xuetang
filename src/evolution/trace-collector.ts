@@ -5,7 +5,7 @@
  * Persists to SQLite database.
  */
 
-import type { Trace } from "./types.js";
+import type { Trace } from './types.js';
 import {
   insertTrace,
   getTrace as dbGetTrace,
@@ -13,10 +13,10 @@ import {
   countTraces,
   clearTraces,
   type TraceRow,
-} from "../memory/db.js";
-import { createLogger } from "../utils/logger.js";
+} from '../memory/db.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("TraceCollector");
+const log = createLogger('TraceCollector');
 
 /**
  * Convert database row to Trace object
@@ -46,7 +46,7 @@ export class TraceCollector {
   /**
    * Start recording a new trace
    */
-  startTrace(sessionId: string, userMessage: string, context?: Trace["context"]): string {
+  startTrace(sessionId: string, userMessage: string, context?: Trace['context']): string {
     const id = crypto.randomUUID();
     const trace: Trace = {
       id,
@@ -54,7 +54,7 @@ export class TraceCollector {
       sessionId,
       userMessage,
       context,
-      agentResponse: "",
+      agentResponse: '',
       toolCalls: [],
       duration: 0,
     };
@@ -68,14 +68,11 @@ export class TraceCollector {
   /**
    * Record a tool call
    */
-  recordToolCall(
-    traceId: string,
-    tool: string,
-    args: Record<string, unknown>,
-    result: unknown
-  ): void {
+  recordToolCall(traceId: string, tool: string, args: Record<string, unknown>, result: unknown): void {
     const trace = this.activeTraces.get(traceId);
-    if (!trace) return;
+    if (!trace) {
+      return;
+    }
 
     trace.toolCalls = trace.toolCalls || [];
     trace.toolCalls.push({ tool, arguments: args, result });
@@ -84,13 +81,11 @@ export class TraceCollector {
   /**
    * Complete the trace with the final response and persist to database
    */
-  completeTrace(
-    traceId: string,
-    response: string,
-    tokenUsage?: Trace["tokenUsage"]
-  ): Trace | undefined {
+  completeTrace(traceId: string, response: string, tokenUsage?: Trace['tokenUsage']): Trace | undefined {
     const trace = this.activeTraces.get(traceId);
-    if (!trace) return undefined;
+    if (!trace) {
+      return undefined;
+    }
 
     trace.agentResponse = response;
     trace.duration = Date.now() - trace.timestamp;
@@ -110,7 +105,7 @@ export class TraceCollector {
         tokenUsage: trace.tokenUsage,
       });
     } catch (error) {
-      log.error("Failed to persist trace:", error);
+      log.error('Failed to persist trace:', error);
     }
 
     // Remove from active traces
@@ -125,11 +120,15 @@ export class TraceCollector {
   getTrace(traceId: string): Trace | undefined {
     // Check active traces first
     const active = this.activeTraces.get(traceId);
-    if (active) return active;
+    if (active) {
+      return active;
+    }
 
     // Check database
     const row = dbGetTrace(traceId);
-    if (row) return rowToTrace(row);
+    if (row) {
+      return rowToTrace(row);
+    }
 
     return undefined;
   }

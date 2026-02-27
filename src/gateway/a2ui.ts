@@ -39,23 +39,47 @@ export interface A2UISurfaceData {
 
 /** Wrap a JS value into a BoundValue */
 export function toBoundValue(v: unknown): BoundValue {
-  if (typeof v === "string") return { literalString: v };
-  if (typeof v === "number") return { literalNumber: v };
-  if (typeof v === "boolean") return { literalBoolean: v };
-  if (Array.isArray(v)) return { literalArray: v };
+  if (typeof v === 'string') {
+    return { literalString: v };
+  }
+  if (typeof v === 'number') {
+    return { literalNumber: v };
+  }
+  if (typeof v === 'boolean') {
+    return { literalBoolean: v };
+  }
+  if (Array.isArray(v)) {
+    return { literalArray: v };
+  }
   return { literalObject: v };
 }
 
 /** Unwrap a BoundValue/ChildrenValue back to JS */
 export function fromBoundValue(bv: BoundValue | ChildrenValue | undefined): unknown {
-  if (!bv) return undefined;
-  if ("literalString" in bv) return bv.literalString;
-  if ("literalNumber" in bv) return bv.literalNumber;
-  if ("literalBoolean" in bv) return bv.literalBoolean;
-  if ("literalArray" in bv) return bv.literalArray;
-  if ("literalObject" in bv) return bv.literalObject;
-  if ("explicitList" in bv) return bv.explicitList;
-  if ("path" in bv) return bv.path;
+  if (!bv) {
+    return undefined;
+  }
+  if ('literalString' in bv) {
+    return bv.literalString;
+  }
+  if ('literalNumber' in bv) {
+    return bv.literalNumber;
+  }
+  if ('literalBoolean' in bv) {
+    return bv.literalBoolean;
+  }
+  if ('literalArray' in bv) {
+    return bv.literalArray;
+  }
+  if ('literalObject' in bv) {
+    return bv.literalObject;
+  }
+  if ('explicitList' in bv) {
+    return bv.explicitList;
+  }
+  if ('path' in bv) {
+    return bv.path;
+  }
   return undefined;
 }
 
@@ -64,14 +88,16 @@ export function fromBoundValue(bv: BoundValue | ChildrenValue | undefined): unkn
 
 /** Get component type name (PascalCase) */
 export function componentType(c: A2UIComponent): string {
-  return Object.keys(c.component)[0] || "";
+  return Object.keys(c.component)[0] || '';
 }
 
 /** Get a component property value (auto-unwrap BoundValue) */
 export function prop(c: A2UIComponent, key: string): unknown {
   const typeName = componentType(c);
   const props = c.component[typeName];
-  if (!props) return undefined;
+  if (!props) {
+    return undefined;
+  }
   return fromBoundValue(props[key]);
 }
 
@@ -79,7 +105,9 @@ export function prop(c: A2UIComponent, key: string): unknown {
 export function children(c: A2UIComponent): string[] {
   const typeName = componentType(c);
   const ch = c.component[typeName]?.children;
-  if (ch && "explicitList" in ch) return ch.explicitList;
+  if (ch && 'explicitList' in ch) {
+    return ch.explicitList;
+  }
   return [];
 }
 
@@ -97,65 +125,65 @@ export function withProp(c: A2UIComponent, key: string, value: unknown): A2UICom
 // ==================== Component Name Mapping ====================
 
 const _TYPE_TO_PASCAL: Record<string, string> = {
-  text: "Text",
-  button: "Button",
-  column: "Column",
-  row: "Row",
-  grid: "Grid",
-  card: "Card",
-  tabs: "Tabs",
-  modal: "Modal",
-  divider: "Divider",
-  spacer: "Spacer",
-  icon: "Icon",
-  progress: "Progress",
-  badge: "Badge",
-  skeleton: "Skeleton",
-  table: "Table",
-  nav: "Nav",
-  form: "Form",
-  form_input: "FormInput",
-  select: "Select",
-  date_picker: "DatePicker",
-  toast: "Toast",
-  metric: "Metric",
+  text: 'Text',
+  button: 'Button',
+  column: 'Column',
+  row: 'Row',
+  grid: 'Grid',
+  card: 'Card',
+  tabs: 'Tabs',
+  modal: 'Modal',
+  divider: 'Divider',
+  spacer: 'Spacer',
+  icon: 'Icon',
+  progress: 'Progress',
+  badge: 'Badge',
+  skeleton: 'Skeleton',
+  table: 'Table',
+  nav: 'Nav',
+  form: 'Form',
+  form_input: 'FormInput',
+  select: 'Select',
+  date_picker: 'DatePicker',
+  toast: 'Toast',
+  metric: 'Metric',
   // PHA custom components
-  chat_messages: "ChatMessages",
-  chat_input: "ChatInput",
-  stat_card: "StatCard",
-  chart: "Chart",
-  data_table: "DataTable",
-  score_gauge: "ScoreGauge",
-  activity_rings: "ActivityRings",
-  status_badge: "StatusBadge",
-  collapsible: "Collapsible",
-  code_editor: "CodeEditor",
-  commit_list: "CommitList",
-  diff_view: "DiffView",
-  git_timeline: "GitTimeline",
-  step_indicator: "StepIndicator",
-  file_tree: "FileTree",
-  version_graph: "VersionGraph",
-  log_viewer: "LogViewer",
-  tag_picker: "TagPicker",
-  radar_chart: "RadarChart",
-  auth_page: "AuthPage",
-  arena_pills: "ArenaPills",
-  arena_score_table: "ArenaScoreTable",
-  arena_category_card: "ArenaCategoryCard",
-  arena_run_picker: "ArenaRunPicker",
-  arena_mode_toggle: "ArenaModeToggle",
-  playground_fab: "PlaygroundFab",
-  evolution_pipeline: "EvolutionPipeline",
+  chat_messages: 'ChatMessages',
+  chat_input: 'ChatInput',
+  stat_card: 'StatCard',
+  chart: 'Chart',
+  data_table: 'DataTable',
+  score_gauge: 'ScoreGauge',
+  activity_rings: 'ActivityRings',
+  status_badge: 'StatusBadge',
+  collapsible: 'Collapsible',
+  code_editor: 'CodeEditor',
+  commit_list: 'CommitList',
+  diff_view: 'DiffView',
+  git_timeline: 'GitTimeline',
+  step_indicator: 'StepIndicator',
+  file_tree: 'FileTree',
+  version_graph: 'VersionGraph',
+  log_viewer: 'LogViewer',
+  tag_picker: 'TagPicker',
+  radar_chart: 'RadarChart',
+  auth_page: 'AuthPage',
+  arena_pills: 'ArenaPills',
+  arena_score_table: 'ArenaScoreTable',
+  arena_category_card: 'ArenaCategoryCard',
+  arena_run_picker: 'ArenaRunPicker',
+  arena_mode_toggle: 'ArenaModeToggle',
+  playground_fab: 'PlaygroundFab',
+  evolution_pipeline: 'EvolutionPipeline',
 };
 
-export const PHA_CATALOG_ID = "pha";
+export const PHA_CATALOG_ID = 'pha';
 
 // Surface IDs
-export const SURFACE_MAIN = "main";
-export const SURFACE_SIDEBAR = "sidebar";
-export const SURFACE_MODAL = "modal";
-export const SURFACE_TOAST = "toast";
+export const SURFACE_MAIN = 'main';
+export const SURFACE_SIDEBAR = 'sidebar';
+export const SURFACE_MODAL = 'modal';
+export const SURFACE_TOAST = 'toast';
 
 // ==================== A2UIGenerator ====================
 
@@ -175,7 +203,7 @@ export class A2UIGenerator {
     this.surfaceId = surfaceId;
   }
 
-  private nextId(prefix: string = "c"): string {
+  private nextId(prefix: string = 'c'): string {
     return `${this.surfaceId}_${prefix}_${++this.idCounter}`;
   }
 
@@ -184,8 +212,10 @@ export class A2UIGenerator {
     const id = this.nextId(prefix);
     const v08Props: Record<string, BoundValue | ChildrenValue> = {};
     for (const [k, v] of Object.entries(props)) {
-      if (v === undefined || v === null) continue;
-      if (k === "children" && Array.isArray(v) && v.every((i) => typeof i === "string")) {
+      if (v === undefined || v === null) {
+        continue;
+      }
+      if (k === 'children' && Array.isArray(v) && v.every((i) => typeof i === 'string')) {
         v08Props.children = { explicitList: v as string[] };
       } else {
         v08Props[k] = toBoundValue(v);
@@ -197,60 +227,60 @@ export class A2UIGenerator {
 
   // Layout components
   column(childIds: string[], opts: Record<string, unknown> = {}): string {
-    return this.add("col", "Column", { children: childIds, ...opts });
+    return this.add('col', 'Column', { children: childIds, ...opts });
   }
 
   row(childIds: string[], opts: Record<string, unknown> = {}): string {
-    return this.add("row", "Row", { children: childIds, ...opts });
+    return this.add('row', 'Row', { children: childIds, ...opts });
   }
 
   grid(childIds: string[], opts: Record<string, unknown> = {}): string {
-    return this.add("grid", "Grid", { children: childIds, ...opts });
+    return this.add('grid', 'Grid', { children: childIds, ...opts });
   }
 
   // Content components
-  text(text: string, variant: string = "body", opts: Record<string, unknown> = {}): string {
-    return this.add("txt", "Text", { text, variant, ...opts });
+  text(text: string, variant: string = 'body', opts: Record<string, unknown> = {}): string {
+    return this.add('txt', 'Text', { text, variant, ...opts });
   }
 
   card(childIds: string[], opts: Record<string, unknown> = {}): string {
-    return this.add("card", "Card", { children: childIds, ...opts });
+    return this.add('card', 'Card', { children: childIds, ...opts });
   }
 
   metric(opts: Record<string, unknown>): string {
-    return this.add("metric", "Metric", opts);
+    return this.add('metric', 'Metric', opts);
   }
 
   statCard(opts: Record<string, unknown>): string {
-    return this.add("stat", "StatCard", opts);
+    return this.add('stat', 'StatCard', opts);
   }
 
   chart(opts: Record<string, unknown>): string {
-    return this.add("chart", "Chart", opts);
+    return this.add('chart', 'Chart', opts);
   }
 
   table(columns: unknown[], rows: unknown[]): string {
-    return this.add("table", "Table", { columns, rows });
+    return this.add('table', 'Table', { columns, rows });
   }
 
   button(label: string, action: string, opts: Record<string, unknown> = {}): string {
-    return this.add("btn", "Button", { label, action, ...opts });
+    return this.add('btn', 'Button', { label, action, ...opts });
   }
 
   progress(value: number, opts: Record<string, unknown> = {}): string {
-    return this.add("prog", "Progress", { value, ...opts });
+    return this.add('prog', 'Progress', { value, ...opts });
   }
 
   badge(text: string, opts: Record<string, unknown> = {}): string {
-    return this.add("badge", "Badge", { text, ...opts });
+    return this.add('badge', 'Badge', { text, ...opts });
   }
 
   skeleton(opts: Record<string, unknown> = {}): string {
-    return this.add("skel", "Skeleton", opts);
+    return this.add('skel', 'Skeleton', opts);
   }
 
   nav(items: unknown[], opts: Record<string, unknown> = {}): string {
-    return this.add("nav", "Nav", { items, ...opts });
+    return this.add('nav', 'Nav', { items, ...opts });
   }
 
   tabs(
@@ -259,85 +289,81 @@ export class A2UIGenerator {
     contentIds: Record<string, string>,
     opts: { actionIds?: string[] } = {}
   ): string {
-    return this.add("tabs", "Tabs", { tabs: tabsList, activeTab, contentIds, ...opts });
+    return this.add('tabs', 'Tabs', { tabs: tabsList, activeTab, contentIds, ...opts });
   }
 
   // Admin/Evolution Component Methods
   codeEditor(value: string, opts: Record<string, unknown> = {}): string {
-    return this.add("editor", "CodeEditor", { value, ...opts });
+    return this.add('editor', 'CodeEditor', { value, ...opts });
   }
 
   commitList(commits: unknown[], opts: Record<string, unknown> = {}): string {
-    return this.add("commits", "CommitList", { commits, ...opts });
+    return this.add('commits', 'CommitList', { commits, ...opts });
   }
 
   diffView(before: string, after: string, opts: Record<string, unknown> = {}): string {
-    return this.add("diff", "DiffView", { before, after, ...opts });
+    return this.add('diff', 'DiffView', { before, after, ...opts });
   }
 
   dataTable(columns: unknown[], rows: unknown[], opts: Record<string, unknown> = {}): string {
-    return this.add("dtable", "DataTable", { columns, rows, ...opts });
+    return this.add('dtable', 'DataTable', { columns, rows, ...opts });
   }
 
   scoreGauge(value: number, opts: Record<string, unknown> = {}): string {
-    return this.add("gauge", "ScoreGauge", { value, ...opts });
+    return this.add('gauge', 'ScoreGauge', { value, ...opts });
   }
 
   activityRings(rings: unknown[], opts: Record<string, unknown> = {}): string {
-    return this.add("rings", "ActivityRings", { rings, ...opts });
+    return this.add('rings', 'ActivityRings', { rings, ...opts });
   }
 
   radarChart(opts: Record<string, unknown>): string {
-    return this.add("radar", "RadarChart", opts);
+    return this.add('radar', 'RadarChart', opts);
   }
 
   statusBadge(status: string, opts: Record<string, unknown> = {}): string {
-    return this.add("status", "StatusBadge", { status, ...opts });
+    return this.add('status', 'StatusBadge', { status, ...opts });
   }
 
   collapsible(title: string, childIds: string[], opts: Record<string, unknown> = {}): string {
-    return this.add("collapse", "Collapsible", { title, children: childIds, ...opts });
+    return this.add('collapse', 'Collapsible', { title, children: childIds, ...opts });
   }
 
   modal(title: string, childIds: string[], opts: Record<string, unknown> = {}): string {
-    return this.add("modal", "Modal", { title, children: childIds, ...opts });
+    return this.add('modal', 'Modal', { title, children: childIds, ...opts });
   }
 
   form(childIds: string[], onSubmit: string, opts: Record<string, unknown> = {}): string {
-    return this.add("form", "Form", { children: childIds, onSubmit, ...opts });
+    return this.add('form', 'Form', { children: childIds, onSubmit, ...opts });
   }
 
   formInput(name: string, inputType: string, opts: Record<string, unknown> = {}): string {
-    return this.add("input", "FormInput", { name, inputType, ...opts });
+    return this.add('input', 'FormInput', { name, inputType, ...opts });
   }
 
   tagPicker(opts: Record<string, unknown>): string {
-    return this.add("tagpick", "TagPicker", opts);
+    return this.add('tagpick', 'TagPicker', opts);
   }
 
   // Evolution Lab Component Methods
   gitTimeline(events: unknown[], opts: Record<string, unknown> = {}): string {
-    return this.add("timeline", "GitTimeline", { events, ...opts });
+    return this.add('timeline', 'GitTimeline', { events, ...opts });
   }
 
   stepIndicator(steps: unknown[], opts: Record<string, unknown> = {}): string {
-    return this.add("steps", "StepIndicator", { steps, ...opts });
+    return this.add('steps', 'StepIndicator', { steps, ...opts });
   }
 
   fileTree(files: unknown[], opts: Record<string, unknown> = {}): string {
-    return this.add("ftree", "FileTree", { files, ...opts });
+    return this.add('ftree', 'FileTree', { files, ...opts });
   }
 
-  versionGraph(
-    mainBranch: unknown,
-    versions: unknown[],
-    opts: Record<string, unknown> = {}
-  ): string {
-    return this.add("vgraph", "VersionGraph", { mainBranch, versions, ...opts });
+  versionGraph(mainBranch: unknown, versions: unknown[], opts: Record<string, unknown> = {}): string {
+    return this.add('vgraph', 'VersionGraph', { mainBranch, versions, ...opts });
   }
 
   logViewer(entries: unknown[], opts: Record<string, unknown> = {}): string {
-    return this.add("logviewer", "LogViewer", { entries, ...opts });
+    return this.add('logviewer', 'LogViewer', { entries, ...opts });
   }
 
   /**
@@ -347,8 +373,10 @@ export class A2UIGenerator {
   addRaw(id: string, typeName: string, props: Record<string, unknown>): void {
     const v08Props: Record<string, BoundValue | ChildrenValue> = {};
     for (const [k, v] of Object.entries(props)) {
-      if (v === undefined || v === null) continue;
-      if (k === "children" && Array.isArray(v) && v.every((i) => typeof i === "string")) {
+      if (v === undefined || v === null) {
+        continue;
+      }
+      if (k === 'children' && Array.isArray(v) && v.every((i) => typeof i === 'string')) {
         v08Props.children = { explicitList: v as string[] };
       } else {
         v08Props[k] = toBoundValue(v);
@@ -392,7 +420,7 @@ export class A2UIGenerator {
   toJsonl(rootId: string): string {
     return this.build(rootId)
       .map((m) => JSON.stringify(m))
-      .join("\n");
+      .join('\n');
   }
 }
 
@@ -401,45 +429,45 @@ export class A2UIGenerator {
 // ============================================================================
 
 export type AGUIEvent =
-  | { type: "RunStarted"; threadId: string; runId: string }
-  | { type: "RunFinished"; threadId: string; runId: string }
-  | { type: "TextMessageStart"; messageId: string; role: "assistant" }
-  | { type: "TextMessageContent"; messageId: string; delta: string }
-  | { type: "TextMessageEnd"; messageId: string }
+  | { type: 'RunStarted'; threadId: string; runId: string }
+  | { type: 'RunFinished'; threadId: string; runId: string }
+  | { type: 'TextMessageStart'; messageId: string; role: 'assistant' }
+  | { type: 'TextMessageContent'; messageId: string; delta: string }
+  | { type: 'TextMessageEnd'; messageId: string }
   | {
-      type: "ToolCallStart";
+      type: 'ToolCallStart';
       toolCallId: string;
       toolCallName: string;
       parentMessageId?: string;
       displayName?: string;
     }
-  | { type: "ToolCallEnd"; toolCallId: string }
+  | { type: 'ToolCallEnd'; toolCallId: string }
   | {
-      type: "ToolCallResult";
+      type: 'ToolCallResult';
       messageId: string;
       toolCallId: string;
       content?: string;
       cards?: { components: unknown[]; root_id: string };
     }
-  | { type: "Custom"; name: string; data: unknown };
+  | { type: 'Custom'; name: string; data: unknown };
 
 // ============================================================================
 // Parts Message Model — unchanged
 // ============================================================================
 
 export type MessagePart =
-  | { type: "text"; content: string }
+  | { type: 'text'; content: string }
   | {
-      type: "tool_use";
+      type: 'tool_use';
       toolCallId: string;
       toolName: string;
-      status: "running" | "completed" | "error";
+      status: 'running' | 'completed' | 'error';
       displayName?: string;
     }
-  | { type: "tool_result"; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
+  | { type: 'tool_result'; toolCallId: string; cards?: { components: unknown[]; root_id: string } };
 
 export interface PartsChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   parts: MessagePart[];
 }

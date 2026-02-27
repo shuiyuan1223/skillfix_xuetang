@@ -5,14 +5,14 @@
  * Stores tokens in .pha/users.db
  */
 
-import { Database } from "bun:sqlite";
-import * as path from "path";
-import { mkdirSync, existsSync } from "fs";
-import { getStateDir, ensureConfigDir } from "../../utils/config.js";
-import { encrypt, decrypt } from "../../utils/crypto.js";
-import type { TokenData } from "./huawei-types.js";
+import { Database } from 'bun:sqlite';
+import * as path from 'path';
+import { mkdirSync, existsSync } from 'fs';
+import { getStateDir, ensureConfigDir } from '../../utils/config.js';
+import { encrypt, decrypt } from '../../utils/crypto.js';
+import type { TokenData } from './huawei-types.js';
 
-const DB_FILE = path.join("db", "oauth.db");
+const DB_FILE = path.join('db', 'oauth.db');
 
 // Buffer time before token expiry (5 minutes)
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
@@ -60,7 +60,7 @@ export class UserStore {
     `);
     // Migration: add uid column if it doesn't exist yet
     try {
-      this.db.run("ALTER TABLE users ADD COLUMN uid TEXT");
+      this.db.run('ALTER TABLE users ADD COLUMN uid TEXT');
     } catch {
       // Column already exists — safe to ignore
     }
@@ -116,7 +116,9 @@ export class UserStore {
       uid: string | null;
     } | null;
 
-    if (!row) return null;
+    if (!row) {
+      return null;
+    }
 
     const stateDir = getStateDir();
     return {
@@ -134,7 +136,7 @@ export class UserStore {
    * Delete token for a user
    */
   deleteToken(uuid: string): void {
-    const stmt = this.db.prepare("DELETE FROM users WHERE uuid = ?");
+    const stmt = this.db.prepare('DELETE FROM users WHERE uuid = ?');
     stmt.run(uuid);
   }
 
@@ -143,7 +145,9 @@ export class UserStore {
    */
   needsRefresh(uuid: string): boolean {
     const token = this.getToken(uuid);
-    if (!token) return true;
+    if (!token) {
+      return true;
+    }
     return Date.now() >= token.expiresAt - TOKEN_EXPIRY_BUFFER_MS;
   }
 
@@ -152,7 +156,9 @@ export class UserStore {
    */
   hasValidToken(uuid: string): boolean {
     const token = this.getToken(uuid);
-    if (!token) return false;
+    if (!token) {
+      return false;
+    }
     return Date.now() < token.expiresAt;
   }
 
@@ -168,13 +174,15 @@ export class UserStore {
    */
   getTokenData(uuid: string): TokenData | null {
     const token = this.getToken(uuid);
-    if (!token) return null;
+    if (!token) {
+      return null;
+    }
 
     return {
       accessToken: token.accessToken,
       refreshToken: token.refreshToken,
       expiresAt: token.expiresAt,
-      tokenType: token.tokenType || "Bearer",
+      tokenType: token.tokenType || 'Bearer',
       scope: token.scope,
     };
   }
@@ -183,7 +191,7 @@ export class UserStore {
    * List all user UUIDs that have stored tokens.
    */
   listUserUuids(): string[] {
-    const stmt = this.db.prepare("SELECT uuid FROM users ORDER BY updated_at DESC");
+    const stmt = this.db.prepare('SELECT uuid FROM users ORDER BY updated_at DESC');
     return (stmt.all() as Array<{ uuid: string }>).map((row) => row.uuid);
   }
 

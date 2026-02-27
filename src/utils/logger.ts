@@ -6,13 +6,13 @@
  * Provides real-time log subscription for the Logs UI page.
  */
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync } from "fs";
-import { join } from "path";
-import { getStateDir } from "./config.js";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
+import { getStateDir } from './config.js';
 
 // ============ Types ============
 
-export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 export interface LogEntry {
   time: string;
@@ -37,7 +37,7 @@ export interface SubsystemLogger {
 // ============ Log Directory ============
 
 function getLogDir(): string {
-  return join(getStateDir(), "logs");
+  return join(getStateDir(), 'logs');
 }
 
 function ensureLogDir(): void {
@@ -48,7 +48,7 @@ function ensureLogDir(): void {
 }
 
 function getLogFile(date?: string): string {
-  const d = date || new Date().toISOString().split("T")[0];
+  const d = date || new Date().toISOString().split('T')[0];
   return join(getLogDir(), `pha-${d}.log`);
 }
 
@@ -92,10 +92,10 @@ function serializeErrors(data: unknown, seen = new WeakSet()): unknown {
   }
 
   // Handle plain objects (but not class instances, Date, etc.)
-  if (typeof data === "object" && data.constructor === Object) {
+  if (typeof data === 'object' && data.constructor === Object) {
     // Avoid circular references
     if (seen.has(data)) {
-      return "[Circular]";
+      return '[Circular]';
     }
     seen.add(data);
 
@@ -126,11 +126,15 @@ function writeLogEntry(entry: LogEntry): void {
 
   // Console forwarding
   const prefix = `[${entry.subsystem}]`;
-  const dataStr = serializedEntry.data ? ` ${JSON.stringify(serializedEntry.data)}` : "";
+  const dataStr = serializedEntry.data ? ` ${JSON.stringify(serializedEntry.data)}` : '';
   const str = `${prefix} ${entry.message}${dataStr}`;
-  if (entry.level === "warn") console.warn(str);
-  else if (entry.level === "error" || entry.level === "fatal") console.error(str);
-  else console.log(str);
+  if (entry.level === 'warn') {
+    console.warn(str);
+  } else if (entry.level === 'error' || entry.level === 'fatal') {
+    console.error(str);
+  } else {
+    console.log(str);
+  }
 
   // Notify subscribers (with serialized data)
   for (const sub of subscribers) {
@@ -146,11 +150,13 @@ function writeLogEntry(entry: LogEntry): void {
 
 export function readLogFile(date?: string, limit?: number): LogEntry[] {
   const filePath = getLogFile(date);
-  if (!existsSync(filePath)) return [];
+  if (!existsSync(filePath)) {
+    return [];
+  }
 
   try {
-    const content = readFileSync(filePath, "utf-8");
-    const lines = content.trim().split("\n").filter(Boolean);
+    const content = readFileSync(filePath, 'utf-8');
+    const lines = content.trim().split('\n').filter(Boolean);
     const entries: LogEntry[] = [];
     for (const line of lines) {
       try {
@@ -173,11 +179,13 @@ export function readLogFile(date?: string, limit?: number): LogEntry[] {
  */
 export function listLogDates(): string[] {
   const dir = getLogDir();
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir)) {
+    return [];
+  }
   try {
     return readdirSync(dir)
-      .filter((f) => f.startsWith("pha-") && f.endsWith(".log"))
-      .map((f) => f.replace("pha-", "").replace(".log", ""))
+      .filter((f) => f.startsWith('pha-') && f.endsWith('.log'))
+      .map((f) => f.replace('pha-', '').replace('.log', ''))
       .sort()
       .reverse();
   } catch {
@@ -212,12 +220,12 @@ export function createLogger(subsystem: string): SubsystemLogger {
 
   return {
     subsystem,
-    trace: (msg, data?) => log("trace", msg, data),
-    debug: (msg, data?) => log("debug", msg, data),
-    info: (msg, data?) => log("info", msg, data),
-    warn: (msg, data?) => log("warn", msg, data),
-    error: (msg, data?) => log("error", msg, data),
-    fatal: (msg, data?) => log("fatal", msg, data),
+    trace: (msg, data?) => log('trace', msg, data),
+    debug: (msg, data?) => log('debug', msg, data),
+    info: (msg, data?) => log('info', msg, data),
+    warn: (msg, data?) => log('warn', msg, data),
+    error: (msg, data?) => log('error', msg, data),
+    fatal: (msg, data?) => log('fatal', msg, data),
     raw: console.log,
     child: (name: string) => createLogger(`${subsystem}/${name}`),
   };

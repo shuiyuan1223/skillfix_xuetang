@@ -5,13 +5,13 @@
  * Stores tokens in .pha/huawei-tokens.json (project directory)
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { getStateDir, ensureConfigDir } from "../../utils/config.js";
-import { encrypt, decrypt } from "../../utils/crypto.js";
-import type { TokenData } from "./huawei-types.js";
+import * as fs from 'fs';
+import * as path from 'path';
+import { getStateDir, ensureConfigDir } from '../../utils/config.js';
+import { encrypt, decrypt } from '../../utils/crypto.js';
+import type { TokenData } from './huawei-types.js';
 
-const TOKEN_FILE = "huawei-tokens.json";
+const TOKEN_FILE = 'huawei-tokens.json';
 
 // Buffer time before token expiry (5 minutes)
 const TOKEN_EXPIRY_BUFFER_MS = 5 * 60 * 1000;
@@ -32,7 +32,7 @@ export class TokenStore {
     }
 
     try {
-      const content = fs.readFileSync(this.tokenPath, "utf-8");
+      const content = fs.readFileSync(this.tokenPath, 'utf-8');
       const parsed = JSON.parse(content) as TokenData;
       const stateDir = getStateDir();
       return {
@@ -75,7 +75,9 @@ export class TokenStore {
    */
   hasValidToken(): boolean {
     const token = this.getToken();
-    if (!token) return false;
+    if (!token) {
+      return false;
+    }
     return !this.isExpired(token);
   }
 
@@ -113,7 +115,7 @@ export class TokenStore {
 
     let expiresIn: string;
     if (!isValid) {
-      expiresIn = "expired";
+      expiresIn = 'expired';
     } else if (msRemaining < 60 * 1000) {
       expiresIn = `${Math.floor(msRemaining / 1000)} seconds`;
     } else if (msRemaining < 60 * 60 * 1000) {

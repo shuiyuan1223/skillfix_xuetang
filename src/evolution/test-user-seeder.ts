@@ -5,19 +5,15 @@
  * into the .pha/users/ directory for benchmark use.
  */
 
-import { readFileSync, readdirSync } from "fs";
-import { join } from "path";
-import { parse as parseYaml } from "yaml";
-import { saveProfileToFile, ensureUserDir, getMemoryPath } from "../memory/profile.js";
-import { writeFileSync } from "fs";
-import type { UserProfile } from "../memory/types.js";
-import {
-  BenchmarkDataSource,
-  mergeFixtureOverrides,
-  type FixtureHealthData,
-} from "./benchmark-data-source.js";
+import { readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
+import { parse as parseYaml } from 'yaml';
+import { saveProfileToFile, ensureUserDir, getMemoryPath } from '../memory/profile.js';
+import { writeFileSync } from 'fs';
+import type { UserProfile } from '../memory/types.js';
+import { BenchmarkDataSource, mergeFixtureOverrides, type FixtureHealthData } from './benchmark-data-source.js';
 
-const TEST_USERS_DIR = join(process.cwd(), "src", "evolution", "test-users");
+const TEST_USERS_DIR = join(process.cwd(), 'src', 'evolution', 'test-users');
 
 export interface TestUserFixture {
   id: string;
@@ -48,10 +44,12 @@ const fixtureCache = new Map<string, TestUserFixture>();
  */
 export function loadTestUserFixture(id: string): TestUserFixture {
   const cached = fixtureCache.get(id);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   const filePath = join(TEST_USERS_DIR, `${id}.yaml`);
-  const content = readFileSync(filePath, "utf-8");
+  const content = readFileSync(filePath, 'utf-8');
   const fixture = parseYaml(content) as TestUserFixture;
   fixtureCache.set(id, fixture);
   return fixture;
@@ -61,8 +59,8 @@ export function loadTestUserFixture(id: string): TestUserFixture {
  * Load all test user fixtures from the test-users directory.
  */
 export function loadAllTestUserFixtures(): TestUserFixture[] {
-  const files = readdirSync(TEST_USERS_DIR).filter((f) => f.endsWith(".yaml"));
-  return files.map((f) => loadTestUserFixture(f.replace(".yaml", "")));
+  const files = readdirSync(TEST_USERS_DIR).filter((f) => f.endsWith('.yaml'));
+  return files.map((f) => loadTestUserFixture(f.replace('.yaml', '')));
 }
 
 /**
@@ -77,7 +75,7 @@ export function seedTestUser(fixture: TestUserFixture): void {
   // Build UserProfile from fixture
   const userProfile: UserProfile = {
     nickname: profile.nickname || undefined,
-    gender: profile.gender as "male" | "female" | undefined,
+    gender: profile.gender as 'male' | 'female' | undefined,
     birthYear: profile.birthYear,
     height: profile.height,
     weight: profile.weight,

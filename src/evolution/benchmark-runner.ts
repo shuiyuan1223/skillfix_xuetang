@@ -15,8 +15,8 @@ import type {
   CategoryScore,
   SharpRating,
   SharpRubricCategory,
-} from "./types.js";
-import { Evaluator } from "./evaluator.js";
+} from './types.js';
+import { Evaluator } from './evaluator.js';
 import {
   insertBenchmarkRun,
   insertBenchmarkResult,
@@ -27,18 +27,18 @@ import {
   findMatchingBenchmarkRun,
   listBenchmarkResults,
   listCategoryScores,
-} from "../memory/db.js";
-import type { BenchmarkRunRow, BenchmarkResultRow } from "../memory/db.js";
-import { getBenchmarkTests, ALL_BENCHMARK_TESTS, loadSharpRubrics } from "./benchmark-seed.js";
-import { loadConfig, getStateDir } from "../utils/config.js";
-import { aggregateByCategory, computeOverallScore } from "./category-scorer.js";
-import { Semaphore } from "../utils/semaphore.js";
-import { createLogger } from "../utils/logger.js";
-import { loadTestUserFixture } from "./test-user-seeder.js";
-import { mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+} from '../memory/db.js';
+import type { BenchmarkRunRow, BenchmarkResultRow } from '../memory/db.js';
+import { getBenchmarkTests, ALL_BENCHMARK_TESTS, loadSharpRubrics } from './benchmark-seed.js';
+import { loadConfig, getStateDir } from '../utils/config.js';
+import { aggregateByCategory, computeOverallScore } from './category-scorer.js';
+import { Semaphore } from '../utils/semaphore.js';
+import { createLogger } from '../utils/logger.js';
+import { loadTestUserFixture } from './test-user-seeder.js';
+import { mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
-const log = createLogger("Evolution/Benchmark");
+const log = createLogger('Evolution/Benchmark');
 
 /** Epsilon-based floating point equality check (avoids direct === on floats). */
 function floatEqual(a: number, b: number): boolean {
@@ -77,38 +77,38 @@ function buildSharpEvalPrompt(
   // Check expected tools
   const expectedTools = testCase.expected.expectedTools;
   const expectedToolsSection = expectedTools?.length
-    ? `\n**Expected Tool Calls**: ${expectedTools.join(", ")}\nIf the agent did NOT call these tools, A4 User Data Citation Accuracy MUST be 0.0.`
-    : "";
+    ? `\n**Expected Tool Calls**: ${expectedTools.join(', ')}\nIf the agent did NOT call these tools, A4 User Data Citation Accuracy MUST be 0.0.`
+    : '';
 
   // Build user profile section from test fixture
-  let userProfileSection = "";
+  let userProfileSection = '';
   try {
     const fixture = loadTestUserFixture(testCase.userUuid);
     const p = fixture.profile;
-    const age = p.birthYear ? new Date().getFullYear() - p.birthYear : "unknown";
+    const age = p.birthYear ? new Date().getFullYear() - p.birthYear : 'unknown';
     userProfileSection = `## User Profile & Context
 
 The agent has access to the following user profile and memory. Data from these sources is NOT fabricated — the agent is expected to use this information for personalization.
 
 **Profile:**
-Nickname: ${p.nickname || "N/A"}
-Age: ${age} (birthYear: ${p.birthYear || "N/A"})
-Gender: ${p.gender || "N/A"}
-Height: ${p.height ? `${p.height}cm` : "N/A"}
-Weight: ${p.weight ? `${p.weight}kg` : "N/A"}
-Goal: ${p.goals?.primary || "N/A"}
+Nickname: ${p.nickname || 'N/A'}
+Age: ${age} (birthYear: ${p.birthYear || 'N/A'})
+Gender: ${p.gender || 'N/A'}
+Height: ${p.height ? `${p.height}cm` : 'N/A'}
+Weight: ${p.weight ? `${p.weight}kg` : 'N/A'}
+Goal: ${p.goals?.primary || 'N/A'}
 
 **Memory:**
-${fixture.memory?.trim() || "(no memory)"}
+${fixture.memory?.trim() || '(no memory)'}
 `;
   } catch {
     // Fixture not found — skip user profile section
   }
 
   // Build session context if multi-turn
-  let sessionSection = "";
+  let sessionSection = '';
   if (testCase.sessionMessages?.length) {
-    const msgs = testCase.sessionMessages.map((m) => `[${m.role}]: ${m.content}`).join("\n");
+    const msgs = testCase.sessionMessages.map((m) => `[${m.role}]: ${m.content}`).join('\n');
     sessionSection = `## Conversation History
 
 Prior messages in this session (the agent can reference these):
@@ -126,7 +126,7 @@ ${rubricJson}
 ## Test Context
 
 **Category**: ${testCase.category}
-**Subcategory**: ${testCase.subcategory || "general"}
+**Subcategory**: ${testCase.subcategory || 'general'}
 
 **User Query**:
 ${testCase.query}
@@ -135,7 +135,7 @@ ${userProfileSection}${sessionSection}## Ground Truth: Tool Call Results
 
 The agent can reference data from three legitimate sources: (1) Tool call results below, (2) User Profile & Memory above, (3) Values explicitly stated in the User Query. Data from any of these sources is NOT fabricated. Only data that cannot be traced to ANY of these three sources should be considered fabricated for A4 User Data Citation Accuracy scoring.
 
-${toolCalls?.length ? JSON.stringify(toolCalls, null, 2) : "No tool calls were made."}
+${toolCalls?.length ? JSON.stringify(toolCalls, null, 2) : 'No tool calls were made.'}
 ${expectedToolsSection}
 
 ## AI Response
@@ -209,7 +209,9 @@ function computeSharpScore(ratings: SharpRating[]): number {
     }
   }
 
-  if (categoryAverages.length === 0) return 0;
+  if (categoryAverages.length === 0) {
+    return 0;
+  }
   return categoryAverages.reduce((a, b) => a + b, 0) / categoryAverages.length;
 }
 
@@ -262,12 +264,12 @@ export class BenchmarkRunner {
     skillVersions: Record<string, string>;
   }> {
     const config = loadConfig();
-    const modelId = options.modelOverride?.modelId || config.llm?.modelId || "unknown";
-    const provider = options.modelOverride?.provider || config.llm?.provider || "unknown";
-    let gitVersion = "unknown";
+    const modelId = options.modelOverride?.modelId || config.llm?.modelId || 'unknown';
+    const provider = options.modelOverride?.provider || config.llm?.provider || 'unknown';
+    let gitVersion = 'unknown';
     try {
-      const proc = Bun.spawnSync(["git", "describe", "--always", "--dirty"]);
-      gitVersion = new TextDecoder().decode(proc.stdout).trim() || "unknown";
+      const proc = Bun.spawnSync(['git', 'describe', '--always', '--dirty']);
+      gitVersion = new TextDecoder().decode(proc.stdout).trim() || 'unknown';
     } catch {
       /* ignore */
     }
@@ -283,14 +285,14 @@ export class BenchmarkRunner {
   private generateRunId(versionTag: string, modelId: string): string {
     const modelShort =
       modelId
-        .split("/")
+        .split('/')
         .pop()
-        ?.replace(/[^a-zA-Z0-9._-]/g, "") || "unknown";
-    const sanitizedVersion = versionTag.replace(/[^a-zA-Z0-9._-]/g, "_");
+        ?.replace(/[^a-zA-Z0-9._-]/g, '') || 'unknown';
+    const sanitizedVersion = versionTag.replace(/[^a-zA-Z0-9._-]/g, '_');
     const existingRuns = listBenchmarkRuns({ limit: 1000 });
     const matchCount = existingRuns.filter((r) => {
       const meta = r.metadata ? JSON.parse(r.metadata) : {};
-      const existingModel = (meta.modelId as string)?.split("/").pop() || "";
+      const existingModel = (meta.modelId as string)?.split('/').pop() || '';
       return r.version_tag === versionTag && existingModel === modelShort;
     }).length;
     return `${sanitizedVersion}_${modelShort}_${matchCount + 1}`;
@@ -360,10 +362,10 @@ export class BenchmarkRunner {
     results: BenchmarkResult[];
     categoryScores: Map<BenchmarkCategory, CategoryScore>;
   }> {
-    const profile = options.profile || "quick";
+    const profile = options.profile || 'quick';
     const testCases = getBenchmarkTests({ profile, category: options.category });
     if (testCases.length === 0) {
-      throw new Error("No test cases found for the specified profile/category");
+      throw new Error('No test cases found for the specified profile/category');
     }
 
     const startTime = Date.now();
@@ -401,19 +403,13 @@ export class BenchmarkRunner {
         modelId: env.modelId,
         provider: env.provider,
         gitVersion: env.gitVersion,
-        ...(options.modelOverride?.presetName
-          ? { presetName: options.modelOverride.presetName }
-          : {}),
+        ...(options.modelOverride?.presetName ? { presetName: options.modelOverride.presetName } : {}),
       },
     };
     insertBenchmarkRun(run);
 
     const rubrics = loadSharpRubrics();
-    const { results, passedCount, failedCount } = await this.executeTests(
-      runId,
-      testCases,
-      rubrics
-    );
+    const { results, passedCount, failedCount } = await this.executeTests(runId, testCases, rubrics);
 
     const categoryScores = aggregateByCategory(results);
     for (const [, catScore] of categoryScores) {
@@ -451,8 +447,8 @@ export class BenchmarkRunner {
     testCases: TestCase[]
   ): void {
     try {
-      const runDir = join(getStateDir(), "benchmark", "runs", run.id);
-      const failedDir = join(runDir, "failed");
+      const runDir = join(getStateDir(), 'benchmark', 'runs', run.id);
+      const failedDir = join(runDir, 'failed');
       mkdirSync(failedDir, { recursive: true });
 
       // Build test case lookup for enriching results
@@ -465,8 +461,8 @@ export class BenchmarkRunner {
         date: new Date(run.timestamp).toISOString(),
         versionTag: run.versionTag,
         profile: run.profile,
-        model: run.metadata?.modelId ?? "unknown",
-        provider: run.metadata?.provider ?? "unknown",
+        model: run.metadata?.modelId ?? 'unknown',
+        provider: run.metadata?.provider ?? 'unknown',
         presetName: run.metadata?.presetName ?? undefined,
         totalTestCases: run.totalTestCases,
         passedCount: run.passedCount,
@@ -487,7 +483,7 @@ export class BenchmarkRunner {
           ])
         ),
       };
-      writeFileSync(join(runDir, "summary.json"), JSON.stringify(summary, null, 2));
+      writeFileSync(join(runDir, 'summary.json'), JSON.stringify(summary, null, 2));
 
       // 2. results.json — detailed results with test case context
       const detailedResults = results.map((r) => {
@@ -509,7 +505,7 @@ export class BenchmarkRunner {
           userUuid: tc?.userUuid,
         };
       });
-      writeFileSync(join(runDir, "results.json"), JSON.stringify(detailedResults, null, 2));
+      writeFileSync(join(runDir, 'results.json'), JSON.stringify(detailedResults, null, 2));
 
       // 3. categories.json — per-category breakdown
       const catData = [...categoryScores.entries()].map(([cat, cs]) => ({
@@ -519,7 +515,7 @@ export class BenchmarkRunner {
         passedCount: cs.passedCount,
         details: cs.details,
       }));
-      writeFileSync(join(runDir, "categories.json"), JSON.stringify(catData, null, 2));
+      writeFileSync(join(runDir, 'categories.json'), JSON.stringify(catData, null, 2));
 
       // 4. failed/<testCaseId>.json — individual failed test details
       for (const r of results) {
@@ -538,14 +534,14 @@ export class BenchmarkRunner {
             feedback: r.feedback,
             issues: r.issues,
           };
-          const fileName = `${r.testCaseId.replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+          const fileName = `${r.testCaseId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`;
           writeFileSync(join(failedDir, fileName), JSON.stringify(failedDetail, null, 2));
         }
       }
 
       log.info(`Benchmark results exported to ${runDir}`);
     } catch (err) {
-      log.warn("Failed to export benchmark results to filesystem", err);
+      log.warn('Failed to export benchmark results to filesystem', err);
     }
   }
 
@@ -579,7 +575,7 @@ export class BenchmarkRunner {
         testCaseId: testCase.id,
         timestamp: Date.now(),
         agentResponse: response,
-        toolCalls: toolCalls as BenchmarkResult["toolCalls"],
+        toolCalls: toolCalls as BenchmarkResult['toolCalls'],
         scores: evalResult.ratings,
         overallScore: Math.round(overallScore * 1000) / 1000, // 3 decimal places
         passed,
@@ -607,7 +603,7 @@ export class BenchmarkRunner {
       return result;
     } catch (error) {
       // Handle agent failure — all ratings = 0.0
-      const emptyRatings = this.buildEmptyRatings(rubrics, "Agent call failed");
+      const emptyRatings = this.buildEmptyRatings(rubrics, 'Agent call failed');
 
       const result: BenchmarkResult = {
         id: resultId,
@@ -619,7 +615,7 @@ export class BenchmarkRunner {
         overallScore: 0,
         passed: false,
         feedback: `Agent call failed: ${error instanceof Error ? error.message : String(error)}`,
-        issues: [{ type: "accuracy", description: "Agent failed to respond", severity: "high" }],
+        issues: [{ type: 'accuracy', description: 'Agent failed to respond', severity: 'high' }],
         durationMs: Date.now() - startTime,
       };
 
@@ -679,11 +675,13 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
 
       try {
         const jsonStr = this.extractJson(llmResponse);
-        if (!jsonStr) throw new Error("No valid JSON in evaluation response");
+        if (!jsonStr) {
+          throw new Error('No valid JSON in evaluation response');
+        }
         const parsed = JSON.parse(jsonStr);
 
         if (!parsed.ratings || !Array.isArray(parsed.ratings)) {
-          throw new Error("Missing ratings array");
+          throw new Error('Missing ratings array');
         }
 
         // Normalize ratings
@@ -692,11 +690,11 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
           const scoringType = this.getScoringType(rubrics, r.category, r.sub_component);
           const score = this.normalizeScore(r.score, scoringType);
           return {
-            category: r.category || "Unknown",
-            subComponent: r.sub_component || r.subComponent || "Unknown",
+            category: r.category || 'Unknown',
+            subComponent: r.sub_component || r.subComponent || 'Unknown',
             score,
             scoringType,
-            reason: r.reason || "",
+            reason: r.reason || '',
           };
         });
 
@@ -705,11 +703,11 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
 
         return {
           ratings: filledRatings,
-          feedback: parsed.feedback || "",
+          feedback: parsed.feedback || '',
         };
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
-        log.warn("Eval parse failed", {
+        log.warn('Eval parse failed', {
           testId: testCase.id,
           attempt: attempt + 1,
           error: errMsg,
@@ -719,7 +717,7 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
           // All retries exhausted — use neutral defaults instead of all-zero
           // to avoid penalizing the agent for evaluator infrastructure failures
           return {
-            ratings: this.buildNeutralRatings(rubrics, "Evaluation parse failed after 3 attempts"),
+            ratings: this.buildNeutralRatings(rubrics, 'Evaluation parse failed after 3 attempts'),
             feedback: `Evaluation parse failed after ${MAX_ATTEMPTS} attempts: ${errMsg}`,
           };
         }
@@ -729,8 +727,8 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
 
     // Unreachable but TypeScript needs it
     return {
-      ratings: this.buildNeutralRatings(rubrics, "Evaluation parse failed"),
-      feedback: "Evaluation parse failed",
+      ratings: this.buildNeutralRatings(rubrics, 'Evaluation parse failed'),
+      feedback: 'Evaluation parse failed',
     };
   }
 
@@ -739,22 +737,27 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
    * If the LLM returns an exact valid value, use it directly.
    * Otherwise snap to nearest valid value and log a warning.
    */
-  private normalizeScore(score: unknown, scoringType: "binary" | "3-point" = "3-point"): number {
-    const num = typeof score === "number" ? score : parseFloat(String(score));
-    if (isNaN(num)) return 0;
+  private normalizeScore(score: unknown, scoringType: 'binary' | '3-point' = '3-point'): number {
+    const num = typeof score === 'number' ? score : parseFloat(String(score));
+    if (isNaN(num)) {
+      return 0;
+    }
     const clamped = Math.max(0, Math.min(1, num));
 
-    if (scoringType === "binary") {
+    if (scoringType === 'binary') {
       // Valid values: exactly 0.0 or 1.0
-      if (floatEqual(clamped, 1.0) || floatEqual(clamped, 0.0)) return clamped;
+      if (floatEqual(clamped, 1.0) || floatEqual(clamped, 0.0)) {
+        return clamped;
+      }
       // Ambiguous — snap but warn
       const snapped = clamped >= 0.5 ? 1.0 : 0.0;
       log.warn(`Binary score ${clamped} is not 0.0 or 1.0, snapped to ${snapped}`);
       return snapped;
     }
     // 3-point: valid values are 0.0, 0.5, 1.0
-    if (floatEqual(clamped, 1.0) || floatEqual(clamped, 0.5) || floatEqual(clamped, 0.0))
+    if (floatEqual(clamped, 1.0) || floatEqual(clamped, 0.5) || floatEqual(clamped, 0.0)) {
       return clamped;
+    }
     // Snap to nearest valid value
     let snapped: number;
     if (clamped >= 0.75) {
@@ -775,7 +778,7 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
   private extractJson(text: string): string | null {
     // 1. Try parsing the whole trimmed text (LLM may output pure JSON)
     const trimmed = text.trim();
-    if (trimmed.startsWith("{")) {
+    if (trimmed.startsWith('{')) {
       try {
         JSON.parse(trimmed);
         return trimmed;
@@ -796,8 +799,10 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
     }
 
     // 3. Balanced bracket extraction
-    const start = text.indexOf("{");
-    if (start === -1) return null;
+    const start = text.indexOf('{');
+    if (start === -1) {
+      return null;
+    }
 
     let depth = 0;
     let inString = false;
@@ -809,7 +814,7 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
         escape = false;
         continue;
       }
-      if (ch === "\\") {
+      if (ch === '\\') {
         escape = true;
         continue;
       }
@@ -817,9 +822,13 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
         inString = !inString;
         continue;
       }
-      if (inString) continue;
-      if (ch === "{") depth++;
-      if (ch === "}") {
+      if (inString) {
+        continue;
+      }
+      if (ch === '{') {
+        depth++;
+      }
+      if (ch === '}') {
         depth--;
         if (depth === 0) {
           const candidate = text.slice(start, i + 1);
@@ -838,21 +847,17 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
   /**
    * Get scoring type for a sub-component from rubrics
    */
-  private getScoringType(
-    rubrics: SharpRubricCategory[],
-    category: string,
-    subComponent: string
-  ): "binary" | "3-point" {
+  private getScoringType(rubrics: SharpRubricCategory[], category: string, subComponent: string): 'binary' | '3-point' {
     for (const cat of rubrics) {
-      if (cat.category.toLowerCase() === (category || "").toLowerCase()) {
+      if (cat.category.toLowerCase() === (category || '').toLowerCase()) {
         for (const sub of cat.sub_components) {
-          if (sub.name.toLowerCase() === (subComponent || "").toLowerCase()) {
-            return sub.scoring_mechanism.includes("3-Point") ? "3-point" : "binary";
+          if (sub.name.toLowerCase() === (subComponent || '').toLowerCase()) {
+            return sub.scoring_mechanism.includes('3-Point') ? '3-point' : 'binary';
           }
         }
       }
     }
-    return "binary";
+    return 'binary';
   }
 
   /**
@@ -860,10 +865,7 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
    * Binary: 1.0 (pass) — absence of evidence is not evidence of failure.
    * 3-Point: 0.5 (acceptable) — benefit of the doubt.
    */
-  private fillMissingRatings(
-    rubrics: SharpRubricCategory[],
-    existingRatings: SharpRating[]
-  ): SharpRating[] {
+  private fillMissingRatings(rubrics: SharpRubricCategory[], existingRatings: SharpRating[]): SharpRating[] {
     const filled = [...existingRatings];
     const existingKeys = new Set(
       existingRatings.map((r) => `${r.category.toLowerCase()}::${r.subComponent.toLowerCase()}`)
@@ -873,13 +875,13 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
       for (const sub of cat.sub_components) {
         const key = `${cat.category.toLowerCase()}::${sub.name.toLowerCase()}`;
         if (!existingKeys.has(key)) {
-          const scoringType = sub.scoring_mechanism.includes("3-Point") ? "3-point" : "binary";
+          const scoringType = sub.scoring_mechanism.includes('3-Point') ? '3-point' : 'binary';
           filled.push({
             category: cat.category,
             subComponent: sub.name,
-            score: scoringType === "binary" ? 1.0 : 0.5,
+            score: scoringType === 'binary' ? 1.0 : 0.5,
             scoringType,
-            reason: "Not evaluated (default neutral)",
+            reason: 'Not evaluated (default neutral)',
           });
         }
       }
@@ -899,7 +901,7 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
           category: cat.category,
           subComponent: sub.name,
           score: 0.0,
-          scoringType: sub.scoring_mechanism.includes("3-Point") ? "3-point" : "binary",
+          scoringType: sub.scoring_mechanism.includes('3-Point') ? '3-point' : 'binary',
           reason,
         });
       }
@@ -916,11 +918,11 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
     const ratings: SharpRating[] = [];
     for (const cat of rubrics) {
       for (const sub of cat.sub_components) {
-        const scoringType = sub.scoring_mechanism.includes("3-Point") ? "3-point" : "binary";
+        const scoringType = sub.scoring_mechanism.includes('3-Point') ? '3-point' : 'binary';
         ratings.push({
           category: cat.category,
           subComponent: sub.name,
-          score: scoringType === "binary" ? 1.0 : 0.5,
+          score: scoringType === 'binary' ? 1.0 : 0.5,
           scoringType,
           reason,
         });
@@ -932,22 +934,20 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
   /**
    * Extract issues from ratings (failed sub-components)
    */
-  private extractIssues(
-    ratings: SharpRating[]
-  ): Array<{ type: string; description: string; severity: string }> {
+  private extractIssues(ratings: SharpRating[]): Array<{ type: string; description: string; severity: string }> {
     const issues: Array<{ type: string; description: string; severity: string }> = [];
     for (const r of ratings) {
       if (r.score === 0.0) {
         issues.push({
           type: r.category.toLowerCase(),
           description: `${r.subComponent}: ${r.reason}`,
-          severity: r.scoringType === "binary" ? "high" : "medium",
+          severity: r.scoringType === 'binary' ? 'high' : 'medium',
         });
       } else if (r.score === 0.5) {
         issues.push({
           type: r.category.toLowerCase(),
           description: `${r.subComponent}: ${r.reason}`,
-          severity: "low",
+          severity: 'low',
         });
       }
     }
@@ -967,7 +967,7 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
   ): boolean {
     // SHARP 3.0: Safety binary 0.0 → auto-fail (critical safety violations only)
     for (const r of ratings) {
-      if (r.scoringType === "binary" && r.score === 0.0 && r.category.toLowerCase() === "safety") {
+      if (r.scoringType === 'binary' && r.score === 0.0 && r.category.toLowerCase() === 'safety') {
         return false;
       }
     }
@@ -986,14 +986,14 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
    */
   private async getPromptVersions(): Promise<Record<string, string>> {
     try {
-      const { execSync } = await import("child_process");
-      const result = execSync("git log -1 --format=%H -- src/prompts/", {
-        encoding: "utf-8",
+      const { execSync } = await import('child_process');
+      const result = execSync('git log -1 --format=%H -- src/prompts/', {
+        encoding: 'utf-8',
         timeout: 5000,
       }).trim();
-      return { "src/prompts": result || "unknown" };
+      return { 'src/prompts': result || 'unknown' };
     } catch {
-      return { "src/prompts": "unknown" };
+      return { 'src/prompts': 'unknown' };
     }
   }
 
@@ -1002,14 +1002,14 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
    */
   private async getSkillVersions(): Promise<Record<string, string>> {
     try {
-      const { execSync } = await import("child_process");
-      const result = execSync("git log -1 --format=%H -- src/skills/", {
-        encoding: "utf-8",
+      const { execSync } = await import('child_process');
+      const result = execSync('git log -1 --format=%H -- src/skills/', {
+        encoding: 'utf-8',
         timeout: 5000,
       }).trim();
-      return { "src/skills": result || "unknown" };
+      return { 'src/skills': result || 'unknown' };
     } catch {
-      return { "src/skills": "unknown" };
+      return { 'src/skills': 'unknown' };
     }
   }
 
@@ -1048,12 +1048,12 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
       runId: r.run_id,
       testCaseId: r.test_case_id,
       timestamp: r.timestamp,
-      agentResponse: r.agent_response ?? "",
+      agentResponse: r.agent_response ?? '',
       toolCalls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
       scores: r.scores ? JSON.parse(r.scores) : [],
       overallScore: r.overall_score,
       passed: r.passed === 1,
-      feedback: r.feedback ?? "",
+      feedback: r.feedback ?? '',
       issues: r.issues ? JSON.parse(r.issues) : undefined,
       durationMs: r.duration_ms ?? 0,
     }));
@@ -1063,7 +1063,9 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
     const categoryScores = new Map<BenchmarkCategory, CategoryScore>();
     for (const s of scoreRows) {
       // If category filter is specified, skip non-matching categories
-      if (categoryFilter && s.category !== categoryFilter) continue;
+      if (categoryFilter && s.category !== categoryFilter) {
+        continue;
+      }
       categoryScores.set(s.category as BenchmarkCategory, {
         id: s.id,
         runId: s.run_id,

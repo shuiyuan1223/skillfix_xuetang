@@ -5,28 +5,28 @@
  * Handles SSE streaming responses by reassembling them into standard API response format.
  */
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlinkSync } from "fs";
-import { join } from "path";
-import { getStateDir } from "./config.js";
-import { createLogger } from "./logger.js";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlinkSync } from 'fs';
+import { join } from 'path';
+import { getStateDir } from './config.js';
+import { createLogger } from './logger.js';
 
-const log = createLogger("LLM/Logger");
+const log = createLogger('LLM/Logger');
 
 function getLogDir(): string {
-  return join(getStateDir(), "llm-logs");
+  return join(getStateDir(), 'llm-logs');
 }
 
 // LLM API endpoints to intercept
 const LLM_API_PATTERNS: { domain: string; name: string }[] = [
-  { domain: "api.openai.com", name: "openai" },
-  { domain: "api.anthropic.com", name: "anthropic" },
-  { domain: "openrouter.ai", name: "openrouter" },
-  { domain: "api.groq.com", name: "groq" },
-  { domain: "api.mistral.ai", name: "mistral" },
-  { domain: "generativelanguage.googleapis.com", name: "google" },
-  { domain: "api.x.ai", name: "xai" },
-  { domain: "api.deepseek.com", name: "deepseek" },
-  { domain: "api.moonshot.cn", name: "moonshot" },
+  { domain: 'api.openai.com', name: 'openai' },
+  { domain: 'api.anthropic.com', name: 'anthropic' },
+  { domain: 'openrouter.ai', name: 'openrouter' },
+  { domain: 'api.groq.com', name: 'groq' },
+  { domain: 'api.mistral.ai', name: 'mistral' },
+  { domain: 'generativelanguage.googleapis.com', name: 'google' },
+  { domain: 'api.x.ai', name: 'xai' },
+  { domain: 'api.deepseek.com', name: 'deepseek' },
+  { domain: 'api.moonshot.cn', name: 'moonshot' },
 ];
 
 function ensureLogDir(): void {
@@ -36,7 +36,7 @@ function ensureLogDir(): void {
 }
 
 function getLogFile(): string {
-  const date = new Date().toISOString().split("T")[0];
+  const date = new Date().toISOString().split('T')[0];
   return join(getLogDir(), `llm-${date}.jsonl`);
 }
 
@@ -48,8 +48,12 @@ function extractMeta(url: string, body: Record<string, unknown> | null): Record<
   const provider = LLM_API_PATTERNS.find((p) => url.includes(p.domain))?.name;
   const model = body?.model;
   const meta: Record<string, unknown> = {};
-  if (provider) meta.provider = provider;
-  if (model) meta.model = model;
+  if (provider) {
+    meta.provider = provider;
+  }
+  if (model) {
+    meta.model = model;
+  }
   return meta;
 }
 
@@ -69,12 +73,14 @@ export function subscribeToLlmLogs(callback: LlmLogSubscriber): () => void {
 }
 
 function notifyLlmSubscribers(entry: Record<string, unknown>): void {
-  if (llmSubscribers.size === 0) return;
+  if (llmSubscribers.size === 0) {
+    return;
+  }
 
   const typed = entry as unknown as LLMLogEntry;
-  if (typed.type === "request") {
+  if (typed.type === 'request') {
     pendingRequest = typed;
-  } else if (typed.type === "response" && pendingRequest) {
+  } else if (typed.type === 'response' && pendingRequest) {
     const req = pendingRequest;
     pendingRequest = null;
 
@@ -83,17 +89,16 @@ function notifyLlmSubscribers(entry: Record<string, unknown>): void {
     if (req.timestamp && typed.timestamp) {
       const reqTime = new Date(req.timestamp).getTime();
       const resTime = new Date(typed.timestamp).getTime();
-      if (!isNaN(reqTime) && !isNaN(resTime)) latencyMs = resTime - reqTime;
+      if (!isNaN(reqTime) && !isNaN(resTime)) {
+        latencyMs = resTime - reqTime;
+      }
     }
 
     const pair: LLMCallPair = {
       id: ++pairIdCounter,
       timestamp: req.timestamp,
-      provider: (req.provider as string) || "unknown",
-      model:
-        (req.model as string) ||
-        ((req.data as Record<string, unknown>)?.model as string) ||
-        "unknown",
+      provider: (req.provider as string) || 'unknown',
+      model: (req.model as string) || ((req.data as Record<string, unknown>)?.model as string) || 'unknown',
       inputTokens: tokenUsage.inputTokens,
       outputTokens: tokenUsage.outputTokens,
       totalTokens: tokenUsage.totalTokens,
@@ -124,7 +129,7 @@ function logEntry(entry: Record<string, unknown>): void {
     appendFileSync(getLogFile(), `${JSON.stringify(fullEntry)}\n`);
     notifyLlmSubscribers(fullEntry);
   } catch (e) {
-    log.warn("Failed to log LLM interaction", e);
+    log.warn('Failed to log LLM interaction', e);
   }
 }
 
@@ -132,21 +137,25 @@ function logEntry(entry: Record<string, unknown>): void {
 
 interface AnthropicRebuilt {
   id?: string;
-  type: "message";
+  type: 'message';
   model?: string;
-  role: "assistant";
-  content: Array<
-    { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: unknown }
-  >;
+  role: 'assistant';
+  content: Array<{ type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: unknown }>;
   stop_reason?: string;
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
 function handleAnthropicMessageStart(d: Record<string, unknown>, result: AnthropicRebuilt): void {
   const msg = d.message as Record<string, unknown> | undefined;
-  if (!msg) return;
-  if (msg.id) result.id = msg.id as string;
-  if (msg.model) result.model = msg.model as string;
+  if (!msg) {
+    return;
+  }
+  if (msg.id) {
+    result.id = msg.id as string;
+  }
+  if (msg.model) {
+    result.model = msg.model as string;
+  }
   const usage = msg.usage as Record<string, number> | undefined;
   if (usage) {
     result.usage = { ...result.usage, input_tokens: usage.input_tokens };
@@ -160,13 +169,13 @@ function handleAnthropicBlockStart(
 ): number {
   const idx = (d.index as number) ?? result.content.length;
   const cb = d.content_block as Record<string, unknown> | undefined;
-  if (cb?.type === "text") {
-    result.content[idx] = { type: "text", text: (cb.text as string) ?? "" };
-  } else if (cb?.type === "tool_use") {
+  if (cb?.type === 'text') {
+    result.content[idx] = { type: 'text', text: (cb.text as string) ?? '' };
+  } else if (cb?.type === 'tool_use') {
     result.content[idx] = {
-      type: "tool_use",
-      id: (cb.id as string) ?? "",
-      name: (cb.name as string) ?? "",
+      type: 'tool_use',
+      id: (cb.id as string) ?? '',
+      name: (cb.name as string) ?? '',
       input: {},
     };
     toolJsonParts.set(idx, []);
@@ -182,50 +191,47 @@ function handleAnthropicBlockDelta(
 ): void {
   const idx = (d.index as number) ?? currentBlockIndex;
   const delta = d.delta as Record<string, unknown> | undefined;
-  if (delta?.type === "text_delta") {
+  if (delta?.type === 'text_delta') {
     const block = result.content[idx];
-    if (block && block.type === "text") {
-      block.text += (delta.text as string) ?? "";
+    if (block && block.type === 'text') {
+      block.text += (delta.text as string) ?? '';
     }
-  } else if (delta?.type === "input_json_delta") {
+  } else if (delta?.type === 'input_json_delta') {
     const parts = toolJsonParts.get(idx);
     if (parts) {
-      parts.push((delta.partial_json as string) ?? "");
+      parts.push((delta.partial_json as string) ?? '');
     }
   }
 }
 
 function handleAnthropicMessageDelta(d: Record<string, unknown>, result: AnthropicRebuilt): void {
   const delta = d.delta as Record<string, unknown> | undefined;
-  if (delta?.stop_reason) result.stop_reason = delta.stop_reason as string;
+  if (delta?.stop_reason) {
+    result.stop_reason = delta.stop_reason as string;
+  }
   const usage = d.usage as Record<string, number> | undefined;
   if (usage) {
     result.usage = { ...result.usage, output_tokens: usage.output_tokens };
   }
 }
 
-function finalizeToolJsonParts(
-  result: AnthropicRebuilt,
-  toolJsonParts: Map<number, string[]>
-): void {
+function finalizeToolJsonParts(result: AnthropicRebuilt, toolJsonParts: Map<number, string[]>): void {
   for (const [idx, parts] of toolJsonParts) {
     const block = result.content[idx];
-    if (block && block.type === "tool_use" && parts.length > 0) {
+    if (block && block.type === 'tool_use' && parts.length > 0) {
       try {
-        block.input = JSON.parse(parts.join(""));
+        block.input = JSON.parse(parts.join(''));
       } catch {
-        block.input = parts.join("");
+        block.input = parts.join('');
       }
     }
   }
 }
 
-function rebuildAnthropicResponse(
-  events: Array<{ event?: string; data: unknown }>
-): AnthropicRebuilt {
+function rebuildAnthropicResponse(events: Array<{ event?: string; data: unknown }>): AnthropicRebuilt {
   const result: AnthropicRebuilt = {
-    type: "message",
-    role: "assistant",
+    type: 'message',
+    role: 'assistant',
     content: [],
   };
   let currentBlockIndex = -1;
@@ -233,13 +239,13 @@ function rebuildAnthropicResponse(
 
   for (const { event, data } of events) {
     const d = data as Record<string, unknown>;
-    if (event === "message_start") {
+    if (event === 'message_start') {
       handleAnthropicMessageStart(d, result);
-    } else if (event === "content_block_start") {
+    } else if (event === 'content_block_start') {
       currentBlockIndex = handleAnthropicBlockStart(d, result, toolJsonParts);
-    } else if (event === "content_block_delta") {
+    } else if (event === 'content_block_delta') {
       handleAnthropicBlockDelta(d, result, currentBlockIndex, toolJsonParts);
-    } else if (event === "message_delta") {
+    } else if (event === 'message_delta') {
       handleAnthropicMessageDelta(d, result);
     }
   }
@@ -252,7 +258,7 @@ interface OpenAIRebuilt {
   id?: string;
   model?: string;
   choices: Array<{
-    message: { role: "assistant"; content: string | null; tool_calls?: unknown[] };
+    message: { role: 'assistant'; content: string | null; tool_calls?: unknown[] };
     finish_reason?: string;
   }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
@@ -266,12 +272,20 @@ function processOpenAIChunk(
   contentParts: string[],
   toolCallMap: Map<number, OpenAIToolCall>
 ): void {
-  if (d.id && !result.id) result.id = d.id as string;
-  if (d.model && !result.model) result.model = d.model as string;
-  if (d.usage) result.usage = d.usage as OpenAIRebuilt["usage"];
+  if (d.id && !result.id) {
+    result.id = d.id as string;
+  }
+  if (d.model && !result.model) {
+    result.model = d.model as string;
+  }
+  if (d.usage) {
+    result.usage = d.usage as OpenAIRebuilt['usage'];
+  }
 
   const choices = d.choices as Array<Record<string, unknown>> | undefined;
-  if (!choices || choices.length === 0) return;
+  if (!choices || choices.length === 0) {
+    return;
+  }
 
   const choice = choices[0];
   if (choice.finish_reason) {
@@ -279,41 +293,50 @@ function processOpenAIChunk(
   }
 
   const delta = choice.delta as Record<string, unknown> | undefined;
-  if (!delta) return;
+  if (!delta) {
+    return;
+  }
 
-  if (typeof delta.content === "string") contentParts.push(delta.content);
+  if (typeof delta.content === 'string') {
+    contentParts.push(delta.content);
+  }
   accumulateOpenAIToolCalls(delta, toolCallMap);
 }
 
-function accumulateOpenAIToolCalls(
-  delta: Record<string, unknown>,
-  toolCallMap: Map<number, OpenAIToolCall>
-): void {
+function accumulateOpenAIToolCalls(delta: Record<string, unknown>, toolCallMap: Map<number, OpenAIToolCall>): void {
   const toolCalls = delta.tool_calls as Array<Record<string, unknown>> | undefined;
-  if (!toolCalls) return;
+  if (!toolCalls) {
+    return;
+  }
 
   for (const tc of toolCalls) {
     const idx = (tc.index as number) ?? 0;
     if (!toolCallMap.has(idx)) {
       toolCallMap.set(idx, {
-        id: (tc.id as string) ?? "",
-        type: (tc.type as string) ?? "function",
-        function: { name: "", arguments: "" },
+        id: (tc.id as string) ?? '',
+        type: (tc.type as string) ?? 'function',
+        function: { name: '', arguments: '' },
       });
     }
     const existing = toolCallMap.get(idx)!;
-    if (tc.id) existing.id = tc.id as string;
+    if (tc.id) {
+      existing.id = tc.id as string;
+    }
     const fn = tc.function as Record<string, string> | undefined;
     if (fn) {
-      if (fn.name) existing.function.name += fn.name;
-      if (fn.arguments) existing.function.arguments += fn.arguments;
+      if (fn.name) {
+        existing.function.name += fn.name;
+      }
+      if (fn.arguments) {
+        existing.function.arguments += fn.arguments;
+      }
     }
   }
 }
 
 function rebuildOpenAIResponse(events: Array<{ event?: string; data: unknown }>): OpenAIRebuilt {
   const result: OpenAIRebuilt = {
-    choices: [{ message: { role: "assistant", content: null }, finish_reason: undefined }],
+    choices: [{ message: { role: 'assistant', content: null }, finish_reason: undefined }],
   };
   const contentParts: string[] = [];
   const toolCallMap: Map<number, OpenAIToolCall> = new Map();
@@ -323,7 +346,7 @@ function rebuildOpenAIResponse(events: Array<{ event?: string; data: unknown }>)
   }
 
   if (contentParts.length > 0) {
-    result.choices[0].message.content = contentParts.join("");
+    result.choices[0].message.content = contentParts.join('');
   }
   if (toolCallMap.size > 0) {
     result.choices[0].message.tool_calls = Array.from(toolCallMap.entries())
@@ -337,14 +360,14 @@ function rebuildOpenAIResponse(events: Array<{ event?: string; data: unknown }>)
 type SSEEvent = { event?: string; data: unknown };
 
 /** Flush accumulated data lines into a parsed event */
-function flushSSEDataLines(
-  dataLines: string[],
-  currentEvent: string | undefined,
-  events: SSEEvent[]
-): void {
-  if (dataLines.length === 0) return;
-  const raw = dataLines.join("\n").trim();
-  if (!raw || raw === "[DONE]") return;
+function flushSSEDataLines(dataLines: string[], currentEvent: string | undefined, events: SSEEvent[]): void {
+  if (dataLines.length === 0) {
+    return;
+  }
+  const raw = dataLines.join('\n').trim();
+  if (!raw || raw === '[DONE]') {
+    return;
+  }
   try {
     events.push({ event: currentEvent, data: JSON.parse(raw) });
   } catch {
@@ -357,21 +380,21 @@ function parseSSEText(text: string): SSEEvent[] {
   let currentEvent: string | undefined;
   let dataLines: string[] = [];
 
-  for (const line of text.split("\n")) {
-    if (line.startsWith("event:")) {
+  for (const line of text.split('\n')) {
+    if (line.startsWith('event:')) {
       flushSSEDataLines(dataLines, currentEvent, events);
       dataLines = [];
-      currentEvent = line.slice("event:".length).trim();
-    } else if (line.startsWith("data:")) {
-      const value = line.slice("data:".length).trim();
-      if (value === "[DONE]") {
+      currentEvent = line.slice('event:'.length).trim();
+    } else if (line.startsWith('data:')) {
+      const value = line.slice('data:'.length).trim();
+      if (value === '[DONE]') {
         flushSSEDataLines(dataLines, currentEvent, events);
         dataLines = [];
         currentEvent = undefined;
       } else {
         dataLines.push(value);
       }
-    } else if (line.trim() === "") {
+    } else if (line.trim() === '') {
       flushSSEDataLines(dataLines, currentEvent, events);
       dataLines = [];
       currentEvent = undefined;
@@ -383,29 +406,30 @@ function parseSSEText(text: string): SSEEvent[] {
 }
 
 function isAnthropicSSE(url: string, events: Array<{ event?: string; data: unknown }>): boolean {
-  if (url.includes("api.anthropic.com")) return true;
+  if (url.includes('api.anthropic.com')) {
+    return true;
+  }
   // Check for Anthropic-style events (openrouter may proxy)
-  return events.some((e) => e.event === "message_start" || e.event === "content_block_start");
+  return events.some((e) => e.event === 'message_start' || e.event === 'content_block_start');
 }
 
-function rebuildSSEResponse(
-  url: string,
-  text: string
-): { rebuilt: unknown; format: "anthropic" | "openai" } | null {
+function rebuildSSEResponse(url: string, text: string): { rebuilt: unknown; format: 'anthropic' | 'openai' } | null {
   const events = parseSSEText(text);
-  if (events.length === 0) return null;
+  if (events.length === 0) {
+    return null;
+  }
 
   if (isAnthropicSSE(url, events)) {
-    return { rebuilt: rebuildAnthropicResponse(events), format: "anthropic" };
+    return { rebuilt: rebuildAnthropicResponse(events), format: 'anthropic' };
   }
-  return { rebuilt: rebuildOpenAIResponse(events), format: "openai" };
+  return { rebuilt: rebuildOpenAIResponse(events), format: 'openai' };
 }
 
 // --- LLM Log Reader ---
 
 export interface LLMLogEntry {
   timestamp: string;
-  type: "request" | "response";
+  type: 'request' | 'response';
   url: string;
   provider?: string;
   model?: string;
@@ -435,28 +459,27 @@ function extractTokenUsage(data: unknown): {
   outputTokens?: number;
   totalTokens?: number;
 } {
-  if (!data || typeof data !== "object") return {};
+  if (!data || typeof data !== 'object') {
+    return {};
+  }
   const d = data as Record<string, unknown>;
 
   // Anthropic format: { usage: { input_tokens, output_tokens } }
-  if (d.usage && typeof d.usage === "object") {
+  if (d.usage && typeof d.usage === 'object') {
     const usage = d.usage as Record<string, unknown>;
-    const input = typeof usage.input_tokens === "number" ? usage.input_tokens : undefined;
-    const output = typeof usage.output_tokens === "number" ? usage.output_tokens : undefined;
+    const input = typeof usage.input_tokens === 'number' ? usage.input_tokens : undefined;
+    const output = typeof usage.output_tokens === 'number' ? usage.output_tokens : undefined;
     // OpenAI format: { usage: { prompt_tokens, completion_tokens, total_tokens } }
-    const prompt = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : undefined;
-    const completion =
-      typeof usage.completion_tokens === "number" ? usage.completion_tokens : undefined;
-    const total = typeof usage.total_tokens === "number" ? usage.total_tokens : undefined;
+    const prompt = typeof usage.prompt_tokens === 'number' ? usage.prompt_tokens : undefined;
+    const completion = typeof usage.completion_tokens === 'number' ? usage.completion_tokens : undefined;
+    const total = typeof usage.total_tokens === 'number' ? usage.total_tokens : undefined;
 
     return {
       inputTokens: input ?? prompt,
       outputTokens: output ?? completion,
       totalTokens:
         total ??
-        ((input ?? prompt) && (output ?? completion)
-          ? (input ?? prompt)! + (output ?? completion)!
-          : undefined),
+        ((input ?? prompt) && (output ?? completion) ? (input ?? prompt)! + (output ?? completion)! : undefined),
     };
   }
   return {};
@@ -464,7 +487,9 @@ function extractTokenUsage(data: unknown): {
 
 /** Resolve the log file path for a given date (or latest) */
 function resolveLogFile(date?: string): string | null {
-  if (!existsSync(getLogDir())) return null;
+  if (!existsSync(getLogDir())) {
+    return null;
+  }
 
   if (date) {
     const f = join(getLogDir(), `llm-${date}.jsonl`);
@@ -472,7 +497,7 @@ function resolveLogFile(date?: string): string | null {
   }
 
   const files = readdirSync(getLogDir())
-    .filter((f) => f.startsWith("llm-") && f.endsWith(".jsonl"))
+    .filter((f) => f.startsWith('llm-') && f.endsWith('.jsonl'))
     .sort()
     .reverse();
   return files.length > 0 ? join(getLogDir(), files[0]) : null;
@@ -482,13 +507,13 @@ function resolveLogFile(date?: string): string | null {
 function parseLogEntries(logFile: string): LLMLogEntry[] {
   let content: string;
   try {
-    content = readFileSync(logFile, "utf-8");
+    content = readFileSync(logFile, 'utf-8');
   } catch {
     return [];
   }
 
   const entries: LLMLogEntry[] = [];
-  for (const line of content.trim().split("\n").filter(Boolean)) {
+  for (const line of content.trim().split('\n').filter(Boolean)) {
     try {
       entries.push(JSON.parse(line) as LLMLogEntry);
     } catch {
@@ -500,10 +525,14 @@ function parseLogEntries(logFile: string): LLMLogEntry[] {
 
 /** Calculate latency between two ISO timestamps */
 function calcLatency(reqTs: string, resTs?: string): number | undefined {
-  if (!resTs) return undefined;
+  if (!resTs) {
+    return undefined;
+  }
   const reqTime = new Date(reqTs).getTime();
   const resTime = new Date(resTs).getTime();
-  if (isNaN(reqTime) || isNaN(resTime)) return undefined;
+  if (isNaN(reqTime) || isNaN(resTime)) {
+    return undefined;
+  }
   return resTime - reqTime;
 }
 
@@ -513,11 +542,8 @@ function buildCallPair(id: number, req: LLMLogEntry, res?: LLMLogEntry): LLMCall
   return {
     id,
     timestamp: req.timestamp,
-    provider: (req.provider as string) || "unknown",
-    model:
-      (req.model as string) ||
-      ((req.data as Record<string, unknown>)?.model as string) ||
-      "unknown",
+    provider: (req.provider as string) || 'unknown',
+    model: (req.model as string) || ((req.data as Record<string, unknown>)?.model as string) || 'unknown',
     inputTokens: tokenUsage.inputTokens,
     outputTokens: tokenUsage.outputTokens,
     totalTokens: tokenUsage.totalTokens,
@@ -532,7 +558,9 @@ function buildCallPair(id: number, req: LLMLogEntry, res?: LLMLogEntry): LLMCall
 /** Read LLM log file and pair request-response entries */
 export function readLlmLogFile(date?: string, limit?: number): LLMCallPair[] {
   const logFile = resolveLogFile(date);
-  if (!logFile) return [];
+  if (!logFile) {
+    return [];
+  }
 
   const entries = parseLogEntries(logFile);
 
@@ -540,11 +568,13 @@ export function readLlmLogFile(date?: string, limit?: number): LLMCallPair[] {
   let id = 1;
 
   for (let i = 0; i < entries.length; i++) {
-    if (entries[i].type !== "request") continue;
+    if (entries[i].type !== 'request') {
+      continue;
+    }
 
     let responseEntry: LLMLogEntry | undefined;
     for (let j = i + 1; j < entries.length && j <= i + 5; j++) {
-      if (entries[j].type === "response" && entries[j].url === entries[i].url) {
+      if (entries[j].type === 'response' && entries[j].url === entries[i].url) {
         responseEntry = entries[j];
         break;
       }
@@ -560,13 +590,13 @@ export function readLlmLogFile(date?: string, limit?: number): LLMCallPair[] {
 /** Get distinct provider names from LLM logs */
 export function getLlmProviders(date?: string): string[] {
   const pairs = readLlmLogFile(date, 1000);
-  return [...new Set(pairs.map((p) => p.provider).filter((p) => p !== "unknown"))].sort();
+  return [...new Set(pairs.map((p) => p.provider).filter((p) => p !== 'unknown'))].sort();
 }
 
 /** Get distinct model names from LLM logs */
 export function getLlmModels(date?: string): string[] {
   const pairs = readLlmLogFile(date, 1000);
-  return [...new Set(pairs.map((p) => p.model).filter((m) => m !== "unknown"))].sort();
+  return [...new Set(pairs.map((p) => p.model).filter((m) => m !== 'unknown'))].sort();
 }
 
 // --- Main interceptor ---
@@ -577,12 +607,9 @@ export function getLlmModels(date?: string): string[] {
 export function installFetchInterceptor(): void {
   const originalFetch = globalThis.fetch.bind(globalThis);
 
-  const interceptedFetch = async (
-    input: string | URL | Request,
-    init?: RequestInit
-  ): Promise<Response> => {
+  const interceptedFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     let url: string;
-    if (typeof input === "string") {
+    if (typeof input === 'string') {
       url = input;
     } else if (input instanceof URL) {
       url = input.href;
@@ -610,7 +637,7 @@ export function installFetchInterceptor(): void {
 
     // Log request with full body and metadata
     logEntry({
-      type: "request",
+      type: 'request',
       url,
       ...meta,
       data: requestBody,
@@ -623,8 +650,8 @@ export function installFetchInterceptor(): void {
     const clonedResponse = response.clone();
 
     // Detect SSE from Content-Type or request body
-    const contentType = response.headers.get("content-type") ?? "";
-    const isSSE = isStream || contentType.includes("text/event-stream");
+    const contentType = response.headers.get('content-type') ?? '';
+    const isSSE = isStream || contentType.includes('text/event-stream');
 
     // Log response asynchronously
     clonedResponse.text().then((text) => {
@@ -648,7 +675,7 @@ export function installFetchInterceptor(): void {
       }
 
       logEntry({
-        type: "response",
+        type: 'response',
         url,
         ...meta,
         status: response.status,
@@ -663,30 +690,34 @@ export function installFetchInterceptor(): void {
   // @ts-expect-error - Bun's fetch type is slightly different
   globalThis.fetch = interceptedFetch;
 
-  log.info("Fetch interceptor installed");
+  log.info('Fetch interceptor installed');
 }
 
 /**
  * Clean up old LLM log files (older than maxAgeDays).
  */
 export function cleanupOldLlmLogs(maxAgeDays: number = 30): void {
-  if (!existsSync(getLogDir())) return;
+  if (!existsSync(getLogDir())) {
+    return;
+  }
 
   const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
   let deleted = 0;
 
   try {
-    const files = readdirSync(getLogDir()).filter(
-      (f) => f.startsWith("llm-") && f.endsWith(".jsonl")
-    );
+    const files = readdirSync(getLogDir()).filter((f) => f.startsWith('llm-') && f.endsWith('.jsonl'));
 
     for (const file of files) {
       // Extract date from filename: llm-YYYY-MM-DD.jsonl
       const dateMatch = file.match(/^llm-(\d{4}-\d{2}-\d{2})\.jsonl$/);
-      if (!dateMatch) continue;
+      if (!dateMatch) {
+        continue;
+      }
 
       const fileDate = new Date(dateMatch[1]).getTime();
-      if (isNaN(fileDate) || fileDate >= cutoff) continue;
+      if (isNaN(fileDate) || fileDate >= cutoff) {
+        continue;
+      }
 
       try {
         unlinkSync(join(getLogDir(), file));

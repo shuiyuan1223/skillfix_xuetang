@@ -5,10 +5,10 @@
  * Also provides in-memory caching to reduce API calls.
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { getStateDir } from "../../utils/config.js";
-import { getUserId } from "../../utils/config.js";
+import * as fs from 'fs';
+import * as path from 'path';
+import { getStateDir } from '../../utils/config.js';
+import { getUserId } from '../../utils/config.js';
 
 // In-memory cache with TTL (5 minutes default)
 const memoryCache = new Map<string, { data: unknown; timestamp: number }>();
@@ -20,10 +20,10 @@ const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 function getCacheDir(userUuid?: string): string {
   const uid = userUuid || getUserId();
   if (uid) {
-    return path.join(getStateDir(), "users", uid, "api-cache");
+    return path.join(getStateDir(), 'users', uid, 'api-cache');
   }
   // Anonymous user — no file cache
-  return "";
+  return '';
 }
 
 /**
@@ -41,7 +41,7 @@ function ensureCacheDir(cacheDir: string): void {
 function getCacheKey(endpoint: string, params: Record<string, unknown>): string {
   const paramStr = JSON.stringify(params, Object.keys(params).sort());
   // Use full base64 encoding to ensure unique keys for different params
-  return `${endpoint}-${Buffer.from(paramStr).toString("base64")}`;
+  return `${endpoint}-${Buffer.from(paramStr).toString('base64')}`;
 }
 
 /**
@@ -58,8 +58,8 @@ export function saveToFileCache(
 
   ensureCacheDir(cacheDir);
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const endpointName = endpoint.replace(/[/:]/g, "_").slice(0, 50);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const endpointName = endpoint.replace(/[/:]/g, '_').slice(0, 50);
   const filename = `${timestamp}_${endpointName}.json`;
   const filepath = path.join(cacheDir, filename);
 
@@ -95,11 +95,7 @@ export function getFromMemoryCache<T>(
 /**
  * Save to memory cache
  */
-export function saveToMemoryCache(
-  endpoint: string,
-  params: Record<string, unknown>,
-  data: unknown
-): void {
+export function saveToMemoryCache(endpoint: string, params: Record<string, unknown>, data: unknown): void {
   const key = getCacheKey(endpoint, params);
   memoryCache.set(key, { data, timestamp: Date.now() });
 }
@@ -116,8 +112,10 @@ export function clearMemoryCache(): void {
  */
 export function listCacheFiles(userUuid?: string): string[] {
   const cacheDir = getCacheDir(userUuid);
-  if (!cacheDir || !fs.existsSync(cacheDir)) return [];
-  return fs.readdirSync(cacheDir).filter((f) => f.endsWith(".json"));
+  if (!cacheDir || !fs.existsSync(cacheDir)) {
+    return [];
+  }
+  return fs.readdirSync(cacheDir).filter((f) => f.endsWith('.json'));
 }
 
 /**
@@ -125,10 +123,12 @@ export function listCacheFiles(userUuid?: string): string[] {
  */
 export function readCacheFile(filename: string, userUuid?: string): unknown {
   const cacheDir = getCacheDir(userUuid);
-  if (!cacheDir) return null;
+  if (!cacheDir) {
+    return null;
+  }
   const filepath = path.join(cacheDir, filename);
   if (fs.existsSync(filepath)) {
-    return JSON.parse(fs.readFileSync(filepath, "utf-8"));
+    return JSON.parse(fs.readFileSync(filepath, 'utf-8'));
   }
   return null;
 }

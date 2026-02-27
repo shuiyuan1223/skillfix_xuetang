@@ -2,15 +2,15 @@
  * Health command - View health data summary
  */
 
-import type { Command } from "commander";
-import { getDataSource } from "../tools/health-data.js";
+import type { Command } from 'commander';
+import { getDataSource } from '../tools/health-data.js';
 import type {
   HealthDataSource,
   HealthMetrics,
   HeartRateData,
   SleepData,
   WorkoutData,
-} from "../data-sources/interface.js";
+} from '../data-sources/interface.js';
 import {
   printHeader,
   printSection,
@@ -23,19 +23,19 @@ import {
   miniChart,
   progressBar,
   Spinner,
-} from "../utils/cli-ui.js";
+} from '../utils/cli-ui.js';
 
 export function registerHealthCommand(program: Command): void {
   program
-    .command("health")
-    .description("View health data summary")
-    .option("-d, --date <string>", "Date in YYYY-MM-DD format", "today")
-    .option("--json", "Output as JSON")
-    .option("-w, --weekly", "Show weekly summary")
+    .command('health')
+    .description('View health data summary')
+    .option('-d, --date <string>', 'Date in YYYY-MM-DD format', 'today')
+    .option('--json', 'Output as JSON')
+    .option('-w, --weekly', 'Show weekly summary')
     .action(async (options) => {
       const dataSource = getDataSource();
 
-      const date = options.date === "today" ? new Date().toISOString().split("T")[0] : options.date;
+      const date = options.date === 'today' ? new Date().toISOString().split('T')[0] : options.date;
 
       if (options.weekly) {
         await showWeeklySummary(dataSource, date, options.json);
@@ -46,13 +46,11 @@ export function registerHealthCommand(program: Command): void {
     });
 }
 
-async function showDailySummary(
-  dataSource: HealthDataSource,
-  date: string,
-  json: boolean
-): Promise<void> {
-  const spinner = new Spinner("Loading health data...");
-  if (!json) spinner.start();
+async function showDailySummary(dataSource: HealthDataSource, date: string, json: boolean): Promise<void> {
+  const spinner = new Spinner('Loading health data...');
+  if (!json) {
+    spinner.start();
+  }
 
   const [metrics, heartRate, sleep, workouts] = await Promise.all([
     dataSource.getMetrics(date),
@@ -61,7 +59,9 @@ async function showDailySummary(
     dataSource.getWorkouts(date),
   ]);
 
-  if (!json) spinner.stop("success");
+  if (!json) {
+    spinner.stop('success');
+  }
 
   const data = {
     date,
@@ -92,124 +92,116 @@ async function showDailySummary(
     return;
   }
 
-  console.log("");
+  console.log('');
   printHeader(`${icons.health} Health Summary`, date);
   printActivitySection(metrics);
   printHeartRateSection(heartRate);
   printSleepSection(sleep);
   printWorkoutsSection(workouts);
 
-  console.log("");
+  console.log('');
   printDivider();
-  console.log(`  ${c.dim("Tip: Use")} ${c.cyan("pha health -w")} ${c.dim("for weekly summary")}`);
-  console.log("");
+  console.log(`  ${c.dim('Tip: Use')} ${c.cyan('pha health -w')} ${c.dim('for weekly summary')}`);
+  console.log('');
 }
 
 function printActivitySection(metrics: HealthMetrics): void {
-  printSection("Activity", icons.activity);
+  printSection('Activity', icons.activity);
   const stepsGoal = 10000;
   printKV(
-    "Steps",
+    'Steps',
     `${c.bold(formatNumber(metrics.steps))} ${c.dim(`/ ${formatNumber(stepsGoal)}`)} ${progressBar(metrics.steps, stepsGoal, 15)}`
   );
-  printKV("Calories", `${c.bold(formatNumber(metrics.calories))} ${c.dim("kcal")}`);
-  printKV("Active Time", `${c.bold(String(metrics.activeMinutes))} ${c.dim("min")}`);
-  printKV("Distance", `${c.bold((metrics.distance / 1000).toFixed(2))} ${c.dim("km")}`);
+  printKV('Calories', `${c.bold(formatNumber(metrics.calories))} ${c.dim('kcal')}`);
+  printKV('Active Time', `${c.bold(String(metrics.activeMinutes))} ${c.dim('min')}`);
+  printKV('Distance', `${c.bold((metrics.distance / 1000).toFixed(2))} ${c.dim('km')}`);
 }
 
 function printHeartRateSection(heartRate: HeartRateData): void {
-  printSection("Heart Rate", icons.heart);
-  const hrData =
-    heartRate.readings.map((r) => r.value) ||
-    Array.from({ length: 24 }, (_, i) => 60 + Math.sin(i) * 10);
-  printKV("Resting", `${c.bold(String(heartRate.restingAvg))} ${c.dim("bpm")}`);
+  printSection('Heart Rate', icons.heart);
+  const hrData = heartRate.readings.map((r) => r.value) || Array.from({ length: 24 }, (_, i) => 60 + Math.sin(i) * 10);
+  printKV('Resting', `${c.bold(String(heartRate.restingAvg))} ${c.dim('bpm')}`);
   printKV(
-    "Range",
-    `${c.cyan(String(heartRate.minToday))} ${c.dim("-")} ${c.red(String(heartRate.maxToday))} ${c.dim("bpm")}`
+    'Range',
+    `${c.cyan(String(heartRate.minToday))} ${c.dim('-')} ${c.red(String(heartRate.maxToday))} ${c.dim('bpm')}`
   );
-  printKV("Today", c.cyan(miniChart(hrData)));
+  printKV('Today', c.cyan(miniChart(hrData)));
 }
 
 function printSleepSection(sleep: SleepData | null): void {
-  printSection("Sleep", icons.sleep);
+  printSection('Sleep', icons.sleep);
   if (!sleep) {
-    console.log(`  ${c.dim("No sleep data recorded")}`);
+    console.log(`  ${c.dim('No sleep data recorded')}`);
     return;
   }
   const sleepGoal = 8;
   printKV(
-    "Duration",
-    `${c.bold(String(sleep.durationHours))} ${c.dim("hours")} ${progressBar(sleep.durationHours, sleepGoal, 10)}`
+    'Duration',
+    `${c.bold(String(sleep.durationHours))} ${c.dim('hours')} ${progressBar(sleep.durationHours, sleepGoal, 10)}`
   );
-  printKV(
-    "Quality",
-    `${c.bold(String(sleep.qualityScore))}${c.dim("%")} ${getQualityLabel(sleep.qualityScore)}`
-  );
-  printKV("Time", `${c.dim(`${sleep.bedTime} → `)}${sleep.wakeTime}`);
+  printKV('Quality', `${c.bold(String(sleep.qualityScore))}${c.dim('%')} ${getQualityLabel(sleep.qualityScore)}`);
+  printKV('Time', `${c.dim(`${sleep.bedTime} → `)}${sleep.wakeTime}`);
 
-  const total =
-    sleep.stages.deep + sleep.stages.light + sleep.stages.rem + (sleep.stages.awake || 0);
+  const total = sleep.stages.deep + sleep.stages.light + sleep.stages.rem + (sleep.stages.awake || 0);
   const stageBar = (val: number, color: (s: string) => string): string => {
     const width = Math.round((val / total) * 20);
-    return color("█".repeat(width));
+    return color('█'.repeat(width));
   };
-  console.log("");
+  console.log('');
   printKV(
-    "Stages",
+    'Stages',
     [
       stageBar(sleep.stages.deep, c.blue) + c.dim(` Deep ${sleep.stages.deep}m`),
       stageBar(sleep.stages.light, c.cyan) + c.dim(` Light ${sleep.stages.light}m`),
       stageBar(sleep.stages.rem, c.magenta) + c.dim(` REM ${sleep.stages.rem}m`),
-    ].join("  ")
+    ].join('  ')
   );
 }
 
 function printWorkoutsSection(workouts: WorkoutData[]): void {
-  printSection("Workouts", "💪");
+  printSection('Workouts', '💪');
   if (workouts.length > 0) {
     printTable(
-      ["Type", "Duration", "Calories"],
-      workouts.map((w: WorkoutData) => [
-        w.type,
-        `${w.durationMinutes} min`,
-        `${w.caloriesBurned} kcal`,
-      ])
+      ['Type', 'Duration', 'Calories'],
+      workouts.map((w: WorkoutData) => [w.type, `${w.durationMinutes} min`, `${w.caloriesBurned} kcal`])
     );
   } else {
-    console.log(`  ${c.dim("No workouts recorded today")}`);
+    console.log(`  ${c.dim('No workouts recorded today')}`);
   }
 }
 
 function getQualityLabel(score: number): string {
-  if (score >= 85) return c.green("Excellent");
-  if (score >= 70) return c.cyan("Good");
-  if (score >= 50) return c.yellow("Fair");
-  return c.red("Poor");
+  if (score >= 85) {
+    return c.green('Excellent');
+  }
+  if (score >= 70) {
+    return c.cyan('Good');
+  }
+  if (score >= 50) {
+    return c.yellow('Fair');
+  }
+  return c.red('Poor');
 }
 
-async function showWeeklySummary(
-  dataSource: HealthDataSource,
-  endDate: string,
-  json: boolean
-): Promise<void> {
-  const spinner = new Spinner("Loading weekly data...");
-  if (!json) spinner.start();
+async function showWeeklySummary(dataSource: HealthDataSource, endDate: string, json: boolean): Promise<void> {
+  const spinner = new Spinner('Loading weekly data...');
+  if (!json) {
+    spinner.start();
+  }
 
   const [weeklySteps, weeklySleep] = await Promise.all([
     dataSource.getWeeklySteps(endDate),
     dataSource.getWeeklySleep(endDate),
   ]);
 
-  if (!json) spinner.stop("success");
+  if (!json) {
+    spinner.stop('success');
+  }
 
-  const totalSteps = weeklySteps.reduce(
-    (sum: number, d: { date: string; steps: number }) => sum + d.steps,
-    0
-  );
+  const totalSteps = weeklySteps.reduce((sum: number, d: { date: string; steps: number }) => sum + d.steps, 0);
   const avgSteps = Math.round(totalSteps / weeklySteps.length);
   const avgSleep =
-    weeklySleep.reduce((sum: number, d: { date: string; hours: number }) => sum + d.hours, 0) /
-    weeklySleep.length;
+    weeklySleep.reduce((sum: number, d: { date: string; hours: number }) => sum + d.hours, 0) / weeklySleep.length;
 
   const data = {
     period: {
@@ -232,53 +224,51 @@ async function showWeeklySummary(
     return;
   }
 
-  console.log("");
+  console.log('');
   printHeader(`${icons.health} Weekly Summary`, `Ending ${endDate}`);
 
   // Steps Section
-  printSection("Steps", icons.steps);
-  printKV("Total", `${c.bold(formatNumber(totalSteps))} ${c.dim("steps")}`);
-  printKV("Daily Avg", `${c.bold(formatNumber(avgSteps))} ${c.dim("steps / day")}`);
+  printSection('Steps', icons.steps);
+  printKV('Total', `${c.bold(formatNumber(totalSteps))} ${c.dim('steps')}`);
+  printKV('Daily Avg', `${c.bold(formatNumber(avgSteps))} ${c.dim('steps / day')}`);
 
   // Steps chart
   const maxSteps = Math.max(...weeklySteps.map((d: { date: string; steps: number }) => d.steps));
-  console.log("");
+  console.log('');
   for (const d of weeklySteps) {
-    const dayName = new Date(d.date).toLocaleDateString("en", { weekday: "short" });
+    const dayName = new Date(d.date).toLocaleDateString('en', { weekday: 'short' });
     const barWidth = Math.round((d.steps / maxSteps) * 30);
-    const bar = c.green("█".repeat(barWidth)) + c.dim("░".repeat(30 - barWidth));
+    const bar = c.green('█'.repeat(barWidth)) + c.dim('░'.repeat(30 - barWidth));
     const stepsStr = formatNumber(d.steps).padStart(6);
-    const highlight = d.steps >= 10000 ? c.green("✓") : " ";
+    const highlight = d.steps >= 10000 ? c.green('✓') : ' ';
     console.log(`  ${c.dim(dayName)} ${bar} ${stepsStr} ${highlight}`);
   }
 
   // Sleep Section
-  printSection("Sleep", icons.sleep);
-  printKV("Avg Duration", `${c.bold(avgSleep.toFixed(1))} ${c.dim("hours / night")}`);
+  printSection('Sleep', icons.sleep);
+  printKV('Avg Duration', `${c.bold(avgSleep.toFixed(1))} ${c.dim('hours / night')}`);
 
   // Sleep chart
   const maxSleep = Math.max(...weeklySleep.map((d: { date: string; hours: number }) => d.hours));
-  console.log("");
+  console.log('');
   for (const d of weeklySleep) {
-    const dayName = new Date(d.date).toLocaleDateString("en", { weekday: "short" });
+    const dayName = new Date(d.date).toLocaleDateString('en', { weekday: 'short' });
     const barWidth = Math.round((d.hours / maxSleep) * 30);
-    const bar = c.blue("█".repeat(barWidth)) + c.dim("░".repeat(30 - barWidth));
+    const bar = c.blue('█'.repeat(barWidth)) + c.dim('░'.repeat(30 - barWidth));
     const hoursStr = `${d.hours}h`.padStart(5);
     let highlight: string;
     if (d.hours >= 7) {
-      highlight = c.green("✓");
+      highlight = c.green('✓');
     } else if (d.hours < 6) {
-      highlight = c.yellow("!");
+      highlight = c.yellow('!');
     } else {
-      highlight = " ";
+      highlight = ' ';
     }
     console.log(`  ${c.dim(dayName)} ${bar} ${hoursStr} ${highlight}`);
   }
 
-  console.log("");
+  console.log('');
   printDivider();
-  console.log(
-    `  ${c.dim("Legend:")} ${c.green("✓")} ${c.dim("Goal met")}  ${c.yellow("!")} ${c.dim("Below target")}`
-  );
-  console.log("");
+  console.log(`  ${c.dim('Legend:')} ${c.green('✓')} ${c.dim('Goal met')}  ${c.yellow('!')} ${c.dim('Below target')}`);
+  console.log('');
 }

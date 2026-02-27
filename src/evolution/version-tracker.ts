@@ -4,7 +4,7 @@
  * Tracks git versions of prompts and skills for benchmark comparisons.
  */
 
-import type { BenchmarkRun, BenchmarkCategory, VersionComparison } from "./types.js";
+import type { BenchmarkRun, BenchmarkCategory, VersionComparison } from './types.js';
 import {
   listBenchmarkRuns,
   getBenchmarkRun,
@@ -12,8 +12,8 @@ import {
   listBenchmarkResults,
   type BenchmarkRunRow,
   type CategoryScoreRow,
-} from "../memory/db.js";
-import { normalizeScoreForDisplay } from "./category-scorer.js";
+} from '../memory/db.js';
+import { normalizeScoreForDisplay } from './category-scorer.js';
 
 /**
  * Get the N most recent benchmark runs
@@ -38,7 +38,9 @@ export function compareRuns(runId1: string, runId2: string): VersionComparison |
   const run1 = getRunById(runId1);
   const run2 = getRunById(runId2);
 
-  if (!run1 || !run2) return null;
+  if (!run1 || !run2) {
+    return null;
+  }
 
   const scores1 = listCategoryScores(runId1);
   const scores2 = listCategoryScores(runId2);
@@ -49,13 +51,17 @@ export function compareRuns(runId1: string, runId2: string): VersionComparison |
   // Build category score maps
   const scoreMap1 = new Map<string, CategoryScoreRow>();
   const scoreMap2 = new Map<string, CategoryScoreRow>();
-  for (const s of scores1) scoreMap1.set(s.category, s);
-  for (const s of scores2) scoreMap2.set(s.category, s);
+  for (const s of scores1) {
+    scoreMap1.set(s.category, s);
+  }
+  for (const s of scores2) {
+    scoreMap2.set(s.category, s);
+  }
 
   // Compute deltas
   const allCategories = new Set([...scoreMap1.keys(), ...scoreMap2.keys()]);
 
-  const categoryDeltas: VersionComparison["categoryDeltas"] = [];
+  const categoryDeltas: VersionComparison['categoryDeltas'] = [];
   for (const cat of allCategories) {
     const s1 = scoreMap1.get(cat)?.score ?? 0;
     const s2 = scoreMap2.get(cat)?.score ?? 0;
@@ -71,10 +77,14 @@ export function compareRuns(runId1: string, runId2: string): VersionComparison |
   // Find flipped tests
   const resultMap1 = new Map<string, boolean>();
   const resultMap2 = new Map<string, boolean>();
-  for (const r of results1) resultMap1.set(r.test_case_id, r.passed === 1);
-  for (const r of results2) resultMap2.set(r.test_case_id, r.passed === 1);
+  for (const r of results1) {
+    resultMap1.set(r.test_case_id, r.passed === 1);
+  }
+  for (const r of results2) {
+    resultMap2.set(r.test_case_id, r.passed === 1);
+  }
 
-  const flippedTests: VersionComparison["flippedTests"] = [];
+  const flippedTests: VersionComparison['flippedTests'] = [];
   const allTestIds = new Set([...resultMap1.keys(), ...resultMap2.keys()]);
   for (const testId of allTestIds) {
     const was = resultMap1.get(testId);
@@ -102,7 +112,9 @@ export function compareRuns(runId1: string, runId2: string): VersionComparison |
  */
 export function compareLatest(count: number = 2): VersionComparison | null {
   const runs = getRecentRuns(count);
-  if (runs.length < 2) return null;
+  if (runs.length < 2) {
+    return null;
+  }
 
   // Compare oldest to newest in the set
   return compareRuns(runs[runs.length - 1].id, runs[0].id);
@@ -110,8 +122,12 @@ export function compareLatest(count: number = 2): VersionComparison | null {
 
 /** Return one of three values based on whether `delta` is positive, negative, or zero. */
 function deltaSign<T>(delta: number, pos: T, neg: T, zero: T): T {
-  if (delta > 0) return pos;
-  if (delta < 0) return neg;
+  if (delta > 0) {
+    return pos;
+  }
+  if (delta < 0) {
+    return neg;
+  }
   return zero;
 }
 
@@ -122,36 +138,36 @@ export function formatComparison(comparison: VersionComparison): string {
   const lines: string[] = [];
   const { run1, run2, categoryDeltas, overallDelta, flippedTests } = comparison;
 
-  lines.push("");
-  lines.push("  Version Comparison");
-  lines.push(`  ${"=".repeat(60)}`);
-  lines.push("");
+  lines.push('');
+  lines.push('  Version Comparison');
+  lines.push(`  ${'='.repeat(60)}`);
+  lines.push('');
   lines.push(
-    `  Run 1: ${run1.id.substring(0, 8)} (${new Date(run1.timestamp).toLocaleDateString()})${run1.versionTag ? ` [${run1.versionTag}]` : ""}`
+    `  Run 1: ${run1.id.substring(0, 8)} (${new Date(run1.timestamp).toLocaleDateString()})${run1.versionTag ? ` [${run1.versionTag}]` : ''}`
   );
   lines.push(
-    `  Run 2: ${run2.id.substring(0, 8)} (${new Date(run2.timestamp).toLocaleDateString()})${run2.versionTag ? ` [${run2.versionTag}]` : ""}`
+    `  Run 2: ${run2.id.substring(0, 8)} (${new Date(run2.timestamp).toLocaleDateString()})${run2.versionTag ? ` [${run2.versionTag}]` : ''}`
   );
-  lines.push("");
+  lines.push('');
 
   // Overall
-  const overallArrow = deltaSign(overallDelta, "+", "", " ");
-  const overallColor = deltaSign(overallDelta, "improved", "regressed", "unchanged");
+  const overallArrow = deltaSign(overallDelta, '+', '', ' ');
+  const overallColor = deltaSign(overallDelta, 'improved', 'regressed', 'unchanged');
   const ds1 = normalizeScoreForDisplay(run1.overallScore);
   const ds2 = normalizeScoreForDisplay(run2.overallScore);
   const displayDelta = ds2 - ds1;
   lines.push(
     `  Overall: ${ds1.toFixed(2)} -> ${ds2.toFixed(2)} (${overallArrow}${displayDelta.toFixed(2)}) [${overallColor}]`
   );
-  lines.push("");
+  lines.push('');
 
   // Category deltas
-  lines.push("  Category Deltas:");
-  lines.push(`  ${"-".repeat(60)}`);
+  lines.push('  Category Deltas:');
+  lines.push(`  ${'-'.repeat(60)}`);
 
   for (const delta of categoryDeltas) {
-    const arrow = deltaSign(delta.delta, "+", "", " ");
-    const indicator = deltaSign(delta.delta, " ^", " v", "  ");
+    const arrow = deltaSign(delta.delta, '+', '', ' ');
+    const indicator = deltaSign(delta.delta, ' ^', ' v', '  ');
     const s1 = normalizeScoreForDisplay(delta.score1);
     const s2 = normalizeScoreForDisplay(delta.score2);
     const dd = s2 - s1;
@@ -162,21 +178,21 @@ export function formatComparison(comparison: VersionComparison): string {
 
   // Flipped tests
   if (flippedTests.length > 0) {
-    lines.push("");
-    lines.push("  Flipped Tests:");
-    lines.push(`  ${"-".repeat(60)}`);
+    lines.push('');
+    lines.push('  Flipped Tests:');
+    lines.push(`  ${'-'.repeat(60)}`);
 
     for (const flip of flippedTests) {
-      const status = flip.nowPass ? "FAIL -> PASS" : "PASS -> FAIL";
-      const indicator = flip.nowPass ? " +" : " -";
+      const status = flip.nowPass ? 'FAIL -> PASS' : 'PASS -> FAIL';
+      const indicator = flip.nowPass ? ' +' : ' -';
       lines.push(`  ${flip.testCaseId.padEnd(30)} ${status}${indicator}`);
     }
   }
 
-  lines.push("");
-  lines.push(`  ${"=".repeat(60)}`);
+  lines.push('');
+  lines.push(`  ${'='.repeat(60)}`);
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 // ============================================================================
@@ -195,7 +211,7 @@ function rowToRun(row: BenchmarkRunRow): BenchmarkRun {
     failedCount: row.failed_count,
     overallScore: row.overall_score,
     durationMs: row.duration_ms ?? 0,
-    profile: (row.profile as "quick" | "full") || "quick",
+    profile: (row.profile as 'quick' | 'full') || 'quick',
     metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
   };
 }

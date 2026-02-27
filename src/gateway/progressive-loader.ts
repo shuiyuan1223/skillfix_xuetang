@@ -5,12 +5,12 @@
  * AgentOS: All UI updates are sent via A2UI messages through WebSocket.
  */
 
-import type { HealthDataSource } from "../data-sources/interface.js";
-import { generateDashboardPage, type DashboardData, type TabId } from "./dashboard-pages.js";
-import { generateSidebar } from "./pages.js";
-import { t } from "../locales/index.js";
-import { A2UIGenerator, SURFACE_TOAST } from "./a2ui.js";
-import { getMissingScopeErrors } from "../data-sources/huawei/huawei-api.js";
+import type { HealthDataSource } from '../data-sources/interface.js';
+import { generateDashboardPage, type DashboardData, type TabId } from './dashboard-pages.js';
+import { generateSidebar } from './pages.js';
+import { t } from '../locales/index.js';
+import { A2UIGenerator, SURFACE_TOAST } from './a2ui.js';
+import { getMissingScopeErrors } from '../data-sources/huawei/huawei-api.js';
 
 type SendFn = (msg: unknown) => void;
 
@@ -24,17 +24,19 @@ interface LoadGroup {
  */
 function sendProgress(send: SendFn, current: number, total: number, label: string): void {
   const ui = new A2UIGenerator(SURFACE_TOAST);
-  const progressText = t("dashboard.loadingProgress")
-    .replace("{current}", String(current))
-    .replace("{total}", String(total));
-  const text = ui.text(`${progressText} - ${label}`, "caption");
+  const progressText = t('dashboard.loadingProgress')
+    .replace('{current}', String(current))
+    .replace('{total}', String(total));
+  const text = ui.text(`${progressText} - ${label}`, 'caption');
   const prog = ui.progress(Math.round((current / total) * 100), {
     maxValue: 100,
-    size: "sm",
-    color: "#3b82f6",
+    size: 'sm',
+    color: '#3b82f6',
   });
   const root = ui.column([text, prog], { gap: 4, padding: 8 });
-  for (const msg of ui.build(root)) send(msg);
+  for (const msg of ui.build(root)) {
+    send(msg);
+  }
 }
 
 /**
@@ -55,8 +57,10 @@ function sendDashboardPage(
   whitelisted = true
 ): void {
   const pageMessages = generateDashboardPage(data, activeTab, { loading });
-  const sidebarMessages = generateSidebar("dashboard", whitelisted);
-  for (const msg of [...sidebarMessages, ...pageMessages]) send(msg);
+  const sidebarMessages = generateSidebar('dashboard', whitelisted);
+  for (const msg of [...sidebarMessages, ...pageMessages]) {
+    send(msg);
+  }
 }
 
 function getOverviewGroups(ds: HealthDataSource, today: string): LoadGroup[] {
@@ -69,7 +73,7 @@ function getOverviewGroups(ds: HealthDataSource, today: string): LoadGroup[] {
   );
   return [
     {
-      label: `${t("activity.steps")} & ${t("health.heartRate")}`,
+      label: `${t('activity.steps')} & ${t('health.heartRate')}`,
       fetchers: [
         async () => {
           const metrics = await ds.getMetrics(today);
@@ -85,14 +89,16 @@ function getOverviewGroups(ds: HealthDataSource, today: string): LoadGroup[] {
           const heartRate = await ds.getHeartRate(today);
           if (heartRate.restingAvg === 0 && heartRate.readings.length === 0) {
             const yHr = await ds.getHeartRate(yesterday);
-            if (yHr.restingAvg > 0) return { heartRate: yHr, heartRateIsYesterday: true };
+            if (yHr.restingAvg > 0) {
+              return { heartRate: yHr, heartRateIsYesterday: true };
+            }
           }
           return { heartRate };
         },
       ],
     },
     {
-      label: t("dashboard.tabVitals"),
+      label: t('dashboard.tabVitals'),
       fetchers: [
         async () => ({ stress: (await ds.getStress?.(today)) ?? null }),
         async () => ({ spo2: (await ds.getSpO2?.(today)) ?? null }),
@@ -102,7 +108,7 @@ function getOverviewGroups(ds: HealthDataSource, today: string): LoadGroup[] {
       ],
     },
     {
-      label: `${t("dashboard.tabSleep")} & ${t("dashboard.tabBody")}`,
+      label: `${t('dashboard.tabSleep')} & ${t('dashboard.tabBody')}`,
       fetchers: [
         async () => ({ sleep: await ds.getSleep(today) }),
         async () => ({ bodyComposition: (await ds.getBodyComposition?.(today)) ?? null }),
@@ -110,7 +116,7 @@ function getOverviewGroups(ds: HealthDataSource, today: string): LoadGroup[] {
       ],
     },
     {
-      label: t("dashboard.tabHeart"),
+      label: t('dashboard.tabHeart'),
       fetchers: [
         async () => ({ ecg: (await ds.getECG?.(today)) ?? null }),
         async () => ({ vo2max: (await ds.getVO2Max?.(today)) ?? null }),
@@ -118,7 +124,7 @@ function getOverviewGroups(ds: HealthDataSource, today: string): LoadGroup[] {
       ],
     },
     {
-      label: t("dashboard.tabTrends"),
+      label: t('dashboard.tabTrends'),
       fetchers: [
         async () => ({ weeklySteps: await ds.getWeeklySteps(today) }),
         async () => ({ weeklySleep: await ds.getWeeklySleep(today) }),
@@ -130,18 +136,18 @@ function getOverviewGroups(ds: HealthDataSource, today: string): LoadGroup[] {
 function getHeartGroups(ds: HealthDataSource, today: string): LoadGroup[] {
   return [
     {
-      label: t("health.heartRate"),
+      label: t('health.heartRate'),
       fetchers: [
         async () => ({ heartRate: await ds.getHeartRate(today) }),
         async () => ({ hrv: (await ds.getHRV?.(today)) ?? null }),
       ],
     },
     {
-      label: t("dashboard.ecgRecords"),
+      label: t('dashboard.ecgRecords'),
       fetchers: [async () => ({ ecg: (await ds.getECG?.(today)) ?? null })],
     },
     {
-      label: t("dashboard.tabTrends"),
+      label: t('dashboard.tabTrends'),
       fetchers: [
         async () => ({
           weeklyHeartRate: await (async () => {
@@ -149,7 +155,7 @@ function getHeartGroups(ds: HealthDataSource, today: string): LoadGroup[] {
               const end = today;
               const start = new Date(today);
               start.setDate(start.getDate() - 7);
-              const data = await ds.getHeartRateRange(start.toISOString().split("T")[0], end);
+              const data = await ds.getHeartRateRange(start.toISOString().split('T')[0], end);
               return data.map((d) => ({ date: d.date, avg: d.avg }));
             }
             return undefined;
@@ -168,14 +174,14 @@ function getGroupsForTab(tab: TabId, ds: HealthDataSource, today: string): LoadG
     overview: () => getOverviewGroups(ds, today),
     vitals: () => [
       {
-        label: t("health.heartRate"),
+        label: t('health.heartRate'),
         fetchers: [
           async () => ({ heartRate: await ds.getHeartRate(today) }),
           async () => ({ hrv: (await ds.getHRV?.(today)) ?? null }),
         ],
       },
       {
-        label: t("dashboard.tabVitals"),
+        label: t('dashboard.tabVitals'),
         fetchers: [
           async () => ({ stress: (await ds.getStress?.(today)) ?? null }),
           async () => ({ spo2: (await ds.getSpO2?.(today)) ?? null }),
@@ -187,14 +193,14 @@ function getGroupsForTab(tab: TabId, ds: HealthDataSource, today: string): LoadG
     ],
     activity: () => [
       {
-        label: t("activity.steps"),
+        label: t('activity.steps'),
         fetchers: [
           async () => ({ metrics: await ds.getMetrics(today) }),
           async () => ({ vo2max: (await ds.getVO2Max?.(today)) ?? null }),
         ],
       },
       {
-        label: t("dashboard.tabTrends"),
+        label: t('dashboard.tabTrends'),
         fetchers: [
           async () => ({ weeklySteps: await ds.getWeeklySteps(today) }),
           async () => ({ workouts: await ds.getWorkouts(today) }),
@@ -202,15 +208,15 @@ function getGroupsForTab(tab: TabId, ds: HealthDataSource, today: string): LoadG
       },
     ],
     sleep: () => [
-      { label: t("sleep.duration"), fetchers: [async () => ({ sleep: await ds.getSleep(today) })] },
+      { label: t('sleep.duration'), fetchers: [async () => ({ sleep: await ds.getSleep(today) })] },
       {
-        label: t("dashboard.sleepTrend"),
+        label: t('dashboard.sleepTrend'),
         fetchers: [async () => ({ weeklySleep: await ds.getWeeklySleep(today) })],
       },
     ],
     body: () => [
       {
-        label: t("dashboard.tabBody"),
+        label: t('dashboard.tabBody'),
         fetchers: [
           async () => ({ bodyComposition: (await ds.getBodyComposition?.(today)) ?? null }),
           async () => ({ nutrition: (await ds.getNutrition?.(today)) ?? null }),
@@ -220,7 +226,7 @@ function getGroupsForTab(tab: TabId, ds: HealthDataSource, today: string): LoadG
     heart: () => getHeartGroups(ds, today),
     trends: () => [
       {
-        label: t("dashboard.tabTrends"),
+        label: t('dashboard.tabTrends'),
         fetchers: [async () => ({ weeklySteps: await ds.getWeeklySteps(today) })],
       },
     ],
@@ -284,7 +290,7 @@ export class ProgressiveDashboardLoader {
 
       // Merge successful results into data
       for (const result of results) {
-        if (result.status === "fulfilled" && result.value) {
+        if (result.status === 'fulfilled' && result.value) {
           Object.assign(this.data, result.value);
         }
       }
@@ -325,7 +331,7 @@ export class ProgressiveDashboardLoader {
     this.data.trendsRange = range;
 
     // Show loading state
-    sendDashboardPage(this.send, this.data, "trends", true, this.whitelisted);
+    sendDashboardPage(this.send, this.data, 'trends', true, this.whitelisted);
 
     try {
       const trendPoints = await this.fetchTrendData(metric, startStr, endStr);
@@ -335,7 +341,7 @@ export class ProgressiveDashboardLoader {
       this.data.trendsData = [];
     }
 
-    sendDashboardPage(this.send, this.data, "trends", false, this.whitelisted);
+    sendDashboardPage(this.send, this.data, 'trends', false, this.whitelisted);
   }
 
   private async fetchTrendData(
@@ -346,45 +352,43 @@ export class ProgressiveDashboardLoader {
     const ds = this.dataSource;
 
     switch (metric) {
-      case "steps":
+      case 'steps':
         if (ds.getMetricsRange) {
           const data = await ds.getMetricsRange(startDate, endDate);
           return data.map((d) => ({ date: d.date, value: d.steps }));
         }
         break;
-      case "heart_rate":
+      case 'heart_rate':
         if (ds.getHeartRateRange) {
           const data = await ds.getHeartRateRange(startDate, endDate);
           return data.map((d) => ({ date: d.date, value: d.avg }));
         }
         break;
-      case "sleep":
+      case 'sleep':
         if (ds.getSleepRange) {
           const data = await ds.getSleepRange(startDate, endDate);
           return data.map((d) => ({ date: d.date, value: d.hours }));
         }
         break;
-      case "weight":
+      case 'weight':
         if (ds.getBodyCompositionRange) {
           const data = await ds.getBodyCompositionRange(startDate, endDate);
-          return data
-            .filter((d) => d.weight != null)
-            .map((d) => ({ date: d.date, value: d.weight! }));
+          return data.filter((d) => d.weight != null).map((d) => ({ date: d.date, value: d.weight! }));
         }
         break;
-      case "blood_pressure":
+      case 'blood_pressure':
         if (ds.getBloodPressureRange) {
           const data = await ds.getBloodPressureRange(startDate, endDate);
           return data.map((d) => ({ date: d.date, value: d.avgSystolic }));
         }
         break;
-      case "stress":
+      case 'stress':
         if (ds.getStressRange) {
           const data = await ds.getStressRange(startDate, endDate);
           return data.map((d) => ({ date: d.date, value: d.avg }));
         }
         break;
-      case "spo2":
+      case 'spo2':
         if (ds.getSpO2Range) {
           const data = await ds.getSpO2Range(startDate, endDate);
           return data.map((d) => ({ date: d.date, value: d.avg }));
@@ -404,24 +408,26 @@ export class ProgressiveDashboardLoader {
  */
 function getLocalDateString(date: Date): string {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
 function parseDays(range: string): number {
   const match = range.match(/^(\d+)([dwmy])$/);
-  if (!match) return 30;
+  if (!match) {
+    return 30;
+  }
   const [, numStr, unit] = match;
   const num = parseInt(numStr, 10);
   switch (unit) {
-    case "d":
+    case 'd':
       return num;
-    case "w":
+    case 'w':
       return num * 7;
-    case "m":
+    case 'm':
       return num * 30;
-    case "y":
+    case 'y':
       return num * 365;
     default:
       return 30;

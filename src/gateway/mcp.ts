@@ -5,19 +5,19 @@
  * The primary MCP interface is now mcp-server.ts (JSON-RPC 2.0).
  */
 
-import { globalRegistry } from "../tools/index.js";
-import type { MCPToolResult } from "../tools/types.js";
-import { getRemoteMCPToolDefinitions } from "../services/remote-mcp-client.js";
-import { createLogger } from "../utils/logger.js";
+import { globalRegistry } from '../tools/index.js';
+import type { MCPToolResult } from '../tools/types.js';
+import { getRemoteMCPToolDefinitions } from '../services/remote-mcp-client.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("MCP");
+const log = createLogger('MCP');
 
 // MCP Tool Definition
 export interface MCPTool {
   name: string;
   description: string;
   inputSchema: {
-    type: "object";
+    type: 'object';
     properties: Record<string, unknown>;
     required?: string[];
   };
@@ -30,7 +30,7 @@ export interface MCPToolCall {
 }
 
 // MCPToolResult is imported from tools/types.ts and re-exported
-export type { MCPToolResult } from "../tools/types.js";
+export type { MCPToolResult } from '../tools/types.js';
 
 /**
  * MCP Handler - Handles MCP protocol requests via legacy REST endpoints.
@@ -40,29 +40,30 @@ export class MCPHandler {
   /** Remote tool definitions loaded lazily */
   private remoteToolDefs: MCPTool[] = [];
   /** Remote tool executors keyed by tool name */
-  private remoteToolExecutors: Map<string, (args: Record<string, unknown>) => Promise<unknown>> =
-    new Map();
+  private remoteToolExecutors: Map<string, (args: Record<string, unknown>) => Promise<unknown>> = new Map();
   private remoteToolsLoaded = false;
 
   /**
    * Load remote MCP tool definitions (called once lazily).
    */
   private async ensureRemoteTools(): Promise<void> {
-    if (this.remoteToolsLoaded) return;
+    if (this.remoteToolsLoaded) {
+      return;
+    }
     this.remoteToolsLoaded = true;
 
     try {
-      const { getRemoteMCPTools } = await import("../services/remote-mcp-client.js");
+      const { getRemoteMCPTools } = await import('../services/remote-mcp-client.js');
       const defs = await getRemoteMCPToolDefinitions();
       const agentTools = await getRemoteMCPTools();
 
       // Build executor map from AgentTools
       for (const at of agentTools) {
         this.remoteToolExecutors.set(at.name, async (args) => {
-          const result = await at.execute("mcp-call", args);
+          const result = await at.execute('mcp-call', args);
           if (result.content && result.content.length > 0) {
             const text = result.content[0];
-            if (typeof text === "object" && "text" in text) {
+            if (typeof text === 'object' && 'text' in text) {
               try {
                 return JSON.parse(text.text);
               } catch {
@@ -78,7 +79,7 @@ export class MCPHandler {
         name: d.name,
         description: d.description,
         inputSchema: {
-          type: "object" as const,
+          type: 'object' as const,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           properties: (d.inputSchema as any)?.properties || {},
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,7 +91,7 @@ export class MCPHandler {
         log.info(`Registered ${defs.length} remote MCP tools`);
       }
     } catch (err) {
-      log.error("Failed to load remote MCP tools", { error: err });
+      log.error('Failed to load remote MCP tools', { error: err });
     }
   }
 
@@ -119,13 +120,13 @@ export class MCPHandler {
       try {
         const result = await remoteExecutor(call.arguments);
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
         };
       } catch (error) {
         return {
           content: [
             {
-              type: "text",
+              type: 'text',
               text: `Error: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
@@ -135,7 +136,7 @@ export class MCPHandler {
     }
 
     return {
-      content: [{ type: "text", text: `Unknown tool: ${call.name}` }],
+      content: [{ type: 'text', text: `Unknown tool: ${call.name}` }],
       isError: true,
     };
   }

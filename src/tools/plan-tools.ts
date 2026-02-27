@@ -4,19 +4,12 @@
  * 6 tools: create, list, get, update_progress, adjust, update_status
  */
 
-import { getUserUuid } from "../utils/config.js";
-import { savePlan, loadPlan, listPlans } from "../plans/store.js";
-import { saveReminder, saveCalendarEvent } from "../proactive/store.js";
-import type { ReminderCategory } from "../proactive/types.js";
-import type {
-  HealthPlan,
-  PlanGoal,
-  PlanMilestone,
-  PlanStatus,
-  GoalMetric,
-  GoalStatus,
-} from "../plans/types.js";
-import type { PHATool } from "./types.js";
+import { getUserUuid } from '../utils/config.js';
+import { savePlan, loadPlan, listPlans } from '../plans/store.js';
+import { saveReminder, saveCalendarEvent } from '../proactive/store.js';
+import type { ReminderCategory } from '../proactive/types.js';
+import type { HealthPlan, PlanGoal, PlanMilestone, PlanStatus, GoalMetric, GoalStatus } from '../plans/types.js';
+import type { PHATool } from './types.js';
 
 // ============================================================================
 // Goal → Reminder template mapping
@@ -31,20 +24,20 @@ interface GoalReminderTemplate {
 
 const GOAL_REMINDER_TEMPLATES: Partial<Record<GoalMetric, GoalReminderTemplate>> = {
   steps: {
-    title: "今日步数目标: {target}{unit}",
-    time: "20:00",
-    category: "exercise",
-    icon: "footprints",
+    title: '今日步数目标: {target}{unit}',
+    time: '20:00',
+    category: 'exercise',
+    icon: 'footprints',
   },
   sleep_hours: {
-    title: "准备入睡，目标睡{target}{unit}",
-    time: "22:30",
-    category: "sleep",
-    icon: "moon",
+    title: '准备入睡，目标睡{target}{unit}',
+    time: '22:30',
+    category: 'sleep',
+    icon: 'moon',
   },
-  exercise_count: { title: "运动时间到！", time: "18:00", category: "exercise", icon: "activity" },
-  weight: { title: "记录今日体重", time: "08:00", category: "checkup", icon: "trending-up" },
-  calories: { title: "注意今日热量摄入", time: "12:00", category: "meal", icon: "flame" },
+  exercise_count: { title: '运动时间到！', time: '18:00', category: 'exercise', icon: 'activity' },
+  weight: { title: '记录今日体重', time: '08:00', category: 'checkup', icon: 'trending-up' },
+  calories: { title: '注意今日热量摄入', time: '12:00', category: 'meal', icon: 'flame' },
 };
 
 // ============================================================================
@@ -61,7 +54,7 @@ interface CreatePlanParams {
     label: string;
     targetValue: number;
     unit: string;
-    frequency: "daily" | "weekly";
+    frequency: 'daily' | 'weekly';
     baselineValue?: number;
   }>;
   milestones?: Array<{
@@ -73,56 +66,56 @@ interface CreatePlanParams {
 }
 
 const createHealthPlanTool: PHATool<CreatePlanParams> = {
-  name: "create_health_plan",
-  description: "创建个性化健康计划。根据用户数据和目标，制定包含具体指标、里程碑的可追踪计划。",
-  displayName: "创建健康计划",
-  category: "planning",
-  icon: "target",
-  companionSkill: "health-planner",
-  label: "Create Health Plan",
+  name: 'create_health_plan',
+  description: '创建个性化健康计划。根据用户数据和目标，制定包含具体指标、里程碑的可追踪计划。',
+  displayName: '创建健康计划',
+  category: 'planning',
+  icon: 'target',
+  companionSkill: 'health-planner',
+  label: 'Create Health Plan',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      name: { type: "string", description: "Plan name (e.g. '30-day sleep improvement')" },
-      description: { type: "string", description: "Plan description and rationale" },
-      startDate: { type: "string", description: "Start date (YYYY-MM-DD)" },
-      endDate: { type: "string", description: "End date (YYYY-MM-DD)" },
+      name: { type: 'string', description: "Plan name (e.g. '30-day sleep improvement')" },
+      description: { type: 'string', description: 'Plan description and rationale' },
+      startDate: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+      endDate: { type: 'string', description: 'End date (YYYY-MM-DD)' },
       goals: {
-        type: "array",
-        description: "Plan goals with measurable targets",
+        type: 'array',
+        description: 'Plan goals with measurable targets',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
             metric: {
-              type: "string",
+              type: 'string',
               description:
-                "Metric type: steps, sleep_hours, exercise_count, heart_rate_resting, weight, calories, active_minutes, custom",
+                'Metric type: steps, sleep_hours, exercise_count, heart_rate_resting, weight, calories, active_minutes, custom',
             },
-            label: { type: "string", description: "Human-readable goal label" },
-            targetValue: { type: "number", description: "Target value to achieve" },
-            unit: { type: "string", description: "Unit (e.g. steps, hours, times)" },
-            frequency: { type: "string", description: "daily or weekly" },
-            baselineValue: { type: "number", description: "Current baseline value (optional)" },
+            label: { type: 'string', description: 'Human-readable goal label' },
+            targetValue: { type: 'number', description: 'Target value to achieve' },
+            unit: { type: 'string', description: 'Unit (e.g. steps, hours, times)' },
+            frequency: { type: 'string', description: 'daily or weekly' },
+            baselineValue: { type: 'number', description: 'Current baseline value (optional)' },
           },
-          required: ["metric", "label", "targetValue", "unit", "frequency"],
+          required: ['metric', 'label', 'targetValue', 'unit', 'frequency'],
         },
       },
       milestones: {
-        type: "array",
-        description: "Plan milestones (optional)",
+        type: 'array',
+        description: 'Plan milestones (optional)',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
-            label: { type: "string", description: "Milestone label" },
-            targetDate: { type: "string", description: "Target date (YYYY-MM-DD)" },
-            criteria: { type: "string", description: "Completion criteria" },
+            label: { type: 'string', description: 'Milestone label' },
+            targetDate: { type: 'string', description: 'Target date (YYYY-MM-DD)' },
+            criteria: { type: 'string', description: 'Completion criteria' },
           },
-          required: ["label", "targetDate", "criteria"],
+          required: ['label', 'targetDate', 'criteria'],
         },
       },
-      tags: { type: "array", description: "Tags for categorization", items: { type: "string" } },
+      tags: { type: 'array', description: 'Tags for categorization', items: { type: 'string' } },
     },
-    required: ["name", "description", "startDate", "endDate", "goals"],
+    required: ['name', 'description', 'startDate', 'endDate', 'goals'],
   },
   execute: async (params: CreatePlanParams) => {
     const uuid = getUserUuid();
@@ -138,7 +131,7 @@ const createHealthPlanTool: PHATool<CreatePlanParams> = {
       unit: g.unit,
       frequency: g.frequency,
       baselineValue: g.baselineValue,
-      status: "on_track" as GoalStatus,
+      status: 'on_track' as GoalStatus,
     }));
 
     const milestones: PlanMilestone[] = (params.milestones || []).map((m, i) => ({
@@ -153,7 +146,7 @@ const createHealthPlanTool: PHATool<CreatePlanParams> = {
       id: planId,
       name: params.name,
       description: params.description,
-      status: "active",
+      status: 'active',
       createdAt: now,
       updatedAt: now,
       startDate: params.startDate,
@@ -168,23 +161,23 @@ const createHealthPlanTool: PHATool<CreatePlanParams> = {
     savePlan(uuid, plan);
 
     // Auto-create reminders based on goal metrics
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split('T')[0];
     let remindersCreated = 0;
     for (const goal of goals) {
       const template = GOAL_REMINDER_TEMPLATES[goal.metric];
-      if (!template) continue;
-      const title = template.title
-        .replace("{target}", String(goal.targetValue))
-        .replace("{unit}", goal.unit);
+      if (!template) {
+        continue;
+      }
+      const title = template.title.replace('{target}', String(goal.targetValue)).replace('{unit}', goal.unit);
       saveReminder(uuid, {
         id: `rem_${planId}_${goal.id}`,
         title,
         scheduledAt: `${today}T${template.time}:00`,
-        repeatRule: "daily",
+        repeatRule: 'daily',
         category: template.category,
         icon: template.icon,
         relatedPlanId: planId,
-        status: "pending",
+        status: 'pending',
         createdAt: now,
       });
       remindersCreated++;
@@ -198,9 +191,9 @@ const createHealthPlanTool: PHATool<CreatePlanParams> = {
         title: ms.label,
         startTime: `${ms.targetDate}T00:00:00`,
         allDay: true,
-        category: "custom",
+        category: 'custom',
         relatedPlanId: planId,
-        status: "scheduled",
+        status: 'scheduled',
         createdAt: now,
       });
       eventsCreated++;
@@ -229,19 +222,19 @@ interface ListPlansParams {
 }
 
 const listHealthPlansTool: PHATool<ListPlansParams> = {
-  name: "list_health_plans",
-  description: "列出用户的健康计划，可按状态筛选。",
-  displayName: "健康计划列表",
-  category: "planning",
-  icon: "bar-chart",
-  companionSkill: "health-planner",
-  label: "List Health Plans",
+  name: 'list_health_plans',
+  description: '列出用户的健康计划，可按状态筛选。',
+  displayName: '健康计划列表',
+  category: 'planning',
+  icon: 'bar-chart',
+  companionSkill: 'health-planner',
+  label: 'List Health Plans',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
       status: {
-        type: "string",
-        description: "Filter by status: active, paused, completed, archived (optional)",
+        type: 'string',
+        description: 'Filter by status: active, paused, completed, archived (optional)',
       },
     },
   },
@@ -258,7 +251,7 @@ const listHealthPlansTool: PHATool<ListPlansParams> = {
         startDate: p.startDate,
         endDate: p.endDate,
         goalsCount: p.goals.length,
-        goalsCompleted: p.goals.filter((g) => g.status === "completed").length,
+        goalsCompleted: p.goals.filter((g) => g.status === 'completed').length,
         tags: p.tags,
       })),
     };
@@ -274,25 +267,25 @@ interface GetPlanParams {
 }
 
 const getHealthPlanTool: PHATool<GetPlanParams> = {
-  name: "get_health_plan",
-  description: "获取健康计划的完整详情，包含目标、里程碑、进度和调整记录。",
-  displayName: "计划详情",
-  category: "planning",
-  icon: "file-text",
-  companionSkill: "health-planner",
-  label: "Get Health Plan",
+  name: 'get_health_plan',
+  description: '获取健康计划的完整详情，包含目标、里程碑、进度和调整记录。',
+  displayName: '计划详情',
+  category: 'planning',
+  icon: 'file-text',
+  companionSkill: 'health-planner',
+  label: 'Get Health Plan',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      planId: { type: "string", description: "Plan ID" },
+      planId: { type: 'string', description: 'Plan ID' },
     },
-    required: ["planId"],
+    required: ['planId'],
   },
   execute: async (params: GetPlanParams) => {
     const uuid = getUserUuid();
     const plan = loadPlan(uuid, params.planId);
     if (!plan) {
-      return { error: "Plan not found", planId: params.planId };
+      return { error: 'Plan not found', planId: params.planId };
     }
     return plan;
   },
@@ -313,47 +306,49 @@ interface UpdateProgressParams {
 }
 
 const updatePlanProgressTool: PHATool<UpdateProgressParams> = {
-  name: "update_plan_progress",
-  description: "记录健康计划的目标进度数据。",
-  displayName: "更新进度",
-  category: "planning",
-  icon: "trending-up",
-  companionSkill: "health-planner",
-  label: "Update Plan Progress",
+  name: 'update_plan_progress',
+  description: '记录健康计划的目标进度数据。',
+  displayName: '更新进度',
+  category: 'planning',
+  icon: 'trending-up',
+  companionSkill: 'health-planner',
+  label: 'Update Plan Progress',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      planId: { type: "string", description: "Plan ID" },
+      planId: { type: 'string', description: 'Plan ID' },
       entries: {
-        type: "array",
-        description: "Progress entries",
+        type: 'array',
+        description: 'Progress entries',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
-            goalId: { type: "string", description: "Goal ID" },
-            date: { type: "string", description: "Date (YYYY-MM-DD, defaults to today)" },
-            actualValue: { type: "number", description: "Actual measured value" },
-            note: { type: "string", description: "Optional note" },
+            goalId: { type: 'string', description: 'Goal ID' },
+            date: { type: 'string', description: 'Date (YYYY-MM-DD, defaults to today)' },
+            actualValue: { type: 'number', description: 'Actual measured value' },
+            note: { type: 'string', description: 'Optional note' },
           },
-          required: ["goalId", "actualValue"],
+          required: ['goalId', 'actualValue'],
         },
       },
     },
-    required: ["planId", "entries"],
+    required: ['planId', 'entries'],
   },
   execute: async (params: UpdateProgressParams) => {
     const uuid = getUserUuid();
     const plan = loadPlan(uuid, params.planId);
     if (!plan) {
-      return { error: "Plan not found", planId: params.planId };
+      return { error: 'Plan not found', planId: params.planId };
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toISOString().split('T')[0];
     const updated: string[] = [];
 
     for (const entry of params.entries) {
       const goal = plan.goals.find((g) => g.id === entry.goalId);
-      if (!goal) continue;
+      if (!goal) {
+        continue;
+      }
 
       const date = entry.date || today;
 
@@ -371,10 +366,15 @@ const updatePlanProgressTool: PHATool<UpdateProgressParams> = {
 
       // Auto-update goal status
       const ratio = entry.actualValue / goal.targetValue;
-      if (ratio >= 1) goal.status = "completed";
-      else if (ratio >= 0.9) goal.status = "ahead";
-      else if (ratio >= 0.6) goal.status = "on_track";
-      else goal.status = "behind";
+      if (ratio >= 1) {
+        goal.status = 'completed';
+      } else if (ratio >= 0.9) {
+        goal.status = 'ahead';
+      } else if (ratio >= 0.6) {
+        goal.status = 'on_track';
+      } else {
+        goal.status = 'behind';
+      }
 
       updated.push(goal.label);
     }
@@ -407,41 +407,41 @@ interface AdjustPlanParams {
 }
 
 const adjustHealthPlanTool: PHATool<AdjustPlanParams> = {
-  name: "adjust_health_plan",
-  description: "调整健康计划（修改目标值、延长周期等），记录调整原因。",
-  displayName: "调整计划",
-  category: "planning",
-  icon: "refresh-cw",
-  companionSkill: "health-planner",
-  label: "Adjust Health Plan",
+  name: 'adjust_health_plan',
+  description: '调整健康计划（修改目标值、延长周期等），记录调整原因。',
+  displayName: '调整计划',
+  category: 'planning',
+  icon: 'refresh-cw',
+  companionSkill: 'health-planner',
+  label: 'Adjust Health Plan',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      planId: { type: "string", description: "Plan ID" },
-      reason: { type: "string", description: "Reason for adjustment" },
-      changes: { type: "string", description: "Description of changes made" },
+      planId: { type: 'string', description: 'Plan ID' },
+      reason: { type: 'string', description: 'Reason for adjustment' },
+      changes: { type: 'string', description: 'Description of changes made' },
       updatedGoals: {
-        type: "array",
-        description: "Goals to update (optional)",
+        type: 'array',
+        description: 'Goals to update (optional)',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
-            goalId: { type: "string", description: "Goal ID" },
-            targetValue: { type: "number", description: "New target value" },
-            label: { type: "string", description: "New label" },
+            goalId: { type: 'string', description: 'Goal ID' },
+            targetValue: { type: 'number', description: 'New target value' },
+            label: { type: 'string', description: 'New label' },
           },
-          required: ["goalId"],
+          required: ['goalId'],
         },
       },
-      newEndDate: { type: "string", description: "New end date (YYYY-MM-DD, optional)" },
+      newEndDate: { type: 'string', description: 'New end date (YYYY-MM-DD, optional)' },
     },
-    required: ["planId", "reason", "changes"],
+    required: ['planId', 'reason', 'changes'],
   },
   execute: async (params: AdjustPlanParams) => {
     const uuid = getUserUuid();
     const plan = loadPlan(uuid, params.planId);
     if (!plan) {
-      return { error: "Plan not found", planId: params.planId };
+      return { error: 'Plan not found', planId: params.planId };
     }
 
     // Record adjustment
@@ -455,9 +455,15 @@ const adjustHealthPlanTool: PHATool<AdjustPlanParams> = {
     if (params.updatedGoals) {
       for (const update of params.updatedGoals) {
         const goal = plan.goals.find((g) => g.id === update.goalId);
-        if (!goal) continue;
-        if (update.targetValue !== undefined) goal.targetValue = update.targetValue;
-        if (update.label !== undefined) goal.label = update.label;
+        if (!goal) {
+          continue;
+        }
+        if (update.targetValue !== undefined) {
+          goal.targetValue = update.targetValue;
+        }
+        if (update.label !== undefined) {
+          goal.label = update.label;
+        }
       }
     }
 
@@ -487,30 +493,30 @@ interface UpdatePlanStatusParams {
 }
 
 const updatePlanStatusTool: PHATool<UpdatePlanStatusParams> = {
-  name: "update_plan_status",
-  description: "更新计划状态（暂停、恢复、完成、归档）。",
-  displayName: "更新计划状态",
-  category: "planning",
-  icon: "check",
-  companionSkill: "health-planner",
-  label: "Update Plan Status",
+  name: 'update_plan_status',
+  description: '更新计划状态（暂停、恢复、完成、归档）。',
+  displayName: '更新计划状态',
+  category: 'planning',
+  icon: 'check',
+  companionSkill: 'health-planner',
+  label: 'Update Plan Status',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      planId: { type: "string", description: "Plan ID" },
+      planId: { type: 'string', description: 'Plan ID' },
       status: {
-        type: "string",
-        description: "New status: active, paused, completed, archived",
+        type: 'string',
+        description: 'New status: active, paused, completed, archived',
       },
-      note: { type: "string", description: "Optional note about the status change" },
+      note: { type: 'string', description: 'Optional note about the status change' },
     },
-    required: ["planId", "status"],
+    required: ['planId', 'status'],
   },
   execute: async (params: UpdatePlanStatusParams) => {
     const uuid = getUserUuid();
     const plan = loadPlan(uuid, params.planId);
     if (!plan) {
-      return { error: "Plan not found", planId: params.planId };
+      return { error: 'Plan not found', planId: params.planId };
     }
 
     const oldStatus = plan.status;
@@ -526,11 +532,10 @@ const updatePlanStatusTool: PHATool<UpdatePlanStatusParams> = {
     }
 
     // Mark all goals as completed when plan is completed
-    if (params.status === "completed") {
+    if (params.status === 'completed') {
       for (const goal of plan.goals) {
-        if (goal.status !== "completed" && goal.status !== "missed") {
-          goal.status =
-            goal.currentValue && goal.currentValue >= goal.targetValue ? "completed" : "missed";
+        if (goal.status !== 'completed' && goal.status !== 'missed') {
+          goal.status = goal.currentValue && goal.currentValue >= goal.targetValue ? 'completed' : 'missed';
         }
       }
     }
