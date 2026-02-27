@@ -123,7 +123,7 @@ enc:v1:<base64(salt ‖ iv ‖ ciphertext ‖ authTag)>
 ```bash
 # 生成一个高熵密钥（推荐 >= 32 字符）
 openssl rand -base64 32
-# 输出示例: K7x2mP9qR4tY1vW8bN3cF6hJ0sL5dA2eG
+# 将输出结果作为 PHA_THIRD_KEY 的值
 ```
 
 注入方式（按推荐度排序）：
@@ -146,7 +146,7 @@ metadata:
   name: pha-keys
 type: Opaque
 stringData:
-  PHA_THIRD_KEY: "K7x2mP9qR4tY1vW8bN3cF6hJ0sL5dA2eG"
+  PHA_THIRD_KEY: "<YOUR-THIRD-KEY>"  # 替换为 openssl rand -base64 32 生成的值
 
 ---
 # deployment.yaml
@@ -181,7 +181,7 @@ ExecStart=/usr/local/bin/pha start -f
 WorkingDirectory=/opt/pha
 
 # /etc/pha/env (权限 0600, 属主 pha)
-PHA_THIRD_KEY=K7x2mP9qR4tY1vW8bN3cF6hJ0sL5dA2eG
+PHA_THIRD_KEY=<YOUR-THIRD-KEY>  # 替换为 openssl rand -base64 32 生成的值
 ```
 
 ```bash
