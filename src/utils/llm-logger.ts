@@ -590,18 +590,15 @@ export function installFetchInterceptor(): void {
   // Register any custom baseUrl from config so proxies (e.g. yunwu.ai) are also intercepted
   try {
     const cfg = loadConfig();
-    // Top-level llm.baseUrl
-    if (cfg.llm?.baseUrl) registerLLMDomain(cfg.llm.baseUrl, cfg.llm.provider ?? "custom");
-    // Per-provider baseUrls in llm.providers map
-    const providers = (cfg.llm as unknown as Record<string, unknown>)?.providers;
-    if (providers && typeof providers === "object") {
-      for (const [providerName, providerCfg] of Object.entries(
-        providers as Record<string, unknown>
-      )) {
-        const baseUrl = (providerCfg as Record<string, unknown>)?.baseUrl as string | undefined;
-        if (baseUrl) registerLLMDomain(baseUrl, providerName);
+    // config.models.providers.*.baseUrl
+    const providers = cfg.models?.providers;
+    if (providers) {
+      for (const [providerName, providerCfg] of Object.entries(providers)) {
+        if (providerCfg.baseUrl) registerLLMDomain(providerCfg.baseUrl, providerName);
       }
     }
+    // Legacy: config.llm.baseUrl
+    if (cfg.llm?.baseUrl) registerLLMDomain(cfg.llm.baseUrl, cfg.llm.provider ?? "custom");
   } catch {
     // Config not available yet (e.g. first-run), skip
   }
