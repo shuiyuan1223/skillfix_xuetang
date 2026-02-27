@@ -37,6 +37,7 @@ import {
   resolveBenchmarkModelBaseUrl,
   getJudgeModel,
   getBenchmarkConcurrency,
+  isWhitelistedUser,
   type LLMProvider,
 } from "../utils/config.js";
 import {
@@ -839,7 +840,7 @@ export class GatewaySession {
 
   /** Build a page with sidebar */
   buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
-    return generatePage(view, mainPage);
+    return generatePage(view, mainPage, this.isWhitelisted());
   }
 
   // Memory system-agent sub-state
@@ -1138,6 +1139,11 @@ export class GatewaySession {
     const config = loadConfig();
     if (config.dataSources.type !== "huawei") return true; // Mock data doesn't need auth
     return huaweiAuth.isUserAuthenticated(this.userUuid);
+  }
+
+  /** Check if the current user is in the feature whitelist */
+  isWhitelisted(): boolean {
+    return isWhitelistedUser(this.userUuid);
   }
 
   /** Convert PartsChatMessage[] to session messages for agent context recovery */

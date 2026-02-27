@@ -110,7 +110,9 @@ async function navigateDashboard(
     (session as any).dashboardLoader.updateSend(send);
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (session as any).dashboardLoader.load(session.dashboardTab);
+  const loader = (session as any).dashboardLoader;
+  loader.whitelisted = session.isWhitelisted();
+  await loader.load(session.dashboardTab);
   return "early-return";
 }
 
@@ -516,7 +518,6 @@ function extractBenchmarkAndJudge(config: any): Record<string, unknown> {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractRemoteServers(
   config: any
 ): Array<{ key: string; url: string; apiKey: string; name: string; enabled: boolean }> {
@@ -841,6 +842,14 @@ export async function dispatchNavigation(
       sendAll(send, session.buildPage("auth", mainPage));
       return;
     }
+  }
+
+  // Whitelist check: non-whitelisted users can only access chat + dashboard
+  const WHITELIST_ALLOWED_VIEWS = ["chat", "dashboard"];
+  if (!session.isWhitelisted() && !WHITELIST_ALLOWED_VIEWS.includes(view)) {
+    session.currentView = "chat";
+    await dispatchNavigation(session, "chat", send);
+    return;
   }
 
   const handler = NAV_HANDLERS[view];

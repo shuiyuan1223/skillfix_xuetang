@@ -51,10 +51,11 @@ function sendDashboardPage(
   send: SendFn,
   data: DashboardData,
   activeTab: TabId,
-  loading: boolean
+  loading: boolean,
+  whitelisted = true
 ): void {
   const pageMessages = generateDashboardPage(data, activeTab, { loading });
-  const sidebarMessages = generateSidebar("dashboard");
+  const sidebarMessages = generateSidebar("dashboard", whitelisted);
   for (const msg of [...sidebarMessages, ...pageMessages]) send(msg);
 }
 
@@ -238,6 +239,7 @@ export class ProgressiveDashboardLoader {
   private data: DashboardData = {};
   private dataSource: HealthDataSource;
   private send: SendFn;
+  whitelisted = true;
 
   constructor(dataSource: HealthDataSource, send: SendFn) {
     this.dataSource = dataSource;
@@ -273,7 +275,7 @@ export class ProgressiveDashboardLoader {
     const groups = getGroupsForTab(activeTab, this.dataSource, today);
 
     // 1. Send skeleton page immediately
-    sendDashboardPage(this.send, this.data, activeTab, true);
+    sendDashboardPage(this.send, this.data, activeTab, true, this.whitelisted);
 
     // 2. Load groups sequentially, rendering after each group
     for (let i = 0; i < groups.length; i++) {
@@ -292,7 +294,7 @@ export class ProgressiveDashboardLoader {
 
       // Re-render with accumulated data
       const isLastGroup = i === groups.length - 1;
-      sendDashboardPage(this.send, this.data, activeTab, !isLastGroup);
+      sendDashboardPage(this.send, this.data, activeTab, !isLastGroup, this.whitelisted);
     }
 
     // 3. Check for scope errors after all groups loaded
@@ -300,7 +302,7 @@ export class ProgressiveDashboardLoader {
     if (scopeErrors.length > 0) {
       this.data.scopeErrors = scopeErrors;
       // Re-send final page with scope error banner
-      sendDashboardPage(this.send, this.data, activeTab, false);
+      sendDashboardPage(this.send, this.data, activeTab, false, this.whitelisted);
     }
 
     // 4. Clear progress toast
@@ -323,7 +325,7 @@ export class ProgressiveDashboardLoader {
     this.data.trendsRange = range;
 
     // Show loading state
-    sendDashboardPage(this.send, this.data, "trends", true);
+    sendDashboardPage(this.send, this.data, "trends", true, this.whitelisted);
 
     try {
       const trendPoints = await this.fetchTrendData(metric, startStr, endStr);
@@ -333,7 +335,7 @@ export class ProgressiveDashboardLoader {
       this.data.trendsData = [];
     }
 
-    sendDashboardPage(this.send, this.data, "trends", false);
+    sendDashboardPage(this.send, this.data, "trends", false, this.whitelisted);
   }
 
   private async fetchTrendData(

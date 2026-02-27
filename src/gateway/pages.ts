@@ -73,7 +73,7 @@ interface ChartData {
 // Sidebar Generator
 // ============================================================================
 
-export function generateSidebar(activeView: string): A2UIMessage[] {
+export function generateSidebar(activeView: string, whitelisted = true): A2UIMessage[] {
   const ui = new A2UIGenerator("sidebar");
   const sidebarConfig = loadConfig().gateway.sidebar;
 
@@ -87,8 +87,11 @@ export function generateSidebar(activeView: string): A2UIMessage[] {
     return items;
   };
 
+  // Views available to non-whitelisted users
+  const BASIC_VIEWS = new Set(["chat", "dashboard"]);
+
   // Main navigation
-  const mainNavItems = filterItems([
+  let mainNavItems = filterItems([
     { id: "chat", label: t("nav.chat"), icon: "chat" },
     { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
     { id: "plans", label: t("nav.plans"), icon: "target" },
@@ -100,7 +103,7 @@ export function generateSidebar(activeView: string): A2UIMessage[] {
   ]);
 
   // Settings navigation
-  const settingsItems = filterItems([
+  let settingsItems = filterItems([
     { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
     { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
     { id: "settings/tools", label: t("nav.tools"), icon: "stethoscope" },
@@ -108,6 +111,12 @@ export function generateSidebar(activeView: string): A2UIMessage[] {
     { id: "settings/logs", label: t("nav.logs"), icon: "bar-chart" },
     { id: "settings/general", label: t("nav.settings"), icon: "settings" },
   ]);
+
+  // Non-whitelisted users only see basic views
+  if (!whitelisted) {
+    mainNavItems = mainNavItems.filter((item) => BASIC_VIEWS.has(item.id));
+    settingsItems = [];
+  }
 
   const parts: string[] = [];
 
@@ -3629,8 +3638,12 @@ export function generateExperimentPage(
 // Page Message Generator (combines sidebar + main)
 // ============================================================================
 
-export function generatePage(view: string, mainContent: A2UIMessage[]): A2UIMessage[] {
-  const sidebar = generateSidebar(view);
+export function generatePage(
+  view: string,
+  mainContent: A2UIMessage[],
+  whitelisted = true
+): A2UIMessage[] {
+  const sidebar = generateSidebar(view, whitelisted);
   return [...sidebar, ...mainContent];
 }
 

@@ -283,6 +283,11 @@ export interface PHAConfig {
   agents?: Record<string, AgentProfileConfig>;
   /** Master tag list for agent tool/skill tag pickers */
   tags?: string[];
+  /** Feature whitelist: only listed UUIDs get full access; others see chat+dashboard only */
+  whitelist?: {
+    /** Whitelisted user UUIDs. Not configured or empty = all users restricted */
+    uuids: string[];
+  };
 }
 
 /** Agent profile as stored in config.json (relaxed types for JSON serialization) */
@@ -1496,4 +1501,12 @@ export function getJudgeModel(): BenchmarkModelConfig {
 export function getBenchmarkConcurrency(): number {
   const config = loadConfig();
   return config.benchmark?.concurrency || 1;
+}
+
+/** Check if a user is in the feature whitelist. Returns false when not configured (default restricted). */
+export function isWhitelistedUser(uid: string | null | undefined): boolean {
+  if (!uid) return false;
+  const config = loadConfig();
+  if (!config.whitelist?.uuids?.length) return false;
+  return config.whitelist.uuids.includes(uid);
 }
