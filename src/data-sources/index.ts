@@ -4,7 +4,7 @@ export * from "./huawei/index.js";
 
 import type { HealthDataSource } from "./interface.js";
 import { MockDataSource } from "./mock.js";
-import { HuaweiHealthDataSource } from "./huawei/index.js";
+import { HuaweiHealthDataSource, createInnerHuaweiHealthApiForUser } from "./huawei/index.js";
 import { loadConfig } from "../utils/config.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -36,6 +36,20 @@ export function createDataSource(userUuid?: string): HealthDataSource {
  */
 export function createDataSourceForUser(userUuid: string): HealthDataSource {
   return createDataSource(userUuid);
+}
+
+/**
+ * Create a data source using inner Huawei API (client_credentials grant).
+ * Uses an app-level access token; routes to the inner HealthKit API with x-huid header.
+ */
+export function createInnerDataSourceForUser(
+  userUuid: string,
+  appLevelAt: string,
+  userHuid: string,
+  clientId: string
+): HealthDataSource {
+  const api = createInnerHuaweiHealthApiForUser(userUuid, appLevelAt, userHuid, clientId);
+  return new HuaweiHealthDataSource(userUuid, api);
 }
 
 // Default data source based on config

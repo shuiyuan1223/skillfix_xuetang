@@ -25,7 +25,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import type { MemorySearchResult } from "../memory/types.js";
 import type { LLMSummarizationConfig } from "../memory/compaction.js";
 import { getDataSource } from "../tools/health-data.js";
-import { createDataSourceForUser } from "../data-sources/index.js";
+import { createDataSourceForUser, createInnerDataSourceForUser } from "../data-sources/index.js";
 import { t } from "../locales/index.js";
 import type { HealthDataSource } from "../data-sources/interface.js";
 import {
@@ -927,14 +927,20 @@ export class GatewaySession {
   modalRadarMode: "categories" | "criteria" = "categories";
   lastViewedBenchmarkRunId: string | null = null;
 
-  constructor(config: GatewayConfig = {}, userUuid?: string) {
+  constructor(
+    config: GatewayConfig = {},
+    userUuid?: string,
+    dataSourceOverride?: HealthDataSource
+  ) {
     this.config = config;
     this.sessionId = crypto.randomUUID();
     this.saSessionId = crypto.randomUUID();
     this.userUuid = userUuid || null;
 
-    // Use user-specific data source if userUuid is provided
-    if (userUuid) {
+    // Use provided data source, or create one based on userUuid
+    if (dataSourceOverride) {
+      this.dataSource = dataSourceOverride;
+    } else if (userUuid) {
       this.dataSource = createDataSourceForUser(userUuid);
       // Always ensure user dir exists so session persistence and memory writes don't ENOENT
       ensureUserDir(userUuid);
@@ -3596,6 +3602,107 @@ async function handleLegacyChat(req: Request, ctx: FetchContext): Promise<Respon
   return sseStreamResponse(session, body.message, "legacy-chat");
 }
 
+/** Handle POST /api/query — 边想边搜 SSE (refresh_token or client_credentials). */
+async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
+  const { readable, writable } = new TransformStream<Uint8Array>();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+
+  const sseSendRaw = (obj: unknown): void => {
+    try {
+      writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)).catch(() => {});
+    } catch {
+      /* noop */
+    }
+  };
+
+  (async () => {
+    try {
+      const body = (await req.json()) as {
+        grant_type?: string;
+        Authorization?: string;
+        query?: string;
+        sn?: string;
+        uid?: string;
+        client_id?: string;
+      };
+
+      const { grant_type = "refresh_token", Authorization, query, sn, uid, client_id } = body;
+
+      if (!Authorization || !query) {
+        sseSendRaw({ event: "error", content: "Missing required fields: Authorization, query" });
+        sseSendRaw({ event: "finish" });
+        writer.close().catch(() => {});
+        return;
+      }
+
+      log.info("[query] start", { sn, query, grant_type });
+
+      if (grant_type === "client_credentials") {
+        if (!uid || !client_id) {
+          sseSendRaw({ event: "error", content: "Missing required fields: uid, client_id" });
+          sseSendRaw({ event: "finish" });
+          writer.close().catch(() => {});
+          return;
+        }
+        ensureUserDir(uid);
+        const innerDataSource = createInnerDataSourceForUser(uid, Authorization, uid, client_id);
+        const session = new GatewaySession(ctx.config, uid, innerDataSource);
+        await session.handleLegacyChatSSE(query, writer, encoder);
+      } else {
+        // grant_type=refresh_token (default)
+        const fullConfig = loadConfig();
+        const huaweiConfig = fullConfig.dataSources.huawei;
+        if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+          sseSendRaw({ event: "error", content: "Huawei credentials not configured" });
+          sseSendRaw({ event: "finish" });
+          writer.close().catch(() => {});
+          return;
+        }
+        let userId: string;
+        try {
+          const { tokenData, userId: resolvedUid } = await huaweiAuth.refreshTokenAndGetUserId(
+            Authorization,
+            huaweiConfig.clientId,
+            huaweiConfig.clientSecret
+          );
+          userId = resolvedUid;
+          getUserStore().saveToken(userId, tokenData);
+        } catch (e) {
+          log.error("[query] token refresh failed", { sn, error: String(e) });
+          sseSendRaw({
+            event: "error",
+            content: `Token refresh failed: ${e instanceof Error ? e.message : String(e)}`,
+          });
+          sseSendRaw({ event: "finish" });
+          writer.close().catch(() => {});
+          return;
+        }
+        ensureUserDir(userId);
+        const session = getOrCreateSessionFromMap(ctx.sessions, ctx.config, userId);
+        await session.handleLegacyChatSSE(query, writer, encoder);
+      }
+    } catch (e) {
+      try {
+        sseSendRaw({ event: "error", content: String(e) });
+        sseSendRaw({ event: "finish" });
+      } catch {
+        /* noop */
+      }
+      writer.close().catch(() => {});
+    }
+  })();
+
+  return new Response(readable, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+}
+
 /** Handle POST /api/a2ui/init — Create/resume session. */
 async function handleA2UIInit(req: Request, ctx: FetchContext): Promise<Response> {
   const body = (await req.json().catch(() => ({}))) as { uuid?: string; view?: string };
@@ -3713,6 +3820,9 @@ async function dispatchPostRoute(
     } catch (e) {
       return jsonError(e);
     }
+  }
+  if (pathname === "/api/query") {
+    return handleQuery(req, ctx);
   }
   if (pathname === "/api/a2ui/init") {
     try {
