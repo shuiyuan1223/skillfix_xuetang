@@ -170,8 +170,7 @@ export function generateChatPage(state: ChatState): A2UIMessage[] {
   const root = ui.column([messagesId, inputId], { gap: 0 });
 
   // Make the column fill the height
-  // eslint-disable-next-line dot-notation
-  const rootComp = ui["components"].get(root);
+  const rootComp = ui.getComponent(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
     if (typeName) {
@@ -242,8 +241,7 @@ export function generateSystemAgentPage(state: {
 
   const root = ui.column(children, { gap: 0 });
   // Fill height for sticky input pattern
-  // eslint-disable-next-line dot-notation
-  const rootComp = ui["components"].get(root);
+  const rootComp = ui.getComponent(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
     if (typeName) {
@@ -1377,11 +1375,8 @@ interface SAMemoryFileInfo {
   preview: string;
 }
 
-// generateSystemAgentSettingsPage removed — content merged into Prompts/Skills/Memory pages
-
 // ============================================================================
-// (Evolution Page Generator removed — now in evolution-lab.ts as 5-Tab Dashboard)
-// Types retained for modal generators
+// Benchmark Modal Types & Generators
 // ============================================================================
 
 interface BenchmarkRunInfo {
@@ -2645,8 +2640,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
   const root = ui.column(cards, { gap: 24, padding: 24 });
 
   // Add some bottom padding to avoid content being cut off
-  // eslint-disable-next-line dot-notation
-  const rootComp = ui["components"].get(root);
+  const rootComp = ui.getComponent(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
     if (typeName) {

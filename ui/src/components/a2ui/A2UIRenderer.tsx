@@ -330,7 +330,9 @@ export function A2UIRenderer({
   function rcGrid(c: A2UIComponent) {
     const columns = (prop(c, "columns") as number) || 2;
     const gap = (prop(c, "gap") as number) || 16;
-    const minColWidth = columns >= 4 ? 160 : columns >= 3 ? 200 : 240;
+    let minColWidth = 240;
+    if (columns >= 4) minColWidth = 160;
+    else if (columns >= 3) minColWidth = 200;
     return (
       <div className="grid stagger-children"
            style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(${minColWidth}px, 100%), 1fr))`, gap }}>
@@ -440,7 +442,7 @@ export function A2UIRenderer({
           {subtitle && <div className="text-xs text-text-muted mt-1.5 relative" style={{ zIndex: 2 }}>{subtitle}</div>}
           {trend && (
             <div className={`text-xs mt-2 font-medium relative ${trendColors[trend.direction] || "text-text-muted"}`} style={{ zIndex: 2 }}>
-              {trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→"} {trend.value}
+              {getTrendArrow(trend.direction)} {trend.value}
             </div>
           )}
         </SpotlightCard>
@@ -620,14 +622,7 @@ export function A2UIRenderer({
 
     const isAccent = variant === "accent";
     const isElevated = variant === "primary" || isAccent;
-    const accentStyle: React.CSSProperties = isAccent
-      ? {
-          background: "linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))",
-          boxShadow: "var(--shadow-md), 0 0 24px var(--color-accent-glow)",
-        }
-      : variant === "primary"
-        ? { boxShadow: "var(--shadow-sm)" }
-        : {};
+    const accentStyle: React.CSSProperties = getAccentStyle(variant, isAccent);
     return (
       <button
         type="button"
@@ -744,11 +739,11 @@ export function A2UIRenderer({
     const variant = (prop(c, "variant") as string) || "rectangular";
     const width = prop(c, "width") || "100%";
     const height = prop(c, "height") || (variant === "text" ? "1em" : "100px");
-    const radiusClass = variant === "circular" ? "rounded-full" : variant === "text" ? "rounded" : "rounded-xl";
+    const radiusClass = getSkeletonRadiusClass(variant);
     return (
       <div
         className={`bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%] motion-safe:animate-skeleton-shimmer ${radiusClass}`}
-        style={{ width: typeof width === "number" ? width + "px" : width, height: typeof height === "number" ? height + "px" : height }}
+        style={{ width: toDimensionStr(width as string | number), height: toDimensionStr(height as string | number) }}
       />
     );
   }
@@ -758,175 +753,20 @@ export function A2UIRenderer({
   function rcChatMessages(c: A2UIComponent) {
     const rawMessages = (prop(c, "messages") as any[]) || [];
     const streaming = prop(c, "streaming") as boolean;
-    const streamingContent = prop(c, "streamingContent") as string;
-    const welcomeTitle = prop(c, "welcomeTitle") as string | undefined;
-    const welcomeSubtitle = prop(c, "welcomeSubtitle") as string | undefined;
-    const welcomeIcon = (prop(c, "welcomeIcon") as string) || "bot";
-    const welcomeActions = prop(c, "welcomeActions") as Array<{ label: string; icon?: string; action: string; content: string }> | undefined;
 
-    // Server-driven welcome screen
-    if (rawMessages.length === 0 && !streaming && welcomeTitle) {
-      const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center">
-          <AnimatedContent distance={20} duration={0.5}>
-            <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6 mx-auto" dangerouslySetInnerHTML={{ __html: ICONS[welcomeIcon] || ICONS["bot"] }} />
-          </AnimatedContent>
-          <BlurText text={welcomeTitle} className="text-xl font-bold text-text-strong tracking-tight justify-center" delay={80} animateBy="words" direction="bottom" />
-          {welcomeSubtitle && (
-            <AnimatedContent distance={15} duration={0.5} delay={0.3}>
-              <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{welcomeSubtitle}</div>
-            </AnimatedContent>
-          )}
-          {welcomeActions && welcomeActions.length > 0 && (
-            <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
-              {welcomeActions.map((a, i) => (
-                <AnimatedContent key={i} distance={20} duration={0.4} delay={0.4 + i * 0.08}>
-                  <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => { const actionName = (prop(c, "action") as string) || a.action || "send_message"; sendAction(actionName, { content: a.content, value: a.content }); }}>
-                    {a.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[a.icon] || "" }} />}
-                    {a.label}
-                  </button>
-                </AnimatedContent>
-              ))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    const noWelcome = prop(c, "noWelcome") as boolean;
-    if (rawMessages.length === 0 && !streaming && noWelcome) {
-      return (
-        <div className="flex-1 flex items-center justify-center p-4 text-text-muted text-[13px] opacity-50">
-          {i18n.evolution?.playgroundChatPlaceholder || "Waiting for messages..."}
-        </div>
-      );
-    }
-
-    // Default welcome
+    // Empty state: show welcome screen
     if (rawMessages.length === 0 && !streaming) {
-      const sugBtn = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
-      return (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center">
-          <AnimatedContent distance={20} duration={0.5}>
-            <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6 mx-auto" dangerouslySetInnerHTML={{ __html: ICONS["chat"] }} />
-          </AnimatedContent>
-          <BlurText text={i18n.chat.title} className="text-xl font-bold text-text-strong tracking-tight justify-center" delay={80} animateBy="words" direction="bottom" />
-          <AnimatedContent distance={15} duration={0.5} delay={0.3}>
-            <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{i18n.chat.subtitle}</div>
-          </AnimatedContent>
-          <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
-            <AnimatedContent distance={20} duration={0.4} delay={0.4}>
-              <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.sleepQuestion })}>
-                <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["moon"] }} />{i18n.chat.sleepAnalysis}
-              </button>
-            </AnimatedContent>
-            <AnimatedContent distance={20} duration={0.4} delay={0.48}>
-              <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.activityQuestion })}>
-                <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["activity"] }} />{i18n.chat.activitySummary}
-              </button>
-            </AnimatedContent>
-            <AnimatedContent distance={20} duration={0.4} delay={0.56}>
-              <button className={sugBtn} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.heartRateQuestion })}>
-                <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS["heart"] }} />{i18n.chat.heartRate}
-              </button>
-            </AnimatedContent>
-          </div>
-        </div>
-      );
+      return renderChatWelcome(c, sendAction);
     }
 
     const avatarBase = "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white [&>svg]:w-4 [&>svg]:h-4";
     const msgBubble = "max-w-[85%] sm:max-w-[70%] px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl leading-relaxed text-[13.5px]";
+    const messages = normalizeMessages(rawMessages);
+    const thinkingMode = prop(c, "thinkingMode") as boolean;
 
-    // Normalize messages to Parts format
-    interface NormalizedMsg {
-      id: string;
-      role: "user" | "assistant";
-      parts: MessagePart[];
-    }
-    const messages: NormalizedMsg[] = [];
-    for (const raw of rawMessages) {
-      if (raw.parts && raw.parts.length > 0) {
-        // New format with parts
-        messages.push({ id: raw.id || String(messages.length), role: raw.role === "tool" ? "assistant" : raw.role, parts: raw.parts });
-      } else if (raw.role === "tool") {
-        // Legacy: merge tool message into previous assistant or create standalone
-        // (old format: independent tool messages)
-        const prev = messages[messages.length - 1];
-        if (prev && prev.role === "assistant") {
-          prev.parts.push({ type: "tool_use", toolCallId: String(messages.length), toolName: raw.toolName || "", status: raw.toolStatus || "completed" });
-          if (raw.cards) {
-            prev.parts.push({ type: "tool_result", toolCallId: String(messages.length), cards: raw.cards });
-          }
-        } else {
-          messages.push({
-            id: raw.id || String(messages.length),
-            role: "assistant",
-            parts: [
-              { type: "tool_use", toolCallId: String(messages.length), toolName: raw.toolName || "", status: raw.toolStatus || "completed" },
-              ...(raw.cards ? [{ type: "tool_result" as const, toolCallId: String(messages.length), cards: raw.cards }] : []),
-            ],
-          });
-        }
-      } else {
-        // Legacy text-only or user message
-        const parts: MessagePart[] = [{ type: "text", content: raw.content || "" }];
-        if (raw.cards) {
-          parts.push({ type: "tool_result", toolCallId: "legacy", cards: raw.cards });
-        }
-        messages.push({ id: raw.id || String(messages.length), role: raw.role === "user" ? "user" : "assistant", parts });
-      }
-    }
-
-    // Render a single part
+    // Render a single message part
     function renderPart(part: MessagePart, partIdx: number) {
-      if (part.type === "text") {
-        if (!part.content?.trim()) return null;
-        return (
-          <div key={partIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }}>
-            <Markdown>{part.content}</Markdown>
-          </div>
-        );
-      }
-      if (part.type === "tool_use") {
-        const status = part.status || "completed";
-        const dotClass = status === "running" ? "bg-primary motion-safe:animate-pulse" : status === "error" ? "bg-error" : "bg-success";
-        const statusIcon = status === "running"
-          ? <span className="tool-spinner" />
-          : status === "error"
-            ? <span className="text-error [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["x"] }} />
-            : <span className="text-success [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS["check"] }} />;
-        const displayName = part.displayName || TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
-        const progress = part.progressData;
-        const pct = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
-        return (
-          <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[90%] sm:max-w-[70%]">
-            <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />
-            <span className="truncate">{displayName}</span>
-            {progress && progress.total > 0 && (
-              <div className="flex items-center gap-1.5 shrink-0 min-w-[100px]">
-                <div className="h-1.5 bg-surface rounded-full overflow-hidden flex-1">
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${status === "running" ? "bg-primary animate-status-pulse" : status === "error" ? "bg-error" : "bg-success"}`}
-                    style={{ width: `${Math.max(pct, 3)}%` }}
-                  />
-                </div>
-                <span className="tabular-nums text-[10px] w-[3ch] text-right">{pct}%</span>
-              </div>
-            )}
-            {statusIcon}
-          </div>
-        );
-      }
-      if (part.type === "tool_result" && part.cards) {
-        return (
-          <div key={partIdx} className="max-w-[90%] sm:max-w-[70%]">
-            {renderInline(part.cards as { components: A2UIComponent[]; root_id: string })}
-          </div>
-        );
-      }
-      return null;
+      return renderMessagePart(part, partIdx, msgBubble, renderInline);
     }
 
     return (
@@ -939,102 +779,13 @@ export function A2UIRenderer({
         }}
       >
         {messages.map((msg, mi) => {
-          const isUser = msg.role === "user";
-
-          if (isUser) {
-            const textContent = msg.parts.filter((p) => p.type === "text").map((p) => (p as { type: "text"; content: string }).content).join("");
-            return (
-              <div key={mi} className="flex gap-4 flex-row-reverse motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-normal">
-                <div className={`${avatarBase} bg-bg-tertiary text-text-secondary`} dangerouslySetInnerHTML={{ __html: ICONS["user"] }} />
-                <div className={`${msgBubble} bg-primary/10 text-text border border-primary/20`}>
-                  {textContent}
-                </div>
-              </div>
-            );
+          if (msg.role === "user") {
+            return renderUserMessage(msg, mi, avatarBase, msgBubble);
           }
-
-          // Assistant message — render parts inline
-          {
-            const hasVisibleParts = msg.parts.some((p) =>
-              (p.type === "text" && p.content?.trim()) || p.type === "tool_use" || p.type === "tool_result"
-            );
-            const isActiveMsg = streaming && mi === messages.length - 1;
-
-            // Skip empty assistant messages that aren't actively streaming
-            if (!isActiveMsg && !hasVisibleParts) return null;
-
-            const thinkingMode = prop(c, "thinkingMode") as boolean;
-            const hasToolCalls = msg.parts.some((p) => p.type === "tool_use");
-
-            return (
-              <div key={mi} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
-                <div className="relative self-start shrink-0">
-                  {isActiveMsg && (
-                    <div className="absolute inset-0 rounded-lg bg-primary/20"
-                         style={{ animation: "agent-breathe-ring 2s ease-out infinite" }} />
-                  )}
-                  <div className={`${avatarBase} bg-primary`}
-                       style={isActiveMsg ? { animation: "agent-breathe 2.5s ease-in-out infinite" } : undefined}
-                       dangerouslySetInnerHTML={{ __html: ICONS["bot"] }} />
-                </div>
-                <div className="flex flex-col gap-2 min-w-0 flex-1">
-                  {thinkingMode && hasToolCalls ? (
-                    <ThinkingMessage
-                      parts={msg.parts}
-                      isActiveMsg={isActiveMsg}
-                      renderPartFn={renderPart}
-                      msgBubble={msgBubble}
-                    />
-                  ) : (
-                    <>
-                      {msg.parts.map((part, pi) => {
-                        // Add stream-border-pulse to actively streaming text part
-                        if (
-                          isActiveMsg && part.type === "text" && part.content?.trim() &&
-                          pi === msg.parts.length - 1
-                        ) {
-                          return (
-                            <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
-                              <Markdown>{part.content}</Markdown>
-                            </div>
-                          );
-                        }
-                        return renderPart(part, pi);
-                      })}
-                      {/* Typing indicator when assistant message has no visible parts yet */}
-                      {isActiveMsg && !hasVisibleParts && (
-                        <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
-                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
-                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
-                          <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          }
+          return renderAssistantMessage(msg, mi, messages.length, streaming, thinkingMode, avatarBase, msgBubble, renderPart);
         })}
 
-        {!streaming && (prop(c, "quickReplies") as Array<{ label: string; content: string; icon?: string; variant?: string }>)?.length ? (
-          <div className="flex gap-2 pl-13 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal">
-            {(prop(c, "quickReplies") as Array<{ label: string; content: string; icon?: string; variant?: string }>).map((qr, i) => (
-              <button
-                key={i}
-                className={`quick-reply-btn flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${
-                  qr.variant === "danger" ? "border-error/30 text-error bg-error/10 hover:bg-error/20 hover:border-error/50"
-                    : qr.variant === "primary" ? "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50"
-                    : "border-border text-text-secondary bg-surface hover:bg-surface-hover hover:border-border-hover"
-                }`}
-                onClick={() => { const actionName = (prop(c, "action") as string) || "send_message"; sendAction(actionName, { content: qr.content, value: qr.content }); }}
-              >
-                {qr.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[qr.icon] || "" }} />}
-                {qr.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
+        {renderQuickReplies(c, streaming, sendAction)}
       </div>
     );
   }
@@ -1087,7 +838,7 @@ export function A2UIRenderer({
               input.value = "";
             }
           }}
-          dangerouslySetInnerHTML={{ __html: streaming ? (ICONS["square"] || "■") : ICONS["send"] }}
+          dangerouslySetInnerHTML={{ __html: streaming ? (ICONS.square || "■") : ICONS.send }}
         />
       </div>
     );
@@ -1233,6 +984,404 @@ export function A2UIRenderer({
   }
 
   return <>{renderComponent(data.root_id)}</>;
+}
+
+// ---- Extracted chat sub-renderers ----
+
+interface NormalizedMsg {
+  id: string;
+  role: "user" | "assistant";
+  parts: MessagePart[];
+}
+
+const SUGGEST_BTN_CLASS = "flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-card border border-border text-text-secondary text-[13px] font-medium cursor-pointer transition-all duration-150 hover:border-border-hover hover:bg-surface-hover hover:text-text hover:-translate-y-px";
+
+/** Render the welcome screen (empty chat state) */
+function renderChatWelcome(
+  c: A2UIComponent,
+  sendAction: (action: string, payload?: Record<string, unknown>) => void,
+): React.ReactNode {
+  const welcomeTitle = prop(c, "welcomeTitle") as string | undefined;
+  if (welcomeTitle) {
+    return renderCustomWelcome(c, welcomeTitle, sendAction);
+  }
+
+  const noWelcome = prop(c, "noWelcome") as boolean;
+  if (noWelcome) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-4 text-text-muted text-[13px] opacity-50">
+        {i18n.evolution?.playgroundChatPlaceholder || "Waiting for messages..."}
+      </div>
+    );
+  }
+
+  return renderDefaultWelcome(sendAction);
+}
+
+/** Render server-driven welcome screen with custom title/actions */
+function renderCustomWelcome(
+  c: A2UIComponent,
+  welcomeTitle: string,
+  sendAction: (action: string, payload?: Record<string, unknown>) => void,
+): React.ReactNode {
+  const welcomeSubtitle = prop(c, "welcomeSubtitle") as string | undefined;
+  const welcomeIcon = (prop(c, "welcomeIcon") as string) || "bot";
+  const welcomeActions = prop(c, "welcomeActions") as Array<{ label: string; icon?: string; action: string; content: string }> | undefined;
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center">
+      <AnimatedContent distance={20} duration={0.5}>
+        <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6 mx-auto" dangerouslySetInnerHTML={{ __html: ICONS[welcomeIcon] || ICONS.bot }} />
+      </AnimatedContent>
+      <BlurText text={welcomeTitle} className="text-xl font-bold text-text-strong tracking-tight justify-center" delay={80} animateBy="words" direction="bottom" />
+      {welcomeSubtitle && (
+        <AnimatedContent distance={15} duration={0.5} delay={0.3}>
+          <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{welcomeSubtitle}</div>
+        </AnimatedContent>
+      )}
+      {welcomeActions && welcomeActions.length > 0 && (
+        <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
+          {welcomeActions.map((a, idx) => (
+            <AnimatedContent key={idx} distance={20} duration={0.4} delay={0.4 + idx * 0.08}>
+              <button className={SUGGEST_BTN_CLASS} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => { sendAction((prop(c, "action") as string) || a.action || "send_message", { content: a.content, value: a.content }); }}>
+                {a.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[a.icon] || "" }} />}
+                {a.label}
+              </button>
+            </AnimatedContent>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Render default welcome screen with built-in suggestions */
+function renderDefaultWelcome(
+  sendAction: (action: string, payload?: Record<string, unknown>) => void,
+): React.ReactNode {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 gap-5 text-center">
+      <AnimatedContent distance={20} duration={0.5}>
+        <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary [&>svg]:w-6 [&>svg]:h-6 mx-auto" dangerouslySetInnerHTML={{ __html: ICONS.chat }} />
+      </AnimatedContent>
+      <BlurText text={i18n.chat.title} className="text-xl font-bold text-text-strong tracking-tight justify-center" delay={80} animateBy="words" direction="bottom" />
+      <AnimatedContent distance={15} duration={0.5} delay={0.3}>
+        <div className="text-[13px] text-text-muted max-w-[380px] leading-relaxed">{i18n.chat.subtitle}</div>
+      </AnimatedContent>
+      <div className="flex flex-wrap gap-2.5 mt-3 justify-center">
+        <AnimatedContent distance={20} duration={0.4} delay={0.4}>
+          <button className={SUGGEST_BTN_CLASS} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.sleepQuestion })}>
+            <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS.moon }} />{i18n.chat.sleepAnalysis}
+          </button>
+        </AnimatedContent>
+        <AnimatedContent distance={20} duration={0.4} delay={0.48}>
+          <button className={SUGGEST_BTN_CLASS} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.activityQuestion })}>
+            <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS.activity }} />{i18n.chat.activitySummary}
+          </button>
+        </AnimatedContent>
+        <AnimatedContent distance={20} duration={0.4} delay={0.56}>
+          <button className={SUGGEST_BTN_CLASS} style={{ boxShadow: "var(--shadow-sm)" }} onClick={() => sendAction("send_message", { content: i18n.chat.heartRateQuestion })}>
+            <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS.heart }} />{i18n.chat.heartRate}
+          </button>
+        </AnimatedContent>
+      </div>
+    </div>
+  );
+}
+
+/** Normalize raw messages into a consistent NormalizedMsg format */
+function normalizeMessages(rawMessages: any[]): NormalizedMsg[] {
+  const messages: NormalizedMsg[] = [];
+  for (const raw of rawMessages) {
+    if (raw.parts && raw.parts.length > 0) {
+      messages.push({ id: raw.id || String(messages.length), role: raw.role === "tool" ? "assistant" : raw.role, parts: raw.parts });
+    } else if (raw.role === "tool") {
+      const prev = messages[messages.length - 1];
+      if (prev && prev.role === "assistant") {
+        prev.parts.push({ type: "tool_use", toolCallId: String(messages.length), toolName: raw.toolName || "", status: raw.toolStatus || "completed" });
+        if (raw.cards) {
+          prev.parts.push({ type: "tool_result", toolCallId: String(messages.length), cards: raw.cards });
+        }
+      } else {
+        messages.push({
+          id: raw.id || String(messages.length),
+          role: "assistant",
+          parts: [
+            { type: "tool_use", toolCallId: String(messages.length), toolName: raw.toolName || "", status: raw.toolStatus || "completed" },
+            ...(raw.cards ? [{ type: "tool_result" as const, toolCallId: String(messages.length), cards: raw.cards }] : []),
+          ],
+        });
+      }
+    } else {
+      const parts: MessagePart[] = [{ type: "text", content: raw.content || "" }];
+      if (raw.cards) {
+        parts.push({ type: "tool_result", toolCallId: "legacy", cards: raw.cards });
+      }
+      messages.push({ id: raw.id || String(messages.length), role: raw.role === "user" ? "user" : "assistant", parts });
+    }
+  }
+  return messages;
+}
+
+/** Render a single message part (text, tool_use, tool_result) */
+function renderMessagePart(
+  part: MessagePart,
+  partIdx: number,
+  msgBubble: string,
+  renderInline: (data: { components: A2UIComponent[]; root_id: string }) => React.ReactNode,
+): React.ReactNode {
+  if (part.type === "text") {
+    if (!part.content?.trim()) return null;
+    return (
+      <div key={partIdx} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)" }}>
+        <Markdown>{part.content}</Markdown>
+      </div>
+    );
+  }
+  if (part.type === "tool_use") {
+    return renderToolUsePart(part, partIdx);
+  }
+  if (part.type === "tool_result" && part.cards) {
+    return (
+      <div key={partIdx} className="max-w-[90%] sm:max-w-[70%]">
+        {renderInline(part.cards as { components: A2UIComponent[]; root_id: string })}
+      </div>
+    );
+  }
+  return null;
+}
+
+/** Render a tool_use part with status indicator and progress bar */
+function renderToolUsePart(part: MessagePart, partIdx: number): React.ReactNode {
+  const status = part.status || "completed";
+  const dotClass = getStatusDotClass(status);
+  const statusIcon = getStatusIcon(status);
+  const displayName = part.displayName || TOOL_DISPLAY_NAMES[part.toolName] || part.toolName;
+  const progress = part.progressData;
+  const pct = progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+  return (
+    <div key={partIdx} className="flex items-center gap-2 text-xs text-text-muted py-1 max-w-[90%] sm:max-w-[70%]">
+      <div className={`w-2 h-2 rounded-full ${dotClass} shrink-0`} />
+      <span className="truncate">{displayName}</span>
+      {progress && progress.total > 0 && (
+        <div className="flex items-center gap-1.5 shrink-0 min-w-[100px]">
+          <div className="h-1.5 bg-surface rounded-full overflow-hidden flex-1">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${getStatusProgressClass(status)}`}
+              style={{ width: `${Math.max(pct, 3)}%` }}
+            />
+          </div>
+          <span className="tabular-nums text-[10px] w-[3ch] text-right">{pct}%</span>
+        </div>
+      )}
+      {statusIcon}
+    </div>
+  );
+}
+
+/** Render a user message bubble */
+function renderUserMessage(msg: NormalizedMsg, index: number, avatarBase: string, msgBubble: string): React.ReactNode {
+  const textContent = msg.parts.filter((p) => p.type === "text").map((p) => (p as { type: "text"; content: string }).content).join("");
+  return (
+    <div key={index} className="flex gap-4 flex-row-reverse motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-right-4 motion-safe:duration-normal">
+      <div className={`${avatarBase} bg-bg-tertiary text-text-secondary`} dangerouslySetInnerHTML={{ __html: ICONS.user }} />
+      <div className={`${msgBubble} bg-primary/10 text-text border border-primary/20`}>
+        {textContent}
+      </div>
+    </div>
+  );
+}
+
+/** Render an assistant message with avatar and parts */
+function renderAssistantMessage(
+  msg: NormalizedMsg,
+  index: number,
+  totalMessages: number,
+  streaming: boolean,
+  thinkingMode: boolean,
+  avatarBase: string,
+  msgBubble: string,
+  renderPart: (part: MessagePart, partIdx: number) => React.ReactNode,
+): React.ReactNode {
+  const hasVisibleParts = msg.parts.some((p) =>
+    (p.type === "text" && p.content?.trim()) || p.type === "tool_use" || p.type === "tool_result"
+  );
+  const isActiveMsg = streaming && index === totalMessages - 1;
+
+  if (!isActiveMsg && !hasVisibleParts) return null;
+
+  const hasToolCalls = msg.parts.some((p) => p.type === "tool_use");
+
+  return (
+    <div key={index} className="flex gap-4 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-left-4 motion-safe:duration-normal">
+      <div className="relative self-start shrink-0">
+        {isActiveMsg && (
+          <div className="absolute inset-0 rounded-lg bg-primary/20"
+               style={{ animation: "agent-breathe-ring 2s ease-out infinite" }} />
+        )}
+        <div className={`${avatarBase} bg-primary`}
+             style={isActiveMsg ? { animation: "agent-breathe 2.5s ease-in-out infinite" } : undefined}
+             dangerouslySetInnerHTML={{ __html: ICONS.bot }} />
+      </div>
+      <div className="flex flex-col gap-2 min-w-0 flex-1">
+        {thinkingMode && hasToolCalls ? (
+          <ThinkingMessage
+            parts={msg.parts}
+            isActiveMsg={isActiveMsg}
+            renderPartFn={renderPart}
+            msgBubble={msgBubble}
+          />
+        ) : (
+          <AssistantMessageParts
+            parts={msg.parts}
+            isActiveMsg={isActiveMsg}
+            hasVisibleParts={hasVisibleParts}
+            msgBubble={msgBubble}
+            renderPart={renderPart}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Render assistant message parts (non-thinking mode) with typing indicator */
+function AssistantMessageParts({
+  parts,
+  isActiveMsg,
+  hasVisibleParts,
+  msgBubble,
+  renderPart,
+}: {
+  parts: MessagePart[];
+  isActiveMsg: boolean;
+  hasVisibleParts: boolean;
+  msgBubble: string;
+  renderPart: (part: MessagePart, partIdx: number) => React.ReactNode;
+}) {
+  return (
+    <>
+      {parts.map((part, pi) => {
+        if (
+          isActiveMsg && part.type === "text" && part.content?.trim() &&
+          pi === parts.length - 1
+        ) {
+          return (
+            <div key={pi} className={`${msgBubble} bg-surface-card border border-border`} style={{ boxShadow: "var(--shadow-sm)", animation: "stream-border-pulse 2s ease-in-out infinite" }}>
+              <Markdown>{part.content}</Markdown>
+            </div>
+          );
+        }
+        return renderPart(part, pi);
+      })}
+      {isActiveMsg && !hasVisibleParts && (
+        <TypingIndicator />
+      )}
+    </>
+  );
+}
+
+/** Typing indicator dots */
+function TypingIndicator() {
+  return (
+    <div className="inline-flex gap-1.5 items-center px-4 py-3 rounded-2xl bg-surface-card border border-border self-start" style={{ boxShadow: "var(--shadow-sm)" }}>
+      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0s" }} />
+      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.2s" }} />
+      <div className="w-2 h-2 rounded-full bg-primary/60 motion-safe:animate-bounce-dot" style={{ animationDelay: "0.4s" }} />
+    </div>
+  );
+}
+
+/** Render quick reply buttons after the last message */
+function renderQuickReplies(
+  c: A2UIComponent,
+  streaming: boolean,
+  sendAction: (action: string, payload?: Record<string, unknown>) => void,
+): React.ReactNode {
+  if (streaming) return null;
+  const quickReplies = prop(c, "quickReplies") as Array<{ label: string; content: string; icon?: string; variant?: string }> | undefined;
+  if (!quickReplies || quickReplies.length === 0) return null;
+
+  const actionName = (prop(c, "action") as string) || "send_message";
+  return (
+    <div className="flex gap-2 pl-13 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-normal">
+      {quickReplies.map((qr, i) => (
+        <button
+          key={i}
+          className={`quick-reply-btn flex items-center gap-1.5 px-4 py-2 rounded-2xl text-sm font-medium cursor-pointer transition-all duration-fast border ${getQuickReplyVariantClass(qr.variant)}`}
+          onClick={() => sendAction(actionName, { content: qr.content, value: qr.content })}
+        >
+          {qr.icon && <span className="w-4 h-4 [&>svg]:w-4 [&>svg]:h-4" dangerouslySetInnerHTML={{ __html: ICONS[qr.icon] || "" }} />}
+          {qr.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Helper: get trend direction arrow
+function getTrendArrow(direction: string): string {
+  if (direction === "up") return "↑";
+  if (direction === "down") return "↓";
+  return "→";
+}
+
+// Helper: get skeleton border radius class
+function getSkeletonRadiusClass(variant: string): string {
+  if (variant === "circular") return "rounded-full";
+  if (variant === "text") return "rounded";
+  return "rounded-xl";
+}
+
+// Helper: get dimension string (number → px, string → as-is)
+function toDimensionStr(value: string | number): string {
+  return typeof value === "number" ? value + "px" : String(value);
+}
+
+// Helper: get status dot class for tool_use
+function getStatusDotClass(status: string): string {
+  if (status === "running") return "bg-primary motion-safe:animate-pulse";
+  if (status === "error") return "bg-error";
+  return "bg-success";
+}
+
+// Helper: get status icon HTML for tool_use
+function getStatusIcon(status: string): React.ReactNode {
+  if (status === "running") {
+    return <span className="tool-spinner" />;
+  }
+  if (status === "error") {
+    return <span className="text-error [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS.x }} />;
+  }
+  return <span className="text-success [&>svg]:w-3 [&>svg]:h-3" dangerouslySetInnerHTML={{ __html: ICONS.check }} />;
+}
+
+// Helper: get status progress bar class for tool_use
+function getStatusProgressClass(status: string): string {
+  if (status === "running") return "bg-primary animate-status-pulse";
+  if (status === "error") return "bg-error";
+  return "bg-success";
+}
+
+// Helper: get quick reply variant class
+function getQuickReplyVariantClass(variant: string | undefined): string {
+  if (variant === "danger") return "border-error/30 text-error bg-error/10 hover:bg-error/20 hover:border-error/50";
+  if (variant === "primary") return "border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 hover:border-primary/50";
+  return "border-border text-text-secondary bg-surface hover:bg-surface-hover hover:border-border-hover";
+}
+
+// Helper: get accent button style
+function getAccentStyle(variant: string, isAccent: boolean): React.CSSProperties {
+  if (isAccent) {
+    return {
+      background: "linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))",
+      boxShadow: "var(--shadow-md), 0 0 24px var(--color-accent-glow)",
+    };
+  }
+  if (variant === "primary") {
+    return { boxShadow: "var(--shadow-sm)" };
+  }
+  return {};
 }
 
 // Helper: parse inline style string to React CSSProperties

@@ -188,15 +188,6 @@ export type BenchmarkCategory =
   | "personalization-memory"
   | "communication-quality";
 
-/** @deprecated Use SHARP equal-weight categories instead */
-export interface CategoryDimensionWeights {
-  accuracy: number;
-  relevance: number;
-  helpfulness: number;
-  safety: number;
-  completeness: number;
-}
-
 // Benchmark run - a single execution of the benchmark suite
 export interface BenchmarkRun {
   id: string;
@@ -248,7 +239,7 @@ export type BenchmarkProfile = "quick" | "full";
 export interface CategoryWeightConfig {
   category: BenchmarkCategory;
   weight: number;
-  dimensionWeights: CategoryDimensionWeights; // @deprecated - kept for backward compat
+  dimensionWeights: Record<string, number>;
 }
 
 // Radar chart data point

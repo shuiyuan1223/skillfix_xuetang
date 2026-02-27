@@ -40,6 +40,11 @@ import { join } from "path";
 
 const log = createLogger("Evolution/Benchmark");
 
+/** Epsilon-based floating point equality check (avoids direct === on floats). */
+function floatEqual(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1e-9;
+}
+
 export interface BenchmarkRunnerConfig {
   /** Function to send a query to the agent and get response */
   agentCall: (
@@ -741,14 +746,15 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
 
     if (scoringType === "binary") {
       // Valid values: exactly 0.0 or 1.0
-      if (clamped === 1.0 || clamped === 0.0) return clamped;
+      if (floatEqual(clamped, 1.0) || floatEqual(clamped, 0.0)) return clamped;
       // Ambiguous — snap but warn
       const snapped = clamped >= 0.5 ? 1.0 : 0.0;
       log.warn(`Binary score ${clamped} is not 0.0 or 1.0, snapped to ${snapped}`);
       return snapped;
     }
     // 3-point: valid values are 0.0, 0.5, 1.0
-    if (clamped === 1.0 || clamped === 0.5 || clamped === 0.0) return clamped;
+    if (floatEqual(clamped, 1.0) || floatEqual(clamped, 0.5) || floatEqual(clamped, 0.0))
+      return clamped;
     // Snap to nearest valid value
     let snapped: number;
     if (clamped >= 0.75) {

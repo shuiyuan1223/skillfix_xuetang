@@ -365,6 +365,13 @@ export class A2UIGenerator {
   }
 
   /**
+   * Get a component by ID (for post-creation mutation, e.g. adding style).
+   */
+  getComponent(id: string): A2UIComponent | undefined {
+    return this.components.get(id);
+  }
+
+  /**
    * Build the A2UI v0.8 messages (surfaceUpdate + beginRendering)
    */
   build(rootId: string): A2UIMessage[] {

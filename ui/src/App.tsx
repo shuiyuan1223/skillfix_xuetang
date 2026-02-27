@@ -131,6 +131,7 @@ export function App() {
       }, 2000);
 
       const handler = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
         if (event.data?.type?.startsWith("PHA_")) {
           console.log("[OAuth] Received message:", event.data.type, event.data);
         }
@@ -147,7 +148,7 @@ export function App() {
       };
 
       window.addEventListener("message", handler);
-      window.postMessage({ type: "PHA_CHECK_EXTENSION" }, "*");
+      window.postMessage({ type: "PHA_CHECK_EXTENSION" }, window.location.origin);
     });
   }, []);
 
@@ -160,6 +161,7 @@ export function App() {
         }, 180000); // 3 minute timeout
 
         const handler = (event: MessageEvent) => {
+          if (event.origin !== window.location.origin) return;
           if (event.data?.type === "PHA_OAUTH_RESULT") {
             clearTimeout(timeout);
             window.removeEventListener("message", handler);
@@ -168,7 +170,7 @@ export function App() {
         };
 
         window.addEventListener("message", handler);
-        window.postMessage({ type: "PHA_OAUTH_START", authUrl }, "*");
+        window.postMessage({ type: "PHA_OAUTH_START", authUrl }, window.location.origin);
       });
     },
     [],
@@ -289,6 +291,8 @@ export function App() {
         }
         break;
       }
+      default:
+        break;
     }
   }, []);
 
@@ -724,6 +728,8 @@ export function App() {
       case "progress":
         setProgressData(data);
         break;
+      default:
+        break;
     }
   }, [extractChatHistory]);
 
@@ -737,6 +743,8 @@ export function App() {
         break;
       case "progress":
         setProgressData(null);
+        break;
+      default:
         break;
     }
   }, [closeModal]);
@@ -802,6 +810,8 @@ export function App() {
             });
             break;
           }
+          default:
+            break;
         }
       }
     },
@@ -903,6 +913,7 @@ export function App() {
 
     // Listen for OAuth completion from callback popup/tab
     const oauthHandler = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === "PHA_OAUTH_COMPLETE" && event.data.userId) {
         setUserIdCookie(event.data.userId);
         uidRef.current = event.data.userId;
@@ -1014,10 +1025,10 @@ export function App() {
           <button
             className="topbar-btn md:!hidden"
             onClick={() => toggleMobileSidebar()}
-            dangerouslySetInnerHTML={{ __html: ICONS["menu"] }}
+            dangerouslySetInnerHTML={{ __html: ICONS.menu }}
           />
           <div className="topbar-brand">
-            <div className="topbar-logo" dangerouslySetInnerHTML={{ __html: ICONS["hospital"] }} />
+            <div className="topbar-logo" dangerouslySetInnerHTML={{ __html: ICONS.hospital }} />
             <span className="topbar-title">PHA</span>
           </div>
         </div>
@@ -1062,7 +1073,7 @@ export function App() {
               className="sidebar-bottom-btn"
               onClick={() => toggleTheme()}
               title={darkMode ? i18n.common.switchToLight : i18n.common.switchToDark}
-              dangerouslySetInnerHTML={{ __html: darkMode ? ICONS["sun"] : ICONS["moon"] }}
+              dangerouslySetInnerHTML={{ __html: darkMode ? ICONS.sun : ICONS.moon }}
             />
             <span
               className={`status-dot-badge ${connected ? "online" : "offline"}`}

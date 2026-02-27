@@ -88,6 +88,15 @@ function findLastTextIdx(parts: MessagePart[]): number {
   }
   return -1;
 }
+
+/** Extract concatenated text from an array of message content blocks. */
+function extractSAText(content: unknown[]): string {
+  let text = "";
+  for (const block of content || []) {
+    if ((block as { type: string }).type === "text") text += (block as { text: string }).text;
+  }
+  return text;
+}
 import type { ProgressiveDashboardLoader } from "./progressive-loader.js";
 import { getUserDir, ensureUserDir, ensureSystemAgentFiles } from "../memory/profile.js";
 import { getPromptTool, getPromptHistoryTool, setPromptsDir } from "../tools/prompt-tools.js";
@@ -452,6 +461,18 @@ function registerHealthRoutes(app: Hono): void {
 }
 
 /** Register browser-facing OAuth routes (start, callback, status). */
+/** Compute the Huawei OAuth redirect URI from config. */
+function getHuaweiRedirectUri(
+  huaweiConfig: { redirectUri?: string },
+  gatewayPort: number,
+  gatewayBasePath: string
+): string {
+  const gwBasePath = (gatewayBasePath || "").replace(/\/+$/, "");
+  return (
+    huaweiConfig.redirectUri || `http://localhost:${gatewayPort}${gwBasePath}/auth/huawei/callback`
+  );
+}
+
 function registerOAuthBrowserRoutes(app: Hono): void {
   app.get("/auth/huawei/start", (c) => {
     const config = loadConfig();
@@ -460,10 +481,11 @@ function registerOAuthBrowserRoutes(app: Hono): void {
       return c.html(
         generateOAuthErrorPage("Huawei client ID not configured. Run 'pha huawei setup' first.")
       );
-    const port = config.gateway.port || 8000;
-    const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
-    const redirectUri =
-      huaweiConfig.redirectUri || `http://localhost:${port}${gwBasePath}/auth/huawei/callback`;
+    const redirectUri = getHuaweiRedirectUri(
+      huaweiConfig,
+      config.gateway.port || 8000,
+      config.gateway.basePath || ""
+    );
     const nonce = crypto.randomUUID();
     const authUrl = huaweiAuth.getAuthUrl(huaweiConfig.clientId, redirectUri);
     return c.redirect(`${authUrl}&state=${encodeURIComponent(nonce)}`);
@@ -472,18 +494,18 @@ function registerOAuthBrowserRoutes(app: Hono): void {
     const code = c.req.query("code");
     if (!code) return c.html(generateOAuthErrorPage("Missing authorization code"));
     try {
+      const hw = getHuaweiOAuthConfig();
+      if (!hw) return c.html(generateOAuthErrorPage("Huawei credentials not configured"));
       const config = loadConfig();
-      const huaweiConfig = config.dataSources.huawei;
-      if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret)
-        return c.html(generateOAuthErrorPage("Huawei credentials not configured"));
-      const port = config.gateway.port || 8000;
-      const gwBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
-      const redirectUri =
-        huaweiConfig.redirectUri || `http://localhost:${port}${gwBasePath}/auth/huawei/callback`;
+      const redirectUri = getHuaweiRedirectUri(
+        hw,
+        config.gateway.port || 8000,
+        config.gateway.basePath || ""
+      );
       const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         code,
-        huaweiConfig.clientId,
-        huaweiConfig.clientSecret,
+        hw.clientId,
+        hw.clientSecret,
         redirectUri
       );
       if (!huaweiUserId)
@@ -520,6 +542,23 @@ function registerOAuthBrowserRoutes(app: Hono): void {
   });
 }
 
+/** Load Huawei OAuth config, returning null if credentials are missing. */
+function getHuaweiOAuthConfig(): {
+  clientId: string;
+  clientSecret: string;
+  redirectUri?: string;
+} | null {
+  const config = loadConfig();
+  const hw = config.dataSources.huawei;
+  if (!hw?.clientId || !hw?.clientSecret) return null;
+  return { clientId: hw.clientId, clientSecret: hw.clientSecret, redirectUri: hw.redirectUri };
+}
+
+/** Format an error for JSON response. */
+function formatErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Register API-facing OAuth routes (get-auth-url, exchange, mcp-flow). */
 function registerOAuthAPIRoutes(app: Hono): void {
   app.get("/auth/huawei/get-auth-url", (c) => {
@@ -532,16 +571,14 @@ function registerOAuthAPIRoutes(app: Hono): void {
     const body = await c.req.json().catch(() => ({}));
     const { code, uuid } = body;
     if (!code) return c.json({ success: false, error: "Missing authorization code" }, 400);
-    const config = loadConfig();
-    const huaweiConfig = config.dataSources.huawei;
-    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret)
-      return c.json({ success: false, error: "Huawei credentials not configured" }, 400);
+    const hw = getHuaweiOAuthConfig();
+    if (!hw) return c.json({ success: false, error: "Huawei credentials not configured" }, 400);
     try {
       const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         code,
-        huaweiConfig.clientId,
-        huaweiConfig.clientSecret,
-        huaweiConfig.redirectUri || "hms://redirect_url"
+        hw.clientId,
+        hw.clientSecret,
+        hw.redirectUri || "hms://redirect_url"
       );
       const userId = huaweiUserId || uuid;
       if (!userId)
@@ -550,19 +587,13 @@ function registerOAuthAPIRoutes(app: Hono): void {
       logOAuth.info("Extension: successfully authenticated user", { userId: userId.slice(0, 8) });
       return c.json({ success: true, userId });
     } catch (error) {
-      logOAuth.error("Extension: token exchange failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return c.json(
-        { success: false, error: error instanceof Error ? error.message : String(error) },
-        500
-      );
+      logOAuth.error("Extension: token exchange failed", { error: formatErrorMessage(error) });
+      return c.json({ success: false, error: formatErrorMessage(error) }, 500);
     }
   });
   app.post("/auth/huawei/mcp-flow", async (c) => {
-    const config = loadConfig();
-    const huaweiConfig = config.dataSources.huawei;
-    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret)
+    const hw = getHuaweiOAuthConfig();
+    if (!hw)
       return c.json(
         {
           success: false,
@@ -580,9 +611,9 @@ function registerOAuthAPIRoutes(app: Hono): void {
       }
       const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
         result.code,
-        huaweiConfig.clientId,
-        huaweiConfig.clientSecret,
-        huaweiConfig.redirectUri || "hms://redirect_url"
+        hw.clientId,
+        hw.clientSecret,
+        hw.redirectUri || "hms://redirect_url"
       );
       if (!huaweiUserId) {
         logOAuth.error("MCP: no user ID in id_token");
@@ -592,13 +623,8 @@ function registerOAuthAPIRoutes(app: Hono): void {
       logOAuth.info("MCP: successfully authenticated user", { userId: huaweiUserId.slice(0, 8) });
       return c.json({ success: true, userId: huaweiUserId });
     } catch (error) {
-      logOAuth.error("MCP: token exchange failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return c.json(
-        { success: false, error: error instanceof Error ? error.message : String(error) },
-        500
-      );
+      logOAuth.error("MCP: token exchange failed", { error: formatErrorMessage(error) });
+      return c.json({ success: false, error: formatErrorMessage(error) }, 500);
     }
   });
 }
@@ -1032,75 +1058,70 @@ export class GatewaySession {
    * Load persisted messages from the most recent session.
    * Reuses the session ID if the last message is within 24 hours.
    */
+  /**
+   * Try to restore a single chat channel from the latest JSONL session file.
+   * Returns { sessionId, messages } if a recent session was found, or null.
+   */
+  private loadSessionChannel(
+    uuid: string,
+    profileId: string,
+    opts?: { prefix?: string; stripPrefix?: string }
+  ): { sessionId: string; messages: PartsChatMessage[] } | null {
+    const profile = getAgentProfile(profileId);
+    const sessionDir = profile.sessionPath
+      ? resolveSessionPath(profile.sessionPath, uuid)
+      : undefined;
+    const session = loadLatestSession(uuid, { prefix: opts?.prefix, sessionDir });
+    if (!session || session.entries.length === 0) return null;
+
+    const lastTs = session.entries[session.entries.length - 1].timestamp;
+    if (Date.now() - lastTs >= GatewaySession.MAX_SESSION_AGE_MS) return null;
+
+    const sid = opts?.stripPrefix
+      ? session.sessionId.replace(new RegExp(`^${opts.stripPrefix}`), "")
+      : session.sessionId;
+
+    const messages = session.entries
+      .filter((e) => e.role === "user" || e.role === "assistant")
+      .map((e) => ({
+        id: crypto.randomUUID(),
+        role: e.role as "user" | "assistant",
+        parts: [{ type: "text" as const, content: e.content }],
+      }));
+
+    return { sessionId: sid, messages };
+  }
+
   private loadPersistedMessages(): void {
     try {
-      // Resolve session directories from agent profiles
-      const phaProfile = getAgentProfile("pha");
-      const pha4oldProfile = getAgentProfile("pha4old");
-      const saProfile = getAgentProfile("sa");
-
-      // Load main chat (per-user) — use pha agent's sessionPath
+      // Load main chat (per-user)
       if (this.userUuid) {
-        const phaSessionDir = phaProfile.sessionPath
-          ? resolveSessionPath(phaProfile.sessionPath, this.userUuid)
-          : undefined;
-        const chatSession = loadLatestSession(this.userUuid, { sessionDir: phaSessionDir });
-        if (chatSession && chatSession.entries.length > 0) {
-          const lastTs = chatSession.entries[chatSession.entries.length - 1].timestamp;
-          if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
-            this.sessionId = chatSession.sessionId;
-            this.chatMessages = chatSession.entries
-              .filter((e) => e.role === "user" || e.role === "assistant")
-              .map((e) => ({
-                id: crypto.randomUUID(),
-                role: e.role as "user" | "assistant",
-                parts: [{ type: "text" as const, content: e.content }],
-              }));
-          }
+        const chat = this.loadSessionChannel(this.userUuid, "pha");
+        if (chat) {
+          this.sessionId = chat.sessionId;
+          this.chatMessages = chat.messages;
         }
       }
 
-      // Load legacy-chat (per-user) — use pha4old agent's sessionPath
+      // Load legacy-chat (per-user)
       if (this.userUuid) {
-        const pha4oldSessionDir = pha4oldProfile.sessionPath
-          ? resolveSessionPath(pha4oldProfile.sessionPath, this.userUuid)
-          : undefined;
-        const legacySession = loadLatestSession(this.userUuid, { sessionDir: pha4oldSessionDir });
-        if (legacySession && legacySession.entries.length > 0) {
-          const lastTs = legacySession.entries[legacySession.entries.length - 1].timestamp;
-          if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
-            this.legacyChatSessionId = legacySession.sessionId.replace(/^legacy-/, "");
-            this.legacyChatMessages = legacySession.entries
-              .filter((e) => e.role === "user" || e.role === "assistant")
-              .map((e) => ({
-                id: crypto.randomUUID(),
-                role: e.role as "user" | "assistant",
-                parts: [{ type: "text" as const, content: e.content }],
-              }));
-          }
+        const legacy = this.loadSessionChannel(this.userUuid, "pha4old", {
+          stripPrefix: "legacy-",
+        });
+        if (legacy) {
+          this.legacyChatSessionId = legacy.sessionId;
+          this.legacyChatMessages = legacy.messages;
         }
       }
 
-      // Load system agent chat — use sa agent's sessionPath
-      const saSessionDir = saProfile.sessionPath
-        ? resolveSessionPath(saProfile.sessionPath, "system")
-        : undefined;
-      const saSession = loadLatestSession(GatewaySession.SA_GLOBAL_UUID, {
+      // Load system agent chat
+      const sa = this.loadSessionChannel(GatewaySession.SA_GLOBAL_UUID, "sa", {
         prefix: "sa-",
-        sessionDir: saSessionDir,
+        stripPrefix: "sa-",
       });
-      if (saSession && saSession.entries.length > 0) {
-        const lastTs = saSession.entries[saSession.entries.length - 1].timestamp;
-        if (Date.now() - lastTs < GatewaySession.MAX_SESSION_AGE_MS) {
-          this.saSessionId = saSession.sessionId.replace(/^sa-/, "");
-          this.systemAgentChatMessages = saSession.entries
-            .filter((e) => e.role === "user" || e.role === "assistant")
-            .map((e) => ({
-              id: crypto.randomUUID(),
-              role: e.role as "user" | "assistant",
-              parts: [{ type: "text" as const, content: e.content }],
-            }));
-        }
+      if (sa) {
+        this.saSessionId = sa.sessionId;
+        this.systemAgentChatMessages = sa.messages;
       }
     } catch (err) {
       logSession.warn("Failed to load persisted messages", { error: err });
@@ -2023,60 +2044,51 @@ export class GatewaySession {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private _handleSAEvent(event: any, send: (msg: unknown) => void): void {
-    const extractText = (content: unknown[]): string => {
-      let text = "";
-      for (const block of content || []) {
-        if ((block as { type: string }).type === "text") text += (block as { text: string }).text;
-      }
-      return text;
-    };
-
-    switch (event.type) {
-      case "message_start": {
-        if (event.message?.role !== "assistant") break;
-        const text = extractText(event.message.content || []);
-        const assistantMsg = this.saGetOrCreateAssistantMsg();
-        if (text) assistantMsg.parts.push({ type: "text", content: text });
-        this.systemAgentStreamingContent = text;
-        this.saLastStreamedText = text;
-        this.sendEvolutionLabUpdate(send);
-        break;
-      }
-      case "message_update": {
-        if (event.message?.role !== "assistant") break;
-        const text = extractText(event.message.content || []);
-        this.systemAgentStreamingContent = text;
-        const assistantMsg = this.saGetOrCreateAssistantMsg();
-        const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
-        if (lastPart && lastPart.type === "text") {
-          lastPart.content = text;
-        } else if (text) {
-          assistantMsg.parts.push({ type: "text", content: text });
-        }
-        this.saLastStreamedText = text;
-        this.sendEvolutionLabUpdateThrottled(send);
-        const activeSend = this.getSend(send);
-        activeSend({ type: "agent_text", content: text, is_final: false });
-        break;
-      }
-      case "message_end":
-        this._handleSAMessageEnd(event, send, extractText);
-        break;
-      case "tool_execution_start":
-        this._handleSAToolStart(event, send);
-        break;
-      case "tool_execution_end":
-        this._handleSAToolEnd(event, send);
-        break;
-      case "agent_end":
+    const SA_EVENT_HANDLERS: Record<string, (ev: any, s: (msg: unknown) => void) => void> = {
+      message_start: (ev, s) => this._handleSAMessageStart(ev, s),
+      message_update: (ev, s) => this._handleSAMessageUpdate(ev, s),
+      message_end: (ev, s) => this._handleSAMessageEnd(ev, s, extractSAText),
+      tool_execution_start: (ev, s) => this._handleSAToolStart(ev, s),
+      tool_execution_end: (ev, s) => this._handleSAToolEnd(ev, s),
+      agent_end: (_ev, s) => {
         this.systemAgentStreaming = false;
         this.saCurrentAssistantMsgId = null;
         this.saLastStreamedText = "";
-        this.sendEvolutionLabUpdate(send);
-        break;
-      default:
-        break;
+        this.sendEvolutionLabUpdate(s);
+      },
+    };
+
+    const handler = SA_EVENT_HANDLERS[event.type];
+    if (handler) handler(event, send);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _handleSAMessageStart(event: any, send: (msg: unknown) => void): void {
+    if (event.message?.role !== "assistant") return;
+    const text = extractSAText(event.message.content || []);
+    const assistantMsg = this.saGetOrCreateAssistantMsg();
+    if (text) assistantMsg.parts.push({ type: "text", content: text });
+    this.systemAgentStreamingContent = text;
+    this.saLastStreamedText = text;
+    this.sendEvolutionLabUpdate(send);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _handleSAMessageUpdate(event: any, send: (msg: unknown) => void): void {
+    if (event.message?.role !== "assistant") return;
+    const text = extractSAText(event.message.content || []);
+    this.systemAgentStreamingContent = text;
+    const assistantMsg = this.saGetOrCreateAssistantMsg();
+    const lastPart = assistantMsg.parts[assistantMsg.parts.length - 1];
+    if (lastPart && lastPart.type === "text") {
+      lastPart.content = text;
+    } else if (text) {
+      assistantMsg.parts.push({ type: "text", content: text });
     }
+    this.saLastStreamedText = text;
+    this.sendEvolutionLabUpdateThrottled(send);
+    const activeSend = this.getSend(send);
+    activeSend({ type: "agent_text", content: text, is_final: false });
   }
 
   private _handleSAMessageEnd(
@@ -2272,33 +2284,45 @@ export class GatewaySession {
       for (const r of completedRuns) this.benchmarkSelectedRunIds.add(r.id);
     }
 
+    const isOverviewOrBenchmark = activeTab === "overview" || activeTab === "benchmark";
+    const hasSelectedRuns = this.benchmarkSelectedRunIds.size > 0;
+
+    // Load tab-specific data
+    const tabSpecific = this._loadEvolutionTabSpecific(activeTab, common.benchmarkRuns);
+
     return {
       activeTab,
       ...common,
       activeVersionBranch: this.activeVersionBranch,
-      selectedRunIds:
-        this.benchmarkSelectedRunIds.size > 0
-          ? Array.from(this.benchmarkSelectedRunIds)
-          : undefined,
+      selectedRunIds: hasSelectedRuns ? Array.from(this.benchmarkSelectedRunIds) : undefined,
       radarMode: this.benchmarkRadarMode,
-      ...(activeTab === "overview" ? this._loadOverviewTabData() : {}),
       comparisonRuns:
-        (activeTab === "overview" || activeTab === "benchmark") &&
-        this.benchmarkSelectedRunIds.size > 0
-          ? this._loadComparisonRuns()
-          : undefined,
-      externalProgressMap:
-        activeTab === "overview" || activeTab === "benchmark"
-          ? loadExternalProgressMap()
-          : undefined,
+        isOverviewOrBenchmark && hasSelectedRuns ? this._loadComparisonRuns() : undefined,
+      externalProgressMap: isOverviewOrBenchmark ? loadExternalProgressMap() : undefined,
       testCases: activeTab === "benchmark" ? loadBenchmarkTestCases() : undefined,
-      ...(activeTab === "versions" ? this._loadVersionsTabData(common.benchmarkRuns) : {}),
       selectedVersion: this.evolutionSelectedVersion || undefined,
       diffContent: this.evolutionLabDiffContent || undefined,
       dataSubTab: this.evolutionDataSubTab,
       tracesPage: this.tracesPage,
-      ...(activeTab === "data" ? this._loadDataTabData() : {}),
+      ...tabSpecific,
     };
+  }
+
+  /** Load tab-specific data fragments for the Evolution Lab. */
+  private _loadEvolutionTabSpecific(
+    activeTab: string,
+    benchmarkRuns: EvolutionLabData["benchmarkRuns"]
+  ): Partial<EvolutionLabData> {
+    switch (activeTab) {
+      case "overview":
+        return this._loadOverviewTabData();
+      case "versions":
+        return this._loadVersionsTabData(benchmarkRuns);
+      case "data":
+        return this._loadDataTabData();
+      default:
+        return {};
+    }
   }
 
   /** Load benchmark runs (common across tabs). */
@@ -3301,9 +3325,10 @@ function mapBenchmarkRunLegacy(r: any): Record<string, unknown> {
 }
 
 /** Load tab-specific evolution data. */
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-function loadEvolutionTabData(tab: string, tracesPage: number) {
-  if (tab === "overview") {
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const EVOLUTION_TAB_LOADERS: Record<string, (tracesPage: number) => Record<string, any>> = {
+  overview: () => {
     const stats = getEvaluationStats();
     const benchmarkRuns = listBenchmarkRuns({ limit: 5 }).map(mapBenchmarkRunLegacy);
     const bestScores = getBestCategoryScores();
@@ -3317,8 +3342,8 @@ function loadEvolutionTabData(tab: string, tracesPage: number) {
           }))
         : undefined;
     return { stats, benchmarkRuns, latestCategoryScores };
-  }
-  if (tab === "traces") {
+  },
+  traces: (tracesPage) => {
     const traceRows = listTraces({ limit: 20, offset: tracesPage * 20 });
     const tracesTotal = countTraces();
     const traces = traceRows.map((tr) => {
@@ -3331,48 +3356,46 @@ function loadEvolutionTabData(tab: string, tracesPage: number) {
       };
     });
     return { traces, tracesTotal };
-  }
-  if (tab === "evaluations") {
-    return {
-      evaluations: listEvaluations({ limit: 50 }).map((e) => ({
-        id: e.id,
-        traceId: e.trace_id,
-        timestamp: e.timestamp,
-        score: e.overall_score,
-        feedback: e.feedback,
-      })),
-    };
-  }
-  if (tab === "benchmark") {
-    return {
-      testCases: listTestCases({ limit: 50 }).map((tc) => ({
-        id: tc.id,
-        category: tc.category,
-        query: tc.query,
-        expected: JSON.parse(tc.expected),
-      })),
-    };
-  }
-  if (tab === "runs") {
-    return { benchmarkRuns: listBenchmarkRuns({ limit: 20 }).map(mapBenchmarkRunLegacy) };
-  }
-  if (tab === "suggestions") {
-    return {
-      suggestions: listSuggestions({ limit: 50 }).map((s) => ({
-        id: s.id,
-        timestamp: s.timestamp,
-        type: s.type,
-        target: s.target,
-        status: s.status,
-        rationale: s.rationale,
-      })),
-    };
-  }
-  if (tab === "config") {
+  },
+  evaluations: () => ({
+    evaluations: listEvaluations({ limit: 50 }).map((e) => ({
+      id: e.id,
+      traceId: e.trace_id,
+      timestamp: e.timestamp,
+      score: e.overall_score,
+      feedback: e.feedback,
+    })),
+  }),
+  benchmark: () => ({
+    testCases: listTestCases({ limit: 50 }).map((tc) => ({
+      id: tc.id,
+      category: tc.category,
+      query: tc.query,
+      expected: JSON.parse(tc.expected),
+    })),
+  }),
+  runs: () => ({
+    benchmarkRuns: listBenchmarkRuns({ limit: 20 }).map(mapBenchmarkRunLegacy),
+  }),
+  suggestions: () => ({
+    suggestions: listSuggestions({ limit: 50 }).map((s) => ({
+      id: s.id,
+      timestamp: s.timestamp,
+      type: s.type,
+      target: s.target,
+      status: s.status,
+      rationale: s.rationale,
+    })),
+  }),
+  config: () => {
     const { loadCategoriesConfig } = require("../evolution/benchmark-seed.js");
     return { categoriesConfig: loadCategoriesConfig() };
-  }
-  return {};
+  },
+};
+
+function loadEvolutionTabData(tab: string, tracesPage: number): Record<string, unknown> {
+  const loader = EVOLUTION_TAB_LOADERS[tab];
+  return loader ? loader(tracesPage) : {};
 }
 
 /** Load external benchmark progress for overview/benchmark tabs. */
@@ -3694,6 +3717,122 @@ function buildQueryEventObserver(sn: string | undefined): (event: unknown) => vo
   };
 }
 
+/** Send an SSE error + finish frame and close the writer. Returns the string used as phase for logging. */
+function sseErrorAndClose(
+  sseSendRaw: (obj: unknown) => void,
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  sn: string | undefined,
+  phase: string,
+  errorMsg: string
+): void {
+  log.warn("[query] error", { sn, phase, error: errorMsg });
+  sseSendRaw({ event: "error", content: errorMsg });
+  sseSendRaw({ event: "finish" });
+  writer.close().catch(() => {});
+}
+
+/** Handle client_credentials grant type for /api/query. */
+async function handleQueryClientCredentials(
+  ctx: FetchContext,
+  params: { sn?: string; Authorization: string; query: string; uid?: string; client_id?: string },
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  encoder: TextEncoder,
+  sseSendRaw: (obj: unknown) => void,
+  eventObserver: (event: unknown) => void
+): Promise<string> {
+  const { sn, uid, client_id, Authorization, query } = params;
+  if (!uid || !client_id) {
+    sseErrorAndClose(
+      sseSendRaw,
+      writer,
+      sn,
+      "validation",
+      "Missing required fields: uid, client_id"
+    );
+    return "validation";
+  }
+
+  ensureUserDir(uid);
+  const innerDataSource = createInnerDataSourceForUser(uid, Authorization, uid, client_id);
+  const session = new GatewaySession(ctx.config, uid, innerDataSource);
+  log.info("[query] session", {
+    sn,
+    phase: "session",
+    userId: uid,
+    sessionId: session.getSessionId(),
+    mode: "client_credentials",
+  });
+
+  await session.handleLegacyChatSSE(query, writer, encoder, eventObserver);
+  return "agent";
+}
+
+/** Handle refresh_token grant type for /api/query. */
+async function handleQueryRefreshToken(
+  ctx: FetchContext,
+  params: { sn?: string; Authorization: string; query: string },
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  encoder: TextEncoder,
+  sseSendRaw: (obj: unknown) => void,
+  eventObserver: (event: unknown) => void
+): Promise<string> {
+  const { sn, Authorization, query } = params;
+  const fullConfig = loadConfig();
+  const huaweiConfig = fullConfig.dataSources.huawei;
+  if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+    sseErrorAndClose(sseSendRaw, writer, sn, "auth", "Huawei credentials not configured");
+    return "auth";
+  }
+
+  log.info("[query] auth.start", { sn, phase: "auth_start", grant_type: "refresh_token" });
+
+  let userId: string;
+  try {
+    const authStart = Date.now();
+    const {
+      tokenData,
+      userId: resolvedUid,
+      uid,
+    } = await huaweiAuth.refreshTokenAndGetUserId(
+      Authorization,
+      huaweiConfig.clientId,
+      huaweiConfig.clientSecret
+    );
+    userId = resolvedUid;
+    getUserStore().saveToken(userId, tokenData, uid);
+    log.info("[query] auth.success", {
+      sn,
+      phase: "auth_success",
+      userId,
+      durationMs: Date.now() - authStart,
+      tokenExpiry: tokenData.expiresAt,
+    });
+  } catch (e) {
+    log.error("[query] auth.failed", { sn, phase: "auth_failed", error: String(e) });
+    sseErrorAndClose(
+      sseSendRaw,
+      writer,
+      sn,
+      "auth_failed",
+      `Token refresh failed: ${e instanceof Error ? e.message : String(e)}`
+    );
+    return "auth";
+  }
+
+  ensureUserDir(userId);
+  const session = new GatewaySession(ctx.config, userId);
+  log.info("[query] session", {
+    sn,
+    phase: "session",
+    userId,
+    sessionId: session.getSessionId(),
+    mode: "refresh_token",
+  });
+
+  await session.handleLegacyChatSSE(query, writer, encoder, eventObserver);
+  return "agent";
+}
+
 /** Handle POST /api/query — 边想边搜 SSE (refresh_token or client_credentials). */
 async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
   const { readable, writable } = new TransformStream<Uint8Array>();
@@ -3737,116 +3876,30 @@ async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
       });
 
       if (!Authorization || !query) {
-        log.warn("[query] error", {
+        sseErrorAndClose(
+          sseSendRaw,
+          writer,
           sn,
-          phase: "validation",
-          error: "Missing required fields: Authorization, query",
-        });
-        sseSendRaw({ event: "error", content: "Missing required fields: Authorization, query" });
-        sseSendRaw({ event: "finish" });
-        writer.close().catch(() => {});
+          "validation",
+          "Missing required fields: Authorization, query"
+        );
         return;
       }
 
       const eventObserver = buildQueryEventObserver(sn);
+      const params = { sn, Authorization, query, uid, client_id };
 
-      if (grant_type === "client_credentials") {
-        phase = "validation";
-        if (!uid || !client_id) {
-          log.warn("[query] error", {
-            sn,
-            phase: "validation",
-            error: "Missing required fields: uid, client_id",
-          });
-          sseSendRaw({ event: "error", content: "Missing required fields: uid, client_id" });
-          sseSendRaw({ event: "finish" });
-          writer.close().catch(() => {});
-          return;
-        }
-
-        phase = "session";
-        ensureUserDir(uid);
-        const innerDataSource = createInnerDataSourceForUser(uid, Authorization, uid, client_id);
-        const session = new GatewaySession(ctx.config, uid, innerDataSource);
-        log.info("[query] session", {
-          sn,
-          phase: "session",
-          userId: uid,
-          sessionId: session.getSessionId(),
-          mode: "client_credentials",
-        });
-
-        phase = "agent";
-        await session.handleLegacyChatSSE(query, writer, encoder, eventObserver);
-      } else {
-        // grant_type=refresh_token (default)
-        phase = "auth";
-        const fullConfig = loadConfig();
-        const huaweiConfig = fullConfig.dataSources.huawei;
-        if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
-          log.warn("[query] error", {
-            sn,
-            phase: "auth",
-            error: "Huawei credentials not configured",
-          });
-          sseSendRaw({ event: "error", content: "Huawei credentials not configured" });
-          sseSendRaw({ event: "finish" });
-          writer.close().catch(() => {});
-          return;
-        }
-
-        log.info("[query] auth.start", { sn, phase: "auth_start", grant_type: "refresh_token" });
-
-        let userId: string;
-        try {
-          const authStart = Date.now();
-          const {
-            tokenData,
-            userId: resolvedUid,
-            uid,
-          } = await huaweiAuth.refreshTokenAndGetUserId(
-            Authorization,
-            huaweiConfig.clientId,
-            huaweiConfig.clientSecret
-          );
-          userId = resolvedUid;
-          getUserStore().saveToken(userId, tokenData, uid);
-          log.info("[query] auth.success", {
-            sn,
-            phase: "auth_success",
-            userId,
-            durationMs: Date.now() - authStart,
-            tokenExpiry: tokenData.expiresAt,
-          });
-        } catch (e) {
-          log.error("[query] auth.failed", {
-            sn,
-            phase: "auth_failed",
-            error: String(e),
-          });
-          sseSendRaw({
-            event: "error",
-            content: `Token refresh failed: ${e instanceof Error ? e.message : String(e)}`,
-          });
-          sseSendRaw({ event: "finish" });
-          writer.close().catch(() => {});
-          return;
-        }
-
-        phase = "session";
-        ensureUserDir(userId);
-        const session = new GatewaySession(ctx.config, userId);
-        log.info("[query] session", {
-          sn,
-          phase: "session",
-          userId,
-          sessionId: session.getSessionId(),
-          mode: "refresh_token",
-        });
-
-        phase = "agent";
-        await session.handleLegacyChatSSE(query, writer, encoder, eventObserver);
-      }
+      phase =
+        grant_type === "client_credentials"
+          ? await handleQueryClientCredentials(
+              ctx,
+              params,
+              writer,
+              encoder,
+              sseSendRaw,
+              eventObserver
+            )
+          : await handleQueryRefreshToken(ctx, params, writer, encoder, sseSendRaw, eventObserver);
 
       log.info("[query] done", {
         sn,
@@ -3978,58 +4031,37 @@ async function handleA2A(req: Request, ctx: FetchContext): Promise<Response> {
 
 // ---- Route dispatch (used by fetch) ----
 
+/** Route table entry: handler function + error handler type. */
+type PostRouteHandler = (req: Request, ctx: FetchContext) => Promise<Response>;
+type PostRouteEntry = { handler: PostRouteHandler; errorHandler: "json" | "jsonrpc" | "none" };
+
+/** POST route table — maps pathname to handler + error style. */
+const POST_ROUTES: Record<string, PostRouteEntry> = {
+  "/api/ag-ui": { handler: handleAgUi, errorHandler: "json" },
+  "/api/legacy-chat": { handler: handleLegacyChat, errorHandler: "json" },
+  "/api/query": { handler: handleQuery, errorHandler: "none" },
+  "/api/a2ui/init": { handler: handleA2UIInit, errorHandler: "json" },
+  "/api/a2ui/action": { handler: handleA2UIAction, errorHandler: "json" },
+  "/api/mcp": { handler: (req) => handleMCP(req), errorHandler: "jsonrpc" },
+  "/api/a2a": { handler: handleA2A, errorHandler: "jsonrpc" },
+};
+
 /** Dispatch POST API routes. Returns null if no match. */
 async function dispatchPostRoute(
   pathname: string,
   req: Request,
   ctx: FetchContext
 ): Promise<Response | null> {
-  if (pathname === "/api/ag-ui") {
-    try {
-      return await handleAgUi(req, ctx);
-    } catch (e) {
-      return jsonError(e);
-    }
+  const route = POST_ROUTES[pathname];
+  if (!route) return null;
+
+  if (route.errorHandler === "none") return route.handler(req, ctx);
+
+  try {
+    return await route.handler(req, ctx);
+  } catch (e) {
+    return route.errorHandler === "jsonrpc" ? jsonRpcParseError() : jsonError(e);
   }
-  if (pathname === "/api/legacy-chat") {
-    try {
-      return await handleLegacyChat(req, ctx);
-    } catch (e) {
-      return jsonError(e);
-    }
-  }
-  if (pathname === "/api/query") {
-    return handleQuery(req, ctx);
-  }
-  if (pathname === "/api/a2ui/init") {
-    try {
-      return await handleA2UIInit(req, ctx);
-    } catch (e) {
-      return jsonError(e);
-    }
-  }
-  if (pathname === "/api/a2ui/action") {
-    try {
-      return await handleA2UIAction(req, ctx);
-    } catch (e) {
-      return jsonError(e);
-    }
-  }
-  if (pathname === "/api/mcp") {
-    try {
-      return await handleMCP(req);
-    } catch {
-      return jsonRpcParseError();
-    }
-  }
-  if (pathname === "/api/a2a") {
-    try {
-      return await handleA2A(req, ctx);
-    } catch {
-      return jsonRpcParseError();
-    }
-  }
-  return null;
 }
 
 /** Dispatch GET API routes. Returns null if no match. */

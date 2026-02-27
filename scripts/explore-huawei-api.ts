@@ -448,102 +448,124 @@ async function testDataCollectors(accessToken: string, clientId: string): Promis
   }
 }
 
-async function main() {
-  console.log("=".repeat(60));
-  console.log("Huawei Health Kit API Explorer");
-  console.log("=".repeat(60));
-  console.log();
+function getResultStatusIcon(result: TestResult): string {
+  if (!result.success) return "✗";
+  if (result.hasData) return "✓";
+  return "○";
+}
 
-  // Get access token
-  let accessToken: string;
-  try {
-    accessToken = await huaweiAuth.ensureValidToken();
-    console.log("✓ Access token obtained");
-  } catch (error) {
-    console.error("✗ Failed to get access token:", error);
-    process.exit(1);
+function getResultInfo(result: TestResult, unit: string): string {
+  if (!result.success) {
+    return result.error?.slice(0, 50) || "unknown error";
   }
+  if (result.hasData) {
+    const fieldsSuffix = result.fields ? `, fields: ${result.fields.join(", ") || "none"}` : "";
+    return `${result.sampleCount} ${unit}${fieldsSuffix}`;
+  }
+  return "no data";
+}
 
-  const config = loadConfig();
-  const clientId = config.dataSources.huawei?.clientId || "";
+function getResultSummaryInfo(result: TestResult, unit: string): string {
+  if (result.hasData) {
+    return `${result.sampleCount} ${unit}`;
+  }
+  return result.error || "no data";
+}
 
-  // Time ranges
+function logResultWithDetails(result: TestResult, label: string, unit: string): void {
+  const status = getResultStatusIcon(result);
+  const info = getResultInfo(result, unit);
+  console.log(`${status} ${label}`);
+  if (result.hasData || !result.success) {
+    console.log(`    ${info}`);
+  }
+}
+
+interface TimeRanges {
+  now: number;
+  oneDayAgo: number;
+  thirtyDaysAgo: number;
+  polymerizeStart: number;
+  polymerizeEnd: number;
+  healthRecordStart: number;
+  healthRecordEnd: number;
+}
+
+function computeTimeRanges(): TimeRanges {
   const now = Date.now();
-
-  // polymerize API: uses MILLISECONDS, max 1 day
   const oneDayAgo = now - 1 * 24 * 60 * 60 * 1000;
-  const polymerizeStart = oneDayAgo; // milliseconds
-  const polymerizeEnd = now;
-
-  // healthRecords API: uses NANOSECONDS (19 digits), can use longer range
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-  const healthRecordStart = thirtyDaysAgo * 1000000; // nanoseconds
-  const healthRecordEnd = now * 1000000;
 
-  console.log(
-    `\nPolymerize range: ${new Date(oneDayAgo).toISOString()} to ${new Date(now).toISOString()} (1 day, ms)`
-  );
-  console.log(
-    `HealthRecords range: ${new Date(thirtyDaysAgo).toISOString()} to ${new Date(now).toISOString()} (30 days, ns)`
-  );
-  console.log();
+  return {
+    now,
+    oneDayAgo,
+    thirtyDaysAgo,
+    polymerizeStart: oneDayAgo, // milliseconds
+    polymerizeEnd: now,
+    healthRecordStart: thirtyDaysAgo * 1000000, // nanoseconds
+    healthRecordEnd: now * 1000000,
+  };
+}
 
-  const results: TestResult[] = [];
-
-  // Test polymerize data types
+async function runPolymerizeTests(
+  accessToken: string,
+  clientId: string,
+  times: TimeRanges
+): Promise<TestResult[]> {
   console.log("-".repeat(60));
   console.log("Testing Polymerize Data Types");
   console.log("-".repeat(60));
+
+  const results: TestResult[] = [];
 
   for (const dataType of POLYMERIZE_DATA_TYPES) {
     const result = await testPolymerizeDataType(
       dataType,
       accessToken,
       clientId,
-      polymerizeStart,
-      polymerizeEnd
+      times.polymerizeStart,
+      times.polymerizeEnd
     );
     results.push(result);
-
-    const status = result.success ? (result.hasData ? "✓" : "○") : "✗";
-    const info = result.success
-      ? result.hasData
-        ? `${result.sampleCount} samples, fields: ${result.fields?.join(", ") || "none"}`
-        : "no data"
-      : result.error?.slice(0, 50);
-    console.log(`${status} ${dataType}`);
-    if (result.hasData || !result.success) {
-      console.log(`    ${info}`);
-    }
+    logResultWithDetails(result, dataType, "samples");
   }
 
-  // Test health records
+  return results;
+}
+
+async function runHealthRecordTests(
+  accessToken: string,
+  clientId: string,
+  times: TimeRanges
+): Promise<TestResult[]> {
   console.log();
   console.log("-".repeat(60));
   console.log("Testing Health Records");
   console.log("-".repeat(60));
+
+  const results: TestResult[] = [];
 
   for (const dataType of HEALTH_RECORD_DATA_TYPES) {
     const result = await testHealthRecordDataType(
       dataType,
       accessToken,
       clientId,
-      healthRecordStart,
-      healthRecordEnd
+      times.healthRecordStart,
+      times.healthRecordEnd
     );
     results.push(result);
-
-    const status = result.success ? (result.hasData ? "✓" : "○") : "✗";
-    const info = result.success
-      ? result.hasData
-        ? `${result.sampleCount} records, fields: ${result.fields?.join(", ") || "none"}`
-        : "no data"
-      : result.error?.slice(0, 50);
-    console.log(`${status} ${dataType}`);
-    if (result.hasData || !result.success) {
-      console.log(`    ${info}`);
-    }
+    logResultWithDetails(result, dataType, "records");
   }
+
+  return results;
+}
+
+async function runMiscTests(
+  accessToken: string,
+  clientId: string,
+  times: TimeRanges
+): Promise<TestResult[]> {
+  const results: TestResult[] = [];
 
   // Test activity records
   console.log();
@@ -554,30 +576,27 @@ async function main() {
   const activityResult = await testActivityRecords(
     accessToken,
     clientId,
-    healthRecordStart,
-    healthRecordEnd
+    times.healthRecordStart,
+    times.healthRecordEnd
   );
   results.push(activityResult);
-  console.log(
-    `${activityResult.success ? (activityResult.hasData ? "✓" : "○") : "✗"} activityRecords: ${
-      activityResult.hasData
-        ? `${activityResult.sampleCount} records`
-        : activityResult.error || "no data"
-    }`
-  );
+
+  const activityStatus = getResultStatusIcon(activityResult);
+  const activityInfo = getResultSummaryInfo(activityResult, "records");
+  console.log(`${activityStatus} activityRecords: ${activityInfo}`);
 
   // Test data collectors
   const collectorsResult = await testDataCollectors(accessToken, clientId);
   results.push(collectorsResult);
-  console.log(
-    `${collectorsResult.success ? (collectorsResult.hasData ? "✓" : "○") : "✗"} dataCollectors: ${
-      collectorsResult.hasData
-        ? `${collectorsResult.sampleCount} collectors`
-        : collectorsResult.error || "no data"
-    }`
-  );
 
-  // Summary
+  const collectorsStatus = getResultStatusIcon(collectorsResult);
+  const collectorsInfo = getResultSummaryInfo(collectorsResult, "collectors");
+  console.log(`${collectorsStatus} dataCollectors: ${collectorsInfo}`);
+
+  return results;
+}
+
+function printSummary(results: TestResult[]): void {
   console.log();
   console.log("=".repeat(60));
   console.log("Summary");
@@ -598,18 +617,26 @@ async function main() {
   for (const r of withData) {
     console.log(`  - ${r.dataType} (${r.endpoint}): ${r.sampleCount} samples`);
   }
+}
 
-  // Save summary
+function saveSummaryToCache(results: TestResult[], times: TimeRanges): void {
+  const successful = results.filter((r) => r.success);
+  const withData = results.filter((r) => r.hasData);
+  const failed = results.filter((r) => !r.success);
+
   saveToFileCache(
     "explore/summary",
     {},
     {
       timestamp: new Date().toISOString(),
       timeRanges: {
-        polymerize: { start: new Date(oneDayAgo).toISOString(), end: new Date(now).toISOString() },
+        polymerize: {
+          start: new Date(times.oneDayAgo).toISOString(),
+          end: new Date(times.now).toISOString(),
+        },
         healthRecords: {
-          start: new Date(thirtyDaysAgo).toISOString(),
-          end: new Date(now).toISOString(),
+          start: new Date(times.thirtyDaysAgo).toISOString(),
+          end: new Date(times.now).toISOString(),
         },
       },
       results,
@@ -621,6 +648,45 @@ async function main() {
       },
     }
   );
+}
+
+async function main() {
+  console.log("=".repeat(60));
+  console.log("Huawei Health Kit API Explorer");
+  console.log("=".repeat(60));
+  console.log();
+
+  // Get access token
+  let accessToken: string;
+  try {
+    accessToken = await huaweiAuth.ensureValidToken();
+    console.log("✓ Access token obtained");
+  } catch (error) {
+    console.error("✗ Failed to get access token:", error);
+    process.exit(1);
+  }
+
+  const config = loadConfig();
+  const clientId = config.dataSources.huawei?.clientId || "";
+
+  const times = computeTimeRanges();
+
+  console.log(
+    `\nPolymerize range: ${new Date(times.oneDayAgo).toISOString()} to ${new Date(times.now).toISOString()} (1 day, ms)`
+  );
+  console.log(
+    `HealthRecords range: ${new Date(times.thirtyDaysAgo).toISOString()} to ${new Date(times.now).toISOString()} (30 days, ns)`
+  );
+  console.log();
+
+  const polymerizeResults = await runPolymerizeTests(accessToken, clientId, times);
+  const healthRecordResults = await runHealthRecordTests(accessToken, clientId, times);
+  const miscResults = await runMiscTests(accessToken, clientId, times);
+
+  const results = [...polymerizeResults, ...healthRecordResults, ...miscResults];
+
+  printSummary(results);
+  saveSummaryToCache(results, times);
 
   console.log();
   console.log("Results saved to .pha/api-cache/explore/");

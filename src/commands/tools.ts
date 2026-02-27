@@ -86,7 +86,7 @@ async function handleToolsCall(
       try {
         value = JSON.parse(value as string);
       } catch {
-        // Keep as string
+        /* keep as string */
       }
       args[key] = value;
     }

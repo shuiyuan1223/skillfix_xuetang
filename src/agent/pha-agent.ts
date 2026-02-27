@@ -243,13 +243,15 @@ function resolveModelInstance(provider: string, modelId: string, baseUrl?: strin
     // @ts-expect-error - dynamic model selection
     const model = getModel(provider, modelId);
     if (model) return model;
-    if (baseUrl) return createCustomModel(provider, modelId, baseUrl);
-  } else if (baseUrl) {
+  }
+
+  if (baseUrl) {
     return createCustomModel(provider, modelId, baseUrl);
   }
 
+  const isBuiltin = BUILTIN_PROVIDERS.includes(provider as LLMProvider);
   throw new Error(
-    baseUrl
+    isBuiltin
       ? `Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`
       : `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(", ")}`
   );
@@ -307,6 +309,62 @@ function resolveAgentTools(config: PHAAgentConfig, userUuid?: string): AgentTool
   return config.extraTools && config.extraTools.length > 0
     ? [...baseTools, ...config.extraTools]
     : baseTools;
+}
+
+/**
+ * Format a present_insight tool call's arguments into a text fallback.
+ * Returns empty string if no meaningful content can be extracted.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatInsightFallback(args: any): string {
+  if (!args) return "";
+  const lines: string[] = [];
+
+  if (args.title) {
+    lines.push(`📊 ${args.title}`, "");
+  }
+
+  const highlights = args.highlights as
+    | Array<{ label: string; value: string | number; unit?: string; status?: string }>
+    | undefined;
+  if (highlights && highlights.length > 0) {
+    for (const h of highlights) {
+      const unit = h.unit || "";
+      const status = h.status ? ` ${h.status}` : "";
+      lines.push(`• ${h.label}: ${h.value}${unit}${status}`);
+    }
+    lines.push("");
+  }
+
+  const insights = args.insights as string[] | undefined;
+  if (insights && insights.length > 0) {
+    for (const insight of insights) {
+      lines.push(`💡 ${insight}`);
+    }
+    lines.push("");
+  }
+
+  const recommendations = args.recommendations as string[] | undefined;
+  if (recommendations && recommendations.length > 0) {
+    for (const rec of recommendations) {
+      lines.push(`✅ ${rec}`);
+    }
+  }
+
+  return lines.join("\n").trim();
+}
+
+/** Extract text content from an AgentMessage's content blocks. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractTextContent(message: any): string {
+  if (!message?.content) return "";
+  let text = "";
+  for (const block of message.content) {
+    if (block.type === "text") {
+      text += block.text;
+    }
+  }
+  return text;
 }
 
 export class PHAAgent {
@@ -430,27 +488,21 @@ export class PHAAgent {
     let llmErrorMessage = "";
     let lastAssistantMessage: AgentMessage | null = null;
 
-    const unsubscribe = this.subscribe((event) => {
-      if (event.type === "message_end" && event.message.role === "assistant") {
-        lastAssistantMessage = event.message;
-        // pi-agent-core event types lack property declarations
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const msg = event.message as any;
-        if (msg.stopReason === "error" && msg.errorMessage) {
+    const handleEvent = (event: AgentEvent): void => {
+      this.checkForAssistantError(event, (msg, errorMessage) => {
+        lastAssistantMessage = msg;
+        if (errorMessage) {
           hasError = true;
-          llmErrorMessage = msg.errorMessage;
-          log.error("LLM returned error", { errorMessage: msg.errorMessage, model: msg.model });
+          llmErrorMessage = errorMessage;
         }
-      }
-      // pi-agent-core event types lack property declarations
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((event as any).type === "error" || (event as any).error) {
+      });
+      this.checkForAgentError(event, () => {
         hasError = true;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        log.warn("Agent error event", (event as any).error || event);
-      }
+      });
       extraEventHandler?.(event);
-    });
+    };
+
+    const unsubscribe = this.subscribe(handleEvent);
 
     try {
       await this.agent.prompt(message);
@@ -466,18 +518,36 @@ export class PHAAgent {
       throw new Error(`LLM error: ${llmErrorMessage}`);
     }
 
-    let finalContent = "";
-    if (lastAssistantMessage) {
-      // pi-agent-core event types lack property declarations
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const block of (lastAssistantMessage as any).content) {
-        if (block.type === "text") {
-          finalContent += block.text;
-        }
-      }
-    }
-
+    const finalContent = extractTextContent(lastAssistantMessage);
     return { finalContent, hasError };
+  }
+
+  /** Check if an event is an assistant message_end and extract error info if present. */
+  private checkForAssistantError(
+    event: AgentEvent,
+    onMessage: (msg: AgentMessage, errorMessage?: string) => void
+  ): void {
+    if (event.type !== "message_end" || event.message.role !== "assistant") return;
+    // pi-agent-core event types lack property declarations
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const msg = event.message as any;
+    const errorMessage =
+      msg.stopReason === "error" && msg.errorMessage ? msg.errorMessage : undefined;
+    if (errorMessage) {
+      log.error("LLM returned error", { errorMessage, model: msg.model });
+    }
+    onMessage(event.message, errorMessage);
+  }
+
+  /** Check if an event is an agent-level error event. */
+  private checkForAgentError(event: AgentEvent, onError: () => void): void {
+    // pi-agent-core event types lack property declarations
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ev = event as any;
+    if (ev.type === "error" || ev.error) {
+      onError();
+      log.warn("Agent error event", ev.error || event);
+    }
   }
 
   /**
@@ -507,75 +577,66 @@ export class PHAAgent {
     let pendingToolArgs: unknown;
 
     const { finalContent } = await this.runPromptAndCollect(message, (event) => {
-      if (event.type === "tool_execution_start") {
-        // pi-agent-core event types lack property declarations
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        pendingToolName = (event as any).toolName || "";
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        pendingToolArgs = (event as any).arguments;
-      }
-      if (event.type === "tool_execution_end") {
-        toolCalls.push({
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          tool: pendingToolName || (event as any).toolName || "unknown",
-          arguments: pendingToolArgs,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          result: (event as any).result,
-        });
-      }
+      this.trackToolEvent(
+        event,
+        { pendingToolName, pendingToolArgs },
+        (name, args) => {
+          pendingToolName = name;
+          pendingToolArgs = args;
+        },
+        (call) => {
+          toolCalls.push(call);
+        }
+      );
     });
 
-    if (!finalContent) {
-      log.warn("chatAndWaitWithTools completed with empty response", {
-        toolCallCount: toolCalls.length,
-      });
-
-      // Fallback: reconstruct reply from present_insight tool call arguments
-      const insightCall = toolCalls.find((tc) => tc.tool === "present_insight");
-      if (insightCall) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const args = insightCall.arguments as any;
-        const lines: string[] = [];
-
-        if (args?.title) {
-          lines.push(`📊 ${args.title}`, "");
-        }
-
-        const highlights = args?.highlights as
-          | Array<{ label: string; value: string | number; unit?: string; status?: string }>
-          | undefined;
-        if (highlights && highlights.length > 0) {
-          for (const h of highlights) {
-            const unit = h.unit ? h.unit : "";
-            const status = h.status ? ` ${h.status}` : "";
-            lines.push(`• ${h.label}: ${h.value}${unit}${status}`);
-          }
-          lines.push("");
-        }
-
-        const insights = args?.insights as string[] | undefined;
-        if (insights && insights.length > 0) {
-          for (const insight of insights) {
-            lines.push(`💡 ${insight}`);
-          }
-          lines.push("");
-        }
-
-        const recommendations = args?.recommendations as string[] | undefined;
-        if (recommendations && recommendations.length > 0) {
-          for (const rec of recommendations) {
-            lines.push(`✅ ${rec}`);
-          }
-        }
-
-        const fallback = lines.join("\n").trim();
-        if (fallback) {
-          return { response: fallback, toolCalls };
-        }
-      }
+    if (finalContent) {
+      return { response: finalContent, toolCalls };
     }
 
-    return { response: finalContent, toolCalls };
+    log.warn("chatAndWaitWithTools completed with empty response", {
+      toolCallCount: toolCalls.length,
+    });
+
+    const fallbackResponse = this.buildInsightFallback(toolCalls);
+    return { response: fallbackResponse || finalContent, toolCalls };
+  }
+
+  /** Track tool execution events and collect tool call records. */
+  private trackToolEvent(
+    event: AgentEvent,
+    pending: { pendingToolName: string; pendingToolArgs: unknown },
+    setPending: (name: string, args: unknown) => void,
+    pushCall: (call: { tool: string; arguments: unknown; result: unknown }) => void
+  ): void {
+    if (event.type === "tool_execution_start") {
+      // pi-agent-core event types lack property declarations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ev = event as any;
+      setPending(ev.toolName || "", ev.arguments);
+      return;
+    }
+    if (event.type === "tool_execution_end") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ev = event as any;
+      pushCall({
+        tool: pending.pendingToolName || ev.toolName || "unknown",
+        arguments: pending.pendingToolArgs,
+        result: ev.result,
+      });
+    }
+  }
+
+  /**
+   * Attempt to reconstruct a fallback response from a present_insight tool call.
+   * Returns the formatted string, or empty string if no insight call was found.
+   */
+  private buildInsightFallback(
+    toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>
+  ): string {
+    const insightCall = toolCalls.find((tc) => tc.tool === "present_insight");
+    if (!insightCall) return "";
+    return formatInsightFallback(insightCall.arguments);
   }
 
   /**

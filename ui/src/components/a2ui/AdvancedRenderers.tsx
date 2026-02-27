@@ -7,6 +7,110 @@ import {
   ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip, Legend,
 } from "recharts";
 
+// ---- Shared Helper Functions ----
+
+/** Map a diff line type to its prefix symbol */
+function diffLineSymbol(type: string): string {
+  if (type === "add") return "+";
+  if (type === "remove") return "-";
+  if (type === "hunk") return "@@";
+  return " ";
+}
+
+/** Map a score to a CSS class: high / mid / low */
+function scoreClass(s: number): string {
+  if (s >= 0.9) return "score-high";
+  if (s >= 0.7) return "score-mid";
+  return "score-low";
+}
+
+/** Map a score to a hex color */
+function scoreColor(s: number): string {
+  if (s >= 0.9) return "#4ade80";
+  if (s >= 0.7) return "#fbbf24";
+  return "#f87171";
+}
+
+/** Map step status to the circle CSS class */
+function stepCircleClass(status: string): string {
+  if (status === "completed") return "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]";
+  if (status === "active") return "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]";
+  if (status === "failed") return "bg-red-500 border-red-500 text-white";
+  if (status === "skipped") return "bg-transparent border-slate-600 border-dashed text-slate-500";
+  return "bg-transparent border-slate-600 text-slate-500";
+}
+
+/** Map step status to the label CSS class */
+function stepLabelClass(status: string): string {
+  if (status === "active") return "text-indigo-400 font-semibold";
+  if (status === "completed") return "text-emerald-400 font-medium";
+  return "text-slate-500 font-medium";
+}
+
+/** Map step status to size class */
+function stepSizeClass(status: string): string {
+  return status === "active" ? "w-12 h-12" : "w-9 h-9";
+}
+
+/** Map step status to icon size class */
+function stepIconSize(status: string): string {
+  return status === "active" ? "w-5 h-5" : "w-4 h-4";
+}
+
+/** Map evolution version status to dot color */
+function versionDotColor(status: string): string {
+  if (status === "active") return "rgb(var(--color-primary))";
+  if (status === "merged") return "rgb(var(--color-success))";
+  return "rgb(var(--color-text-muted))";
+}
+
+/** Map recommendation to badge CSS class */
+function recommendationBadgeClass(recommendation: string): string {
+  if (recommendation === "merge") return "bg-emerald-500/15 text-emerald-400";
+  if (recommendation === "revert") return "bg-red-500/15 text-red-400";
+  return "bg-amber-500/15 text-amber-400";
+}
+
+/** Build connector className for step indicator (horizontal vs vertical) */
+function stepConnectorClass(isH: boolean, connectorDone: boolean): string {
+  const layout = isH ? "h-1 flex-1 min-w-[24px] rounded-full" : "w-1 h-8 ml-[17px] rounded-full";
+  const color = connectorDone ? "bg-gradient-to-r from-emerald-500 to-indigo-500" : "bg-slate-700";
+  return `${layout} ${color} transition-colors`;
+}
+
+/** Build step container className */
+function stepContainerClass(isH: boolean, clickable: boolean | string | undefined): string {
+  const layout = isH ? "flex-col" : "flex-row";
+  const gap = isH ? "gap-2" : "gap-3";
+  const cursor = clickable ? "cursor-pointer" : "";
+  return `flex ${layout} items-center ${gap} ${cursor}`;
+}
+
+/** Render the icon content inside a step circle */
+function renderStepIcon(step: any, iconSizeCls: string, index: number): React.ReactNode {
+  if (step.status === "completed") {
+    return <span className={iconSizeCls} dangerouslySetInnerHTML={{ __html: getIcon("check") }} />;
+  }
+  if (step.icon) {
+    return <span className={iconSizeCls} dangerouslySetInnerHTML={{ __html: getIcon(step.icon as string) }} />;
+  }
+  return <span>{index + 1}</span>;
+}
+
+/** Compute relative time string from a timestamp */
+function relativeTimeStr(ts: number | string): string {
+  const d = typeof ts === "string" ? new Date(ts).getTime() : ts;
+  const diff = Date.now() - d;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
 // ---- Code Editor ----
 export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
   const value = prop(c, "value") as string;
@@ -153,7 +257,7 @@ function renderUnifiedDiff(title: string, diff: string) {
         {bodyLines.map((l, i) => (
           <div key={i} className={`flex ${lineClass(l.type)}`}>
             <span className="w-8 text-center text-text-muted select-none shrink-0 py-px opacity-60">
-              {l.type === "add" ? "+" : l.type === "remove" ? "-" : l.type === "hunk" ? "@@" : " "}
+              {diffLineSymbol(l.type)}
             </span>
             <span className="flex-1 py-px px-2 whitespace-pre">{l.type === "hunk" ? l.text : l.text.slice(1) || " "}</span>
           </div>
@@ -187,7 +291,9 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
     }
     if (render === "progress") {
       const str = String(value);
-      let num: number, barCls = "bg-primary", anim = "";
+      let num: number;
+      let barCls = "bg-primary";
+      let anim = "";
       if (str.includes("|")) {
         const [n, v] = str.split("|");
         num = Number(n) || 0;
@@ -526,18 +632,6 @@ export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
   const typeIcons: Record<string, string> = { branch: "git-branch", commit: "git-commit", benchmark: "test-tube", merge: "git-merge", revert: "alert-triangle", tag: "star" };
   const statusColors: Record<string, string> = { success: "rgb(var(--color-success))", failed: "rgb(var(--color-error))", pending: "rgb(var(--color-text-muted))", active: "rgb(var(--color-primary))" };
 
-  const relativeTime = (ts: number) => {
-    const diff = Date.now() - ts;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    if (days < 30) return `${days}d ago`;
-    return `${Math.floor(days / 30)}mo ago`;
-  };
-
   const dateGroups: { date: string; events: { evt: any; idx: number }[] }[] = [];
   let lastDate = "";
   for (let i = 0; i < events.length; i++) {
@@ -591,7 +685,7 @@ export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
                   {evt.branch && <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary"><span dangerouslySetInnerHTML={{ __html: getIcon("git-branch") }} /> {evt.branch}</span>}
                   {evt.tags && (evt.tags as string[]).map((tag, ti) => <span key={ti} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400"><span dangerouslySetInnerHTML={{ __html: getIcon("star") }} /> {tag}</span>)}
                   {evt.filesChanged && <span className="flex items-center gap-1">{evt.filesChanged} file{(evt.filesChanged as number) > 1 ? "s" : ""} {evt.additions && <span className="text-emerald-400">+{evt.additions}</span>} {evt.deletions && <span className="text-red-400">-{evt.deletions}</span>}</span>}
-                  <span className="ml-auto">{relativeTime(evt.timestamp as number)}</span>
+                  <span className="ml-auto">{relativeTimeStr(evt.timestamp as number)}</span>
                 </div>
               </div>
               {onContextAction && (
@@ -622,31 +716,24 @@ export function renderStepIndicator(c: A2UIComponent, ctx: RenderContext) {
   const orientation = (prop(c, "orientation") as string) || "horizontal";
   const onStepClick = prop(c, "onStepClick") as string | undefined;
   const isH = orientation === "horizontal";
+  const layoutClass = isH ? "flex-row items-center justify-center" : "flex-col";
 
   return (
-    <div className={`flex ${isH ? "flex-row items-center justify-center" : "flex-col"} gap-0`}>
+    <div className={`flex ${layoutClass} gap-0`}>
       {steps.map((step: any, i: number) => {
         const status = (step.status as string) || "pending";
         const connectorDone = status === "completed" || status === "active";
-        const circleClass = status === "completed" ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]"
-          : status === "active" ? "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]"
-          : status === "failed" ? "bg-red-500 border-red-500 text-white"
-          : "bg-transparent border-slate-600 text-slate-500";
-        const labelClass = status === "active" ? "text-indigo-400 font-semibold" : status === "completed" ? "text-emerald-400 font-medium" : "text-slate-500 font-medium";
-        const sizeClass = status === "active" ? "w-12 h-12" : "w-9 h-9";
-        const iconSize = status === "active" ? "w-5 h-5" : "w-4 h-4";
         const clickable = onStepClick && (status === "completed" || status === "active");
+        const iconSizeCls = stepIconSize(status);
 
         return (
           <React.Fragment key={i}>
-            {i > 0 && <div className={`${isH ? "h-1 flex-1 min-w-[24px] rounded-full" : "w-1 h-8 ml-[17px] rounded-full"} ${connectorDone ? "bg-gradient-to-r from-emerald-500 to-indigo-500" : "bg-slate-700"} transition-colors`} />}
-            <div className={`flex ${isH ? "flex-col" : "flex-row"} items-center ${isH ? "gap-2" : "gap-3"} ${clickable ? "cursor-pointer" : ""}`} onClick={clickable ? () => ctx.sendAction(onStepClick!, { stepId: step.id }) : undefined}>
-              <div className={`${sizeClass} rounded-full flex items-center justify-center text-xs border-2 shrink-0 transition-all ${circleClass}`}>
-                {step.status === "completed" ? <span className={iconSize} dangerouslySetInnerHTML={{ __html: getIcon("check") }} />
-                  : step.icon ? <span className={iconSize} dangerouslySetInnerHTML={{ __html: getIcon(step.icon as string) }} />
-                  : <span>{i + 1}</span>}
+            {i > 0 && <div className={stepConnectorClass(isH, connectorDone)} />}
+            <div className={stepContainerClass(isH, clickable)} onClick={clickable ? () => ctx.sendAction(onStepClick!, { stepId: step.id }) : undefined}>
+              <div className={`${stepSizeClass(status)} rounded-full flex items-center justify-center text-xs border-2 shrink-0 transition-all ${stepCircleClass(status)}`}>
+                {renderStepIcon(step, iconSizeCls, i)}
               </div>
-              <span className={`text-[11px] whitespace-nowrap uppercase tracking-wider ${labelClass}`}>{step.label}</span>
+              <span className={`text-[11px] whitespace-nowrap uppercase tracking-wider ${stepLabelClass(status)}`}>{step.label}</span>
             </div>
           </React.Fragment>
         );
@@ -718,7 +805,6 @@ export function renderArenaPills(c: A2UIComponent, ctx: RenderContext) {
 // ---- Arena Score Table ----
 export function renderArenaScoreTable(c: A2UIComponent, _ctx: RenderContext) {
   const rows = (prop(c, "rows") as Array<{ label: string; color: string; score: number }>) || [];
-  const scoreClass = (s: number) => s >= 0.9 ? "score-high" : s >= 0.7 ? "score-mid" : "score-low";
   return (
     <table className="arena-score-table">
       <thead><tr><th>Run</th><th>Overall Score</th></tr></thead>
@@ -741,7 +827,6 @@ export function renderArenaCategoryCard(c: A2UIComponent, _ctx: RenderContext) {
   const icon = prop(c, "categoryIcon") as string;
   const avgScore = prop(c, "avgScore") as number;
   const criteria = (prop(c, "criteria") as Array<{ name: string; scores: Array<{ value: number; color: string }> }>) || [];
-  const scoreClass = (s: number) => s >= 0.9 ? "score-high" : s >= 0.7 ? "score-mid" : "score-low";
   const showBar = criteria.length > 0 && criteria[0].scores.length <= 1;
   return (
     <div className="arena-category-card">
@@ -915,6 +1000,105 @@ export function renderLogViewer(c: A2UIComponent, _ctx: RenderContext) {
   );
 }
 
+// ---- Version Graph Helpers ----
+
+function renderGraphCommit(
+  cm: any, ti: number, isLast: boolean,
+  G: number, dotCx: number, trunkColor: string,
+  onVersionClick: string | undefined, ctx: RenderContext,
+): React.ReactNode {
+  const hasBenchmark = cm.benchmarkScore != null;
+  const dotSize = hasBenchmark ? 8 : 6;
+  return (
+    <div
+      key={`c-${ti}`}
+      className="flex items-center cursor-pointer hover:bg-surface-hover rounded-lg transition-colors"
+      style={{ minHeight: 28 }}
+      onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: "main", commit: cm.shortHash })}
+    >
+      <div className="shrink-0 relative" style={{ width: G, alignSelf: "stretch" }}>
+        <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? "50%" : 0, background: trunkColor }} />
+        <div className="absolute rounded-full" style={{
+          width: dotSize, height: dotSize,
+          left: dotCx - dotSize / 2, top: "50%", transform: "translateY(-50%)",
+          background: "rgb(var(--color-text-muted))",
+        }} />
+      </div>
+      <div className="flex-1 min-w-0 flex items-center justify-between gap-2 py-0.5 pr-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[11px] text-text-muted font-mono shrink-0">{cm.shortHash}</span>
+          <span className="text-[12px] text-text-secondary truncate">{cm.message}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {hasBenchmark && (
+            <span className="text-[11px] font-semibold tabular-nums" style={{ color: scoreColor(cm.benchmarkScore) }}>
+              {cm.benchmarkScore.toFixed(2)}
+            </span>
+          )}
+          <span className="text-[10px] text-text-muted whitespace-nowrap">{relativeTimeStr(cm.date)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderGraphBranch(
+  v: any, ti: number, isLast: boolean, selectedBranch: string | undefined,
+  G: number, dotCx: number, trunkColor: string,
+  onVersionClick: string | undefined, ctx: RenderContext,
+): React.ReactNode {
+  const selected = v.branch === selectedBranch;
+  const status = v.status as string;
+  const dotColor = versionDotColor(status);
+  const branchY = 16;
+  const branchNameCls = status === "abandoned" ? "text-text-muted line-through" : "text-text";
+  const deltaPrefix = v.scoreDelta > 0 ? "+" : "";
+  const deltaCls = v.scoreDelta > 0 ? "text-emerald-400" : "text-red-400";
+
+  return (
+    <div
+      key={`v-${ti}`}
+      className={`flex items-stretch cursor-pointer rounded-lg transition-colors ${selected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
+      onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
+    >
+      <div className="shrink-0 relative" style={{ width: G }}>
+        <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? branchY : 0, background: trunkColor }} />
+        <div className="absolute" style={{ height: 2, left: dotCx, right: 0, top: branchY, background: dotColor }} />
+        <div className="absolute rounded-full" style={{ width: 6, height: 6, left: dotCx - 3, top: branchY - 3, background: dotColor }} />
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-1.5 pr-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor }} />
+            <span className={`text-[13px] font-medium truncate ${branchNameCls}`}>{v.branch}</span>
+            {status === "merged" && <span className="text-[10px] text-emerald-400 shrink-0">→ merged</span>}
+            {status === "abandoned" && <span className="text-[10px] text-text-muted shrink-0">✕</span>}
+            {status === "active" && <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary shrink-0">active</span>}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {v.latestScore != null && (
+              <span className="text-[13px] font-semibold tabular-nums" style={{ color: scoreColor(v.latestScore) }}>
+                {v.latestScore.toFixed(2)}
+              </span>
+            )}
+            {v.scoreDelta != null && v.scoreDelta !== 0 && (
+              <span className={`text-[10px] font-medium tabular-nums ${deltaCls}`}>
+                ({deltaPrefix}{Number(v.scoreDelta).toFixed(2)})
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 ml-4 text-[10px] text-text-muted">
+          {v.trigger && <span>{v.trigger}</span>}
+          {v.trigger && v.filesChanged > 0 && <span>·</span>}
+          {v.filesChanged > 0 && <span>{v.filesChanged} files</span>}
+          <span className="ml-auto">{relativeTimeStr(v.createdAt as number)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---- Version Graph (Git Graph style tree) ----
 export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
   const mainBranch = prop(c, "mainBranch") as { name: string; latestScore?: number | null; benchmarkCount: number } | undefined;
@@ -922,21 +1106,6 @@ export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
   const versions = (prop(c, "versions") as any[]) || [];
   const selectedBranch = prop(c, "selectedBranch") as string | undefined;
   const onVersionClick = prop(c, "onVersionClick") as string | undefined;
-
-  const relativeTime = (ts: number | string) => {
-    const d = typeof ts === "string" ? new Date(ts).getTime() : ts;
-    const diff = Date.now() - d;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    if (days < 30) return `${days}d ago`;
-    return `${Math.floor(days / 30)}mo ago`;
-  };
-
-  const scoreColor = (s: number) => s >= 0.9 ? "#4ade80" : s >= 0.7 ? "#fbbf24" : "#f87171";
 
   const mainName = mainBranch?.name || "main";
   const mainScore = mainBranch?.latestScore;
@@ -1028,121 +1197,48 @@ export function renderVersionGraph(c: A2UIComponent, ctx: RenderContext) {
 
       {timeline.map((item, ti) => {
         const isLast = ti === timeline.length - 1;
-
         if (item.kind === "commit") {
-          const cm = item.commit;
-          const hasBenchmark = cm.benchmarkScore != null;
-          const dotSize = hasBenchmark ? 8 : 6;
-          return (
-            <div
-              key={`c-${ti}`}
-              className="flex items-center cursor-pointer hover:bg-surface-hover rounded-lg transition-colors"
-              style={{ minHeight: 28 }}
-              onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: "main", commit: cm.shortHash })}
-            >
-              {/* Gutter: trunk line + commit dot */}
-              <div className="shrink-0 relative" style={{ width: G, alignSelf: "stretch" }}>
-                {/* Continuous trunk line — full height */}
-                <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? "50%" : 0, background: trunkColor }} />
-                {/* Commit dot centered vertically */}
-                <div className="absolute rounded-full" style={{
-                  width: dotSize, height: dotSize,
-                  left: dotCx - dotSize / 2, top: "50%", transform: "translateY(-50%)",
-                  background: "rgb(var(--color-text-muted))",
-                }} />
-              </div>
-              {/* Commit content */}
-              <div className="flex-1 min-w-0 flex items-center justify-between gap-2 py-0.5 pr-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[11px] text-text-muted font-mono shrink-0">{cm.shortHash}</span>
-                  <span className="text-[12px] text-text-secondary truncate">{cm.message}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {hasBenchmark && (
-                    <span className="text-[11px] font-semibold tabular-nums" style={{ color: scoreColor(cm.benchmarkScore) }}>
-                      {cm.benchmarkScore.toFixed(2)}
-                    </span>
-                  )}
-                  <span className="text-[10px] text-text-muted whitespace-nowrap">{relativeTime(cm.date)}</span>
-                </div>
-              </div>
-            </div>
-          );
+          return renderGraphCommit(item.commit, ti, isLast, G, dotCx, trunkColor, onVersionClick, ctx);
         }
-
-        // Branch (evo version) — use fixed top offset (16px = first line center) not 50%
-        const v = item.version;
-        const selected = v.branch === selectedBranch;
-        const status = v.status as string;
-        const dotColor = status === "active" ? "rgb(var(--color-primary))"
-          : status === "merged" ? "rgb(var(--color-success))"
-          : "rgb(var(--color-text-muted))";
-        // First-line center offset: py-1.5 (6px) + half line-height (~10px) = 16px
-        const branchY = 16;
-
-        return (
-          <div
-            key={`v-${ti}`}
-            className={`flex items-stretch cursor-pointer rounded-lg transition-colors
-              ${selected ? "bg-primary/8" : "hover:bg-surface-hover"}`}
-            onClick={() => onVersionClick && ctx.sendAction(onVersionClick, { branch: v.branch })}
-          >
-            {/* Gutter: trunk line + horizontal branch connector */}
-            <div className="shrink-0 relative" style={{ width: G }}>
-              {/* Continuous trunk line */}
-              <div className="absolute" style={{ width: 2, left: dotCx - 1, top: 0, bottom: isLast ? branchY : 0, background: trunkColor }} />
-              {/* Horizontal branch-off line from trunk center to right edge */}
-              <div className="absolute" style={{ height: 2, left: dotCx, right: 0, top: branchY, background: dotColor }} />
-              {/* Small dot at the fork point on the trunk */}
-              <div className="absolute rounded-full" style={{ width: 6, height: 6, left: dotCx - 3, top: branchY - 3, background: dotColor }} />
-            </div>
-
-            {/* Version content with colored dot */}
-            <div className="flex-1 min-w-0 flex flex-col gap-0.5 py-1.5 pr-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor }} />
-                  <span className={`text-[13px] font-medium truncate ${status === "abandoned" ? "text-text-muted line-through" : "text-text"}`}>
-                    {v.branch}
-                  </span>
-                  {status === "merged" && (
-                    <span className="text-[10px] text-emerald-400 shrink-0">→ merged</span>
-                  )}
-                  {status === "abandoned" && (
-                    <span className="text-[10px] text-text-muted shrink-0">✕</span>
-                  )}
-                  {status === "active" && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/15 text-primary shrink-0">active</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {v.latestScore != null && (
-                    <span className="text-[13px] font-semibold tabular-nums" style={{ color: scoreColor(v.latestScore) }}>
-                      {v.latestScore.toFixed(2)}
-                    </span>
-                  )}
-                  {v.scoreDelta != null && v.scoreDelta !== 0 && (
-                    <span className={`text-[10px] font-medium tabular-nums ${v.scoreDelta > 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      ({v.scoreDelta > 0 ? "+" : ""}{Number(v.scoreDelta).toFixed(2)})
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 ml-4 text-[10px] text-text-muted">
-                {v.trigger && <span>{v.trigger}</span>}
-                {v.trigger && v.filesChanged > 0 && <span>·</span>}
-                {v.filesChanged > 0 && <span>{v.filesChanged} files</span>}
-                <span className="ml-auto">{relativeTime(v.createdAt as number)}</span>
-              </div>
-            </div>
-          </div>
-        );
+        return renderGraphBranch(item.version, ti, isLast, selectedBranch, G, dotCx, trunkColor, onVersionClick, ctx);
       })}
     </div>
   );
 }
 
 // ---- Evolution Pipeline ----
+function renderCycleHeader(cycle: any): React.ReactNode {
+  const deltaClass = cycle.score.delta >= 0 ? "text-emerald-400" : "text-red-400";
+  const deltaPrefix = cycle.score.delta >= 0 ? "+" : "";
+  return (
+    <>
+      <span className="text-[11px] text-slate-400">{cycle.score.before.toFixed(2)} → {cycle.score.after.toFixed(2)}</span>
+      <span className={`text-[11px] font-semibold ${deltaClass}`}>({deltaPrefix}{cycle.score.delta.toFixed(3)})</span>
+      {cycle.recommendation && <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${recommendationBadgeClass(cycle.recommendation)}`}>{cycle.recommendation}</span>}
+    </>
+  );
+}
+
+function renderPipelineStep(step: any, i: number, cycle: any, onStepClick: string | undefined, ctx: RenderContext): React.ReactNode {
+  const status = (step.status as string) || "pending";
+  const connectorDone = status === "completed" || status === "active";
+  const clickable = onStepClick && (status === "completed" || status === "active");
+  const iconSizeCls = stepIconSize(status);
+  const cursorCls = clickable ? "cursor-pointer" : "";
+
+  return (
+    <React.Fragment key={i}>
+      {i > 0 && <div className={stepConnectorClass(true, connectorDone)} />}
+      <div className={`flex flex-col items-center gap-2 ${cursorCls}`} onClick={clickable ? () => ctx.sendAction(onStepClick!, { stepId: step.id, cycleNumber: cycle.cycleNumber }) : undefined}>
+        <div className={`${stepSizeClass(status)} rounded-full flex items-center justify-center text-xs border-2 shrink-0 transition-all ${stepCircleClass(status)}`}>
+          {renderStepIcon(step, iconSizeCls, i)}
+        </div>
+        <span className={`text-[11px] whitespace-nowrap uppercase tracking-wider ${stepLabelClass(status)}`}>{step.label}</span>
+      </div>
+    </React.Fragment>
+  );
+}
+
 export function renderEvolutionPipeline(c: A2UIComponent, ctx: RenderContext) {
   const cycles = (prop(c, "cycles") as any[]) || [];
   const onStepClick = prop(c, "onStepClick") as string | undefined;
@@ -1157,39 +1253,10 @@ export function renderEvolutionPipeline(c: A2UIComponent, ctx: RenderContext) {
             <div className="flex flex-col gap-1 py-2">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Cycle {cycle.cycleNumber}</span>
-                {cycle.score && <>
-                  <span className="text-[11px] text-slate-400">{cycle.score.before.toFixed(2)} → {cycle.score.after.toFixed(2)}</span>
-                  <span className={`text-[11px] font-semibold ${cycle.score.delta >= 0 ? "text-emerald-400" : "text-red-400"}`}>({cycle.score.delta >= 0 ? "+" : ""}{cycle.score.delta.toFixed(3)})</span>
-                  {cycle.recommendation && <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${cycle.recommendation === "merge" ? "bg-emerald-500/15 text-emerald-400" : cycle.recommendation === "revert" ? "bg-red-500/15 text-red-400" : "bg-amber-500/15 text-amber-400"}`}>{cycle.recommendation}</span>}
-                </>}
+                {cycle.score && renderCycleHeader(cycle)}
               </div>
               <div className="flex flex-row items-center justify-center gap-0">
-                {steps.map((step: any, i: number) => {
-                  const status = (step.status as string) || "pending";
-                  const connectorDone = status === "completed" || status === "active";
-                  const circleClass = status === "completed" ? "bg-emerald-500 border-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.4)]"
-                    : status === "active" ? "bg-indigo-500 border-indigo-500 text-white ring-4 ring-indigo-500/30 shadow-[0_0_20px_rgba(99,102,241,0.5)]"
-                    : status === "failed" ? "bg-red-500 border-red-500 text-white"
-                    : status === "skipped" ? "bg-transparent border-slate-600 border-dashed text-slate-500"
-                    : "bg-transparent border-slate-600 text-slate-500";
-                  const labelClass = status === "active" ? "text-indigo-400 font-semibold" : status === "completed" ? "text-emerald-400 font-medium" : "text-slate-500 font-medium";
-                  const sizeClass = status === "active" ? "w-12 h-12" : "w-9 h-9";
-                  const iconSize = status === "active" ? "w-5 h-5" : "w-4 h-4";
-                  const clickable = onStepClick && (status === "completed" || status === "active");
-                  return (
-                    <React.Fragment key={i}>
-                      {i > 0 && <div className={`h-1 flex-1 min-w-[24px] rounded-full ${connectorDone ? "bg-gradient-to-r from-emerald-500 to-indigo-500" : "bg-slate-700"} transition-colors`} />}
-                      <div className={`flex flex-col items-center gap-2 ${clickable ? "cursor-pointer" : ""}`} onClick={clickable ? () => ctx.sendAction(onStepClick!, { stepId: step.id, cycleNumber: cycle.cycleNumber }) : undefined}>
-                        <div className={`${sizeClass} rounded-full flex items-center justify-center text-xs border-2 shrink-0 transition-all ${circleClass}`}>
-                          {step.status === "completed" ? <span className={iconSize} dangerouslySetInnerHTML={{ __html: getIcon("check") }} />
-                            : step.icon ? <span className={iconSize} dangerouslySetInnerHTML={{ __html: getIcon(step.icon as string) }} />
-                            : <span>{i + 1}</span>}
-                        </div>
-                        <span className={`text-[11px] whitespace-nowrap uppercase tracking-wider ${labelClass}`}>{step.label}</span>
-                      </div>
-                    </React.Fragment>
-                  );
-                })}
+                {steps.map((step: any, i: number) => renderPipelineStep(step, i, cycle, onStepClick, ctx))}
               </div>
             </div>
             {!isLast && (
