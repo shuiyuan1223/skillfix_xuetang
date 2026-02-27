@@ -30,8 +30,13 @@ type AnyJson = any;
 
 /** Helper to get a named field value from a Huawei value array. */
 function getFieldValue(
-  values: Array<{ fieldName?: string; integerValue?: number; longValue?: number; floatValue?: number }>,
-  fieldName: string,
+  values: Array<{
+    fieldName?: string;
+    integerValue?: number;
+    longValue?: number;
+    floatValue?: number;
+  }>,
+  fieldName: string
 ): number | null {
   const field = values.find((v) => v.fieldName === fieldName);
   if (!field) return null;
@@ -275,7 +280,7 @@ function findMainSleepRecord(records: AnyJson[], targetDate: string): AnyJson {
 
 /** Parse sleep fragment segments from a record's subData. */
 function parseSleepFragments(
-  record: AnyJson,
+  record: AnyJson
 ): Array<{ startTime: number; endTime: number; sleepType: number }> {
   const segments: Array<{ startTime: number; endTime: number; sleepType: number }> = [];
   const fragmentData = record.subData?.["com.huawei.continuous.sleep.fragment"];
@@ -316,17 +321,19 @@ export function parseSleepResponse(json: AnyJson, targetDate: string): SleepResu
 
   const segments = parseSleepFragments(mainRecord);
 
-  const bedTime = fallAsleepTime
-    ? fmtTime(fallAsleepTime)
-    : segments.length > 0
-      ? fmtTime(segments[0].startTime)
-      : "00:00";
+  let bedTime = "00:00";
+  if (fallAsleepTime) {
+    bedTime = fmtTime(fallAsleepTime);
+  } else if (segments.length > 0) {
+    bedTime = fmtTime(segments[0].startTime);
+  }
 
-  const wakeTime = wakeupTime
-    ? fmtTime(wakeupTime)
-    : segments.length > 0
-      ? fmtTime(segments[segments.length - 1].endTime)
-      : "00:00";
+  let wakeTime = "00:00";
+  if (wakeupTime) {
+    wakeTime = fmtTime(wakeupTime);
+  } else if (segments.length > 0) {
+    wakeTime = fmtTime(segments[segments.length - 1].endTime);
+  }
 
   return {
     segments,
@@ -358,7 +365,7 @@ function getRecordFieldValue(record: AnyJson, fieldName: string): number | undef
 
 /** Build a Map of date -> best sleep data from healthRecords (skips naps). */
 function buildSleepByDateMap(
-  healthRecords: AnyJson[],
+  healthRecords: AnyJson[]
 ): Map<string, { hours: number; sleepScore?: number }> {
   const sleepByDate = new Map<string, { hours: number; sleepScore?: number }>();
 
@@ -382,7 +389,7 @@ function buildSleepByDateMap(
 
 export function parseWeeklySleepResponse(
   json: AnyJson,
-  endDate: string,
+  endDate: string
 ): Array<{ date: string; hours: number; sleepScore?: number }> {
   const healthRecords: AnyJson[] = json?.healthRecords || [];
   const sleepByDate = buildSleepByDateMap(healthRecords);
@@ -462,9 +469,7 @@ export function parseBloodPressureResponse(json: AnyJson): BloodPressureResult |
     latestSystolic: systolicValues[systolicValues.length - 1],
     latestDiastolic: diastolicValues[diastolicValues.length - 1],
     avgSystolic: Math.round(systolicValues.reduce((a, b) => a + b, 0) / systolicValues.length),
-    avgDiastolic: Math.round(
-      diastolicValues.reduce((a, b) => a + b, 0) / diastolicValues.length,
-    ),
+    avgDiastolic: Math.round(diastolicValues.reduce((a, b) => a + b, 0) / diastolicValues.length),
   };
 }
 
@@ -639,7 +644,7 @@ export interface MenstrualCycleResult {
 
 export function parseMenstrualFlowResponse(
   json: AnyJson,
-  fallbackDate: string,
+  fallbackDate: string
 ): Array<{ date: string; status: string }> {
   const records: Array<{ date: string; status: string }> = [];
   for (const point of iteratePoints(json)) {
@@ -662,7 +667,7 @@ export function parseMenstrualFlowResponse(
 
 export function deriveMenstrualCycleInfo(
   records: Array<{ date: string; status: string }>,
-  queryDate: string,
+  queryDate: string
 ): MenstrualCycleResult | null {
   if (records.length === 0) return null;
 
@@ -672,7 +677,7 @@ export function deriveMenstrualCycleInfo(
   let cycleDay: number | undefined;
   let phase: "menstrual" | "follicular" | "ovulatory" | "luteal" | undefined;
   const daysDiff = Math.floor(
-    (new Date(queryDate).getTime() - new Date(periodStartDate).getTime()) / (1000 * 60 * 60 * 24),
+    (new Date(queryDate).getTime() - new Date(periodStartDate).getTime()) / (1000 * 60 * 60 * 24)
   );
   cycleDay = daysDiff + 1;
   if (cycleDay <= 5) phase = "menstrual";
@@ -735,7 +740,11 @@ export function parseHRVResponse(json: AnyJson): HRVResult | null {
     let hrvValue = 0;
     for (const v of point.value || []) {
       const val: number = v.floatValue ?? v.integerValue ?? 0;
-      if (v.fieldName === "rmssd" || v.fieldName === "hrv" || v.fieldName === "heart_rate_variability") {
+      if (
+        v.fieldName === "rmssd" ||
+        v.fieldName === "hrv" ||
+        v.fieldName === "heart_rate_variability"
+      ) {
         hrvValue = val;
         break;
       }
@@ -811,7 +820,7 @@ export function parseEmotionResponse(json: AnyJson): EmotionResult | null {
 // ---------------------------------------------------------------------------
 
 export function parsePolymerizeDataRangeChunk(
-  json: AnyJson,
+  json: AnyJson
 ): Array<{ date: string; values: Record<string, number> }> {
   const result: Array<{ date: string; values: Record<string, number> }> = [];
   const groups: AnyJson[] = json?.group || [];

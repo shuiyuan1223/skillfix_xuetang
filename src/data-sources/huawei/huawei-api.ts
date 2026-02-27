@@ -208,6 +208,8 @@ export class HuaweiHealthApi {
         case HuaweiDataType.ACTIVE_MINUTES:
           aggregated.activeMinutes = Math.round(totalValue);
           break;
+        default:
+          break;
       }
     });
 
@@ -1012,7 +1014,9 @@ export class HuaweiHealthApi {
     );
 
     // Parse weight and height responses using extracted parsers
-    const parseWeightRes = async (res: Response | null): Promise<ReturnType<typeof parseBodyCompositionWeightResponse>> => {
+    const parseWeightRes = async (
+      res: Response | null
+    ): Promise<ReturnType<typeof parseBodyCompositionWeightResponse>> => {
       if (!res || !res.ok) return null;
       const json = await res.json();
       return parseBodyCompositionWeightResponse(json);
