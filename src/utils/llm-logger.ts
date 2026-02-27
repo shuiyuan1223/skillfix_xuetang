@@ -7,7 +7,7 @@
 
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlinkSync } from "fs";
 import { join } from "path";
-import { getStateDir } from "./config.js";
+import { getStateDir, loadConfig } from "./config.js";
 import { createLogger } from "./logger.js";
 
 const log = createLogger("LLM/Logger");
@@ -16,7 +16,7 @@ function getLogDir(): string {
   return join(getStateDir(), "llm-logs");
 }
 
-// LLM API endpoints to intercept
+// LLM API endpoints to intercept (mutable so config-defined proxies can be added at startup)
 const LLM_API_PATTERNS: { domain: string; name: string }[] = [
   { domain: "api.openai.com", name: "openai" },
   { domain: "api.anthropic.com", name: "anthropic" },
@@ -28,6 +28,18 @@ const LLM_API_PATTERNS: { domain: string; name: string }[] = [
   { domain: "api.deepseek.com", name: "deepseek" },
   { domain: "api.moonshot.cn", name: "moonshot" },
 ];
+
+/** Register an extra domain to intercept (e.g. custom OpenAI-compatible proxy). */
+function registerLLMDomain(baseUrl: string, name: string): void {
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    if (!LLM_API_PATTERNS.some((p) => p.domain === hostname)) {
+      LLM_API_PATTERNS.push({ domain: hostname, name });
+    }
+  } catch {
+    // invalid URL, skip
+  }
+}
 
 function ensureLogDir(): void {
   if (!existsSync(getLogDir())) {
@@ -575,6 +587,25 @@ export function getLlmModels(date?: string): string[] {
  * Install fetch interceptor to log all LLM API requests/responses
  */
 export function installFetchInterceptor(): void {
+  // Register any custom baseUrl from config so proxies (e.g. yunwu.ai) are also intercepted
+  try {
+    const cfg = loadConfig();
+    // Top-level llm.baseUrl
+    if (cfg.llm?.baseUrl) registerLLMDomain(cfg.llm.baseUrl, cfg.llm.provider ?? "custom");
+    // Per-provider baseUrls in llm.providers map
+    const providers = (cfg.llm as unknown as Record<string, unknown>)?.providers;
+    if (providers && typeof providers === "object") {
+      for (const [providerName, providerCfg] of Object.entries(
+        providers as Record<string, unknown>
+      )) {
+        const baseUrl = (providerCfg as Record<string, unknown>)?.baseUrl as string | undefined;
+        if (baseUrl) registerLLMDomain(baseUrl, providerName);
+      }
+    }
+  } catch {
+    // Config not available yet (e.g. first-run), skip
+  }
+
   const originalFetch = globalThis.fetch.bind(globalThis);
 
   const interceptedFetch = async (
