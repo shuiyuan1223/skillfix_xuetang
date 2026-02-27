@@ -280,7 +280,7 @@ export class HuaweiAuth {
     }
     if (!huaweiUserId) {
       try {
-        huaweiUserId = await fetchUserInfoSub(tokenData.accessToken);
+        ({ userId: huaweiUserId } = await fetchUserInfoSub(tokenData.accessToken));
       } catch (e) {
         log.error("UserInfo fallback failed:", e);
       }
@@ -404,10 +404,10 @@ export class HuaweiAuth {
     refreshToken: string,
     clientId: string,
     clientSecret: string
-  ): Promise<{ tokenData: TokenData; userId: string }> {
+  ): Promise<{ tokenData: TokenData; userId: string; uid?: string }> {
     const tokenData = await this.refreshTokenForUser(refreshToken, clientId, clientSecret);
-    const userId = await fetchUserInfoSub(tokenData.accessToken);
-    return { tokenData, userId };
+    const { userId, uid } = await fetchUserInfoSub(tokenData.accessToken);
+    return { tokenData, userId, uid };
   }
 }
 
@@ -434,7 +434,7 @@ export function decodeIdToken(idToken: string): string {
  * POST https://oauth-api.cloud.huawei.com/rest.php
  *   nsp_svc=huawei.oauth2.user.getTokenInfo&access_token=...&open_id=OPENID
  */
-async function fetchUserInfoSub(accessToken: string): Promise<string> {
+async function fetchUserInfoSub(accessToken: string): Promise<{ userId: string; uid?: string }> {
   const url = "https://oauth-api.cloud.huawei.com/rest.php";
   const body = new URLSearchParams({
     nsp_svc: "huawei.oauth2.user.getTokenInfo",
@@ -455,14 +455,15 @@ async function fetchUserInfoSub(accessToken: string): Promise<string> {
   }
   const data = (await response.json()) as Record<string, unknown>;
   log.info("getTokenInfo response keys:", Object.keys(data).join(","));
-  const uid = (data.union_id || data.open_id || data.unionID || data.openID || data.sub) as
+  const userId = (data.union_id || data.open_id || data.unionID || data.openID || data.sub) as
     | string
     | undefined;
-  if (!uid) {
+  if (!userId) {
     log.error("getTokenInfo has no user ID:", JSON.stringify(data).slice(0, 300));
     throw new Error("getTokenInfo response missing user ID");
   }
-  return uid;
+  const uid = (data.uid as string | undefined) || undefined;
+  return { userId, uid };
 }
 
 // Default instance

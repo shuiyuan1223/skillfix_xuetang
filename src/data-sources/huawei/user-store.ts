@@ -24,6 +24,7 @@ export interface UserToken {
   expiresAt: number;
   tokenType?: string;
   scope?: string;
+  uid?: string;
 }
 
 export class UserStore {
@@ -52,26 +53,34 @@ export class UserStore {
         expires_at INTEGER NOT NULL,
         token_type TEXT,
         scope TEXT,
+        uid TEXT,
         created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),
         updated_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
       )
     `);
+    // Migration: add uid column if it doesn't exist yet
+    try {
+      this.db.run("ALTER TABLE users ADD COLUMN uid TEXT");
+    } catch {
+      // Column already exists — safe to ignore
+    }
   }
 
   /**
    * Save or update token for a user (auto-encrypts token values)
    */
-  saveToken(uuid: string, token: TokenData): void {
+  saveToken(uuid: string, token: TokenData, uid?: string): void {
     const stateDir = getStateDir();
     const stmt = this.db.prepare(`
-      INSERT INTO users (uuid, access_token, refresh_token, expires_at, token_type, scope, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (uuid, access_token, refresh_token, expires_at, token_type, scope, uid, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(uuid) DO UPDATE SET
         access_token = excluded.access_token,
         refresh_token = excluded.refresh_token,
         expires_at = excluded.expires_at,
         token_type = excluded.token_type,
         scope = excluded.scope,
+        uid = COALESCE(excluded.uid, users.uid),
         updated_at = excluded.updated_at
     `);
 
@@ -82,6 +91,7 @@ export class UserStore {
       token.expiresAt,
       token.tokenType || null,
       token.scope || null,
+      uid || null,
       Date.now()
     );
   }
@@ -91,7 +101,7 @@ export class UserStore {
    */
   getToken(uuid: string): UserToken | null {
     const stmt = this.db.prepare(`
-      SELECT uuid, access_token, refresh_token, expires_at, token_type, scope
+      SELECT uuid, access_token, refresh_token, expires_at, token_type, scope, uid
       FROM users
       WHERE uuid = ?
     `);
@@ -103,6 +113,7 @@ export class UserStore {
       expires_at: number;
       token_type: string | null;
       scope: string | null;
+      uid: string | null;
     } | null;
 
     if (!row) return null;
@@ -115,6 +126,7 @@ export class UserStore {
       expiresAt: row.expires_at,
       tokenType: row.token_type || undefined,
       scope: row.scope || undefined,
+      uid: row.uid || undefined,
     };
   }
 

@@ -3794,13 +3794,17 @@ async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
         let userId: string;
         try {
           const authStart = Date.now();
-          const { tokenData, userId: resolvedUid } = await huaweiAuth.refreshTokenAndGetUserId(
+          const {
+            tokenData,
+            userId: resolvedUid,
+            uid,
+          } = await huaweiAuth.refreshTokenAndGetUserId(
             Authorization,
             huaweiConfig.clientId,
             huaweiConfig.clientSecret
           );
           userId = resolvedUid;
-          getUserStore().saveToken(userId, tokenData);
+          getUserStore().saveToken(userId, tokenData, uid);
           log.info("[query] auth.success", {
             sn,
             phase: "auth_success",
@@ -3825,15 +3829,13 @@ async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
 
         phase = "session";
         ensureUserDir(userId);
-        const isNew = !ctx.sessions.has(userId);
-        const session = getOrCreateSessionFromMap(ctx.sessions, ctx.config, userId);
+        const session = new GatewaySession(ctx.config, userId);
         log.info("[query] session", {
           sn,
           phase: "session",
           userId,
           sessionId: session.getSessionId(),
           mode: "refresh_token",
-          isNew,
         });
 
         phase = "agent";
