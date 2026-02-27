@@ -697,7 +697,14 @@ const handleViewIncident: ActionHandler = async (session, _action, payload, send
   const windowMs = 60 * 60 * 1000;
   const fromMs = bc.timestamp - windowMs;
   const toMs = bc.timestamp + windowMs;
-  const allPairs = readLlmLogFile(new Date(bc.timestamp).toISOString().split("T")[0], 500);
+  // Read logs for both the incident date and adjacent dates (handles midnight boundary)
+  const incidentDate = new Date(bc.timestamp);
+  const prevDate = new Date(bc.timestamp - 24 * 60 * 60 * 1000);
+  const datesToRead = [
+    prevDate.toISOString().split("T")[0],
+    incidentDate.toISOString().split("T")[0],
+  ];
+  const allPairs = datesToRead.flatMap((d) => readLlmLogFile(d));
   const traceEntries = allPairs
     .filter((p) => {
       const t = new Date(p.timestamp).getTime();
