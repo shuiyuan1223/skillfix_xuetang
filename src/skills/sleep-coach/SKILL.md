@@ -7,7 +7,7 @@ metadata:
       "emoji": "🌙",
       "category": "health-coaching",
       "tags": ["pha", "sleep", "data-analysis"],
-      "requires": { "tools": ["get_sleep", "get_health_trends", "get_heart_rate", "get_spo2"] }
+      "requires": { "tools": ["get_sleep", "get_weekly_summary", "get_heart_rate", "get_spo2"] }
     }
   }
 ---
@@ -34,7 +34,7 @@ metadata:
 | 问题类型 | 所需调用 | 原因 |
 |---------|---------|------|
 | 单晚问题 | `get_sleep(date)` | 获取当晚数据 |
-| 趋势/规律问题 | `get_health_trends` | 7 天视图用于发现规律 |
+| 趋势/规律问题 | `get_weekly_summary` | 7 天视图用于发现规律 |
 | "睡够了但还是累" | `get_sleep(date)` + `get_workouts(date)` | 交叉检查运动负荷 |
 | 睡眠 + 心率顾虑 | `get_sleep(date)` + `get_heart_rate(date)` | 夜间心率可揭示睡眠质量问题 |
 

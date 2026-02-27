@@ -13,7 +13,7 @@ const TEST_STATE_DIR = join(import.meta.dir, "../../.pha-test");
 
 describe("MemoryManager", () => {
   let manager: MemoryManager;
-  const testUuid = "test-user-" + Date.now();
+  const testUuid = `test-user-${Date.now()}`;
 
   beforeAll(() => {
     // Ensure test directory exists
@@ -86,7 +86,7 @@ describe("MemoryManager", () => {
   });
 
   test("should get next missing field", () => {
-    const newUuid = "new-user-" + Date.now();
+    const newUuid = `new-user-${Date.now()}`;
     manager.ensureUser(newUuid);
 
     const missingField = manager.getNextMissingField(newUuid);

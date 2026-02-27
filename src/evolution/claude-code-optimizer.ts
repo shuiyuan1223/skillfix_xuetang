@@ -5,7 +5,7 @@
  * prompt/skill modifications based on benchmark feedback.
  */
 
-import type { BenchmarkResult, BenchmarkCategory } from "./types.js";
+import type { BenchmarkCategory } from "./types.js";
 import { CATEGORY_LABELS } from "./benchmark-seed.js";
 
 export interface OptimizationContext {
@@ -96,8 +96,6 @@ export async function optimizeWithClaudeCode(
   projectRoot: string
 ): Promise<OptimizationResult> {
   const { spawn } = await import("child_process");
-  const { existsSync } = await import("fs");
-  const { join } = await import("path");
 
   // Check if claude CLI is available
   const claudePath = await findClaudeCli();

@@ -24,13 +24,26 @@ import type {
   EmotionData,
   HRVData,
 } from "../interface.js";
-import { HuaweiHealthApi, huaweiHealthApi, createHuaweiHealthApiForUser } from "./huawei-api.js";
-import { HuaweiAuth, huaweiAuth } from "./huawei-auth.js";
+import type { HuaweiHealthApi } from "./huawei-api.js";
+import { huaweiHealthApi, createHuaweiHealthApiForUser } from "./huawei-api.js";
+import type { HuaweiAuth } from "./huawei-auth.js";
+import { huaweiAuth } from "./huawei-auth.js";
 import { mapActivityType } from "./huawei-types.js";
 import { getUserStore } from "./user-store.js";
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("Huawei/DataSource");
+
+/** Serialize error for structured logging (Error objects stringify to {} by default) */
+function errMsg(error: unknown): { message: string; code?: string } {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      ...("code" in error ? { code: String((error as any).code) } : {}),
+    };
+  }
+  return { message: String(error) };
+}
 
 /** Get date string in local timezone (YYYY-MM-DD) */
 function toLocalDateStr(d: Date): string {
@@ -63,12 +76,33 @@ export class HuaweiHealthDataSource implements HealthDataSource {
   }
 
   /**
-   * Ensure valid token for this data source (handles multi-user)
+   * Ensure valid token for this data source (handles multi-user).
+   * If the exact UUID has no token, falls back to the first available token
+   * in the store (handles UUID mismatch after re-auth).
    */
   private async ensureToken(): Promise<void> {
     if (this.userUuid) {
       // Multi-user mode: use SQLite token
-      await this.auth.ensureValidTokenForUser(this.userUuid, getUserStore());
+      try {
+        await this.auth.ensureValidTokenForUser(this.userUuid, getUserStore());
+      } catch (e) {
+        // Fallback: if this UUID has no token, try finding any valid token in the store
+        const store = getUserStore();
+        const allUuids = store.listUserUuids();
+        if (allUuids.length > 0) {
+          const fallbackUuid = allUuids[0];
+          log.warn("Token not found for UUID, falling back to available token", {
+            requestedUuid: this.userUuid.slice(0, 8),
+            fallbackUuid: fallbackUuid.slice(0, 8),
+          });
+          await this.auth.ensureValidTokenForUser(fallbackUuid, store);
+          // Update both the data source and API to use the correct UUID
+          this.userUuid = fallbackUuid;
+          this.api = createHuaweiHealthApiForUser(fallbackUuid);
+          return;
+        }
+        throw e;
+      }
     } else {
       // Single-user mode: use file token
       await this.auth.ensureValidToken();
@@ -91,7 +125,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         activeMinutes: data.activeMinutes,
       };
     } catch (error) {
-      log.warn("Failed to fetch metrics", error);
+      log.warn("Failed to fetch metrics", errMsg(error));
       // Return zeros instead of mock data
       return { date, steps: 0, distance: 0, calories: 0, activeMinutes: 0 };
     }
@@ -112,7 +146,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         readings: result.readings,
       };
     } catch (error) {
-      log.warn("Failed to fetch heart rate", error);
+      log.warn("Failed to fetch heart rate", errMsg(error));
       return { date, restingAvg: 0, maxToday: 0, minToday: 0, readings: [] };
     }
   }
@@ -159,6 +193,8 @@ export class HuaweiHealthDataSource implements HealthDataSource {
             case 5:
               stages.light += duration;
               break;
+            default:
+              break;
           }
         }
       }
@@ -182,7 +218,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         stages,
       };
     } catch (error) {
-      log.warn("Failed to fetch sleep", error);
+      log.warn("Failed to fetch sleep", errMsg(error));
       return null;
     }
   }
@@ -205,7 +241,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         avgHeartRate: record.avgHeartRate,
       }));
     } catch (error) {
-      log.warn("Failed to fetch workouts", error);
+      log.warn("Failed to fetch workouts", errMsg(error));
       return [];
     }
   }
@@ -237,7 +273,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       const data = await this.api.getWeeklySleepData(endDate);
       return data.map((d) => ({ date: d.date, hours: d.hours }));
     } catch (error) {
-      log.warn("Failed to fetch weekly sleep", error);
+      log.warn("Failed to fetch weekly sleep", errMsg(error));
       // Return empty array for each day
       const result: Array<{ date: string; hours: number }> = [];
       const end = new Date(endDate);
@@ -275,7 +311,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         readings: result.readings,
       };
     } catch (error) {
-      log.warn("Failed to fetch stress data", error);
+      log.warn("Failed to fetch stress data", errMsg(error));
       return null;
     }
   }
@@ -305,7 +341,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         readings: result.readings,
       };
     } catch (error) {
-      log.warn("Failed to fetch SpO2 data", error);
+      log.warn("Failed to fetch SpO2 data", errMsg(error));
       return null;
     }
   }
@@ -324,7 +360,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     try {
       return await this.api.getRestingHeartRateData(date);
     } catch (error) {
-      log.warn("Failed to fetch resting heart rate", error);
+      log.warn("Failed to fetch resting heart rate", errMsg(error));
       return null;
     }
   }
@@ -357,7 +393,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         hasArrhythmia: result.hasArrhythmia,
       };
     } catch (error) {
-      log.warn("Failed to fetch ECG data", error);
+      log.warn("Failed to fetch ECG data", errMsg(error));
       return null;
     }
   }
@@ -378,7 +414,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch blood pressure", error);
+      log.warn("Failed to fetch blood pressure", errMsg(error));
       return null;
     }
   }
@@ -397,7 +433,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch blood glucose", error);
+      log.warn("Failed to fetch blood glucose", errMsg(error));
       return null;
     }
   }
@@ -416,7 +452,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch body composition", error);
+      log.warn("Failed to fetch body composition", errMsg(error));
       return null;
     }
   }
@@ -435,7 +471,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch body temperature", error);
+      log.warn("Failed to fetch body temperature", errMsg(error));
       return null;
     }
   }
@@ -454,7 +490,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch nutrition", error);
+      log.warn("Failed to fetch nutrition", errMsg(error));
       return null;
     }
   }
@@ -473,7 +509,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch menstrual cycle", error);
+      log.warn("Failed to fetch menstrual cycle", errMsg(error));
       return null;
     }
   }
@@ -492,7 +528,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch VO2Max", error);
+      log.warn("Failed to fetch VO2Max", errMsg(error));
       return null;
     }
   }
@@ -511,7 +547,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch emotion", error);
+      log.warn("Failed to fetch emotion", errMsg(error));
       return null;
     }
   }
@@ -530,7 +566,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       if (!result) return null;
       return { date, ...result };
     } catch (error) {
-      log.warn("Failed to fetch HRV", error);
+      log.warn("Failed to fetch HRV", errMsg(error));
       return null;
     }
   }
@@ -567,6 +603,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       ]);
 
       // Build lookup maps — sum all field values since fieldName varies by data type
+      // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
       const sumValues = (vals: Record<string, number>) =>
         Object.values(vals).reduce((a, b) => a + b, 0);
       const stepsMap = new Map(stepsData.map((d) => [d.date, sumValues(d.values)]));
@@ -597,13 +634,15 @@ export class HuaweiHealthDataSource implements HealthDataSource {
 
       return result;
     } catch (error) {
-      log.warn("Failed to fetch metrics range with groupByTime", error);
+      log.warn("Failed to fetch metrics range with groupByTime", errMsg(error));
       return [];
     }
   }
 
   /**
-   * Get sleep data for a date range
+   * Get sleep data for a date range.
+   * Tries the weekly healthRecords API first; on failure, falls back to
+   * individual-day getSleep() calls which have built-in date fallback logic.
    */
   async getSleepRange(
     startDate: string,
@@ -611,39 +650,72 @@ export class HuaweiHealthDataSource implements HealthDataSource {
   ): Promise<Array<{ date: string; hours: number; qualityScore?: number }>> {
     try {
       await this.ensureToken();
-      // Use the weekly API with extended range
-      const data = await this.api.getWeeklySleepData(endDate);
+    } catch (error) {
+      log.warn("Not authenticated, no sleep range data available", errMsg(error));
+      return [];
+    }
 
-      // If range is within 7 days, return directly
+    // --- Primary path: weekly healthRecords API ---
+    try {
       const start = new Date(startDate);
       const end = new Date(endDate);
       const dayDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
 
       if (dayDiff <= 7) {
-        return data.map((d) => ({ date: d.date, hours: d.hours, qualityScore: d.sleepScore }));
-      }
+        const data = await this.api.getWeeklySleepData(endDate);
+        if (data.length > 0) {
+          return data.map((d) => ({ date: d.date, hours: d.hours, qualityScore: d.sleepScore }));
+        }
+      } else {
+        // For longer ranges, fetch in 7-day chunks
+        const result: Array<{ date: string; hours: number; qualityScore?: number }> = [];
+        const current = new Date(end);
 
-      // For longer ranges, fetch in 7-day chunks
-      const result: Array<{ date: string; hours: number; qualityScore?: number }> = [];
-      const current = new Date(end);
-
-      while (current >= start) {
-        const chunkEnd = toLocalDateStr(current);
-        const chunkData = await this.api.getWeeklySleepData(chunkEnd);
-        for (const d of chunkData) {
-          if (new Date(d.date) >= start && new Date(d.date) <= end) {
-            // Avoid duplicates
-            if (!result.some((r) => r.date === d.date)) {
-              result.push({ date: d.date, hours: d.hours, qualityScore: d.sleepScore });
+        while (current >= start) {
+          const chunkEnd = toLocalDateStr(current);
+          const chunkData = await this.api.getWeeklySleepData(chunkEnd);
+          for (const d of chunkData) {
+            if (new Date(d.date) >= start && new Date(d.date) <= end) {
+              if (!result.some((r) => r.date === d.date)) {
+                result.push({ date: d.date, hours: d.hours, qualityScore: d.sleepScore });
+              }
             }
           }
+          current.setDate(current.getDate() - 7);
         }
-        current.setDate(current.getDate() - 7);
+
+        if (result.length > 0) {
+          return result.sort((a, b) => a.date.localeCompare(b.date));
+        }
+      }
+    } catch (error) {
+      log.warn("Weekly sleep API failed, falling back to per-day queries", errMsg(error));
+    }
+
+    // --- Fallback path: individual day queries (uses getSleep with date fallback) ---
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const result: Array<{ date: string; hours: number; qualityScore?: number }> = [];
+
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = toLocalDateStr(d);
+        const sleep = await this.getSleep(dateStr);
+        if (sleep) {
+          result.push({
+            date: sleep.date,
+            hours: sleep.durationHours,
+            qualityScore: sleep.qualityScore,
+          });
+        }
       }
 
-      return result.sort((a, b) => a.date.localeCompare(b.date));
+      if (result.length > 0) {
+        log.info("Sleep range fetched via per-day fallback", { count: result.length });
+      }
+      return result;
     } catch (error) {
-      log.warn("Failed to fetch sleep range", error);
+      log.warn("Failed to fetch sleep range (fallback)", errMsg(error));
       return [];
     }
   }
@@ -671,12 +743,12 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       // With groupByTime, each entry has daily aggregated HR values
       return data.map((d) => ({
         date: d.date,
-        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
-        max: Math.round(d.values["max"] || d.values["value"] || 0),
-        min: Math.round(d.values["min"] || d.values["value"] || 0),
+        avg: Math.round(d.values.value || d.values.avg || 0),
+        max: Math.round(d.values.max || d.values.value || 0),
+        min: Math.round(d.values.min || d.values.value || 0),
       }));
     } catch (error) {
-      log.warn("Failed to fetch heart rate range with groupByTime", error);
+      log.warn("Failed to fetch heart rate range with groupByTime", errMsg(error));
       return [];
     }
   }
@@ -703,18 +775,19 @@ export class HuaweiHealthDataSource implements HealthDataSource {
 
       return data.map((d) => ({
         date: d.date,
-        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
-        max: Math.round(d.values["max"] || d.values["value"] || 0),
-        min: Math.round(d.values["min"] || d.values["value"] || 0),
+        avg: Math.round(d.values.value || d.values.avg || 0),
+        max: Math.round(d.values.max || d.values.value || 0),
+        min: Math.round(d.values.min || d.values.value || 0),
       }));
     } catch (error) {
-      log.warn("Failed to fetch stress range", error);
+      log.warn("Failed to fetch stress range", errMsg(error));
       return [];
     }
   }
 
   /**
-   * Get SpO2 data for a date range using groupByTime
+   * Get SpO2 data for a date range using groupByTime.
+   * Falls back to per-day getSpO2() if the bulk API fails.
    */
   async getSpO2Range(
     startDate: string,
@@ -722,10 +795,12 @@ export class HuaweiHealthDataSource implements HealthDataSource {
   ): Promise<Array<{ date: string; avg: number; max: number; min: number }>> {
     try {
       await this.ensureToken();
-    } catch {
+    } catch (error) {
+      log.warn("Not authenticated, no SpO2 range data available", errMsg(error));
       return [];
     }
 
+    // --- Primary path: polymerize groupByTime API ---
     try {
       const data = await this.api.getPolymerizeDataRange(
         "com.huawei.instantaneous.spo2",
@@ -733,14 +808,43 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         endDate
       );
 
-      return data.map((d) => ({
-        date: d.date,
-        avg: Math.round(d.values["value"] || d.values["avg"] || 0),
-        max: Math.round(d.values["max"] || Math.min(100, (d.values["value"] || 0) + 1)),
-        min: Math.round(d.values["min"] || Math.max(0, (d.values["value"] || 0) - 2)),
-      }));
+      if (data.length > 0) {
+        return data.map((d) => ({
+          date: d.date,
+          avg: Math.round(d.values.value || d.values.avg || 0),
+          max: Math.round(d.values.max || Math.min(100, (d.values.value || 0) + 1)),
+          min: Math.round(d.values.min || Math.max(0, (d.values.value || 0) - 2)),
+        }));
+      }
     } catch (error) {
-      log.warn("Failed to fetch SpO2 range", error);
+      log.warn("SpO2 range API failed, falling back to per-day queries", errMsg(error));
+    }
+
+    // --- Fallback path: individual day queries ---
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const result: Array<{ date: string; avg: number; max: number; min: number }> = [];
+
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = toLocalDateStr(d);
+        const spo2 = await this.getSpO2(dateStr);
+        if (spo2 && spo2.avg > 0) {
+          result.push({
+            date: spo2.date,
+            avg: spo2.avg,
+            max: spo2.max,
+            min: spo2.min,
+          });
+        }
+      }
+
+      if (result.length > 0) {
+        log.info("SpO2 range fetched via per-day fallback", { count: result.length });
+      }
+      return result;
+    } catch (error) {
+      log.warn("Failed to fetch SpO2 range (fallback)", errMsg(error));
       return [];
     }
   }
@@ -768,12 +872,12 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       return data
         .map((d) => ({
           date: d.date,
-          avgSystolic: Math.round(d.values["systolic_pressure"] || d.values["value"] || 0),
-          avgDiastolic: Math.round(d.values["diastolic_pressure"] || 0),
+          avgSystolic: Math.round(d.values.systolic_pressure || d.values.value || 0),
+          avgDiastolic: Math.round(d.values.diastolic_pressure || 0),
         }))
         .filter((d) => d.avgSystolic > 0);
     } catch (error) {
-      log.warn("Failed to fetch blood pressure range", error);
+      log.warn("Failed to fetch blood pressure range", errMsg(error));
       return [];
     }
   }
@@ -801,19 +905,18 @@ export class HuaweiHealthDataSource implements HealthDataSource {
       return data
         .map((d) => ({
           date: d.date,
-          weight: d.values["body_weight"]
-            ? Math.round(d.values["body_weight"] * 10) / 10
-            : d.values["value"]
-              ? Math.round(d.values["value"] * 10) / 10
-              : undefined,
-          bmi: d.values["bmi"] ? Math.round(d.values["bmi"] * 10) / 10 : undefined,
-          bodyFatRate: d.values["body_fat_rate"]
-            ? Math.round(d.values["body_fat_rate"] * 10) / 10
+          weight: (() => {
+            const raw = d.values.body_weight ?? d.values.value;
+            return raw ? Math.round(raw * 10) / 10 : undefined;
+          })(),
+          bmi: d.values.bmi ? Math.round(d.values.bmi * 10) / 10 : undefined,
+          bodyFatRate: d.values.body_fat_rate
+            ? Math.round(d.values.body_fat_rate * 10) / 10
             : undefined,
         }))
         .filter((d) => d.weight != null);
     } catch (error) {
-      log.warn("Failed to fetch body composition range", error);
+      log.warn("Failed to fetch body composition range", errMsg(error));
       return [];
     }
   }
@@ -835,7 +938,7 @@ export class HuaweiHealthDataSource implements HealthDataSource {
         avgHeartRate: record.avgHeartRate,
       }));
     } catch (error) {
-      log.warn("Failed to fetch workouts range", error);
+      log.warn("Failed to fetch workouts range", errMsg(error));
       return [];
     }
   }

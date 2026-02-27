@@ -99,7 +99,7 @@ export function serializeMessagesForLLM(messages: AgentMessage[], maxChars = 500
         .filter((b) => b.type === "text")
         .map((b) => (b as { text: string }).text)
         .join("\n");
-      const truncated = text.length > 500 ? text.slice(0, 500) + "..." : text;
+      const truncated = text.length > 500 ? `${text.slice(0, 500)}...` : text;
       line = `Tool(${toolMsg.toolName}): ${truncated || (toolMsg.isError ? "[error]" : "[ok]")}`;
     }
 
@@ -578,7 +578,7 @@ function softTrimToolResult(msg: AgentMessage, maxChars: number): AgentMessage {
     if (block.type === "text") {
       const text = (block as { type: "text"; text: string }).text;
       if (text.length > maxChars) {
-        return { type: "text" as const, text: text.slice(0, maxChars) + "\n[...truncated]" };
+        return { type: "text" as const, text: `${text.slice(0, maxChars)}\n[...truncated]` };
       }
     }
     return block;

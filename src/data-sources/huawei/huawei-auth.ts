@@ -5,9 +5,14 @@
  */
 
 import { loadConfig } from "../../utils/config.js";
-import { TokenStore, tokenStore as defaultTokenStore } from "./token-store.js";
-import { UserStore, getUserStore } from "./user-store.js";
+import { createLogger } from "../../utils/logger.js";
+import type { TokenStore } from "./token-store.js";
+import { tokenStore as defaultTokenStore } from "./token-store.js";
+import type { UserStore } from "./user-store.js";
+import { getUserStore } from "./user-store.js";
 import type { HuaweiTokenResponse, TokenData } from "./huawei-types.js";
+
+const log = createLogger("Huawei/Auth");
 
 // Huawei OAuth endpoints (defaults, can be overridden in config)
 const DEFAULT_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authorize";
@@ -59,6 +64,8 @@ function getConfigRedirectUri(): string {
 
 export class HuaweiAuth {
   private tokenStore: TokenStore;
+  /** Mutex map for per-user token refresh to prevent race conditions */
+  private refreshPromises = new Map<string, Promise<string>>();
 
   constructor(tokenStore: TokenStore = defaultTokenStore) {
     this.tokenStore = tokenStore;
@@ -266,19 +273,16 @@ export class HuaweiAuth {
       try {
         huaweiUserId = decodeIdToken(data.id_token);
       } catch (e) {
-        console.error("[Huawei/Auth] id_token decode failed:", e);
+        log.error("id_token decode failed:", e);
       }
     } else {
-      console.warn(
-        "[Huawei/Auth] Token response has no id_token, keys:",
-        Object.keys(data).join(",")
-      );
+      log.warn("Token response has no id_token, keys:", Object.keys(data).join(","));
     }
     if (!huaweiUserId) {
       try {
         huaweiUserId = await fetchUserInfoSub(tokenData.accessToken);
       } catch (e) {
-        console.error("[Huawei/Auth] UserInfo fallback failed:", e);
+        log.error("UserInfo fallback failed:", e);
       }
     }
 
@@ -326,8 +330,10 @@ export class HuaweiAuth {
   }
 
   /**
-   * Ensure we have a valid access token for a specific user
-   * Will refresh if needed, using UserStore
+   * Ensure we have a valid access token for a specific user.
+   * Will refresh if needed, using UserStore.
+   * Uses a per-user mutex to prevent race conditions when multiple
+   * parallel calls try to refresh the same token simultaneously.
    */
   async ensureValidTokenForUser(uuid: string, userStore?: UserStore): Promise<string> {
     const store = userStore || getUserStore();
@@ -342,24 +348,44 @@ export class HuaweiAuth {
       return token.accessToken;
     }
 
-    // Token needs refresh
-    const config = loadConfig();
-    const huaweiConfig = config.dataSources.huawei;
-
-    if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
-      throw new Error("Huawei credentials not configured. Run 'pha huawei setup' first.");
+    // Token needs refresh — use mutex to prevent parallel refresh race condition
+    const existing = this.refreshPromises.get(uuid);
+    if (existing) {
+      return existing; // Another call is already refreshing — wait for it
     }
 
-    const newToken = await this.refreshTokenForUser(
-      token.refreshToken,
-      huaweiConfig.clientId,
-      huaweiConfig.clientSecret
-    );
+    const refreshPromise = (async () => {
+      try {
+        // Re-check after acquiring the "lock" — another call may have already refreshed
+        const freshToken = store.getTokenData(uuid);
+        if (freshToken && !store.needsRefresh(uuid)) {
+          return freshToken.accessToken;
+        }
 
-    // Store the new token
-    store.saveToken(uuid, newToken);
+        const config = loadConfig();
+        const huaweiConfig = config.dataSources.huawei;
 
-    return newToken.accessToken;
+        if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+          throw new Error("Huawei credentials not configured. Run 'pha huawei setup' first.");
+        }
+
+        const newToken = await this.refreshTokenForUser(
+          token.refreshToken,
+          huaweiConfig.clientId,
+          huaweiConfig.clientSecret
+        );
+
+        // Store the new token
+        store.saveToken(uuid, newToken);
+
+        return newToken.accessToken;
+      } finally {
+        this.refreshPromises.delete(uuid);
+      }
+    })();
+
+    this.refreshPromises.set(uuid, refreshPromise);
+    return refreshPromise;
   }
 
   /**
@@ -416,7 +442,7 @@ async function fetchUserInfoSub(accessToken: string): Promise<string> {
     access_token: accessToken,
   });
 
-  console.log("[Huawei/Auth] Fetching getTokenInfo from:", url);
+  log.info("Fetching getTokenInfo from:", url);
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -424,16 +450,16 @@ async function fetchUserInfoSub(accessToken: string): Promise<string> {
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    console.error("[Huawei/Auth] getTokenInfo failed:", response.status, text.slice(0, 300));
+    log.error("getTokenInfo failed", { status: response.status, body: text.slice(0, 300) });
     throw new Error(`getTokenInfo request failed: ${response.status}`);
   }
   const data = (await response.json()) as Record<string, unknown>;
-  console.log("[Huawei/Auth] getTokenInfo response keys:", Object.keys(data).join(","));
+  log.info("getTokenInfo response keys:", Object.keys(data).join(","));
   const uid = (data.union_id || data.open_id || data.unionID || data.openID || data.sub) as
     | string
     | undefined;
   if (!uid) {
-    console.error("[Huawei/Auth] getTokenInfo has no user ID:", JSON.stringify(data).slice(0, 300));
+    log.error("getTokenInfo has no user ID:", JSON.stringify(data).slice(0, 300));
     throw new Error("getTokenInfo response missing user ID");
   }
   return uid;

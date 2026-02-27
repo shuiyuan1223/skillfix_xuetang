@@ -9,6 +9,7 @@ import {
   type AgentOptions,
   type AgentEvent,
   type AgentMessage,
+  type AgentTool,
 } from "@mariozechner/pi-agent-core";
 import { getModel, type Model } from "@mariozechner/pi-ai";
 import { globalRegistry } from "../tools/index.js";
@@ -35,9 +36,9 @@ import {
   resolveModel,
   resolveAgentModel,
   resolveSystemAgentModel,
-  type AgentProfileConfig,
 } from "../utils/config.js";
 import type { ToolCategory } from "../tools/types.js";
+import type { HealthDataSource } from "../data-sources/interface.js";
 
 /** Declarative agent configuration profile (runtime, fully typed) */
 export interface AgentProfile {
@@ -203,11 +204,13 @@ export interface PHAAgentConfig {
   /** Session ID for transcript storage */
   sessionId?: string;
   /** User-specific health data source (for per-session isolation) */
-  dataSource?: import("../data-sources/interface.js").HealthDataSource;
+  dataSource?: HealthDataSource;
   /** Custom tools (overrides default health tools when provided) */
-  tools?: import("@mariozechner/pi-agent-core").AgentTool<any>[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tools?: AgentTool<any>[];
   /** Extra tools to append (e.g. from plugins), merged with default tools */
-  extraTools?: import("@mariozechner/pi-agent-core").AgentTool<any>[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  extraTools?: AgentTool<any>[];
   /** Additional agent options */
   agentOptions?: Partial<AgentOptions>;
   /** Prior chat messages to restore context after restart */
@@ -217,6 +220,94 @@ export interface PHAAgentConfig {
 }
 
 // LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createCustomModel(provider: string, modelId: string, baseUrl: string): Model<any> {
+  return {
+    id: modelId,
+    name: modelId,
+    api: "openai-completions" as const,
+    provider: provider,
+    baseUrl: baseUrl,
+    reasoning: false,
+    input: ["text", "image"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 16384,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resolveModelInstance(provider: string, modelId: string, baseUrl?: string): Model<any> {
+  if (BUILTIN_PROVIDERS.includes(provider as LLMProvider)) {
+    // @ts-expect-error - dynamic model selection
+    const model = getModel(provider, modelId);
+    if (model) return model;
+    if (baseUrl) return createCustomModel(provider, modelId, baseUrl);
+  } else if (baseUrl) {
+    return createCustomModel(provider, modelId, baseUrl);
+  }
+
+  throw new Error(
+    baseUrl
+      ? `Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`
+      : `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(", ")}`
+  );
+}
+
+function buildAgentSystemPrompt(
+  userUuid: string | undefined,
+  profile?: PHAAgentConfig["profile"]
+): string {
+  const memoryManager = getMemoryManager();
+  if (userUuid) memoryManager.ensureUser(userUuid);
+
+  const skillOptions = profile?.skills
+    ? {
+        tags: profile.skills.tags,
+        include: profile.skills.include,
+        exclude: profile.skills.exclude ?? profile.skills.excludeTypes,
+      }
+    : undefined;
+  const contextOptions = profile
+    ? {
+        memory: profile.context.memory,
+        profile: profile.context.profile,
+        bootstrap: profile.context.bootstrap,
+      }
+    : undefined;
+
+  return memoryManager.buildSystemPrompt(userUuid || "anonymous", skillOptions, contextOptions);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function resolveAgentTools(config: PHAAgentConfig, userUuid?: string): AgentTool<any>[] {
+  let registry = config.dataSource
+    ? globalRegistry.withDataSource(config.dataSource)
+    : globalRegistry;
+
+  if (userUuid) {
+    registry = registry.withUserUuid(userUuid);
+  }
+
+  const defaultCategories: ToolCategory[] = [
+    "health",
+    "memory",
+    "profile",
+    "config",
+    "skill",
+    "presentation",
+    "planning",
+    "proactive",
+  ];
+  const baseTools =
+    config.tools ||
+    registry.toAgentToolsByCategories(config.profile?.tools.categories || defaultCategories);
+
+  return config.extraTools && config.extraTools.length > 0
+    ? [...baseTools, ...config.extraTools]
+    : baseTools;
+}
 
 export class PHAAgent {
   private agent: Agent;
@@ -237,131 +328,25 @@ export class PHAAgent {
       );
     }
 
-    let model: Model<any>;
+    const model = resolveModelInstance(provider, modelId, config.baseUrl);
+    const systemPrompt = buildAgentSystemPrompt(this.userUuid, config.profile);
+    const tools = resolveAgentTools(config, this.userUuid);
 
-    if (BUILTIN_PROVIDERS.includes(provider)) {
-      // Try built-in pi-ai provider first (has proper compat settings)
-      // @ts-expect-error - dynamic model selection
-      model = getModel(provider, modelId);
-
-      if (!model && config.baseUrl) {
-        // Model not in registry but provider is known — use custom baseUrl as fallback
-        model = {
-          id: modelId,
-          name: modelId,
-          api: "openai-completions" as const,
-          provider: provider,
-          baseUrl: config.baseUrl,
-          reasoning: false,
-          input: ["text", "image"],
-          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          contextWindow: 128000,
-          maxTokens: 16384,
-        };
-      }
-    } else if (config.baseUrl) {
-      // Non-built-in provider with custom baseUrl
-      model = {
-        id: modelId,
-        name: modelId,
-        api: "openai-completions" as const,
-        provider: provider,
-        baseUrl: config.baseUrl,
-        reasoning: false,
-        input: ["text", "image"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128000,
-        maxTokens: 16384,
-      };
-    } else {
-      // For non-built-in providers without baseUrl
-      throw new Error(
-        `Provider ${provider} requires baseUrl for OpenAI-compatible API, or use one of: ${BUILTIN_PROVIDERS.join(", ")}`
-      );
-    }
-
-    if (!model) {
-      throw new Error(
-        `Model not found: ${provider}/${modelId}. Try a different model or configure baseUrl.`
-      );
-    }
-
-    // Build system prompt with user profile + memory
-    const memoryManager = getMemoryManager();
-    if (this.userUuid) {
-      memoryManager.ensureUser(this.userUuid);
-    }
-    const skillOptions = config.profile?.skills
-      ? {
-          tags: config.profile.skills.tags,
-          include: config.profile.skills.include,
-          exclude: config.profile.skills.exclude ?? config.profile.skills.excludeTypes,
-        }
-      : undefined;
-    const contextOptions = config.profile
-      ? {
-          memory: config.profile.context.memory,
-          profile: config.profile.context.profile,
-          bootstrap: config.profile.context.bootstrap,
-        }
-      : undefined;
-    const systemPrompt = memoryManager.buildSystemPrompt(
-      this.userUuid || "anonymous",
-      skillOptions,
-      contextOptions
-    );
-
-    // Build LLM config for compaction summarization
     const llmConfig: LLMSummarizationConfig = {
-      provider: provider,
-      modelId: modelId,
-      apiKey: apiKey,
+      provider,
+      modelId,
+      apiKey,
       baseUrl: config.baseUrl,
       api: model.api,
     };
-
-    // Compaction flush: save context to memory before truncation
     const compactionFlush = createCompactionFlush(
-      {
-        contextWindow: model.contextWindow || 128000,
-        reserveTokens: 20000,
-        flushThreshold: 4000,
-      },
-      memoryManager,
+      { contextWindow: model.contextWindow || 128000, reserveTokens: 20000, flushThreshold: 4000 },
+      getMemoryManager(),
       this.userUuid || "anonymous",
       llmConfig,
       config.sessionId
     );
 
-    // Use per-session tools when a user-specific data source is provided
-    let registry = config.dataSource
-      ? globalRegistry.withDataSource(config.dataSource)
-      : globalRegistry;
-
-    // Bind session user UUID to all tools so getUserUuid() returns the correct UUID
-    if (this.userUuid) {
-      registry = registry.withUserUuid(this.userUuid);
-    }
-
-    const defaultCategories: ToolCategory[] = [
-      "health",
-      "memory",
-      "profile",
-      "config",
-      "skill",
-      "presentation",
-      "planning",
-      "proactive",
-    ];
-    const baseTools =
-      config.tools ||
-      registry.toAgentToolsByCategories(config.profile?.tools.categories || defaultCategories);
-    const tools =
-      config.extraTools && config.extraTools.length > 0
-        ? [...baseTools, ...config.extraTools]
-        : baseTools;
-
-    // Convert persisted session messages to AgentMessage[] for context recovery
     const messages = config.sessionMessages ? sessionToAgentMessages(config.sessionMessages) : [];
 
     this.agent = new Agent({
@@ -433,19 +418,23 @@ export class PHAAgent {
   }
 
   /**
-   * Send a message and wait for the complete response.
-   * Returns the final assistant message content.
+   * Core prompt-and-collect loop.
+   * Sends message, waits for idle, captures the final assistant message and handles LLM errors.
+   * @param extraEventHandler - optional handler for additional event types (e.g., tool tracking)
    */
-  async chatAndWait(message: string): Promise<string> {
+  private async runPromptAndCollect(
+    message: string,
+    extraEventHandler?: (event: AgentEvent) => void
+  ): Promise<{ finalContent: string; hasError: boolean }> {
     let hasError = false;
     let llmErrorMessage = "";
-    // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
     let lastAssistantMessage: AgentMessage | null = null;
 
     const unsubscribe = this.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
         lastAssistantMessage = event.message;
-        // Check for LLM-level errors (e.g. 401, rate limit, model not found)
+        // pi-agent-core event types lack property declarations
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const msg = event.message as any;
         if (msg.stopReason === "error" && msg.errorMessage) {
           hasError = true;
@@ -453,37 +442,50 @@ export class PHAAgent {
           log.error("LLM returned error", { errorMessage: msg.errorMessage, model: msg.model });
         }
       }
-      // Capture errors for diagnostics
+      // pi-agent-core event types lack property declarations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if ((event as any).type === "error" || (event as any).error) {
         hasError = true;
-        log.warn("chatAndWait error event", (event as any).error || event);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        log.warn("Agent error event", (event as any).error || event);
       }
+      extraEventHandler?.(event);
     });
 
     try {
       await this.agent.prompt(message);
       await this.agent.waitForIdle();
     } catch (err) {
-      log.warn("chatAndWait prompt/idle error", err);
+      log.warn("prompt/idle error", err);
       throw err;
     } finally {
       unsubscribe();
     }
 
-    // If the LLM returned an error, throw so callers can handle it
     if (llmErrorMessage) {
       throw new Error(`LLM error: ${llmErrorMessage}`);
     }
 
-    // Extract text from the last assistant message only
     let finalContent = "";
     if (lastAssistantMessage) {
+      // pi-agent-core event types lack property declarations
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const block of (lastAssistantMessage as any).content) {
         if (block.type === "text") {
           finalContent += block.text;
         }
       }
     }
+
+    return { finalContent, hasError };
+  }
+
+  /**
+   * Send a message and wait for the complete response.
+   * Returns the final assistant message content.
+   */
+  async chatAndWait(message: string): Promise<string> {
+    const { finalContent, hasError } = await this.runPromptAndCollect(message);
 
     if (!finalContent && hasError) {
       log.warn("chatAndWait completed with empty response and errors");
@@ -500,63 +502,77 @@ export class PHAAgent {
     response: string;
     toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }>;
   }> {
-    // Keep only the LAST assistant message to avoid leaking intermediate tool-call text
-    let lastAssistantMessage: AgentMessage | null = null;
-    let llmErrorMessage = "";
     const toolCalls: Array<{ tool: string; arguments: unknown; result: unknown }> = [];
     let pendingToolName = "";
-    let pendingToolArgs: unknown = undefined;
+    let pendingToolArgs: unknown;
 
-    const unsubscribe = this.subscribe((event) => {
-      if (event.type === "message_end" && event.message.role === "assistant") {
-        lastAssistantMessage = event.message;
-        // Check for LLM-level errors (e.g. 401, rate limit, model not found)
-        const msg = event.message as any;
-        if (msg.stopReason === "error" && msg.errorMessage) {
-          llmErrorMessage = msg.errorMessage;
-          log.error("LLM returned error", { errorMessage: msg.errorMessage, model: msg.model });
-        }
-      }
+    const { finalContent } = await this.runPromptAndCollect(message, (event) => {
       if (event.type === "tool_execution_start") {
+        // pi-agent-core event types lack property declarations
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pendingToolName = (event as any).toolName || "";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pendingToolArgs = (event as any).arguments;
       }
       if (event.type === "tool_execution_end") {
         toolCalls.push({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           tool: pendingToolName || (event as any).toolName || "unknown",
           arguments: pendingToolArgs,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           result: (event as any).result,
         });
       }
     });
 
-    try {
-      await this.agent.prompt(message);
-      await this.agent.waitForIdle();
-    } finally {
-      unsubscribe();
-    }
-
-    // If the LLM returned an error, throw so callers can handle it
-    if (llmErrorMessage) {
-      throw new Error(`LLM error: ${llmErrorMessage}`);
-    }
-
-    // Extract text from the last assistant message only
-    let finalContent = "";
-    if (lastAssistantMessage) {
-      for (const block of (lastAssistantMessage as any).content) {
-        if (block.type === "text") {
-          finalContent += block.text;
-        }
-      }
-    }
-
     if (!finalContent) {
       log.warn("chatAndWaitWithTools completed with empty response", {
-        hasLastAssistantMessage: !!lastAssistantMessage,
         toolCallCount: toolCalls.length,
       });
+
+      // Fallback: reconstruct reply from present_insight tool call arguments
+      const insightCall = toolCalls.find((tc) => tc.tool === "present_insight");
+      if (insightCall) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const args = insightCall.arguments as any;
+        const lines: string[] = [];
+
+        if (args?.title) {
+          lines.push(`📊 ${args.title}`, "");
+        }
+
+        const highlights = args?.highlights as
+          | Array<{ label: string; value: string | number; unit?: string; status?: string }>
+          | undefined;
+        if (highlights && highlights.length > 0) {
+          for (const h of highlights) {
+            const unit = h.unit ? h.unit : "";
+            const status = h.status ? ` ${h.status}` : "";
+            lines.push(`• ${h.label}: ${h.value}${unit}${status}`);
+          }
+          lines.push("");
+        }
+
+        const insights = args?.insights as string[] | undefined;
+        if (insights && insights.length > 0) {
+          for (const insight of insights) {
+            lines.push(`💡 ${insight}`);
+          }
+          lines.push("");
+        }
+
+        const recommendations = args?.recommendations as string[] | undefined;
+        if (recommendations && recommendations.length > 0) {
+          for (const rec of recommendations) {
+            lines.push(`✅ ${rec}`);
+          }
+        }
+
+        const fallback = lines.join("\n").trim();
+        if (fallback) {
+          return { response: fallback, toolCalls };
+        }
+      }
     }
 
     return { response: finalContent, toolCalls };
@@ -617,12 +633,14 @@ export async function withActivityTimeout<T>(
     let hardTimer: ReturnType<typeof setTimeout>;
     let settled = false;
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const cleanup = () => {
       clearTimeout(inactivityTimer);
       clearTimeout(hardTimer);
       unsubscribe();
     };
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const fail = (reason: string) => {
       if (settled) return;
       settled = true;
@@ -631,6 +649,7 @@ export async function withActivityTimeout<T>(
       reject(new Error(reason));
     };
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const resetInactivity = () => {
       clearTimeout(inactivityTimer);
       inactivityTimer = setTimeout(

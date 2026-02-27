@@ -127,6 +127,7 @@ const createHealthPlanTool: PHATool<CreatePlanParams> = {
   execute: async (params: CreatePlanParams) => {
     const uuid = getUserUuid();
     const now = new Date().toISOString();
+    // eslint-disable-next-line no-restricted-syntax
     const planId = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const goals: PlanGoal[] = params.goals.map((g, i) => ({
@@ -549,6 +550,7 @@ const updatePlanStatusTool: PHATool<UpdatePlanStatusParams> = {
 // Export
 // ============================================================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const planTools: PHATool<any>[] = [
   createHealthPlanTool,
   listHealthPlansTool,

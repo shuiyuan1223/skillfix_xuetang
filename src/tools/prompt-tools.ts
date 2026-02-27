@@ -5,7 +5,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "fs";
-import { join, basename } from "path";
+import { join } from "path";
 import { execSync } from "child_process";
 import { gitCommitFiles } from "../evolution/version-manager.js";
 

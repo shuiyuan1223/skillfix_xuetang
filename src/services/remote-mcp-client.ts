@@ -33,7 +33,7 @@ export class RemoteMCPClient {
     const url = new URL(this.config.url);
     const headers: Record<string, string> = {};
     if (this.config.apiKey) {
-      headers["Authorization"] = `Bearer ${this.config.apiKey}`;
+      headers.Authorization = `Bearer ${this.config.apiKey}`;
     }
 
     this.client = new Client(
@@ -49,7 +49,7 @@ export class RemoteMCPClient {
       await this.client.connect(this.transport);
       this.connected = true;
       log.info(`[${this.serverKey}] Connected via Streamable HTTP`);
-    } catch (e) {
+    } catch (_e) {
       log.info(`[${this.serverKey}] Streamable HTTP failed, trying SSE fallback...`);
       // Reset client for retry
       this.client = new Client(
@@ -174,11 +174,13 @@ export async function disconnectAllRemoteMCPClients(): Promise<void> {
  * Build a TypeBox schema from a JSON Schema object returned by the remote MCP server.
  * We pass through properties as-is since TypeBox Type.Unsafe accepts raw JSON Schema.
  */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 function jsonSchemaToTypebox(inputSchema?: Record<string, unknown>) {
   if (!inputSchema || typeof inputSchema !== "object") {
     return Type.Object({});
   }
   // Use Type.Unsafe to wrap the raw JSON Schema so pi-agent accepts it
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return Type.Unsafe<Record<string, unknown>>(inputSchema as any);
 }
 
@@ -186,11 +188,13 @@ function jsonSchemaToTypebox(inputSchema?: Record<string, unknown>) {
  * Connect to all configured remote MCP servers and return their tools as AgentTools.
  * Safe to call when no remoteServers are configured — returns [].
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getRemoteMCPTools(): Promise<AgentTool<any>[]> {
   const config = loadConfig();
   const servers = config.mcp?.remoteServers;
   if (!servers || Object.keys(servers).length === 0) return [];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tools: AgentTool<any>[] = [];
 
   for (const [serverKey, serverConfig] of Object.entries(servers)) {

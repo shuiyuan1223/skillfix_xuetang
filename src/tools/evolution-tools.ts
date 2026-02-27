@@ -25,8 +25,18 @@ import {
   updateSuggestionStatus,
 } from "../memory/db.js";
 import { BenchmarkRunner, type BenchmarkRunnerConfig } from "../evolution/benchmark-runner.js";
-import { diagnose, type DiagnoseResult } from "../evolution/diagnose.js";
-import type { BenchmarkProfile, BenchmarkCategory } from "../evolution/types.js";
+import {
+  diagnose,
+  type DiagnoseResult,
+  type ExistingBenchmarkData,
+} from "../evolution/diagnose.js";
+import type {
+  BenchmarkProfile,
+  BenchmarkCategory,
+  BenchmarkRun,
+  BenchmarkResult,
+  CategoryScore,
+} from "../evolution/types.js";
 import { appendEvolutionLog } from "./system-memory-tools.js";
 import type { PHATool } from "./types.js";
 
@@ -854,6 +864,128 @@ export const runBenchmarkTool: PHATool<{
 };
 
 // ============================================================================
+// Diagnose helpers
+// ============================================================================
+
+async function loadExistingBenchmarkData(
+  runId: string
+): Promise<ExistingBenchmarkData | undefined> {
+  const {
+    getBenchmarkRun,
+    listBenchmarkResults: listBR,
+    listCategoryScores: listCS,
+  } = await import("../memory/db.js");
+
+  const runRow = getBenchmarkRun(runId);
+  if (!runRow) return undefined;
+
+  const run: BenchmarkRun = {
+    id: runRow.id,
+    timestamp: runRow.timestamp,
+    versionTag: runRow.version_tag ?? undefined,
+    promptVersions: runRow.prompt_versions ? JSON.parse(runRow.prompt_versions) : {},
+    skillVersions: runRow.skill_versions ? JSON.parse(runRow.skill_versions) : {},
+    totalTestCases: runRow.total_test_cases,
+    passedCount: runRow.passed_count,
+    failedCount: runRow.failed_count,
+    overallScore: runRow.overall_score,
+    durationMs: runRow.duration_ms ?? 0,
+    profile: runRow.profile as "quick" | "full",
+    metadata: runRow.metadata ? JSON.parse(runRow.metadata) : undefined,
+  };
+
+  const results: BenchmarkResult[] = listBR({ runId }).map((r) => ({
+    id: r.id,
+    runId: r.run_id,
+    testCaseId: r.test_case_id,
+    timestamp: r.timestamp,
+    agentResponse: r.agent_response ?? "",
+    toolCalls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
+    scores: r.scores ? JSON.parse(r.scores) : [],
+    overallScore: r.overall_score,
+    passed: r.passed === 1,
+    feedback: r.feedback ?? "",
+    issues: r.issues ? JSON.parse(r.issues) : undefined,
+    durationMs: r.duration_ms ?? 0,
+  }));
+
+  const categoryScores = new Map<BenchmarkCategory, CategoryScore>();
+  for (const row of listCS(runId)) {
+    if (!row.subcategory) {
+      categoryScores.set(row.category as BenchmarkCategory, {
+        id: row.id,
+        runId: row.run_id,
+        category: row.category as BenchmarkCategory,
+        score: row.score,
+        testCount: row.test_count,
+        passedCount: row.passed_count,
+        details: row.details ? JSON.parse(row.details) : undefined,
+      });
+    }
+  }
+
+  return { run, results, categoryScores };
+}
+
+function logDiagnoseResult(result: DiagnoseResult): void {
+  try {
+    const weakSummary = result.weaknesses
+      .map(
+        (w) =>
+          `  - ${w.label}: ${w.score.toFixed(2)} (gap: ${w.gap.toFixed(2)}, ${w.failingTests.length} failing)`
+      )
+      .join("\n");
+    const sugSummary = result.suggestions
+      .slice(0, 5)
+      .map((s) => `  - [${s.priority}] ${s.category}: ${s.description.slice(0, 80)}`)
+      .join("\n");
+    const gapSummary =
+      result.dataGaps.length > 0 ? `Data Gaps: ${result.dataGaps.length} issues found` : "";
+    appendEvolutionLog(
+      `**Diagnose Result**\n` +
+        `Overall: ${result.overallScore.toFixed(3)} | ${result.run.passedCount}/${result.run.totalTestCases} passed\n${
+          weakSummary ? `Weaknesses:\n${weakSummary}\n` : ""
+        }${sugSummary ? `Top Suggestions:\n${sugSummary}\n` : ""}${gapSummary ? `${gapSummary}\n` : ""}`
+    );
+  } catch {
+    /* best-effort logging */
+  }
+}
+
+function formatDiagnoseResponse(result: DiagnoseResult): Record<string, unknown> {
+  return {
+    success: true,
+    overallScore: result.overallScore,
+    passed: result.run.passedCount,
+    failed: result.run.failedCount,
+    total: result.run.totalTestCases,
+    weaknesses: result.weaknesses.map((w) => ({
+      category: w.category,
+      label: w.label,
+      score: w.score,
+      gap: w.gap,
+      failingTestCount: w.failingTests.length,
+      commonPatterns: w.commonPatterns,
+      weakSubComponents: w.weakSubComponents,
+    })),
+    suggestions: result.suggestions.map((s) => ({
+      category: s.category,
+      description: s.description,
+      targetFiles: s.targetFiles,
+      priority: s.priority,
+    })),
+    dataGaps: result.dataGaps.map((g) => ({
+      testCaseId: g.testCaseId,
+      type: g.type,
+      description: g.description,
+      field: g.field,
+      suggestion: g.suggestion,
+    })),
+    issuesCreated: result.issuesCreated,
+  };
+}
+
+// ============================================================================
 // run_diagnose — Agent can run diagnose pipeline
 // ============================================================================
 
@@ -892,71 +1024,9 @@ export const runDiagnoseTool: PHATool<{
     const config = getRunnerConfig();
     const profile = (args?.profile || "quick") as BenchmarkProfile;
 
-    // If runId provided, load existing benchmark data from DB
-    let existingBenchmark: import("../evolution/diagnose.js").ExistingBenchmarkData | undefined;
-    if (args?.runId) {
-      const {
-        getBenchmarkRun,
-        listBenchmarkResults: listBR,
-        listCategoryScores: listCS,
-      } = await import("../memory/db.js");
-
-      const runRow = getBenchmarkRun(args.runId);
-      if (!runRow) {
-        return { success: false, error: `Benchmark run ${args.runId} not found in database` };
-      }
-
-      const resultRows = listBR({ runId: args.runId });
-      const categoryRows = listCS(args.runId);
-
-      const run: import("../evolution/types.js").BenchmarkRun = {
-        id: runRow.id,
-        timestamp: runRow.timestamp,
-        versionTag: runRow.version_tag ?? undefined,
-        promptVersions: runRow.prompt_versions ? JSON.parse(runRow.prompt_versions) : {},
-        skillVersions: runRow.skill_versions ? JSON.parse(runRow.skill_versions) : {},
-        totalTestCases: runRow.total_test_cases,
-        passedCount: runRow.passed_count,
-        failedCount: runRow.failed_count,
-        overallScore: runRow.overall_score,
-        durationMs: runRow.duration_ms ?? 0,
-        profile: runRow.profile as "quick" | "full",
-        metadata: runRow.metadata ? JSON.parse(runRow.metadata) : undefined,
-      };
-
-      const results: import("../evolution/types.js").BenchmarkResult[] = resultRows.map((r) => ({
-        id: r.id,
-        runId: r.run_id,
-        testCaseId: r.test_case_id,
-        timestamp: r.timestamp,
-        agentResponse: r.agent_response ?? "",
-        toolCalls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
-        scores: r.scores ? JSON.parse(r.scores) : [],
-        overallScore: r.overall_score,
-        passed: r.passed === 1,
-        feedback: r.feedback ?? "",
-        issues: r.issues ? JSON.parse(r.issues) : undefined,
-        durationMs: r.duration_ms ?? 0,
-      }));
-
-      type BC = import("../evolution/types.js").BenchmarkCategory;
-      type CS = import("../evolution/types.js").CategoryScore;
-      const categoryScores = new Map<BC, CS>();
-      for (const row of categoryRows) {
-        if (!row.subcategory) {
-          categoryScores.set(row.category as BC, {
-            id: row.id,
-            runId: row.run_id,
-            category: row.category as BC,
-            score: row.score,
-            testCount: row.test_count,
-            passedCount: row.passed_count,
-            details: row.details ? JSON.parse(row.details) : undefined,
-          });
-        }
-      }
-
-      existingBenchmark = { run, results, categoryScores };
+    const existingBenchmark = args?.runId ? await loadExistingBenchmarkData(args.runId) : undefined;
+    if (args?.runId && !existingBenchmark) {
+      return { success: false, error: `Benchmark run ${args.runId} not found in database` };
     }
 
     const result: DiagnoseResult = await diagnose({
@@ -967,61 +1037,9 @@ export const runDiagnoseTool: PHATool<{
       createIssues: args?.createIssues || false,
     });
 
-    // Auto-log diagnose result to evolution-log.md
-    try {
-      const weakSummary = result.weaknesses
-        .map(
-          (w) =>
-            `  - ${w.label}: ${w.score.toFixed(2)} (gap: ${w.gap.toFixed(2)}, ${w.failingTests.length} failing)`
-        )
-        .join("\n");
-      const sugSummary = result.suggestions
-        .slice(0, 5)
-        .map((s) => `  - [${s.priority}] ${s.category}: ${s.description.slice(0, 80)}`)
-        .join("\n");
-      const gapSummary =
-        result.dataGaps.length > 0 ? `Data Gaps: ${result.dataGaps.length} issues found` : "";
-      appendEvolutionLog(
-        `**Diagnose Result**\n` +
-          `Overall: ${result.overallScore.toFixed(3)} | ${result.run.passedCount}/${result.run.totalTestCases} passed\n` +
-          (weakSummary ? `Weaknesses:\n${weakSummary}\n` : "") +
-          (sugSummary ? `Top Suggestions:\n${sugSummary}\n` : "") +
-          (gapSummary ? `${gapSummary}\n` : "")
-      );
-    } catch {
-      /* best-effort logging */
-    }
+    logDiagnoseResult(result);
 
-    return {
-      success: true,
-      overallScore: result.overallScore,
-      passed: result.run.passedCount,
-      failed: result.run.failedCount,
-      total: result.run.totalTestCases,
-      weaknesses: result.weaknesses.map((w) => ({
-        category: w.category,
-        label: w.label,
-        score: w.score,
-        gap: w.gap,
-        failingTestCount: w.failingTests.length,
-        commonPatterns: w.commonPatterns,
-        weakSubComponents: w.weakSubComponents,
-      })),
-      suggestions: result.suggestions.map((s) => ({
-        category: s.category,
-        description: s.description,
-        targetFiles: s.targetFiles,
-        priority: s.priority,
-      })),
-      dataGaps: result.dataGaps.map((g) => ({
-        testCaseId: g.testCaseId,
-        type: g.type,
-        description: g.description,
-        field: g.field,
-        suggestion: g.suggestion,
-      })),
-      issuesCreated: result.issuesCreated,
-    };
+    return formatDiagnoseResponse(result);
   },
 };
 

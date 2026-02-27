@@ -159,7 +159,7 @@ export function printHeader(title: string, subtitle?: string): void {
  */
 export function printSection(title: string, icon?: string): void {
   console.log("");
-  console.log(`${icon ? icon + " " : ""}${c.bold(title)}`);
+  console.log(`${icon ? `${icon} ` : ""}${c.bold(title)}`);
   console.log(c.dim(box.h.repeat(50)));
 }
 
@@ -260,12 +260,12 @@ export class Spinner {
       this.interval = null;
     }
 
-    const icon =
-      status === "success"
-        ? c.green(icons.success)
-        : status === "error"
-          ? c.red(icons.error)
-          : c.yellow(icons.warning);
+    const iconMap: Record<string, string> = {
+      success: c.green(icons.success),
+      error: c.red(icons.error),
+      warning: c.yellow(icons.warning),
+    };
+    const icon = iconMap[status] ?? c.yellow(icons.warning);
     process.stdout.write(`\r  ${icon} ${this.message}\n`);
   }
 
@@ -337,7 +337,7 @@ export function formatRelativeTime(date: Date | string): string {
  */
 export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str;
-  return str.slice(0, maxLength - 3) + "...";
+  return `${str.slice(0, maxLength - 3)}...`;
 }
 
 /**

@@ -28,7 +28,9 @@ export type MemoryChunk = {
 export function ensureDir(dir: string): string {
   try {
     fsSync.mkdirSync(dir, { recursive: true });
-  } catch {}
+  } catch {
+    // ignore
+  }
   return dir;
 }
 
@@ -61,7 +63,7 @@ export function isMemoryPath(relPath: string): boolean {
   return normalized.startsWith("memory/");
 }
 
-async function walkDir(dir: string, files: string[]) {
+async function walkDir(dir: string, files: string[]): Promise<void> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
@@ -91,6 +93,7 @@ export async function listMemoryFiles(
   const altMemoryFile = path.join(workspaceDir, "memory.md");
   const memoryDir = path.join(workspaceDir, "memory");
 
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const addMarkdownFile = async (absPath: string) => {
     try {
       const stat = await fs.lstat(absPath);
@@ -101,7 +104,9 @@ export async function listMemoryFiles(
         return;
       }
       result.push(absPath);
-    } catch {}
+    } catch {
+      // ignore
+    }
   };
 
   await addMarkdownFile(memoryFile);
@@ -111,7 +116,9 @@ export async function listMemoryFiles(
     if (!dirStat.isSymbolicLink() && dirStat.isDirectory()) {
       await walkDir(memoryDir, result);
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
 
   const normalizedExtraPaths = normalizeExtraMemoryPaths(workspaceDir, extraPaths);
   if (normalizedExtraPaths.length > 0) {
@@ -128,7 +135,9 @@ export async function listMemoryFiles(
         if (stat.isFile() && inputPath.endsWith(".md")) {
           result.push(inputPath);
         }
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
   }
   if (result.length <= 1) {
@@ -140,7 +149,9 @@ export async function listMemoryFiles(
     let key = entry;
     try {
       key = await fs.realpath(entry);
-    } catch {}
+    } catch {
+      // ignore
+    }
     if (seen.has(key)) {
       continue;
     }
@@ -185,6 +196,7 @@ export function chunkMarkdown(
   let current: Array<{ line: string; lineNo: number }> = [];
   let currentChars = 0;
 
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const flush = () => {
     if (current.length === 0) {
       return;
@@ -205,6 +217,7 @@ export function chunkMarkdown(
     });
   };
 
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const carryOverlap = () => {
     if (overlapChars <= 0 || current.length === 0) {
       current = [];
@@ -330,7 +343,7 @@ export async function runWithConcurrency<T>(
 
   await Promise.allSettled(workers);
   if (firstError) {
-    throw firstError;
+    throw firstError instanceof Error ? firstError : new Error(String(firstError));
   }
   return results;
 }

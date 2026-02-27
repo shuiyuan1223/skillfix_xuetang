@@ -46,18 +46,22 @@ export function categoryToAgentTags(category: ToolCategory): string[] {
 }
 
 export class ToolRegistry {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private tools = new Map<string, PHATool<any>>();
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   register(tool: PHATool<any>): void {
     this.tools.set(tool.name, tool);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   registerAll(tools: PHATool<any>[]): void {
     for (const tool of tools) {
       this.register(tool);
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   get(name: string): PHATool<any> | undefined {
     return this.tools.get(name);
   }
@@ -66,10 +70,12 @@ export class ToolRegistry {
     return this.tools.has(name);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getAll(): PHATool<any>[] {
     return Array.from(this.tools.values());
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getByCategory(category: ToolCategory): PHATool<any>[] {
     return this.getAll().filter((t) => t.category === category);
   }
@@ -88,6 +94,7 @@ export class ToolRegistry {
     }
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await tool.execute(args as any);
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -121,10 +128,12 @@ export class ToolRegistry {
   // Agent Integration (auto-derive AgentTools via Type.Unsafe)
   // ===========================================================================
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toAgentTools(): AgentTool<any>[] {
     return this.getAll().map((tool) => this.toAgentTool(tool));
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toAgentToolsByCategories(categories: ToolCategory[]): AgentTool<any>[] {
     const set = new Set(categories);
     return this.getAll()
@@ -132,7 +141,9 @@ export class ToolRegistry {
       .map((t) => this.toAgentTool(t));
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private toAgentTool(tool: PHATool<any>): AgentTool<any> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const schema = Type.Unsafe<Record<string, unknown>>(tool.inputSchema as any);
 
     return {
@@ -145,6 +156,7 @@ export class ToolRegistry {
         params: Record<string, unknown>
       ): Promise<AgentToolResult<unknown>> => {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const result = await tool.execute(params as any);
           const text = JSON.stringify(result, null, 2);
           return {
@@ -206,8 +218,10 @@ export class ToolRegistry {
     const newRegistry = new ToolRegistry();
 
     // Copy all tools, replacing sessionBound health tools with bound versions
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const boundToolMap = new Map<string, { execute: (args: any) => Promise<unknown> }>();
     for (const t of Object.values(boundTools)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       boundToolMap.set((t as any).name, t as any);
     }
 
@@ -232,6 +246,7 @@ export class ToolRegistry {
     for (const tool of this.getAll()) {
       newRegistry.register({
         ...tool,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         execute: (args: any) => runWithUserUuid(uuid, () => tool.execute(args)),
       });
     }

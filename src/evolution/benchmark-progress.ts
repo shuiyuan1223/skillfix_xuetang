@@ -133,7 +133,7 @@ export function readAllBenchmarkProgress(): Record<string, BenchmarkProgressInfo
   // 1. Legacy single file (CLI)
   const legacy = readBenchmarkProgress();
   if (legacy) {
-    result["__cli__"] = legacy;
+    result.__cli__ = legacy;
   }
 
   // 2. Per-run files

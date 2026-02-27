@@ -1,0 +1,25 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "endTime": 1770335999999,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-temp-collector",
+          "samplePoints": [
+            {
+              "startTime": 1770249600000000000,
+              "endTime": 1770249660000000000,
+              "value": [{ "fieldName": "body_temperature", "floatValue": 36.5 }]
+            },
+            {
+              "startTime": 1770253200000000000,
+              "endTime": 1770253260000000000,
+              "value": [{ "fieldName": "body_temperature", "floatValue": 36.8 }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

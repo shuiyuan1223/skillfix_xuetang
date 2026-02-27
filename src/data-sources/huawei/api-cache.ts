@@ -31,7 +31,7 @@ function getCacheDir(userUuid?: string): string {
  */
 function ensureCacheDir(cacheDir: string): void {
   if (cacheDir && !fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.mkdirSync(cacheDir, { recursive: true, mode: 0o750 });
   }
 }
 
@@ -71,7 +71,7 @@ export function saveToFileCache(
     error,
   };
 
-  fs.writeFileSync(filepath, JSON.stringify(cacheData, null, 2));
+  fs.writeFileSync(filepath, JSON.stringify(cacheData, null, 2), { mode: 0o640 });
 }
 
 /**

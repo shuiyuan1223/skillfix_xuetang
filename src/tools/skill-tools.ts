@@ -32,6 +32,26 @@ export function getSkillsDir(): string {
 /**
  * Parse YAML frontmatter from SKILL.md
  */
+/** Try parsing as JSON, falling back to the raw string */
+function tryParseJsonOrString(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/** Parse a single YAML scalar value (string, boolean, number, inline JSON) */
+function parseYamlScalar(value: string): unknown {
+  if (value.startsWith('"') && value.endsWith('"')) return value.slice(1, -1);
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (!isNaN(Number(value))) return Number(value);
+  const trimmed = value.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return tryParseJsonOrString(value);
+  return value;
+}
+
 function parseFrontmatter(content: string): {
   frontmatter: Record<string, unknown>;
   body: string;
@@ -54,15 +74,10 @@ function parseFrontmatter(content: string): {
   for (const line of yamlStr.split("\n")) {
     if (inMultiline) {
       if (line.startsWith("  ") || line.trim() === "") {
-        multilineValue += line + "\n";
+        multilineValue += `${line}\n`;
         continue;
       } else {
-        // Try to parse as JSON if it looks like JSON
-        try {
-          frontmatter[currentKey] = JSON.parse(multilineValue.trim());
-        } catch {
-          frontmatter[currentKey] = multilineValue.trim();
-        }
+        frontmatter[currentKey] = tryParseJsonOrString(multilineValue.trim());
         inMultiline = false;
       }
     }
@@ -74,35 +89,14 @@ function parseFrontmatter(content: string): {
       if (value === "" || value === "|" || value === ">") {
         inMultiline = true;
         multilineValue = "";
-      } else if (value.startsWith('"') && value.endsWith('"')) {
-        frontmatter[key] = value.slice(1, -1);
-      } else if (value === "true") {
-        frontmatter[key] = true;
-      } else if (value === "false") {
-        frontmatter[key] = false;
-      } else if (!isNaN(Number(value))) {
-        frontmatter[key] = Number(value);
       } else {
-        // Check if it's inline JSON
-        if (value.trim().startsWith("{") || value.trim().startsWith("[")) {
-          try {
-            frontmatter[key] = JSON.parse(value);
-          } catch {
-            frontmatter[key] = value;
-          }
-        } else {
-          frontmatter[key] = value;
-        }
+        frontmatter[key] = parseYamlScalar(value);
       }
     }
   }
 
   if (inMultiline && currentKey) {
-    try {
-      frontmatter[currentKey] = JSON.parse(multilineValue.trim());
-    } catch {
-      frontmatter[currentKey] = multilineValue.trim();
-    }
+    frontmatter[currentKey] = tryParseJsonOrString(multilineValue.trim());
   }
 
   return { frontmatter, body: body.trim() };

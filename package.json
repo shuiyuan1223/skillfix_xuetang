@@ -60,6 +60,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "eslint-plugin-import-x": "^4.15.0",
     "@happy-dom/global-registrator": "^20.7.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",

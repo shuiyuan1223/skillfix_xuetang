@@ -24,183 +24,130 @@ import { createLogger } from "./logger.js";
 
 const log = createLogger("Migration");
 
+const GARBAGE_USER_DIRS = new Set(["anonymous", "test-user", "undefined", "null"]);
+
+/** Move a SQLite DB file (with optional WAL/SHM companions) */
+function moveDbFile(oldPath: string, newPath: string, label: string): void {
+  if (!existsSync(oldPath) || existsSync(newPath)) return;
+  try {
+    renameSync(oldPath, newPath);
+    for (const ext of ["-wal", "-shm"]) {
+      const walFile = oldPath + ext;
+      if (existsSync(walFile)) {
+        renameSync(walFile, newPath + ext);
+      }
+    }
+    log.info(`Moved ${label}`);
+  } catch (err) {
+    log.warn(`Failed to move ${label}`, { error: err });
+  }
+}
+
+/** Safely delete a single file */
+function safeUnlink(filePath: string, label: string): void {
+  if (!existsSync(filePath)) return;
+  try {
+    unlinkSync(filePath);
+    log.info(`Deleted ${label}`);
+  } catch (err) {
+    log.warn(`Failed to delete ${label}`, { error: err });
+  }
+}
+
+/** Safely delete a directory recursively */
+function safeRmDir(dirPath: string, label: string): void {
+  if (!existsSync(dirPath)) return;
+  try {
+    rmSync(dirPath, { recursive: true, force: true });
+    log.info(`Deleted ${label}`);
+  } catch (err) {
+    log.warn(`Failed to delete ${label}`, { error: err });
+  }
+}
+
+/** Clean up test/garbage user directories */
+function cleanupGarbageUserDirs(usersDir: string): void {
+  if (!existsSync(usersDir)) return;
+  try {
+    for (const entry of readdirSync(usersDir)) {
+      if (!GARBAGE_USER_DIRS.has(entry)) continue;
+      const entryPath = join(usersDir, entry);
+      if (!statSync(entryPath).isDirectory()) continue;
+      rmSync(entryPath, { recursive: true, force: true });
+      log.info(`Deleted garbage user dir: users/${entry}/`);
+    }
+  } catch (err) {
+    log.warn("Failed to clean up users/", { error: err });
+  }
+}
+
+/** Remove data/ directory if empty */
+function removeEmptyDataDir(projectRoot: string): void {
+  const dataDir = join(projectRoot, "data");
+  if (!existsSync(dataDir)) return;
+  try {
+    if (readdirSync(dataDir).length === 0) {
+      rmSync(dataDir, { recursive: true, force: true });
+      log.info("Deleted empty data/ directory");
+    }
+  } catch {
+    // Ignore — not critical
+  }
+}
+
 export function migrateStateDir(): void {
   const stateDir = getStateDir();
   const marker = join(stateDir, ".migrated-v2");
-
   if (existsSync(marker)) return;
 
   log.info("Running .pha/ directory migration to v2 layout...");
 
-  // 1. Create db/ directory
   const dbDir = join(stateDir, "db");
   mkdirSync(dbDir, { recursive: true });
 
-  // 2. Move data/pha.db → .pha/db/evolution.db
   const projectRoot = findProjectRoot();
-  const oldEvolutionDb = join(projectRoot, "data", "pha.db");
-  const newEvolutionDb = join(dbDir, "evolution.db");
-  if (existsSync(oldEvolutionDb) && !existsSync(newEvolutionDb)) {
-    try {
-      renameSync(oldEvolutionDb, newEvolutionDb);
-      // Also move WAL/SHM files if they exist
-      for (const ext of ["-wal", "-shm"]) {
-        const walFile = oldEvolutionDb + ext;
-        if (existsSync(walFile)) {
-          renameSync(walFile, newEvolutionDb + ext);
-        }
-      }
-      log.info("Moved data/pha.db → .pha/db/evolution.db");
-    } catch (err) {
-      log.warn("Failed to move data/pha.db", { error: err });
-    }
-  }
 
-  // 3. Move users.db → db/oauth.db
-  const oldUsersDb = join(stateDir, "users.db");
-  const newOauthDb = join(dbDir, "oauth.db");
-  if (existsSync(oldUsersDb) && !existsSync(newOauthDb)) {
-    try {
-      renameSync(oldUsersDb, newOauthDb);
-      for (const ext of ["-wal", "-shm"]) {
-        const walFile = oldUsersDb + ext;
-        if (existsSync(walFile)) {
-          renameSync(walFile, newOauthDb + ext);
-        }
-      }
-      log.info("Moved users.db → db/oauth.db");
-    } catch (err) {
-      log.warn("Failed to move users.db", { error: err });
-    }
-  }
+  // Move databases
+  moveDbFile(
+    join(projectRoot, "data", "pha.db"),
+    join(dbDir, "evolution.db"),
+    "data/pha.db → .pha/db/evolution.db"
+  );
+  moveDbFile(join(stateDir, "users.db"), join(dbDir, "oauth.db"), "users.db → db/oauth.db");
 
-  // 4. Delete memory.db (redundant — only had empty preferences)
-  for (const file of ["memory.db", "memory.db-wal", "memory.db-shm"]) {
-    const path = join(stateDir, file);
-    if (existsSync(path)) {
-      try {
-        unlinkSync(path);
-        log.info(`Deleted ${file}`);
-      } catch (err) {
-        log.warn(`Failed to delete ${file}`, { error: err });
-      }
-    }
+  // Delete redundant files
+  for (const f of ["memory.db", "memory.db-wal", "memory.db-shm"]) {
+    safeUnlink(join(stateDir, f), f);
   }
+  safeRmDir(join(stateDir, "vectors"), "vectors/");
 
-  // 5. Delete vectors/ (deprecated, replaced by per-user memory-index.db)
-  const vectorsDir = join(stateDir, "vectors");
-  if (existsSync(vectorsDir)) {
-    try {
-      rmSync(vectorsDir, { recursive: true, force: true });
-      log.info("Deleted vectors/");
-    } catch (err) {
-      log.warn("Failed to delete vectors/", { error: err });
-    }
-  }
-
-  // 6. Move system-agent/ → users/system/
-  const oldSystemAgent = join(stateDir, "system-agent");
-  const newSystemAgent = join(stateDir, "users", "system");
-  if (existsSync(oldSystemAgent) && !existsSync(newSystemAgent)) {
+  // Move system-agent → users/system
+  const oldSA = join(stateDir, "system-agent");
+  const newSA = join(stateDir, "users", "system");
+  if (existsSync(oldSA) && !existsSync(newSA)) {
     try {
       mkdirSync(join(stateDir, "users"), { recursive: true });
-      renameSync(oldSystemAgent, newSystemAgent);
+      renameSync(oldSA, newSA);
       log.info("Moved system-agent/ → users/system/");
     } catch (err) {
       log.warn("Failed to move system-agent/", { error: err });
     }
   }
 
-  // 7. Delete global api-cache/ (historical data, now per-user)
-  const globalApiCache = join(stateDir, "api-cache");
-  if (existsSync(globalApiCache)) {
-    try {
-      rmSync(globalApiCache, { recursive: true, force: true });
-      log.info("Deleted global api-cache/");
-    } catch (err) {
-      log.warn("Failed to delete api-cache/", { error: err });
-    }
+  // Delete deprecated files and dirs
+  safeRmDir(join(stateDir, "api-cache"), "global api-cache/");
+  safeUnlink(join(stateDir, "huawei-tokens.json"), "huawei-tokens.json");
+  for (const f of ["playground-state.json"]) {
+    safeUnlink(join(stateDir, f), f);
+  }
+  for (const d of ["screenshots", "ui-audit"]) {
+    safeRmDir(join(stateDir, d), `${d}/`);
   }
 
-  // 8. Delete huawei-tokens.json (now in db/oauth.db)
-  const oldTokenFile = join(stateDir, "huawei-tokens.json");
-  if (existsSync(oldTokenFile)) {
-    try {
-      unlinkSync(oldTokenFile);
-      log.info("Deleted huawei-tokens.json");
-    } catch (err) {
-      log.warn("Failed to delete huawei-tokens.json", { error: err });
-    }
-  }
+  // Clean up garbage user dirs and empty data/
+  cleanupGarbageUserDirs(join(stateDir, "users"));
+  removeEmptyDataDir(projectRoot);
 
-  // 9. Delete garbage files
-  const garbageFiles = ["playground-state.json"];
-  for (const file of garbageFiles) {
-    const path = join(stateDir, file);
-    if (existsSync(path)) {
-      try {
-        unlinkSync(path);
-        log.info(`Deleted ${file}`);
-      } catch (err) {
-        log.warn(`Failed to delete ${file}`, { error: err });
-      }
-    }
-  }
-
-  const garbageDirs = ["screenshots", "ui-audit"];
-  for (const dir of garbageDirs) {
-    const path = join(stateDir, dir);
-    if (existsSync(path)) {
-      try {
-        rmSync(path, { recursive: true, force: true });
-        log.info(`Deleted ${dir}/`);
-      } catch (err) {
-        log.warn(`Failed to delete ${dir}/`, { error: err });
-      }
-    }
-  }
-
-  // 10. Clean up test garbage directories under users/
-  const usersDir = join(stateDir, "users");
-  if (existsSync(usersDir)) {
-    try {
-      const entries = readdirSync(usersDir);
-      for (const entry of entries) {
-        const entryPath = join(usersDir, entry);
-        const stat = statSync(entryPath);
-        if (!stat.isDirectory()) continue;
-
-        // Remove test/garbage user dirs (but keep benchmark-*, system, and real user IDs)
-        if (
-          entry === "anonymous" ||
-          entry === "test-user" ||
-          entry === "undefined" ||
-          entry === "null"
-        ) {
-          rmSync(entryPath, { recursive: true, force: true });
-          log.info(`Deleted garbage user dir: users/${entry}/`);
-        }
-      }
-    } catch (err) {
-      log.warn("Failed to clean up users/", { error: err });
-    }
-  }
-
-  // 11. Remove empty data/ directory if it was left behind
-  const dataDir = join(projectRoot, "data");
-  if (existsSync(dataDir)) {
-    try {
-      const files = readdirSync(dataDir);
-      if (files.length === 0) {
-        rmSync(dataDir, { recursive: true, force: true });
-        log.info("Deleted empty data/ directory");
-      }
-    } catch {
-      // Ignore — not critical
-    }
-  }
-
-  // Write migration marker
   writeFileSync(marker, `migrated at ${new Date().toISOString()}\n`);
   log.info(".pha/ directory migration complete");
 }

@@ -34,6 +34,7 @@ export const getConfigTool: PHATool<{ section?: string }> = {
     const config = loadConfig();
     const section = args.section || "all";
 
+    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const maskKey = (key?: string) => (key ? `${key.slice(0, 6)}...${key.slice(-4)}` : undefined);
 
     if (section === "llm" || section === "all") {

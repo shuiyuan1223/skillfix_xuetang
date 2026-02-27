@@ -11,7 +11,7 @@
 export * from "./db.js";
 
 // User memory (profiles, health records, conversation history)
-export * from "./types.js";
+export type * from "./types.js";
 export * from "./memory-manager.js";
 export * from "./soul.js";
 export * from "./profile.js";

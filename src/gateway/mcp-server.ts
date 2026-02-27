@@ -34,6 +34,91 @@ const SERVER_INFO = {
 
 const PROTOCOL_VERSION = "2024-11-05";
 
+function makeResult(id: string | number | null, result: unknown): JsonRpcResponse {
+  return { jsonrpc: "2.0", id, result };
+}
+
+function makeError(id: string | number | null, code: number, message: string): JsonRpcResponse {
+  return { jsonrpc: "2.0", id, error: { code, message } };
+}
+
+function handleInitialize(id: string | number | null): JsonRpcResponse {
+  return makeResult(id, {
+    protocolVersion: PROTOCOL_VERSION,
+    capabilities: { tools: { listChanged: false } },
+    serverInfo: SERVER_INFO,
+  });
+}
+
+function handleNotificationsInitialized(id: string | number | null): JsonRpcResponse {
+  if (id !== null) {
+    return makeResult(id, {});
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return null as any;
+}
+
+async function handleToolsList(id: string | number | null): Promise<JsonRpcResponse> {
+  const localTools = globalRegistry.listTools();
+
+  let remoteToolDefs: Array<{ name: string; description: string; inputSchema: unknown }> = [];
+  try {
+    remoteToolDefs = (await getRemoteMCPToolDefinitions()).map((d) => ({
+      name: d.name,
+      description: d.description,
+      inputSchema: d.inputSchema || { type: "object", properties: {} },
+    }));
+  } catch {
+    // Remote tools unavailable
+  }
+
+  return makeResult(id, { tools: [...localTools, ...remoteToolDefs] });
+}
+
+async function handleToolsCall(
+  id: string | number | null,
+  params: Record<string, unknown> | undefined
+): Promise<JsonRpcResponse> {
+  const p = params as { name: string; arguments?: Record<string, unknown> } | undefined;
+  if (!p?.name) {
+    return makeError(id, -32602, "Missing tool name");
+  }
+
+  if (globalRegistry.has(p.name)) {
+    const result = await globalRegistry.callTool(p.name, p.arguments || {});
+    return makeResult(id, result);
+  }
+
+  try {
+    const remoteTools = await getRemoteMCPTools();
+    const remoteTool = remoteTools.find((t) => t.name === p.name);
+    if (remoteTool) {
+      const result = await remoteTool.execute("mcp-call", p.arguments || {});
+      const text = result.content?.[0];
+      const textStr =
+        typeof text === "object" && "text" in text ? text.text : JSON.stringify(result);
+      return makeResult(id, { content: [{ type: "text", text: textStr }] });
+    }
+  } catch {
+    // Remote tools unavailable
+  }
+
+  return makeError(id, -32602, `Unknown tool: ${p.name}`);
+}
+
+type McpMethodHandler = (
+  id: string | number | null,
+  params: Record<string, unknown> | undefined
+) => JsonRpcResponse | Promise<JsonRpcResponse>;
+
+const MCP_METHOD_HANDLERS: Record<string, McpMethodHandler> = {
+  initialize: (id) => handleInitialize(id),
+  "notifications/initialized": (id) => handleNotificationsInitialized(id),
+  "tools/list": (id) => handleToolsList(id),
+  "tools/call": (id, params) => handleToolsCall(id, params),
+  ping: (id) => makeResult(id, {}),
+};
+
 /**
  * Handle a single JSON-RPC 2.0 MCP request.
  */
@@ -41,128 +126,19 @@ export async function handleMCPRequest(body: unknown): Promise<JsonRpcResponse> 
   const req = body as JsonRpcRequest;
 
   if (!req.jsonrpc || req.jsonrpc !== "2.0" || !req.method) {
-    return {
-      jsonrpc: "2.0",
-      id: req?.id ?? null,
-      error: { code: -32600, message: "Invalid Request" },
-    };
+    return makeError(req?.id ?? null, -32600, "Invalid Request");
   }
 
   const id = req.id ?? null;
 
   try {
-    switch (req.method) {
-      case "initialize": {
-        return {
-          jsonrpc: "2.0",
-          id,
-          result: {
-            protocolVersion: PROTOCOL_VERSION,
-            capabilities: {
-              tools: { listChanged: false },
-            },
-            serverInfo: SERVER_INFO,
-          },
-        };
-      }
-
-      case "notifications/initialized": {
-        if (id !== null) {
-          return { jsonrpc: "2.0", id, result: {} };
-        }
-        return null as any;
-      }
-
-      case "tools/list": {
-        // Local tools from registry
-        const localTools = globalRegistry.listTools();
-
-        // Remote tools (lazy load)
-        let remoteToolDefs: Array<{ name: string; description: string; inputSchema: unknown }> = [];
-        try {
-          remoteToolDefs = (await getRemoteMCPToolDefinitions()).map((d) => ({
-            name: d.name,
-            description: d.description,
-            inputSchema: d.inputSchema || { type: "object", properties: {} },
-          }));
-        } catch {
-          // Remote tools unavailable
-        }
-
-        return {
-          jsonrpc: "2.0",
-          id,
-          result: { tools: [...localTools, ...remoteToolDefs] },
-        };
-      }
-
-      case "tools/call": {
-        const params = req.params as
-          | { name: string; arguments?: Record<string, unknown> }
-          | undefined;
-        if (!params?.name) {
-          return {
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32602, message: "Missing tool name" },
-          };
-        }
-
-        // Try local registry first
-        if (globalRegistry.has(params.name)) {
-          const result = await globalRegistry.callTool(params.name, params.arguments || {});
-          return { jsonrpc: "2.0", id, result };
-        }
-
-        // Try remote tools
-        try {
-          const remoteTools = await getRemoteMCPTools();
-          const remoteTool = remoteTools.find((t) => t.name === params.name);
-          if (remoteTool) {
-            const result = await remoteTool.execute("mcp-call", params.arguments || {});
-            const text = result.content?.[0];
-            const textStr =
-              typeof text === "object" && "text" in text ? text.text : JSON.stringify(result);
-            return {
-              jsonrpc: "2.0",
-              id,
-              result: {
-                content: [{ type: "text", text: textStr }],
-              },
-            };
-          }
-        } catch {
-          // Remote tools unavailable
-        }
-
-        return {
-          jsonrpc: "2.0",
-          id,
-          error: { code: -32602, message: `Unknown tool: ${params.name}` },
-        };
-      }
-
-      case "ping": {
-        return { jsonrpc: "2.0", id, result: {} };
-      }
-
-      default: {
-        return {
-          jsonrpc: "2.0",
-          id,
-          error: { code: -32601, message: `Method not found: ${req.method}` },
-        };
-      }
+    const handler = MCP_METHOD_HANDLERS[req.method];
+    if (handler) {
+      return await handler(id, req.params);
     }
+    return makeError(id, -32601, `Method not found: ${req.method}`);
   } catch (error) {
     log.error("MCP request failed", { method: req.method, error });
-    return {
-      jsonrpc: "2.0",
-      id,
-      error: {
-        code: -32603,
-        message: error instanceof Error ? error.message : String(error),
-      },
-    };
+    return makeError(id, -32603, error instanceof Error ? error.message : String(error));
   }
 }

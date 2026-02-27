@@ -33,6 +33,7 @@ import type {
 import type { PHATool } from "./types.js";
 
 function genId(prefix: string): string {
+  // eslint-disable-next-line no-restricted-syntax
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -565,6 +566,7 @@ const deleteCalendarEventTool: PHATool<DeleteCalendarEventParams> = {
 // Export
 // ============================================================================
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const proactiveTools: PHATool<any>[] = [
   createRecommendationTool,
   listRecommendationsTool,

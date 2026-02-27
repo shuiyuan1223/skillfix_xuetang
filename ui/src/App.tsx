@@ -10,6 +10,9 @@ import { A2UIRenderer } from "./components/a2ui/A2UIRenderer";
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Gateway basePath injected by server (empty string when no prefix configured) */
+const BASE_PATH = (window as any).__PHA_BASE_PATH__ || "";
+
 function setUserIdCookie(userId: string): void {
   const expires = new Date();
   expires.setFullYear(expires.getFullYear() + 1);
@@ -44,7 +47,7 @@ async function postAction(
   handleMessage: (msg: WSMessage) => void,
 ): Promise<void> {
   try {
-    const res = await fetch("/api/a2ui/action", {
+    const res = await fetch(`${BASE_PATH}/api/a2ui/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -101,6 +104,7 @@ export function App() {
   const isAutoScrollingRef = useRef(false);
   const extensionDetectedRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
+  const lastViewRef = useRef<string | null>(null);
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
   const handleMessageRef = useRef<(msg: WSMessage) => void>(() => {});
   const pendingSurface = useRef(new Map<string, A2UIComponent[]>());
@@ -312,7 +316,7 @@ export function App() {
 
     const uuid = uidRef.current || "anonymous";
 
-    fetch("/api/ag-ui", {
+    fetch(`${BASE_PATH}/api/ag-ui`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({ thread_id: uuid, messages: [{ role: "user", content }] }),
@@ -371,7 +375,7 @@ export function App() {
     sendActionRaw("show_toast", { message: "Opening authorization page...", variant: "info" });
 
     try {
-      const urlResponse = await fetch("/auth/huawei/get-auth-url");
+      const urlResponse = await fetch(`${BASE_PATH}/auth/huawei/get-auth-url`);
       if (!urlResponse.ok) {
         const text = await urlResponse.text();
         console.error("[OAuth] get-auth-url failed:", urlResponse.status, text.slice(0, 200));
@@ -387,7 +391,7 @@ export function App() {
       console.log("[OAuth] Extension result:", result);
 
       if (result.success && result.code) {
-        const exchangeResponse = await fetch("/auth/huawei/exchange", {
+        const exchangeResponse = await fetch(`${BASE_PATH}/auth/huawei/exchange`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code: result.code, uuid: uidRef.current }),
@@ -425,7 +429,7 @@ export function App() {
     sendActionRaw("show_toast", { message: "Launching browser for authentication...", variant: "info" });
 
     try {
-      const response = await fetch("/auth/huawei/mcp-flow", {
+      const response = await fetch(`${BASE_PATH}/auth/huawei/mcp-flow`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uuid: uidRef.current }),
@@ -600,6 +604,7 @@ export function App() {
   );
 
   const sendNavigate = useCallback((view: string) => {
+    lastViewRef.current = view;
     setPageKey((k) => k + 1);
 
     // Close mobile sidebar with animation
@@ -814,10 +819,10 @@ export function App() {
     try {
       // 1. HTTP init — get session + initial page state
       const uuid = uidRef.current;
-      const initRes = await fetch("/api/a2ui/init", {
+      const initRes = await fetch(`${BASE_PATH}/api/a2ui/init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uuid }),
+        body: JSON.stringify({ uuid, view: lastViewRef.current }),
       });
 
       if (!initRes.ok) {
@@ -841,7 +846,7 @@ export function App() {
       setConnected(true);
 
       // 2. SSE events — long-lived connection for server push
-      const es = new EventSource(`/api/a2ui/events?sessionId=${sessionId}`);
+      const es = new EventSource(`${BASE_PATH}/api/a2ui/events?sessionId=${sessionId}`);
       eventSourceRef.current = es;
 
       es.onmessage = (event) => {

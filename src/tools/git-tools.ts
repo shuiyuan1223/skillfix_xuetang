@@ -6,7 +6,6 @@
  */
 
 import {
-  getProjectRoot,
   getGitStatusPorcelain,
   getGitLog,
   getGitDiffContent,
@@ -19,7 +18,6 @@ import {
   createNextVersion,
   mergeVersion,
   abandonVersion,
-  removeWorktree,
 } from "../evolution/version-manager.js";
 import type { PHATool } from "./types.js";
 

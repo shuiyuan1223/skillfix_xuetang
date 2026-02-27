@@ -11,6 +11,7 @@ export const zhCN: LocaleMessages = {
     sleep: "睡眠",
     activity: "运动",
     plans: "计划与提醒",
+    experiment: "实验",
     memory: "记忆",
     prompts: "提示词",
     skills: "技能",
@@ -325,7 +326,7 @@ export const zhCN: LocaleMessages = {
     retry: "重试",
     retryStep: "重跑当前步骤",
     rerunQuick: "重跑 Quick (5)",
-    rerunFull: "重跑 Full (16)",
+    rerunFull: "重跑 Full (19)",
     // Auto-evolve
     autoEvolve: "自动进化",
     autoEvolveDesc: "使用 Claude Code 自动优化薄弱分类",
@@ -409,7 +410,7 @@ export const zhCN: LocaleMessages = {
     latestRun: "最新运行",
     bestScoresAllTime: "历史最佳",
     bestPerVersion: "各版本最佳",
-    // SHARP 2.0
+    // SHARP 3.0
     sharpSafety: "安全性",
     sharpUsefulness: "实用性",
     sharpAccuracy: "准确性",
@@ -425,7 +426,7 @@ export const zhCN: LocaleMessages = {
     // Arena dashboard
     selectRunsForComparison: "选择对比的运行记录",
     categoriesMode: "5 类别",
-    criteriaMode: "16 准则",
+    criteriaMode: "19 准则",
     overallScores: "总体分数",
     categoryBreakdown: "分类明细",
     clearSelection: "清除选择",
@@ -494,6 +495,10 @@ export const zhCN: LocaleMessages = {
     memoryFileLines: "行数",
     memoryFilePreview: "预览",
     memoryEmptyFile: "（空文件）",
+    logDate: "日期",
+    logDetail: "对话详情",
+    backToLogs: "← 返回日志列表",
+    memorySummaryEmpty: "Agent 尚未积累长期记忆，对话中的关键信息会逐步记录在这里。",
   },
 
   integrations: {
@@ -754,6 +759,17 @@ export const zhCN: LocaleMessages = {
     placeholder: "输入健康问题...",
     thinking: "思考中",
     searching: "搜索中",
+  },
+
+  experiment: {
+    refresh: "刷新数据",
+    lastUpdated: "最后更新",
+    viewDashboard: "查看仪表盘",
+    widgets: "个组件",
+    sections: "个分区",
+    dashboardCreated: "仪表盘已创建",
+    empty: "还没有实验仪表盘",
+    emptyHint: "在聊天中让我帮你创建一个",
   },
 
   auth: {

@@ -15,7 +15,6 @@ import {
   PROVIDER_CONFIGS,
   type LLMProvider,
   type PHAConfig,
-  type EmbeddingConfig,
 } from "../utils/config.js";
 import { c, icons } from "../utils/cli-ui.js";
 import { HuaweiAuth, tokenStore } from "../data-sources/huawei/index.js";
@@ -79,7 +78,7 @@ async function setupHuaweiHealth(config: PHAConfig): Promise<boolean> {
         p.log.success("Already authorized");
         return true;
       }
-      return await authorizeHuawei(config);
+      return authorizeHuawei(config);
     }
   }
 
@@ -114,7 +113,7 @@ async function setupHuaweiHealth(config: PHAConfig): Promise<boolean> {
   };
   p.log.success("Credentials saved");
 
-  return await authorizeHuawei(config);
+  return authorizeHuawei(config);
 }
 
 /**
@@ -353,166 +352,298 @@ async function editConfig(config: PHAConfig): Promise<void> {
   }
 }
 
+async function editProvider(config: PHAConfig): Promise<void> {
+  const providerOptions = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
+    value: key,
+    label: cfg.name,
+    hint: cfg.hint,
+  }));
+  const newProvider = await p.select({
+    message: "Select LLM provider",
+    options: providerOptions,
+    initialValue: config.llm.provider,
+  });
+  handleCancel(newProvider);
+
+  config.llm.provider = newProvider as LLMProvider;
+  const providerCfg = PROVIDER_CONFIGS[newProvider as LLMProvider];
+  if (providerCfg.baseUrl) config.llm.baseUrl = providerCfg.baseUrl;
+  else delete config.llm.baseUrl;
+
+  const envKey = process.env[providerCfg.envVar];
+  if (!envKey) {
+    if (KEY_URLS[newProvider as string])
+      p.note(`Get your API key from:\n${KEY_URLS[newProvider as string]}`, "API Key");
+    const apiKey = await p.password({ message: `Enter ${providerCfg.name} API key` });
+    handleCancel(apiKey);
+    if (apiKey) config.llm.apiKey = apiKey as string;
+  }
+
+  config.llm.modelId = providerCfg.defaultModel;
+  if (!config.models) config.models = { providers: {} };
+  const pk = newProvider as string;
+  if (!config.models.providers[pk]) config.models.providers[pk] = { models: [] };
+  if (config.llm.apiKey) config.models.providers[pk].apiKey = config.llm.apiKey;
+  if (config.llm.baseUrl) config.models.providers[pk].baseUrl = config.llm.baseUrl;
+  const modelName = config.llm.modelId || providerCfg.defaultModel;
+  if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
+    config.models.providers[pk].models.push({ name: modelName, model: modelName });
+  }
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.pha = `${pk}/${modelName}`;
+  p.log.success(`Provider: ${providerCfg.name}, Model: ${config.llm.modelId}`);
+}
+
+async function editModel(config: PHAConfig): Promise<void> {
+  const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
+  const defaultModel = providerCfg?.defaultModel || "";
+  const newModel = await p.text({
+    message: "Model ID",
+    placeholder: defaultModel,
+    initialValue: config.llm.modelId || defaultModel,
+  });
+  handleCancel(newModel);
+
+  config.llm.modelId = (newModel as string) || defaultModel;
+  const modelName = config.llm.modelId;
+  const pk = config.llm.provider;
+  if (config.models?.providers?.[pk]) {
+    if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
+      config.models.providers[pk].models.push({ name: modelName, model: modelName });
+    }
+    if (!config.orchestrator) config.orchestrator = {};
+    config.orchestrator.pha = `${pk}/${modelName}`;
+  }
+  p.log.success(`Model: ${config.llm.modelId}`);
+}
+
+async function editApiKey(config: PHAConfig): Promise<void> {
+  const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
+  if (KEY_URLS[config.llm.provider]) {
+    p.note(`Get your API key from:\n${KEY_URLS[config.llm.provider]}`, "API Key");
+  }
+  const apiKey = await p.password({
+    message: `Enter ${providerCfg?.name || config.llm.provider} API key`,
+  });
+  handleCancel(apiKey);
+  if (apiKey) {
+    config.llm.apiKey = apiKey as string;
+    const pk = config.llm.provider;
+    if (config.models?.providers?.[pk]) config.models.providers[pk].apiKey = apiKey as string;
+    p.log.success("API key updated");
+  }
+}
+
+async function editPort(config: PHAConfig): Promise<void> {
+  const portStr = await p.text({
+    message: "Gateway port",
+    initialValue: String(config.gateway.port),
+    validate: (value) => {
+      const num = parseInt(value || "", 10);
+      if (isNaN(num) || num < 1 || num > 65535) return "Please enter a valid port number (1-65535)";
+      return undefined;
+    },
+  });
+  handleCancel(portStr);
+  config.gateway.port = parseInt(portStr as string, 10);
+  p.log.success(`Port: ${config.gateway.port}`);
+}
+
+async function editDataSource(config: PHAConfig): Promise<void> {
+  const newSource = await p.select({
+    message: "Select health data source",
+    options: [
+      { value: "mock", label: "Mock Data", hint: "For development/testing" },
+      { value: "huawei", label: "Huawei Health Kit", hint: "HarmonyOS/Android" },
+      { value: "apple", label: "Apple HealthKit", hint: "iOS/macOS (not implemented)" },
+    ],
+    initialValue: config.dataSources.type,
+  });
+  handleCancel(newSource);
+  if (newSource === "huawei") {
+    const success = await setupHuaweiHealth(config);
+    if (success) config.dataSources.type = "huawei";
+  } else {
+    config.dataSources.type = newSource as "mock" | "huawei" | "apple";
+  }
+  p.log.success(`Data source: ${config.dataSources.type}`);
+}
+
+const editHandlers: Record<string, (config: PHAConfig) => Promise<void>> = {
+  provider: editProvider,
+  model: editModel,
+  apikey: editApiKey,
+  port: editPort,
+  datasource: editDataSource,
+  embedding: setupEmbedding,
+};
+
 /**
  * Handle specific config edit
  */
 async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
-  switch (choice) {
-    case "provider": {
-      const providerOptions = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
-        value: key,
-        label: cfg.name,
-        hint: cfg.hint,
-      }));
+  const handler = editHandlers[choice];
+  if (handler) await handler(config);
+}
 
-      const newProvider = await p.select({
-        message: "Select LLM provider",
-        options: providerOptions,
-        initialValue: config.llm.provider,
-      });
-      handleCancel(newProvider);
+/** Wizard Step 1: select LLM provider, API key, model */
+async function wizardLLMProvider(
+  config: PHAConfig
+): Promise<(typeof PROVIDER_CONFIGS)[LLMProvider]> {
+  p.log.step("Step 1/4: LLM Provider");
 
-      config.llm.provider = newProvider as LLMProvider;
-      const providerCfg = PROVIDER_CONFIGS[newProvider as LLMProvider];
-
-      if (providerCfg.baseUrl) {
-        config.llm.baseUrl = providerCfg.baseUrl;
-      } else {
-        delete config.llm.baseUrl;
-      }
-
-      // Prompt for API key if not in env
-      const envKey = process.env[providerCfg.envVar];
-      if (!envKey) {
-        if (KEY_URLS[newProvider as string]) {
-          p.note(`Get your API key from:\n${KEY_URLS[newProvider as string]}`, "API Key");
-        }
-
-        const apiKey = await p.password({
-          message: `Enter ${providerCfg.name} API key`,
-        });
-        handleCancel(apiKey);
-
-        if (apiKey) {
-          config.llm.apiKey = apiKey as string;
-        }
-      }
-
-      config.llm.modelId = providerCfg.defaultModel;
-      // Sync to model repository
-      if (!config.models) config.models = { providers: {} };
-      const pk = newProvider as string;
-      if (!config.models.providers[pk]) config.models.providers[pk] = { models: [] };
-      if (config.llm.apiKey) config.models.providers[pk].apiKey = config.llm.apiKey;
-      if (config.llm.baseUrl) config.models.providers[pk].baseUrl = config.llm.baseUrl;
-      const modelName = config.llm.modelId || providerCfg.defaultModel;
-      if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
-        config.models.providers[pk].models.push({ name: modelName, model: modelName });
-      }
-      if (!config.orchestrator) config.orchestrator = {};
-      config.orchestrator.pha = `${pk}/${modelName}`;
-      p.log.success(`Provider: ${providerCfg.name}, Model: ${config.llm.modelId}`);
-      break;
-    }
-
-    case "model": {
-      const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
-      const defaultModel = providerCfg?.defaultModel || "";
-
-      const newModel = await p.text({
-        message: "Model ID",
-        placeholder: defaultModel,
-        initialValue: config.llm.modelId || defaultModel,
-      });
-      handleCancel(newModel);
-
-      config.llm.modelId = (newModel as string) || defaultModel;
-      // Sync to model repository
-      const modelName = config.llm.modelId;
-      const pk = config.llm.provider;
-      if (config.models?.providers?.[pk]) {
-        if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
-          config.models.providers[pk].models.push({ name: modelName, model: modelName });
-        }
-        if (!config.orchestrator) config.orchestrator = {};
-        config.orchestrator.pha = `${pk}/${modelName}`;
-      }
-      p.log.success(`Model: ${config.llm.modelId}`);
-      break;
-    }
-
-    case "apikey": {
-      const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
-
-      if (KEY_URLS[config.llm.provider]) {
-        p.note(`Get your API key from:\n${KEY_URLS[config.llm.provider]}`, "API Key");
-      }
-
-      const apiKey = await p.password({
-        message: `Enter ${providerCfg?.name || config.llm.provider} API key`,
-      });
-      handleCancel(apiKey);
-
-      if (apiKey) {
-        config.llm.apiKey = apiKey as string;
-        // Sync to model repository
-        const pk = config.llm.provider;
-        if (config.models?.providers?.[pk]) {
-          config.models.providers[pk].apiKey = apiKey as string;
-        }
-        p.log.success("API key updated");
-      }
-      break;
-    }
-
-    case "port": {
-      const portStr = await p.text({
-        message: "Gateway port",
-        initialValue: String(config.gateway.port),
-        validate: (value) => {
-          const num = parseInt(value || "", 10);
-          if (isNaN(num) || num < 1 || num > 65535) {
-            return "Please enter a valid port number (1-65535)";
-          }
-          return undefined;
-        },
-      });
-      handleCancel(portStr);
-
-      config.gateway.port = parseInt(portStr as string, 10);
-      p.log.success(`Port: ${config.gateway.port}`);
-      break;
-    }
-
-    case "datasource": {
-      const newSource = await p.select({
-        message: "Select health data source",
-        options: [
-          { value: "mock", label: "Mock Data", hint: "For development/testing" },
-          { value: "huawei", label: "Huawei Health Kit", hint: "HarmonyOS/Android" },
-          { value: "apple", label: "Apple HealthKit", hint: "iOS/macOS (not implemented)" },
-        ],
-        initialValue: config.dataSources.type,
-      });
-      handleCancel(newSource);
-
-      if (newSource === "huawei") {
-        const success = await setupHuaweiHealth(config);
-        if (success) {
-          config.dataSources.type = "huawei";
-        }
-      } else {
-        config.dataSources.type = newSource as "mock" | "huawei" | "apple";
-      }
-      p.log.success(`Data source: ${config.dataSources.type}`);
-      break;
-    }
-
-    case "embedding": {
-      await setupEmbedding(config);
-      break;
-    }
+  const detectedProviders: string[] = [];
+  for (const cfg of Object.values(PROVIDER_CONFIGS)) {
+    if (process.env[cfg.envVar]) detectedProviders.push(`${c.green("\u2713")} Found ${cfg.envVar}`);
   }
+  if (detectedProviders.length > 0) p.log.info(detectedProviders.join("\n"));
+  else p.log.warn("No API keys found in environment");
+
+  const providerOptions = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
+    value: key,
+    label: cfg.name,
+    hint: cfg.hint,
+  }));
+  const selectedProvider = await p.select({
+    message: "Select LLM provider",
+    options: providerOptions,
+  });
+  handleCancel(selectedProvider);
+
+  config.llm.provider = selectedProvider as LLMProvider;
+  const providerCfg = PROVIDER_CONFIGS[selectedProvider as LLMProvider];
+
+  let apiKey = process.env[providerCfg.envVar];
+  if (apiKey) {
+    const useExisting = await p.confirm({
+      message: `Use existing ${providerCfg.envVar}? (${formatApiKeyPreview(apiKey)})`,
+      initialValue: true,
+    });
+    handleCancel(useExisting);
+    if (!useExisting) apiKey = undefined;
+  }
+  if (!apiKey) {
+    if (KEY_URLS[selectedProvider as string])
+      p.note(`Get your API key from:\n${KEY_URLS[selectedProvider as string]}`, "API Key");
+    const newKey = await p.password({ message: `Enter ${providerCfg.name} API key` });
+    handleCancel(newKey);
+    if (newKey) config.llm.apiKey = newKey as string;
+  } else {
+    config.llm.apiKey = apiKey;
+  }
+
+  if (providerCfg.baseUrl) config.llm.baseUrl = providerCfg.baseUrl;
+
+  const model = await p.text({
+    message: "Model ID",
+    placeholder: providerCfg.defaultModel,
+    initialValue: providerCfg.defaultModel,
+  });
+  handleCancel(model);
+  config.llm.modelId = (model as string) || providerCfg.defaultModel;
+
+  return providerCfg;
+}
+
+/** Wizard Step 2: gateway port and auto-start */
+async function wizardGateway(config: PHAConfig): Promise<void> {
+  p.log.step("Step 2/4: Gateway");
+  const port = await p.text({
+    message: "Gateway port",
+    initialValue: "8000",
+    validate: (value) => {
+      const num = parseInt(value || "", 10);
+      return isNaN(num) || num < 1 || num > 65535
+        ? "Please enter a valid port number (1-65535)"
+        : undefined;
+    },
+  });
+  handleCancel(port);
+  config.gateway.port = parseInt(port as string, 10);
+
+  const autoStart = await p.confirm({
+    message: "Auto-start gateway on boot?",
+    initialValue: false,
+  });
+  handleCancel(autoStart);
+  config.gateway.autoStart = autoStart as boolean;
+}
+
+/** Wizard Step 3: health data source */
+async function wizardHealthData(config: PHAConfig): Promise<void> {
+  p.log.step("Step 3/4: Health Data");
+  const dataSource = await p.select({
+    message: "Select health data source",
+    options: [
+      { value: "mock", label: "Mock Data", hint: "For development/testing" },
+      { value: "huawei", label: "Huawei Health Kit", hint: "HarmonyOS/Android" },
+      { value: "apple", label: "Apple HealthKit", hint: "iOS/macOS (not implemented)" },
+    ],
+  });
+  handleCancel(dataSource);
+  if (dataSource === "huawei") {
+    if (await setupHuaweiHealth(config)) config.dataSources.type = "huawei";
+  } else {
+    config.dataSources.type = dataSource as "mock" | "huawei" | "apple";
+  }
+}
+
+/** Wizard Step 4: embedding/vector search */
+async function wizardEmbedding(config: PHAConfig): Promise<void> {
+  p.log.step("Step 4/4: Memory & Vector Search");
+  if (config.llm.provider === "openrouter") {
+    const enableEmbedding = await p.confirm({
+      message: "Enable vector search for memory? (uses OpenRouter embeddings)",
+      initialValue: true,
+    });
+    handleCancel(enableEmbedding);
+    config.embedding = enableEmbedding
+      ? { enabled: true, model: "openai/text-embedding-3-small" }
+      : { enabled: false };
+    if (enableEmbedding) p.log.success("Vector search enabled (text-embedding-3-small)");
+  } else {
+    p.note(
+      [
+        "Vector search requires OpenRouter API for embeddings.",
+        "You can enable it later via 'pha onboard'.",
+      ].join("\n"),
+      "Vector Search"
+    );
+    config.embedding = { enabled: false };
+  }
+}
+
+/** Populate unified model repository from wizard selections */
+function populateModelRepository(
+  config: PHAConfig,
+  providerCfg: (typeof PROVIDER_CONFIGS)[LLMProvider]
+): void {
+  const providerKey = config.llm.provider;
+  const modelEntry = {
+    name: config.llm.modelId || providerCfg.defaultModel,
+    model: config.llm.modelId || providerCfg.defaultModel,
+  };
+  const providerModels = [modelEntry];
+  if (config.embedding?.enabled && config.embedding.model) {
+    const embModelId = config.embedding.model;
+    const embParts = embModelId.split("/");
+    const embName = embParts[embParts.length - 1];
+    if (!providerModels.find((m) => m.name === embName))
+      providerModels.push({ name: embName, model: embModelId });
+    if (!config.orchestrator) config.orchestrator = {};
+    config.orchestrator.embedding = `${providerKey}/${embName}`;
+  }
+  config.models = {
+    providers: {
+      [providerKey]: {
+        ...(config.llm.baseUrl ? { baseUrl: config.llm.baseUrl } : {}),
+        ...(config.llm.apiKey ? { apiKey: config.llm.apiKey } : {}),
+        models: providerModels,
+      },
+    },
+  };
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.pha = `${providerKey}/${modelEntry.name}`;
 }
 
 /**
@@ -530,195 +661,14 @@ async function runFullWizard(): Promise<void> {
 
   p.log.info("User ID will be set after Huawei OAuth authorization");
 
-  // Step 1: LLM Provider
-  p.log.step("Step 1/4: LLM Provider");
+  const providerCfg = await wizardLLMProvider(config);
+  await wizardGateway(config);
+  await wizardHealthData(config);
+  await wizardEmbedding(config);
+  populateModelRepository(config, providerCfg);
 
-  // Check for existing API keys in environment
-  const detectedProviders: string[] = [];
-  for (const cfg of Object.values(PROVIDER_CONFIGS)) {
-    if (process.env[cfg.envVar]) {
-      detectedProviders.push(`${c.green("✓")} Found ${cfg.envVar}`);
-    }
-  }
-
-  if (detectedProviders.length > 0) {
-    p.log.info(detectedProviders.join("\n"));
-  } else {
-    p.log.warn("No API keys found in environment");
-  }
-
-  const providerOptions = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
-    value: key,
-    label: cfg.name,
-    hint: cfg.hint,
-  }));
-
-  const selectedProvider = await p.select({
-    message: "Select LLM provider",
-    options: providerOptions,
-  });
-  handleCancel(selectedProvider);
-
-  config.llm.provider = selectedProvider as LLMProvider;
-  const providerCfg = PROVIDER_CONFIGS[selectedProvider as LLMProvider];
-
-  // API Key
-  let apiKey = process.env[providerCfg.envVar];
-
-  if (apiKey) {
-    const useExisting = await p.confirm({
-      message: `Use existing ${providerCfg.envVar}? (${formatApiKeyPreview(apiKey)})`,
-      initialValue: true,
-    });
-    handleCancel(useExisting);
-
-    if (!useExisting) {
-      apiKey = undefined;
-    }
-  }
-
-  if (!apiKey) {
-    if (KEY_URLS[selectedProvider as string]) {
-      p.note(`Get your API key from:\n${KEY_URLS[selectedProvider as string]}`, "API Key");
-    }
-
-    const newKey = await p.password({
-      message: `Enter ${providerCfg.name} API key`,
-    });
-    handleCancel(newKey);
-
-    if (newKey) {
-      config.llm.apiKey = newKey as string;
-    }
-  } else {
-    config.llm.apiKey = apiKey;
-  }
-
-  // Base URL
-  if (providerCfg.baseUrl) {
-    config.llm.baseUrl = providerCfg.baseUrl;
-  }
-
-  // Model
-  const model = await p.text({
-    message: "Model ID",
-    placeholder: providerCfg.defaultModel,
-    initialValue: providerCfg.defaultModel,
-  });
-  handleCancel(model);
-  config.llm.modelId = (model as string) || providerCfg.defaultModel;
-
-  // Step 2: Gateway
-  p.log.step("Step 2/4: Gateway");
-
-  const port = await p.text({
-    message: "Gateway port",
-    initialValue: "8000",
-    validate: (value) => {
-      const num = parseInt(value || "", 10);
-      if (isNaN(num) || num < 1 || num > 65535) {
-        return "Please enter a valid port number (1-65535)";
-      }
-      return undefined;
-    },
-  });
-  handleCancel(port);
-  config.gateway.port = parseInt(port as string, 10);
-
-  const autoStart = await p.confirm({
-    message: "Auto-start gateway on boot?",
-    initialValue: false,
-  });
-  handleCancel(autoStart);
-  config.gateway.autoStart = autoStart as boolean;
-
-  // Step 3: Health Data
-  p.log.step("Step 3/4: Health Data");
-
-  const dataSource = await p.select({
-    message: "Select health data source",
-    options: [
-      { value: "mock", label: "Mock Data", hint: "For development/testing" },
-      { value: "huawei", label: "Huawei Health Kit", hint: "HarmonyOS/Android" },
-      { value: "apple", label: "Apple HealthKit", hint: "iOS/macOS (not implemented)" },
-    ],
-  });
-  handleCancel(dataSource);
-
-  if (dataSource === "huawei") {
-    const success = await setupHuaweiHealth(config);
-    if (success) {
-      config.dataSources.type = "huawei";
-    }
-  } else {
-    config.dataSources.type = dataSource as "mock" | "huawei" | "apple";
-  }
-
-  // Step 4: Embedding/Vector Search
-  p.log.step("Step 4/4: Memory & Vector Search");
-
-  // Auto-enable if using OpenRouter (can use same API key)
-  if (config.llm.provider === "openrouter") {
-    const enableEmbedding = await p.confirm({
-      message: "Enable vector search for memory? (uses OpenRouter embeddings)",
-      initialValue: true,
-    });
-    handleCancel(enableEmbedding);
-
-    if (enableEmbedding) {
-      config.embedding = {
-        enabled: true,
-        model: "openai/text-embedding-3-small",
-      };
-      p.log.success("Vector search enabled (text-embedding-3-small)");
-    } else {
-      config.embedding = { enabled: false };
-    }
-  } else {
-    p.note(
-      [
-        "Vector search requires OpenRouter API for embeddings.",
-        "You can enable it later via 'pha onboard'.",
-      ].join("\n"),
-      "Vector Search"
-    );
-    config.embedding = { enabled: false };
-  }
-
-  // Populate unified model repository from wizard selections
-  const providerKey = config.llm.provider;
-  const modelEntry = {
-    name: config.llm.modelId || providerCfg.defaultModel,
-    model: config.llm.modelId || providerCfg.defaultModel,
-  };
-  const providerModels = [modelEntry];
-  // Add embedding model to provider if enabled
-  if (config.embedding?.enabled && config.embedding.model) {
-    const embModelId = config.embedding.model;
-    const embParts = embModelId.split("/");
-    const embName = embParts[embParts.length - 1];
-    if (!providerModels.find((m) => m.name === embName)) {
-      providerModels.push({ name: embName, model: embModelId });
-    }
-    if (!config.orchestrator) config.orchestrator = {};
-    config.orchestrator.embedding = `${providerKey}/${embName}`;
-  }
-  config.models = {
-    providers: {
-      [providerKey]: {
-        ...(config.llm.baseUrl ? { baseUrl: config.llm.baseUrl } : {}),
-        ...(config.llm.apiKey ? { apiKey: config.llm.apiKey } : {}),
-        models: providerModels,
-      },
-    },
-  };
-  if (!config.orchestrator) config.orchestrator = {};
-  config.orchestrator.pha = `${providerKey}/${modelEntry.name}`;
-
-  // Save
   saveConfig(config);
 
-  // Summary
   p.note(
     [
       `Provider: ${providerCfg.name}`,
@@ -732,7 +682,6 @@ async function runFullWizard(): Promise<void> {
   );
 
   p.log.info(`Tip: Run ${c.cyan("pha state init --remote <url>")} to sync .pha/ to a private repo`);
-
   const nextCmd = config.dataSources.type === "huawei" ? `${c.cyan("pha auth")} then ` : "";
   p.outro(`Next: Run ${nextCmd}${c.cyan("pha start")} or ${c.cyan("pha health")}`);
 }

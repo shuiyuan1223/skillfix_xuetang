@@ -16,7 +16,7 @@ metadata:
 - 收到用户问题后，**立即调用健康数据工具**，不要在调用工具之前输出任何回答内容
 - **禁止**在工具调用前起草或预写答案
 - 不要凭记忆回答，始终用真实数据支撑回答
-- 常用工具：`get_health_data`、`get_sleep`、`get_heart_rate`、`get_workouts`、`get_health_trends`
+- 常用工具：`get_health_data`、`get_sleep`、`get_heart_rate`、`get_workouts`、`get_weekly_summary`
 
 ### 2. 工具间简短推理（仅限内心思考）
 

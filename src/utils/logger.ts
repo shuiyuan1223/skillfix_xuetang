@@ -66,26 +66,76 @@ export function subscribeToLogs(callback: LogSubscriber): () => void {
 
 // ============ Write ============
 
+/**
+ * Recursively serialize Error objects in data structure.
+ * Converts Error instances to { message, stack, name } format,
+ * and recursively processes nested objects and arrays.
+ */
+function serializeErrors(data: unknown, seen = new WeakSet()): unknown {
+  // Handle null/undefined
+  if (data === null || data === undefined) {
+    return data;
+  }
+
+  // Handle Error objects
+  if (data instanceof Error) {
+    return {
+      message: data.message,
+      stack: data.stack,
+      name: data.name,
+    };
+  }
+
+  // Handle arrays
+  if (Array.isArray(data)) {
+    return data.map((item) => serializeErrors(item, seen));
+  }
+
+  // Handle plain objects (but not class instances, Date, etc.)
+  if (typeof data === "object" && data.constructor === Object) {
+    // Avoid circular references
+    if (seen.has(data)) {
+      return "[Circular]";
+    }
+    seen.add(data);
+
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      result[key] = serializeErrors(value, seen);
+    }
+    return result;
+  }
+
+  // Return primitives (string, number, boolean) and other types as-is
+  return data;
+}
+
 function writeLogEntry(entry: LogEntry): void {
+  // Serialize Error objects (including nested) before JSON.stringify
+  const serializedEntry = {
+    ...entry,
+    data: serializeErrors(entry.data),
+  };
+
   try {
     ensureLogDir();
-    appendFileSync(getLogFile(), JSON.stringify(entry) + "\n");
+    appendFileSync(getLogFile(), `${JSON.stringify(serializedEntry)}\n`);
   } catch {
     // Silently fail — avoid infinite recursion if logging itself fails
   }
 
   // Console forwarding
   const prefix = `[${entry.subsystem}]`;
-  const dataStr = entry.data ? ` ${JSON.stringify(entry.data)}` : "";
+  const dataStr = serializedEntry.data ? ` ${JSON.stringify(serializedEntry.data)}` : "";
   const str = `${prefix} ${entry.message}${dataStr}`;
   if (entry.level === "warn") console.warn(str);
   else if (entry.level === "error" || entry.level === "fatal") console.error(str);
   else console.log(str);
 
-  // Notify subscribers
+  // Notify subscribers (with serialized data)
   for (const sub of subscribers) {
     try {
-      sub(entry);
+      sub(serializedEntry as LogEntry);
     } catch {
       // Subscriber errors should not break logging
     }

@@ -101,4 +101,24 @@ export const dailyLogTool: PHATool<{ content: string }> = {
   },
 };
 
-export const memoryTools = [memorySearchTool, memorySaveTool, dailyLogTool];
+export const memoryStatusTool: PHATool = {
+  name: "memory_status",
+  description:
+    "获取记忆索引的状态信息（用于调试）。返回索引的健康状态、包含的文件数、分块数、FTS和向量搜索的可用性。",
+  displayName: "记忆状态",
+  category: "memory",
+  icon: "info",
+  label: "Memory Status",
+  inputSchema: { type: "object", properties: {} },
+  execute: async () => {
+    const uuid = getUserUuid();
+    const mm = getMemoryManager();
+    const status = await mm.getIndexStatus(uuid);
+    return {
+      success: true,
+      data: status,
+    };
+  },
+};
+
+export const memoryTools = [memorySearchTool, memorySaveTool, dailyLogTool, memoryStatusTool];

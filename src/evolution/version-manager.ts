@@ -16,7 +16,6 @@ import {
   insertEvolutionVersion,
   updateEvolutionVersion,
   getEvolutionVersionByBranch,
-  listEvolutionVersions,
 } from "../memory/db.js";
 
 const log = createLogger("Evolution/Version");

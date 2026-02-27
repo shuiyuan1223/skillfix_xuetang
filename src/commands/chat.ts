@@ -12,6 +12,95 @@ import {
 } from "../utils/config.js";
 import { c, icons, Spinner, fatal, info } from "../utils/cli-ui.js";
 
+async function handleSingleMessage(
+  agent: Awaited<ReturnType<typeof createPHAAgent>>,
+  options: { message: string; json?: boolean; stream?: boolean; showTools?: boolean },
+  providerDisplay: string
+): Promise<void> {
+  let response = "";
+  const toolCalls: Array<{ tool: string; args: unknown; result: unknown }> = [];
+  let currentToolSpinner: Spinner | null = null;
+
+  if (!options.json && !options.stream) {
+    console.log(`\n${c.dim("Using")} ${providerDisplay}\n`);
+  }
+
+  agent.subscribe((event) => {
+    if (event.type === "message_update" && event.message.role === "assistant") {
+      for (const block of event.message.content) {
+        const textBlock = block as { type: string; text: string };
+        if (textBlock.type === "text") {
+          response = textBlock.text;
+          if (options.stream !== false && !options.json) {
+            if (currentToolSpinner) {
+              currentToolSpinner.stop("success");
+              currentToolSpinner = null;
+            }
+            process.stdout.write(`\r\x1b[K${c.cyan("PHA:")} ${response}`);
+          }
+        }
+      }
+    } else if (event.type === "message_end") {
+      if (currentToolSpinner) {
+        currentToolSpinner.stop("success");
+        currentToolSpinner = null;
+      }
+      if (options.stream !== false && !options.json) {
+        process.stdout.write("\n");
+      }
+    } else if (event.type === "tool_execution_start") {
+      toolCalls.push({ tool: event.toolName, args: event.args, result: null });
+      if (!options.json && options.showTools) {
+        currentToolSpinner = new Spinner(`Calling ${event.toolName}...`);
+        currentToolSpinner.start();
+      } else if (!options.json && options.stream !== false) {
+        process.stdout.write(
+          `\r\x1b[K${c.yellow(icons.running)} ${c.dim(`Using ${event.toolName}...`)}`
+        );
+      }
+    } else if (event.type === "tool_execution_end") {
+      const lastTool = toolCalls[toolCalls.length - 1];
+      if (lastTool) {
+        lastTool.result = event.result;
+      }
+      if (currentToolSpinner) {
+        currentToolSpinner.stop("success");
+        currentToolSpinner = null;
+      }
+    }
+  });
+
+  try {
+    await agent.chat(options.message);
+    await agent.getAgent().waitForIdle();
+
+    if (options.json) {
+      console.log(JSON.stringify({ message: options.message, response, toolCalls }, null, 2));
+    } else {
+      if (toolCalls.length > 0 && !options.showTools) {
+        console.log(
+          `\n${c.dim(`Used ${toolCalls.length} tool(s): ${toolCalls.map((t) => t.tool).join(", ")}`)}`
+        );
+      }
+      console.log("");
+    }
+  } catch (error) {
+    (currentToolSpinner as Spinner | null)?.stop("error");
+    fatal("Chat failed", error instanceof Error ? error.message : String(error));
+  }
+}
+
+function showInteractiveHint(): void {
+  console.log("");
+  info("For interactive chat:");
+  console.log(`  ${c.cyan("pha tui --local")} ${c.dim("Start local terminal UI")}`);
+  console.log(`  ${c.cyan("pha tui")}         ${c.dim("Connect to gateway")}`);
+  console.log("");
+  info("For single message:");
+  console.log(`  ${c.cyan("pha chat -m")} ${c.dim("'your message here'")}`);
+  console.log("");
+}
+
 export function registerChatCommand(program: Command): void {
   program
     .command("chat")
@@ -35,112 +124,18 @@ export function registerChatCommand(program: Command): void {
       }
 
       const provider = options.provider || resolved.provider;
-      const apiKey = resolved.apiKey;
       const providerCfg = PROVIDER_CONFIGS[provider as LLMProvider];
       const agent = await createPHAAgent({
-        apiKey,
+        apiKey: resolved.apiKey,
         provider: provider as LLMProvider,
         modelId: options.model || resolved.modelId,
       });
 
-      // Single message mode
       if (options.message) {
-        let response = "";
-        const toolCalls: Array<{ tool: string; args: unknown; result: unknown }> = [];
-        let currentToolSpinner: Spinner | null = null;
-
-        if (!options.json && !options.stream) {
-          console.log(`\n${c.dim("Using")} ${providerCfg?.name || provider}\n`);
-        }
-
-        agent.subscribe((event) => {
-          if (event.type === "message_update" && event.message.role === "assistant") {
-            const content = event.message.content;
-            for (const block of content) {
-              if ((block as any).type === "text") {
-                response = (block as any).text;
-                if (options.stream !== false && !options.json) {
-                  // Clear spinner if active
-                  if (currentToolSpinner) {
-                    currentToolSpinner.stop("success");
-                    currentToolSpinner = null;
-                  }
-                  process.stdout.write(`\r\x1b[K${c.cyan("PHA:")} ${response}`);
-                }
-              }
-            }
-          } else if (event.type === "message_end") {
-            if (currentToolSpinner) {
-              currentToolSpinner.stop("success");
-              currentToolSpinner = null;
-            }
-            if (options.stream !== false && !options.json) {
-              process.stdout.write("\n");
-            }
-          } else if (event.type === "tool_execution_start") {
-            toolCalls.push({ tool: event.toolName, args: event.args, result: null });
-            if (!options.json && options.showTools) {
-              currentToolSpinner = new Spinner(`Calling ${event.toolName}...`);
-              currentToolSpinner.start();
-            } else if (!options.json && options.stream !== false) {
-              process.stdout.write(
-                `\r\x1b[K${c.yellow(icons.running)} ${c.dim(`Using ${event.toolName}...`)}`
-              );
-            }
-          } else if (event.type === "tool_execution_end") {
-            const lastTool = toolCalls[toolCalls.length - 1];
-            if (lastTool) {
-              lastTool.result = event.result;
-            }
-            if (currentToolSpinner) {
-              currentToolSpinner.stop("success");
-              currentToolSpinner = null;
-            }
-          }
-        });
-
-        try {
-          await agent.chat(options.message);
-          await agent.getAgent().waitForIdle();
-
-          if (options.json) {
-            console.log(
-              JSON.stringify(
-                {
-                  message: options.message,
-                  response,
-                  toolCalls,
-                },
-                null,
-                2
-              )
-            );
-          } else {
-            // Show tool summary if any
-            if (toolCalls.length > 0 && !options.showTools) {
-              console.log(
-                `\n${c.dim(`Used ${toolCalls.length} tool(s): ${toolCalls.map((t) => t.tool).join(", ")}`)}`
-              );
-            }
-            console.log("");
-          }
-        } catch (error) {
-          // Stop spinner if active (it's a Spinner | null in closure scope)
-          (currentToolSpinner as Spinner | null)?.stop("error");
-          fatal("Chat failed", error instanceof Error ? error.message : String(error));
-        }
-
+        await handleSingleMessage(agent, options, providerCfg?.name || provider);
         return;
       }
 
-      // Interactive mode - redirect to TUI
-      console.log("");
-      info("For interactive chat:");
-      console.log(`  ${c.cyan("pha tui --local")} ${c.dim("Start local terminal UI")}`);
-      console.log(`  ${c.cyan("pha tui")}         ${c.dim("Connect to gateway")}`);
-      console.log("");
-      info("For single message:");
-      console.log(`  ${c.cyan("pha chat -m")} ${c.dim("'your message here'")}`);
-      console.log("");
+      showInteractiveHint();
     });
 }

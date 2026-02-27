@@ -211,40 +211,36 @@ function statOrSkeleton(
 }
 
 // ============================================================================
-// Tab: Overview
+// Tab: Overview — section builders
 // ============================================================================
 
-function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
-  const children: string[] = [];
+function buildScopeErrorBanner(ui: A2UIGenerator, scopeErrors: string[]): string {
+  const warnIcon = ui.text("!", "h2");
+  const reAuthTitle = ui.text(t("dashboard.scopeErrorTitle"), "body");
+  const reAuthHint = ui.text(t("dashboard.scopeErrorHint"), "caption");
+  const reAuthBtn = ui.button(t("dashboard.reAuth"), "start_huawei_auth", {
+    variant: "accent",
+    size: "sm",
+  });
+  const reAuthContent = ui.row(
+    [warnIcon, ui.column([reAuthTitle, reAuthHint], { gap: 4 }), reAuthBtn],
+    { justify: "between", align: "center", gap: 12 }
+  );
+  return ui.card([reAuthContent], {
+    padding: 16,
+    className: "border-l-4 border-l-warning",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+}
 
-  // ── Re-auth banner (if scope errors detected) — show at top for visibility ──
-  if (data.scopeErrors && data.scopeErrors.length > 0) {
-    const warnIcon = ui.text("!", "h2");
-    const reAuthTitle = ui.text(t("dashboard.scopeErrorTitle"), "body");
-    const reAuthHint = ui.text(t("dashboard.scopeErrorHint"), "caption");
-    const reAuthBtn = ui.button(t("dashboard.reAuth"), "start_huawei_auth", {
-      variant: "accent",
-      size: "sm",
-    });
-    const reAuthContent = ui.row(
-      [warnIcon, ui.column([reAuthTitle, reAuthHint], { gap: 4 }), reAuthBtn],
-      { justify: "between", align: "center", gap: 12 }
-    );
-    children.push(
-      ui.card([reAuthContent], { padding: 16, className: "border-l-4 border-l-warning" } as any)
-    );
-  }
-
-  // ── Hero Section: Activity Rings + Health Score + Quick Stats ──
+function buildHeroSection(ui: A2UIGenerator, data: DashboardData): string {
   const stepsGoal = 8000;
   const activeHoursGoal = 12;
   const caloriesGoal = 500;
   const currentSteps = data.metrics?.steps ?? 0;
-  // activeMinutes stores hours * 60 from dailyActivitySummary; convert back to hours
   const currentActiveHours = Math.round((data.metrics?.activeMinutes ?? 0) / 60);
   const currentCalories = data.metrics?.calories ?? 0;
 
-  // Concentric activity rings (Apple Watch style)
   const rings = ui.activityRings(
     [
       { value: currentSteps, max: stepsGoal, label: t("activity.steps"), color: "#FA114F" },
@@ -264,7 +260,6 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     { size: 180 }
   );
 
-  // Health score in the hero
   const score = calculateHealthScore(data);
   const gauge = ui.scoreGauge(score, {
     max: 100,
@@ -278,7 +273,6 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     ],
   });
 
-  // Health score column (gauge only — ring legends already show percentages)
   const quickStatsChildren: string[] = [gauge];
   if (data.metricsIsYesterday) {
     quickStatsChildren.push(ui.badge(t("dashboard.yesterdayData"), { variant: "info" }));
@@ -286,73 +280,60 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
   const quickStatsCol = ui.column(quickStatsChildren, { gap: 8, align: "center" });
 
   const heroRow = ui.row([rings, quickStatsCol], { gap: 32, justify: "center", align: "center" });
-  const heroCard = ui.card([heroRow], { padding: 28 });
-  children.push(heroCard);
+  return ui.card([heroRow], { padding: 28 });
+}
 
-  // ── Vital Signs (compact row of key stats) ──
-  const vitalCards: string[] = [];
-
+function buildVitalSignsRow(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
   const hrSubtitle = data.heartRateIsYesterday
     ? t("dashboard.yesterdayData")
     : t("health.bpmResting");
-  vitalCards.push(
+  const vitalCards = [
     statOrSkeleton(ui, !!data.heartRate, loading, {
       title: t("health.heartRate"),
       value: data.heartRate ? `${data.heartRate.restingAvg}` : "--",
       subtitle: hrSubtitle,
       icon: "heart",
       color: "#ef4444",
-    })
-  );
-  vitalCards.push(
+    }),
     statOrSkeleton(ui, !!data.spo2, loading, {
       title: t("health.spo2"),
       value: data.spo2 ? `${data.spo2.current}%` : "--",
       subtitle: t("health.oxygen"),
       icon: "wind",
       color: "#10b981",
-    })
-  );
-  vitalCards.push(
+    }),
     statOrSkeleton(ui, !!data.stress, loading, {
       title: t("health.stress"),
       value: data.stress ? `${data.stress.current}` : "--",
       subtitle: t("health.stressLevel"),
       icon: "brain",
       color: "#8b5cf6",
-    })
-  );
-  vitalCards.push(
+    }),
     statOrSkeleton(ui, !!data.sleep, loading, {
       title: t("sleep.duration"),
       value: data.sleep ? `${data.sleep.durationHours.toFixed(1)}h` : "--",
       subtitle: t("sleep.hours"),
       icon: "moon",
       color: "#6366f1",
-    })
-  );
+    }),
+  ];
+  return ui.grid(vitalCards, { columns: 4, gap: 12 });
+}
 
-  children.push(ui.grid(vitalCards, { columns: 4, gap: 12 }));
-
-  // ── Secondary stats (Body/Temp/Emotion) ──
-  const secondaryCards: string[] = [];
-  secondaryCards.push(
+function buildSecondaryStatsRow(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
+  const secondaryCards = [
     statOrSkeleton(ui, !!data.bodyComposition, loading, {
       title: t("health.bodyWeight"),
       value: data.bodyComposition?.weight ? `${data.bodyComposition.weight} kg` : "--",
       icon: "activity",
       color: "#0ea5e9",
-    })
-  );
-  secondaryCards.push(
+    }),
     statOrSkeleton(ui, !!data.bodyTemperature, loading, {
       title: t("health.bodyTemperature"),
       value: data.bodyTemperature ? `${data.bodyTemperature.latest}°C` : "--",
       icon: "flame",
       color: "#f59e0b",
-    })
-  );
-  secondaryCards.push(
+    }),
     statOrSkeleton(ui, !!data.bloodPressure, loading, {
       title: t("health.bloodPressure"),
       value: data.bloodPressure
@@ -361,31 +342,19 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
       subtitle: "mmHg",
       icon: "stethoscope",
       color: "#f97316",
-    })
-  );
-  secondaryCards.push(
+    }),
     statOrSkeleton(ui, !!data.emotion, loading, {
       title: t("dashboard.emotion"),
       value: data.emotion ? data.emotion.current : "--",
       subtitle: data.emotion ? `${data.emotion.score}/100` : undefined,
       icon: "star",
       color: "#ec4899",
-    })
-  );
+    }),
+  ];
+  return ui.grid(secondaryCards, { columns: 4, gap: 12 });
+}
 
-  children.push(ui.grid(secondaryCards, { columns: 4, gap: 12 }));
-
-  // ── Anomaly alerts (only if there are anomalies) ──
-  const anomalies = detectAnomalies(data);
-  if (anomalies.length > 0) {
-    const alertBadges = anomalies.map((a) =>
-      ui.badge(`${a.label}: ${a.value}`, { variant: a.severity === "error" ? "error" : "warning" })
-    );
-    const alertRow = ui.row(alertBadges, { gap: 8, wrap: true });
-    children.push(ui.card([alertRow], { padding: 16 }));
-  }
-
-  // ── Charts row: 7-day steps + today heart rate ──
+function buildOverviewCharts(ui: A2UIGenerator, data: DashboardData): string[] {
   const chartChildren: string[] = [];
 
   if (data.weeklySteps && data.weeklySteps.length > 0) {
@@ -414,13 +383,13 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
     chartChildren.push(ui.card([hrChartTitle, hrChart], { padding: 20 }));
   }
 
+  const result: string[] = [];
   if (chartChildren.length === 1) {
-    children.push(chartChildren[0]);
+    result.push(chartChildren[0]);
   } else if (chartChildren.length > 1) {
-    children.push(ui.grid(chartChildren, { columns: 2, gap: 16 }));
+    result.push(ui.grid(chartChildren, { columns: 2, gap: 16 }));
   }
 
-  // ── Sleep trend (if available) ──
   if (data.weeklySleep && data.weeklySleep.length > 0) {
     const sleepChartTitle = ui.text(t("dashboard.sleepTrend"), "h3");
     const sleepChart = ui.chart({
@@ -431,8 +400,33 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
       height: 160,
       color: "#8b5cf6",
     });
-    children.push(ui.card([sleepChartTitle, sleepChart], { padding: 20 }));
+    result.push(ui.card([sleepChartTitle, sleepChart], { padding: 20 }));
   }
+
+  return result;
+}
+
+function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
+  const children: string[] = [];
+
+  if (data.scopeErrors && data.scopeErrors.length > 0) {
+    children.push(buildScopeErrorBanner(ui, data.scopeErrors));
+  }
+
+  children.push(buildHeroSection(ui, data));
+  children.push(buildVitalSignsRow(ui, data, loading));
+  children.push(buildSecondaryStatsRow(ui, data, loading));
+
+  const anomalies = detectAnomalies(data);
+  if (anomalies.length > 0) {
+    const alertBadges = anomalies.map((a) =>
+      ui.badge(`${a.label}: ${a.value}`, { variant: a.severity === "error" ? "error" : "warning" })
+    );
+    const alertRow = ui.row(alertBadges, { gap: 8, wrap: true });
+    children.push(ui.card([alertRow], { padding: 16 }));
+  }
+
+  children.push(...buildOverviewCharts(ui, data));
 
   return ui.column(children, { gap: 16 });
 }
@@ -441,63 +435,43 @@ function buildOverviewTab(ui: A2UIGenerator, data: DashboardData, loading: boole
 // Tab: Vitals
 // ============================================================================
 
-function buildVitalsTab(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
-  const children: string[] = [];
-
-  // Stat cards grid
-  const cards: string[] = [];
-
-  cards.push(
+function buildVitalsStatCards(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
+  const cards = [
     statOrSkeleton(ui, !!data.heartRate, loading, {
       title: t("health.heartRate"),
       value: data.heartRate ? `${data.heartRate.restingAvg}` : "--",
       subtitle: t("health.bpmResting"),
       icon: "heart",
       color: "#ef4444",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.heartRate, loading, {
       title: t("health.restingHR"),
       value: data.heartRate ? `${data.heartRate.restingAvg}` : "--",
       subtitle: t("health.bpmUnit"),
       icon: "heart-pulse",
       color: "#f97316",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.hrv, loading, {
       title: t("dashboard.hrv"),
       value: data.hrv ? `${data.hrv.rmssd}` : "--",
       subtitle: "ms",
       icon: "activity",
       color: "#6366f1",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.spo2, loading, {
       title: t("health.spo2"),
       value: data.spo2 ? `${data.spo2.current}%` : "--",
       subtitle: t("health.oxygen"),
       icon: "wind",
       color: "#10b981",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.stress, loading, {
       title: t("health.stress"),
       value: data.stress ? `${data.stress.current}` : "--",
       subtitle: t("health.stressLevel"),
       icon: "brain",
       color: "#8b5cf6",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.bloodPressure, loading, {
       title: t("health.bloodPressure"),
       value: data.bloodPressure
@@ -506,32 +480,28 @@ function buildVitalsTab(ui: A2UIGenerator, data: DashboardData, loading: boolean
       subtitle: "mmHg",
       icon: "stethoscope",
       color: "#f97316",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.bloodGlucose, loading, {
       title: t("health.bloodGlucose"),
       value: data.bloodGlucose ? `${data.bloodGlucose.latest}` : "--",
       subtitle: "mmol/L",
       icon: "zap",
       color: "#3b82f6",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.bodyTemperature, loading, {
       title: t("health.bodyTemperature"),
       value: data.bodyTemperature ? `${data.bodyTemperature.latest}` : "--",
       subtitle: "C",
       icon: "flame",
       color: "#f59e0b",
-    })
-  );
+    }),
+  ];
+  return ui.grid(cards, { columns: 4, gap: 16 });
+}
 
-  children.push(ui.grid(cards, { columns: 4, gap: 16 }));
+function buildVitalsCharts(ui: A2UIGenerator, data: DashboardData): string[] {
+  const result: string[] = [];
 
-  // 24h heart rate chart
   if (data.heartRate && data.heartRate.readings.length > 0) {
     const hrChartTitle = ui.text(t("health.heartRateTrend"), "h3");
     const hrChart = ui.chart({
@@ -542,10 +512,9 @@ function buildVitalsTab(ui: A2UIGenerator, data: DashboardData, loading: boolean
       height: 200,
       color: "#ef4444",
     });
-    children.push(ui.card([hrChartTitle, hrChart], { padding: 20 }));
+    result.push(ui.card([hrChartTitle, hrChart], { padding: 20 }));
   }
 
-  // 24h stress chart
   if (data.stress && data.stress.readings.length > 0) {
     const stressChartTitle = ui.text(t("health.stress"), "h3");
     const stressChart = ui.chart({
@@ -556,10 +525,9 @@ function buildVitalsTab(ui: A2UIGenerator, data: DashboardData, loading: boolean
       height: 200,
       color: "#8b5cf6",
     });
-    children.push(ui.card([stressChartTitle, stressChart], { padding: 20 }));
+    result.push(ui.card([stressChartTitle, stressChart], { padding: 20 }));
   }
 
-  // Blood pressure table
   if (data.bloodPressure && data.bloodPressure.readings.length > 0) {
     const bpTitle = ui.text(t("health.bloodPressure"), "h3");
     const bpTable = ui.table(
@@ -574,10 +542,9 @@ function buildVitalsTab(ui: A2UIGenerator, data: DashboardData, loading: boolean
         diastolic: `${r.diastolic} mmHg`,
       }))
     );
-    children.push(ui.card([bpTitle, bpTable], { padding: 20 }));
+    result.push(ui.card([bpTitle, bpTable], { padding: 20 }));
   }
 
-  // Blood glucose table
   if (data.bloodGlucose && data.bloodGlucose.readings.length > 0) {
     const bgTitle = ui.text(t("health.bloodGlucose"), "h3");
     const bgTable = ui.table(
@@ -590,9 +557,16 @@ function buildVitalsTab(ui: A2UIGenerator, data: DashboardData, loading: boolean
         value: `${r.value} mmol/L`,
       }))
     );
-    children.push(ui.card([bgTitle, bgTable], { padding: 20 }));
+    result.push(ui.card([bgTitle, bgTable], { padding: 20 }));
   }
 
+  return result;
+}
+
+function buildVitalsTab(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
+  const children: string[] = [];
+  children.push(buildVitalsStatCards(ui, data, loading));
+  children.push(...buildVitalsCharts(ui, data));
   return ui.column(children, { gap: 24 });
 }
 
@@ -786,32 +760,21 @@ function buildSleepTab(ui: A2UIGenerator, data: DashboardData, loading: boolean)
 // Tab: Body
 // ============================================================================
 
-function buildBodyTab(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
-  const children: string[] = [];
-
-  // Stat cards
-  const cards: string[] = [];
-
-  cards.push(
+function buildBodyStatCards(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
+  const cards = [
     statOrSkeleton(ui, !!data.bodyComposition?.weight, loading, {
       title: t("health.bodyWeight"),
       value: data.bodyComposition?.weight ? `${data.bodyComposition.weight}` : "--",
       subtitle: "kg",
       icon: "activity",
       color: "#6366f1",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.bodyComposition?.bmi, loading, {
       title: t("health.bmi"),
       value: data.bodyComposition?.bmi ? `${data.bodyComposition.bmi.toFixed(1)}` : "--",
       icon: "bar-chart",
       color: "#3b82f6",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.bodyComposition?.bodyFatRate, loading, {
       title: t("health.bodyFat"),
       value: data.bodyComposition?.bodyFatRate
@@ -819,89 +782,66 @@ function buildBodyTab(ui: A2UIGenerator, data: DashboardData, loading: boolean):
         : "--",
       icon: "trending-up",
       color: "#f97316",
-    })
-  );
-
-  cards.push(
+    }),
     statOrSkeleton(ui, !!data.bodyComposition?.height, loading, {
       title: t("dashboard.height"),
       value: data.bodyComposition?.height ? `${data.bodyComposition.height}` : "--",
       subtitle: "cm",
       icon: "activity",
       color: "#10b981",
+    }),
+  ];
+  return ui.grid(cards, { columns: 4, gap: 16 });
+}
+
+function buildNutritionCard(ui: A2UIGenerator, nutrition: NutritionData): string {
+  const nutritionTitle = ui.text(t("dashboard.nutritionSummary"), "h3");
+  const nutritionItems: string[] = [];
+
+  nutritionItems.push(
+    ui.statCard({
+      title: t("activity.calories"),
+      value: `${nutrition.totalCalories}`,
+      subtitle: "kcal",
+      icon: "flame",
+      color: "#f97316",
     })
   );
 
-  children.push(ui.grid(cards, { columns: 4, gap: 16 }));
-
-  // Nutrition summary card
-  if (data.nutrition) {
-    const nutritionTitle = ui.text(t("dashboard.nutritionSummary"), "h3");
-    const nutritionItems: string[] = [];
-
-    nutritionItems.push(
-      ui.statCard({
-        title: t("activity.calories"),
-        value: `${data.nutrition.totalCalories}`,
-        subtitle: "kcal",
-        icon: "flame",
-        color: "#f97316",
-      })
-    );
-
-    if (data.nutrition.protein !== undefined) {
+  const macros: Array<{ key: keyof NutritionData; label: string; color: string }> = [
+    { key: "protein", label: "dashboard.protein", color: "#ef4444" },
+    { key: "fat", label: "dashboard.fat", color: "#f59e0b" },
+    { key: "carbs", label: "dashboard.carbs", color: "#3b82f6" },
+    { key: "water", label: "dashboard.water", color: "#10b981" },
+  ];
+  for (const m of macros) {
+    const val = nutrition[m.key];
+    if (val !== undefined) {
       nutritionItems.push(
         ui.statCard({
-          title: t("dashboard.protein"),
-          value: `${data.nutrition.protein}`,
-          subtitle: "g",
+          title: t(m.label as Parameters<typeof t>[0]),
+          value: `${val}`,
+          subtitle: m.key === "water" ? "mL" : "g",
           icon: "zap",
-          color: "#ef4444",
+          color: m.color,
         })
       );
     }
-
-    if (data.nutrition.fat !== undefined) {
-      nutritionItems.push(
-        ui.statCard({
-          title: t("dashboard.fat"),
-          value: `${data.nutrition.fat}`,
-          subtitle: "g",
-          icon: "zap",
-          color: "#f59e0b",
-        })
-      );
-    }
-
-    if (data.nutrition.carbs !== undefined) {
-      nutritionItems.push(
-        ui.statCard({
-          title: t("dashboard.carbs"),
-          value: `${data.nutrition.carbs}`,
-          subtitle: "g",
-          icon: "zap",
-          color: "#3b82f6",
-        })
-      );
-    }
-
-    if (data.nutrition.water !== undefined) {
-      nutritionItems.push(
-        ui.statCard({
-          title: t("dashboard.water"),
-          value: `${data.nutrition.water}`,
-          subtitle: "mL",
-          icon: "zap",
-          color: "#10b981",
-        })
-      );
-    }
-
-    const nutritionGrid = ui.grid(nutritionItems, { columns: nutritionItems.length, gap: 12 });
-    children.push(ui.card([nutritionTitle, nutritionGrid], { padding: 20 }));
   }
 
-  // Menstrual cycle collapsible placeholder
+  const nutritionGrid = ui.grid(nutritionItems, { columns: nutritionItems.length, gap: 12 });
+  return ui.card([nutritionTitle, nutritionGrid], { padding: 20 });
+}
+
+function buildBodyTab(ui: A2UIGenerator, data: DashboardData, loading: boolean): string {
+  const children: string[] = [];
+
+  children.push(buildBodyStatCards(ui, data, loading));
+
+  if (data.nutrition) {
+    children.push(buildNutritionCard(ui, data.nutrition));
+  }
+
   const menstrualText = ui.text(t("dashboard.loadingData"), "caption");
   const menstrualCollapsible = ui.collapsible(t("health.menstrualCycle"), [menstrualText], {
     icon: "heart",

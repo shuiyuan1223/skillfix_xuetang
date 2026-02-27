@@ -7,7 +7,7 @@ metadata:
       "emoji": "🏃",
       "category": "health-coaching",
       "tags": ["pha", "workout", "exercise", "training", "data-analysis"],
-      "requires": { "tools": ["get_workouts", "get_heart_rate", "get_sleep", "get_health_trends"] }
+      "requires": { "tools": ["get_workouts", "get_heart_rate", "get_sleep", "get_weekly_summary"] }
     }
   }
 ---
@@ -53,8 +53,8 @@ metadata:
 |---------|---------|------|
 | 今天的运动 | `get_workouts(today)` | 直接回答 |
 | 今天该不该运动？ | `get_workouts(yesterday)` + `get_sleep(today)` + `get_heart_rate(today)` | 准备度评估需要恢复上下文 |
-| 周回顾 | `get_health_trends` + `get_workouts(today)` | 总量 + 近期详情 |
-| 表现趋势 | `get_health_trends` | 多日视图 |
+| 周回顾 | `get_weekly_summary` + `get_workouts(today)` | 总量 + 近期详情 |
+| 表现趋势 | `get_weekly_summary` | 多日视图 |
 
 
 ## 伤病安全检查（给运动建议前执行）

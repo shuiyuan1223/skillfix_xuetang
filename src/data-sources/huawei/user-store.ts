@@ -165,6 +165,14 @@ export class UserStore {
   }
 
   /**
+   * List all user UUIDs that have stored tokens.
+   */
+  listUserUuids(): string[] {
+    const stmt = this.db.prepare("SELECT uuid FROM users ORDER BY updated_at DESC");
+    return (stmt.all() as Array<{ uuid: string }>).map((row) => row.uuid);
+  }
+
+  /**
    * Close database connection
    */
   close(): void {

@@ -47,18 +47,6 @@ function toolLabel(toolName: string): string {
   return TOOL_LABELS[toolName] ?? "正在查询数据";
 }
 
-function extractText(content: unknown): string {
-  if (!content) return "";
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((b: any) => b?.type === "text")
-      .map((b: any) => b.text ?? "")
-      .join("");
-  }
-  return "";
-}
-
 export class LegacyProtocolAdapter {
   private state: AdapterState = "initial";
   private pendingText = "";
@@ -68,94 +56,109 @@ export class LegacyProtocolAdapter {
 
   constructor(private send: (event: LegacySSEEvent) => void) {}
 
-  handleAgentEvent(event: any): void {
-    switch (event.type) {
-      case "message_start": {
-        if (event.message?.role !== "assistant") break;
-
-        if (this.state === "initial") {
-          this.send({ event: "search_mode", content: "search_with_think" });
-          this.send({ event: "rag_status", content: "start_search" });
-          this.state = "reasoning";
-        }
-
-        this.pendingText = "";
-        break;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private extractText(message: any): string {
+    const content = message?.content || [];
+    if (typeof content === "string") return content;
+    let text = "";
+    for (const block of content) {
+      if (block.type === "text") {
+        text += block.text;
       }
+    }
+    return text;
+  }
 
-      case "message_update": {
-        if (event.message?.role !== "assistant") break;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly eventHandlers: Record<string, (event: any) => void> = {
+    message_start: (event) => {
+      if (event.message?.role !== "assistant") return;
 
-        const text = extractText(event.message.content);
-        const delta = text.slice(this.pendingText.length);
-        this.pendingText = text;
-
-        if (!delta) break;
-
-        if (this.hasToolCalled) {
-          // Post-tool phase: stream directly as final answer
-          if (!this.finalStreamStarted) {
-            this.send({ event: "rag_status", content: "search_with_think" });
-            this.finalStreamStarted = true;
-          }
-          this.send({ event: "data", content: delta });
-        }
-        // Pre-tool: buffer only — role not yet confirmed
-        break;
-      }
-
-      case "message_end": {
-        if (event.message?.role !== "assistant") break;
-
-        const text = extractText(event.message.content);
-        this.finalText = text || this.pendingText;
-        this.state = "pending";
-        this.pendingText = "";
-        break;
-      }
-
-      case "tool_execution_start": {
-        // Pre-tool buffered text is discarded — it's internal model thinking,
-        // not meant for the user (often contains draft answers that would duplicate the final reply)
-        this.finalText = "";
-
-        this.hasToolCalled = true;
-        if (this.state === "pending" || this.state === "reasoning") {
-          this.state = "searching";
-        }
-
-        this.send({
-          event: "data",
-          content: `\n${toolLabel(event.toolName ?? "")}\n`,
-          content_type: "reasoning",
-        });
-        break;
-      }
-
-      case "tool_execution_end": {
+      if (this.state === "initial") {
+        this.send({ event: "search_mode", content: "search_with_think" });
         this.send({ event: "rag_status", content: "start_search" });
         this.state = "reasoning";
-        this.pendingText = "";
-        this.finalText = "";
-        break;
       }
 
-      case "agent_end": {
-        if (this.state === "done") break;
+      this.pendingText = "";
+    },
 
+    message_update: (event) => {
+      if (event.message?.role !== "assistant") return;
+
+      const text = this.extractText(event.message);
+      const delta = text.slice(this.pendingText.length);
+      this.pendingText = text;
+
+      if (!delta) return;
+
+      if (this.hasToolCalled) {
+        // Post-tool phase: stream directly as final answer
         if (!this.finalStreamStarted) {
-          // No tool calls: emit everything at once
           this.send({ event: "rag_status", content: "search_with_think" });
-          const content = this.finalText || this.pendingText;
-          if (content.trim()) {
-            this.send({ event: "data", content });
-          }
+          this.finalStreamStarted = true;
         }
-
-        this.send({ event: "finish" });
-        this.state = "done";
-        break;
+        this.send({ event: "data", content: delta });
       }
+      // Pre-tool: buffer only — role not yet confirmed
+    },
+
+    message_end: (event) => {
+      if (event.message?.role !== "assistant") return;
+
+      const text = this.extractText(event.message);
+      this.finalText = text || this.pendingText;
+      this.state = "pending";
+      this.pendingText = "";
+    },
+
+    tool_execution_start: (event) => {
+      // Pre-tool buffered text is discarded — it's internal model thinking,
+      // not meant for the user (often contains draft answers that would duplicate the final reply)
+      this.finalText = "";
+
+      this.hasToolCalled = true;
+      if (this.state === "pending" || this.state === "reasoning") {
+        this.state = "searching";
+      }
+
+      this.send({
+        event: "data",
+        content: `\n${toolLabel(event.toolName ?? "")}\n`,
+        content_type: "reasoning",
+      });
+    },
+
+    tool_execution_end: () => {
+      this.send({ event: "rag_status", content: "start_search" });
+      this.state = "reasoning";
+      this.pendingText = "";
+      this.finalText = "";
+    },
+
+    agent_end: () => {
+      if (this.state === "done") return;
+
+      if (!this.finalStreamStarted) {
+        // No tool calls: emit everything at once
+        this.send({ event: "rag_status", content: "search_with_think" });
+        const content = this.finalText || this.pendingText;
+        if (content.trim()) {
+          this.send({ event: "data", content });
+        }
+      }
+
+      this.send({ event: "finish" });
+      this.state = "done";
+    },
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handleAgentEvent(event: any): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler = this.eventHandlers[event.type as string] as ((e: any) => void) | undefined;
+    if (handler) {
+      handler(event);
     }
   }
 }

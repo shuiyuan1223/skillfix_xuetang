@@ -4,13 +4,7 @@
  * Tracks git versions of prompts and skills for benchmark comparisons.
  */
 
-import type {
-  BenchmarkRun,
-  BenchmarkCategory,
-  CategoryScore,
-  VersionComparison,
-  BenchmarkResult,
-} from "./types.js";
+import type { BenchmarkRun, BenchmarkCategory, VersionComparison } from "./types.js";
 import {
   listBenchmarkRuns,
   getBenchmarkRun,
@@ -114,6 +108,13 @@ export function compareLatest(count: number = 2): VersionComparison | null {
   return compareRuns(runs[runs.length - 1].id, runs[0].id);
 }
 
+/** Return one of three values based on whether `delta` is positive, negative, or zero. */
+function deltaSign<T>(delta: number, pos: T, neg: T, zero: T): T {
+  if (delta > 0) return pos;
+  if (delta < 0) return neg;
+  return zero;
+}
+
 /**
  * Format comparison as CLI output
  */
@@ -123,7 +124,7 @@ export function formatComparison(comparison: VersionComparison): string {
 
   lines.push("");
   lines.push("  Version Comparison");
-  lines.push("  " + "=".repeat(60));
+  lines.push(`  ${"=".repeat(60)}`);
   lines.push("");
   lines.push(
     `  Run 1: ${run1.id.substring(0, 8)} (${new Date(run1.timestamp).toLocaleDateString()})${run1.versionTag ? ` [${run1.versionTag}]` : ""}`
@@ -134,8 +135,8 @@ export function formatComparison(comparison: VersionComparison): string {
   lines.push("");
 
   // Overall
-  const overallArrow = overallDelta > 0 ? "+" : overallDelta < 0 ? "" : " ";
-  const overallColor = overallDelta > 0 ? "improved" : overallDelta < 0 ? "regressed" : "unchanged";
+  const overallArrow = deltaSign(overallDelta, "+", "", " ");
+  const overallColor = deltaSign(overallDelta, "improved", "regressed", "unchanged");
   const ds1 = normalizeScoreForDisplay(run1.overallScore);
   const ds2 = normalizeScoreForDisplay(run2.overallScore);
   const displayDelta = ds2 - ds1;
@@ -146,11 +147,11 @@ export function formatComparison(comparison: VersionComparison): string {
 
   // Category deltas
   lines.push("  Category Deltas:");
-  lines.push("  " + "-".repeat(60));
+  lines.push(`  ${"-".repeat(60)}`);
 
   for (const delta of categoryDeltas) {
-    const arrow = delta.delta > 0 ? "+" : delta.delta < 0 ? "" : " ";
-    const indicator = delta.delta > 0 ? " ^" : delta.delta < 0 ? " v" : "  ";
+    const arrow = deltaSign(delta.delta, "+", "", " ");
+    const indicator = deltaSign(delta.delta, " ^", " v", "  ");
     const s1 = normalizeScoreForDisplay(delta.score1);
     const s2 = normalizeScoreForDisplay(delta.score2);
     const dd = s2 - s1;
@@ -163,7 +164,7 @@ export function formatComparison(comparison: VersionComparison): string {
   if (flippedTests.length > 0) {
     lines.push("");
     lines.push("  Flipped Tests:");
-    lines.push("  " + "-".repeat(60));
+    lines.push(`  ${"-".repeat(60)}`);
 
     for (const flip of flippedTests) {
       const status = flip.nowPass ? "FAIL -> PASS" : "PASS -> FAIL";
@@ -173,7 +174,7 @@ export function formatComparison(comparison: VersionComparison): string {
   }
 
   lines.push("");
-  lines.push("  " + "=".repeat(60));
+  lines.push(`  ${"=".repeat(60)}`);
 
   return lines.join("\n");
 }

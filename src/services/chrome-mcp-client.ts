@@ -30,7 +30,12 @@ export class ChromeMCPClient {
   /**
    * Get MCP configuration from config file
    */
-  private getMCPConfig() {
+  private getMCPConfig(): {
+    command: string;
+    args: string[];
+    browserUrl: string | undefined;
+    wsEndpoint: string | undefined;
+  } {
     const config = loadConfig();
     const mcpConfig = config.mcp?.chromeMcp || {};
 
@@ -78,7 +83,7 @@ export class ChromeMCPClient {
       stderrStream.on("data", (data: Buffer) => {
         const msg = data.toString().trim();
         if (msg) {
-          log.debug("stderr: " + msg);
+          log.debug(`stderr: ${msg}`);
         }
       });
     }
@@ -168,14 +173,14 @@ export class ChromeMCPClient {
    * Open a new page with URL
    */
   async newPage(url: string): Promise<unknown> {
-    return await this.callTool("new_page", { url });
+    return this.callTool("new_page", { url });
   }
 
   /**
    * Navigate current page to URL
    */
   async navigatePage(url: string): Promise<unknown> {
-    return await this.callTool("navigate_page", { type: "url", url });
+    return this.callTool("navigate_page", { type: "url", url });
   }
 
   /**
@@ -222,7 +227,7 @@ export class ChromeMCPClient {
    * Get a specific network request by ID
    */
   async getNetworkRequest(requestId: string): Promise<unknown> {
-    return await this.callTool("get_network_request", { requestId });
+    return this.callTool("get_network_request", { requestId });
   }
 
   /**
@@ -375,7 +380,7 @@ export class ChromeMCPClient {
               return code;
             }
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore errors
         }
 
@@ -406,7 +411,7 @@ export class ChromeMCPClient {
               return code;
             }
           }
-        } catch (e) {
+        } catch (_e) {
           // Performance entries might not be available
         }
       } catch (e) {

@@ -7,6 +7,7 @@
 
 import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
 import { t } from "../locales/index.js";
+import { loadConfig } from "../utils/config.js";
 import type { UserProfile, MemorySearchResult } from "../memory/types.js";
 import type { HealthPlan, PlanStatus } from "../plans/types.js";
 import type { Recommendation, Reminder, CalendarEvent } from "../proactive/types.js";
@@ -17,6 +18,8 @@ import {
   getCategoryIcon,
   type ComparisonRun,
 } from "./evolution-lab.js";
+import type { DashboardDefinition, DashboardWidget } from "../tools/dashboard-types.js";
+import type { LLMCallPair } from "../utils/llm-logger.js";
 
 // Types for page data
 interface Message {
@@ -72,39 +75,57 @@ interface ChartData {
 
 export function generateSidebar(activeView: string): A2UIMessage[] {
   const ui = new A2UIGenerator("sidebar");
+  const sidebarConfig = loadConfig().gateway.sidebar;
+
+  const filterItems = <T extends { id: string }>(items: T[]): T[] => {
+    if (sidebarConfig?.include?.length) {
+      return items.filter((item) => sidebarConfig.include!.includes(item.id));
+    }
+    if (sidebarConfig?.exclude?.length) {
+      return items.filter((item) => !sidebarConfig.exclude!.includes(item.id));
+    }
+    return items;
+  };
 
   // Main navigation
-  const mainNav = ui.nav(
-    [
-      { id: "chat", label: t("nav.chat"), icon: "chat" },
-      { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
-      { id: "plans", label: t("nav.plans"), icon: "target" },
-      { id: "memory", label: t("nav.memory"), icon: "brain" },
-      { id: "legacy-chat", label: t("nav.legacyChat"), icon: "search" },
-      { id: "evolution", label: t("nav.evolution"), icon: "flask" },
-      { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
-    ],
-    { activeId: activeView }
-  );
-
-  // Divider
-  const dividerId = `div_${Date.now()}`;
-  ui.addRaw(dividerId, "Divider", {});
+  const mainNavItems = filterItems([
+    { id: "chat", label: t("nav.chat"), icon: "chat" },
+    { id: "dashboard", label: t("nav.dashboard"), icon: "activity" },
+    { id: "plans", label: t("nav.plans"), icon: "target" },
+    { id: "experiment", label: t("nav.experiment"), icon: "flask" },
+    { id: "memory", label: t("nav.memory"), icon: "brain" },
+    { id: "legacy-chat", label: t("nav.legacyChat"), icon: "search" },
+    { id: "evolution", label: t("nav.evolution"), icon: "test-tube" },
+    { id: "system-agent", label: t("nav.systemAgent"), icon: "bot" },
+  ]);
 
   // Settings navigation
-  const settingsNav = ui.nav(
-    [
-      { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
-      { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
-      { id: "settings/tools", label: t("nav.tools"), icon: "stethoscope" },
-      { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
-      { id: "settings/logs", label: t("nav.logs"), icon: "bar-chart" },
-      { id: "settings/general", label: t("nav.settings"), icon: "settings" },
-    ],
-    { activeId: activeView }
-  );
+  const settingsItems = filterItems([
+    { id: "settings/prompts", label: t("nav.prompts"), icon: "file-text" },
+    { id: "settings/skills", label: t("nav.skills"), icon: "puzzle" },
+    { id: "settings/tools", label: t("nav.tools"), icon: "stethoscope" },
+    { id: "settings/integrations", label: t("nav.integrations"), icon: "link" },
+    { id: "settings/logs", label: t("nav.logs"), icon: "bar-chart" },
+    { id: "settings/general", label: t("nav.settings"), icon: "settings" },
+  ]);
 
-  const root = ui.column([mainNav, dividerId, settingsNav], { gap: 0 });
+  const parts: string[] = [];
+
+  if (mainNavItems.length > 0) {
+    parts.push(ui.nav(mainNavItems, { activeId: activeView }));
+  }
+
+  if (mainNavItems.length > 0 && settingsItems.length > 0) {
+    const dividerId = `div_${Date.now()}`;
+    ui.addRaw(dividerId, "Divider", {});
+    parts.push(dividerId);
+  }
+
+  if (settingsItems.length > 0) {
+    parts.push(ui.nav(settingsItems, { activeId: activeView }));
+  }
+
+  const root = ui.column(parts, { gap: 0 });
 
   return ui.build(root);
 }
@@ -140,6 +161,7 @@ export function generateChatPage(state: ChatState): A2UIMessage[] {
   const root = ui.column([messagesId, inputId], { gap: 0 });
 
   // Make the column fill the height
+  // eslint-disable-next-line dot-notation
   const rootComp = ui["components"].get(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
@@ -156,7 +178,7 @@ export function generateChatPage(state: ChatState): A2UIMessage[] {
 // ============================================================================
 
 export function generateSystemAgentPage(state: {
-  chatMessages: Array<{ role: string; content?: string; parts?: unknown[]; cards?: any }>;
+  chatMessages: Array<{ role: string; content?: string; parts?: unknown[]; cards?: unknown }>;
   streaming: boolean;
   streamingContent: string;
   quickReplies?: QuickReply[];
@@ -211,6 +233,7 @@ export function generateSystemAgentPage(state: {
 
   const root = ui.column(children, { gap: 0 });
   // Fill height for sticky input pattern
+  // eslint-disable-next-line dot-notation
   const rootComp = ui["components"].get(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
@@ -570,6 +593,188 @@ function getProfileRows(profile: UserProfile): Array<{ field: string; value: str
   return rows;
 }
 
+// ── Memory page tab builders ──
+
+interface MemoryPageData {
+  activeTab: "profile" | "summary" | "logs" | "search" | "system-agent";
+  profileCompleteness: number;
+  profile: UserProfile;
+  missingFields: string[];
+  memorySummary: string;
+  dailyLogs: Array<{ date: string; preview: string }>;
+  searchQuery?: string;
+  searchResults?: MemorySearchResult[];
+  loading?: boolean;
+  selectedLogDate?: string;
+  selectedLogContent?: string;
+  saMemoryFiles?: SAMemoryFileInfo[];
+  saSelectedMemoryFile?: string;
+  saMemoryContent?: string;
+  saEditingMemory?: boolean;
+}
+
+function getCompletenessColor(pct: number): string {
+  if (pct >= 80) return "#10b981";
+  if (pct >= 50) return "#f59e0b";
+  return "#ef4444";
+}
+
+function getScoreBadgeVariant(score: number): string {
+  if (score >= 0.7) return "success";
+  if (score >= 0.4) return "warning";
+  return "default";
+}
+
+function buildMemoryProfileTab(ui: A2UIGenerator, data: MemoryPageData): string {
+  const completenessCard = ui.statCard({
+    title: t("memory.completeness"),
+    value: `${data.profileCompleteness}%`,
+    icon: "bar-chart",
+    color: getCompletenessColor(data.profileCompleteness),
+  });
+  const missingCard = ui.statCard({
+    title: t("memory.missingFields"),
+    value: data.missingFields.length,
+    subtitle:
+      data.missingFields.length > 0
+        ? data.missingFields.map((f) => PROFILE_FIELD_LABELS[f]?.zh || f).join(", ")
+        : undefined,
+    icon: "file-text",
+    color: data.missingFields.length === 0 ? "#10b981" : "#f97316",
+  });
+  const statsGrid = ui.grid([completenessCard, missingCard], { columns: 2, gap: 16 });
+  const profileRows = getProfileRows(data.profile);
+  const profileTable = ui.dataTable(
+    [
+      { key: "field", label: t("memory.field") },
+      { key: "value", label: t("memory.value") },
+    ],
+    profileRows
+  );
+  const profileCard = ui.card([profileTable], { title: t("memory.profile"), padding: 20 });
+  return ui.column([statsGrid, profileCard], { padding: 16, gap: 16 });
+}
+
+function buildMemorySummaryTab(ui: A2UIGenerator, memorySummary: string): string {
+  const stripped = (memorySummary || "")
+    .replace(/^#.*$/gm, "")
+    .replace(/[_*()（）\-\s]/g, "")
+    .replace(/MEMORY\.?md/gi, "")
+    .replace(/Agent.{0,30}(积累|记录|内容|accumulate)/gi, "")
+    .trim();
+  if (stripped.length > 10) {
+    const editor = ui.codeEditor(memorySummary, {
+      language: "markdown",
+      readonly: true,
+      height: 400,
+    });
+    return ui.column([editor], { padding: 16 });
+  }
+  return ui.column([ui.text(t("memory.memorySummaryEmpty"), "caption")], { padding: 16 });
+}
+
+function buildMemoryLogsTab(ui: A2UIGenerator, data: MemoryPageData): string {
+  if (data.selectedLogDate && data.selectedLogContent !== undefined) {
+    const backBtn = ui.button(t("memory.backToLogs"), "memory_log_back", {
+      variant: "ghost",
+      size: "sm",
+    });
+    const dateTitle = ui.text(`${t("memory.logDate")}: ${data.selectedLogDate}`, "h3");
+    const editor = ui.codeEditor(data.selectedLogContent, {
+      language: "markdown",
+      readonly: true,
+      height: 400,
+    });
+    return ui.column([backBtn, dateTitle, editor], { padding: 16, gap: 12 });
+  }
+  if (data.dailyLogs.length > 0) {
+    const logRows = data.dailyLogs.map((log) => ({
+      date: log.date,
+      preview: log.preview,
+    }));
+    const logsTable = ui.dataTable(
+      [
+        { key: "date", label: t("memory.logDate") },
+        { key: "preview", label: t("memory.value") },
+      ],
+      logRows,
+      { onRowClick: "memory_log_select" }
+    );
+    return ui.column([logsTable], { padding: 16 });
+  }
+  return ui.column([ui.text(t("memory.noResults"), "caption")], { padding: 16 });
+}
+
+function buildMemorySearchTab(ui: A2UIGenerator, data: MemoryPageData): string {
+  const searchInput = ui.formInput("query", "text", {
+    placeholder: t("memory.searchPlaceholder"),
+    value: data.searchQuery || "",
+  });
+  const searchForm = ui.form([searchInput], "memory_search_submit", {
+    submitLabel: t("memory.search"),
+    submitIcon: "search",
+  });
+  const searchChildren: string[] = [searchForm];
+
+  if (data.searchQuery && data.searchResults) {
+    if (data.searchResults.length === 0) {
+      searchChildren.push(ui.text(t("memory.noResults"), "caption"));
+    } else {
+      for (const r of data.searchResults) {
+        const scoreBadge = ui.badge(`${t("memory.score")}: ${Math.round(r.score * 100)}%`, {
+          variant: getScoreBadgeVariant(r.score),
+        });
+        const pathText = ui.text(r.path, "caption");
+        const snippetText = ui.text(r.snippet, "body");
+        const resultHeader = ui.row([pathText, scoreBadge], { gap: 8, align: "center" });
+        searchChildren.push(ui.card([resultHeader, snippetText], { padding: 12 }));
+      }
+    }
+  }
+  return ui.column(searchChildren, { padding: 16, gap: 12 });
+}
+
+function buildMemorySystemAgentTab(ui: A2UIGenerator, data: MemoryPageData): string {
+  const saChildren: string[] = [];
+  const memoryRows = (data.saMemoryFiles || []).map((f) => ({
+    name: f.displayName,
+    lines: f.lines,
+    preview: f.preview || t("memory.memoryEmptyFile"),
+  }));
+  const memoryTable = ui.dataTable(
+    [
+      { key: "name", label: t("memory.memoryFileName"), sortable: true },
+      { key: "lines", label: t("memory.memoryFileLines") },
+      { key: "preview", label: t("memory.memoryFilePreview") },
+    ],
+    memoryRows,
+    { onRowClick: "sa_memory_select" }
+  );
+  saChildren.push(memoryTable);
+
+  if (data.saSelectedMemoryFile && data.saMemoryContent !== undefined) {
+    const editor = ui.codeEditor(data.saMemoryContent, {
+      language: "markdown",
+      readonly: !data.saEditingMemory,
+      lineNumbers: true,
+      height: 400,
+      onChange: "sa_memory_content_change",
+    });
+    const editBtn = data.saEditingMemory
+      ? ui.button(t("common.save"), "sa_memory_save", { variant: "primary" })
+      : ui.button(t("common.edit"), "sa_memory_edit", { variant: "outline" });
+    const cancelBtn = data.saEditingMemory
+      ? ui.button(t("common.cancel"), "sa_memory_cancel", { variant: "ghost" })
+      : null;
+    const editorBtns = cancelBtn ? [editBtn, cancelBtn] : [editBtn];
+    const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
+    saChildren.push(
+      ui.card([editorHeader, editor], { title: data.saSelectedMemoryFile, padding: 20 })
+    );
+  }
+  return ui.column(saChildren, { padding: 16, gap: 16 });
+}
+
 export function generateMemoryPage(data: {
   activeTab: "profile" | "summary" | "logs" | "search" | "system-agent";
   profileCompleteness: number;
@@ -580,6 +785,9 @@ export function generateMemoryPage(data: {
   searchQuery?: string;
   searchResults?: MemorySearchResult[];
   loading?: boolean;
+  // Daily log detail view
+  selectedLogDate?: string;
+  selectedLogContent?: string;
   // System Agent memory tab
   saMemoryFiles?: SAMemoryFileInfo[];
   saSelectedMemoryFile?: string;
@@ -605,172 +813,18 @@ export function generateMemoryPage(data: {
     return ui.build(root);
   }
 
-  // Tab contents
+  // Tab contents — delegate to extracted builders
   const tabContentIds: Record<string, string> = {};
-
-  // Tab 1: Profile — stats + profile table
-  if (data.activeTab === "profile") {
-    const completenessCard = ui.statCard({
-      title: t("memory.completeness"),
-      value: `${data.profileCompleteness}%`,
-      icon: "bar-chart",
-      color:
-        data.profileCompleteness >= 80
-          ? "#10b981"
-          : data.profileCompleteness >= 50
-            ? "#f59e0b"
-            : "#ef4444",
-    });
-
-    const missingCard = ui.statCard({
-      title: t("memory.missingFields"),
-      value: data.missingFields.length,
-      subtitle:
-        data.missingFields.length > 0
-          ? data.missingFields.map((f) => PROFILE_FIELD_LABELS[f]?.zh || f).join(", ")
-          : undefined,
-      icon: "file-text",
-      color: data.missingFields.length === 0 ? "#10b981" : "#f97316",
-    });
-
-    const statsGrid = ui.grid([completenessCard, missingCard], { columns: 2, gap: 16 });
-
-    const profileRows = getProfileRows(data.profile);
-    const profileTable = ui.dataTable(
-      [
-        { key: "field", label: t("memory.field") },
-        { key: "value", label: t("memory.value") },
-      ],
-      profileRows
-    );
-    const profileCard = ui.card([profileTable], { title: t("memory.profile"), padding: 20 });
-
-    tabContentIds["profile"] = ui.column([statsGrid, profileCard], { padding: 16, gap: 16 });
-  }
-
-  // Tab 2: Summary — MEMORY.md viewer
-  if (data.activeTab === "summary") {
-    if (data.memorySummary) {
-      const editor = ui.codeEditor(data.memorySummary, {
-        language: "markdown",
-        readonly: true,
-        height: 400,
-      });
-      tabContentIds["summary"] = ui.column([editor], { padding: 16 });
-    } else {
-      tabContentIds["summary"] = ui.column([ui.text(t("memory.noResults"), "caption")], {
-        padding: 16,
-      });
-    }
-  }
-
-  // Tab 3: Logs — daily logs table
-  if (data.activeTab === "logs") {
-    if (data.dailyLogs.length > 0) {
-      const logRows = data.dailyLogs.map((log) => ({
-        date: log.date,
-        preview: log.preview,
-      }));
-      const logsTable = ui.table(
-        [
-          { key: "date", label: t("evolution.time") },
-          { key: "preview", label: t("memory.value") },
-        ],
-        logRows
-      );
-      tabContentIds["logs"] = ui.column([logsTable], { padding: 16 });
-    } else {
-      tabContentIds["logs"] = ui.column([ui.text(t("memory.noResults"), "caption")], {
-        padding: 16,
-      });
-    }
-  }
-
-  // Tab 4: Search — input + results
-  if (data.activeTab === "search") {
-    const searchInput = ui.formInput("query", "text", {
-      placeholder: t("memory.searchPlaceholder"),
-      value: data.searchQuery || "",
-    });
-    const searchBtn = ui.button(t("memory.search"), "memory_search_submit", {
-      variant: "primary",
-      size: "sm",
-    });
-    const searchRow = ui.row([searchInput, searchBtn], { gap: 8, align: "end" });
-    const searchChildren: string[] = [searchRow];
-
-    if (data.searchQuery && data.searchResults) {
-      if (data.searchResults.length === 0) {
-        searchChildren.push(ui.text(t("memory.noResults"), "caption"));
-      } else {
-        for (const result of data.searchResults) {
-          const scoreBadge = ui.badge(`${t("memory.score")}: ${Math.round(result.score * 100)}%`, {
-            variant: result.score >= 0.7 ? "success" : result.score >= 0.4 ? "warning" : "default",
-          });
-          const pathText = ui.text(result.path, "caption");
-          const snippetText = ui.text(result.snippet, "body");
-          const resultHeader = ui.row([pathText, scoreBadge], { gap: 8, align: "center" });
-          const resultCard = ui.card([resultHeader, snippetText], { padding: 12 });
-          searchChildren.push(resultCard);
-        }
-      }
-    }
-
-    tabContentIds["search"] = ui.column(searchChildren, { padding: 16, gap: 12 });
-  }
-
-  // Tab 5: System Agent — memory files
-  if (data.activeTab === "system-agent") {
-    const saChildren: string[] = [];
-
-    const memoryRows = (data.saMemoryFiles || []).map((f) => ({
-      name: f.displayName,
-      lines: f.lines,
-      preview: f.preview || t("memory.memoryEmptyFile"),
-    }));
-
-    const memoryTable = ui.dataTable(
-      [
-        { key: "name", label: t("memory.memoryFileName"), sortable: true },
-        { key: "lines", label: t("memory.memoryFileLines") },
-        { key: "preview", label: t("memory.memoryFilePreview") },
-      ],
-      memoryRows,
-      { onRowClick: "sa_memory_select" }
-    );
-
-    saChildren.push(memoryTable);
-
-    // Selected memory file editor
-    if (data.saSelectedMemoryFile && data.saMemoryContent !== undefined) {
-      const editor = ui.codeEditor(data.saMemoryContent, {
-        language: "markdown",
-        readonly: !data.saEditingMemory,
-        lineNumbers: true,
-        height: 400,
-        onChange: "sa_memory_content_change",
-      });
-
-      const editBtn = data.saEditingMemory
-        ? ui.button(t("common.save"), "sa_memory_save", { variant: "primary" })
-        : ui.button(t("common.edit"), "sa_memory_edit", { variant: "outline" });
-
-      const cancelBtn = data.saEditingMemory
-        ? ui.button(t("common.cancel"), "sa_memory_cancel", { variant: "ghost" })
-        : null;
-
-      const editorBtns = cancelBtn ? [editBtn, cancelBtn] : [editBtn];
-      const editorHeader = ui.row(editorBtns, { gap: 8, justify: "end" });
-
-      saChildren.push(
-        ui.card([editorHeader, editor], {
-          title: data.saSelectedMemoryFile,
-          padding: 20,
-        })
-      );
-    }
-
-    tabContentIds["system-agent"] = ui.column(saChildren, { padding: 16, gap: 16 });
+  const tabBuilders: Record<string, () => string> = {
+    profile: () => buildMemoryProfileTab(ui, data),
+    summary: () => buildMemorySummaryTab(ui, data.memorySummary),
+    logs: () => buildMemoryLogsTab(ui, data),
+    search: () => buildMemorySearchTab(ui, data),
+    "system-agent": () => buildMemorySystemAgentTab(ui, data),
+  };
+  const builder = tabBuilders[data.activeTab];
+  if (builder) {
+    tabContentIds[data.activeTab] = builder();
   }
 
   // Assemble tabs
@@ -972,7 +1026,9 @@ const SKILL_CATEGORY_TABS = [
   { id: "utility", label: "skillCatUtility", icon: "puzzle" as const },
 ];
 
-export function generateSkillsPage(data: {
+// ── Skills page section builders ──
+
+interface SkillsPageData {
   skills: SkillInfo[];
   selectedSkill?: string;
   selectedSkillFile?: string;
@@ -981,54 +1037,9 @@ export function generateSkillsPage(data: {
   editing?: boolean;
   loading?: boolean;
   category?: string;
-}): A2UIMessage[] {
-  const ui = new A2UIGenerator("main");
-  const category = data.category || "health-coaching";
+}
 
-  // Header
-  const title = ui.text(t("skills.title"), "h2");
-  const subtitle = ui.text(t("skills.subtitle"), "caption");
-
-  const headerChildren = [ui.column([title, subtitle], { gap: 4 })];
-  const createBtn = ui.button("", "create_skill", {
-    variant: "primary",
-    size: "sm",
-    icon: "sparkles",
-    tooltip: t("skills.newSkill"),
-  } as any);
-  headerChildren.push(createBtn);
-  const headerRow = ui.row(headerChildren, {
-    justify: "between",
-    align: "start",
-  });
-  const header = ui.column([headerRow], { padding: 24 });
-
-  // Build tab definitions with i18n labels
-  const tabDefs = SKILL_CATEGORY_TABS.map((tab) => ({
-    id: tab.id,
-    label: t(`skills.${tab.label}` as any) || tab.id,
-    icon: tab.icon,
-  }));
-
-  // Loading skeleton — early return before building tabs
-  if (data.loading) {
-    const tabContentIds: Record<string, string> = {};
-    const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
-    tabContentIds[category] = ui.column([s1], { gap: 16, padding: 24 });
-    const tabs = ui.tabs(tabDefs, category, tabContentIds);
-    const root = ui.column([header, tabs], { gap: 0 });
-    return ui.build(root);
-  }
-
-  // Filter skills by current category
-  const filteredSkills = data.skills.filter((s) => {
-    const skillCat = s.category || (s.type === "system" ? "evolution" : "utility");
-    return skillCat === category;
-  });
-
-  const children: string[] = [];
-
-  // Skills list for current category
+function buildSkillsListCard(ui: A2UIGenerator, filteredSkills: SkillInfo[]): string {
   if (filteredSkills.length > 0) {
     const skillRows = filteredSkills.map((s) => ({
       name: `${s.emoji || "🧩"} ${s.name}`,
@@ -1046,84 +1057,108 @@ export function generateSkillsPage(data: {
       skillRows,
       { onRowClick: "select_skill" }
     );
-    children.push(ui.card([skillsTable], { title: t("skills.cardTitle"), padding: 20 }));
-  } else {
-    const emptyText = ui.text("No skills installed", "caption");
-    children.push(emptyText);
+    return ui.card([skillsTable], { title: t("skills.cardTitle"), padding: 20 });
   }
+  return ui.text("No skills installed", "caption");
+}
 
-  // If a skill is selected, show editor
-  if (data.selectedSkill && data.content !== undefined) {
-    const selectedInfo = data.skills.find((s) => s.name === data.selectedSkill);
-    const currentFile = data.selectedSkillFile || "SKILL.md";
-    const editorLanguage = (data.language || "markdown") as
-      | "markdown"
-      | "json"
-      | "yaml"
-      | "typescript"
-      | "javascript";
+function buildSkillEditorCard(ui: A2UIGenerator, data: SkillsPageData): string | null {
+  if (!data.selectedSkill || data.content === undefined) return null;
+  const selectedInfo = data.skills.find((s) => s.name === data.selectedSkill);
+  const currentFile = data.selectedSkillFile || "SKILL.md";
+  const editorLanguage = (data.language || "markdown") as
+    | "markdown"
+    | "json"
+    | "yaml"
+    | "typescript"
+    | "javascript";
 
-    const editorChildren: string[] = [];
-
-    // File selector (when skill has multiple files)
-    const skillFiles = selectedInfo?.structure?.files;
-    if (skillFiles && skillFiles.length > 1) {
-      const fileButtons = skillFiles.map((f) =>
-        ui.button(f, "select_skill_file", {
-          variant: f === currentFile ? "primary" : "outline",
-          size: "sm",
-          payload: { file: f },
-        })
-      );
-      editorChildren.push(ui.row(fileButtons));
-    }
-
-    // Editor
-    const editor = ui.codeEditor(data.content, {
-      language: editorLanguage,
-      readonly: !data.editing,
-      lineNumbers: true,
-      height: 400,
-      onChange: "skill_content_change",
-    });
-
-    const editBtn = data.editing
-      ? ui.button(t("common.save"), "save_skill", { variant: "primary" })
-      : ui.button(t("common.edit"), "edit_skill", { variant: "outline" });
-
-    const toggleBtn = ui.button(
-      selectedInfo?.enabled ? t("common.disable") : t("common.enable"),
-      "toggle_skill",
-      { variant: selectedInfo?.enabled ? "ghost" : "secondary" }
+  const editorChildren: string[] = [];
+  const skillFiles = selectedInfo?.structure?.files;
+  if (skillFiles && skillFiles.length > 1) {
+    const fileButtons = skillFiles.map((f) =>
+      ui.button(f, "select_skill_file", {
+        variant: f === currentFile ? "primary" : "outline",
+        size: "sm",
+        payload: { file: f },
+      })
     );
+    editorChildren.push(ui.row(fileButtons));
+  }
+  const editor = ui.codeEditor(data.content, {
+    language: editorLanguage,
+    readonly: !data.editing,
+    lineNumbers: true,
+    height: 400,
+    onChange: "skill_content_change",
+  });
+  const editBtn = data.editing
+    ? ui.button(t("common.save"), "save_skill", { variant: "primary" })
+    : ui.button(t("common.edit"), "edit_skill", { variant: "outline" });
+  const toggleBtn = ui.button(
+    selectedInfo?.enabled ? t("common.disable") : t("common.enable"),
+    "toggle_skill",
+    { variant: selectedInfo?.enabled ? "ghost" : "secondary" }
+  );
+  const cancelBtn = data.editing
+    ? ui.button(t("common.cancel"), "cancel_edit", { variant: "ghost" })
+    : null;
+  const editorActions = cancelBtn ? [editBtn, cancelBtn, toggleBtn] : [editBtn, toggleBtn];
+  editorChildren.push(ui.row(editorActions, { gap: 8, justify: "end" }));
+  editorChildren.push(editor);
+  return ui.card(editorChildren, { title: `${data.selectedSkill}/${currentFile}`, padding: 20 });
+}
 
-    const cancelBtn = data.editing
-      ? ui.button(t("common.cancel"), "cancel_edit", { variant: "ghost" })
-      : null;
+export function generateSkillsPage(data: SkillsPageData): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+  const category = data.category || "health-coaching";
 
-    const editorActions = cancelBtn ? [editBtn, cancelBtn, toggleBtn] : [editBtn, toggleBtn];
+  // Header
+  const title = ui.text(t("skills.title"), "h2");
+  const subtitle = ui.text(t("skills.subtitle"), "caption");
+  const headerChildren = [ui.column([title, subtitle], { gap: 4 })];
+  const createBtn = ui.button("", "create_skill", {
+    variant: "primary",
+    size: "sm",
+    icon: "sparkles",
+    tooltip: t("skills.newSkill"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any);
+  headerChildren.push(createBtn);
+  const header = ui.column([ui.row(headerChildren, { justify: "between", align: "start" })], {
+    padding: 24,
+  });
 
-    const editorHeader = ui.row(editorActions, { gap: 8, justify: "end" });
+  // Tab definitions
+  const tabDefs = SKILL_CATEGORY_TABS.map((tab) => ({
+    id: tab.id,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    label: t(`skills.${tab.label}` as any) || tab.id,
+    icon: tab.icon,
+  }));
 
-    editorChildren.push(editorHeader);
-    editorChildren.push(editor);
-
-    const editorCard = ui.card(editorChildren, {
-      title: `${data.selectedSkill}/${currentFile}`,
-      padding: 20,
-    });
-
-    children.push(editorCard);
+  // Loading skeleton
+  if (data.loading) {
+    const tabContentIds: Record<string, string> = {};
+    const s1 = ui.skeleton({ variant: "rectangular", height: 200 });
+    tabContentIds[category] = ui.column([s1], { gap: 16, padding: 24 });
+    const tabs = ui.tabs(tabDefs, category, tabContentIds);
+    return ui.build(ui.column([header, tabs], { gap: 0 }));
   }
 
-  // Wrap content as tab content so tabs component renders it
+  // Build tab content
+  const filteredSkills = data.skills.filter((s) => {
+    const skillCat = s.category || (s.type === "system" ? "evolution" : "utility");
+    return skillCat === category;
+  });
+  const children: string[] = [buildSkillsListCard(ui, filteredSkills)];
+  const editorCard = buildSkillEditorCard(ui, data);
+  if (editorCard) children.push(editorCard);
+
   const tabContentIds: Record<string, string> = {};
   tabContentIds[category] = ui.column(children, { gap: 24, padding: 24 });
   const tabs = ui.tabs(tabDefs, category, tabContentIds);
-
-  const root = ui.column([header, tabs], { gap: 0 });
-
-  return ui.build(root);
+  return ui.build(ui.column([header, tabs], { gap: 0 }));
 }
 
 // ============================================================================
@@ -1292,7 +1327,7 @@ export function generateSkillDetailModal(skill: {
     const contentTitle = ui.text("SKILL.md", "h3");
     children.push(contentTitle);
     const preview =
-      skill.content.length > 2000 ? skill.content.slice(0, 2000) + "\n..." : skill.content;
+      skill.content.length > 2000 ? `${skill.content.slice(0, 2000)}\n...` : skill.content;
     const contentBlock = ui.codeEditor(preview, {
       language: "markdown",
       readOnly: true,
@@ -1424,6 +1459,7 @@ export function generateIntegrationsPage(data: IntegrationsPageData): A2UIMessag
     size: "sm",
     icon: "refresh-cw",
     tooltip: t("integrations.refreshData"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), refreshBtn], {
     justify: "between",
@@ -1735,7 +1771,7 @@ interface LogsPageData {
   activeSubsystem?: string;
 
   // LLM calls tab
-  llmCalls: import("../utils/llm-logger.js").LLMCallPair[];
+  llmCalls: LLMCallPair[];
   llmProviders: string[];
   llmModels: string[];
   llmActiveProvider?: string;
@@ -1757,6 +1793,7 @@ export function generateLogsPage(data: LogsPageData): A2UIMessage[] {
     size: "sm",
     icon: "refresh-cw",
     tooltip: t("logs.refresh"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), refreshBtn], {
     justify: "between",
@@ -1872,18 +1909,21 @@ function buildLlmCallsTab(ui: A2UIGenerator, data: LogsPageData): string {
     const timeStr = call.timestamp
       ? new Date(call.timestamp).toLocaleTimeString("en-US", { hour12: false })
       : "-";
-    const tokensStr =
-      call.inputTokens != null && call.outputTokens != null
-        ? `${call.inputTokens}/${call.outputTokens}`
-        : call.totalTokens != null
-          ? String(call.totalTokens)
-          : "-";
-    const latencyStr =
-      call.latencyMs != null
-        ? call.latencyMs >= 1000
-          ? `${(call.latencyMs / 1000).toFixed(1)}s`
-          : `${call.latencyMs}ms`
-        : "-";
+    let tokensStr: string;
+    if (call.inputTokens != null && call.outputTokens != null) {
+      tokensStr = `${call.inputTokens}/${call.outputTokens}`;
+    } else if (call.totalTokens != null) {
+      tokensStr = String(call.totalTokens);
+    } else {
+      tokensStr = "-";
+    }
+    let latencyStr: string;
+    if (call.latencyMs == null) {
+      latencyStr = "-";
+    } else {
+      latencyStr =
+        call.latencyMs >= 1000 ? `${(call.latencyMs / 1000).toFixed(1)}s` : `${call.latencyMs}ms`;
+    }
     const statusStr = call.status != null ? String(call.status) : "-";
 
     return {
@@ -2039,17 +2079,15 @@ export interface SettingsPageData {
   rawConfigJson: string;
 }
 
-export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
-  const ui = new A2UIGenerator("main");
-  const saveIcon = { submitIcon: "save", submitTooltip: t("settings.saveButton") };
+// ── Settings page section builders ──
 
-  // Header
-  const title = ui.text(t("settings.title"), "h2");
-  const subtitle = ui.text(t("settings.subtitle"), "caption");
-  const uuidText = ui.text(`${t("settings.userId")}: ${data.userId || "—"}`, "caption");
-  const header = ui.column([title, subtitle, uuidText], { gap: 6, style: "margin-bottom: 8px;" });
+type SaveIconOpts = { submitIcon: string; submitTooltip: string };
 
-  // ---- Model Repository Section ----
+function buildSettingsModelRepoCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const repoChildren: string[] = [];
   for (const mp of data.modelProviders) {
     const mpBaseUrl = ui.formInput(`mp__${mp.key}__baseUrl`, "text", {
@@ -2111,22 +2149,21 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     ...saveIcon,
     footerExtra: [addProviderBtn],
   });
-  const repoCard = ui.card([repoForm], {
-    title: t("settings.sectionModelRepository"),
-    padding: 20,
-  });
+  return ui.card([repoForm], { title: t("settings.sectionModelRepository"), padding: 20 });
+}
 
-  // ---- Agents Configuration Section ----
+function buildSettingsAgentsCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const agentModelRefOptions = [
     { value: "", label: t("settings.defaultModelFallback") },
     ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
   ];
-  // Build collapsibles for each agent (no per-agent form — one form wraps all)
   const agentFormChildren: string[] = [];
   for (const profile of data.agentProfiles) {
     const pfx = `ap__${profile.id}__`;
-
-    // Agent ID title + delete button
     const agentTitle = ui.text(profile.id, "h3");
     const agentDeleteBtn = ui.button("", "settings_agent_delete", {
       icon: "x",
@@ -2135,8 +2172,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
       payload: { agentId: profile.id },
     });
     const titleRow = ui.row([agentTitle, agentDeleteBtn], { justify: "between", align: "center" });
-
-    // Form inputs (collected by the outer form on submit)
     const modelInput = ui.formInput(`${pfx}model`, "select", {
       label: t("settings.agentModelLabel"),
       options: agentModelRefOptions,
@@ -2152,8 +2187,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
       value: profile.sessionPath,
       placeholder: "users/{uid}/sessions/pha",
     });
-
-    // Tag pickers (their buttons are type="button", won't trigger form submit)
     const toolTagPicker = ui.tagPicker({
       label: t("settings.agentToolTags"),
       selected: profile.toolTags,
@@ -2172,7 +2205,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
       placeholder: t("settings.addTag"),
       stableKey: `tp_${profile.id}_skill`,
     });
-
     const shouldExpand = data.expandedAgentId
       ? profile.id === data.expandedAgentId
       : profile.id === "pha";
@@ -2184,7 +2216,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
       )
     );
   }
-  // One form wrapping all agent collapsibles — add + save on same row
   const addAgentBtn = ui.button(t("settings.addAgent"), "settings_agent_add", {
     icon: "plus",
     variant: "outline",
@@ -2193,12 +2224,10 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     ...saveIcon,
     footerExtra: [addAgentBtn],
   });
-  const agentsCard = ui.card([agentsForm], {
-    title: t("settings.sectionAgents"),
-    padding: 20,
-  });
+  return ui.card([agentsForm], { title: t("settings.sectionAgents"), padding: 20 });
+}
 
-  // ---- Tags Collection Section ----
+function buildSettingsTagsCard(ui: A2UIGenerator, data: SettingsPageData): string {
   const tagsDesc = ui.text(t("settings.sectionTagsDesc"), "caption");
   const tagsPicker = ui.tagPicker({
     selected: data.configTags,
@@ -2207,12 +2236,14 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     placeholder: t("settings.addTag"),
     stableKey: "tp_config_tags",
   });
-  const tagsCard = ui.card([tagsDesc, tagsPicker], {
-    title: t("settings.sectionTags"),
-    padding: 20,
-  });
+  return ui.card([tagsDesc, tagsPicker], { title: t("settings.sectionTags"), padding: 20 });
+}
 
-  // ---- Gateway Section ----
+function buildSettingsGatewayCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const portInput = ui.formInput("port", "text", {
     label: t("settings.gatewayPort"),
     value: String(data.gatewayPort),
@@ -2226,9 +2257,14 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     value: String(data.gatewayAutoStart),
   });
   const gatewayForm = ui.form([portInput, autoStartSelect], "settings_save_gateway", saveIcon);
-  const gatewayCard = ui.card([gatewayForm], { title: t("settings.sectionGateway"), padding: 20 });
+  return ui.card([gatewayForm], { title: t("settings.sectionGateway"), padding: 20 });
+}
 
-  // ---- Data Source Section ----
+function buildSettingsDataSourceCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): { dsCard: string; scopesCard: string | null } {
   const dsSelect = ui.formInput("dataSourceType", "select", {
     label: t("settings.dataSource"),
     options: [
@@ -2239,70 +2275,59 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     value: data.dataSourceType,
   });
   const dsInputs: string[] = [dsSelect];
-
-  // Show Huawei config fields when huawei is selected
   if (data.dataSourceType === "huawei") {
     dsInputs.push(
       ui.formInput("huaweiClientId", "text", {
         label: t("settings.huaweiClientId"),
         value: data.huaweiClientId,
         placeholder: "your-client-id",
-      })
-    );
-    dsInputs.push(
+      }),
       ui.formInput("huaweiClientSecret", "text", {
         label: t("settings.huaweiClientSecret"),
         value: data.huaweiClientSecret,
         placeholder: "your-client-secret",
-      })
-    );
-    dsInputs.push(
+      }),
       ui.formInput("huaweiRedirectUri", "text", {
         label: t("settings.huaweiRedirectUri"),
         value: data.huaweiRedirectUri,
         placeholder: "http://localhost:8000/auth/callback",
-      })
-    );
-    dsInputs.push(
+      }),
       ui.formInput("huaweiAuthUrl", "text", {
         label: t("settings.huaweiAuthUrl"),
         value: data.huaweiAuthUrl,
-      })
-    );
-    dsInputs.push(
+      }),
       ui.formInput("huaweiTokenUrl", "text", {
         label: t("settings.huaweiTokenUrl"),
         value: data.huaweiTokenUrl,
-      })
-    );
-    dsInputs.push(
+      }),
       ui.formInput("huaweiApiBaseUrl", "text", {
         label: t("settings.huaweiApiBaseUrl"),
         value: data.huaweiApiBaseUrl,
       })
     );
   }
-
   const dsForm = ui.form(dsInputs, "settings_save_datasource", saveIcon);
   const dsCard = ui.card([dsForm], { title: t("settings.sectionData"), padding: 20 });
 
-  // ---- OAuth Scopes Section (tag_picker, only when huawei) ----
   let scopesCard: string | null = null;
   if (data.dataSourceType === "huawei") {
     const scopePicker = ui.tagPicker({
       selected: data.huaweiScopes,
-      options: data.huaweiScopes, // existing scopes as preset options
+      options: data.huaweiScopes,
       onToggle: "settings_scope_toggle",
       placeholder: t("settings.addScope"),
       stableKey: "tp_huawei_scopes",
     });
-    scopesCard = ui.card([scopePicker], {
-      title: t("settings.scopesPerLine"),
-      padding: 20,
-    });
+    scopesCard = ui.card([scopePicker], { title: t("settings.scopesPerLine"), padding: 20 });
   }
+  return { dsCard, scopesCard };
+}
 
-  // ---- TUI Section ----
+function buildSettingsTuiCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const tuiThemeSelect = ui.formInput("tuiTheme", "select", {
     label: t("settings.tuiTheme"),
     options: [
@@ -2320,9 +2345,14 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     value: String(data.tuiShowToolCalls),
   });
   const tuiForm = ui.form([tuiThemeSelect, tuiToolCallsSelect], "settings_save_tui", saveIcon);
-  const tuiCard = ui.card([tuiForm], { title: t("settings.sectionTui"), padding: 20 });
+  return ui.card([tuiForm], { title: t("settings.sectionTui"), padding: 20 });
+}
 
-  // ---- Embedding Section ----
+function buildSettingsEmbeddingCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const embeddingToggle = ui.formInput("embeddingEnabled", "select", {
     label: t("settings.embedding"),
     options: [
@@ -2340,12 +2370,14 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     "settings_save_embedding",
     saveIcon
   );
-  const embeddingCard = ui.card([embeddingForm], {
-    title: t("settings.sectionEmbedding"),
-    padding: 20,
-  });
+  return ui.card([embeddingForm], { title: t("settings.sectionEmbedding"), padding: 20 });
+}
 
-  // ---- Benchmark & Evolution Section (judge model + concurrency + applyEngine) ----
+function buildSettingsBenchmarkCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const allModelRefOptions = [
     { value: "", label: t("settings.noneSelected") },
     ...data.allModelRefs.map((ref) => ({ value: ref, label: ref })),
@@ -2372,15 +2404,15 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     "settings_save_benchmark_v4",
     saveIcon
   );
-  const benchmarkCard = ui.card([benchmarkForm], {
-    title: t("settings.sectionBenchmark"),
-    padding: 20,
-  });
+  return ui.card([benchmarkForm], { title: t("settings.sectionBenchmark"), padding: 20 });
+}
 
-  // ---- MCP Section (structured) ----
+function buildSettingsMcpCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const mcpChildren: string[] = [];
-
-  // Chrome DevTools MCP sub-form
   const chromeCmdInput = ui.formInput("chromeMcpCommand", "text", {
     label: t("settings.chromeMcpCommand"),
     value: data.chromeMcpCommand,
@@ -2407,7 +2439,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
   );
   mcpChildren.push(ui.collapsible("Chrome DevTools", [chromeMcpForm], { expanded: true }));
 
-  // Remote MCP Servers
   const remoteFormInputs: string[] = [];
   for (const srv of data.remoteServers) {
     const sUrl = ui.formInput(`mcp_remote__${srv.key}__url`, "text", {
@@ -2456,13 +2487,14 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     footerExtra: [mcpRemoteAddBtn],
   });
   mcpChildren.push(ui.collapsible(t("settings.remoteServers"), [mcpRemoteForm]));
+  return ui.card(mcpChildren, { title: t("settings.sectionMcp"), padding: 20 });
+}
 
-  const mcpCard = ui.card(mcpChildren, {
-    title: t("settings.sectionMcp"),
-    padding: 20,
-  });
-
-  // ---- Plugins Section (structured) ----
+function buildSettingsPluginsCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const pluginsChildren: string[] = [];
   const pluginEnabledSelect = ui.formInput("pluginEnabled", "select", {
     label: t("settings.pluginEnabled"),
@@ -2482,8 +2514,6 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     saveIcon
   );
   pluginsChildren.push(pluginsMainForm);
-
-  // Per-plugin entries (with auto-discovery info)
   if (data.pluginEntries.length === 0) {
     pluginsChildren.push(ui.text(t("settings.noPluginsFound"), "caption"));
   }
@@ -2499,7 +2529,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     }
     const originBadge = ui.badge(originLabel, { variant: "info", size: "sm" });
     pluginContent.push(
-      ui.row([ui.text(t("settings.pluginOrigin") + ":", "caption"), originBadge], {
+      ui.row([ui.text(`${t("settings.pluginOrigin")}:`, "caption"), originBadge], {
         gap: 6,
         align: "center",
       })
@@ -2519,12 +2549,14 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     pluginContent.push(peEnabled, peConfig);
     pluginsChildren.push(ui.collapsible(titleLabel, pluginContent));
   }
-  const pluginsCard = ui.card(pluginsChildren, {
-    title: t("settings.sectionPlugins"),
-    padding: 20,
-  });
+  return ui.card(pluginsChildren, { title: t("settings.sectionPlugins"), padding: 20 });
+}
 
-  // ---- Context & Proactive Section ----
+function buildSettingsContextCard(
+  ui: A2UIGenerator,
+  data: SettingsPageData,
+  saveIcon: SaveIconOpts
+): string {
   const ctxLocationInput = ui.formInput("contextLocation", "text", {
     label: t("settings.contextLocation"),
     value: data.contextLocation,
@@ -2551,43 +2583,60 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     "settings_save_context",
     saveIcon
   );
-  const contextCard = ui.card([contextForm], {
-    title: t("settings.sectionContext"),
-    padding: 20,
-  });
+  return ui.card([contextForm], { title: t("settings.sectionContext"), padding: 20 });
+}
 
-  // ---- Raw Config Viewer ----
+function buildSettingsRawConfigCard(ui: A2UIGenerator, data: SettingsPageData): string {
   const rawEditor = ui.codeEditor(data.rawConfigJson, {
     language: "json",
     readonly: true,
     height: 300,
   });
-  const copyBtn = ui.button(t("settings.copyConfig"), "settings_copy_config", {
-    icon: "save",
-  });
+  const copyBtn = ui.button(t("settings.copyConfig"), "settings_copy_config", { icon: "save" });
   const downloadBtn = ui.button(t("settings.downloadConfig"), "settings_download_config", {
     icon: "file-text",
   });
   const rawActions = ui.row([copyBtn, downloadBtn], { gap: 8, style: "margin-top: 12px;" });
-  const rawCard = ui.card([rawEditor, rawActions], {
-    title: t("settings.rawConfig"),
-    padding: 20,
-  });
+  return ui.card([rawEditor, rawActions], { title: t("settings.rawConfig"), padding: 20 });
+}
 
+export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+  const saveIcon: SaveIconOpts = {
+    submitIcon: "save",
+    submitTooltip: t("settings.saveButton"),
+  };
+
+  // Header
+  const title = ui.text(t("settings.title"), "h2");
+  const subtitle = ui.text(t("settings.subtitle"), "caption");
+  const uuidText = ui.text(`${t("settings.userId")}: ${data.userId || "—"}`, "caption");
+  const header = ui.column([title, subtitle, uuidText], { gap: 6, style: "margin-bottom: 8px;" });
+
+  // Build section cards via extracted builders
+  const { dsCard, scopesCard } = buildSettingsDataSourceCard(ui, data, saveIcon);
   const cards: string[] = [
     header,
-    repoCard,
-    agentsCard,
-    tagsCard,
-    gatewayCard,
-    contextCard,
+    buildSettingsModelRepoCard(ui, data, saveIcon),
+    buildSettingsAgentsCard(ui, data, saveIcon),
+    buildSettingsTagsCard(ui, data),
+    buildSettingsGatewayCard(ui, data, saveIcon),
+    buildSettingsContextCard(ui, data, saveIcon),
     dsCard,
   ];
   if (scopesCard) cards.push(scopesCard);
-  cards.push(tuiCard, embeddingCard, benchmarkCard, mcpCard, pluginsCard, rawCard);
+  cards.push(
+    buildSettingsTuiCard(ui, data, saveIcon),
+    buildSettingsEmbeddingCard(ui, data, saveIcon),
+    buildSettingsBenchmarkCard(ui, data, saveIcon),
+    buildSettingsMcpCard(ui, data, saveIcon),
+    buildSettingsPluginsCard(ui, data, saveIcon),
+    buildSettingsRawConfigCard(ui, data)
+  );
   const root = ui.column(cards, { gap: 24, padding: 24 });
 
   // Add some bottom padding to avoid content being cut off
+  // eslint-disable-next-line dot-notation
   const rootComp = ui["components"].get(root);
   if (rootComp) {
     const typeName = Object.keys(rootComp.component)[0];
@@ -2603,25 +2652,9 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
 // Benchmark Run Detail Modal
 // ============================================================================
 
-export function generateBenchmarkRunDetailModal(
-  run: BenchmarkRunInfo,
-  categoryScores: CategoryScoreInfo[],
-  radarMode: "categories" | "criteria" = "categories"
-): A2UIMessage[] {
-  const ui = new A2UIGenerator("modal");
+// ── Benchmark Run Detail Modal builders ──
 
-  const children: string[] = [];
-
-  // Top: score gauge centered (0.xx scale)
-  const overallNorm = run.overallScore <= 1.0 ? run.overallScore : run.overallScore / 100;
-  const overallGauge = ui.scoreGauge(overallNorm, {
-    label: t("evolution.totalScore"),
-    max: 1.0,
-    size: "lg",
-  });
-  children.push(ui.column([overallGauge], { align: "center" }));
-
-  // Stat cards row
+function buildModalStatCards(ui: A2UIGenerator, run: BenchmarkRunInfo): string {
   const passedCard = ui.statCard({
     title: t("evolution.passed"),
     value: `${run.passedCount}/${run.totalTestCases}`,
@@ -2641,9 +2674,10 @@ export function generateBenchmarkRunDetailModal(
     icon: "timer",
     color: "#667eea",
   });
-  children.push(ui.grid([passedCard, failedCard, durationCard], { columns: 3, gap: 12 }));
+  return ui.grid([passedCard, failedCard, durationCard], { columns: 3, gap: 12 });
+}
 
-  // Version / Model info row
+function buildModalInfoRow(ui: A2UIGenerator, run: BenchmarkRunInfo): string | null {
   const infoItems: string[] = [];
   if (run.versionTag || run.metadata?.gitVersion) {
     infoItems.push(
@@ -2659,93 +2693,127 @@ export function generateBenchmarkRunDetailModal(
   if (run.metadata?.provider) {
     infoItems.push(ui.text(`Provider: ${run.metadata.provider}`, "caption"));
   }
-  if (infoItems.length > 0) {
-    children.push(ui.row(infoItems, { gap: 16 }));
-  }
+  return infoItems.length > 0 ? ui.row(infoItems, { gap: 16 }) : null;
+}
 
-  // Plotly radar chart with mode toggle
-  if (categoryScores.length > 0) {
-    // Mode toggle
-    const toggleId = `modal_toggle_${Date.now()}`;
-    ui.addRaw(toggleId, "ArenaModeToggle", {
-      options: [
-        { label: "5 Categories", value: "categories" },
-        { label: "16 Criteria", value: "criteria" },
-      ],
-      active: radarMode,
-      action: "set_modal_radar_mode",
-    });
-    children.push(ui.row([toggleId], { justify: "center" }));
+function buildModalRadarSection(
+  ui: A2UIGenerator,
+  run: BenchmarkRunInfo,
+  categoryScores: CategoryScoreInfo[],
+  overallNorm: number,
+  radarMode: "categories" | "criteria"
+): string[] {
+  const ids: string[] = [];
+  // Mode toggle
+  const toggleId = `modal_toggle_${Date.now()}`;
+  ui.addRaw(toggleId, "ArenaModeToggle", {
+    options: [
+      { label: "5 Categories", value: "categories" },
+      { label: "16 Criteria", value: "criteria" },
+    ],
+    active: radarMode,
+    action: "set_modal_radar_mode",
+  });
+  ids.push(ui.row([toggleId], { justify: "center" }));
 
-    // Build Plotly radar with single run (map camelCase to snake_case for ComparisonRun)
-    const comparisonRun: ComparisonRun = {
-      id: run.id,
-      label: run.versionTag || run.id.slice(0, 8),
-      color: "rgb(99, 102, 241)",
-      overallScore: overallNorm,
-      categoryScores: categoryScores.map((cs) => ({
-        category: cs.category,
-        score: cs.score,
-        test_count: cs.testCount,
-        passed_count: cs.passedCount,
-        subComponents: cs.subComponents,
-      })),
-    };
-    const radarChartData = buildRadarChartData([comparisonRun], radarMode);
-    const radarId = `modal_radar_${Date.now()}`;
-    ui.addRaw(radarId, "RadarChart", {
-      radarData: radarChartData.data,
-      radarSeries: radarChartData.series,
-      height: 300,
-    });
-    children.push(radarId);
+  const comparisonRun: ComparisonRun = {
+    id: run.id,
+    label: run.versionTag || run.id.slice(0, 8),
+    color: "rgb(99, 102, 241)",
+    overallScore: overallNorm,
+    categoryScores: categoryScores.map((cs) => ({
+      category: cs.category,
+      score: cs.score,
+      test_count: cs.testCount,
+      passed_count: cs.passedCount,
+      subComponents: cs.subComponents,
+    })),
+  };
+  const radarChartData = buildRadarChartData([comparisonRun], radarMode);
+  const radarId = `modal_radar_${Date.now()}`;
+  ui.addRaw(radarId, "RadarChart", {
+    radarData: radarChartData.data,
+    radarSeries: radarChartData.series,
+    height: 300,
+  });
+  ids.push(radarId);
+  return ids;
+}
 
-    // Category cards (arena_category_card style)
-    const hasSubComponents = categoryScores.some(
-      (cs) => cs.subComponents && cs.subComponents.length > 0
-    );
-    if (hasSubComponents) {
-      const catCards: string[] = [];
-      for (const cs of categoryScores) {
-        const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
-        const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
-        const criteria = (cs.subComponents || []).map((sub) => ({
-          name: sub.name,
-          scores: [{ value: sub.score <= 1 ? sub.score : sub.score / 100, color: catColor }],
-        }));
-        const catCardId = `modal_cat_${cs.category}_${Date.now()}`;
-        ui.addRaw(catCardId, "ArenaCategoryCard", {
-          categoryName: getCategoryLabel(cs.category),
-          categoryColor: catColor,
-          categoryIcon: getCategoryIcon(cs.category),
-          avgScore,
-          criteria,
-        });
-        catCards.push(catCardId);
-      }
-      const catGrid = ui.column(catCards, {
-        gap: 16,
-        style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));",
-      } as any);
-      children.push(catGrid);
-    } else {
-      // Fallback: simple category scores table
-      const catLabel = ui.text(t("evolution.categoryScores"), "label");
-      const catRows = categoryScores.map((cs) => ({
-        category: getCategoryLabel(cs.category),
-        score: (cs.score <= 1.0 ? cs.score : cs.score / 100).toFixed(2),
-        passed: `${cs.passedCount}/${cs.testCount}`,
+function buildModalCategoryCards(ui: A2UIGenerator, categoryScores: CategoryScoreInfo[]): string[] {
+  const hasSubComponents = categoryScores.some(
+    (cs) => cs.subComponents && cs.subComponents.length > 0
+  );
+  if (hasSubComponents) {
+    const catCards: string[] = [];
+    for (const cs of categoryScores) {
+      const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
+      const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
+      const criteria = (cs.subComponents || []).map((sub) => ({
+        name: sub.name,
+        scores: [{ value: sub.score <= 1 ? sub.score : sub.score / 100, color: catColor }],
       }));
-      const catTable = ui.dataTable(
-        [
-          { key: "category", label: t("evolution.category") },
-          { key: "score", label: t("evolution.score") },
-          { key: "passed", label: t("evolution.passed") },
-        ],
-        catRows
-      );
-      children.push(catLabel, catTable);
+      const catCardId = `modal_cat_${cs.category}_${Date.now()}`;
+      ui.addRaw(catCardId, "ArenaCategoryCard", {
+        categoryName: getCategoryLabel(cs.category),
+        categoryColor: catColor,
+        categoryIcon: getCategoryIcon(cs.category),
+        avgScore,
+        criteria,
+      });
+      catCards.push(catCardId);
     }
+    const catGrid = ui.column(catCards, {
+      gap: 16,
+      style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    return [catGrid];
+  }
+  // Fallback: simple category scores table
+  const catLabel = ui.text(t("evolution.categoryScores"), "label");
+  const catRows = categoryScores.map((cs) => ({
+    category: getCategoryLabel(cs.category),
+    score: (cs.score <= 1.0 ? cs.score : cs.score / 100).toFixed(2),
+    passed: `${cs.passedCount}/${cs.testCount}`,
+  }));
+  const catTable = ui.dataTable(
+    [
+      { key: "category", label: t("evolution.category") },
+      { key: "score", label: t("evolution.score") },
+      { key: "passed", label: t("evolution.passed") },
+    ],
+    catRows
+  );
+  return [catLabel, catTable];
+}
+
+export function generateBenchmarkRunDetailModal(
+  run: BenchmarkRunInfo,
+  categoryScores: CategoryScoreInfo[],
+  radarMode: "categories" | "criteria" = "categories"
+): A2UIMessage[] {
+  const ui = new A2UIGenerator("modal");
+  const children: string[] = [];
+
+  // Score gauge
+  const overallNorm = run.overallScore <= 1.0 ? run.overallScore : run.overallScore / 100;
+  const overallGauge = ui.scoreGauge(overallNorm, {
+    label: t("evolution.totalScore"),
+    max: 1.0,
+    size: "lg",
+  });
+  children.push(ui.column([overallGauge], { align: "center" }));
+
+  // Stat cards + info row
+  children.push(buildModalStatCards(ui, run));
+  const infoRow = buildModalInfoRow(ui, run);
+  if (infoRow) children.push(infoRow);
+
+  // Radar + category cards
+  if (categoryScores.length > 0) {
+    children.push(...buildModalRadarSection(ui, run, categoryScores, overallNorm, radarMode));
+    children.push(...buildModalCategoryCards(ui, categoryScores));
   }
 
   // Delete button
@@ -2758,7 +2826,6 @@ export function generateBenchmarkRunDetailModal(
 
   const content = ui.column(children, { gap: 16, padding: 8 });
   const root = ui.modal(`Benchmark Run ${run.id.slice(0, 8)}`, [content], { size: "lg" });
-
   return ui.build(root);
 }
 
@@ -2882,14 +2949,186 @@ export type PlansPageTab =
   | "reminders"
   | "calendar";
 
-export function generatePlansPage(data: {
+// ── Plans page tab builders ──
+
+interface PlansPageData {
   activeTab: PlansPageTab;
   plans: HealthPlan[];
   recommendations?: Recommendation[];
   reminders?: Reminder[];
   events?: CalendarEvent[];
   loading?: boolean;
-}): A2UIMessage[] {
+}
+
+function buildPlansListTab(ui: A2UIGenerator, plans: HealthPlan[], tabId: string): string {
+  const tabChildren: string[] = [];
+  if (plans.length === 0) {
+    const emptyIcon = ui.text("target", "caption");
+    const emptyText = ui.text(t("plans.noPlans"), "h3");
+    const emptyHint = ui.text(t("plans.askAgentHint"), "caption");
+    tabChildren.push(
+      ui.column([emptyIcon, emptyText, emptyHint], { gap: 8, align: "center", padding: 48 })
+    );
+  } else {
+    const cardIds: string[] = [];
+    for (const plan of plans) {
+      cardIds.push(buildPlanCard(ui, plan));
+    }
+    tabChildren.push(ui.column(cardIds, { gap: 12, padding: 16 }));
+  }
+  return ui.column(tabChildren, { gap: 0, padding: 24 });
+}
+
+function buildPlanCard(ui: A2UIGenerator, plan: HealthPlan): string {
+  const goalsCompleted = plan.goals.filter((g) => g.status === "completed").length;
+  const totalGoals = plan.goals.length;
+  const progressPct = totalGoals > 0 ? Math.round((goalsCompleted / totalGoals) * 100) : 0;
+  const now = new Date();
+  const end = new Date(plan.endDate);
+  const daysLeft = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  const planStatusLabels: Record<string, string> = {
+    active: t("plans.statusActive"),
+    paused: t("plans.statusPaused"),
+    completed: t("plans.statusCompleted"),
+  };
+  const statusLabel = planStatusLabels[plan.status] || t("plans.statusArchived");
+  const badge = ui.badge(statusLabel, { color: PLAN_STATUS_COLORS[plan.status] });
+  const nameText = ui.text(plan.name, "h3");
+  const descText = ui.text(plan.description, "caption");
+  const headerRow = ui.row([nameText, badge], { justify: "between", align: "center" });
+  const progressBar = ui.progress(progressPct, { maxValue: 100, color: "#10b981" });
+  const goalsLabel = ui.text(
+    `${goalsCompleted}/${totalGoals} ${t("plans.goalsCompleted")}`,
+    "caption"
+  );
+  const daysLabel =
+    plan.status === "active"
+      ? ui.text(`${daysLeft} ${t("plans.daysRemaining")}`, "caption")
+      : ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
+  const statsRow = ui.row([goalsLabel, daysLabel], { justify: "between" });
+  const viewBtn = ui.button(t("plans.viewDetails"), `view_plan:${plan.id}`, {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
+  const cardContent = ui.column([headerRow, descText, progressBar, statsRow, viewBtn], { gap: 8 });
+  return ui.card([cardContent], { padding: 16 });
+}
+
+function buildRecommendationsTab(ui: A2UIGenerator, recs: Recommendation[]): string {
+  const children: string[] = [];
+  if (recs.length === 0) {
+    const emptyText = ui.text(t("proactive.noRecommendations"), "h3");
+    const hint = ui.text(t("proactive.askAgentHint"), "caption");
+    children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+  } else {
+    const cards: string[] = [];
+    for (const rec of recs) {
+      const badge = ui.badge(rec.type, { color: PRIORITY_COLORS[rec.priority] || "#3b82f6" });
+      const titleText = ui.text(rec.title, "h3");
+      const headerRow = ui.row([titleText, badge], { justify: "between", align: "center" });
+      const body = ui.text(rec.body, "body");
+      const actBtn = ui.button(t("proactive.acted"), `rec_act:${rec.id}`, {
+        variant: "primary",
+        size: "sm",
+        icon: "check",
+      });
+      const dismissBtn = ui.button(t("proactive.dismiss"), `rec_dismiss:${rec.id}`, {
+        variant: "outline",
+        size: "sm",
+        icon: "x",
+      });
+      const btnRow = ui.row([actBtn, dismissBtn], { gap: 8 });
+      const cardContent = ui.column([headerRow, body, btnRow], { gap: 8 });
+      cards.push(ui.card([cardContent], { padding: 16 }));
+    }
+    children.push(ui.column(cards, { gap: 12 }));
+  }
+  return ui.column(children, { gap: 0, padding: 24 });
+}
+
+function buildRemindersTab(ui: A2UIGenerator, rems: Reminder[]): string {
+  const children: string[] = [];
+  if (rems.length === 0) {
+    const emptyText = ui.text(t("proactive.noReminders"), "h3");
+    const hint = ui.text(t("proactive.askAgentHint"), "caption");
+    children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+  } else {
+    const cards: string[] = [];
+    for (const rem of rems) {
+      cards.push(buildReminderCard(ui, rem));
+    }
+    children.push(ui.column(cards, { gap: 12 }));
+  }
+  return ui.column(children, { gap: 0, padding: 24 });
+}
+
+function buildReminderCard(ui: A2UIGenerator, rem: Reminder): string {
+  const titleText = ui.text(rem.title, "h3");
+  const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
+  const timeText = ui.text(time, "caption");
+  const headerRow = ui.row([titleText, timeText], { justify: "between", align: "center" });
+  const details: string[] = [];
+  if (rem.body) details.push(ui.text(rem.body, "body"));
+  if (rem.repeatRule !== "none") {
+    details.push(ui.badge(`${t("proactive.repeats")}: ${rem.repeatRule}`, { color: "#8b5cf6" }));
+  }
+  const remStatusColors: Record<string, string> = {
+    completed: "#10b981",
+    pending: "#3b82f6",
+  };
+  const statusBadge = ui.badge(rem.status, {
+    color: remStatusColors[rem.status] || "#6b7280",
+  });
+  const btnIds: string[] = [];
+  if (rem.status === "pending") {
+    btnIds.push(
+      ui.button(t("proactive.complete"), `rem_complete:${rem.id}`, {
+        variant: "primary",
+        size: "sm",
+        icon: "check",
+      })
+    );
+  }
+  const infoRow = ui.row([statusBadge, ...btnIds], { gap: 8 });
+  const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
+  return ui.card([cardContent], { padding: 16 });
+}
+
+function buildCalendarTab(ui: A2UIGenerator, evts: CalendarEvent[]): string {
+  const children: string[] = [];
+  if (evts.length === 0) {
+    const emptyText = ui.text(t("proactive.noEvents"), "h3");
+    const hint = ui.text(t("proactive.askAgentHint"), "caption");
+    children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
+  } else {
+    const cards: string[] = [];
+    for (const evt of evts) {
+      const titleText = ui.text(evt.title, "h3");
+      const date = evt.startTime.split("T")[0];
+      const time = evt.startTime.split("T")[1]?.slice(0, 5) || "";
+      const dateText = ui.text(`${date} ${time}`, "caption");
+      const headerRow = ui.row([titleText, dateText], { justify: "between", align: "center" });
+      const details: string[] = [];
+      if (evt.description) details.push(ui.text(evt.description, "body"));
+      const catBadge = ui.badge(evt.category, { color: "#8b5cf6" });
+      const evtStatusColors: Record<string, string> = {
+        completed: "#10b981",
+        cancelled: "#ef4444",
+      };
+      const statusBadge = ui.badge(evt.status, {
+        color: evtStatusColors[evt.status] || "#3b82f6",
+      });
+      const infoRow = ui.row([catBadge, statusBadge], { gap: 8 });
+      const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
+      cards.push(ui.card([cardContent], { padding: 16 }));
+    }
+    children.push(ui.column(cards, { gap: 12 }));
+  }
+  return ui.column(children, { gap: 0, padding: 24 });
+}
+
+export function generatePlansPage(data: PlansPageData): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
 
   // Header
@@ -2906,210 +3145,19 @@ export function generatePlansPage(data: {
     return ui.build(root);
   }
 
+  // Build active tab content via dispatch
   const tabContentIds: Record<string, string> = {};
-
-  // --- Plans tabs (active / completed / archived) ---
-  if (
-    data.activeTab === "active" ||
-    data.activeTab === "completed" ||
-    data.activeTab === "archived"
-  ) {
-    const tabChildren: string[] = [];
-
-    if (data.plans.length === 0) {
-      const emptyIcon = ui.text("target", "caption");
-      const emptyText = ui.text(t("plans.noPlans"), "h3");
-      const emptyHint = ui.text(t("plans.askAgentHint"), "caption");
-      tabChildren.push(
-        ui.column([emptyIcon, emptyText, emptyHint], { gap: 8, align: "center", padding: 48 })
-      );
-    } else {
-      const cardIds: string[] = [];
-      for (const plan of data.plans) {
-        const goalsCompleted = plan.goals.filter((g) => g.status === "completed").length;
-        const totalGoals = plan.goals.length;
-        const progressPct = totalGoals > 0 ? Math.round((goalsCompleted / totalGoals) * 100) : 0;
-
-        // Days remaining
-        const now = new Date();
-        const end = new Date(plan.endDate);
-        const daysLeft = Math.max(
-          0,
-          Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-        );
-
-        // Status badge
-        const statusLabel =
-          plan.status === "active"
-            ? t("plans.statusActive")
-            : plan.status === "paused"
-              ? t("plans.statusPaused")
-              : plan.status === "completed"
-                ? t("plans.statusCompleted")
-                : t("plans.statusArchived");
-        const badge = ui.badge(statusLabel, {
-          color: PLAN_STATUS_COLORS[plan.status],
-        });
-
-        // Plan name + description
-        const nameText = ui.text(plan.name, "h3");
-        const descText = ui.text(plan.description, "caption");
-        const headerRow = ui.row([nameText, badge], { justify: "between", align: "center" });
-
-        // Progress bar
-        const progressBar = ui.progress(progressPct, { maxValue: 100, color: "#10b981" });
-
-        // Stats row
-        const goalsLabel = ui.text(
-          `${goalsCompleted}/${totalGoals} ${t("plans.goalsCompleted")}`,
-          "caption"
-        );
-        const daysLabel =
-          plan.status === "active"
-            ? ui.text(`${daysLeft} ${t("plans.daysRemaining")}`, "caption")
-            : ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
-        const statsRow = ui.row([goalsLabel, daysLabel], { justify: "between" });
-
-        // View button
-        const viewBtn = ui.button(t("plans.viewDetails"), `view_plan:${plan.id}`, {
-          variant: "outline",
-          size: "sm",
-          icon: "chevron-right",
-        });
-
-        const cardContent = ui.column([headerRow, descText, progressBar, statsRow, viewBtn], {
-          gap: 8,
-        });
-        const card = ui.card([cardContent], { padding: 16 });
-        cardIds.push(card);
-      }
-      tabChildren.push(ui.column(cardIds, { gap: 12, padding: 16 }));
-    }
-    tabContentIds[data.activeTab] = ui.column(tabChildren, { gap: 0, padding: 24 });
-  }
-
-  // --- Recommendations tab ---
-  if (data.activeTab === "recommendations") {
-    const children: string[] = [];
-    const recs = data.recommendations || [];
-    if (recs.length === 0) {
-      const emptyText = ui.text(t("proactive.noRecommendations"), "h3");
-      const hint = ui.text(t("proactive.askAgentHint"), "caption");
-      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
-    } else {
-      const cards: string[] = [];
-      for (const rec of recs) {
-        const badge = ui.badge(rec.type, { color: PRIORITY_COLORS[rec.priority] || "#3b82f6" });
-        const titleText = ui.text(rec.title, "h3");
-        const headerRow = ui.row([titleText, badge], { justify: "between", align: "center" });
-        const body = ui.text(rec.body, "body");
-        const btnIds: string[] = [];
-        btnIds.push(
-          ui.button(t("proactive.acted"), `rec_act:${rec.id}`, {
-            variant: "primary",
-            size: "sm",
-            icon: "check",
-          })
-        );
-        btnIds.push(
-          ui.button(t("proactive.dismiss"), `rec_dismiss:${rec.id}`, {
-            variant: "outline",
-            size: "sm",
-            icon: "x",
-          })
-        );
-        const btnRow = ui.row(btnIds, { gap: 8 });
-        const cardContent = ui.column([headerRow, body, btnRow], { gap: 8 });
-        cards.push(ui.card([cardContent], { padding: 16 }));
-      }
-      children.push(ui.column(cards, { gap: 12 }));
-    }
-    tabContentIds["recommendations"] = ui.column(children, { gap: 0, padding: 24 });
-  }
-
-  // --- Reminders tab ---
-  if (data.activeTab === "reminders") {
-    const children: string[] = [];
-    const rems = data.reminders || [];
-    if (rems.length === 0) {
-      const emptyText = ui.text(t("proactive.noReminders"), "h3");
-      const hint = ui.text(t("proactive.askAgentHint"), "caption");
-      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
-    } else {
-      const cards: string[] = [];
-      for (const rem of rems) {
-        const titleText = ui.text(rem.title, "h3");
-        const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
-        const timeText = ui.text(time, "caption");
-        const headerRow = ui.row([titleText, timeText], { justify: "between", align: "center" });
-        const details: string[] = [];
-        if (rem.body) details.push(ui.text(rem.body, "body"));
-        if (rem.repeatRule !== "none") {
-          details.push(
-            ui.badge(`${t("proactive.repeats")}: ${rem.repeatRule}`, { color: "#8b5cf6" })
-          );
-        }
-        const statusBadge = ui.badge(rem.status, {
-          color:
-            rem.status === "completed"
-              ? "#10b981"
-              : rem.status === "pending"
-                ? "#3b82f6"
-                : "#6b7280",
-        });
-        const btnIds: string[] = [];
-        if (rem.status === "pending") {
-          btnIds.push(
-            ui.button(t("proactive.complete"), `rem_complete:${rem.id}`, {
-              variant: "primary",
-              size: "sm",
-              icon: "check",
-            })
-          );
-        }
-        const infoRow = ui.row([statusBadge, ...btnIds], { gap: 8 });
-        const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
-        cards.push(ui.card([cardContent], { padding: 16 }));
-      }
-      children.push(ui.column(cards, { gap: 12 }));
-    }
-    tabContentIds["reminders"] = ui.column(children, { gap: 0, padding: 24 });
-  }
-
-  // --- Calendar tab ---
-  if (data.activeTab === "calendar") {
-    const children: string[] = [];
-    const evts = data.events || [];
-    if (evts.length === 0) {
-      const emptyText = ui.text(t("proactive.noEvents"), "h3");
-      const hint = ui.text(t("proactive.askAgentHint"), "caption");
-      children.push(ui.column([emptyText, hint], { gap: 8, align: "center", padding: 48 }));
-    } else {
-      const cards: string[] = [];
-      for (const evt of evts) {
-        const titleText = ui.text(evt.title, "h3");
-        const date = evt.startTime.split("T")[0];
-        const time = evt.startTime.split("T")[1]?.slice(0, 5) || "";
-        const dateText = ui.text(`${date} ${time}`, "caption");
-        const headerRow = ui.row([titleText, dateText], { justify: "between", align: "center" });
-        const details: string[] = [];
-        if (evt.description) details.push(ui.text(evt.description, "body"));
-        const catBadge = ui.badge(evt.category, { color: "#8b5cf6" });
-        const statusBadge = ui.badge(evt.status, {
-          color:
-            evt.status === "completed"
-              ? "#10b981"
-              : evt.status === "cancelled"
-                ? "#ef4444"
-                : "#3b82f6",
-        });
-        const infoRow = ui.row([catBadge, statusBadge], { gap: 8 });
-        const cardContent = ui.column([headerRow, ...details, infoRow], { gap: 6 });
-        cards.push(ui.card([cardContent], { padding: 16 }));
-      }
-      children.push(ui.column(cards, { gap: 12 }));
-    }
-    tabContentIds["calendar"] = ui.column(children, { gap: 0, padding: 24 });
+  const tabBuilders: Record<string, () => string> = {
+    active: () => buildPlansListTab(ui, data.plans, "active"),
+    completed: () => buildPlansListTab(ui, data.plans, "completed"),
+    archived: () => buildPlansListTab(ui, data.plans, "archived"),
+    recommendations: () => buildRecommendationsTab(ui, data.recommendations || []),
+    reminders: () => buildRemindersTab(ui, data.reminders || []),
+    calendar: () => buildCalendarTab(ui, data.events || []),
+  };
+  const builder = tabBuilders[data.activeTab];
+  if (builder) {
+    tabContentIds[data.activeTab] = builder();
   }
 
   // Tabs
@@ -3130,27 +3178,9 @@ export function generatePlansPage(data: {
   return ui.build(root);
 }
 
-export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
-  const ui = new A2UIGenerator("modal");
+// ── Plan Detail Modal builders ──
 
-  // Description + date range
-  const desc = ui.text(plan.description, "caption");
-  const dateRange = ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
-  const statusBadge = ui.badge(
-    plan.status === "active"
-      ? t("plans.statusActive")
-      : plan.status === "paused"
-        ? t("plans.statusPaused")
-        : plan.status === "completed"
-          ? t("plans.statusCompleted")
-          : t("plans.statusArchived"),
-    { color: PLAN_STATUS_COLORS[plan.status] }
-  );
-  const infoRow = ui.row([statusBadge, dateRange], { gap: 8, align: "center" });
-
-  const sections: string[] = [desc, infoRow];
-
-  // Goals table
+function buildPlanGoalsCard(ui: A2UIGenerator, plan: HealthPlan): string {
   const goalRows = plan.goals.map((g) => {
     const currentVal = g.currentValue;
     const baseVal = g.baselineValue;
@@ -3158,17 +3188,13 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
       currentVal !== undefined && g.targetValue > 0
         ? `${Math.round((currentVal / g.targetValue) * 100)}%`
         : "-";
-    const statusLabel =
-      g.status === "completed"
-        ? "✓"
-        : g.status === "ahead"
-          ? "↑"
-          : g.status === "behind"
-            ? "↓"
-            : g.status === "missed"
-              ? "✗"
-              : "→";
-    // Show current value, or baseline as fallback reference
+    const goalStatusSymbols: Record<string, string> = {
+      completed: "✓",
+      ahead: "↑",
+      behind: "↓",
+      missed: "✗",
+    };
+    const statusLabel = goalStatusSymbols[g.status] || "→";
     let currentDisplay: string;
     if (currentVal !== undefined) {
       currentDisplay = `${currentVal} ${g.unit}`;
@@ -3185,7 +3211,6 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
       status: statusLabel,
     };
   });
-
   const goalsTable = ui.dataTable(
     [
       { key: "label", label: t("plans.goalLabel") },
@@ -3196,44 +3221,42 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
     ],
     goalRows
   );
-  const goalsCard = ui.card([goalsTable], { title: t("plans.goalLabel"), padding: 16 });
-  sections.push(goalsCard);
+  return ui.card([goalsTable], { title: t("plans.goalLabel"), padding: 16 });
+}
 
-  // Milestones (git_timeline)
-  if (plan.milestones.length > 0) {
-    const timelineEntries = plan.milestones.map((m) => ({
-      id: m.id,
-      type: "commit" as const,
-      label: m.label,
-      description: m.criteria,
-      timestamp: new Date(m.targetDate).getTime(),
-      status: m.completed ? ("success" as const) : ("pending" as const),
-    }));
-    const timeline = ui.gitTimeline(timelineEntries);
-    const msCard = ui.card([timeline], { title: t("plans.milestones"), padding: 16 });
-    sections.push(msCard);
-  }
+function buildPlanMilestonesCard(ui: A2UIGenerator, plan: HealthPlan): string | null {
+  if (plan.milestones.length === 0) return null;
+  const timelineEntries = plan.milestones.map((m) => ({
+    id: m.id,
+    type: "commit" as const,
+    label: m.label,
+    description: m.criteria,
+    timestamp: new Date(m.targetDate).getTime(),
+    status: m.completed ? ("success" as const) : ("pending" as const),
+  }));
+  const timeline = ui.gitTimeline(timelineEntries);
+  return ui.card([timeline], { title: t("plans.milestones"), padding: 16 });
+}
 
-  // Adjustment history
-  if (plan.adjustments.length > 0) {
-    const adjRows = plan.adjustments.map((a) => ({
-      date: a.date.split("T")[0],
-      reason: a.reason,
-      changes: a.changes,
-    }));
-    const adjTable = ui.dataTable(
-      [
-        { key: "date", label: t("plans.date") },
-        { key: "reason", label: t("plans.reason") },
-        { key: "changes", label: t("plans.changes") },
-      ],
-      adjRows
-    );
-    const adjCard = ui.card([adjTable], { title: t("plans.adjustmentHistory"), padding: 16 });
-    sections.push(adjCard);
-  }
+function buildPlanAdjustmentsCard(ui: A2UIGenerator, plan: HealthPlan): string | null {
+  if (plan.adjustments.length === 0) return null;
+  const adjRows = plan.adjustments.map((a) => ({
+    date: a.date.split("T")[0],
+    reason: a.reason,
+    changes: a.changes,
+  }));
+  const adjTable = ui.dataTable(
+    [
+      { key: "date", label: t("plans.date") },
+      { key: "reason", label: t("plans.reason") },
+      { key: "changes", label: t("plans.changes") },
+    ],
+    adjRows
+  );
+  return ui.card([adjTable], { title: t("plans.adjustmentHistory"), padding: 16 });
+}
 
-  // Action buttons
+function buildPlanActionButtons(ui: A2UIGenerator, plan: HealthPlan): string | null {
   const buttons: string[] = [];
   if (plan.status === "active") {
     buttons.push(
@@ -3241,9 +3264,7 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
         variant: "outline",
         size: "sm",
         icon: "pause",
-      })
-    );
-    buttons.push(
+      }),
       ui.button(t("plans.complete"), `update_plan_action:${plan.id}:completed`, {
         variant: "primary",
         size: "sm",
@@ -3268,13 +3289,339 @@ export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
       })
     );
   }
+  return buttons.length > 0 ? ui.row(buttons, { gap: 8, justify: "end" }) : null;
+}
 
-  if (buttons.length > 0) {
-    sections.push(ui.row(buttons, { gap: 8, justify: "end" }));
-  }
+export function generatePlanDetailModal(plan: HealthPlan): A2UIMessage[] {
+  const ui = new A2UIGenerator("modal");
+
+  const desc = ui.text(plan.description, "caption");
+  const dateRange = ui.text(`${plan.startDate} ~ ${plan.endDate}`, "caption");
+  const detailPlanLabels: Record<string, string> = {
+    active: t("plans.statusActive"),
+    paused: t("plans.statusPaused"),
+    completed: t("plans.statusCompleted"),
+  };
+  const statusBadge = ui.badge(detailPlanLabels[plan.status] || t("plans.statusArchived"), {
+    color: PLAN_STATUS_COLORS[plan.status],
+  });
+  const infoRow = ui.row([statusBadge, dateRange], { gap: 8, align: "center" });
+
+  const sections: string[] = [desc, infoRow, buildPlanGoalsCard(ui, plan)];
+  const milestones = buildPlanMilestonesCard(ui, plan);
+  if (milestones) sections.push(milestones);
+  const adjustments = buildPlanAdjustmentsCard(ui, plan);
+  if (adjustments) sections.push(adjustments);
+  const actionBtns = buildPlanActionButtons(ui, plan);
+  if (actionBtns) sections.push(actionBtns);
 
   const body = ui.column(sections, { gap: 16 });
   const root = ui.modal(plan.name, [body], { size: "lg" });
+  return ui.build(root);
+}
+
+// ============================================================================
+// Custom Dashboard Generator
+// ============================================================================
+
+// ── Widget renderers (one per widget type) ──
+
+type WidgetRenderer = (ui: A2UIGenerator, cfg: Record<string, unknown>) => string;
+
+function renderStatRow(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const items = (cfg.items as Array<Record<string, unknown>>) || [];
+  const cols = (cfg.columns as number) || items.length || 3;
+  const cards = items.map((item) =>
+    ui.statCard({
+      title: (item.label as string) || "",
+      value: (item.value as string) || "",
+      subtitle: (item.unit as string) || undefined,
+      icon: (item.icon as string) || "activity",
+      color: (item.color as string) || undefined,
+      trend: item.trend || undefined,
+    })
+  );
+  return ui.grid(cards, { columns: cols, gap: 12 });
+}
+
+function renderLineChart(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const title = cfg.title as string | undefined;
+  const children: string[] = [];
+  if (title) children.push(ui.text(title, "subheading"));
+
+  let chartData = (cfg.data as Array<Record<string, unknown>>) || [];
+  let chartColor = (cfg.color as string) || "#3b82f6";
+  if (chartData.length === 0 && cfg.metrics) {
+    const metrics = cfg.metrics as Array<{
+      data?: Array<Record<string, unknown>>;
+      color?: string;
+      label?: string;
+    }>;
+    if (metrics[0]?.data) {
+      chartData = metrics[0].data;
+      if (metrics[0].color) chartColor = metrics[0].color;
+    }
+  }
+  chartData = chartData.map((d) => ({
+    label: (d.label as string) || (d.date as string) || "",
+    value: d.value,
+  }));
+
+  children.push(
+    ui.chart({
+      chartType: "line",
+      data: chartData,
+      xKey: "label",
+      yKey: "value",
+      yLabel: cfg.yLabel || undefined,
+      color: chartColor,
+    })
+  );
+  return ui.card(children, { padding: 16 });
+}
+
+function renderBarChart(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const title = cfg.title as string | undefined;
+  const children: string[] = [];
+  if (title) children.push(ui.text(title, "subheading"));
+  children.push(
+    ui.chart({
+      chartType: "bar",
+      data: cfg.data || [],
+      xKey: "label",
+      yKey: "value",
+      yLabel: cfg.yLabel || undefined,
+      color: cfg.color || "#10b981",
+    })
+  );
+  return ui.card(children, { padding: 16 });
+}
+
+function renderProgressTracker(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const title = (cfg.title as string) || "";
+  const current = (cfg.current as number) || 0;
+  const target = (cfg.target as number) || 100;
+  const baseline = cfg.baseline as number | undefined;
+  const unit = (cfg.unit as string) || "";
+
+  let pct: number;
+  let progressValue: number;
+  let progressMax: number;
+  if (baseline != null && baseline !== target) {
+    const range = Math.abs(baseline - target);
+    const moved =
+      baseline > target ? Math.max(0, baseline - current) : Math.max(0, current - baseline);
+    pct = Math.max(0, Math.min(Math.round((moved / range) * 100), 100));
+    progressValue = pct;
+    progressMax = 100;
+  } else {
+    pct = target !== 0 ? Math.max(0, Math.min(Math.round((current / target) * 100), 100)) : 0;
+    progressValue = Math.min(current, target);
+    progressMax = target;
+  }
+
+  const children: string[] = [
+    ui.text(title, "subheading"),
+    ui.progress(progressValue, { maxValue: progressMax, color: cfg.color || "#8b5cf6" }),
+    ui.text(`${current}${unit} → ${target}${unit} (${pct}%)`, "caption"),
+  ];
+  return ui.card(children, { padding: 16 });
+}
+
+function renderDataTable(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const columns = (cfg.columns as Array<Record<string, unknown>>) || [];
+  const rows = (cfg.rows as Array<Record<string, unknown>>) || [];
+  return ui.card([ui.dataTable(columns, rows)], { padding: 16 });
+}
+
+function renderTextBlock(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const content = (cfg.content as string) || "";
+  const variant = (cfg.variant as string) || "body";
+  return ui.text(content, variant, { markdown: true });
+}
+
+function getMilestoneType(status: string): string {
+  const milestoneTypes: Record<string, string> = {
+    completed: "commit",
+    current: "branch",
+  };
+  return milestoneTypes[status] || "merge";
+}
+
+function renderMilestoneTimeline(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const entries = ((cfg.entries as Array<Record<string, unknown>>) || []).map((e) => ({
+    type: getMilestoneType(e.status as string),
+    date: (e.date as string) || "",
+    message: (e.title as string) || "",
+    detail: (e.description as string) || undefined,
+    icon: (e.icon as string) || undefined,
+  }));
+  return ui.card([ui.gitTimeline(entries)], { padding: 16 });
+}
+
+function renderMetricGrid(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const metrics = (cfg.metrics as Array<Record<string, unknown>>) || [];
+  const cols = (cfg.columns as number) || 3;
+  const metricIds = metrics.map((m) =>
+    ui.metric({
+      label: (m.label as string) || "",
+      value: (m.value as string) || "",
+      unit: (m.unit as string) || undefined,
+      icon: (m.icon as string) || "activity",
+      color: (m.color as string) || undefined,
+    })
+  );
+  return ui.grid(metricIds, { columns: cols, gap: 12 });
+}
+
+function renderScoreGauge(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const value = (cfg.value as number) || 0;
+  const max = (cfg.max as number) || 100;
+  const label = (cfg.label as string) || undefined;
+  const size = (cfg.size as string) || "md";
+  const thresholds = cfg.thresholds as Array<{ value: number; color: string }> | undefined;
+  return ui.scoreGauge(value, { max, label, size, thresholds });
+}
+
+function renderActivityRings(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const rings = (cfg.rings as Array<Record<string, unknown>>) || [];
+  const size = (cfg.size as number) || undefined;
+  return ui.activityRings(rings, { size });
+}
+
+function renderRadarChart(ui: A2UIGenerator, cfg: Record<string, unknown>): string {
+  const title = cfg.title as string | undefined;
+  const children: string[] = [];
+  if (title) children.push(ui.text(title, "subheading"));
+  children.push(
+    ui.radarChart({
+      radarData: cfg.data || [],
+      radarSeries: cfg.series || [],
+      height: 300,
+    })
+  );
+  return ui.card(children, { padding: 16 });
+}
+
+const WIDGET_RENDERERS: Record<string, WidgetRenderer> = {
+  stat_row: renderStatRow,
+  line_chart: renderLineChart,
+  bar_chart: renderBarChart,
+  progress_tracker: renderProgressTracker,
+  data_table: renderDataTable,
+  text_block: renderTextBlock,
+  milestone_timeline: renderMilestoneTimeline,
+  metric_grid: renderMetricGrid,
+  score_gauge: renderScoreGauge,
+  activity_rings: renderActivityRings,
+  radar_chart: renderRadarChart,
+};
+
+function renderWidget(ui: A2UIGenerator, widget: DashboardWidget): string {
+  const cfg = widget.config as Record<string, unknown>;
+  const renderer = WIDGET_RENDERERS[widget.type];
+  if (renderer) return renderer(ui, cfg);
+  return ui.text(`Unknown widget type: ${widget.type}`, "caption");
+}
+
+/**
+ * Render a single dashboard's content into the given A2UIGenerator.
+ * Returns the root component ID for embedding into tabs or standalone pages.
+ */
+function renderDashboardContent(ui: A2UIGenerator, dashboard: DashboardDefinition): string {
+  const children: string[] = [];
+
+  // Subtitle + last updated (refresh button is at page level, not here)
+  if (dashboard.subtitle) {
+    children.push(ui.text(dashboard.subtitle, "subheading"));
+  }
+  const updatedAt = new Date(dashboard.updatedAt).toLocaleString();
+  children.push(ui.text(`${t("experiment.lastUpdated")}: ${updatedAt}`, "caption"));
+
+  // Render sections
+  for (const section of dashboard.sections) {
+    const sectionChildren: string[] = [];
+    if (section.title) {
+      sectionChildren.push(ui.text(section.title, "subheading"));
+    }
+    for (const widget of section.widgets) {
+      sectionChildren.push(renderWidget(ui, widget));
+    }
+    // Use column (not card) to avoid double-card nesting with stat_row etc.
+    children.push(ui.column(sectionChildren, { gap: 12 }));
+  }
+
+  return ui.column(children, { gap: 24 });
+}
+
+export function generateCustomDashboard(dashboard: DashboardDefinition): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+  const root = renderDashboardContent(ui, dashboard);
+  return ui.build(root);
+}
+
+// ============================================================================
+// Experiment Page Generator (tabs for dynamic dashboards)
+// ============================================================================
+
+export function generateExperimentPage(
+  dashboards: Map<string, DashboardDefinition>,
+  activeDashboardTab?: string | null
+): A2UIMessage[] {
+  const ui = new A2UIGenerator("main");
+
+  // Empty state
+  if (dashboards.size === 0) {
+    const emptyTitle = ui.text(t("experiment.empty"), "h2");
+    const emptyHint = ui.text(t("experiment.emptyHint"), "caption");
+    const emptyCol = ui.column([emptyTitle, emptyHint], {
+      gap: 8,
+      padding: 64,
+      alignItems: "center",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const root = ui.column([emptyCol], { gap: 0 });
+    return ui.build(root);
+  }
+
+  // Determine active tab
+  const dashList = [...dashboards.values()];
+  let activeTab = activeDashboardTab;
+  if (!activeTab || !dashboards.has(activeTab)) {
+    activeTab = dashList[0].id;
+  }
+
+  // Build tab definitions
+  const tabDefs = dashList.map((d) => ({
+    id: d.id,
+    label: d.title,
+    icon: d.icon || "activity",
+  }));
+
+  // Build content for the active tab only
+  const tabContentIds: Record<string, string> = {};
+  const activeDash = dashboards.get(activeTab);
+  if (activeDash) {
+    tabContentIds[activeTab] = renderDashboardContent(ui, activeDash);
+  }
+
+  // Refresh button in tab header bar (right side)
+  const actionIds: string[] = [];
+  if (activeDash) {
+    actionIds.push(
+      ui.button("", `refresh_dashboard:${activeDash.id}`, {
+        variant: "ghost",
+        icon: "refresh-cw",
+        tooltip: t("experiment.refresh"),
+      })
+    );
+  }
+
+  const tabs = ui.tabs(tabDefs, activeTab, tabContentIds, { actionIds });
+
+  const content = ui.column([tabs], { gap: 0, padding: 24 });
+  const root = ui.column([content], { gap: 0 });
+
   return ui.build(root);
 }
 
@@ -3512,15 +3859,13 @@ export function generateSuggestionDetailModal(suggestion: SuggestionDetail): A2U
   const ui = new A2UIGenerator("modal");
 
   const typeBadge = ui.badge(suggestion.type, { variant: "info" });
+  const suggestionVariants: Record<string, string> = {
+    applied: "success",
+    rejected: "error",
+    validated: "success",
+  };
   const statusBadge = ui.badge(suggestion.status, {
-    variant:
-      suggestion.status === "applied"
-        ? "success"
-        : suggestion.status === "rejected"
-          ? "error"
-          : suggestion.status === "validated"
-            ? "success"
-            : "default",
+    variant: suggestionVariants[suggestion.status] || "default",
   });
   const headerRow = ui.row([typeBadge, statusBadge], { gap: 8 });
 
@@ -3803,52 +4148,62 @@ function buildToolCardResult(messages: A2UIMessage[]): ToolCardResult {
  *
  * `result` is an AgentToolResult: { content, details: { success, data } }
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const RANGE_CARD_GENERATORS: Record<string, (data: any) => ToolCardResult | null> = {
+  get_sleep: generateSleepRangeCards,
+  get_heart_rate: generateHeartRateRangeCards,
+  get_health_data: generateHealthDataRangeCards,
+  get_stress: generateStressRangeCards,
+  get_spo2: generateSpo2RangeCards,
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const SINGLE_CARD_GENERATORS: Record<string, (data: any) => ToolCardResult | null> = {
+  get_health_data: generateHealthDataCards,
+  get_heart_rate: generateHeartRateCards,
+  get_sleep: generateSleepCards,
+  get_weekly_summary: generateWeeklySummaryCards,
+  get_workouts: generateWorkoutsCards,
+  get_hrv: generateHrvCards,
+  get_blood_pressure: generateBloodPressureCards,
+  get_stress: generateStressCards,
+  get_spo2: generateSpo2Cards,
+  get_body_composition: generateBodyCompositionCards,
+  get_blood_glucose: generateBloodGlucoseCards,
+  get_nutrition: generateNutritionCards,
+  present_insight: generateInsightCards,
+  create_health_plan: generateCreatePlanCards,
+};
+
 export function generateToolCards(toolName: string, result: unknown): ToolCardResult | null {
-  // AgentToolResult wraps data in details.data (health tools)
-  // or details directly (git tools, etc.)
   const details = (result as { details?: Record<string, unknown> })?.details;
   if (!details) return null;
 
-  // Git tools: details has diff/branch/etc. directly (no .data wrapper)
-  if (toolName === "git_diff") {
-    return generateGitDiffCards(details);
-  }
+  if (toolName === "git_diff") return generateGitDiffCards(details);
 
   const data = details?.data;
   if (!data) return null;
 
-  switch (toolName) {
-    case "get_health_data":
-      return generateHealthDataCards(data);
-    case "get_heart_rate":
-      return generateHeartRateCards(data);
-    case "get_sleep":
-      return generateSleepCards(data);
-    case "get_weekly_summary":
-      return generateWeeklySummaryCards(data);
-    case "get_workouts":
-      return generateWorkoutsCards(data);
-    case "get_hrv":
-      return generateHrvCards(data);
-    case "get_blood_pressure":
-      return generateBloodPressureCards(data);
-    case "get_stress":
-      return generateStressCards(data);
-    case "get_spo2":
-      return generateSpo2Cards(data);
-    case "get_body_composition":
-      return generateBodyCompositionCards(data);
-    case "get_blood_glucose":
-      return generateBloodGlucoseCards(data);
-    case "get_nutrition":
-      return generateNutritionCards(data);
-    case "present_insight":
-      return generateInsightCards(data);
-    case "create_health_plan":
-      return generateCreatePlanCards(data);
-    default:
-      return generateGenericToolCards(data);
+  // Range mode dispatch
+  if (details?.mode === "range" && Array.isArray(data)) {
+    const rangeGen = RANGE_CARD_GENERATORS[toolName];
+    return rangeGen
+      ? rangeGen(data)
+      : generateGenericRangeCards(toolName, data as Array<Record<string, unknown>>);
   }
+
+  // Single mode dispatch
+  const singleGen = SINGLE_CARD_GENERATORS[toolName];
+  if (singleGen) return singleGen(data);
+
+  // Details-based tools
+  if (toolName === "create_dashboard") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dashData = (details as any)?.details ?? details;
+    return generateCreateDashboardCards(dashData as Record<string, unknown>);
+  }
+
+  return generateGenericToolCards(data);
 }
 
 function generateGitDiffCards(details: Record<string, unknown>): ToolCardResult | null {
@@ -3903,6 +4258,48 @@ function generateCreatePlanCards(data: unknown): ToolCardResult | null {
   const grid = ui.grid([nameCard, goalsCard, dateCard], { columns: 3, gap: 12 });
 
   const viewBtn = ui.button(t("plans.viewDetails"), "navigate:plans", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
+
+  const root = ui.column([grid, viewBtn], { gap: 12 });
+  return buildToolCardResult(ui.build(root));
+}
+
+function generateCreateDashboardCards(details: Record<string, unknown>): ToolCardResult | null {
+  const title = details.title as string | undefined;
+  const widgetCount = details.widgetCount as number | undefined;
+  const sectionCount = details.sectionCount as number | undefined;
+  const dashboardId = details.dashboardId as string | undefined;
+  if (!title || !dashboardId) return null;
+
+  const ui = new A2UIGenerator("ic-dash");
+
+  const titleCard = ui.statCard({
+    title: t("experiment.dashboardCreated"),
+    value: title,
+    icon: (details.icon as string) || "activity",
+    color: "#8b5cf6",
+  });
+
+  const widgetsCard = ui.statCard({
+    title: t("experiment.widgets"),
+    value: `${widgetCount || 0}`,
+    icon: "bar-chart",
+    color: "#3b82f6",
+  });
+
+  const sectionsCard = ui.statCard({
+    title: t("experiment.sections"),
+    value: `${sectionCount || 0}`,
+    icon: "target",
+    color: "#10b981",
+  });
+
+  const grid = ui.grid([titleCard, widgetsCard, sectionsCard], { columns: 3, gap: 12 });
+
+  const viewBtn = ui.button(t("experiment.viewDashboard"), `view_dashboard:${dashboardId}`, {
     variant: "outline",
     size: "sm",
     icon: "chevron-right",
@@ -4063,7 +4460,8 @@ function generateSleepCards(data: unknown): ToolCardResult | null {
 
   const scheduleCard = ui.statCard({
     title: t("sleep.deepSleep"),
-    value: d.bedTime && d.wakeTime ? `${d.bedTime}-${d.wakeTime}` : "--",
+    value: d.stages?.deep != null ? `${d.stages.deep}` : "--",
+    subtitle: t("sleep.minutes"),
     icon: "bed",
     color: "#6366f1",
   });
@@ -4655,6 +5053,336 @@ function generateInsightCards(data: unknown): ToolCardResult | null {
   const cardContent = ui.column(children, { gap: 8 });
   const root = ui.card([cardContent], { padding: 16 });
   return buildToolCardResult(ui.build(root));
+}
+
+// ============================================================================
+// Range Card Generators — For multi-day (startDate + endDate) queries
+// ============================================================================
+
+/** Helper: format date label from "YYYY-MM-DD" to "MM/DD" */
+function shortDateLabel(date: string): string {
+  const parts = date.split("-");
+  return `${parts[1]}/${parts[2]}`;
+}
+
+function generateSleepRangeCards(
+  data: Array<{ date: string; hours: number; qualityScore?: number }>
+): ToolCardResult | null {
+  if (!data || data.length === 0) return null;
+
+  const withData = data.filter((d) => d.hours > 0);
+  const avgHours =
+    withData.length > 0
+      ? Math.round((withData.reduce((s, d) => s + d.hours, 0) / withData.length) * 10) / 10
+      : 0;
+  const avgQuality =
+    withData.filter((d) => d.qualityScore != null).length > 0
+      ? Math.round(
+          withData
+            .filter((d) => d.qualityScore != null)
+            .reduce((s, d) => s + (d.qualityScore || 0), 0) /
+            withData.filter((d) => d.qualityScore != null).length
+        )
+      : null;
+
+  const ui = new A2UIGenerator("ic-sleep-range");
+
+  const avgCard = ui.statCard({
+    title: t("sleep.duration"),
+    value: avgHours > 0 ? `${avgHours}h` : "--",
+    subtitle: `${withData.length}/${data.length} days`,
+    icon: "moon",
+    color: "#8b5cf6",
+  });
+
+  const qualityCard = ui.statCard({
+    title: t("sleep.quality"),
+    value: avgQuality != null ? `${avgQuality}` : "--",
+    subtitle: "/100 avg",
+    icon: "star",
+    color: "#f59e0b",
+  });
+
+  const bestDay =
+    withData.length > 0 ? withData.reduce((a, b) => (a.hours > b.hours ? a : b)) : null;
+  const bestCard = ui.statCard({
+    title: t("sleep.deepSleep"),
+    value: bestDay ? `${bestDay.hours}h` : "--",
+    subtitle: bestDay ? shortDateLabel(bestDay.date) : "",
+    icon: "bed",
+    color: "#6366f1",
+  });
+
+  const statsGrid = ui.grid([avgCard, qualityCard, bestCard], { columns: 3, gap: 12 });
+  const children: string[] = [statsGrid];
+
+  // Bar chart: sleep hours per day
+  const chartData = data.map((d) => ({
+    label: shortDateLabel(d.date),
+    value: d.hours,
+  }));
+  const chartLabel = ui.text(t("dashboard.sleepTrend"), "label");
+  const chart = ui.chart({
+    chartType: "bar",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#8b5cf6",
+  });
+  const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+  children.push(chartCard);
+
+  const viewBtn = ui.button(t("sleep.title"), "navigate:sleep", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
+  children.push(viewBtn);
+
+  const root = ui.column(children, { gap: 12 });
+  return buildToolCardResult(ui.build(root));
+}
+
+function generateHeartRateRangeCards(
+  data: Array<{ date: string; avg: number; max: number; min: number }>
+): ToolCardResult | null {
+  if (!data || data.length === 0) return null;
+
+  const withData = data.filter((d) => d.avg > 0);
+  const avgHR =
+    withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
+  const maxHR = withData.length > 0 ? Math.max(...withData.map((d) => d.max)) : 0;
+  const minHR = withData.length > 0 ? Math.min(...withData.map((d) => d.min)) : 0;
+
+  const ui = new A2UIGenerator("ic-hr-range");
+
+  const avgCard = ui.statCard({
+    title: t("health.restingHR"),
+    value: avgHR || "--",
+    subtitle: t("health.bpmUnit"),
+    icon: "heart",
+    color: "#ef4444",
+  });
+  const maxCard = ui.statCard({
+    title: t("health.maxHR"),
+    value: maxHR || "--",
+    subtitle: t("health.bpmMax"),
+    icon: "trending-up",
+    color: "#f97316",
+  });
+  const minCard = ui.statCard({
+    title: t("health.minHR"),
+    value: minHR || "--",
+    subtitle: t("health.bpmMin"),
+    icon: "trending-down",
+    color: "#3b82f6",
+  });
+
+  const statsGrid = ui.grid([avgCard, maxCard, minCard], { columns: 3, gap: 12 });
+  const children: string[] = [statsGrid];
+
+  const chartData = data.map((d) => ({ label: shortDateLabel(d.date), value: d.avg }));
+  const chartLabel = ui.text(t("health.heartRateTrend"), "label");
+  const chart = ui.chart({
+    chartType: "line",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#ef4444",
+  });
+  const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+  children.push(chartCard);
+
+  const viewBtn = ui.button(t("health.title"), "navigate:health", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
+  children.push(viewBtn);
+
+  const root = ui.column(children, { gap: 12 });
+  return buildToolCardResult(ui.build(root));
+}
+
+function generateHealthDataRangeCards(
+  data: Array<{ date: string; steps: number; calories: number }>
+): ToolCardResult | null {
+  if (!data || data.length === 0) return null;
+
+  const withData = data.filter((d) => d.steps > 0);
+  const avgSteps =
+    withData.length > 0
+      ? Math.round(withData.reduce((s, d) => s + d.steps, 0) / withData.length)
+      : 0;
+  const totalCal = data.reduce((s, d) => s + (d.calories || 0), 0);
+
+  const ui = new A2UIGenerator("ic-health-range");
+
+  const avgCard = ui.statCard({
+    title: t("activity.steps"),
+    value: avgSteps.toLocaleString(),
+    subtitle: "avg/day",
+    icon: "footprints",
+    color: "#10b981",
+  });
+  const calCard = ui.statCard({
+    title: t("activity.calories"),
+    value: totalCal.toLocaleString(),
+    subtitle: `${data.length} days`,
+    icon: "flame",
+    color: "#f97316",
+  });
+  const daysCard = ui.statCard({
+    title: t("activity.activeTime"),
+    value: `${withData.length}/${data.length}`,
+    subtitle: "days",
+    icon: "timer",
+    color: "#3b82f6",
+  });
+
+  const statsGrid = ui.grid([avgCard, calCard, daysCard], { columns: 3, gap: 12 });
+  const children: string[] = [statsGrid];
+
+  const chartData = data.map((d) => ({ label: shortDateLabel(d.date), value: d.steps }));
+  const chartLabel = ui.text(t("dashboard.stepsTrend"), "label");
+  const chart = ui.chart({
+    chartType: "bar",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#10b981",
+  });
+  const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+  children.push(chartCard);
+
+  const viewBtn = ui.button(t("activity.title"), "navigate:activity", {
+    variant: "outline",
+    size: "sm",
+    icon: "chevron-right",
+  });
+  children.push(viewBtn);
+
+  const root = ui.column(children, { gap: 12 });
+  return buildToolCardResult(ui.build(root));
+}
+
+function generateStressRangeCards(
+  data: Array<{ date: string; avg: number; max: number; min: number }>
+): ToolCardResult | null {
+  if (!data || data.length === 0) return null;
+
+  const withData = data.filter((d) => d.avg > 0);
+  const avgStress =
+    withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
+  const maxStress = withData.length > 0 ? Math.max(...withData.map((d) => d.max)) : 0;
+
+  const ui = new A2UIGenerator("ic-stress-range");
+
+  const avgCard = ui.statCard({
+    title: t("health.stress"),
+    value: avgStress || "--",
+    subtitle: "/99 avg",
+    icon: "brain",
+    color: avgStress > 60 ? "#ef4444" : "#10b981",
+  });
+  const maxCard = ui.statCard({
+    title: t("health.maxHR"),
+    value: maxStress || "--",
+    subtitle: "peak",
+    icon: "trending-up",
+    color: "#f97316",
+  });
+  const daysCard = ui.statCard({
+    title: "Range",
+    value: `${data.length}`,
+    subtitle: "days",
+    icon: "calendar",
+    color: "#3b82f6",
+  });
+
+  const statsGrid = ui.grid([avgCard, maxCard, daysCard], { columns: 3, gap: 12 });
+  const children: string[] = [statsGrid];
+
+  const chartData = data.map((d) => ({ label: shortDateLabel(d.date), value: d.avg }));
+  const chartLabel = ui.text(t("health.stressLevel"), "label");
+  const chart = ui.chart({
+    chartType: "area",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#8b5cf6",
+  });
+  const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+  children.push(chartCard);
+
+  const root = ui.column(children, { gap: 12 });
+  return buildToolCardResult(ui.build(root));
+}
+
+function generateSpo2RangeCards(
+  data: Array<{ date: string; avg: number; max: number; min: number }>
+): ToolCardResult | null {
+  if (!data || data.length === 0) return null;
+
+  const withData = data.filter((d) => d.avg > 0);
+  const avgSpo2 =
+    withData.length > 0 ? Math.round(withData.reduce((s, d) => s + d.avg, 0) / withData.length) : 0;
+  const minSpo2 = withData.length > 0 ? Math.min(...withData.map((d) => d.min)) : 0;
+
+  const ui = new A2UIGenerator("ic-spo2-range");
+
+  const avgCard = ui.statCard({
+    title: t("health.spo2"),
+    value: avgSpo2 > 0 ? `${avgSpo2}%` : "--",
+    icon: "wind",
+    color: avgSpo2 < 95 ? "#ef4444" : "#10b981",
+  });
+  const minCard = ui.statCard({
+    title: t("health.minHR"),
+    value: minSpo2 > 0 ? `${minSpo2}%` : "--",
+    subtitle: "lowest",
+    icon: "trending-down",
+    color: "#3b82f6",
+  });
+  const daysCard = ui.statCard({
+    title: "Range",
+    value: `${data.length}`,
+    subtitle: "days",
+    icon: "calendar",
+    color: "#8b5cf6",
+  });
+
+  const statsGrid = ui.grid([avgCard, minCard, daysCard], { columns: 3, gap: 12 });
+  const children: string[] = [statsGrid];
+
+  const chartData = data.map((d) => ({ label: shortDateLabel(d.date), value: d.avg }));
+  const chartLabel = ui.text(t("health.spo2"), "label");
+  const chart = ui.chart({
+    chartType: "line",
+    data: chartData,
+    xKey: "label",
+    yKey: "value",
+    height: 160,
+    color: "#10b981",
+  });
+  const chartCard = ui.card([chartLabel, chart], { padding: 12 });
+  children.push(chartCard);
+
+  const root = ui.column(children, { gap: 12 });
+  return buildToolCardResult(ui.build(root));
+}
+
+/** Generic range fallback: renders array data as a data table */
+function generateGenericRangeCards(
+  _toolName: string,
+  data: Array<Record<string, unknown>>
+): ToolCardResult | null {
+  if (!data || data.length === 0) return null;
+  return generateGenericToolCards(data);
 }
 
 /**

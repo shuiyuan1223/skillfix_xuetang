@@ -136,7 +136,7 @@ export function classifyFeedback(payload: SlackWebhookPayload): FeedbackClassifi
   }
 
   // Generate summary
-  const summary = payload.text.length > 100 ? payload.text.substring(0, 100) + "..." : payload.text;
+  const summary = payload.text.length > 100 ? `${payload.text.substring(0, 100)}...` : payload.text;
 
   return {
     category: bestCategory,

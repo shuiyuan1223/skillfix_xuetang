@@ -12,7 +12,7 @@
  * - Category Scorer: Aggregates scores with category-specific weights
  */
 
-export * from "./types.js";
+export type * from "./types.js";
 export * from "./trace-collector.js";
 export * from "./evaluator.js";
 export * from "./analyzer.js";

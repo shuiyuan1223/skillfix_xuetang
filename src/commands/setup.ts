@@ -3,13 +3,7 @@
  */
 
 import type { Command } from "commander";
-import {
-  ensureConfigDir,
-  saveConfig,
-  getConfigPath,
-  isConfigured,
-  loadConfig,
-} from "../utils/config.js";
+import { ensureConfigDir, saveConfig, getConfigPath, isConfigured } from "../utils/config.js";
 import type { PHAConfig } from "../utils/config.js";
 
 export function registerSetupCommand(program: Command): void {

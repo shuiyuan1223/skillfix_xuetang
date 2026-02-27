@@ -11,6 +11,7 @@ export interface LocaleMessages {
     sleep: string;
     activity: string;
     plans: string;
+    experiment: string;
     memory: string;
     prompts: string;
     skills: string;
@@ -433,7 +434,7 @@ export interface LocaleMessages {
     latestRun: string;
     bestScoresAllTime: string;
     bestPerVersion: string;
-    // SHARP 2.0
+    // SHARP 3.0
     sharpSafety: string;
     sharpUsefulness: string;
     sharpAccuracy: string;
@@ -518,6 +519,10 @@ export interface LocaleMessages {
     memoryFileLines: string;
     memoryFilePreview: string;
     memoryEmptyFile: string;
+    logDate: string;
+    logDetail: string;
+    backToLogs: string;
+    memorySummaryEmpty: string;
   };
 
   // Integrations page
@@ -784,6 +789,18 @@ export interface LocaleMessages {
     placeholder: string;
     thinking: string;
     searching: string;
+  };
+
+  // Custom Experiment Dashboard
+  experiment: {
+    refresh: string;
+    lastUpdated: string;
+    viewDashboard: string;
+    widgets: string;
+    sections: string;
+    dashboardCreated: string;
+    empty: string;
+    emptyHint: string;
   };
 
   // OAuth / Authorization

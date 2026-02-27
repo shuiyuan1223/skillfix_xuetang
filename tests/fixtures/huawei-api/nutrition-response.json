@@ -1,0 +1,22 @@
+{
+  "healthRecords": [
+    {
+      "startTime": 1770249600000000000,
+      "value": [
+        { "fieldName": "dietaryEnergy", "floatValue": 450 },
+        { "fieldName": "protein", "floatValue": 25.5 },
+        { "fieldName": "fat", "floatValue": 15.2 },
+        { "fieldName": "carbohydrates", "floatValue": 55.8 }
+      ]
+    },
+    {
+      "startTime": 1770267600000000000,
+      "value": [
+        { "fieldName": "dietaryEnergy", "floatValue": 650 },
+        { "fieldName": "protein", "floatValue": 35.0 },
+        { "fieldName": "fat", "floatValue": 22.5 },
+        { "fieldName": "carbohydrates", "floatValue": 80.3 }
+      ]
+    }
+  ]
+}
