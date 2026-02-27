@@ -5,7 +5,7 @@
  * PHA uses this through OpenRouter.
  */
 
-import type { EmbeddingProvider, EmbeddingProviderOptions } from "./embeddings.js";
+import type { EmbeddingProvider, EmbeddingProviderOptions } from './embeddings.js';
 
 export type OpenAiEmbeddingClient = {
   baseUrl: string;
@@ -13,12 +13,12 @@ export type OpenAiEmbeddingClient = {
   model: string;
 };
 
-export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
-const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+export const DEFAULT_OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
+const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const OPENAI_MAX_INPUT_TOKENS: Record<string, number> = {
-  "text-embedding-3-small": 8192,
-  "text-embedding-3-large": 8192,
-  "text-embedding-ada-002": 8191,
+  'text-embedding-3-small': 8192,
+  'text-embedding-3-large': 8192,
+  'text-embedding-ada-002': 8191,
 };
 
 export function normalizeOpenAiModel(model: string): string {
@@ -26,8 +26,8 @@ export function normalizeOpenAiModel(model: string): string {
   if (!trimmed) {
     return DEFAULT_OPENAI_EMBEDDING_MODEL;
   }
-  if (trimmed.startsWith("openai/")) {
-    return trimmed.slice("openai/".length);
+  if (trimmed.startsWith('openai/')) {
+    return trimmed.slice('openai/'.length);
   }
   return trimmed;
 }
@@ -36,14 +36,14 @@ export async function createOpenAiEmbeddingProvider(
   options: EmbeddingProviderOptions
 ): Promise<{ provider: EmbeddingProvider; client: OpenAiEmbeddingClient }> {
   const client = await resolveOpenAiEmbeddingClient(options);
-  const url = `${client.baseUrl.replace(/\/$/, "")}/embeddings`;
+  const url = `${client.baseUrl.replace(/\/$/, '')}/embeddings`;
 
   const embed = async (input: string[]): Promise<number[][]> => {
     if (input.length === 0) {
       return [];
     }
     const res = await fetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: client.headers,
       body: JSON.stringify({ model: client.model, input }),
     });
@@ -60,7 +60,7 @@ export async function createOpenAiEmbeddingProvider(
 
   return {
     provider: {
-      id: "openai",
+      id: 'openai',
       model: client.model,
       maxInputTokens: OPENAI_MAX_INPUT_TOKENS[client.model],
       embedQuery: async (text) => {
@@ -73,25 +73,20 @@ export async function createOpenAiEmbeddingProvider(
   };
 }
 
-export async function resolveOpenAiEmbeddingClient(
-  options: EmbeddingProviderOptions
-): Promise<OpenAiEmbeddingClient> {
+export async function resolveOpenAiEmbeddingClient(options: EmbeddingProviderOptions): Promise<OpenAiEmbeddingClient> {
   const remote = options.remote;
   const remoteApiKey = remote?.apiKey?.trim();
   const remoteBaseUrl = remote?.baseUrl?.trim();
 
   // PHA: resolve API key from options or environment
-  const apiKey =
-    remoteApiKey || options.apiKey || process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY;
+  const apiKey = remoteApiKey || options.apiKey || process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    throw new Error(
-      "No API key found for provider openai. Set OPENAI_API_KEY or configure in .pha/config.json"
-    );
+    throw new Error('No API key found for provider openai. Set OPENAI_API_KEY or configure in .pha/config.json');
   }
 
   const baseUrl = remoteBaseUrl || DEFAULT_OPENAI_BASE_URL;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
     Authorization: `Bearer ${apiKey}`,
     ...(remote?.headers ?? {}),
   };

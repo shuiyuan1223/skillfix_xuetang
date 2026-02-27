@@ -5,10 +5,10 @@
  * chunking, embedding parsing, and concurrency control.
  */
 
-import crypto from "node:crypto";
-import fsSync from "node:fs";
-import fs from "node:fs/promises";
-import path from "node:path";
+import crypto from 'node:crypto';
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 export type MemoryFileEntry = {
   path: string;
@@ -35,8 +35,8 @@ export function ensureDir(dir: string): string {
 }
 
 export function normalizeRelPath(value: string): string {
-  const trimmed = value.trim().replace(/^[./]+/, "");
-  return trimmed.replace(/\\/g, "/");
+  const trimmed = value.trim().replace(/^[./]+/, '');
+  return trimmed.replace(/\\/g, '/');
 }
 
 export function normalizeExtraMemoryPaths(workspaceDir: string, extraPaths?: string[]): string[] {
@@ -46,9 +46,7 @@ export function normalizeExtraMemoryPaths(workspaceDir: string, extraPaths?: str
   const resolved = extraPaths
     .map((value) => value.trim())
     .filter(Boolean)
-    .map((value) =>
-      path.isAbsolute(value) ? path.resolve(value) : path.resolve(workspaceDir, value)
-    );
+    .map((value) => (path.isAbsolute(value) ? path.resolve(value) : path.resolve(workspaceDir, value)));
   return Array.from(new Set(resolved));
 }
 
@@ -57,10 +55,10 @@ export function isMemoryPath(relPath: string): boolean {
   if (!normalized) {
     return false;
   }
-  if (normalized === "MEMORY.md" || normalized === "memory.md") {
+  if (normalized === 'MEMORY.md' || normalized === 'memory.md') {
     return true;
   }
-  return normalized.startsWith("memory/");
+  return normalized.startsWith('memory/');
 }
 
 async function walkDir(dir: string, files: string[]): Promise<void> {
@@ -77,21 +75,18 @@ async function walkDir(dir: string, files: string[]): Promise<void> {
     if (!entry.isFile()) {
       continue;
     }
-    if (!entry.name.endsWith(".md")) {
+    if (!entry.name.endsWith('.md')) {
       continue;
     }
     files.push(full);
   }
 }
 
-export async function listMemoryFiles(
-  workspaceDir: string,
-  extraPaths?: string[]
-): Promise<string[]> {
+export async function listMemoryFiles(workspaceDir: string, extraPaths?: string[]): Promise<string[]> {
   const result: string[] = [];
-  const memoryFile = path.join(workspaceDir, "MEMORY.md");
-  const altMemoryFile = path.join(workspaceDir, "memory.md");
-  const memoryDir = path.join(workspaceDir, "memory");
+  const memoryFile = path.join(workspaceDir, 'MEMORY.md');
+  const altMemoryFile = path.join(workspaceDir, 'memory.md');
+  const memoryDir = path.join(workspaceDir, 'memory');
 
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   const addMarkdownFile = async (absPath: string) => {
@@ -100,7 +95,7 @@ export async function listMemoryFiles(
       if (stat.isSymbolicLink() || !stat.isFile()) {
         return;
       }
-      if (!absPath.endsWith(".md")) {
+      if (!absPath.endsWith('.md')) {
         return;
       }
       result.push(absPath);
@@ -132,7 +127,7 @@ export async function listMemoryFiles(
           await walkDir(inputPath, result);
           continue;
         }
-        if (stat.isFile() && inputPath.endsWith(".md")) {
+        if (stat.isFile() && inputPath.endsWith('.md')) {
           result.push(inputPath);
         }
       } catch {
@@ -162,18 +157,15 @@ export async function listMemoryFiles(
 }
 
 export function hashText(value: string): string {
-  return crypto.createHash("sha256").update(value).digest("hex");
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-export async function buildFileEntry(
-  absPath: string,
-  workspaceDir: string
-): Promise<MemoryFileEntry> {
+export async function buildFileEntry(absPath: string, workspaceDir: string): Promise<MemoryFileEntry> {
   const stat = await fs.stat(absPath);
-  const content = await fs.readFile(absPath, "utf-8");
+  const content = await fs.readFile(absPath, 'utf-8');
   const hash = hashText(content);
   return {
-    path: path.relative(workspaceDir, absPath).replace(/\\/g, "/"),
+    path: path.relative(workspaceDir, absPath).replace(/\\/g, '/'),
     absPath,
     mtimeMs: stat.mtimeMs,
     size: stat.size,
@@ -181,11 +173,8 @@ export async function buildFileEntry(
   };
 }
 
-export function chunkMarkdown(
-  content: string,
-  chunking: { tokens: number; overlap: number }
-): MemoryChunk[] {
-  const lines = content.split("\n");
+export function chunkMarkdown(content: string, chunking: { tokens: number; overlap: number }): MemoryChunk[] {
+  const lines = content.split('\n');
   if (lines.length === 0) {
     return [];
   }
@@ -206,7 +195,7 @@ export function chunkMarkdown(
     if (!firstEntry || !lastEntry) {
       return;
     }
-    const text = current.map((entry) => entry.line).join("\n");
+    const text = current.map((entry) => entry.line).join('\n');
     const startLine = firstEntry.lineNo;
     const endLine = lastEntry.lineNo;
     chunks.push({
@@ -242,11 +231,11 @@ export function chunkMarkdown(
   };
 
   for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i] ?? "";
+    const line = lines[i] ?? '';
     const lineNo = i + 1;
     const segments: string[] = [];
     if (line.length === 0) {
-      segments.push("");
+      segments.push('');
     } else {
       for (let start = 0; start < line.length; start += maxChars) {
         segments.push(line.slice(start, start + maxChars));
@@ -310,10 +299,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-export async function runWithConcurrency<T>(
-  tasks: Array<() => Promise<T>>,
-  limit: number
-): Promise<T[]> {
+export async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
   if (tasks.length === 0) {
     return [];
   }

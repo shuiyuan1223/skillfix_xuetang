@@ -7,11 +7,11 @@
  * Adapted from OpenClaw src/plugins/hook-runner-global.ts.
  */
 
-import type { PluginRegistry } from "./registry.js";
-import { createSubsystemLogger } from "../memory/compat.js";
-import { createHookRunner, type HookRunner } from "./hooks.js";
+import type { PluginRegistry } from './registry.js';
+import { createSubsystemLogger } from '../memory/compat.js';
+import { createHookRunner, type HookRunner } from './hooks.js';
 
-const log = createSubsystemLogger("plugins");
+const log = createSubsystemLogger('plugins');
 
 let globalHookRunner: HookRunner | null = null;
 let globalRegistry: PluginRegistry | null = null;
@@ -56,7 +56,7 @@ export function getGlobalPluginRegistry(): PluginRegistry | null {
 /**
  * Check if any hooks are registered for a given hook name.
  */
-export function hasGlobalHooks(hookName: Parameters<HookRunner["hasHooks"]>[0]): boolean {
+export function hasGlobalHooks(hookName: Parameters<HookRunner['hasHooks']>[0]): boolean {
   return globalHookRunner?.hasHooks(hookName) ?? false;
 }
 

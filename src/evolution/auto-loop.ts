@@ -12,44 +12,25 @@
  * 8. Repeat
  */
 
-import type {
-  AutoLoopConfig,
-  BenchmarkCategory,
-  BenchmarkResult,
-  BenchmarkRun,
-  CategoryScore,
-} from "./types.js";
-import { BenchmarkRunner, type BenchmarkRunnerConfig } from "./benchmark-runner.js";
-import {
-  identifyWeakCategories,
-  computeOverallScore,
-  normalizeScoreForDisplay,
-} from "./category-scorer.js";
-import { CATEGORY_LABELS } from "./benchmark-seed.js";
+import type { AutoLoopConfig, BenchmarkCategory, BenchmarkResult, BenchmarkRun, CategoryScore } from './types.js';
+import { BenchmarkRunner, type BenchmarkRunnerConfig } from './benchmark-runner.js';
+import { identifyWeakCategories, computeOverallScore, normalizeScoreForDisplay } from './category-scorer.js';
+import { CATEGORY_LABELS } from './benchmark-seed.js';
 import {
   optimizeWithClaudeCode,
   readPromptFiles,
   readSkillFiles,
   type OptimizationContext,
-} from "./claude-code-optimizer.js";
-import { createNextVersion, type VersionInfo } from "./version-manager.js";
-import { updateEvolutionVersion, getEvolutionVersionByBranch } from "../memory/db.js";
+} from './claude-code-optimizer.js';
+import { createNextVersion, type VersionInfo } from './version-manager.js';
+import { updateEvolutionVersion, getEvolutionVersionByBranch } from '../memory/db.js';
 
 export interface AutoLoopCallbacks {
   onIterationStart?: (iteration: number, maxIterations: number) => void;
-  onBenchmarkComplete?: (
-    run: BenchmarkRun,
-    categoryScores: Map<BenchmarkCategory, CategoryScore>
-  ) => void;
-  onWeakCategoriesFound?: (
-    categories: Array<{ category: BenchmarkCategory; score: number; gap: number }>
-  ) => void;
+  onBenchmarkComplete?: (run: BenchmarkRun, categoryScores: Map<BenchmarkCategory, CategoryScore>) => void;
+  onWeakCategoriesFound?: (categories: Array<{ category: BenchmarkCategory; score: number; gap: number }>) => void;
   onOptimizationStart?: (category: BenchmarkCategory) => void;
-  onOptimizationComplete?: (
-    category: BenchmarkCategory,
-    success: boolean,
-    filesChanged: string[]
-  ) => void;
+  onOptimizationComplete?: (category: BenchmarkCategory, success: boolean, filesChanged: string[]) => void;
   onComparisonResult?: (improved: boolean, delta: number) => void;
   onRevert?: (reason: string) => void;
   onComplete?: (totalIterations: number, finalScore: number, improved: boolean) => void;
@@ -124,13 +105,13 @@ export class AutoLoop {
 
       const weakCategories = identifyWeakCategories(lastCategoryScores, targetNormalized);
       if (weakCategories.length === 0) {
-        this.log("No weak categories found. Done!");
+        this.log('No weak categories found. Done!');
         break;
       }
 
       this.callbacks.onWeakCategoriesFound?.(weakCategories);
       this.log(
-        `Weak categories: ${weakCategories.map((w) => `${CATEGORY_LABELS[w.category]} (${w.score.toFixed(1)})`).join(", ")}`
+        `Weak categories: ${weakCategories.map((w) => `${CATEGORY_LABELS[w.category]} (${w.score.toFixed(1)})`).join(', ')}`
       );
 
       const iterState = { lastResults, lastCategoryScores };
@@ -169,7 +150,7 @@ export class AutoLoop {
     results: BenchmarkResult[];
     categoryScores: Map<BenchmarkCategory, CategoryScore>;
   }> {
-    this.log("Running initial benchmark...");
+    this.log('Running initial benchmark...');
     const initialRun = await runner.run({ profile: this.config.profile });
     result.initialScore = initialRun.run.overallScore;
     result.runs.push(initialRun.run);
@@ -200,7 +181,7 @@ export class AutoLoop {
       .filter((r) => !r.passed && r.testCaseId.startsWith(getCategoryPrefix(weak.category)))
       .map((r) => ({
         testCaseId: r.testCaseId,
-        query: "",
+        query: '',
         agentResponse: r.agentResponse,
         feedback: r.feedback,
         score: r.overallScore,
@@ -223,19 +204,15 @@ export class AutoLoop {
     };
 
     const optResult = await optimizeWithClaudeCode(context, optCwd);
-    this.callbacks.onOptimizationComplete?.(
-      weak.category,
-      optResult.success,
-      optResult.filesChanged
-    );
+    this.callbacks.onOptimizationComplete?.(weak.category, optResult.success, optResult.filesChanged);
 
     if (!optResult.success) {
       this.log(`Optimization failed: ${optResult.error}`);
       return;
     }
 
-    this.log(`Changed files: ${optResult.filesChanged.join(", ")}`);
-    this.log("Re-running benchmark...");
+    this.log(`Changed files: ${optResult.filesChanged.join(', ')}`);
+    this.log('Re-running benchmark...');
     const rerunResult = await runner.run({
       profile: this.config.profile,
       category: weak.category,
@@ -312,11 +289,9 @@ export class AutoLoop {
     if (this.versionInfo) {
       const version = getEvolutionVersionByBranch(this.versionInfo.branchName);
       if (version) {
-        const allFilesChanged = result.changes
-          .filter((ch) => ch.kept)
-          .flatMap((ch) => ch.filesChanged);
+        const allFilesChanged = result.changes.filter((ch) => ch.kept).flatMap((ch) => ch.filesChanged);
         updateEvolutionVersion(version.id, {
-          status: result.improved ? "active" : "abandoned",
+          status: result.improved ? 'active' : 'abandoned',
           scoreDelta: result.finalScore - result.initialScore,
           filesChanged: allFilesChanged,
         });
@@ -348,20 +323,18 @@ export class AutoLoop {
   private async ensureBranch(): Promise<void> {
     try {
       this.versionInfo = createNextVersion({
-        triggerMode: "auto-evolve",
+        triggerMode: 'auto-evolve',
         triggerRef: `target=${this.config.targetScore}`,
       });
-      this.log(
-        `Created worktree: ${this.versionInfo.branchName} at ${this.versionInfo.worktreePath}`
-      );
+      this.log(`Created worktree: ${this.versionInfo.branchName} at ${this.versionInfo.worktreePath}`);
     } catch (error) {
       this.log(`Warning: Could not create worktree, falling back to direct branch: ${error}`);
       // Fallback to old behavior
-      const { execSync } = await import("child_process");
+      const { execSync } = await import('child_process');
       try {
-        const currentBranch = execSync("git branch --show-current", {
+        const currentBranch = execSync('git branch --show-current', {
           cwd: this.projectRoot,
-          encoding: "utf-8",
+          encoding: 'utf-8',
           timeout: 5000,
         }).trim();
 
@@ -369,13 +342,13 @@ export class AutoLoop {
           try {
             execSync(`git checkout -b ${this.config.branch}`, {
               cwd: this.projectRoot,
-              encoding: "utf-8",
+              encoding: 'utf-8',
               timeout: 5000,
             });
           } catch {
             execSync(`git checkout ${this.config.branch}`, {
               cwd: this.projectRoot,
-              encoding: "utf-8",
+              encoding: 'utf-8',
               timeout: 5000,
             });
           }
@@ -391,30 +364,30 @@ export class AutoLoop {
    * Revert the last git commit (in worktree or project root)
    */
   private async revertLastCommit(): Promise<void> {
-    const { execSync } = await import("child_process");
+    const { execSync } = await import('child_process');
     const cwd = this.versionInfo?.worktreePath || this.projectRoot;
 
     try {
-      execSync("git revert --no-edit HEAD", {
+      execSync('git revert --no-edit HEAD', {
         cwd,
-        encoding: "utf-8",
+        encoding: 'utf-8',
         timeout: 10000,
       });
     } catch (error) {
       this.log(`Warning: Failed to revert: ${error}`);
       try {
-        execSync("git reset --soft HEAD~1", {
+        execSync('git reset --soft HEAD~1', {
           cwd,
-          encoding: "utf-8",
+          encoding: 'utf-8',
           timeout: 5000,
         });
-        execSync("git checkout -- .", {
+        execSync('git checkout -- .', {
           cwd,
-          encoding: "utf-8",
+          encoding: 'utf-8',
           timeout: 5000,
         });
       } catch {
-        this.log("Warning: Could not revert changes");
+        this.log('Warning: Could not revert changes');
       }
     }
   }
@@ -429,13 +402,13 @@ export class AutoLoop {
 // ============================================================================
 
 const CATEGORY_PREFIX_MAP: Record<BenchmarkCategory, string> = {
-  "health-data-analysis": "hda",
-  "health-coaching": "hc",
-  "safety-boundaries": "sb",
-  "personalization-memory": "pm",
-  "communication-quality": "cq",
+  'health-data-analysis': 'hda',
+  'health-coaching': 'hc',
+  'safety-boundaries': 'sb',
+  'personalization-memory': 'pm',
+  'communication-quality': 'cq',
 };
 
 function getCategoryPrefix(category: BenchmarkCategory): string {
-  return CATEGORY_PREFIX_MAP[category] || "";
+  return CATEGORY_PREFIX_MAP[category] || '';
 }

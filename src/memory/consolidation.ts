@@ -6,13 +6,13 @@
  * Runs fire-and-forget; failures are silently logged.
  */
 
-import { readFileSync, existsSync } from "fs";
-import { getDailyLogPath, getMemoryPath } from "./profile.js";
-import type { MemoryManager } from "./memory-manager.js";
-import type { LLMSummarizationConfig } from "./compaction.js";
-import { createLogger } from "../utils/logger.js";
+import { readFileSync, existsSync } from 'fs';
+import { getDailyLogPath, getMemoryPath } from './profile.js';
+import type { MemoryManager } from './memory-manager.js';
+import type { LLMSummarizationConfig } from './compaction.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Memory/Consolidation");
+const log = createLogger('Memory/Consolidation');
 
 const CONSOLIDATION_PROMPT = `你是一个记忆提炼助手。从以下对话日志中提取值得长期记住的关键事实。
 
@@ -41,76 +41,68 @@ export async function consolidateMemory(
   // 1. Read today's daily log
   const dailyLogPath = getDailyLogPath(uuid);
   if (!existsSync(dailyLogPath)) {
-    log.info("Consolidation skipped: no daily log for today");
+    log.info('Consolidation skipped: no daily log for today');
     return;
   }
-  const dailyLog = readFileSync(dailyLogPath, "utf-8").trim();
+  const dailyLog = readFileSync(dailyLogPath, 'utf-8').trim();
   if (!dailyLog || dailyLog.length < 100) {
-    log.info("Consolidation skipped: daily log too short");
+    log.info('Consolidation skipped: daily log too short');
     return;
   }
 
   // 2. Read existing MEMORY.md
   const memoryPath = getMemoryPath(uuid);
-  let existingMemory = "";
+  let existingMemory = '';
   if (existsSync(memoryPath)) {
-    existingMemory = readFileSync(memoryPath, "utf-8").trim();
+    existingMemory = readFileSync(memoryPath, 'utf-8').trim();
   }
 
   // 3. Build prompt
-  const prompt = CONSOLIDATION_PROMPT.replace("{existingMemory}", existingMemory || "(空)").replace(
-    "{dailyLog}",
+  const prompt = CONSOLIDATION_PROMPT.replace('{existingMemory}', existingMemory || '(空)').replace(
+    '{dailyLog}',
     dailyLog
   );
 
   // 4. Call LLM to extract facts
   const extracted = await callLLMForExtraction(prompt, llmConfig);
-  if (!extracted || extracted === "NONE" || extracted.trim() === "NONE") {
-    log.info("Consolidation: no new facts to extract");
+  if (!extracted || extracted === 'NONE' || extracted.trim() === 'NONE') {
+    log.info('Consolidation: no new facts to extract');
     return;
   }
 
   // 5. Append to MEMORY.md
-  const date = new Date().toISOString().split("T")[0];
+  const date = new Date().toISOString().split('T')[0];
   const section = `\n## ${date} 自动提炼\n\n${extracted.trim()}\n`;
   memoryManager.appendMemory(uuid, section);
-  log.info(
-    `Consolidation: appended new facts to MEMORY.md (${extracted.trim().split("\n").length} lines)`
-  );
+  log.info(`Consolidation: appended new facts to MEMORY.md (${extracted.trim().split('\n').length} lines)`);
 }
 
 /**
  * Call LLM to extract facts from daily log.
  * Mirrors the HTTP call pattern from compaction.ts callLLMForSummary.
  */
-async function callLLMForExtraction(
-  prompt: string,
-  config: LLMSummarizationConfig
-): Promise<string | null> {
+async function callLLMForExtraction(prompt: string, config: LLMSummarizationConfig): Promise<string | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
     let response: Response;
 
-    if (config.api === "anthropic-messages") {
-      const url = config.baseUrl
-        ? `${config.baseUrl}/v1/messages`
-        : "https://api.anthropic.com/v1/messages";
+    if (config.api === 'anthropic-messages') {
+      const url = config.baseUrl ? `${config.baseUrl}/v1/messages` : 'https://api.anthropic.com/v1/messages';
 
       response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "x-api-key": config.apiKey,
-          "anthropic-version": "2023-06-01",
+          'Content-Type': 'application/json',
+          'x-api-key': config.apiKey,
+          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
           model: config.modelId,
           max_tokens: 512,
-          system:
-            "You are a memory extraction assistant. Extract key facts from conversation logs.",
-          messages: [{ role: "user", content: prompt }],
+          system: 'You are a memory extraction assistant. Extract key facts from conversation logs.',
+          messages: [{ role: 'user', content: prompt }],
         }),
         signal: controller.signal,
       });
@@ -125,19 +117,19 @@ async function callLLMForExtraction(
       };
       return (
         data.content
-          ?.filter((b) => b.type === "text")
+          ?.filter((b) => b.type === 'text')
           .map((b) => b.text)
-          .join("\n") || null
+          .join('\n') || null
       );
     } else {
       const url = config.baseUrl
         ? `${config.baseUrl}/v1/chat/completions`
-        : "https://api.openai.com/v1/chat/completions";
+        : 'https://api.openai.com/v1/chat/completions';
 
       response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify({
@@ -145,11 +137,10 @@ async function callLLMForExtraction(
           max_tokens: 512,
           messages: [
             {
-              role: "system",
-              content:
-                "You are a memory extraction assistant. Extract key facts from conversation logs.",
+              role: 'system',
+              content: 'You are a memory extraction assistant. Extract key facts from conversation logs.',
             },
-            { role: "user", content: prompt },
+            { role: 'user', content: prompt },
           ],
         }),
         signal: controller.signal,
@@ -166,10 +157,10 @@ async function callLLMForExtraction(
       return data.choices?.[0]?.message?.content || null;
     }
   } catch (err) {
-    if ((err as Error).name === "AbortError") {
-      log.warn("Consolidation LLM timed out (30s)");
+    if ((err as Error).name === 'AbortError') {
+      log.warn('Consolidation LLM timed out (30s)');
     } else {
-      log.warn("Consolidation LLM failed", err);
+      log.warn('Consolidation LLM failed', err);
     }
     return null;
   } finally {

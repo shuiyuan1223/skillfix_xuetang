@@ -6,22 +6,22 @@
  * server.ts (tool_execution_end interception) and pages.ts (generateCustomDashboard).
  */
 
-import type { PHATool } from "./types.js";
-import { MAX_DASHBOARDS_PER_SESSION } from "./dashboard-types.js";
-import type { WidgetType } from "./dashboard-types.js";
+import type { PHATool } from './types.js';
+import { MAX_DASHBOARDS_PER_SESSION } from './dashboard-types.js';
+import type { WidgetType } from './dashboard-types.js';
 
 const VALID_WIDGET_TYPES: WidgetType[] = [
-  "stat_row",
-  "line_chart",
-  "bar_chart",
-  "progress_tracker",
-  "data_table",
-  "text_block",
-  "milestone_timeline",
-  "metric_grid",
-  "score_gauge",
-  "activity_rings",
-  "radar_chart",
+  'stat_row',
+  'line_chart',
+  'bar_chart',
+  'progress_tracker',
+  'data_table',
+  'text_block',
+  'milestone_timeline',
+  'metric_grid',
+  'score_gauge',
+  'activity_rings',
+  'radar_chart',
 ];
 
 interface CreateDashboardArgs {
@@ -46,67 +46,66 @@ interface UpdateDashboardArgs {
 }
 
 const createDashboardTool: PHATool<CreateDashboardArgs> = {
-  name: "create_dashboard",
+  name: 'create_dashboard',
   description:
     `创建自定义仪表盘页面。仪表盘由多个 section 组成，每个 section 包含若干 widget。` +
     `可用 widget 类型：stat_row（指标卡片行）、line_chart（折线图）、bar_chart（柱状图）、progress_tracker（进度条，下降目标需设baseline）、` +
     `data_table（数据表格）、text_block（文本块）、milestone_timeline（里程碑时间线）、metric_grid（指标网格）、` +
     `score_gauge（环形评分）、activity_rings（活动环）、radar_chart（雷达图）。` +
     `创建后侧边栏「实验」页面会自动出现 tab。每个会话最多 ${MAX_DASHBOARDS_PER_SESSION} 个。`,
-  displayName: "创建仪表盘",
-  category: "presentation",
-  icon: "activity",
-  label: "Create Dashboard",
+  displayName: '创建仪表盘',
+  category: 'presentation',
+  icon: 'activity',
+  label: 'Create Dashboard',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      title: { type: "string", description: "Dashboard title" },
-      subtitle: { type: "string", description: "Optional subtitle / description" },
+      title: { type: 'string', description: 'Dashboard title' },
+      subtitle: { type: 'string', description: 'Optional subtitle / description' },
       icon: {
-        type: "string",
-        description:
-          "Icon name (e.g. heart, activity, moon, brain, target). See available icons in the system.",
+        type: 'string',
+        description: 'Icon name (e.g. heart, activity, moon, brain, target). See available icons in the system.',
       },
       sections: {
-        type: "array",
-        description: "Dashboard sections, each containing widgets",
+        type: 'array',
+        description: 'Dashboard sections, each containing widgets',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
-            title: { type: "string", description: "Section title (optional)" },
+            title: { type: 'string', description: 'Section title (optional)' },
             widgets: {
-              type: "array",
-              description: "Widgets in this section",
+              type: 'array',
+              description: 'Widgets in this section',
               items: {
-                type: "object",
+                type: 'object',
                 properties: {
                   type: {
-                    type: "string",
+                    type: 'string',
                     description:
-                      "Widget type: stat_row, line_chart, bar_chart, progress_tracker, data_table, text_block, milestone_timeline, metric_grid, score_gauge, activity_rings, radar_chart",
+                      'Widget type: stat_row, line_chart, bar_chart, progress_tracker, data_table, text_block, milestone_timeline, metric_grid, score_gauge, activity_rings, radar_chart',
                   },
                   config: {
-                    type: "object",
-                    description: "Widget-specific configuration",
+                    type: 'object',
+                    description: 'Widget-specific configuration',
                   },
                 },
-                required: ["type", "config"],
+                required: ['type', 'config'],
               },
             },
           },
-          required: ["widgets"],
+          required: ['widgets'],
         },
       },
     },
-    required: ["title", "sections"],
+    required: ['title', 'sections'],
   },
   execute: async (args: CreateDashboardArgs) => {
     // Auto-parse sections if LLM passed it as a JSON string
-    if (typeof args.sections === "string") {
+    if (typeof args.sections === 'string') {
       try {
         args.sections = JSON.parse(args.sections);
       } catch {
-        return { success: false, error: "sections: must be a valid JSON array" };
+        return { success: false, error: 'sections: must be a valid JSON array' };
       }
     }
 
@@ -116,7 +115,7 @@ const createDashboardTool: PHATool<CreateDashboardArgs> = {
         if (!VALID_WIDGET_TYPES.includes(widget.type as WidgetType)) {
           return {
             success: false,
-            error: `Invalid widget type: ${widget.type}. Valid types: ${VALID_WIDGET_TYPES.join(", ")}`,
+            error: `Invalid widget type: ${widget.type}. Valid types: ${VALID_WIDGET_TYPES.join(', ')}`,
           };
         }
       }
@@ -133,7 +132,7 @@ const createDashboardTool: PHATool<CreateDashboardArgs> = {
         dashboardId,
         title: args.title,
         subtitle: args.subtitle,
-        icon: args.icon || "activity",
+        icon: args.icon || 'activity',
         sections: args.sections,
         widgetCount: totalWidgets,
         sectionCount: args.sections.length,
@@ -143,53 +142,53 @@ const createDashboardTool: PHATool<CreateDashboardArgs> = {
 };
 
 const updateDashboardTool: PHATool<UpdateDashboardArgs> = {
-  name: "update_dashboard",
+  name: 'update_dashboard',
   description:
-    "更新已有的自定义仪表盘。可更新标题、副标题和 sections（包括所有 widget）。" +
-    "需提供 dashboardId（从 create_dashboard 返回值中获取）。",
-  displayName: "更新仪表盘",
-  category: "presentation",
-  icon: "activity",
-  label: "Update Dashboard",
+    '更新已有的自定义仪表盘。可更新标题、副标题和 sections（包括所有 widget）。' +
+    '需提供 dashboardId（从 create_dashboard 返回值中获取）。',
+  displayName: '更新仪表盘',
+  category: 'presentation',
+  icon: 'activity',
+  label: 'Update Dashboard',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      dashboardId: { type: "string", description: "Dashboard ID from create_dashboard" },
-      title: { type: "string", description: "New title (optional)" },
-      subtitle: { type: "string", description: "New subtitle (optional)" },
-      icon: { type: "string", description: "New icon name (optional)" },
+      dashboardId: { type: 'string', description: 'Dashboard ID from create_dashboard' },
+      title: { type: 'string', description: 'New title (optional)' },
+      subtitle: { type: 'string', description: 'New subtitle (optional)' },
+      icon: { type: 'string', description: 'New icon name (optional)' },
       sections: {
-        type: "array",
-        description: "New sections (replaces all existing sections)",
+        type: 'array',
+        description: 'New sections (replaces all existing sections)',
         items: {
-          type: "object",
+          type: 'object',
           properties: {
-            title: { type: "string" },
+            title: { type: 'string' },
             widgets: {
-              type: "array",
+              type: 'array',
               items: {
-                type: "object",
+                type: 'object',
                 properties: {
-                  type: { type: "string" },
-                  config: { type: "object" },
+                  type: { type: 'string' },
+                  config: { type: 'object' },
                 },
-                required: ["type", "config"],
+                required: ['type', 'config'],
               },
             },
           },
-          required: ["widgets"],
+          required: ['widgets'],
         },
       },
     },
-    required: ["dashboardId"],
+    required: ['dashboardId'],
   },
   execute: async (args: UpdateDashboardArgs) => {
     // Auto-parse sections if LLM passed it as a JSON string
-    if (typeof args.sections === "string") {
+    if (typeof args.sections === 'string') {
       try {
         args.sections = JSON.parse(args.sections);
       } catch {
-        return { success: false, error: "sections: must be a valid JSON array" };
+        return { success: false, error: 'sections: must be a valid JSON array' };
       }
     }
 
@@ -200,7 +199,7 @@ const updateDashboardTool: PHATool<UpdateDashboardArgs> = {
           if (!VALID_WIDGET_TYPES.includes(widget.type as WidgetType)) {
             return {
               success: false,
-              error: `Invalid widget type: ${widget.type}. Valid types: ${VALID_WIDGET_TYPES.join(", ")}`,
+              error: `Invalid widget type: ${widget.type}. Valid types: ${VALID_WIDGET_TYPES.join(', ')}`,
             };
           }
         }

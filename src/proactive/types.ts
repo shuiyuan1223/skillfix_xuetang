@@ -10,16 +10,11 @@
 // Recommendations (小艺建议 — proactive health suggestions)
 // ============================================================================
 
-export type RecommendationType =
-  | "health_tip"
-  | "plan_reminder"
-  | "achievement"
-  | "alert"
-  | "suggestion";
+export type RecommendationType = 'health_tip' | 'plan_reminder' | 'achievement' | 'alert' | 'suggestion';
 
-export type Priority = "low" | "medium" | "high" | "urgent";
+export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 
-export type RecommendationStatus = "active" | "dismissed" | "acted";
+export type RecommendationStatus = 'active' | 'dismissed' | 'acted';
 
 export interface Recommendation {
   id: string;
@@ -50,18 +45,11 @@ export interface Recommendation {
 // Reminders (待办/提醒)
 // ============================================================================
 
-export type ReminderCategory =
-  | "medication"
-  | "exercise"
-  | "sleep"
-  | "hydration"
-  | "meal"
-  | "checkup"
-  | "custom";
+export type ReminderCategory = 'medication' | 'exercise' | 'sleep' | 'hydration' | 'meal' | 'checkup' | 'custom';
 
-export type RepeatRule = "daily" | "weekly" | "weekdays" | "none";
+export type RepeatRule = 'daily' | 'weekly' | 'weekdays' | 'none';
 
-export type ReminderStatus = "pending" | "completed" | "snoozed" | "expired";
+export type ReminderStatus = 'pending' | 'completed' | 'snoozed' | 'expired';
 
 export interface Reminder {
   id: string;
@@ -83,9 +71,9 @@ export interface Reminder {
 // Calendar Events (日历)
 // ============================================================================
 
-export type CalendarCategory = "workout" | "checkup" | "meal" | "sleep" | "medication" | "custom";
+export type CalendarCategory = 'workout' | 'checkup' | 'meal' | 'sleep' | 'medication' | 'custom';
 
-export type CalendarEventStatus = "scheduled" | "completed" | "cancelled";
+export type CalendarEventStatus = 'scheduled' | 'completed' | 'cancelled';
 
 export interface CalendarEvent {
   id: string;

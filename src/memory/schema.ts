@@ -6,13 +6,13 @@
  * This module is imported for its side-effect only.
  */
 
-import { Database } from "bun:sqlite";
-import { existsSync } from "fs";
+import { Database } from 'bun:sqlite';
+import { existsSync } from 'fs';
 
-if (process.platform === "darwin") {
+if (process.platform === 'darwin') {
   const paths = [
-    "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib", // Apple Silicon
-    "/usr/local/opt/sqlite3/lib/libsqlite3.dylib", // Intel
+    '/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib', // Apple Silicon
+    '/usr/local/opt/sqlite3/lib/libsqlite3.dylib', // Intel
   ];
   const found = paths.find((p) => existsSync(p));
   if (found) {

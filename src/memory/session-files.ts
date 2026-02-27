@@ -4,16 +4,12 @@
  * Parse JSONL session transcripts into indexable text content.
  */
 
-import fs from "node:fs/promises";
-import path from "node:path";
-import {
-  resolveSessionTranscriptsDirForAgent,
-  redactSensitiveText,
-  createSubsystemLogger,
-} from "./compat.js";
-import { hashText } from "./internal.js";
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { resolveSessionTranscriptsDirForAgent, redactSensitiveText, createSubsystemLogger } from './compat.js';
+import { hashText } from './internal.js';
 
-const log = createSubsystemLogger("memory");
+const log = createSubsystemLogger('memory');
 
 export type SessionFileEntry = {
   path: string;
@@ -33,7 +29,7 @@ export async function listSessionFilesForAgent(agentId: string): Promise<string[
     return entries
       .filter((entry) => entry.isFile())
       .map((entry) => entry.name)
-      .filter((name) => name.endsWith(".jsonl"))
+      .filter((name) => name.endsWith('.jsonl'))
       .map((name) => path.join(dir, name));
   } catch {
     return [];
@@ -41,18 +37,18 @@ export async function listSessionFilesForAgent(agentId: string): Promise<string[
 }
 
 export function sessionPathForFile(absPath: string): string {
-  return path.join("sessions", path.basename(absPath)).replace(/\\/g, "/");
+  return path.join('sessions', path.basename(absPath)).replace(/\\/g, '/');
 }
 
 function normalizeSessionText(value: string): string {
   return value
-    .replace(/\s*\n+\s*/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/\s*\n+\s*/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 export function extractSessionText(content: unknown): string | null {
-  if (typeof content === "string") {
+  if (typeof content === 'string') {
     const normalized = normalizeSessionText(content);
     return normalized ? normalized : null;
   }
@@ -61,11 +57,11 @@ export function extractSessionText(content: unknown): string | null {
   }
   const parts: string[] = [];
   for (const block of content) {
-    if (!block || typeof block !== "object") {
+    if (!block || typeof block !== 'object') {
       continue;
     }
     const record = block as { type?: unknown; text?: unknown };
-    if (record.type !== "text" || typeof record.text !== "string") {
+    if (record.type !== 'text' || typeof record.text !== 'string') {
       continue;
     }
     const normalized = normalizeSessionText(record.text);
@@ -76,14 +72,14 @@ export function extractSessionText(content: unknown): string | null {
   if (parts.length === 0) {
     return null;
   }
-  return parts.join(" ");
+  return parts.join(' ');
 }
 
 export async function buildSessionEntry(absPath: string): Promise<SessionFileEntry | null> {
   try {
     const stat = await fs.stat(absPath);
-    const raw = await fs.readFile(absPath, "utf-8");
-    const lines = raw.split("\n");
+    const raw = await fs.readFile(absPath, 'utf-8');
+    const lines = raw.split('\n');
     const collected: string[] = [];
     const lineMap: number[] = [];
     for (let jsonlIdx = 0; jsonlIdx < lines.length; jsonlIdx++) {
@@ -97,38 +93,32 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
       } catch {
         continue;
       }
-      if (
-        !record ||
-        typeof record !== "object" ||
-        (record as { type?: unknown }).type !== "message"
-      ) {
+      if (!record || typeof record !== 'object' || (record as { type?: unknown }).type !== 'message') {
         continue;
       }
-      const message = (record as { message?: unknown }).message as
-        | { role?: unknown; content?: unknown }
-        | undefined;
-      if (!message || typeof message.role !== "string") {
+      const message = (record as { message?: unknown }).message as { role?: unknown; content?: unknown } | undefined;
+      if (!message || typeof message.role !== 'string') {
         continue;
       }
-      if (message.role !== "user" && message.role !== "assistant") {
+      if (message.role !== 'user' && message.role !== 'assistant') {
         continue;
       }
       const text = extractSessionText(message.content);
       if (!text) {
         continue;
       }
-      const safe = redactSensitiveText(text, { mode: "tools" });
-      const label = message.role === "user" ? "User" : "Assistant";
+      const safe = redactSensitiveText(text, { mode: 'tools' });
+      const label = message.role === 'user' ? 'User' : 'Assistant';
       collected.push(`${label}: ${safe}`);
       lineMap.push(jsonlIdx + 1);
     }
-    const content = collected.join("\n");
+    const content = collected.join('\n');
     return {
       path: sessionPathForFile(absPath),
       absPath,
       mtimeMs: stat.mtimeMs,
       size: stat.size,
-      hash: hashText(`${content}\n${lineMap.join(",")}`),
+      hash: hashText(`${content}\n${lineMap.join(',')}`),
       content,
       lineMap,
     };

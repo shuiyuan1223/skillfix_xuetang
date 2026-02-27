@@ -5,8 +5,8 @@
  * and creates GitHub issues for tracking.
  */
 
-import type { BenchmarkCategory } from "../evolution/types.js";
-import { CATEGORY_LABELS } from "../evolution/benchmark-seed.js";
+import type { BenchmarkCategory } from '../evolution/types.js';
+import { CATEGORY_LABELS } from '../evolution/benchmark-seed.js';
 
 export interface SlackWebhookPayload {
   token?: string;
@@ -22,8 +22,8 @@ export interface SlackWebhookPayload {
 }
 
 export interface FeedbackClassification {
-  category: BenchmarkCategory | "general";
-  severity: "low" | "medium" | "high";
+  category: BenchmarkCategory | 'general';
+  severity: 'low' | 'medium' | 'high';
   summary: string;
   originalText: string;
   userName: string;
@@ -32,73 +32,73 @@ export interface FeedbackClassification {
 
 // Keyword-based category classification
 const CATEGORY_KEYWORDS: Record<BenchmarkCategory, string[]> = {
-  "health-data-analysis": [
-    "data",
-    "sleep",
-    "heart rate",
-    "steps",
-    "calories",
-    "workout",
-    "activity",
-    "metrics",
-    "numbers",
-    "incorrect data",
-    "wrong data",
+  'health-data-analysis': [
+    'data',
+    'sleep',
+    'heart rate',
+    'steps',
+    'calories',
+    'workout',
+    'activity',
+    'metrics',
+    'numbers',
+    'incorrect data',
+    'wrong data',
   ],
-  "health-coaching": [
-    "goal",
-    "motivation",
-    "habit",
-    "progress",
-    "coaching",
-    "encourage",
-    "advice",
-    "recommendation",
-    "plan",
+  'health-coaching': [
+    'goal',
+    'motivation',
+    'habit',
+    'progress',
+    'coaching',
+    'encourage',
+    'advice',
+    'recommendation',
+    'plan',
   ],
-  "safety-boundaries": [
-    "unsafe",
-    "dangerous",
-    "diagnosis",
-    "diagnose",
-    "medical",
-    "emergency",
-    "prescribe",
-    "medication",
-    "treatment",
-    "fabricated",
-    "made up",
-    "hallucinated",
+  'safety-boundaries': [
+    'unsafe',
+    'dangerous',
+    'diagnosis',
+    'diagnose',
+    'medical',
+    'emergency',
+    'prescribe',
+    'medication',
+    'treatment',
+    'fabricated',
+    'made up',
+    'hallucinated',
   ],
-  "personalization-memory": [
-    "remember",
-    "forgot",
-    "context",
-    "profile",
-    "personal",
-    "previous conversation",
-    "last time",
-    "my preference",
+  'personalization-memory': [
+    'remember',
+    'forgot',
+    'context',
+    'profile',
+    'personal',
+    'previous conversation',
+    'last time',
+    'my preference',
   ],
-  "communication-quality": [
-    "confusing",
-    "unclear",
-    "verbose",
-    "too long",
-    "tone",
-    "sensitive",
-    "insensitive",
-    "vague",
-    "not specific",
-    "generic",
-    "not actionable",
+  'communication-quality': [
+    'confusing',
+    'unclear',
+    'verbose',
+    'too long',
+    'tone',
+    'sensitive',
+    'insensitive',
+    'vague',
+    'not specific',
+    'generic',
+    'not actionable',
   ],
 };
 
 const SEVERITY_KEYWORDS: Record<string, string[]> = {
-  high: ["urgent", "critical", "dangerous", "emergency", "broken", "crash", "wrong medical"],
-  medium: ["incorrect", "missing", "confusing", "not working", "bug", "issue"],
-  low: ["suggestion", "nice to have", "minor", "small", "typo", "wording"],
+  high: ['urgent', 'critical', 'dangerous', 'emergency', 'broken', 'crash', 'wrong medical'],
+  medium: ['incorrect', 'missing', 'confusing', 'not working', 'bug', 'issue'],
+  low: ['suggestion', 'nice to have', 'minor', 'small', 'typo', 'wording'],
 };
 
 /**
@@ -108,7 +108,7 @@ export function classifyFeedback(payload: SlackWebhookPayload): FeedbackClassifi
   const text = payload.text.toLowerCase();
 
   // Classify category
-  let bestCategory: BenchmarkCategory | "general" = "general";
+  let bestCategory: BenchmarkCategory | 'general' = 'general';
   let bestScore = 0;
 
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
@@ -125,11 +125,11 @@ export function classifyFeedback(payload: SlackWebhookPayload): FeedbackClassifi
   }
 
   // Classify severity
-  let severity: "low" | "medium" | "high" = "medium";
+  let severity: 'low' | 'medium' | 'high' = 'medium';
   for (const [sev, keywords] of Object.entries(SEVERITY_KEYWORDS)) {
     for (const keyword of keywords) {
       if (text.includes(keyword.toLowerCase())) {
-        severity = sev as "low" | "medium" | "high";
+        severity = sev as 'low' | 'medium' | 'high';
         break;
       }
     }
@@ -143,7 +143,7 @@ export function classifyFeedback(payload: SlackWebhookPayload): FeedbackClassifi
     severity,
     summary,
     originalText: payload.text,
-    userName: payload.user_name || "unknown",
+    userName: payload.user_name || 'unknown',
     timestamp: payload.timestamp || new Date().toISOString(),
   };
 }
@@ -156,8 +156,7 @@ export function buildIssueBody(classification: FeedbackClassification): {
   body: string;
   labels: string[];
 } {
-  const categoryLabel =
-    classification.category === "general" ? "General" : CATEGORY_LABELS[classification.category];
+  const categoryLabel = classification.category === 'general' ? 'General' : CATEGORY_LABELS[classification.category];
 
   const title = `[Feedback] ${categoryLabel}: ${classification.summary}`;
 
@@ -187,11 +186,7 @@ export function buildIssueBody(classification: FeedbackClassification): {
 ---
 *Auto-created from Slack feedback via PHA webhook*`;
 
-  const labels = [
-    "feedback",
-    `severity:${classification.severity}`,
-    `category:${classification.category}`,
-  ];
+  const labels = ['feedback', `severity:${classification.severity}`, `category:${classification.category}`];
 
   return { title, body, labels };
 }
@@ -223,14 +218,14 @@ export async function handleSlackWebhook(payload: SlackWebhookPayload): Promise<
  * Create a GitHub issue using the gh CLI
  */
 async function createGitHubIssue(title: string, body: string, labels: string[]): Promise<string> {
-  const { execSync } = await import("child_process");
+  const { execSync } = await import('child_process');
 
-  const labelArgs = labels.map((l) => `-l "${l}"`).join(" ");
+  const labelArgs = labels.map((l) => `-l "${l}"`).join(' ');
 
   try {
     const result = execSync(
       `gh issue create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" ${labelArgs}`,
-      { encoding: "utf-8", timeout: 15000 }
+      { encoding: 'utf-8', timeout: 15000 }
     );
     return result.trim();
   } catch (error) {

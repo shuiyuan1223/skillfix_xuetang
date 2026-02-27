@@ -824,4 +824,4 @@ export interface LocaleMessages {
   };
 }
 
-export type LocaleKey = "zh-CN" | "en";
+export type LocaleKey = 'zh-CN' | 'en';

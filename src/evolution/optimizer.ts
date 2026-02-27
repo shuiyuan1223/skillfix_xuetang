@@ -4,10 +4,10 @@
  * Generates and applies prompt/tool improvements based on analysis.
  */
 
-import type { AnalysisResult, OptimizationSuggestion } from "./types.js";
-import { createLogger } from "../utils/logger.js";
+import type { AnalysisResult, OptimizationSuggestion } from './types.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Optimizer");
+const log = createLogger('Optimizer');
 
 const OPTIMIZATION_PROMPT = `You are an AI system improvement specialist. Based on the analysis of a health assistant's performance, suggest specific improvements.
 
@@ -68,17 +68,17 @@ export class Optimizer {
       return [];
     }
 
-    const prompt = OPTIMIZATION_PROMPT.replace(
-      "{analysis}",
-      JSON.stringify(analysis, null, 2)
-    ).replace("{currentPrompt}", this.currentSystemPrompt);
+    const prompt = OPTIMIZATION_PROMPT.replace('{analysis}', JSON.stringify(analysis, null, 2)).replace(
+      '{currentPrompt}',
+      this.currentSystemPrompt
+    );
 
     const response = await this.llmCall(prompt);
 
     try {
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error("No JSON found in response");
+        throw new Error('No JSON found in response');
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
@@ -89,13 +89,13 @@ export class Optimizer {
         const opt: OptimizationSuggestion = {
           id,
           timestamp: Date.now(),
-          type: suggestion.type || "prompt",
+          type: suggestion.type || 'prompt',
           target: suggestion.target,
           currentValue: suggestion.currentValue,
           suggestedValue: suggestion.suggestedValue,
           rationale: suggestion.rationale,
           expectedImprovement: suggestion.expectedImprovement,
-          status: "pending",
+          status: 'pending',
         };
 
         suggestions.push(opt);
@@ -104,7 +104,7 @@ export class Optimizer {
 
       return suggestions;
     } catch (error) {
-      log.error("Failed to parse optimization suggestions:", error);
+      log.error('Failed to parse optimization suggestions:', error);
       return [];
     }
   }
@@ -128,8 +128,8 @@ export class Optimizer {
    */
   updateSuggestionStatus(
     id: string,
-    status: OptimizationSuggestion["status"],
-    validationResults?: OptimizationSuggestion["validationResults"]
+    status: OptimizationSuggestion['status'],
+    validationResults?: OptimizationSuggestion['validationResults']
   ): void {
     const suggestion = this.suggestions.get(id);
     if (suggestion) {
@@ -145,7 +145,7 @@ export class Optimizer {
    */
   applySuggestion(id: string): string | null {
     const suggestion = this.suggestions.get(id);
-    if (!suggestion || suggestion.type !== "prompt") {
+    if (!suggestion || suggestion.type !== 'prompt') {
       return null;
     }
 
@@ -159,7 +159,7 @@ export class Optimizer {
       newPrompt += `\n\n${suggestion.suggestedValue}`;
     }
 
-    suggestion.status = "applied";
+    suggestion.status = 'applied';
     this.currentSystemPrompt = newPrompt;
 
     return newPrompt;

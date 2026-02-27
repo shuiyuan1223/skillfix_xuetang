@@ -15,10 +15,10 @@ interface StarBorderProps {
 }
 
 export default function StarBorder({
-  as: Component = "div",
-  className = "",
-  color = "rgb(var(--color-primary))",
-  speed = "6s",
+  as: Component = 'div',
+  className = '',
+  color = 'rgb(var(--color-primary))',
+  speed = '6s',
   thickness = 1,
   children,
   ...rest

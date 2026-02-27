@@ -5,24 +5,24 @@
  * Safe to run repeatedly (idempotent).
  */
 
-import type { Command } from "commander";
-import { c, icons } from "../utils/cli-ui.js";
-import { migrateStateDir } from "../utils/state-migration.js";
-import { ensureSystemAgentFiles } from "../memory/profile.js";
-import { getDatabase } from "../memory/db.js";
-import { getUserStore } from "../data-sources/huawei/user-store.js";
-import { seedAllTestUsers, loadAllTestUserFixtures } from "../evolution/test-user-seeder.js";
+import type { Command } from 'commander';
+import { c, icons } from '../utils/cli-ui.js';
+import { migrateStateDir } from '../utils/state-migration.js';
+import { ensureSystemAgentFiles } from '../memory/profile.js';
+import { getDatabase } from '../memory/db.js';
+import { getUserStore } from '../data-sources/huawei/user-store.js';
+import { seedAllTestUsers, loadAllTestUserFixtures } from '../evolution/test-user-seeder.js';
 
 export function registerInitCommand(program: Command): void {
   program
-    .command("init")
-    .description("Initialize .pha/ runtime data (DB schemas, test users, system agent)")
-    .option("--seed-test-users", "Seed benchmark test users")
-    .option("--all", "Initialize everything")
+    .command('init')
+    .description('Initialize .pha/ runtime data (DB schemas, test users, system agent)')
+    .option('--seed-test-users', 'Seed benchmark test users')
+    .option('--all', 'Initialize everything')
     .action(async (options) => {
       const seedUsers = options.all || options.seedTestUsers;
 
-      console.log(`${c.bold("Initializing .pha/ runtime data...")}\n`);
+      console.log(`${c.bold('Initializing .pha/ runtime data...')}\n`);
 
       // 1. Run state migration (creates db/, users/system/, etc.)
       migrateStateDir();

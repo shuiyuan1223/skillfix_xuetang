@@ -5,17 +5,17 @@
  * Persists evaluation results to SQLite.
  */
 
-import type { Trace, EvaluationResult, TestCase } from "./types.js";
+import type { Trace, EvaluationResult, TestCase } from './types.js';
 import {
   insertEvaluation,
   getEvaluationByTraceId,
   listEvaluations,
   getEvaluationStats,
   type EvaluationRow,
-} from "../memory/db.js";
-import { createLogger } from "../utils/logger.js";
+} from '../memory/db.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Evaluator");
+const log = createLogger('Evaluator');
 
 const EVALUATION_PROMPT = `You are an expert evaluator for a health assistant AI. Your task is to evaluate the quality of the AI's response to a user's health-related query.
 
@@ -76,7 +76,7 @@ function rowToEvaluation(row: EvaluationRow): EvaluationResult {
     timestamp: row.timestamp,
     scores: JSON.parse(row.scores),
     overallScore: row.overall_score,
-    feedback: row.feedback || "",
+    feedback: row.feedback || '',
     issues: row.issues ? JSON.parse(row.issues) : [],
   };
 }
@@ -98,13 +98,10 @@ export class Evaluator {
       return rowToEvaluation(existing);
     }
 
-    const prompt = EVALUATION_PROMPT.replace("{query}", trace.userMessage)
-      .replace("{context}", JSON.stringify(trace.context || {}, null, 2))
-      .replace("{response}", trace.agentResponse)
-      .replace(
-        "{toolCalls}",
-        trace.toolCalls?.length ? JSON.stringify(trace.toolCalls, null, 2) : "None"
-      );
+    const prompt = EVALUATION_PROMPT.replace('{query}', trace.userMessage)
+      .replace('{context}', JSON.stringify(trace.context || {}, null, 2))
+      .replace('{response}', trace.agentResponse)
+      .replace('{toolCalls}', trace.toolCalls?.length ? JSON.stringify(trace.toolCalls, null, 2) : 'None');
 
     const response = await this.llmCall(prompt);
 
@@ -114,7 +111,7 @@ export class Evaluator {
       // Extract JSON from response
       const jsonMatch = response.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error("No JSON found in response");
+        throw new Error('No JSON found in response');
       }
 
       const parsed = JSON.parse(jsonMatch[0]);
@@ -138,7 +135,7 @@ export class Evaluator {
         timestamp: Date.now(),
         scores: parsed.scores,
         overallScore: Math.round(overallScore),
-        feedback: parsed.feedback || "",
+        feedback: parsed.feedback || '',
         issues: parsed.issues || [],
       };
     } catch (error) {
@@ -157,9 +154,9 @@ export class Evaluator {
         feedback: `Evaluation failed: ${error instanceof Error ? error.message : String(error)}`,
         issues: [
           {
-            type: "accuracy",
-            description: "Could not evaluate response",
-            severity: "medium",
+            type: 'accuracy',
+            description: 'Could not evaluate response',
+            severity: 'medium',
           },
         ],
       };
@@ -177,7 +174,7 @@ export class Evaluator {
         issues: result.issues,
       });
     } catch (error) {
-      log.error("Failed to persist evaluation:", error);
+      log.error('Failed to persist evaluation:', error);
     }
 
     return result;
@@ -248,10 +245,10 @@ export class Evaluator {
     const trace: Trace = {
       id: `test-${testCase.id}`,
       timestamp: Date.now(),
-      sessionId: "test",
+      sessionId: 'test',
       userMessage: testCase.query,
       agentResponse: response,
-      toolCalls: toolCalls as Trace["toolCalls"],
+      toolCalls: toolCalls as Trace['toolCalls'],
       duration: 0,
     };
 

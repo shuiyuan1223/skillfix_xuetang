@@ -2,16 +2,16 @@
  * Plugin System — Barrel Exports
  */
 
-export { loadPlugins } from "./loader.js";
+export { loadPlugins } from './loader.js';
 export {
   getGlobalHookRunner,
   getGlobalPluginRegistry,
   hasGlobalHooks,
   initializeGlobalHookRunner,
   resetGlobalHookRunner,
-} from "./hook-runner-global.js";
-export { createHookRunner, type HookRunner } from "./hooks.js";
-export { createEmptyRegistry, type PluginRegistry, type PluginRecord } from "./registry.js";
+} from './hook-runner-global.js';
+export { createHookRunner, type HookRunner } from './hooks.js';
+export { createEmptyRegistry, type PluginRegistry, type PluginRecord } from './registry.js';
 export type {
   PHAPluginApi,
   PHAPluginDefinition,
@@ -21,4 +21,4 @@ export type {
   PluginHookRegistration,
   AnyAgentTool,
   PluginLogger,
-} from "./types.js";
+} from './types.js';

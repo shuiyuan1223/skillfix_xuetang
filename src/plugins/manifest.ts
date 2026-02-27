@@ -5,15 +5,12 @@
  * Adapted from OpenClaw manifest.ts.
  */
 
-import fs from "node:fs";
-import path from "node:path";
+import fs from 'node:fs';
+import path from 'node:path';
 
-export const PHA_MANIFEST_FILENAME = "pha.plugin.json";
-export const OPENCLAW_MANIFEST_FILENAME = "openclaw.plugin.json";
-export const PLUGIN_MANIFEST_FILENAMES = [
-  PHA_MANIFEST_FILENAME,
-  OPENCLAW_MANIFEST_FILENAME,
-] as const;
+export const PHA_MANIFEST_FILENAME = 'pha.plugin.json';
+export const OPENCLAW_MANIFEST_FILENAME = 'openclaw.plugin.json';
+export const PLUGIN_MANIFEST_FILENAMES = [PHA_MANIFEST_FILENAME, OPENCLAW_MANIFEST_FILENAME] as const;
 
 export type PluginManifest = {
   id: string;
@@ -28,7 +25,7 @@ export type PluginManifestLoadResult =
   | { ok: false; error: string; manifestPath: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function resolvePluginManifestPath(rootDir: string): string | null {
@@ -53,7 +50,7 @@ export function loadPluginManifest(rootDir: string): PluginManifestLoadResult {
 
   let raw: unknown;
   try {
-    raw = JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as unknown;
+    raw = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as unknown;
   } catch (err) {
     return {
       ok: false,
@@ -63,18 +60,18 @@ export function loadPluginManifest(rootDir: string): PluginManifestLoadResult {
   }
 
   if (!isRecord(raw)) {
-    return { ok: false, error: "plugin manifest must be an object", manifestPath };
+    return { ok: false, error: 'plugin manifest must be an object', manifestPath };
   }
 
-  const id = typeof raw.id === "string" ? raw.id.trim() : "";
+  const id = typeof raw.id === 'string' ? raw.id.trim() : '';
   if (!id) {
-    return { ok: false, error: "plugin manifest requires id", manifestPath };
+    return { ok: false, error: 'plugin manifest requires id', manifestPath };
   }
 
   const configSchema = isRecord(raw.configSchema) ? raw.configSchema : undefined;
-  const name = typeof raw.name === "string" ? raw.name.trim() : undefined;
-  const description = typeof raw.description === "string" ? raw.description.trim() : undefined;
-  const version = typeof raw.version === "string" ? raw.version.trim() : undefined;
+  const name = typeof raw.name === 'string' ? raw.name.trim() : undefined;
+  const description = typeof raw.description === 'string' ? raw.description.trim() : undefined;
+  const version = typeof raw.version === 'string' ? raw.version.trim() : undefined;
 
   return {
     ok: true,

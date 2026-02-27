@@ -61,8 +61,8 @@ export function buildFtsQuery(raw: string): string | null {
   }
 
   // Quote each token and join with AND
-  const quoted = tokens.map((t) => `"${t.replaceAll('"', "")}"`);
-  return quoted.join(" AND ");
+  const quoted = tokens.map((t) => `"${t.replaceAll('"', '')}"`);
+  return quoted.join(' AND ');
 }
 
 export function bm25RankToScore(rank: number): number {

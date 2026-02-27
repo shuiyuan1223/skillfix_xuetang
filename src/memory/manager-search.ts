@@ -4,12 +4,11 @@
  * Low-level vector and keyword search using sqlite-vec and FTS5.
  */
 
-import type { DatabaseSyncType } from "./compat.js";
-import { truncateUtf16Safe } from "./compat.js";
-import { cosineSimilarity, parseEmbedding } from "./internal.js";
+import type { DatabaseSyncType } from './compat.js';
+import { truncateUtf16Safe } from './compat.js';
+import { cosineSimilarity, parseEmbedding } from './internal.js';
 
-const vectorToBlob = (embedding: number[]): Buffer =>
-  Buffer.from(new Float32Array(embedding).buffer);
+const vectorToBlob = (embedding: number[]): Buffer => Buffer.from(new Float32Array(embedding).buffer);
 
 export type SearchSource = string;
 
@@ -169,12 +168,7 @@ export async function searchKeyword(params: {
  ORDER BY LENGTH(text) ASC
  LIMIT ?`
       )
-      .all(
-        `%${params.query}%`,
-        params.providerModel,
-        ...params.sourceFilter.params,
-        params.limit
-      ) as Array<{
+      .all(`%${params.query}%`, params.providerModel, ...params.sourceFilter.params, params.limit) as Array<{
       id: string;
       path: string;
       source: SearchSource;

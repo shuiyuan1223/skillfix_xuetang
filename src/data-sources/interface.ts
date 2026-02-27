@@ -132,7 +132,7 @@ export interface NutritionData {
 export interface MenstrualCycleData {
   date: string;
   cycleDay?: number;
-  phase?: "menstrual" | "follicular" | "ovulatory" | "luteal";
+  phase?: 'menstrual' | 'follicular' | 'ovulatory' | 'luteal';
   periodStartDate?: string;
   cycleLength?: number;
   records: Array<{ date: string; status: string }>;
@@ -141,7 +141,7 @@ export interface MenstrualCycleData {
 export interface VO2MaxData {
   date: string;
   value: number; // mL/kg/min
-  level: "low" | "fair" | "good" | "excellent" | "superior";
+  level: 'low' | 'fair' | 'good' | 'excellent' | 'superior';
 }
 
 export interface EmotionData {

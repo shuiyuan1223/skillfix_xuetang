@@ -5,7 +5,7 @@
  * Used by MemoryIndexManager (not PHA's old schema.ts which handles user tables).
  */
 
-import type { DatabaseSyncType } from "./compat.js";
+import type { DatabaseSyncType } from './compat.js';
 
 export function ensureMemoryIndexSchema(params: {
   db: DatabaseSyncType;
@@ -82,20 +82,15 @@ export function ensureMemoryIndexSchema(params: {
     }
   }
 
-  ensureColumn(params.db, "files", "source", "TEXT NOT NULL DEFAULT 'memory'");
-  ensureColumn(params.db, "chunks", "source", "TEXT NOT NULL DEFAULT 'memory'");
+  ensureColumn(params.db, 'files', 'source', "TEXT NOT NULL DEFAULT 'memory'");
+  ensureColumn(params.db, 'chunks', 'source', "TEXT NOT NULL DEFAULT 'memory'");
   params.db.run(`CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);`);
   params.db.run(`CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source);`);
 
   return { ftsAvailable, ...(ftsError ? { ftsError } : {}) };
 }
 
-function ensureColumn(
-  db: DatabaseSyncType,
-  table: "files" | "chunks",
-  column: string,
-  definition: string
-): void {
+function ensureColumn(db: DatabaseSyncType, table: 'files' | 'chunks', column: string, definition: string): void {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   if (rows.some((row) => row.name === column)) {
     return;

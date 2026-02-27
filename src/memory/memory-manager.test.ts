@@ -2,16 +2,16 @@
  * Memory Manager Tests
  */
 
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { MemoryManager } from "./memory-manager.js";
-import { existsSync, rmSync, mkdirSync, readdirSync } from "fs";
-import { join } from "path";
-import { getStateDir } from "../utils/config.js";
+import { describe, test, expect, beforeAll, afterAll } from 'bun:test';
+import { MemoryManager } from './memory-manager.js';
+import { existsSync, rmSync, mkdirSync, readdirSync } from 'fs';
+import { join } from 'path';
+import { getStateDir } from '../utils/config.js';
 
 // Use a test-specific directory
-const TEST_STATE_DIR = join(import.meta.dir, "../../.pha-test");
+const TEST_STATE_DIR = join(import.meta.dir, '../../.pha-test');
 
-describe("MemoryManager", () => {
+describe('MemoryManager', () => {
   let manager: MemoryManager;
   const testUuid = `test-user-${Date.now()}`;
 
@@ -31,43 +31,43 @@ describe("MemoryManager", () => {
       rmSync(TEST_STATE_DIR, { recursive: true, force: true });
     }
     // Clean up test user directories leaked into .pha/users/
-    const usersDir = join(getStateDir(), "users");
+    const usersDir = join(getStateDir(), 'users');
     if (existsSync(usersDir)) {
       for (const entry of readdirSync(usersDir)) {
-        if (entry.startsWith("test-user-") || entry.startsWith("new-user-")) {
+        if (entry.startsWith('test-user-') || entry.startsWith('new-user-')) {
           rmSync(join(usersDir, entry), { recursive: true, force: true });
         }
       }
     }
   });
 
-  test("should create manager instance", () => {
+  test('should create manager instance', () => {
     manager = new MemoryManager();
     expect(manager).toBeDefined();
   });
 
-  test("should ensure user exists", () => {
+  test('should ensure user exists', () => {
     manager.ensureUser(testUuid);
     const profile = manager.getProfile(testUuid);
     expect(profile).toBeDefined();
   });
 
-  test("should update and get profile (file-only)", () => {
+  test('should update and get profile (file-only)', () => {
     manager.updateProfile(testUuid, {
-      gender: "male",
+      gender: 'male',
       birthYear: 1990,
       height: 175,
       weight: 70,
     });
 
     const profile = manager.getProfile(testUuid);
-    expect(profile.gender).toBe("male");
+    expect(profile.gender).toBe('male');
     expect(profile.birthYear).toBe(1990);
     expect(profile.height).toBe(175);
     expect(profile.weight).toBe(70);
   });
 
-  test("should merge nested objects in profile", () => {
+  test('should merge nested objects in profile', () => {
     manager.updateProfile(testUuid, {
       goals: {
         dailySteps: 10000,
@@ -85,42 +85,42 @@ describe("MemoryManager", () => {
     expect(profile.goals?.sleepHours).toBe(8);
   });
 
-  test("should get next missing field", () => {
+  test('should get next missing field', () => {
     const newUuid = `new-user-${Date.now()}`;
     manager.ensureUser(newUuid);
 
     const missingField = manager.getNextMissingField(newUuid);
     expect(missingField).toBeDefined();
-    expect(missingField?.key).toBe("gender");
+    expect(missingField?.key).toBe('gender');
   });
 
-  test("should get profile completeness", () => {
+  test('should get profile completeness', () => {
     const completeness = manager.getProfileCompleteness(testUuid);
     expect(completeness).toBeGreaterThan(0);
     expect(completeness).toBeLessThanOrEqual(100);
   });
 
-  test("should append to memory without error", () => {
-    manager.appendMemory(testUuid, "## 发现\n用户喜欢跑步");
+  test('should append to memory without error', () => {
+    manager.appendMemory(testUuid, '## 发现\n用户喜欢跑步');
     // Memory is written to file; indexing is async via OpenClaw engine
   });
 
-  test("should search async (returns empty when index not available)", async () => {
-    const results = await manager.searchAsync(testUuid, "跑步");
+  test('should search async (returns empty when index not available)', async () => {
+    const results = await manager.searchAsync(testUuid, '跑步');
     // In test environment without embedding config, returns empty
     expect(results).toBeDefined();
     expect(Array.isArray(results)).toBe(true);
   });
 
-  test("should build system prompt", () => {
+  test('should build system prompt', () => {
     const prompt = manager.buildSystemPrompt(testUuid);
-    expect(prompt).toContain("PHA");
-    expect(prompt).toContain("Current User Information");
+    expect(prompt).toContain('PHA');
+    expect(prompt).toContain('Current User Information');
   });
 
-  test("should load SOUL prompt", () => {
+  test('should load SOUL prompt', () => {
     const soul = manager.getSoulPrompt();
-    expect(soul).toContain("PHA");
-    expect(soul).toContain("健康");
+    expect(soul).toContain('PHA');
+    expect(soul).toContain('健康');
   });
 });
