@@ -24,6 +24,10 @@ import { registerWebCommand } from "./commands/web.js";
 import { registerStateCommand } from "./commands/state.js";
 import { registerInitCommand } from "./commands/init.js";
 import { registerGetCommand } from "./commands/get.js";
+import {
+  registerEncryptConfigCommand,
+  registerDecryptConfigCommand,
+} from "./commands/encrypt-config.js";
 
 const program = new Command();
 
@@ -97,5 +101,9 @@ registerInitCommand(program);
 
 // Quick data retrieval
 registerGetCommand(program);
+
+// Security / encryption
+registerEncryptConfigCommand(program);
+registerDecryptConfigCommand(program);
 
 program.parse();

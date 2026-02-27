@@ -1,12 +1,12 @@
 /**
- * Category Scorer — SHARP 2.0
+ * Category Scorer — SHARP 3.0
  *
  * Aggregates benchmark results (with SharpRating[] scores) into per-category scores.
  * SHARP categories: Safety, Usefulness, Accuracy, Relevance, Personalization.
  * Test-case categories: health-data-analysis, health-coaching, etc. (scene grouping).
  *
  * Both coexist: test cases are grouped by scene category, each result carries
- * 16 SHARP ratings that are aggregated for the SHARP breakdown.
+ * SHARP ratings (16 in 2.0, 19 in 3.0) that are aggregated for the SHARP breakdown.
  */
 
 import type {
@@ -19,7 +19,7 @@ import type {
 import { loadCategoryWeights, loadCategoryLabels } from "./benchmark-seed.js";
 
 /**
- * Normalize score for display: always return 0.00-1.00 (SHARP 2.0 standard).
+ * Normalize score for display: always return 0.00-1.00 (SHARP standard).
  * Handles legacy 0-100 data by dividing back to 0.0-1.0.
  */
 export function normalizeScoreForDisplay(score: number): number {
@@ -28,7 +28,7 @@ export function normalizeScoreForDisplay(score: number): number {
 }
 
 // ============================================================================
-// SHARP 2.0 Aggregation
+// SHARP 3.0 Aggregation
 // ============================================================================
 
 /** SHARP category names */
@@ -317,7 +317,14 @@ export function generateAsciiRadar(data: RadarDataPoint[], width: number = 50): 
     const label = point.label.padEnd(maxLabelLen);
     const displayScore = point.score.toFixed(2);
     const scoreStr = displayScore.padStart(6);
-    const indicator = pct >= 0.8 ? " +" : pct >= 0.6 ? " ~" : " !";
+    let indicator: string;
+    if (pct >= 0.8) {
+      indicator = " +";
+    } else if (pct >= 0.6) {
+      indicator = " ~";
+    } else {
+      indicator = " !";
+    }
 
     lines.push(`  ${label}  ${bar} ${scoreStr}${indicator}`);
   }
@@ -377,7 +384,7 @@ function getSubcategoryFromTestId(testId: string): string | null {
 }
 
 // Legacy compat — kept for any code that imports this
-/** @deprecated Use SHARP 2.0 scoring */
+/** @deprecated Use SHARP scoring */
 export function calculateCategoryWeightedScore(
   scores: SharpRating[] | Record<string, number>,
   _category: BenchmarkCategory

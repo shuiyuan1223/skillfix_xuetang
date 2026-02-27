@@ -51,99 +51,130 @@ function sendDashboardPage(
   send: SendFn,
   data: DashboardData,
   activeTab: TabId,
-  loading: boolean
+  loading: boolean,
+  whitelisted = true
 ): void {
   const pageMessages = generateDashboardPage(data, activeTab, { loading });
-  const sidebarMessages = generateSidebar("dashboard");
+  const sidebarMessages = generateSidebar("dashboard", whitelisted);
   for (const msg of [...sidebarMessages, ...pageMessages]) send(msg);
+}
+
+function getOverviewGroups(ds: HealthDataSource, today: string): LoadGroup[] {
+  const yesterday = getLocalDateString(
+    (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d;
+    })()
+  );
+  return [
+    {
+      label: `${t("activity.steps")} & ${t("health.heartRate")}`,
+      fetchers: [
+        async () => {
+          const metrics = await ds.getMetrics(today);
+          if (metrics.steps === 0 && metrics.calories === 0) {
+            const yMetrics = await ds.getMetrics(yesterday);
+            if (yMetrics.steps > 0 || yMetrics.calories > 0) {
+              return { metrics: yMetrics, metricsIsYesterday: true };
+            }
+          }
+          return { metrics };
+        },
+        async () => {
+          const heartRate = await ds.getHeartRate(today);
+          if (heartRate.restingAvg === 0 && heartRate.readings.length === 0) {
+            const yHr = await ds.getHeartRate(yesterday);
+            if (yHr.restingAvg > 0) return { heartRate: yHr, heartRateIsYesterday: true };
+          }
+          return { heartRate };
+        },
+      ],
+    },
+    {
+      label: t("dashboard.tabVitals"),
+      fetchers: [
+        async () => ({ stress: (await ds.getStress?.(today)) ?? null }),
+        async () => ({ spo2: (await ds.getSpO2?.(today)) ?? null }),
+        async () => ({ bloodPressure: (await ds.getBloodPressure?.(today)) ?? null }),
+        async () => ({ bloodGlucose: (await ds.getBloodGlucose?.(today)) ?? null }),
+        async () => ({ bodyTemperature: (await ds.getBodyTemperature?.(today)) ?? null }),
+      ],
+    },
+    {
+      label: `${t("dashboard.tabSleep")} & ${t("dashboard.tabBody")}`,
+      fetchers: [
+        async () => ({ sleep: await ds.getSleep(today) }),
+        async () => ({ bodyComposition: (await ds.getBodyComposition?.(today)) ?? null }),
+        async () => ({ nutrition: (await ds.getNutrition?.(today)) ?? null }),
+      ],
+    },
+    {
+      label: t("dashboard.tabHeart"),
+      fetchers: [
+        async () => ({ ecg: (await ds.getECG?.(today)) ?? null }),
+        async () => ({ vo2max: (await ds.getVO2Max?.(today)) ?? null }),
+        async () => ({ emotion: (await ds.getEmotion?.(today)) ?? null }),
+      ],
+    },
+    {
+      label: t("dashboard.tabTrends"),
+      fetchers: [
+        async () => ({ weeklySteps: await ds.getWeeklySteps(today) }),
+        async () => ({ weeklySleep: await ds.getWeeklySleep(today) }),
+      ],
+    },
+  ];
+}
+
+function getHeartGroups(ds: HealthDataSource, today: string): LoadGroup[] {
+  return [
+    {
+      label: t("health.heartRate"),
+      fetchers: [
+        async () => ({ heartRate: await ds.getHeartRate(today) }),
+        async () => ({ hrv: (await ds.getHRV?.(today)) ?? null }),
+      ],
+    },
+    {
+      label: t("dashboard.ecgRecords"),
+      fetchers: [async () => ({ ecg: (await ds.getECG?.(today)) ?? null })],
+    },
+    {
+      label: t("dashboard.tabTrends"),
+      fetchers: [
+        async () => ({
+          weeklyHeartRate: await (async () => {
+            if (ds.getHeartRateRange) {
+              const end = today;
+              const start = new Date(today);
+              start.setDate(start.getDate() - 7);
+              const data = await ds.getHeartRateRange(start.toISOString().split("T")[0], end);
+              return data.map((d) => ({ date: d.date, avg: d.avg }));
+            }
+            return undefined;
+          })(),
+        }),
+      ],
+    },
+  ];
 }
 
 /**
  * Define loading groups for each tab
  */
 function getGroupsForTab(tab: TabId, ds: HealthDataSource, today: string): LoadGroup[] {
-  const groups: LoadGroup[] = [];
-
-  switch (tab) {
-    case "overview": {
-      const yesterday = getLocalDateString(
-        (() => {
-          const d = new Date();
-          d.setDate(d.getDate() - 1);
-          return d;
-        })()
-      );
-      groups.push({
-        label: `${t("activity.steps")} & ${t("health.heartRate")}`,
-        fetchers: [
-          async () => {
-            const metrics = await ds.getMetrics(today);
-            // Fallback to yesterday if today has no data yet
-            if (metrics.steps === 0 && metrics.calories === 0) {
-              const yMetrics = await ds.getMetrics(yesterday);
-              if (yMetrics.steps > 0 || yMetrics.calories > 0) {
-                return { metrics: yMetrics, metricsIsYesterday: true };
-              }
-            }
-            return { metrics };
-          },
-          async () => {
-            const heartRate = await ds.getHeartRate(today);
-            if (heartRate.restingAvg === 0 && heartRate.readings.length === 0) {
-              const yHr = await ds.getHeartRate(yesterday);
-              if (yHr.restingAvg > 0) {
-                return { heartRate: yHr, heartRateIsYesterday: true };
-              }
-            }
-            return { heartRate };
-          },
-        ],
-      });
-      groups.push({
-        label: t("dashboard.tabVitals"),
-        fetchers: [
-          async () => ({ stress: (await ds.getStress?.(today)) ?? null }),
-          async () => ({ spo2: (await ds.getSpO2?.(today)) ?? null }),
-          async () => ({ bloodPressure: (await ds.getBloodPressure?.(today)) ?? null }),
-          async () => ({ bloodGlucose: (await ds.getBloodGlucose?.(today)) ?? null }),
-          async () => ({ bodyTemperature: (await ds.getBodyTemperature?.(today)) ?? null }),
-        ],
-      });
-      groups.push({
-        label: `${t("dashboard.tabSleep")} & ${t("dashboard.tabBody")}`,
-        fetchers: [
-          async () => ({ sleep: await ds.getSleep(today) }),
-          async () => ({ bodyComposition: (await ds.getBodyComposition?.(today)) ?? null }),
-          async () => ({ nutrition: (await ds.getNutrition?.(today)) ?? null }),
-        ],
-      });
-      groups.push({
-        label: t("dashboard.tabHeart"),
-        fetchers: [
-          async () => ({ ecg: (await ds.getECG?.(today)) ?? null }),
-          async () => ({ vo2max: (await ds.getVO2Max?.(today)) ?? null }),
-          async () => ({ emotion: (await ds.getEmotion?.(today)) ?? null }),
-        ],
-      });
-      groups.push({
-        label: t("dashboard.tabTrends"),
-        fetchers: [
-          async () => ({ weeklySteps: await ds.getWeeklySteps(today) }),
-          async () => ({ weeklySleep: await ds.getWeeklySleep(today) }),
-        ],
-      });
-      break;
-    }
-
-    case "vitals":
-      groups.push({
+  const tabHandlers: Record<string, () => LoadGroup[]> = {
+    overview: () => getOverviewGroups(ds, today),
+    vitals: () => [
+      {
         label: t("health.heartRate"),
         fetchers: [
           async () => ({ heartRate: await ds.getHeartRate(today) }),
           async () => ({ hrv: (await ds.getHRV?.(today)) ?? null }),
         ],
-      });
-      groups.push({
+      },
+      {
         label: t("dashboard.tabVitals"),
         fetchers: [
           async () => ({ stress: (await ds.getStress?.(today)) ?? null }),
@@ -152,93 +183,51 @@ function getGroupsForTab(tab: TabId, ds: HealthDataSource, today: string): LoadG
           async () => ({ bloodGlucose: (await ds.getBloodGlucose?.(today)) ?? null }),
           async () => ({ bodyTemperature: (await ds.getBodyTemperature?.(today)) ?? null }),
         ],
-      });
-      break;
-
-    case "activity":
-      groups.push({
+      },
+    ],
+    activity: () => [
+      {
         label: t("activity.steps"),
         fetchers: [
           async () => ({ metrics: await ds.getMetrics(today) }),
           async () => ({ vo2max: (await ds.getVO2Max?.(today)) ?? null }),
         ],
-      });
-      groups.push({
+      },
+      {
         label: t("dashboard.tabTrends"),
         fetchers: [
           async () => ({ weeklySteps: await ds.getWeeklySteps(today) }),
           async () => ({ workouts: await ds.getWorkouts(today) }),
         ],
-      });
-      break;
-
-    case "sleep":
-      groups.push({
-        label: t("sleep.duration"),
-        fetchers: [async () => ({ sleep: await ds.getSleep(today) })],
-      });
-      groups.push({
+      },
+    ],
+    sleep: () => [
+      { label: t("sleep.duration"), fetchers: [async () => ({ sleep: await ds.getSleep(today) })] },
+      {
         label: t("dashboard.sleepTrend"),
         fetchers: [async () => ({ weeklySleep: await ds.getWeeklySleep(today) })],
-      });
-      break;
-
-    case "body":
-      groups.push({
+      },
+    ],
+    body: () => [
+      {
         label: t("dashboard.tabBody"),
         fetchers: [
           async () => ({ bodyComposition: (await ds.getBodyComposition?.(today)) ?? null }),
           async () => ({ nutrition: (await ds.getNutrition?.(today)) ?? null }),
         ],
-      });
-      break;
-
-    case "heart":
-      groups.push({
-        label: t("health.heartRate"),
-        fetchers: [
-          async () => ({ heartRate: await ds.getHeartRate(today) }),
-          async () => ({ hrv: (await ds.getHRV?.(today)) ?? null }),
-        ],
-      });
-      groups.push({
-        label: t("dashboard.ecgRecords"),
-        fetchers: [async () => ({ ecg: (await ds.getECG?.(today)) ?? null })],
-      });
-      groups.push({
-        label: t("dashboard.tabTrends"),
-        fetchers: [
-          async () => ({
-            weeklyHeartRate: await (async () => {
-              if (ds.getHeartRateRange) {
-                const end = today;
-                const start = new Date(today);
-                start.setDate(start.getDate() - 7);
-                const data = await ds.getHeartRateRange(start.toISOString().split("T")[0], end);
-                return data.map((d) => ({ date: d.date, avg: d.avg }));
-              }
-              return undefined;
-            })(),
-          }),
-        ],
-      });
-      break;
-
-    case "trends":
-      // Trends tab loads data via separate action (time_range_change)
-      // Initial load just shows the selector UI
-      groups.push({
+      },
+    ],
+    heart: () => getHeartGroups(ds, today),
+    trends: () => [
+      {
         label: t("dashboard.tabTrends"),
         fetchers: [async () => ({ weeklySteps: await ds.getWeeklySteps(today) })],
-      });
-      break;
+      },
+    ],
+  };
 
-    default:
-      // Fallback: load overview
-      return getGroupsForTab("overview", ds, today);
-  }
-
-  return groups;
+  const handler = tabHandlers[tab];
+  return handler ? handler() : getOverviewGroups(ds, today);
 }
 
 /**
@@ -250,6 +239,7 @@ export class ProgressiveDashboardLoader {
   private data: DashboardData = {};
   private dataSource: HealthDataSource;
   private send: SendFn;
+  whitelisted = true;
 
   constructor(dataSource: HealthDataSource, send: SendFn) {
     this.dataSource = dataSource;
@@ -285,7 +275,7 @@ export class ProgressiveDashboardLoader {
     const groups = getGroupsForTab(activeTab, this.dataSource, today);
 
     // 1. Send skeleton page immediately
-    sendDashboardPage(this.send, this.data, activeTab, true);
+    sendDashboardPage(this.send, this.data, activeTab, true, this.whitelisted);
 
     // 2. Load groups sequentially, rendering after each group
     for (let i = 0; i < groups.length; i++) {
@@ -304,7 +294,7 @@ export class ProgressiveDashboardLoader {
 
       // Re-render with accumulated data
       const isLastGroup = i === groups.length - 1;
-      sendDashboardPage(this.send, this.data, activeTab, !isLastGroup);
+      sendDashboardPage(this.send, this.data, activeTab, !isLastGroup, this.whitelisted);
     }
 
     // 3. Check for scope errors after all groups loaded
@@ -312,7 +302,7 @@ export class ProgressiveDashboardLoader {
     if (scopeErrors.length > 0) {
       this.data.scopeErrors = scopeErrors;
       // Re-send final page with scope error banner
-      sendDashboardPage(this.send, this.data, activeTab, false);
+      sendDashboardPage(this.send, this.data, activeTab, false, this.whitelisted);
     }
 
     // 4. Clear progress toast
@@ -335,7 +325,7 @@ export class ProgressiveDashboardLoader {
     this.data.trendsRange = range;
 
     // Show loading state
-    sendDashboardPage(this.send, this.data, "trends", true);
+    sendDashboardPage(this.send, this.data, "trends", true, this.whitelisted);
 
     try {
       const trendPoints = await this.fetchTrendData(metric, startStr, endStr);
@@ -345,7 +335,7 @@ export class ProgressiveDashboardLoader {
       this.data.trendsData = [];
     }
 
-    sendDashboardPage(this.send, this.data, "trends", false);
+    sendDashboardPage(this.send, this.data, "trends", false, this.whitelisted);
   }
 
   private async fetchTrendData(
@@ -399,6 +389,8 @@ export class ProgressiveDashboardLoader {
           const data = await ds.getSpO2Range(startDate, endDate);
           return data.map((d) => ({ date: d.date, value: d.avg }));
         }
+        break;
+      default:
         break;
     }
 

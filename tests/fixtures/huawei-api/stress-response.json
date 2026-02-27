@@ -1,0 +1,33 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "endTime": 1770335999999,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-stress-collector",
+          "samplePoints": [
+            {
+              "startTime": 1770249600000000000,
+              "endTime": 1770249660000000000,
+              "dataTypeName": "com.huawei.instantaneous.stress",
+              "value": [{ "fieldName": "stress", "integerValue": 45 }]
+            },
+            {
+              "startTime": 1770253200000000000,
+              "endTime": 1770253260000000000,
+              "dataTypeName": "com.huawei.instantaneous.stress",
+              "value": [{ "fieldName": "stress", "integerValue": 62 }]
+            },
+            {
+              "startTime": 1770256800000000000,
+              "endTime": 1770256860000000000,
+              "dataTypeName": "com.huawei.instantaneous.stress",
+              "value": [{ "fieldName": "stress", "integerValue": 38 }]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

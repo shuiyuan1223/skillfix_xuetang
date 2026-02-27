@@ -34,6 +34,7 @@
       "authUrl": "https://oauth-login1.cloud.huawei.com/oauth2/v3/authorize",
       "tokenUrl": "https://oauth-login.cloud.huawei.com/oauth2/v2/token",
       "apiBaseUrl": "https://hihealthbase-drcn.things.dbankcloud.cn:443",
+      "innerApiBaseUrl": "https://healthapi-inner.things.dbankcloud.cn:443",
       "scopes": [
         "openid",
         "profile",

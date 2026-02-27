@@ -119,21 +119,21 @@ export interface OptimizationSuggestion {
 }
 
 // ============================================================================
-// SHARP 2.0 Types
+// SHARP 3.0 Types
 // ============================================================================
 
-/** SHARP 2.0 single sub-component rating */
+/** SHARP 3.0 single sub-component rating */
 export interface SharpRating {
   category: string; // "Safety" | "Usefulness" | "Accuracy" | "Relevance" | "Personalization"
-  subComponent: string; // "Risk Disclosure" | "Medical Boundary" | ...
+  subComponent: string; // "S1 Risk Disclosure" | "A1 Scientific Factual Correctness" | ...
   score: number; // 1.0 | 0.5 | 0.0
   scoringType: "binary" | "3-point";
   reason: string;
 }
 
-/** SHARP 2.0 evaluation summary */
+/** SHARP 3.0 evaluation summary */
 export interface SharpSummary {
-  totalComponents: number; // 16
+  totalComponents: number; // 19
   perfectScores: number;
   failedComponents: number;
   averageScore: number; // 0.0-1.0
@@ -145,8 +145,9 @@ export interface SharpSummary {
 export interface SharpSubComponent {
   name: string;
   evaluation_criteria: string;
-  scoring_mechanism: "Binary" | "3-Point Scale";
-  scoring_logic: string;
+  scoring_mechanism: string; // "Binary (1.0 / 0.0)" | "3-Point Scale (1.0 / 0.5 / 0.0)"
+  scoring_logic?: string; // SHARP 2.0 legacy field
+  [key: string]: unknown; // SHARP 3.0 adds pass, fail, examples, etc.
 }
 
 /** SHARP Rubric category definition */
@@ -187,7 +188,7 @@ export type BenchmarkCategory =
   | "personalization-memory"
   | "communication-quality";
 
-/** @deprecated Use SHARP 2.0 equal-weight categories instead */
+/** @deprecated Use SHARP equal-weight categories instead */
 export interface CategoryDimensionWeights {
   accuracy: number;
   relevance: number;
@@ -221,7 +222,7 @@ export interface CategoryScore {
   score: number;
   testCount: number;
   passedCount: number;
-  details?: SharpRating[]; // SHARP 2.0 sub-component details
+  details?: SharpRating[]; // SHARP sub-component details
 }
 
 // Individual benchmark result for a test case
@@ -232,8 +233,8 @@ export interface BenchmarkResult {
   timestamp: number;
   agentResponse: string;
   toolCalls?: Array<{ tool: string; arguments: unknown; result: unknown }>;
-  scores: SharpRating[]; // 16 SHARP sub-component ratings
-  overallScore: number; // 0.0-1.0 (SHARP 2.0)
+  scores: SharpRating[]; // SHARP sub-component ratings (16 in 2.0, 19 in 3.0)
+  overallScore: number; // 0.0-1.0 (SHARP)
   passed: boolean;
   feedback: string;
   issues?: Array<{ type: string; description: string; severity: string }>;

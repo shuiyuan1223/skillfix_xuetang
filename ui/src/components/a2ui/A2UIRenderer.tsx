@@ -46,7 +46,6 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_weekly_summary: "周报汇总",
   get_workouts: "运动数据",
   get_hrv: "心率变异性",
-  get_health_trends: "健康趋势",
   update_user_profile: "更新健康档案",
   complete_onboarding: "完成引导",
   present_insight: "健康洞察",
@@ -424,7 +423,7 @@ export function A2UIRenderer({
     };
 
     // Parse numeric value for CountUp animation
-    const numericValue = typeof value === "number" ? value : parseFloat(String(value));
+    const numericValue = typeof value === "number" ? value : parseFloat(String(value).replace(/,/g, ""));
     const isNumeric = !isNaN(numericValue) && isFinite(numericValue);
     // Extract non-numeric suffix (e.g. "bpm", "%", "kcal")
     const valueSuffix = isNumeric && typeof value === "string" ? value.replace(/[\d.,\s-]+/, "").trim() : "";

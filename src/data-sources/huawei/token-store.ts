@@ -8,6 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { getStateDir, ensureConfigDir } from "../../utils/config.js";
+import { encrypt, decrypt } from "../../utils/crypto.js";
 import type { TokenData } from "./huawei-types.js";
 
 const TOKEN_FILE = "huawei-tokens.json";
@@ -23,7 +24,7 @@ export class TokenStore {
   }
 
   /**
-   * Get the stored token data
+   * Get the stored token data (auto-decrypts encrypted tokens)
    */
   getToken(): TokenData | null {
     if (!fs.existsSync(this.tokenPath)) {
@@ -32,18 +33,30 @@ export class TokenStore {
 
     try {
       const content = fs.readFileSync(this.tokenPath, "utf-8");
-      return JSON.parse(content) as TokenData;
+      const parsed = JSON.parse(content) as TokenData;
+      const stateDir = getStateDir();
+      return {
+        ...parsed,
+        accessToken: decrypt(parsed.accessToken, stateDir),
+        refreshToken: decrypt(parsed.refreshToken, stateDir),
+      };
     } catch {
       return null;
     }
   }
 
   /**
-   * Save token data
+   * Save token data (auto-encrypts sensitive token fields)
    */
   saveToken(token: TokenData): void {
     ensureConfigDir();
-    fs.writeFileSync(this.tokenPath, JSON.stringify(token, null, 2), {
+    const stateDir = getStateDir();
+    const encrypted = {
+      ...token,
+      accessToken: encrypt(token.accessToken, stateDir),
+      refreshToken: encrypt(token.refreshToken, stateDir),
+    };
+    fs.writeFileSync(this.tokenPath, JSON.stringify(encrypted, null, 2), {
       mode: 0o600, // User-only read/write
     });
   }

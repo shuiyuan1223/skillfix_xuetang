@@ -21,6 +21,7 @@ import type {
   PluginHookName,
   PluginHookRegistration,
   PluginLogger,
+  PluginOrigin,
   PluginToolRegistration,
 } from "./types.js";
 
@@ -32,76 +33,31 @@ function isToolFactory(tool: AnyAgentTool | PHAPluginToolFactory): tool is PHAPl
   );
 }
 
-async function loadSinglePlugin(
-  candidate: PluginCandidate,
+function pushPluginRecord(
   registry: PluginRegistry,
-  pluginConfigs?: Record<string, { enabled?: boolean; config?: unknown }>
-): Promise<void> {
-  // 1. Load manifest
-  const manifestResult = loadPluginManifest(candidate.dir);
-  if (!manifestResult.ok) {
-    log.warn(`skipping ${candidate.dir}: ${manifestResult.error}`);
-    registry.plugins.push({
-      id: path.basename(candidate.dir),
-      name: path.basename(candidate.dir),
-      source: candidate.source,
-      origin: candidate.origin,
-      status: "error",
-      error: manifestResult.error,
-      toolCount: 0,
-      hookCount: 0,
-    });
-    return;
-  }
+  base: { id: string; name: string; source: string; origin: PluginOrigin },
+  status: "error" | "disabled" | "loaded",
+  counts?: { toolCount: number; hookCount: number },
+  error?: string
+): void {
+  registry.plugins.push({
+    ...base,
+    status,
+    toolCount: counts?.toolCount ?? 0,
+    hookCount: counts?.hookCount ?? 0,
+    ...(error ? { error } : {}),
+  });
+}
 
-  const manifest = manifestResult.manifest;
-  const pluginId = manifest.id;
-
-  // 2. Check enabled/disabled
-  const pluginEntry = pluginConfigs?.[pluginId];
-  if (pluginEntry?.enabled === false) {
-    log.info(`plugin ${pluginId} is disabled`);
-    registry.plugins.push({
-      id: pluginId,
-      name: manifest.name || pluginId,
-      source: candidate.source,
-      origin: candidate.origin,
-      status: "disabled",
-      toolCount: 0,
-      hookCount: 0,
-    });
-    return;
-  }
-
-  // 3. Import the module
-  let mod: Record<string, unknown>;
-  try {
-    mod = await import(candidate.source);
-  } catch (err) {
-    const msg = `failed to import plugin ${pluginId}: ${String(err)}`;
-    log.error(msg);
-    registry.plugins.push({
-      id: pluginId,
-      name: manifest.name || pluginId,
-      source: candidate.source,
-      origin: candidate.origin,
-      status: "error",
-      error: msg,
-      toolCount: 0,
-      hookCount: 0,
-    });
-    return;
-  }
-
-  // 4. Resolve plugin definition
-  const pluginDef: PHAPluginModule =
-    (mod.default as PHAPluginModule) || (mod as unknown as PHAPluginModule);
-
-  // Track registrations for this plugin
-  const toolRegs: PluginToolRegistration[] = [];
-  const hookRegs: PluginHookRegistration[] = [];
-
-  // 5. Create PHAPluginApi
+function createPluginApi(
+  pluginId: string,
+  candidate: PluginCandidate,
+  manifest: { name?: string; version?: string; description?: string },
+  pluginEntry: { config?: unknown } | undefined,
+  registry: PluginRegistry,
+  toolRegs: PluginToolRegistration[],
+  hookRegs: PluginHookRegistration[]
+): PHAPluginApi {
   const pluginLogger: PluginLogger = {
     debug: (msg) => log.debug(`[${pluginId}] ${msg}`),
     info: (msg) => log.info(`[${pluginId}] ${msg}`),
@@ -109,7 +65,7 @@ async function loadSinglePlugin(
     error: (msg) => log.error(`[${pluginId}] ${msg}`),
   };
 
-  const api: PHAPluginApi = {
+  return {
     id: pluginId,
     name: manifest.name || pluginId,
     version: manifest.version,
@@ -120,7 +76,6 @@ async function loadSinglePlugin(
 
     registerTool(tool: AnyAgentTool | PHAPluginToolFactory, opts?: PHAPluginToolOptions): void {
       if (isToolFactory(tool)) {
-        // Resolve factory immediately with empty context
         const result = tool({});
         if (!result) return;
         const tools = Array.isArray(result) ? result : [result];
@@ -154,42 +109,90 @@ async function loadSinglePlugin(
       pluginLogger.debug?.(`registered hook: ${hookName}`);
     },
   };
+}
 
-  // 6. Call register
-  try {
-    if (typeof pluginDef === "function") {
-      await pluginDef(api);
-    } else if (pluginDef.register) {
-      await pluginDef.register(api);
-    }
-  } catch (err) {
-    const msg = `plugin ${pluginId} register() failed: ${String(err)}`;
-    log.error(msg);
-    registry.plugins.push({
-      id: pluginId,
-      name: manifest.name || pluginId,
-      source: candidate.source,
-      origin: candidate.origin,
-      status: "error",
-      error: msg,
-      toolCount: 0,
-      hookCount: 0,
-    });
+async function loadSinglePlugin(
+  candidate: PluginCandidate,
+  registry: PluginRegistry,
+  pluginConfigs?: Record<string, { enabled?: boolean; config?: unknown }>
+): Promise<void> {
+  const base = (
+    id: string,
+    name?: string
+  ): { id: string; name: string; source: string; origin: PluginOrigin } => ({
+    id,
+    name: name || id,
+    source: candidate.source,
+    origin: candidate.origin,
+  });
+
+  // 1. Load manifest
+  const manifestResult = loadPluginManifest(candidate.dir);
+  if (!manifestResult.ok) {
+    log.warn(`skipping ${candidate.dir}: ${manifestResult.error}`);
+    pushPluginRecord(
+      registry,
+      base(path.basename(candidate.dir)),
+      "error",
+      undefined,
+      manifestResult.error
+    );
     return;
   }
 
-  // 7. Record success
-  const record: PluginRecord = {
-    id: pluginId,
-    name: manifest.name || pluginId,
-    source: candidate.source,
-    origin: candidate.origin,
-    status: "loaded",
+  const manifest = manifestResult.manifest;
+  const pluginId = manifest.id;
+
+  // 2. Check enabled/disabled
+  const pluginEntry = pluginConfigs?.[pluginId];
+  if (pluginEntry?.enabled === false) {
+    log.info(`plugin ${pluginId} is disabled`);
+    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), "disabled");
+    return;
+  }
+
+  // 3. Import the module
+  let mod: Record<string, unknown>;
+  try {
+    mod = await import(candidate.source);
+  } catch (err) {
+    const msg = `failed to import plugin ${pluginId}: ${String(err)}`;
+    log.error(msg);
+    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), "error", undefined, msg);
+    return;
+  }
+
+  // 4. Resolve plugin definition & create API
+  const pluginDef: PHAPluginModule =
+    (mod.default as PHAPluginModule) || (mod as unknown as PHAPluginModule);
+  const toolRegs: PluginToolRegistration[] = [];
+  const hookRegs: PluginHookRegistration[] = [];
+  const api = createPluginApi(
+    pluginId,
+    candidate,
+    manifest,
+    pluginEntry,
+    registry,
+    toolRegs,
+    hookRegs
+  );
+
+  // 5. Call register
+  try {
+    if (typeof pluginDef === "function") await pluginDef(api);
+    else if (pluginDef.register) await pluginDef.register(api);
+  } catch (err) {
+    const msg = `plugin ${pluginId} register() failed: ${String(err)}`;
+    log.error(msg);
+    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), "error", undefined, msg);
+    return;
+  }
+
+  // 6. Record success
+  pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), "loaded", {
     toolCount: toolRegs.length,
     hookCount: hookRegs.length,
-  };
-  registry.plugins.push(record);
-
+  });
   log.info(`loaded: ${pluginId} (${toolRegs.length} tools, ${hookRegs.length} hooks)`);
 }
 

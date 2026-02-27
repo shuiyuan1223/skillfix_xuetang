@@ -32,6 +32,250 @@ const log = createLogger("Agent/HealthContext");
  * @param dataSource - Optional user-specific data source; falls back to global.
  * @param userUuid - Optional user UUID for plan lookup; falls back to getUserUuid().
  */
+/** Compute the Monday-based week start for a given date string */
+function computeWeekStart(today: string): string {
+  const todayDate = new Date(`${today}T00:00:00`);
+  const dayOfWeek = todayDate.getDay();
+  const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekStart = new Date(todayDate);
+  weekStart.setDate(todayDate.getDate() - mondayOffset);
+  return weekStart.toISOString().split("T")[0];
+}
+
+/** Fetch all health data in parallel */
+
+async function fetchAllHealthData(
+  source: HealthDataSource,
+  today: string,
+  weekStartStr: string
+): Promise<any[]> {
+  return Promise.all([
+    source.getWeeklySteps(today).catch(() => []),
+    source.getWeeklySleep(today).catch(() => []),
+    source.getHeartRate(today).catch(() => null),
+    source.getWorkouts(today).catch(() => []),
+    source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
+    source.getStress?.(today).catch(() => null) ?? Promise.resolve(null),
+    source.getSpO2?.(today).catch(() => null) ?? Promise.resolve(null),
+    source.getBloodPressure?.(today).catch(() => null) ?? Promise.resolve(null),
+    source.getBloodGlucose?.(today).catch(() => null) ?? Promise.resolve(null),
+    source.getBodyTemperature?.(today).catch(() => null) ?? Promise.resolve(null),
+    source.getMetrics(today).catch(() => null),
+    source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
+  ]);
+}
+
+function buildActivitySection(weeklySteps: Array<{ date: string; steps: number }>): string | null {
+  if (weeklySteps.length === 0) return null;
+
+  const totalSteps = weeklySteps.reduce((sum, d) => sum + d.steps, 0);
+  const avgSteps = Math.round(totalSteps / weeklySteps.length);
+  const daysAbove8k = weeklySteps.filter((d) => d.steps >= 8000).length;
+
+  let trend = "";
+  if (weeklySteps.length >= 6) {
+    const recentAvg = Math.round(weeklySteps.slice(-3).reduce((s, d) => s + d.steps, 0) / 3);
+    const earlierAvg = Math.round(weeklySteps.slice(0, 3).reduce((s, d) => s + d.steps, 0) / 3);
+    if (earlierAvg > 0) {
+      const pct = Math.round(((recentAvg - earlierAvg) / earlierAvg) * 100);
+      if (pct > 10) trend = ` (trending up ~${pct}%)`;
+      else if (pct < -10) trend = ` (trending down ~${Math.abs(pct)}%)`;
+      else trend = " (stable)";
+    }
+  }
+
+  return `**Activity**: Avg ${avgSteps.toLocaleString()} steps/day, goal reached ${daysAbove8k}/${weeklySteps.length} days${trend}`;
+}
+
+function buildSleepSection(weeklySleep: Array<{ date: string; hours: number }>): string | null {
+  const sleepDays = weeklySleep.filter((d) => d.hours > 0);
+  if (sleepDays.length === 0) return null;
+
+  const avgSleep =
+    Math.round((sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length) * 10) / 10;
+  const minSleep = Math.min(...sleepDays.map((d) => d.hours));
+  const maxSleep = Math.max(...sleepDays.map((d) => d.hours));
+  const spread = Math.round((maxSleep - minSleep) * 10) / 10;
+
+  let consistency = "";
+  if (spread <= 1) consistency = ", consistent";
+  else if (spread <= 2) consistency = ", some variation";
+  else consistency = `, inconsistent (${minSleep}h-${maxSleep}h range)`;
+
+  return `**Sleep**: Avg ${avgSleep}h/night over ${sleepDays.length} days${consistency}`;
+}
+
+function buildVitalsSection(
+  todayHR: any,
+  todayStress: any,
+  todaySpO2: any,
+  todayBP: any,
+  todayGlucose: any,
+  todayTemp: any
+): string[] {
+  const sections: string[] = [];
+  if (todayHR) {
+    sections.push(
+      `**Heart Rate (today)**: Resting avg ${todayHR.restingAvg} bpm, range ${todayHR.minToday}-${todayHR.maxToday} bpm`
+    );
+  }
+  if (todayStress) {
+    sections.push(
+      `**Stress (today)**: Current ${todayStress.current}, avg ${todayStress.avg}, range ${todayStress.min}-${todayStress.max}`
+    );
+  }
+  if (todaySpO2) {
+    sections.push(
+      `**SpO2 (today)**: Current ${todaySpO2.current}%, avg ${todaySpO2.avg}%, range ${todaySpO2.min}-${todaySpO2.max}%`
+    );
+  }
+  if (todayBP) {
+    sections.push(
+      `**Blood Pressure (today)**: ${todayBP.latestSystolic}/${todayBP.latestDiastolic} mmHg`
+    );
+  }
+  if (todayGlucose) {
+    sections.push(`**Blood Glucose (today)**: ${todayGlucose.latest} mmol/L`);
+  }
+  if (todayTemp) {
+    sections.push(`**Body Temperature (today)**: ${todayTemp.latest}\u00B0C`);
+  }
+  return sections;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildWorkoutSection(todayWorkouts: any[]): string {
+  if (todayWorkouts.length > 0) {
+    const descs = todayWorkouts.map((w) => {
+      let desc = `${w.type} ${w.durationMinutes}min`;
+      if (w.distanceKm) desc += ` ${w.distanceKm}km`;
+      return desc;
+    });
+    return `**Workouts (today)**: ${descs.join(", ")}`;
+  }
+  return "**Workouts (today)**: None recorded";
+}
+
+function collectInsights(
+  weeklySteps: any[],
+  weeklySleep: any[],
+  todayHR: any,
+  todayStress: any,
+  todaySpO2: any,
+  todayBP: any,
+  todayGlucose: any,
+  todayTemp: any
+): string[] {
+  const insights: string[] = [];
+  const sleepDays = weeklySleep.filter((d: { hours: number }) => d.hours > 0);
+
+  if (sleepDays.length >= 5) {
+    const avgSleep =
+      sleepDays.reduce((s: number, d: { hours: number }) => s + d.hours, 0) / sleepDays.length;
+    if (avgSleep < 6)
+      insights.push("Sleep duration has been consistently below 6 hours — worth discussing.");
+  }
+  if (weeklySteps.length >= 5) {
+    const last2 = weeklySteps.slice(-2);
+    if (last2.filter((d: { steps: number }) => d.steps < 2000).length >= 2) {
+      insights.push("Activity has been very low the past 2 days.");
+    }
+  }
+  if (todayHR && todayHR.restingAvg > 90)
+    insights.push("Today's resting heart rate is elevated (>90 bpm).");
+  if (todayStress && todayStress.avg > 60)
+    insights.push("Today's average stress level is high (>60).");
+  if (todaySpO2 && todaySpO2.avg < 95)
+    insights.push("Today's blood oxygen is below normal (<95%).");
+  if (todayBP && (todayBP.latestSystolic > 140 || todayBP.latestDiastolic > 90)) {
+    insights.push("Blood pressure is elevated (>140/90 mmHg).");
+  }
+  if (todayGlucose && todayGlucose.latest > 7.0)
+    insights.push("Blood glucose is elevated (>7.0 mmol/L fasting).");
+  if (todayTemp && todayTemp.latest > 37.5)
+    insights.push("Body temperature is elevated (>37.5\u00B0C).");
+  return insights;
+}
+
+function buildPlansSection(
+  userUuid: string | undefined,
+  today: string,
+  data: HealthSnapshot
+): string {
+  try {
+    const uuid = userUuid || getUserUuid();
+    const activePlans = listPlans(uuid, "active");
+    if (activePlans.length === 0) return "";
+
+    autoSyncPlanProgress(activePlans, uuid, today, data);
+
+    let result = "\n\n## Active Health Plans\n";
+    for (const plan of activePlans) {
+      const done = plan.goals.filter((g) => g.status === "completed").length;
+      result += `\n- **${plan.name}** (${plan.startDate} ~ ${plan.endDate}): ${done}/${plan.goals.length} goals completed`;
+      for (const goal of plan.goals) {
+        const current = goal.currentValue;
+        const pct = current != null ? Math.round((current / goal.targetValue) * 100) : 0;
+        const arrowMap: Record<string, string> = {
+          completed: "\u2191",
+          ahead: "\u2191",
+          behind: "\u2193",
+        };
+        const arrow = arrowMap[goal.status] ?? "\u2192";
+        result += `\n  - ${goal.label}: target ${goal.targetValue}${goal.unit}, current ${current ?? "?"}${goal.unit} (${pct}%) \u2192 ${goal.status} ${arrow}`;
+      }
+    }
+    result +=
+      "\n\nWhen discussing health topics related to an active plan, mention the user's plan progress.";
+    return result;
+  } catch {
+    return "";
+  }
+}
+
+function buildProactiveSection(userUuid: string | undefined): string {
+  try {
+    const uuid = userUuid || getUserUuid();
+    const activeRecs = listRecommendations(uuid, "active");
+    const pendingReminders = listReminders(uuid, "pending");
+    const now = new Date().toISOString();
+    const weekLater = new Date(Date.now() + 7 * 86400000).toISOString();
+    const upcomingEvents = listCalendarEvents(uuid, {
+      from: now,
+      to: weekLater,
+      status: "scheduled",
+    });
+
+    if (activeRecs.length === 0 && pendingReminders.length === 0 && upcomingEvents.length === 0) {
+      return "";
+    }
+
+    let result = "\n\n## Proactive Items\n";
+    if (activeRecs.length > 0) {
+      result += `\n**Recommendations** (${activeRecs.length} active):`;
+      for (const rec of activeRecs.slice(0, 5))
+        result += `\n- [${rec.priority}] ${rec.title}: ${rec.body}`;
+    }
+    if (pendingReminders.length > 0) {
+      result += `\n**Reminders** (${pendingReminders.length} pending):`;
+      for (const rem of pendingReminders.slice(0, 5)) {
+        const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
+        result += `\n- ${rem.title} @ ${time} (${rem.repeatRule})`;
+      }
+    }
+    if (upcomingEvents.length > 0) {
+      result += `\n**Upcoming Events** (next 7 days):`;
+      for (const evt of upcomingEvents.slice(0, 5)) {
+        result += `\n- ${evt.title} \u2014 ${evt.startTime.split("T")[0]} ${evt.startTime.split("T")[1]?.slice(0, 5) || ""}`;
+      }
+    }
+    result += "\n\nReference these proactive items when relevant to the conversation.";
+    return result;
+  } catch {
+    return "";
+  }
+}
+
 export async function preComputeHealthContext(
   dataSource?: HealthDataSource,
   userUuid?: string
@@ -39,13 +283,14 @@ export async function preComputeHealthContext(
   try {
     const source = dataSource || getDataSource();
     const today = new Date().toISOString().split("T")[0];
+    const weekStartStr = computeWeekStart(today);
 
-    // Fetch data in parallel (including stress, SpO2, and new health types if available)
     const [
       weeklySteps,
       weeklySleep,
       todayHR,
       todayWorkouts,
+      weeklyWorkouts,
       todayStress,
       todaySpO2,
       todayBP,
@@ -53,271 +298,49 @@ export async function preComputeHealthContext(
       todayTemp,
       todayMetrics,
       todayBodyComp,
-    ] = await Promise.all([
-      source.getWeeklySteps(today).catch(() => []),
-      source.getWeeklySleep(today).catch(() => []),
-      source.getHeartRate(today).catch(() => null),
-      source.getWorkouts(today).catch(() => []),
-      source.getStress?.(today).catch(() => null) ?? Promise.resolve(null),
-      source.getSpO2?.(today).catch(() => null) ?? Promise.resolve(null),
-      source.getBloodPressure?.(today).catch(() => null) ?? Promise.resolve(null),
-      source.getBloodGlucose?.(today).catch(() => null) ?? Promise.resolve(null),
-      source.getBodyTemperature?.(today).catch(() => null) ?? Promise.resolve(null),
-      source.getMetrics(today).catch(() => null),
-      source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
-    ]);
+    ] = await fetchAllHealthData(source, today, weekStartStr);
 
     const sections: string[] = [];
+    const activity = buildActivitySection(weeklySteps);
+    if (activity) sections.push(activity);
+    const sleep = buildSleepSection(weeklySleep);
+    if (sleep) sections.push(sleep);
+    sections.push(
+      ...buildVitalsSection(todayHR, todayStress, todaySpO2, todayBP, todayGlucose, todayTemp)
+    );
+    sections.push(buildWorkoutSection(todayWorkouts));
 
-    // --- Activity Summary ---
-    if (weeklySteps.length > 0) {
-      const totalSteps = weeklySteps.reduce((sum, d) => sum + d.steps, 0);
-      const avgSteps = Math.round(totalSteps / weeklySteps.length);
-      const daysAbove8k = weeklySteps.filter((d) => d.steps >= 8000).length;
+    if (sections.length === 0) return "";
 
-      // Trend: compare last 3 days to first 3 days
-      const recentAvg =
-        weeklySteps.length >= 6
-          ? Math.round(weeklySteps.slice(-3).reduce((s, d) => s + d.steps, 0) / 3)
-          : null;
-      const earlierAvg =
-        weeklySteps.length >= 6
-          ? Math.round(weeklySteps.slice(0, 3).reduce((s, d) => s + d.steps, 0) / 3)
-          : null;
-
-      let trend = "";
-      if (recentAvg && earlierAvg && earlierAvg > 0) {
-        const pctChange = Math.round(((recentAvg - earlierAvg) / earlierAvg) * 100);
-        if (pctChange > 10) trend = ` (trending up ~${pctChange}%)`;
-        else if (pctChange < -10) trend = ` (trending down ~${Math.abs(pctChange)}%)`;
-        else trend = " (stable)";
-      }
-
-      sections.push(
-        `**Activity**: Avg ${avgSteps.toLocaleString()} steps/day, goal reached ${daysAbove8k}/${weeklySteps.length} days${trend}`
-      );
-    }
-
-    // --- Sleep Summary ---
-    const sleepDays = weeklySleep.filter((d) => d.hours > 0);
-    if (sleepDays.length > 0) {
-      const avgSleep =
-        Math.round((sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length) * 10) / 10;
-      const minSleep = Math.min(...sleepDays.map((d) => d.hours));
-      const maxSleep = Math.max(...sleepDays.map((d) => d.hours));
-      const spread = Math.round((maxSleep - minSleep) * 10) / 10;
-
-      let consistency = "";
-      if (spread <= 1) consistency = ", consistent";
-      else if (spread <= 2) consistency = ", some variation";
-      else consistency = `, inconsistent (${minSleep}h-${maxSleep}h range)`;
-
-      sections.push(
-        `**Sleep**: Avg ${avgSleep}h/night over ${sleepDays.length} days${consistency}`
-      );
-    }
-
-    // --- Heart Rate ---
-    if (todayHR) {
-      sections.push(
-        `**Heart Rate (today)**: Resting avg ${todayHR.restingAvg} bpm, range ${todayHR.minToday}-${todayHR.maxToday} bpm`
-      );
-    }
-
-    // --- Stress ---
-    if (todayStress) {
-      sections.push(
-        `**Stress (today)**: Current ${todayStress.current}, avg ${todayStress.avg}, range ${todayStress.min}-${todayStress.max}`
-      );
-    }
-
-    // --- SpO2 ---
-    if (todaySpO2) {
-      sections.push(
-        `**SpO2 (today)**: Current ${todaySpO2.current}%, avg ${todaySpO2.avg}%, range ${todaySpO2.min}-${todaySpO2.max}%`
-      );
-    }
-
-    // --- Blood Pressure ---
-    if (todayBP) {
-      sections.push(
-        `**Blood Pressure (today)**: ${todayBP.latestSystolic}/${todayBP.latestDiastolic} mmHg`
-      );
-    }
-
-    // --- Blood Glucose ---
-    if (todayGlucose) {
-      sections.push(`**Blood Glucose (today)**: ${todayGlucose.latest} mmol/L`);
-    }
-
-    // --- Body Temperature ---
-    if (todayTemp) {
-      sections.push(`**Body Temperature (today)**: ${todayTemp.latest}\u00B0C`);
-    }
-
-    // --- Today's Workouts ---
-    if (todayWorkouts.length > 0) {
-      const workoutDescs = todayWorkouts.map((w) => {
-        let desc = `${w.type} ${w.durationMinutes}min`;
-        if (w.distanceKm) desc += ` ${w.distanceKm}km`;
-        return desc;
-      });
-      sections.push(`**Workouts (today)**: ${workoutDescs.join(", ")}`);
-    } else {
-      sections.push("**Workouts (today)**: None recorded");
-    }
-
-    if (sections.length === 0) {
-      return "";
-    }
-
-    // --- Insights ---
-    const insights: string[] = [];
-
-    // Insight: sleep consistency
-    if (sleepDays.length >= 5) {
-      const avgSleep = sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length;
-      if (avgSleep < 6) {
-        insights.push("Sleep duration has been consistently below 6 hours — worth discussing.");
-      }
-    }
-
-    // Insight: activity drop
-    if (weeklySteps.length >= 5) {
-      const last2 = weeklySteps.slice(-2);
-      const zeroOrVeryLow = last2.filter((d) => d.steps < 2000);
-      if (zeroOrVeryLow.length >= 2) {
-        insights.push("Activity has been very low the past 2 days.");
-      }
-    }
-
-    // Insight: elevated HR
-    if (todayHR && todayHR.restingAvg > 90) {
-      insights.push("Today's resting heart rate is elevated (>90 bpm).");
-    }
-
-    // Insight: high stress
-    if (todayStress && todayStress.avg > 60) {
-      insights.push("Today's average stress level is high (>60).");
-    }
-
-    // Insight: low SpO2
-    if (todaySpO2 && todaySpO2.avg < 95) {
-      insights.push("Today's blood oxygen is below normal (<95%).");
-    }
-
-    // Insight: elevated blood pressure
-    if (todayBP && (todayBP.latestSystolic > 140 || todayBP.latestDiastolic > 90)) {
-      insights.push("Blood pressure is elevated (>140/90 mmHg).");
-    }
-
-    // Insight: elevated blood glucose
-    if (todayGlucose && todayGlucose.latest > 7.0) {
-      insights.push("Blood glucose is elevated (>7.0 mmol/L fasting).");
-    }
-
-    // Insight: elevated body temperature
-    if (todayTemp && todayTemp.latest > 37.5) {
-      insights.push("Body temperature is elevated (>37.5\u00B0C).");
-    }
-
+    const insights = collectInsights(
+      weeklySteps,
+      weeklySleep,
+      todayHR,
+      todayStress,
+      todaySpO2,
+      todayBP,
+      todayGlucose,
+      todayTemp
+    );
     const dateRange =
       weeklySteps.length > 0
         ? `${weeklySteps[0].date} to ${weeklySteps[weeklySteps.length - 1].date}`
         : `past 7 days`;
 
     let result = `\n## Recent Health Context (${dateRange})\n\n${sections.join("\n")}`;
+    if (insights.length > 0) result += `\n\n**Insights**: ${insights.join(" ")}`;
 
-    if (insights.length > 0) {
-      result += `\n\n**Insights**: ${insights.join(" ")}`;
-    }
-
-    // --- Active Health Plans (auto-sync + enhanced display) ---
-    try {
-      const uuid = userUuid || getUserUuid();
-      const activePlans = listPlans(uuid, "active");
-
-      // Auto-sync plan progress with latest health data
-      if (activePlans.length > 0) {
-        autoSyncPlanProgress(activePlans, uuid, today, {
-          weeklySteps,
-          weeklySleep,
-          todayHR,
-          todayWorkouts,
-          todayMetrics,
-          todayBodyComp,
-        });
-      }
-
-      if (activePlans.length > 0) {
-        result += "\n\n## Active Health Plans\n";
-        for (const plan of activePlans) {
-          const done = plan.goals.filter((g) => g.status === "completed").length;
-          result += `\n- **${plan.name}** (${plan.startDate} ~ ${plan.endDate}): ${done}/${plan.goals.length} goals completed`;
-          for (const goal of plan.goals) {
-            const current = goal.currentValue;
-            const pct = current != null ? Math.round((current / goal.targetValue) * 100) : 0;
-            const arrow =
-              goal.status === "completed" || goal.status === "ahead"
-                ? "↑"
-                : goal.status === "behind"
-                  ? "↓"
-                  : "→";
-            result += `\n  - ${goal.label}: target ${goal.targetValue}${goal.unit}, current ${current ?? "?"}${goal.unit} (${pct}%) → ${goal.status} ${arrow}`;
-          }
-        }
-        result +=
-          "\n\nWhen discussing health topics related to an active plan, mention the user's plan progress.";
-      }
-    } catch {
-      // Plans not available — ignore
-    }
-
-    // --- Proactive Items (recommendations, reminders, calendar) ---
-    try {
-      const uuid = userUuid || getUserUuid();
-      const activeRecs = listRecommendations(uuid, "active");
-      const pendingReminders = listReminders(uuid, "pending");
-      const now = new Date().toISOString();
-      const weekLater = new Date(Date.now() + 7 * 86400000).toISOString();
-      const upcomingEvents = listCalendarEvents(uuid, {
-        from: now,
-        to: weekLater,
-        status: "scheduled",
-      });
-
-      if (activeRecs.length > 0 || pendingReminders.length > 0 || upcomingEvents.length > 0) {
-        result += "\n\n## Proactive Items\n";
-
-        if (activeRecs.length > 0) {
-          result += `\n**Recommendations** (${activeRecs.length} active):`;
-          for (const rec of activeRecs.slice(0, 5)) {
-            result += `\n- [${rec.priority}] ${rec.title}: ${rec.body}`;
-          }
-        }
-
-        if (pendingReminders.length > 0) {
-          result += `\n**Reminders** (${pendingReminders.length} pending):`;
-          for (const rem of pendingReminders.slice(0, 5)) {
-            const time = rem.scheduledAt.split("T")[1]?.slice(0, 5) || rem.scheduledAt;
-            result += `\n- ${rem.title} @ ${time} (${rem.repeatRule})`;
-          }
-        }
-
-        if (upcomingEvents.length > 0) {
-          result += `\n**Upcoming Events** (next 7 days):`;
-          for (const evt of upcomingEvents.slice(0, 5)) {
-            const date = evt.startTime.split("T")[0];
-            const time = evt.startTime.split("T")[1]?.slice(0, 5) || "";
-            result += `\n- ${evt.title} — ${date} ${time}`;
-          }
-        }
-
-        result += "\n\nReference these proactive items when relevant to the conversation.";
-      }
-    } catch {
-      // Proactive items not available — ignore
-    }
+    const snapshot: HealthSnapshot = {
+      weeklySteps,
+      weeklySleep,
+      todayHR,
+      todayWorkouts,
+      weeklyWorkouts,
+      todayMetrics,
+      todayBodyComp,
+    };
+    result += buildPlansSection(userUuid, today, snapshot);
+    result += buildProactiveSection(userUuid);
 
     return result;
   } catch (e) {
@@ -390,6 +413,7 @@ export interface HealthSnapshot {
   weeklySleep: Array<{ date: string; hours: number }>;
   todayHR: { restingAvg: number } | null;
   todayWorkouts: Array<{ durationMinutes: number }>;
+  weeklyWorkouts: Array<{ durationMinutes: number }>;
   todayMetrics: HealthMetrics | null;
   todayBodyComp: BodyCompositionData | null;
 }
@@ -435,50 +459,43 @@ export function autoSyncPlanProgress(
   }
 }
 
+function resolveSteps(frequency: "daily" | "weekly", data: HealthSnapshot): number | null {
+  if (data.weeklySteps.length === 0) return null;
+  if (frequency === "weekly") {
+    return Math.round(data.weeklySteps.reduce((s, d) => s + d.steps, 0) / data.weeklySteps.length);
+  }
+  return data.weeklySteps[data.weeklySteps.length - 1].steps;
+}
+
+function resolveSleepHours(frequency: "daily" | "weekly", data: HealthSnapshot): number | null {
+  const sleepDays = data.weeklySleep.filter((d) => d.hours > 0);
+  if (sleepDays.length === 0) return null;
+  if (frequency === "weekly") {
+    return Math.round((sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length) * 10) / 10;
+  }
+  return sleepDays[sleepDays.length - 1].hours;
+}
+
 function resolveMetricValue(
   metric: string,
   frequency: "daily" | "weekly",
   data: HealthSnapshot
 ): number | null {
   switch (metric) {
-    case "steps": {
-      if (data.weeklySteps.length === 0) return null;
-      if (frequency === "weekly") {
-        const total = data.weeklySteps.reduce((s, d) => s + d.steps, 0);
-        return Math.round(total / data.weeklySteps.length);
-      }
-      // daily: last entry (today or most recent)
-      return data.weeklySteps[data.weeklySteps.length - 1].steps;
-    }
-    case "sleep_hours": {
-      const sleepDays = data.weeklySleep.filter((d) => d.hours > 0);
-      if (sleepDays.length === 0) return null;
-      if (frequency === "weekly") {
-        return (
-          Math.round((sleepDays.reduce((s, d) => s + d.hours, 0) / sleepDays.length) * 10) / 10
-        );
-      }
-      return sleepDays[sleepDays.length - 1].hours;
-    }
-    case "exercise_count": {
-      if (frequency === "weekly") {
-        // Count workout days in the week (approximate from todayWorkouts only)
-        return data.todayWorkouts.length;
-      }
-      return data.todayWorkouts.length;
-    }
+    case "steps":
+      return resolveSteps(frequency, data);
+    case "sleep_hours":
+      return resolveSleepHours(frequency, data);
+    case "exercise_count":
+      return frequency === "weekly" ? data.weeklyWorkouts.length : data.todayWorkouts.length;
     case "heart_rate_resting":
       return data.todayHR?.restingAvg ?? null;
     case "weight":
       return data.todayBodyComp?.weight ?? null;
     case "calories":
-      if (!data.todayMetrics) return null;
-      if (frequency === "weekly") return data.todayMetrics.calories; // best available
-      return data.todayMetrics.calories;
+      return data.todayMetrics?.calories ?? null;
     case "active_minutes":
-      if (!data.todayMetrics) return null;
-      if (frequency === "weekly") return data.todayMetrics.activeMinutes;
-      return data.todayMetrics.activeMinutes;
+      return data.todayMetrics?.activeMinutes ?? null;
     default:
       return null;
   }

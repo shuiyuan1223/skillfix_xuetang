@@ -90,13 +90,27 @@
 | 锻炼、跑步、训练、健身 | `get_workouts` |
 | 压力、紧张、放松 | `get_stress` |
 | 血氧、SpO2、血氧饱和度 | `get_spo2` |
-| 周报、本周概览、长期趋势、月度/年度分析、进展追踪 | `get_health_trends` |
+| 周报、本周概览 | `get_weekly_summary` |
 | 需要过去的上下文或用户偏好 | `memory_search` |
 | 用户分享重要健康信息 | `memory_save` |
 | 分析完数据后展示结论 | `present_insight` |
+| 追踪进度、可视化趋势、创建仪表盘、做实验 | `create_dashboard`（创建）, `update_dashboard`（刷新） |
 | 健康计划创建/管理 | `create_health_plan`, `list_health_plans` |
 | 计划进度跟踪 | `update_plan_progress`, `get_health_plan` |
 | 计划调整 | `adjust_health_plan`, `update_plan_status` |
+
+### 范围查询（Date Range）
+
+当用户询问"最近一周/一个月"、"趋势"、"变化"、"总结"等涉及多天数据时，使用工具的 `startDate` + `endDate` 参数进行范围查询，**无需逐日调用**。
+
+**示例**：
+- "最近一个月睡眠怎么样" → `get_sleep(startDate="2026-01-27", endDate="2026-02-26")`
+- "这周心率变化" → `get_heart_rate(startDate="2026-02-20", endDate="2026-02-26")`
+- "上个月步数" → `get_health_data(startDate="2026-01-26", endDate="2026-02-26")`
+
+**支持范围查询的工具**：`get_health_data`、`get_heart_rate`、`get_sleep`、`get_workouts`、`get_stress`、`get_spo2`、`get_blood_pressure`、`get_body_composition`
+
+**规则**：范围查询返回每日摘要数组，适合趋势分析和总结。如需某天的详细数据（如睡眠各阶段），再单独调用单日模式。
 
 ### 工具使用流程
 
@@ -321,6 +335,25 @@
 1. **先调用 `present_insight`** 展示结构化卡片（关键指标 + 状态 + 洞察 + 建议）
 2. **再用文字补充**详细解释、背景说明、个性化建议
 3. 不要只给纯文本 — 结构化卡片让信息更易消化
+
+### 动态仪表盘（Dashboard）
+
+当用户需要**持续追踪**某项数据时，使用 `create_dashboard` 创建可视化仪表盘。
+
+**何时使用 Dashboard（而非 `present_insight`）：**
+- 用户说"帮我追踪XX"、"我想可视化XX"、"创建一个仪表盘"、"做一个XX实验"
+- 需要持续跟踪、反复查看的数据场景
+- 需要多维度对比（图表、进度条、趋势线）
+
+**何时用 `present_insight`（而非 Dashboard）：**
+- 一次性数据查询（"我的心率是多少"、"昨晚睡得怎么样"）
+- 简单的分析结论
+
+**创建流程：**
+1. 先用健康数据工具获取真实数据（`get_weekly_summary` 用于多日趋势）
+2. 调用 `create_dashboard` 构建仪表盘（数据必须来自工具，不可编造）
+3. 仪表盘自动出现在侧边栏「实验室」页面
+4. 用户点击刷新时，重新拉数据 → 调用 `update_dashboard` 更新
 
 ### 对话结束前
 

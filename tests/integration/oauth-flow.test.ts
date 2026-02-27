@@ -85,7 +85,7 @@ describe("OAuth Token Storage Integration", () => {
         expect(token).not.toBeNull();
         expect(token!.accessToken).toBe(`access-${userId}`);
       }
-    });
+    }, 30_000); // PBKDF2 600K iterations per encrypt/decrypt — 20 operations need ~15s
   });
 
   describe("Token Refresh Scenarios", () => {

@@ -9,6 +9,7 @@ import { Database } from "bun:sqlite";
 import * as path from "path";
 import { mkdirSync, existsSync } from "fs";
 import { getStateDir, ensureConfigDir } from "../../utils/config.js";
+import { encrypt, decrypt } from "../../utils/crypto.js";
 import type { TokenData } from "./huawei-types.js";
 
 const DB_FILE = path.join("db", "oauth.db");
@@ -23,6 +24,7 @@ export interface UserToken {
   expiresAt: number;
   tokenType?: string;
   scope?: string;
+  uid?: string;
 }
 
 export class UserStore {
@@ -51,45 +53,55 @@ export class UserStore {
         expires_at INTEGER NOT NULL,
         token_type TEXT,
         scope TEXT,
+        uid TEXT,
         created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),
         updated_at INTEGER DEFAULT (strftime('%s', 'now') * 1000)
       )
     `);
+    // Migration: add uid column if it doesn't exist yet
+    try {
+      this.db.run("ALTER TABLE users ADD COLUMN uid TEXT");
+    } catch {
+      // Column already exists — safe to ignore
+    }
   }
 
   /**
-   * Save or update token for a user
+   * Save or update token for a user (auto-encrypts token values)
    */
-  saveToken(uuid: string, token: TokenData): void {
+  saveToken(uuid: string, token: TokenData, uid?: string): void {
+    const stateDir = getStateDir();
     const stmt = this.db.prepare(`
-      INSERT INTO users (uuid, access_token, refresh_token, expires_at, token_type, scope, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (uuid, access_token, refresh_token, expires_at, token_type, scope, uid, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(uuid) DO UPDATE SET
         access_token = excluded.access_token,
         refresh_token = excluded.refresh_token,
         expires_at = excluded.expires_at,
         token_type = excluded.token_type,
         scope = excluded.scope,
+        uid = COALESCE(excluded.uid, users.uid),
         updated_at = excluded.updated_at
     `);
 
     stmt.run(
       uuid,
-      token.accessToken,
-      token.refreshToken,
+      encrypt(token.accessToken, stateDir),
+      encrypt(token.refreshToken, stateDir),
       token.expiresAt,
       token.tokenType || null,
       token.scope || null,
+      uid || null,
       Date.now()
     );
   }
 
   /**
-   * Get token for a user
+   * Get token for a user (auto-decrypts token values)
    */
   getToken(uuid: string): UserToken | null {
     const stmt = this.db.prepare(`
-      SELECT uuid, access_token, refresh_token, expires_at, token_type, scope
+      SELECT uuid, access_token, refresh_token, expires_at, token_type, scope, uid
       FROM users
       WHERE uuid = ?
     `);
@@ -101,17 +113,20 @@ export class UserStore {
       expires_at: number;
       token_type: string | null;
       scope: string | null;
+      uid: string | null;
     } | null;
 
     if (!row) return null;
 
+    const stateDir = getStateDir();
     return {
       uuid: row.uuid,
-      accessToken: row.access_token,
-      refreshToken: row.refresh_token,
+      accessToken: decrypt(row.access_token, stateDir),
+      refreshToken: decrypt(row.refresh_token, stateDir),
       expiresAt: row.expires_at,
       tokenType: row.token_type || undefined,
       scope: row.scope || undefined,
+      uid: row.uid || undefined,
     };
   }
 
@@ -162,6 +177,14 @@ export class UserStore {
       tokenType: token.tokenType || "Bearer",
       scope: token.scope,
     };
+  }
+
+  /**
+   * List all user UUIDs that have stored tokens.
+   */
+  listUserUuids(): string[] {
+    const stmt = this.db.prepare("SELECT uuid FROM users ORDER BY updated_at DESC");
+    return (stmt.all() as Array<{ uuid: string }>).map((row) => row.uuid);
   }
 
   /**

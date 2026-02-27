@@ -24,7 +24,7 @@ help:
 	@echo "  make test       - Run tests"
 	@echo "  make sync REMOTE=user@host:path       - Sync, build, install and restart on remote"
 	@echo "  make sync-dist REMOTE=user@host:path  - Sync pre-built dist and restart on remote"
-	@echo "  make sync-win REMOTE=user@host:path  - Sync via tar+ssh (no rsync needed)"
+	@echo "  make sync-win REMOTE=user@host:path [SSH_KEY=path] - Sync via tar+ssh (no rsync)"
 	@echo ""
 	@echo "Prerequisites:"
 	@echo "  - Bun (https://bun.sh)"
@@ -170,24 +170,30 @@ endif
 	@echo "==> Sync complete!"
 
 # Sync to remote via tar+scp+ssh (for Windows, no rsync needed)
-# Run from PowerShell: make sync-win REMOTE=user@host:/path/to/pha
+# Usage: make sync-win REMOTE=user@host:/path/to/pha [SSH_KEY=/d/ssh_key/id_rsa_gz1]
 sync-win:
 ifndef REMOTE
 	@echo Error: REMOTE not specified
-	@echo Usage: make sync-win REMOTE=user@host:/path/to/pha
+	@echo Usage: make sync-win REMOTE=user@host:/path/to/pha SSH_KEY=/d/ssh_key/id_rsa_gz1
+	@exit 1
+endif
+ifndef SSH_KEY
+	@echo Error: SSH_KEY not specified
+	@echo Usage: make sync-win REMOTE=user@host:/path/to/pha SSH_KEY=/d/ssh_key/id_rsa_gz1
 	@exit 1
 endif
 	$(eval _H := $(firstword $(subst :, ,$(REMOTE))))
 	$(eval _P := $(word 2,$(subst :, ,$(REMOTE))))
-	@echo ==> Git pull...
+	@echo "==> SSH_KEY=$(SSH_KEY)"
+	@echo "==> Git pull..."
 	git pull
-	@echo ==> Packing source...
-	tar czf pha-sync.tar.gz --exclude=node_modules --exclude=.git --exclude=dist --exclude=ui/dist --exclude=ui/node_modules --exclude=.env --exclude=*.log --exclude=pha-sync.tar.gz .
-	@echo ==> Uploading to $(_H):$(_P)...
-	powershell -NoProfile -Command "scp pha-sync.tar.gz '$(_H):$(_P)/pha-sync.tar.gz'"
-	-del pha-sync.tar.gz 2>nul
-	@echo ==> Extracting and building on remote...
-	powershell -NoProfile -Command "ssh $(_H) 'source ~/.bashrc && cd $(_P) && tar xzf pha-sync.tar.gz && rm pha-sync.tar.gz && make install'"
-	@echo ==> Restarting service...
-	powershell -NoProfile -Command "ssh $(_H) 'source ~/.bashrc && pkill -f dist/cli 2>/dev/null; cd $(_P) && nohup pha start > /tmp/pha.log 2>&1 &'"
-	@echo ==> Sync complete!
+	@echo "==> Packing source..."
+	tar czf pha-sync.tar.gz --exclude=node_modules --exclude=.git --exclude=dist --exclude=ui/dist --exclude=ui/node_modules --exclude=.pha --exclude=.env --exclude="*.log" --exclude=pha-sync.tar.gz . || if [ $$? -eq 1 ]; then true; else exit $$?; fi
+	@echo "==> Uploading to $(_H):$(_P)..."
+	powershell -NoProfile -Command "scp -i '$(SSH_KEY)' pha-sync.tar.gz '$(_H):$(_P)/pha-sync.tar.gz'"
+	powershell -NoProfile -Command "Remove-Item -Force pha-sync.tar.gz -ErrorAction SilentlyContinue"
+	@echo "==> Extracting and building on remote..."
+	powershell -NoProfile -Command "ssh -i '$(SSH_KEY)' $(_H) 'source ~/.bashrc && cd $(_P) && tar xzf pha-sync.tar.gz && rm pha-sync.tar.gz && make install'"
+	@echo "==> Restarting service..."
+	powershell -NoProfile -Command "ssh -i '$(SSH_KEY)' $(_H) 'source ~/.bashrc 2>/dev/null; cd $(_P) && pha restart' 2>&1"
+	@echo "==> Sync complete!"

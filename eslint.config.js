@@ -45,6 +45,7 @@ export default [
       // ── Ch1: 鸿蒙环境限制 ────────────────────────────────────────────────────
       // Ext-2.1: strict mode — ES Module 自动启用，无需额外规则
       "no-eval": "error",                                            // G.AOD.01 禁止 eval()
+      "no-implied-eval": "error",                                    // G.AOD.02 禁止隐式 eval（setTimeout/setInterval 字符串参数）
       "no-with": "error",                                            // G.SCO.02 禁止 with(){}
       "no-new-func": "error",                                        // G.MET.08 禁止动态创建函数
 
@@ -66,6 +67,8 @@ export default [
 
       // ── Ch4: 声明与初始化 ────────────────────────────────────────────────────
       "no-var": "error",                                             // G.VAR.01 禁止 var
+      "no-multi-assign": "error",                                    // G.DCL.04 禁止连续赋值
+      "no-undef-init": "error",                                      // G.DCL.05 不要用 undefined 初始化变量
 
       // ── Ch5: 数据类型 ────────────────────────────────────────────────────────
       "no-floating-decimal": "error",                                // G.TYP.01 浮点数不省略 0
@@ -73,9 +76,13 @@ export default [
 
       // ── Ch6: 运算与表达式 ────────────────────────────────────────────────────
       "eqeqeq": ["error", "smart"],                                  // G.EXP.02 使用 ===
+      "no-nested-ternary": "error",                                  // G.EXP.03 禁止嵌套三元表达式
       "no-cond-assign": "error",                                     // G.CTL.06 条件中不赋值
+      "default-case": "error",                                       // G.CTL.01 switch 必须有 default 分支
 
       // ── Ch7: 函数 ────────────────────────────────────────────────────────────
+      "complexity": ["warn", { max: 20 }],                           // G.MET.01 圈复杂度 ≤ 20
+      "max-lines-per-function": ["warn", { max: 100, skipBlankLines: true, skipComments: true }], // G.MET.02 函数体 ≤ 100 行
       "consistent-return": "error",                                  // G.MET.07 一致的 return
       "prefer-rest-params": "error",                                 // G.MET.10 rest 替代 arguments
       "@typescript-eslint/no-this-alias": "error",                   // Ext-8.3  禁止 this 赋值
@@ -98,16 +105,31 @@ export default [
       }],                                                          // G.FUN.01-TS 显式返回类型
       "@typescript-eslint/consistent-type-imports": "error",         // Ext-12.4  类型导入一致性
       "@typescript-eslint/no-explicit-any": "warn",                  // Ext-12.6  禁止 any（暂降级为 warn，待存量整改完毕后升回 error）
+      "@typescript-eslint/ban-ts-comment": ["error", {              // G.CMT.01-TS + G.CMT.02-TS
+        "ts-expect-error": "allow-with-description",                 //   @ts-expect-error 必须加说明
+        "ts-ignore": true,                                           //   禁止 @ts-ignore，改用 @ts-expect-error
+        "ts-nocheck": "allow-with-description",                      //   @ts-nocheck 必须加说明
+        "ts-check": false,                                           //   @ts-check 允许
+        "minimumDescriptionLength": 5,                               //   说明至少 5 个字符
+      }],
 
       // ── Ch12: 安全审计 ───────────────────────────────────────────────────────
       "no-console": "error",                                         // SEC.02 禁止 console 直接输出
       "no-debugger": "error",                                        // SEC.03 禁止 debugger
       "no-alert": "error",                                           // SEC.03 禁止 alert()
-      "no-restricted-syntax": [                                      // SEC.09 禁止 Math.random() 安全场景
+      "no-restricted-syntax": [                                      // SEC.09 + G.MOD.01
         "error",
         {
           selector: "CallExpression[callee.object.name='Math'][callee.property.name='random']",
           message: "SEC.09: 安全场景请使用 crypto.randomBytes / randomUUID / getRandomValues",
+        },
+        {
+          selector: "ExportNamedDeclaration > VariableDeclaration[kind='let']",
+          message: "G.MOD.01: 禁止 export let，导出变量必须是 const（不可变）",
+        },
+        {
+          selector: "ExportNamedDeclaration > VariableDeclaration[kind='var']",
+          message: "G.MOD.01: 禁止 export var，导出变量必须是 const（不可变）",
         },
       ],
 

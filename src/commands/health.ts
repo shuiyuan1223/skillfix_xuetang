@@ -4,7 +4,13 @@
 
 import type { Command } from "commander";
 import { getDataSource } from "../tools/health-data.js";
-import type { HealthDataSource, WorkoutData } from "../data-sources/interface.js";
+import type {
+  HealthDataSource,
+  HealthMetrics,
+  HeartRateData,
+  SleepData,
+  WorkoutData,
+} from "../data-sources/interface.js";
 import {
   printHeader,
   printSection,
@@ -88,11 +94,20 @@ async function showDailySummary(
 
   console.log("");
   printHeader(`${icons.health} Health Summary`, date);
+  printActivitySection(metrics);
+  printHeartRateSection(heartRate);
+  printSleepSection(sleep);
+  printWorkoutsSection(workouts);
 
-  // Activity Section
+  console.log("");
+  printDivider();
+  console.log(`  ${c.dim("Tip: Use")} ${c.cyan("pha health -w")} ${c.dim("for weekly summary")}`);
+  console.log("");
+}
+
+function printActivitySection(metrics: HealthMetrics): void {
   printSection("Activity", icons.activity);
   const stepsGoal = 10000;
-  const _stepsPercent = Math.min(100, Math.round((metrics.steps / stepsGoal) * 100));
   printKV(
     "Steps",
     `${c.bold(formatNumber(metrics.steps))} ${c.dim(`/ ${formatNumber(stepsGoal)}`)} ${progressBar(metrics.steps, stepsGoal, 15)}`
@@ -100,56 +115,56 @@ async function showDailySummary(
   printKV("Calories", `${c.bold(formatNumber(metrics.calories))} ${c.dim("kcal")}`);
   printKV("Active Time", `${c.bold(String(metrics.activeMinutes))} ${c.dim("min")}`);
   printKV("Distance", `${c.bold((metrics.distance / 1000).toFixed(2))} ${c.dim("km")}`);
+}
 
-  // Heart Rate Section
+function printHeartRateSection(heartRate: HeartRateData): void {
   printSection("Heart Rate", icons.heart);
   const hrData =
     heartRate.readings.map((r) => r.value) ||
-    Array(24)
-      .fill(0)
-      .map((_, i) => 60 + Math.sin(i) * 10);
+    Array.from({ length: 24 }, (_, i) => 60 + Math.sin(i) * 10);
   printKV("Resting", `${c.bold(String(heartRate.restingAvg))} ${c.dim("bpm")}`);
   printKV(
     "Range",
     `${c.cyan(String(heartRate.minToday))} ${c.dim("-")} ${c.red(String(heartRate.maxToday))} ${c.dim("bpm")}`
   );
   printKV("Today", c.cyan(miniChart(hrData)));
+}
 
-  // Sleep Section
+function printSleepSection(sleep: SleepData | null): void {
   printSection("Sleep", icons.sleep);
-  if (sleep) {
-    const sleepGoal = 8;
-    printKV(
-      "Duration",
-      `${c.bold(String(sleep.durationHours))} ${c.dim("hours")} ${progressBar(sleep.durationHours, sleepGoal, 10)}`
-    );
-    printKV(
-      "Quality",
-      `${c.bold(String(sleep.qualityScore))}${c.dim("%")} ${getQualityLabel(sleep.qualityScore)}`
-    );
-    printKV("Time", `${c.dim(`${sleep.bedTime} → `)}${sleep.wakeTime}`);
-
-    // Sleep stages breakdown
-    const total =
-      sleep.stages.deep + sleep.stages.light + sleep.stages.rem + (sleep.stages.awake || 0);
-    const stageBar = (val: number, color: (s: string) => string) => {
-      const width = Math.round((val / total) * 20);
-      return color("█".repeat(width));
-    };
-    console.log("");
-    printKV(
-      "Stages",
-      [
-        stageBar(sleep.stages.deep, c.blue) + c.dim(` Deep ${sleep.stages.deep}m`),
-        stageBar(sleep.stages.light, c.cyan) + c.dim(` Light ${sleep.stages.light}m`),
-        stageBar(sleep.stages.rem, c.magenta) + c.dim(` REM ${sleep.stages.rem}m`),
-      ].join("  ")
-    );
-  } else {
+  if (!sleep) {
     console.log(`  ${c.dim("No sleep data recorded")}`);
+    return;
   }
+  const sleepGoal = 8;
+  printKV(
+    "Duration",
+    `${c.bold(String(sleep.durationHours))} ${c.dim("hours")} ${progressBar(sleep.durationHours, sleepGoal, 10)}`
+  );
+  printKV(
+    "Quality",
+    `${c.bold(String(sleep.qualityScore))}${c.dim("%")} ${getQualityLabel(sleep.qualityScore)}`
+  );
+  printKV("Time", `${c.dim(`${sleep.bedTime} → `)}${sleep.wakeTime}`);
 
-  // Workouts Section
+  const total =
+    sleep.stages.deep + sleep.stages.light + sleep.stages.rem + (sleep.stages.awake || 0);
+  const stageBar = (val: number, color: (s: string) => string): string => {
+    const width = Math.round((val / total) * 20);
+    return color("█".repeat(width));
+  };
+  console.log("");
+  printKV(
+    "Stages",
+    [
+      stageBar(sleep.stages.deep, c.blue) + c.dim(` Deep ${sleep.stages.deep}m`),
+      stageBar(sleep.stages.light, c.cyan) + c.dim(` Light ${sleep.stages.light}m`),
+      stageBar(sleep.stages.rem, c.magenta) + c.dim(` REM ${sleep.stages.rem}m`),
+    ].join("  ")
+  );
+}
+
+function printWorkoutsSection(workouts: WorkoutData[]): void {
   printSection("Workouts", "💪");
   if (workouts.length > 0) {
     printTable(
@@ -163,11 +178,6 @@ async function showDailySummary(
   } else {
     console.log(`  ${c.dim("No workouts recorded today")}`);
   }
-
-  console.log("");
-  printDivider();
-  console.log(`  ${c.dim("Tip: Use")} ${c.cyan("pha health -w")} ${c.dim("for weekly summary")}`);
-  console.log("");
 }
 
 function getQualityLabel(score: number): string {
@@ -254,7 +264,14 @@ async function showWeeklySummary(
     const barWidth = Math.round((d.hours / maxSleep) * 30);
     const bar = c.blue("█".repeat(barWidth)) + c.dim("░".repeat(30 - barWidth));
     const hoursStr = `${d.hours}h`.padStart(5);
-    const highlight = d.hours >= 7 ? c.green("✓") : d.hours < 6 ? c.yellow("!") : " ";
+    let highlight: string;
+    if (d.hours >= 7) {
+      highlight = c.green("✓");
+    } else if (d.hours < 6) {
+      highlight = c.yellow("!");
+    } else {
+      highlight = " ";
+    }
     console.log(`  ${c.dim(dayName)} ${bar} ${hoursStr} ${highlight}`);
   }
 

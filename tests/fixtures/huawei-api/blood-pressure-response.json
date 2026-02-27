@@ -1,0 +1,32 @@
+{
+  "group": [
+    {
+      "startTime": 1770249600000,
+      "endTime": 1770335999999,
+      "sampleSet": [
+        {
+          "dataCollectorId": "test-bp-collector",
+          "samplePoints": [
+            {
+              "startTime": 1770249600000000000,
+              "endTime": 1770249660000000000,
+              "value": [
+                { "fieldName": "systolic_pressure", "integerValue": 120 },
+                { "fieldName": "diastolic_pressure", "integerValue": 80 },
+                { "fieldName": "sphygmus", "integerValue": 72 }
+              ]
+            },
+            {
+              "startTime": 1770253200000000000,
+              "endTime": 1770253260000000000,
+              "value": [
+                { "fieldName": "systolic_pressure", "integerValue": 130 },
+                { "fieldName": "diastolic_pressure", "integerValue": 85 }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

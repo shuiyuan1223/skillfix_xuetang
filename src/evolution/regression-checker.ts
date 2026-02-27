@@ -36,23 +36,11 @@ export interface RegressionReport {
   summary: string;
 }
 
-/**
- * Check for regressions between the latest two benchmark runs
- */
-export function checkRegression(
-  options: {
-    threshold?: number; // minimum delta to count as regression (default: 5)
-    baseRunId?: string; // specific base run to compare against
-  } = {}
-): RegressionReport {
-  const rawThreshold = options.threshold ?? 5;
-  // Normalize threshold: user provides 0-100 scale, scores may be 0.0-1.0
-  const threshold = rawThreshold <= 1.0 ? rawThreshold : rawThreshold / 100;
-
-  // Get runs
-  const runs = listBenchmarkRuns({ limit: 10 });
-
-  if (runs.length < 2 && !options.baseRunId) {
+function resolveRunPair(
+  runs: BenchmarkRunRow[],
+  baseRunId?: string
+): { currentRunRow: BenchmarkRunRow; baseRunRow: BenchmarkRunRow } | RegressionReport {
+  if (runs.length < 2 && !baseRunId) {
     return {
       hasRegression: false,
       baseRun: null,
@@ -68,12 +56,9 @@ export function checkRegression(
   }
 
   const currentRunRow = runs[0];
-  let baseRunRow: BenchmarkRunRow;
 
-  if (options.baseRunId) {
-    const found = runs.find(
-      (r) => r.id === options.baseRunId || r.id.startsWith(options.baseRunId!)
-    );
+  if (baseRunId) {
+    const found = runs.find((r) => r.id === baseRunId || r.id.startsWith(baseRunId));
     if (!found) {
       return {
         hasRegression: false,
@@ -86,34 +71,37 @@ export function checkRegression(
         overallDelta: 0,
         categoryRegressions: [],
         newFailures: [],
-        summary: `Base run not found: ${options.baseRunId}`,
+        summary: `Base run not found: ${baseRunId}`,
       };
     }
-    baseRunRow = found;
-  } else {
-    baseRunRow = runs[1];
+    return { currentRunRow, baseRunRow: found };
   }
 
-  // Get category scores
-  const baseScores = listCategoryScores(baseRunRow.id);
-  const currentScores = listCategoryScores(currentRunRow.id);
+  return { currentRunRow, baseRunRow: runs[1] };
+}
+
+function findCategoryRegressions(
+  baseId: string,
+  currentId: string,
+  threshold: number
+): RegressionReport["categoryRegressions"] {
+  const baseScores = listCategoryScores(baseId);
+  const currentScores = listCategoryScores(currentId);
 
   const baseScoreMap = new Map<string, CategoryScoreRow>();
   const currentScoreMap = new Map<string, CategoryScoreRow>();
   for (const s of baseScores) baseScoreMap.set(s.category, s);
   for (const s of currentScores) currentScoreMap.set(s.category, s);
 
-  // Check category regressions
-  const categoryRegressions: RegressionReport["categoryRegressions"] = [];
+  const regressions: RegressionReport["categoryRegressions"] = [];
   const allCategories = new Set([...baseScoreMap.keys(), ...currentScoreMap.keys()]);
 
   for (const cat of allCategories) {
     const base = baseScoreMap.get(cat)?.score ?? 0;
     const current = currentScoreMap.get(cat)?.score ?? 0;
     const delta = current - base;
-
     if (delta < -threshold) {
-      categoryRegressions.push({
+      regressions.push({
         category: cat as BenchmarkCategory,
         label: CATEGORY_LABELS[cat as BenchmarkCategory] || cat,
         baseScore: base,
@@ -122,60 +110,86 @@ export function checkRegression(
       });
     }
   }
+  return regressions;
+}
 
-  // Check for newly failing tests
-  const baseResults = listBenchmarkResults({ runId: baseRunRow.id });
-  const currentResults = listBenchmarkResults({ runId: currentRunRow.id });
+function findNewFailures(baseId: string, currentId: string): RegressionReport["newFailures"] {
+  const baseResults = listBenchmarkResults({ runId: baseId });
+  const currentResults = listBenchmarkResults({ runId: currentId });
 
   const baseResultMap = new Map<string, { passed: boolean; score: number }>();
-  const currentResultMap = new Map<string, { passed: boolean; score: number }>();
-
   for (const r of baseResults) {
     baseResultMap.set(r.test_case_id, { passed: r.passed === 1, score: r.overall_score });
   }
-  for (const r of currentResults) {
-    currentResultMap.set(r.test_case_id, { passed: r.passed === 1, score: r.overall_score });
-  }
 
-  const newFailures: RegressionReport["newFailures"] = [];
-  for (const [testId, current] of currentResultMap) {
-    const base = baseResultMap.get(testId);
-    if (base && base.passed && !current.passed) {
-      newFailures.push({
-        testCaseId: testId,
+  const failures: RegressionReport["newFailures"] = [];
+  for (const r of currentResults) {
+    const base = baseResultMap.get(r.test_case_id);
+    const currentPassed = r.passed === 1;
+    if (base && base.passed && !currentPassed) {
+      failures.push({
+        testCaseId: r.test_case_id,
         baseScore: base.score,
-        currentScore: current.score,
+        currentScore: r.overall_score,
       });
     }
   }
+  return failures;
+}
 
-  // Overall
-  const overallDelta = currentRunRow.overall_score - baseRunRow.overall_score;
-  const hasRegression = categoryRegressions.length > 0 || overallDelta < -threshold;
-
-  // Build summary
-  const dsBase = normalizeScoreForDisplay(baseRunRow.overall_score);
-  const dsCurrent = normalizeScoreForDisplay(currentRunRow.overall_score);
+function buildRegressionSummary(
+  hasRegression: boolean,
+  baseScore: number,
+  currentScore: number,
+  overallDelta: number,
+  threshold: number,
+  categoryRegressions: RegressionReport["categoryRegressions"],
+  newFailures: RegressionReport["newFailures"]
+): string {
+  const dsBase = normalizeScoreForDisplay(baseScore);
+  const dsCurrent = normalizeScoreForDisplay(currentScore);
   const displayDelta = dsCurrent - dsBase;
 
-  let summary: string;
   if (!hasRegression) {
-    summary = `No regression detected. Overall: ${dsBase.toFixed(2)} -> ${dsCurrent.toFixed(2)} (${displayDelta >= 0 ? "+" : ""}${displayDelta.toFixed(2)})`;
-  } else {
-    const parts: string[] = [];
-    if (overallDelta < -threshold) {
-      parts.push(`Overall score dropped by ${Math.abs(displayDelta).toFixed(2)}`);
-    }
-    if (categoryRegressions.length > 0) {
-      parts.push(
-        `${categoryRegressions.length} category regression(s): ${categoryRegressions.map((r) => `${r.label} (${normalizeScoreForDisplay(r.delta).toFixed(2)})`).join(", ")}`
-      );
-    }
-    if (newFailures.length > 0) {
-      parts.push(`${newFailures.length} test(s) newly failing`);
-    }
-    summary = `REGRESSION DETECTED: ${parts.join("; ")}`;
+    return `No regression detected. Overall: ${dsBase.toFixed(2)} -> ${dsCurrent.toFixed(2)} (${displayDelta >= 0 ? "+" : ""}${displayDelta.toFixed(2)})`;
   }
+
+  const parts: string[] = [];
+  if (overallDelta < -threshold) {
+    parts.push(`Overall score dropped by ${Math.abs(displayDelta).toFixed(2)}`);
+  }
+  if (categoryRegressions.length > 0) {
+    parts.push(
+      `${categoryRegressions.length} category regression(s): ${categoryRegressions.map((r) => `${r.label} (${normalizeScoreForDisplay(r.delta).toFixed(2)})`).join(", ")}`
+    );
+  }
+  if (newFailures.length > 0) {
+    parts.push(`${newFailures.length} test(s) newly failing`);
+  }
+  return `REGRESSION DETECTED: ${parts.join("; ")}`;
+}
+
+/**
+ * Check for regressions between the latest two benchmark runs
+ */
+export function checkRegression(
+  options: {
+    threshold?: number; // minimum delta to count as regression (default: 5)
+    baseRunId?: string; // specific base run to compare against
+  } = {}
+): RegressionReport {
+  const rawThreshold = options.threshold ?? 5;
+  const threshold = rawThreshold <= 1.0 ? rawThreshold : rawThreshold / 100;
+
+  const runs = listBenchmarkRuns({ limit: 10 });
+  const pair = resolveRunPair(runs, options.baseRunId);
+  if ("hasRegression" in pair) return pair;
+
+  const { currentRunRow, baseRunRow } = pair;
+  const categoryRegressions = findCategoryRegressions(baseRunRow.id, currentRunRow.id, threshold);
+  const newFailures = findNewFailures(baseRunRow.id, currentRunRow.id);
+  const overallDelta = currentRunRow.overall_score - baseRunRow.overall_score;
+  const hasRegression = categoryRegressions.length > 0 || overallDelta < -threshold;
 
   return {
     hasRegression,
@@ -192,7 +206,15 @@ export function checkRegression(
     overallDelta,
     categoryRegressions,
     newFailures,
-    summary,
+    summary: buildRegressionSummary(
+      hasRegression,
+      baseRunRow.overall_score,
+      currentRunRow.overall_score,
+      overallDelta,
+      threshold,
+      categoryRegressions,
+      newFailures
+    ),
   };
 }
 

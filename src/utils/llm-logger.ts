@@ -12,7 +12,9 @@ import { createLogger } from "./logger.js";
 
 const log = createLogger("LLM/Logger");
 
-const LOG_DIR = join(getStateDir(), "llm-logs");
+function getLogDir(): string {
+  return join(getStateDir(), "llm-logs");
+}
 
 // LLM API endpoints to intercept
 const LLM_API_PATTERNS: { domain: string; name: string }[] = [
@@ -28,14 +30,14 @@ const LLM_API_PATTERNS: { domain: string; name: string }[] = [
 ];
 
 function ensureLogDir(): void {
-  if (!existsSync(LOG_DIR)) {
-    mkdirSync(LOG_DIR, { recursive: true });
+  if (!existsSync(getLogDir())) {
+    mkdirSync(getLogDir(), { recursive: true });
   }
 }
 
 function getLogFile(): string {
   const date = new Date().toISOString().split("T")[0];
-  return join(LOG_DIR, `llm-${date}.jsonl`);
+  return join(getLogDir(), `llm-${date}.jsonl`);
 }
 
 function isLLMEndpoint(url: string): boolean {
@@ -140,71 +142,72 @@ interface AnthropicRebuilt {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
-function rebuildAnthropicResponse(
-  events: Array<{ event?: string; data: unknown }>
-): AnthropicRebuilt {
-  const result: AnthropicRebuilt = {
-    type: "message",
-    role: "assistant",
-    content: [],
-  };
-  // Track current content block being built
-  let currentBlockIndex = -1;
-  // Accumulate tool_use input JSON strings per block index
-  const toolJsonParts: Map<number, string[]> = new Map();
+function handleAnthropicMessageStart(d: Record<string, unknown>, result: AnthropicRebuilt): void {
+  const msg = d.message as Record<string, unknown> | undefined;
+  if (!msg) return;
+  if (msg.id) result.id = msg.id as string;
+  if (msg.model) result.model = msg.model as string;
+  const usage = msg.usage as Record<string, number> | undefined;
+  if (usage) {
+    result.usage = { ...result.usage, input_tokens: usage.input_tokens };
+  }
+}
 
-  for (const { event, data } of events) {
-    const d = data as Record<string, unknown>;
+function handleAnthropicBlockStart(
+  d: Record<string, unknown>,
+  result: AnthropicRebuilt,
+  toolJsonParts: Map<number, string[]>
+): number {
+  const idx = (d.index as number) ?? result.content.length;
+  const cb = d.content_block as Record<string, unknown> | undefined;
+  if (cb?.type === "text") {
+    result.content[idx] = { type: "text", text: (cb.text as string) ?? "" };
+  } else if (cb?.type === "tool_use") {
+    result.content[idx] = {
+      type: "tool_use",
+      id: (cb.id as string) ?? "",
+      name: (cb.name as string) ?? "",
+      input: {},
+    };
+    toolJsonParts.set(idx, []);
+  }
+  return idx;
+}
 
-    if (event === "message_start") {
-      const msg = d.message as Record<string, unknown> | undefined;
-      if (msg) {
-        if (msg.id) result.id = msg.id as string;
-        if (msg.model) result.model = msg.model as string;
-        const usage = msg.usage as Record<string, number> | undefined;
-        if (usage) {
-          result.usage = { ...result.usage, input_tokens: usage.input_tokens };
-        }
-      }
-    } else if (event === "content_block_start") {
-      currentBlockIndex = (d.index as number) ?? result.content.length;
-      const cb = d.content_block as Record<string, unknown> | undefined;
-      if (cb?.type === "text") {
-        result.content[currentBlockIndex] = { type: "text", text: (cb.text as string) ?? "" };
-      } else if (cb?.type === "tool_use") {
-        result.content[currentBlockIndex] = {
-          type: "tool_use",
-          id: (cb.id as string) ?? "",
-          name: (cb.name as string) ?? "",
-          input: {},
-        };
-        toolJsonParts.set(currentBlockIndex, []);
-      }
-    } else if (event === "content_block_delta") {
-      const idx = (d.index as number) ?? currentBlockIndex;
-      const delta = d.delta as Record<string, unknown> | undefined;
-      if (delta?.type === "text_delta") {
-        const block = result.content[idx];
-        if (block && block.type === "text") {
-          block.text += (delta.text as string) ?? "";
-        }
-      } else if (delta?.type === "input_json_delta") {
-        const parts = toolJsonParts.get(idx);
-        if (parts) {
-          parts.push((delta.partial_json as string) ?? "");
-        }
-      }
-    } else if (event === "message_delta") {
-      const delta = d.delta as Record<string, unknown> | undefined;
-      if (delta?.stop_reason) result.stop_reason = delta.stop_reason as string;
-      const usage = d.usage as Record<string, number> | undefined;
-      if (usage) {
-        result.usage = { ...result.usage, output_tokens: usage.output_tokens };
-      }
+function handleAnthropicBlockDelta(
+  d: Record<string, unknown>,
+  result: AnthropicRebuilt,
+  currentBlockIndex: number,
+  toolJsonParts: Map<number, string[]>
+): void {
+  const idx = (d.index as number) ?? currentBlockIndex;
+  const delta = d.delta as Record<string, unknown> | undefined;
+  if (delta?.type === "text_delta") {
+    const block = result.content[idx];
+    if (block && block.type === "text") {
+      block.text += (delta.text as string) ?? "";
+    }
+  } else if (delta?.type === "input_json_delta") {
+    const parts = toolJsonParts.get(idx);
+    if (parts) {
+      parts.push((delta.partial_json as string) ?? "");
     }
   }
+}
 
-  // Parse accumulated tool JSON
+function handleAnthropicMessageDelta(d: Record<string, unknown>, result: AnthropicRebuilt): void {
+  const delta = d.delta as Record<string, unknown> | undefined;
+  if (delta?.stop_reason) result.stop_reason = delta.stop_reason as string;
+  const usage = d.usage as Record<string, number> | undefined;
+  if (usage) {
+    result.usage = { ...result.usage, output_tokens: usage.output_tokens };
+  }
+}
+
+function finalizeToolJsonParts(
+  result: AnthropicRebuilt,
+  toolJsonParts: Map<number, string[]>
+): void {
   for (const [idx, parts] of toolJsonParts) {
     const block = result.content[idx];
     if (block && block.type === "tool_use" && parts.length > 0) {
@@ -215,7 +218,33 @@ function rebuildAnthropicResponse(
       }
     }
   }
+}
 
+function rebuildAnthropicResponse(
+  events: Array<{ event?: string; data: unknown }>
+): AnthropicRebuilt {
+  const result: AnthropicRebuilt = {
+    type: "message",
+    role: "assistant",
+    content: [],
+  };
+  let currentBlockIndex = -1;
+  const toolJsonParts: Map<number, string[]> = new Map();
+
+  for (const { event, data } of events) {
+    const d = data as Record<string, unknown>;
+    if (event === "message_start") {
+      handleAnthropicMessageStart(d, result);
+    } else if (event === "content_block_start") {
+      currentBlockIndex = handleAnthropicBlockStart(d, result, toolJsonParts);
+    } else if (event === "content_block_delta") {
+      handleAnthropicBlockDelta(d, result, currentBlockIndex, toolJsonParts);
+    } else if (event === "message_delta") {
+      handleAnthropicMessageDelta(d, result);
+    }
+  }
+
+  finalizeToolJsonParts(result, toolJsonParts);
   return result;
 }
 
@@ -229,66 +258,73 @@ interface OpenAIRebuilt {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 }
 
+type OpenAIToolCall = { id: string; type: string; function: { name: string; arguments: string } };
+
+function processOpenAIChunk(
+  d: Record<string, unknown>,
+  result: OpenAIRebuilt,
+  contentParts: string[],
+  toolCallMap: Map<number, OpenAIToolCall>
+): void {
+  if (d.id && !result.id) result.id = d.id as string;
+  if (d.model && !result.model) result.model = d.model as string;
+  if (d.usage) result.usage = d.usage as OpenAIRebuilt["usage"];
+
+  const choices = d.choices as Array<Record<string, unknown>> | undefined;
+  if (!choices || choices.length === 0) return;
+
+  const choice = choices[0];
+  if (choice.finish_reason) {
+    result.choices[0].finish_reason = choice.finish_reason as string;
+  }
+
+  const delta = choice.delta as Record<string, unknown> | undefined;
+  if (!delta) return;
+
+  if (typeof delta.content === "string") contentParts.push(delta.content);
+  accumulateOpenAIToolCalls(delta, toolCallMap);
+}
+
+function accumulateOpenAIToolCalls(
+  delta: Record<string, unknown>,
+  toolCallMap: Map<number, OpenAIToolCall>
+): void {
+  const toolCalls = delta.tool_calls as Array<Record<string, unknown>> | undefined;
+  if (!toolCalls) return;
+
+  for (const tc of toolCalls) {
+    const idx = (tc.index as number) ?? 0;
+    if (!toolCallMap.has(idx)) {
+      toolCallMap.set(idx, {
+        id: (tc.id as string) ?? "",
+        type: (tc.type as string) ?? "function",
+        function: { name: "", arguments: "" },
+      });
+    }
+    const existing = toolCallMap.get(idx)!;
+    if (tc.id) existing.id = tc.id as string;
+    const fn = tc.function as Record<string, string> | undefined;
+    if (fn) {
+      if (fn.name) existing.function.name += fn.name;
+      if (fn.arguments) existing.function.arguments += fn.arguments;
+    }
+  }
+}
+
 function rebuildOpenAIResponse(events: Array<{ event?: string; data: unknown }>): OpenAIRebuilt {
   const result: OpenAIRebuilt = {
     choices: [{ message: { role: "assistant", content: null }, finish_reason: undefined }],
   };
   const contentParts: string[] = [];
-  // tool_calls: index -> {id, type, function: {name, arguments}}
-  const toolCallMap: Map<
-    number,
-    { id: string; type: string; function: { name: string; arguments: string } }
-  > = new Map();
+  const toolCallMap: Map<number, OpenAIToolCall> = new Map();
 
   for (const { data } of events) {
-    const d = data as Record<string, unknown>;
-    if (d.id && !result.id) result.id = d.id as string;
-    if (d.model && !result.model) result.model = d.model as string;
-
-    // Usage chunk (sent when stream_options.include_usage is true)
-    if (d.usage) {
-      result.usage = d.usage as OpenAIRebuilt["usage"];
-    }
-
-    const choices = d.choices as Array<Record<string, unknown>> | undefined;
-    if (choices && choices.length > 0) {
-      const choice = choices[0];
-      if (choice.finish_reason) {
-        result.choices[0].finish_reason = choice.finish_reason as string;
-      }
-      const delta = choice.delta as Record<string, unknown> | undefined;
-      if (delta) {
-        if (typeof delta.content === "string") {
-          contentParts.push(delta.content);
-        }
-        const toolCalls = delta.tool_calls as Array<Record<string, unknown>> | undefined;
-        if (toolCalls) {
-          for (const tc of toolCalls) {
-            const idx = (tc.index as number) ?? 0;
-            if (!toolCallMap.has(idx)) {
-              toolCallMap.set(idx, {
-                id: (tc.id as string) ?? "",
-                type: (tc.type as string) ?? "function",
-                function: { name: "", arguments: "" },
-              });
-            }
-            const existing = toolCallMap.get(idx)!;
-            if (tc.id) existing.id = tc.id as string;
-            const fn = tc.function as Record<string, string> | undefined;
-            if (fn) {
-              if (fn.name) existing.function.name += fn.name;
-              if (fn.arguments) existing.function.arguments += fn.arguments;
-            }
-          }
-        }
-      }
-    }
+    processOpenAIChunk(data as Record<string, unknown>, result, contentParts, toolCallMap);
   }
 
   if (contentParts.length > 0) {
     result.choices[0].message.content = contentParts.join("");
   }
-
   if (toolCallMap.size > 0) {
     result.choices[0].message.tool_calls = Array.from(toolCallMap.entries())
       .sort(([a], [b]) => a - b)
@@ -298,74 +334,51 @@ function rebuildOpenAIResponse(events: Array<{ event?: string; data: unknown }>)
   return result;
 }
 
-function parseSSEText(text: string): Array<{ event?: string; data: unknown }> {
-  const events: Array<{ event?: string; data: unknown }> = [];
+type SSEEvent = { event?: string; data: unknown };
+
+/** Flush accumulated data lines into a parsed event */
+function flushSSEDataLines(
+  dataLines: string[],
+  currentEvent: string | undefined,
+  events: SSEEvent[]
+): void {
+  if (dataLines.length === 0) return;
+  const raw = dataLines.join("\n").trim();
+  if (!raw || raw === "[DONE]") return;
+  try {
+    events.push({ event: currentEvent, data: JSON.parse(raw) });
+  } catch {
+    // skip unparseable
+  }
+}
+
+function parseSSEText(text: string): SSEEvent[] {
+  const events: SSEEvent[] = [];
   let currentEvent: string | undefined;
   let dataLines: string[] = [];
 
   for (const line of text.split("\n")) {
     if (line.startsWith("event:")) {
-      // Flush previous if we had data
-      if (dataLines.length > 0) {
-        const raw = dataLines.join("\n").trim();
-        if (raw && raw !== "[DONE]") {
-          try {
-            events.push({ event: currentEvent, data: JSON.parse(raw) });
-          } catch {
-            // skip unparseable
-          }
-        }
-        dataLines = [];
-      }
+      flushSSEDataLines(dataLines, currentEvent, events);
+      dataLines = [];
       currentEvent = line.slice("event:".length).trim();
     } else if (line.startsWith("data:")) {
       const value = line.slice("data:".length).trim();
       if (value === "[DONE]") {
-        // Flush any remaining
-        if (dataLines.length > 0) {
-          const raw = dataLines.join("\n").trim();
-          if (raw && raw !== "[DONE]") {
-            try {
-              events.push({ event: currentEvent, data: JSON.parse(raw) });
-            } catch {
-              // skip
-            }
-          }
-          dataLines = [];
-        }
+        flushSSEDataLines(dataLines, currentEvent, events);
+        dataLines = [];
         currentEvent = undefined;
       } else {
         dataLines.push(value);
       }
     } else if (line.trim() === "") {
-      // Empty line = end of event
-      if (dataLines.length > 0) {
-        const raw = dataLines.join("\n").trim();
-        if (raw && raw !== "[DONE]") {
-          try {
-            events.push({ event: currentEvent, data: JSON.parse(raw) });
-          } catch {
-            // skip
-          }
-        }
-        dataLines = [];
-        currentEvent = undefined;
-      }
+      flushSSEDataLines(dataLines, currentEvent, events);
+      dataLines = [];
+      currentEvent = undefined;
     }
   }
 
-  // Flush any remaining data
-  if (dataLines.length > 0) {
-    const raw = dataLines.join("\n").trim();
-    if (raw && raw !== "[DONE]") {
-      try {
-        events.push({ event: currentEvent, data: JSON.parse(raw) });
-      } catch {
-        // skip
-      }
-    }
-  }
-
+  flushSSEDataLines(dataLines, currentEvent, events);
   return events;
 }
 
@@ -449,25 +462,24 @@ function extractTokenUsage(data: unknown): {
   return {};
 }
 
-/** Read LLM log file and pair request-response entries */
-export function readLlmLogFile(date?: string, limit?: number): LLMCallPair[] {
-  if (!existsSync(LOG_DIR)) return [];
+/** Resolve the log file path for a given date (or latest) */
+function resolveLogFile(date?: string): string | null {
+  if (!existsSync(getLogDir())) return null;
 
-  let logFile: string;
   if (date) {
-    logFile = join(LOG_DIR, `llm-${date}.jsonl`);
-  } else {
-    // Find latest log file
-    const files = readdirSync(LOG_DIR)
-      .filter((f) => f.startsWith("llm-") && f.endsWith(".jsonl"))
-      .sort()
-      .reverse();
-    if (files.length === 0) return [];
-    logFile = join(LOG_DIR, files[0]);
+    const f = join(getLogDir(), `llm-${date}.jsonl`);
+    return existsSync(f) ? f : null;
   }
 
-  if (!existsSync(logFile)) return [];
+  const files = readdirSync(getLogDir())
+    .filter((f) => f.startsWith("llm-") && f.endsWith(".jsonl"))
+    .sort()
+    .reverse();
+  return files.length > 0 ? join(getLogDir(), files[0]) : null;
+}
 
+/** Parse JSONL file into LLMLogEntry array */
+function parseLogEntries(logFile: string): LLMLogEntry[] {
   let content: string;
   try {
     content = readFileSync(logFile, "utf-8");
@@ -475,69 +487,74 @@ export function readLlmLogFile(date?: string, limit?: number): LLMCallPair[] {
     return [];
   }
 
-  const lines = content.trim().split("\n").filter(Boolean);
   const entries: LLMLogEntry[] = [];
-  for (const line of lines) {
+  for (const line of content.trim().split("\n").filter(Boolean)) {
     try {
       entries.push(JSON.parse(line) as LLMLogEntry);
     } catch {
       // skip unparseable lines
     }
   }
+  return entries;
+}
 
-  // Pair requests with responses
+/** Calculate latency between two ISO timestamps */
+function calcLatency(reqTs: string, resTs?: string): number | undefined {
+  if (!resTs) return undefined;
+  const reqTime = new Date(reqTs).getTime();
+  const resTime = new Date(resTs).getTime();
+  if (isNaN(reqTime) || isNaN(resTime)) return undefined;
+  return resTime - reqTime;
+}
+
+/** Build a LLMCallPair from a request entry and optional response */
+function buildCallPair(id: number, req: LLMLogEntry, res?: LLMLogEntry): LLMCallPair {
+  const tokenUsage = res ? extractTokenUsage(res.data) : {};
+  return {
+    id,
+    timestamp: req.timestamp,
+    provider: (req.provider as string) || "unknown",
+    model:
+      (req.model as string) ||
+      ((req.data as Record<string, unknown>)?.model as string) ||
+      "unknown",
+    inputTokens: tokenUsage.inputTokens,
+    outputTokens: tokenUsage.outputTokens,
+    totalTokens: tokenUsage.totalTokens,
+    latencyMs: calcLatency(req.timestamp, res?.timestamp),
+    status: res?.status,
+    stream: !!(req.data as Record<string, unknown>)?.stream,
+    requestData: req.data,
+    responseData: res?.data,
+  };
+}
+
+/** Read LLM log file and pair request-response entries */
+export function readLlmLogFile(date?: string, limit?: number): LLMCallPair[] {
+  const logFile = resolveLogFile(date);
+  if (!logFile) return [];
+
+  const entries = parseLogEntries(logFile);
+
   const pairs: LLMCallPair[] = [];
   let id = 1;
 
   for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
-    if (entry.type !== "request") continue;
+    if (entries[i].type !== "request") continue;
 
-    // Look for the next response with same url
     let responseEntry: LLMLogEntry | undefined;
     for (let j = i + 1; j < entries.length && j <= i + 5; j++) {
-      if (entries[j].type === "response" && entries[j].url === entry.url) {
+      if (entries[j].type === "response" && entries[j].url === entries[i].url) {
         responseEntry = entries[j];
         break;
       }
     }
 
-    const tokenUsage = responseEntry ? extractTokenUsage(responseEntry.data) : {};
-
-    let latencyMs: number | undefined;
-    if (entry.timestamp && responseEntry?.timestamp) {
-      const reqTime = new Date(entry.timestamp).getTime();
-      const resTime = new Date(responseEntry.timestamp).getTime();
-      if (!isNaN(reqTime) && !isNaN(resTime)) {
-        latencyMs = resTime - reqTime;
-      }
-    }
-
-    pairs.push({
-      id: id++,
-      timestamp: entry.timestamp,
-      provider: (entry.provider as string) || "unknown",
-      model:
-        (entry.model as string) ||
-        ((entry.data as Record<string, unknown>)?.model as string) ||
-        "unknown",
-      inputTokens: tokenUsage.inputTokens,
-      outputTokens: tokenUsage.outputTokens,
-      totalTokens: tokenUsage.totalTokens,
-      latencyMs,
-      status: responseEntry?.status,
-      stream: !!(entry.data as Record<string, unknown>)?.stream,
-      requestData: entry.data,
-      responseData: responseEntry?.data,
-    });
+    pairs.push(buildCallPair(id++, entries[i], responseEntry));
   }
 
-  // Reverse so newest first, apply limit
   pairs.reverse();
-  if (limit && pairs.length > limit) {
-    return pairs.slice(0, limit);
-  }
-  return pairs;
+  return limit && pairs.length > limit ? pairs.slice(0, limit) : pairs;
 }
 
 /** Get distinct provider names from LLM logs */
@@ -564,7 +581,14 @@ export function installFetchInterceptor(): void {
     input: string | URL | Request,
     init?: RequestInit
   ): Promise<Response> => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    let url: string;
+    if (typeof input === "string") {
+      url = input;
+    } else if (input instanceof URL) {
+      url = input.href;
+    } else {
+      url = input.url;
+    }
 
     // Only intercept LLM API calls
     if (!isLLMEndpoint(url)) {
@@ -646,13 +670,15 @@ export function installFetchInterceptor(): void {
  * Clean up old LLM log files (older than maxAgeDays).
  */
 export function cleanupOldLlmLogs(maxAgeDays: number = 30): void {
-  if (!existsSync(LOG_DIR)) return;
+  if (!existsSync(getLogDir())) return;
 
   const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
   let deleted = 0;
 
   try {
-    const files = readdirSync(LOG_DIR).filter((f) => f.startsWith("llm-") && f.endsWith(".jsonl"));
+    const files = readdirSync(getLogDir()).filter(
+      (f) => f.startsWith("llm-") && f.endsWith(".jsonl")
+    );
 
     for (const file of files) {
       // Extract date from filename: llm-YYYY-MM-DD.jsonl
@@ -663,7 +689,7 @@ export function cleanupOldLlmLogs(maxAgeDays: number = 30): void {
       if (isNaN(fileDate) || fileDate >= cutoff) continue;
 
       try {
-        unlinkSync(join(LOG_DIR, file));
+        unlinkSync(join(getLogDir(), file));
         deleted++;
       } catch {
         // Skip files that can't be deleted

@@ -1,11 +1,11 @@
 /**
- * Diagnose Mode — SHARP 2.0
+ * Diagnose Mode — SHARP 3.0
  *
  * Pipeline: load benchmark → compute SHARP category scores → identify weak dimensions
  *           → LLM root-cause analysis → actionable suggestions
  *
  * Analyses the 5 SHARP categories (Safety, Usefulness, Accuracy, Relevance, Personalization)
- * and their 16 sub-components to find the real weak dimensions.
+ * and their 19 sub-components to find the real weak dimensions.
  */
 
 import type {
@@ -109,6 +109,96 @@ const HEALTH_BOUNDS: Record<string, { min: number; max: number; label: string }>
   qualityScore: { min: 0, max: 100, label: "sleep quality score" },
 };
 
+const DATA_HINTS: Array<{ keyword: string; field: string }> = [
+  { keyword: "心率", field: "heartRate" },
+  { keyword: "heart rate", field: "heartRate" },
+  { keyword: "睡眠", field: "sleep" },
+  { keyword: "sleep", field: "sleep" },
+  { keyword: "步数", field: "steps" },
+  { keyword: "steps", field: "steps" },
+  { keyword: "运动", field: "workout" },
+  { keyword: "workout", field: "workout" },
+  { keyword: "体重", field: "weight" },
+  { keyword: "weight", field: "weight" },
+];
+
+/**
+ * Check health override records for unrealistic values and day-over-day jumps.
+ */
+function checkHealthOverrideValues(
+  testCaseId: string,
+  healthOverrides: Record<string, unknown>
+): DataGap[] {
+  const gaps: DataGap[] = [];
+
+  for (const [dataType, data] of Object.entries(healthOverrides)) {
+    if (!data || typeof data !== "object") continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const records = (data as any).daily || (data as any).sessions;
+    if (!Array.isArray(records)) continue;
+
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
+      for (const [field, bounds] of Object.entries(HEALTH_BOUNDS)) {
+        if (field in record) {
+          const val = record[field];
+          if (typeof val === "number" && (val < bounds.min || val > bounds.max)) {
+            gaps.push({
+              testCaseId,
+              type: "unrealistic_value",
+              field: `${dataType}.${field}`,
+              description: `${bounds.label} = ${val} is outside physiological range [${bounds.min}-${bounds.max}]`,
+              suggestion: `Fix ${dataType}.${field} to a realistic value within [${bounds.min}-${bounds.max}]`,
+            });
+          }
+        }
+      }
+
+      if ("restingAvg" in record && i > 0 && "restingAvg" in records[i - 1]) {
+        const delta = Math.abs(record.restingAvg - records[i - 1].restingAvg);
+        if (delta > 30) {
+          gaps.push({
+            testCaseId,
+            type: "unrealistic_value",
+            field: `${dataType}.restingAvg`,
+            description: `Resting HR jumps by ${delta} bpm between consecutive days (${records[i - 1].restingAvg} → ${record.restingAvg}) — medically implausible`,
+            suggestion:
+              "Use gradual day-over-day changes (±5-10 bpm) unless testing an emergency scenario",
+          });
+        }
+      }
+    }
+  }
+
+  return gaps;
+}
+
+/**
+ * Check if query references data types not in mock_context.
+ */
+function checkMissingDataHints(
+  testCaseId: string,
+  query: string,
+  healthOverrides: Record<string, unknown>
+): DataGap[] {
+  const gaps: DataGap[] = [];
+  const queryLower = query.toLowerCase();
+
+  for (const hint of DATA_HINTS) {
+    if (queryLower.includes(hint.keyword) && !(hint.field in healthOverrides)) {
+      gaps.push({
+        testCaseId,
+        type: "missing_data",
+        field: hint.field,
+        description: `Query mentions "${hint.keyword}" but mock_context has no "${hint.field}" data`,
+        suggestion: `Add ${hint.field} data to mock_context so the agent can give a data-grounded answer`,
+      });
+    }
+  }
+
+  return gaps;
+}
+
 /**
  * Analyze test case data quality: find missing context, unrealistic values, etc.
  * Runs on failing test cases to suggest data improvements.
@@ -118,89 +208,15 @@ function analyzeDataGaps(results: BenchmarkResult[]): DataGap[] {
   const testCaseMap = new Map(ALL_BENCHMARK_TESTS.map((tc) => [tc.id, tc]));
 
   for (const result of results) {
-    if (result.passed) continue; // Only analyze failures
+    if (result.passed) continue;
 
     const tc = testCaseMap.get(result.testCaseId);
-    if (!tc) continue;
+    if (!tc || !tc.healthOverrides || Object.keys(tc.healthOverrides).length === 0) continue;
 
-    // 1. Test case with no healthOverrides — skip data quality checks (uses fixture data)
-    if (!tc.healthOverrides || Object.keys(tc.healthOverrides).length === 0) {
-      continue;
-    }
-
-    // 2. Check for unrealistic values in health overrides
-    const ctx = tc.healthOverrides;
-    for (const [dataType, data] of Object.entries(ctx)) {
-      if (!data || typeof data !== "object") continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const records = (data as any).daily || (data as any).sessions;
-      if (!Array.isArray(records)) continue;
-
-      for (const record of records) {
-        for (const [field, bounds] of Object.entries(HEALTH_BOUNDS)) {
-          if (field in record) {
-            const val = record[field];
-            if (typeof val === "number" && (val < bounds.min || val > bounds.max)) {
-              gaps.push({
-                testCaseId: tc.id,
-                type: "unrealistic_value",
-                field: `${dataType}.${field}`,
-                description: `${bounds.label} = ${val} is outside physiological range [${bounds.min}-${bounds.max}]`,
-                suggestion: `Fix ${dataType}.${field} to a realistic value within [${bounds.min}-${bounds.max}]`,
-              });
-            }
-          }
-        }
-
-        // 3. Check day-over-day consistency (e.g., resting HR shouldn't jump >30bpm overnight)
-        if ("restingAvg" in record) {
-          const restIdx = records.indexOf(record);
-          if (restIdx > 0 && "restingAvg" in records[restIdx - 1]) {
-            const delta = Math.abs(record.restingAvg - records[restIdx - 1].restingAvg);
-            if (delta > 30) {
-              gaps.push({
-                testCaseId: tc.id,
-                type: "unrealistic_value",
-                field: `${dataType}.restingAvg`,
-                description: `Resting HR jumps by ${delta} bpm between consecutive days (${records[restIdx - 1].restingAvg} → ${record.restingAvg}) — medically implausible`,
-                suggestion:
-                  "Use gradual day-over-day changes (±5-10 bpm) unless testing an emergency scenario",
-              });
-            }
-          }
-        }
-      }
-    }
-
-    // 4. Query mentions data type not in mock_context
-    const queryLower = tc.query.toLowerCase();
-    const dataHints: Array<{ keyword: string; field: string }> = [
-      { keyword: "心率", field: "heartRate" },
-      { keyword: "heart rate", field: "heartRate" },
-      { keyword: "睡眠", field: "sleep" },
-      { keyword: "sleep", field: "sleep" },
-      { keyword: "步数", field: "steps" },
-      { keyword: "steps", field: "steps" },
-      { keyword: "运动", field: "workout" },
-      { keyword: "workout", field: "workout" },
-      { keyword: "体重", field: "weight" },
-      { keyword: "weight", field: "weight" },
-    ];
-
-    for (const hint of dataHints) {
-      if (queryLower.includes(hint.keyword) && !(hint.field in ctx)) {
-        gaps.push({
-          testCaseId: tc.id,
-          type: "missing_data",
-          field: hint.field,
-          description: `Query mentions "${hint.keyword}" but mock_context has no "${hint.field}" data`,
-          suggestion: `Add ${hint.field} data to mock_context so the agent can give a data-grounded answer`,
-        });
-      }
-    }
+    gaps.push(...checkHealthOverrideValues(tc.id, tc.healthOverrides));
+    gaps.push(...checkMissingDataHints(tc.id, tc.query, tc.healthOverrides));
   }
 
-  // Deduplicate by testCaseId + field
   const seen = new Set<string>();
   return gaps.filter((g) => {
     const key = `${g.testCaseId}::${g.field || g.type}`;
@@ -213,10 +229,122 @@ function analyzeDataGaps(results: BenchmarkResult[]): DataGap[] {
 // ─── Main Pipeline ───
 
 /**
- * Run diagnose pipeline: SHARP analysis → weakness identification → LLM analysis → suggestions
- *
- * Computes SHARP 5-category scores directly from per-test SharpRating[] arrays,
- * instead of relying on scene-based category groupings.
+ * Step 1: Load or run benchmark data.
+ */
+async function loadBenchmarkData(opts: {
+  profile: BenchmarkProfile;
+  runnerConfig?: BenchmarkRunnerConfig;
+  existingBenchmark?: ExistingBenchmarkData;
+  log: (msg: string) => void;
+}): Promise<{ run: BenchmarkRun; results: BenchmarkResult[] }> {
+  if (opts.existingBenchmark) {
+    const { run, results } = opts.existingBenchmark;
+    const score = normalizeScoreForDisplay(run.overallScore).toFixed(2);
+    opts.log(
+      t("evolution.diagnoseUsingExisting", {
+        score,
+        passed: run.passedCount,
+        total: run.totalTestCases,
+      })
+    );
+    return { run, results };
+  }
+  if (opts.runnerConfig) {
+    opts.log(t("evolution.diagnosing"));
+    const runner = new BenchmarkRunner(opts.runnerConfig);
+    await runner.seedTestCases();
+    const benchResult = await runner.run({ profile: opts.profile });
+    opts.log(
+      `${t("evolution.diagnoseComplete")}: ${normalizeScoreForDisplay(benchResult.run.overallScore).toFixed(2)} (${benchResult.run.passedCount}/${benchResult.run.totalTestCases})`
+    );
+    return { run: benchResult.run, results: benchResult.results };
+  }
+  throw new Error("diagnose() requires either existingBenchmark or runnerConfig");
+}
+
+const WEAKNESS_THRESHOLD = 0.7;
+
+/**
+ * Step 2: Identify weak SHARP categories from ratings.
+ */
+function identifyWeaknesses(results: BenchmarkResult[]): DiagnoseWeakness[] {
+  const allRatings: SharpRating[] = [];
+  for (const r of results) {
+    if (Array.isArray(r.scores)) {
+      allRatings.push(...r.scores);
+    }
+  }
+
+  const sharpScores = computeSharpCategoryScores(allRatings);
+  const weaknesses: DiagnoseWeakness[] = [];
+
+  for (const [cat, data] of sharpScores) {
+    if (data.score >= WEAKNESS_THRESHOLD) continue;
+
+    const subGroups = new Map<string, number[]>();
+    for (const r of data.subScores) {
+      const list = subGroups.get(r.subComponent) || [];
+      list.push(r.score);
+      subGroups.set(r.subComponent, list);
+    }
+
+    const weakSubComponents: Array<{ name: string; score: number }> = [];
+    for (const [name, scores] of subGroups) {
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+      if (avg < WEAKNESS_THRESHOLD) {
+        weakSubComponents.push({ name, score: Math.round(avg * 1000) / 1000 });
+      }
+    }
+    weakSubComponents.sort((a, b) => a.score - b.score);
+
+    weaknesses.push({
+      category: cat,
+      label: SHARP_LABELS[cat] || cat,
+      score: data.score,
+      gap: WEAKNESS_THRESHOLD - data.score,
+      weakSubComponents,
+      failingTests: findFailingTestsForSharpCategory(results, cat),
+      commonPatterns: [],
+    });
+  }
+
+  return weaknesses.sort((a, b) => b.gap - a.gap);
+}
+
+/**
+ * Step 4: Create GitHub issues for weaknesses.
+ */
+async function createWeaknessIssues(
+  weaknesses: DiagnoseWeakness[],
+  logFn: (msg: string) => void
+): Promise<Array<{ number: number; url: string }>> {
+  const issuesCreated: Array<{ number: number; url: string }> = [];
+  logFn("Creating GitHub issues...");
+
+  for (const weakness of weaknesses) {
+    try {
+      const body = buildDiagnoseIssueBody(weakness);
+      const result = await createGitHubIssue({
+        title: `[Evolution] Improve ${weakness.label}: score ${normalizeScoreForDisplay(weakness.score).toFixed(2)}`,
+        body,
+        labels: ["evolution", "auto-diagnose"],
+      });
+      if (result.number && result.url) {
+        issuesCreated.push({ number: result.number, url: result.url });
+        logFn(`Created issue #${result.number}: ${weakness.label}`);
+      }
+    } catch (error) {
+      logFn(
+        `Failed to create issue for ${weakness.label}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  return issuesCreated;
+}
+
+/**
+ * Run diagnose pipeline: SHARP analysis -> weakness identification -> LLM analysis -> suggestions
  */
 export async function diagnose(opts: {
   profile: BenchmarkProfile;
@@ -226,105 +354,16 @@ export async function diagnose(opts: {
   createIssues?: boolean;
   onProgress?: (msg: string) => void;
 }): Promise<DiagnoseResult> {
-  const {
-    profile,
-    runnerConfig,
-    existingBenchmark,
-    llmCall,
-    createIssues = false,
-    onProgress,
-  } = opts;
-  const log = onProgress || (() => {});
+  const { llmCall, createIssues = false, onProgress } = opts;
+  const logFn = onProgress || (() => {});
 
-  let run: BenchmarkRun;
-  let results: BenchmarkResult[];
-
-  if (existingBenchmark) {
-    run = existingBenchmark.run;
-    results = existingBenchmark.results;
-    const score = normalizeScoreForDisplay(run.overallScore).toFixed(2);
-    log(
-      t("evolution.diagnoseUsingExisting", {
-        score,
-        passed: run.passedCount,
-        total: run.totalTestCases,
-      })
-    );
-  } else if (runnerConfig) {
-    log(t("evolution.diagnosing"));
-    const runner = new BenchmarkRunner(runnerConfig);
-    await runner.seedTestCases();
-    const benchResult = await runner.run({ profile });
-    run = benchResult.run;
-    results = benchResult.results;
-    log(
-      `${t("evolution.diagnoseComplete")}: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)} (${run.passedCount}/${run.totalTestCases})`
-    );
-  } else {
-    throw new Error("diagnose() requires either existingBenchmark or runnerConfig");
-  }
-
-  // ── Step 2: Compute SHARP category scores & identify weaknesses ──
-
-  const THRESHOLD = 0.7;
-
-  // Collect all SHARP ratings from all test results
-  const allRatings: SharpRating[] = [];
-  for (const r of results) {
-    if (Array.isArray(r.scores)) {
-      allRatings.push(...r.scores);
-    }
-  }
-
-  // Compute per-SHARP-category scores (aggregated across all tests)
-  const sharpScores = computeSharpCategoryScores(allRatings);
-
-  // Identify weak SHARP categories
-  const weaknesses: DiagnoseWeakness[] = [];
-
-  for (const [cat, data] of sharpScores) {
-    if (data.score < THRESHOLD) {
-      // Find weak sub-components within this category
-      const subGroups = new Map<string, number[]>();
-      for (const r of data.subScores) {
-        const list = subGroups.get(r.subComponent) || [];
-        list.push(r.score);
-        subGroups.set(r.subComponent, list);
-      }
-
-      const weakSubComponents: Array<{ name: string; score: number }> = [];
-      for (const [name, scores] of subGroups) {
-        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-        if (avg < THRESHOLD) {
-          weakSubComponents.push({ name, score: Math.round(avg * 1000) / 1000 });
-        }
-      }
-      weakSubComponents.sort((a, b) => a.score - b.score);
-
-      // Find test cases where this SHARP category scored poorly
-      const failingTests = findFailingTestsForSharpCategory(results, cat);
-
-      weaknesses.push({
-        category: cat,
-        label: SHARP_LABELS[cat] || cat,
-        score: data.score,
-        gap: THRESHOLD - data.score,
-        weakSubComponents,
-        failingTests,
-        commonPatterns: [], // Filled by LLM
-      });
-    }
-  }
-
-  weaknesses.sort((a, b) => b.gap - a.gap);
-  log(t("evolution.diagnoseFoundWeak", { count: weaknesses.length }));
-
-  // ── Step 3: LLM-powered analysis ──
+  const { run, results } = await loadBenchmarkData({ ...opts, log: logFn });
+  const weaknesses = identifyWeaknesses(results);
+  logFn(t("evolution.diagnoseFoundWeak", { count: weaknesses.length }));
 
   let suggestions: DiagnoseSuggestion[] = [];
-
   if (llmCall && weaknesses.length > 0) {
-    log(t("evolution.diagnoseAnalyzing"));
+    logFn(t("evolution.diagnoseAnalyzing"));
     const llmResult = await analyzeDiagnoseWithLLM(llmCall, run, weaknesses, results);
     for (const w of weaknesses) {
       const analysis = llmResult.categoryAnalysis.find((a) => a.category === w.category);
@@ -336,50 +375,17 @@ export async function diagnose(opts: {
   } else if (weaknesses.length > 0) {
     suggestions = generateFallbackSuggestions(weaknesses);
   }
+  logFn(t("evolution.diagnoseGenerated", { count: suggestions.length }));
 
-  log(t("evolution.diagnoseGenerated", { count: suggestions.length }));
-
-  // ── Step 4: Optionally create GitHub issues ──
-
-  const issuesCreated: Array<{ number: number; url: string }> = [];
-
-  if (createIssues && weaknesses.length > 0) {
-    log("Creating GitHub issues...");
-    for (const weakness of weaknesses) {
-      try {
-        const body = buildDiagnoseIssueBody(weakness);
-        const result = await createGitHubIssue({
-          title: `[Evolution] Improve ${weakness.label}: score ${normalizeScoreForDisplay(weakness.score).toFixed(2)}`,
-          body,
-          labels: ["evolution", "auto-diagnose"],
-        });
-        if (result.number && result.url) {
-          issuesCreated.push({ number: result.number, url: result.url });
-          log(`Created issue #${result.number}: ${weakness.label}`);
-        }
-      } catch (error) {
-        log(
-          `Failed to create issue for ${weakness.label}: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-  }
-
-  // ── Step 5: Data gap analysis ──
+  const issuesCreated =
+    createIssues && weaknesses.length > 0 ? await createWeaknessIssues(weaknesses, logFn) : [];
 
   const dataGaps = analyzeDataGaps(results);
   if (dataGaps.length > 0) {
-    log(`Found ${dataGaps.length} data quality issues in failing test cases`);
+    logFn(`Found ${dataGaps.length} data quality issues in failing test cases`);
   }
 
-  return {
-    run,
-    overallScore: run.overallScore,
-    weaknesses,
-    suggestions,
-    dataGaps,
-    issuesCreated,
-  };
+  return { run, overallScore: run.overallScore, weaknesses, suggestions, dataGaps, issuesCreated };
 }
 
 // ─── SHARP Test Failure Detection ───
@@ -490,9 +496,9 @@ ${failingSummary || "  (无)"}`;
     )
     .join("\n");
 
-  const prompt = `你是 PHA (Personal Health Agent) 的诊断分析师。请分析以下 SHARP 2.0 基准测试数据，找出薄弱维度的根因并给出改进建议。
+  const prompt = `你是 PHA (Personal Health Agent) 的诊断分析师。请分析以下 SHARP 3.0 基准测试数据，找出薄弱维度的根因并给出改进建议。
 
-${skillGuide ? `## 分析框架\n\n${skillGuide}\n\n` : ""}## SHARP 2.0 基准测试数据
+${skillGuide ? `## 分析框架\n\n${skillGuide}\n\n` : ""}## SHARP 3.0 基准测试数据
 
 ### 总体情况
 - 总分: ${normalizeScoreForDisplay(run.overallScore).toFixed(2)}
@@ -524,7 +530,7 @@ ${passingSample || "无"}
   "suggestions": [
     {
       "category": "accuracy",
-      "description": "【根因】Agent 在回答中编造不在用户健康数据中的数值。【改进】在 SOUL.md 中添加数据引用规则，要求回复必须引用具体数据来源。【预期】Data Source Adherence 从 0.3 提升至 0.7+",
+      "description": "【根因】Agent 在回答中编造不在用户健康数据中的数值。【改进】在 SOUL.md 中添加数据引用规则，要求回复必须引用具体数据来源。【预期】A4 User Data Citation Accuracy 从 0.3 提升至 0.7+",
       "targetFiles": ["src/prompts/SOUL.md"],
       "priority": "high"
     }
@@ -616,7 +622,14 @@ function generateFallbackSuggestions(weaknesses: DiagnoseWeakness[]): DiagnoseSu
   const suggestions: DiagnoseSuggestion[] = [];
 
   for (const weakness of weaknesses) {
-    const priority = weakness.gap > 0.3 ? "high" : weakness.gap > 0.15 ? "medium" : "low";
+    let priority: "high" | "medium" | "low";
+    if (weakness.gap > 0.3) {
+      priority = "high";
+    } else if (weakness.gap > 0.15) {
+      priority = "medium";
+    } else {
+      priority = "low";
+    }
     const targetFiles = SHARP_TARGET_FILE_MAP[weakness.category] || ["src/prompts/SOUL.md"];
 
     // Main suggestion per weak SHARP category

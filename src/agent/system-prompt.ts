@@ -79,27 +79,41 @@ function matchesFilter(skill: SkillEntry, filters: string[]): boolean {
   return false;
 }
 
-/**
- * Build a skill registry section for the system prompt.
- * Agent scans descriptions and calls `get_skill` when relevant.
- *
- * Supports filtering via include/exclude (skill name, category, or tag).
- * Output is grouped by category.
- */
-export function buildSkillRegistry(options?: {
-  tags?: string[];
-  include?: string[];
-  exclude?: string[];
-  /** @deprecated Use exclude instead */
-  excludeTypes?: string[];
-}): string {
-  const skillsDir = getSkillsDir();
-  if (!existsSync(skillsDir)) {
-    return "";
+function passesFilters(
+  skill: SkillEntry,
+  metadata: { tags?: string[]; type?: string },
+  options?: {
+    tags?: string[];
+    include?: string[];
+    exclude?: string[];
+    excludeTypes?: string[];
   }
+): boolean {
+  if (options?.excludeTypes?.length) {
+    if (metadata.type && options.excludeTypes.includes(metadata.type)) return false;
+  }
+  if (options?.tags?.length) {
+    if (!metadata.tags?.some((t) => options.tags!.includes(t))) return false;
+  }
+  if (options?.include?.length) {
+    if (!matchesFilter(skill, options.include)) return false;
+  }
+  if (options?.exclude?.length) {
+    if (matchesFilter(skill, options.exclude)) return false;
+  }
+  return true;
+}
 
+function loadFilteredSkills(
+  skillsDir: string,
+  options?: {
+    tags?: string[];
+    include?: string[];
+    exclude?: string[];
+    excludeTypes?: string[];
+  }
+): SkillEntry[] {
   const skills: SkillEntry[] = [];
-
   try {
     const entries = readdirSync(skillsDir, { withFileTypes: true });
     for (const entry of entries) {
@@ -111,12 +125,6 @@ export function buildSkillRegistry(options?: {
 
       const content = readFileSync(skillFile, "utf-8");
       const metadata = parseSkillMetadata(content);
-
-      // Legacy filter: excludeTypes
-      if (options?.excludeTypes?.length) {
-        if (metadata.type && options.excludeTypes.includes(metadata.type)) continue;
-      }
-
       const nameMatch = content.match(/^name:\s*(.+)$/m);
       const descMatch = content.match(/^description:\s*"?([^"]+)"?$/m);
 
@@ -127,32 +135,17 @@ export function buildSkillRegistry(options?: {
         tags: metadata.tags,
       };
 
-      // Tags filter: if set, skill must have at least one matching tag
-      if (options?.tags?.length) {
-        if (!metadata.tags?.some((t) => options.tags!.includes(t))) continue;
+      if (passesFilters(skill, metadata, options)) {
+        skills.push(skill);
       }
-
-      // Include filter: if set, skill must match at least one
-      if (options?.include?.length) {
-        if (!matchesFilter(skill, options.include)) continue;
-      }
-
-      // Exclude filter: if skill matches any, skip it
-      if (options?.exclude?.length) {
-        if (matchesFilter(skill, options.exclude)) continue;
-      }
-
-      skills.push(skill);
     }
   } catch (e) {
     log.warn("Failed to load skill registry", { error: String(e) });
   }
+  return skills;
+}
 
-  if (skills.length === 0) {
-    return "";
-  }
-
-  // Group by category
+function formatSkillRegistryText(skills: SkillEntry[]): string {
   const grouped = new Map<string, SkillEntry[]>();
   for (const skill of skills) {
     const cat = skill.category || "utility";
@@ -173,9 +166,7 @@ export function buildSkillRegistry(options?: {
     "<available_skills>",
   ];
 
-  // Output in category order
   const orderedCategories = [...CATEGORY_ORDER.filter((c) => grouped.has(c))];
-  // Add any categories not in the predefined order
   for (const cat of grouped.keys()) {
     if (!orderedCategories.includes(cat)) orderedCategories.push(cat);
   }
@@ -193,6 +184,28 @@ export function buildSkillRegistry(options?: {
 
   lines.push("</available_skills>");
   lines.push("");
-
   return lines.join("\n");
+}
+
+/**
+ * Build a skill registry section for the system prompt.
+ * Agent scans descriptions and calls `get_skill` when relevant.
+ *
+ * Supports filtering via include/exclude (skill name, category, or tag).
+ * Output is grouped by category.
+ */
+export function buildSkillRegistry(options?: {
+  tags?: string[];
+  include?: string[];
+  exclude?: string[];
+  /** @deprecated Use exclude instead */
+  excludeTypes?: string[];
+}): string {
+  const skillsDir = getSkillsDir();
+  if (!existsSync(skillsDir)) return "";
+
+  const skills = loadFilteredSkills(skillsDir, options);
+  if (skills.length === 0) return "";
+
+  return formatSkillRegistryText(skills);
 }

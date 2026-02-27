@@ -7,7 +7,7 @@ metadata:
       "emoji": "📊",
       "category": "health-coaching",
       "tags": ["pha", "overview", "daily-summary", "data-analysis"],
-      "requires": { "tools": ["get_health_data", "get_health_trends"] }
+      "requires": { "tools": ["get_health_data", "get_weekly_summary"] }
     }
   }
 ---
@@ -20,11 +20,11 @@ metadata:
 
 | 用户描述 | 范围 | 数据策略 |
 |---------|------|---------|
-| "我怎么样？" / "健康概览" | **全面概览** | `get_health_data(today)` + `get_health_trends(7d)` |
+| "我怎么样？" / "健康概览" | **全面概览** | `get_health_data(today)` + `get_weekly_summary` |
 | "今天走了多少步？" | **单项指标，今日** | `get_health_data(today)` |
-| "这周怎么样？" | **周趋势** | `get_health_trends(7d)` |
-| "我达标了吗？" / "进度怎样？" | **目标追踪** | `get_health_trends(7d)` + 检查个人档案目标 |
-| "这周和上周比怎么样" | **周期对比** | `get_health_trends(14d)` |
+| "这周怎么样？" | **周趋势** | `get_weekly_summary` |
+| "我达标了吗？" / "进度怎样？" | **目标追踪** | `get_weekly_summary` + 检查个人档案目标 |
+| "这周和上周比怎么样" | **周期对比** | `get_weekly_summary` |
 
 ## 第二步：评估框架
 

@@ -7,7 +7,7 @@ metadata:
       "emoji": "🧘",
       "category": "health-coaching",
       "tags": ["pha", "stress", "mental-health", "data-analysis"],
-      "requires": { "tools": ["get_heart_rate", "get_sleep", "get_health_trends", "get_stress", "get_hrv", "get_emotion"] }
+      "requires": { "tools": ["get_heart_rate", "get_sleep", "get_weekly_summary", "get_stress", "get_hrv", "get_emotion"] }
     }
   }
 ---
@@ -30,8 +30,8 @@ metadata:
 | 关注点 | 所需调用 | 原因 |
 |-------|---------|------|
 | 急性压力 | `get_heart_rate(today)` + `get_sleep(today)` | 当前生理状态 |
-| 数据驱动查询 | `get_heart_rate(today)` + `get_health_trends` + `get_sleep(today)` | 全面视图 |
-| 慢性压力 / 职业倦怠 | `get_health_trends` + `get_heart_rate(today)` + `memory_search("stress")` | 趋势 + 历史 |
+| 数据驱动查询 | `get_heart_rate(today)` + `get_weekly_summary` + `get_sleep(today)` | 全面视图 |
+| 慢性压力 / 职业倦怠 | `get_weekly_summary` + `get_heart_rate(today)` + `memory_search("stress")` | 趋势 + 历史 |
 | 技巧请求 | 可选——可能根本不需要数据 | 有时候用户只是想要帮助，不需要分析 |
 
 ## 第三步：压力信号检测

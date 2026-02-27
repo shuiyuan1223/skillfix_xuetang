@@ -58,7 +58,8 @@ export function registerWebCommand(program: Command): void {
     .action(async (options) => {
       const config = loadConfig();
       const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
-      const url = `http://localhost:${port}`;
+      const webBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+      const url = `http://localhost:${port}${webBasePath}`;
 
       const pid = getPid();
       if (!pid || !isRunning(pid)) {
@@ -80,7 +81,8 @@ export function registerWebCommand(program: Command): void {
     .action(async (options) => {
       const config = loadConfig();
       const port = options.port ? parseInt(options.port, 10) : config.gateway.port;
-      const url = `http://localhost:${port}`;
+      const dashBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+      const url = `http://localhost:${port}${dashBasePath}`;
 
       const pid = getPid();
       if (!pid || !isRunning(pid)) {

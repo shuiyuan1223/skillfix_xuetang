@@ -78,6 +78,10 @@ pha tui           # 终端聊天界面
       "skills": { "excludeTypes": ["system"] },
       "skillHint": "legacy-streaming"
     }
+  },
+  "whitelist": {                  // 功能白名单（可选，不配置此节 = 全员全量）
+    "enabled": true,              // true=受白名单约束（默认）; false=不受约束，全员全量
+    "uuids": ["huawei-uuid-001"] // enabled=true 时，仅列出的用户享受全量，其余仅 chat+dashboard
   }
 }
 ```
@@ -510,6 +514,7 @@ Evolution Lab 是顶级导航页面，采用 5-Tab Dashboard 布局：
 | `POST /api/mcp` | MCP JSON-RPC 2.0（Streamable HTTP） |
 | `GET /.well-known/agent.json` | A2A Agent Card 发现 |
 | `POST /api/a2a` | A2A JSON-RPC 2.0 任务管理 |
+| `POST /api/query` | 边想边搜 SSE（传入 refresh_token，无需预登录） |
 | `POST /mcp/tools/list` | 列出 MCP 工具 (legacy) |
 | `POST /mcp/tools/call` | 调用 MCP 工具 (legacy) |
 | `GET /api/health/*` | REST API (兼容) |

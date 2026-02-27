@@ -12,6 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { encrypt, decrypt, isEncrypted, ensureKeyFiles, isCryptoReady } from "./crypto.js";
 
 // Session-scoped user ID (set during tool execution via runWithUserId)
 const userIdStore = new AsyncLocalStorage<string>();
@@ -171,6 +172,7 @@ export interface HuaweiHealthKitConfig {
   authUrl?: string;
   tokenUrl?: string;
   apiBaseUrl?: string;
+  innerApiBaseUrl?: string;
 }
 
 export interface RemoteMCPServerConfig {
@@ -202,6 +204,15 @@ export interface PHAConfig {
     host: string;
     port: number;
     autoStart: boolean;
+    /** URL path prefix, e.g. "/health_sport/pha" */
+    basePath?: string;
+    /** Sidebar navigation visibility control */
+    sidebar?: {
+      /** Whitelist: only show these view IDs (takes priority over exclude) */
+      include?: string[];
+      /** Blacklist: hide these view IDs */
+      exclude?: string[];
+    };
   };
   llm: LLMConfig;
   dataSources: {
@@ -281,6 +292,13 @@ export interface PHAConfig {
   agents?: Record<string, AgentProfileConfig>;
   /** Master tag list for agent tool/skill tag pickers */
   tags?: string[];
+  /** Feature whitelist: control which users get full navigation access */
+  whitelist?: {
+    /** true = enforce whitelist (only listed UUIDs get full access); false = no restriction (everyone full access). Default: true */
+    enabled?: boolean;
+    /** Whitelisted user UUIDs (only effective when enabled=true) */
+    uuids?: string[];
+  };
 }
 
 /** Agent profile as stored in config.json (relaxed types for JSON serialization) */
@@ -443,13 +461,248 @@ export function getConfigPath(): string {
 export function ensureConfigDir(): void {
   const dir = getConfigDir();
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o750 });
   }
 }
 
 // ============================================================================
+// Sensitive field encryption
+// ============================================================================
+
+/** Dot-paths of fields that must be encrypted on disk. '*' matches any key. */
+const SENSITIVE_FIELDS = [
+  "llm.apiKey",
+  "models.providers.*.apiKey",
+  "dataSources.huawei.clientSecret",
+  "mcp.remoteServers.*.apiKey",
+];
+
+/**
+ * Recursively walk an object tree and transform leaf values at matching paths.
+ * Supports wildcard '*' to match any key in an object.
+ */
+function walkAndTransform(
+  obj: Record<string, unknown>,
+  pathParts: string[],
+  index: number,
+  transform: (v: unknown) => unknown
+): void {
+  if (index >= pathParts.length || obj == null || typeof obj !== "object") return;
+
+  const part = pathParts[index];
+  const isLast = index === pathParts.length - 1;
+
+  if (part === "*") {
+    // Wildcard: iterate all keys at this level
+    for (const key of Object.keys(obj)) {
+      const child = obj[key];
+      if (isLast) {
+        obj[key] = transform(child);
+      } else if (child != null && typeof child === "object") {
+        walkAndTransform(child as Record<string, unknown>, pathParts, index + 1, transform);
+      }
+    }
+  } else if (isLast) {
+    if (part in obj) {
+      obj[part] = transform(obj[part]);
+    }
+  } else {
+    const child = obj[part];
+    if (child != null && typeof child === "object") {
+      walkAndTransform(child as Record<string, unknown>, pathParts, index + 1, transform);
+    }
+  }
+}
+
+/** Encrypt all sensitive fields in-place (skip already-encrypted values) */
+function encryptSensitiveFields(obj: Record<string, unknown>, stateDir: string): void {
+  for (const fieldPath of SENSITIVE_FIELDS) {
+    walkAndTransform(obj, fieldPath.split("."), 0, (value) => {
+      if (typeof value === "string" && value && !isEncrypted(value)) {
+        return encrypt(value, stateDir);
+      }
+      return value;
+    });
+  }
+}
+
+/** Decrypt all sensitive fields in-place (plain values pass through) */
+function decryptSensitiveFields(obj: Record<string, unknown>, stateDir: string): void {
+  for (const fieldPath of SENSITIVE_FIELDS) {
+    walkAndTransform(obj, fieldPath.split("."), 0, (value) => {
+      if (typeof value === "string" && isEncrypted(value)) {
+        return decrypt(value, stateDir);
+      }
+      return value;
+    });
+  }
+}
+
+/**
+ * Count how many sensitive fields are still in plaintext (not encrypted).
+ * Used by `pha doctor` to report migration status.
+ */
+export function countPlaintextSensitiveFields(configPath?: string): number {
+  const cfgPath = configPath || getConfigPath();
+  if (!fs.existsSync(cfgPath)) return 0;
+
+  try {
+    const content = fs.readFileSync(cfgPath, "utf-8");
+    const raw = JSON.parse(content);
+    let count = 0;
+    for (const fieldPath of SENSITIVE_FIELDS) {
+      walkAndTransform(raw, fieldPath.split("."), 0, (value) => {
+        if (typeof value === "string" && value && !isEncrypted(value)) {
+          count++;
+        }
+        return value; // don't mutate
+      });
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
+// Re-export crypto utilities for convenience
+export { isCryptoReady, ensureKeyFiles, isEncrypted, encrypt, decrypt };
+
+// ============================================================================
 // Migration: old flat config → new unified model repository
 // ============================================================================
+
+/** Ensure a provider entry exists in the map; merge apiKey/baseUrl if set */
+function ensureMigrationProvider(
+  providers: Record<string, ModelProviderConfig>,
+  key: string,
+  apiKey?: string,
+  baseUrl?: string
+): void {
+  if (!providers[key]) {
+    providers[key] = {
+      models: [],
+      ...(apiKey ? { apiKey } : {}),
+      ...(baseUrl ? { baseUrl } : {}),
+    };
+  } else {
+    if (apiKey && !providers[key].apiKey) providers[key].apiKey = apiKey;
+    if (baseUrl && !providers[key].baseUrl) providers[key].baseUrl = baseUrl;
+  }
+}
+
+/** Add a model definition to a provider if not already present */
+function addMigrationModel(
+  providers: Record<string, ModelProviderConfig>,
+  providerKey: string,
+  name: string,
+  modelId: string,
+  label?: string
+): void {
+  const models = providers[providerKey].models;
+  if (!models.find((m) => m.name === name)) {
+    models.push({ name, model: modelId, ...(label ? { label } : {}) });
+  }
+}
+
+/** Migrate top-level model assignment fields to orchestrator */
+function migrateOrchestratorFields(config: PHAConfig): boolean {
+  if (config.orchestrator) return false;
+  if (
+    !config.agentModel &&
+    !config.systemAgentModel &&
+    !config.embeddingModel &&
+    typeof config.judgeModel !== "string"
+  ) {
+    return false;
+  }
+  config.orchestrator = {
+    pha: config.agentModel,
+    sa: config.systemAgentModel,
+    judge: typeof config.judgeModel === "string" ? config.judgeModel : undefined,
+    embedding: config.embeddingModel,
+  };
+  delete config.agentModel;
+  delete config.systemAgentModel;
+  delete config.embeddingModel;
+  if (typeof config.judgeModel === "string") delete config.judgeModel;
+  return true;
+}
+
+/** Migrate benchmark models to the provider map */
+function migrateBenchmarkModels(
+  config: PHAConfig,
+  providers: Record<string, ModelProviderConfig>,
+  fallbackProvider: string
+): void {
+  if (!config.benchmarkModels || Object.keys(config.benchmarkModels).length === 0) return;
+  const refs: string[] = [];
+  for (const [name, cfg] of Object.entries(config.benchmarkModels)) {
+    const bp = cfg.provider || fallbackProvider;
+    ensureMigrationProvider(
+      providers,
+      bp,
+      cfg.apiKey,
+      cfg.baseUrl || PROVIDER_CONFIGS[bp]?.baseUrl
+    );
+    addMigrationModel(providers, bp, name, cfg.modelId, cfg.label);
+    refs.push(`${bp}/${name}`);
+  }
+  if (!config.benchmark) config.benchmark = {};
+  config.benchmark.models = refs;
+}
+
+/** Migrate judge model (object format) to provider map + orchestrator */
+function migrateJudgeModel(
+  config: PHAConfig,
+  providers: Record<string, ModelProviderConfig>
+): void {
+  if (!config.judgeModel || typeof config.judgeModel !== "object") return;
+  const jm = config.judgeModel as BenchmarkModelConfig;
+  if (!jm.provider || !jm.modelId) return;
+  ensureMigrationProvider(
+    providers,
+    jm.provider,
+    jm.apiKey,
+    jm.baseUrl || PROVIDER_CONFIGS[jm.provider]?.baseUrl
+  );
+  const jn = deriveModelName(jm.modelId);
+  addMigrationModel(providers, jm.provider, jn, jm.modelId, jm.label);
+  if (config.orchestrator) config.orchestrator.judge = `${jm.provider}/${jn}`;
+  delete config.judgeModel;
+}
+
+/** Build new model repository from legacy config fields */
+function buildModelRepository(config: PHAConfig): Record<string, ModelProviderConfig> {
+  const providers: Record<string, ModelProviderConfig> = {};
+  const llmProvider = config.llm.provider || "anthropic";
+  const llmModelId = config.llm.modelId || PROVIDER_CONFIGS[llmProvider]?.defaultModel || "default";
+
+  // LLM → orchestrator.pha
+  ensureMigrationProvider(
+    providers,
+    llmProvider,
+    config.llm.apiKey,
+    config.llm.baseUrl || PROVIDER_CONFIGS[llmProvider]?.baseUrl
+  );
+  const agentModelName = deriveModelName(llmModelId);
+  addMigrationModel(providers, llmProvider, agentModelName, llmModelId);
+  if (!config.orchestrator) config.orchestrator = {};
+  config.orchestrator.pha = `${llmProvider}/${agentModelName}`;
+
+  migrateBenchmarkModels(config, providers, llmProvider);
+  migrateJudgeModel(config, providers);
+
+  // Embedding model
+  if (config.embedding?.model && config.embedding.enabled !== false) {
+    const ep = llmProvider === "openrouter" ? "openrouter" : llmProvider;
+    ensureMigrationProvider(providers, ep);
+    const en = deriveModelName(config.embedding.model);
+    addMigrationModel(providers, ep, en, config.embedding.model);
+    config.orchestrator.embedding = `${ep}/${en}`;
+  }
+
+  return providers;
+}
 
 /**
  * Migrate old config format to new unified model repository (in-memory only).
@@ -457,134 +710,33 @@ export function ensureConfigDir(): void {
  */
 /** @returns true if config was modified (migration or cleanup) */
 function migrateConfig(config: PHAConfig): boolean {
-  // Clean up redundant old fields even if already migrated
   let modified = false;
+
+  // Clean up redundant old fields even if already migrated
   if (config.benchmarkModels && config.models?.providers) {
     delete config.benchmarkModels;
     modified = true;
   }
 
-  // 5. Migrate top-level model assignment fields → orchestrator
-  if (
-    !config.orchestrator &&
-    (config.agentModel ||
-      config.systemAgentModel ||
-      config.embeddingModel ||
-      typeof config.judgeModel === "string")
-  ) {
-    config.orchestrator = {
-      pha: config.agentModel,
-      sa: config.systemAgentModel,
-      judge: typeof config.judgeModel === "string" ? config.judgeModel : undefined,
-      embedding: config.embeddingModel,
-    };
-    delete config.agentModel;
-    delete config.systemAgentModel;
-    delete config.embeddingModel;
-    if (typeof config.judgeModel === "string") delete config.judgeModel;
-    modified = true;
-  }
+  // Migrate top-level model assignment fields → orchestrator
+  if (migrateOrchestratorFields(config)) modified = true;
 
   // Already migrated (model repository)
   if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
     return modified;
   }
 
-  const providers: Record<string, ModelProviderConfig> = {};
+  const providers = buildModelRepository(config);
 
-  // Helper: ensure provider exists in the map
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  const ensureProvider = (providerKey: string, apiKey?: string, baseUrl?: string) => {
-    if (!providers[providerKey]) {
-      providers[providerKey] = {
-        models: [],
-        ...(apiKey ? { apiKey } : {}),
-        ...(baseUrl ? { baseUrl } : {}),
-      };
-    } else {
-      // Merge apiKey/baseUrl if not already set
-      if (apiKey && !providers[providerKey].apiKey) {
-        providers[providerKey].apiKey = apiKey;
-      }
-      if (baseUrl && !providers[providerKey].baseUrl) {
-        providers[providerKey].baseUrl = baseUrl;
-      }
-    }
-  };
-
-  // Helper: add model if not already present
-  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-  const addModel = (providerKey: string, name: string, modelId: string, label?: string) => {
-    const models = providers[providerKey].models;
-    if (!models.find((m) => m.name === name)) {
-      models.push({ name, model: modelId, ...(label ? { label } : {}) });
-    }
-  };
-
-  // 1. Migrate config.llm → orchestrator.pha
-  const llmProvider = config.llm.provider || "anthropic";
-  const llmModelId = config.llm.modelId || PROVIDER_CONFIGS[llmProvider]?.defaultModel || "default";
-  const defaultBaseUrl = config.llm.baseUrl || PROVIDER_CONFIGS[llmProvider]?.baseUrl;
-
-  ensureProvider(llmProvider, config.llm.apiKey, defaultBaseUrl);
-  // Derive a short name from the model ID
-  const agentModelName = deriveModelName(llmModelId);
-  addModel(llmProvider, agentModelName, llmModelId);
-  if (!config.orchestrator) config.orchestrator = {};
-  config.orchestrator.pha = `${llmProvider}/${agentModelName}`;
-
-  // 2. Migrate config.benchmarkModels
-  if (config.benchmarkModels && Object.keys(config.benchmarkModels).length > 0) {
-    const benchmarkRefs: string[] = [];
-    for (const [presetName, modelCfg] of Object.entries(config.benchmarkModels)) {
-      const bProvider = modelCfg.provider || llmProvider;
-      const bBaseUrl = modelCfg.baseUrl || PROVIDER_CONFIGS[bProvider]?.baseUrl;
-      ensureProvider(bProvider, modelCfg.apiKey, bBaseUrl);
-      addModel(bProvider, presetName, modelCfg.modelId, modelCfg.label);
-      benchmarkRefs.push(`${bProvider}/${presetName}`);
-    }
-    if (!config.benchmark) config.benchmark = {};
-    config.benchmark.models = benchmarkRefs;
-  }
-
-  // 3. Migrate config.judgeModel (object → orchestrator.judge string ref)
-  if (config.judgeModel && typeof config.judgeModel === "object") {
-    const jm = config.judgeModel as BenchmarkModelConfig;
-    if (jm.provider && jm.modelId) {
-      const jProvider = jm.provider;
-      const jBaseUrl = jm.baseUrl || PROVIDER_CONFIGS[jProvider]?.baseUrl;
-      ensureProvider(jProvider, jm.apiKey, jBaseUrl);
-      const judgeName = deriveModelName(jm.modelId);
-      addModel(jProvider, judgeName, jm.modelId, jm.label);
-      config.orchestrator.judge = `${jProvider}/${judgeName}`;
-      delete config.judgeModel;
-    }
-  }
-
-  // 4. Migrate config.embedding → orchestrator.embedding
-  if (config.embedding?.model && config.embedding.enabled !== false) {
-    // Embedding models typically use the same provider (openrouter) or separate
-    const embModel = config.embedding.model;
-    // If using openrouter and main provider is openrouter, add there
-    const embProvider = llmProvider === "openrouter" ? "openrouter" : llmProvider;
-    ensureProvider(embProvider);
-    const embName = deriveModelName(embModel);
-    addModel(embProvider, embName, embModel);
-    config.orchestrator.embedding = `${embProvider}/${embName}`;
-  }
-
-  // Only set if we actually found something to migrate
   if (Object.keys(providers).length > 0) {
     config.models = { providers };
-    // Remove fully redundant old fields (data now lives in models.providers + benchmark.models)
     delete config.benchmarkModels;
-    // Clean up legacy fields that are now in orchestrator
     delete config.agentModel;
     delete config.systemAgentModel;
     delete config.embeddingModel;
     return true;
   }
-  return false;
+  return modified;
 }
 
 /** Derive a short model name from a full model ID (e.g. "anthropic/claude-sonnet-4" → "claude-sonnet-4") */
@@ -683,6 +835,16 @@ export function loadConfig(): PHAConfig {
   try {
     const content = fs.readFileSync(configPath, "utf-8");
     const loaded = JSON.parse(content);
+
+    // Decrypt sensitive fields before merging (operates on raw loaded object)
+    try {
+      const stateDir = getStateDir();
+      decryptSensitiveFields(loaded, stateDir);
+    } catch {
+      // If decryption fails (missing key files on first run, etc.), proceed with raw values.
+      // Fields that couldn't be decrypted stay as-is (enc:v1:... strings).
+    }
+
     // Deep-merge known nested sections so partial user configs
     // (e.g. { gateway: { port: 9000 } }) don't lose defaults like autoStart.
     const config = {
@@ -710,7 +872,13 @@ export function loadConfig(): PHAConfig {
     if (needsSave) {
       try {
         const clean = stripLegacyFieldsForSave(config);
-        fs.writeFileSync(configPath, JSON.stringify(clean, null, 2));
+        // Encrypt sensitive fields before writing back
+        try {
+          encryptSensitiveFields(clean, getStateDir());
+        } catch {
+          // Best-effort encryption during migration
+        }
+        fs.writeFileSync(configPath, JSON.stringify(clean, null, 2), { mode: 0o640 });
       } catch {
         // Best-effort — don't fail loadConfig if write fails
       }
@@ -727,7 +895,17 @@ export function saveConfig(config: PHAConfig): void {
   ensureConfigDir();
   const configPath = getConfigPath();
   const clean = stripLegacyFieldsForSave(config);
-  fs.writeFileSync(configPath, JSON.stringify(clean, null, 2));
+
+  // Encrypt sensitive fields before writing to disk
+  try {
+    const stateDir = getStateDir();
+    encryptSensitiveFields(clean, stateDir);
+  } catch {
+    // If encryption fails (e.g. key file issues), write plaintext as fallback.
+    // This preserves backward compatibility during first-time setup.
+  }
+
+  fs.writeFileSync(configPath, JSON.stringify(clean, null, 2), { mode: 0o640 });
   // Re-sync in-memory legacy fields after save
   syncLegacyFields(config);
 }
@@ -794,42 +972,18 @@ export function resolveModel(ref: string, config?: PHAConfig): ResolvedModel {
   };
 }
 
-/**
- * Resolve the agent model. Falls back to legacy llm config if agentModel is not set.
- */
-export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
-  const cfg = config || loadConfig();
-
-  // Priority 1: agents.pha.model
-  const phaAgentModel = cfg.agents?.pha?.model;
-  if (phaAgentModel && cfg.models?.providers) {
-    try {
-      return resolveModel(phaAgentModel, cfg);
-    } catch {
-      // Fall through
-    }
+/** Try resolving a model ref, returning null on failure */
+function tryResolveModel(ref: string | undefined, cfg: PHAConfig): ResolvedModel | null {
+  if (!ref || !cfg.models?.providers) return null;
+  try {
+    return resolveModel(ref, cfg);
+  } catch {
+    return null;
   }
+}
 
-  // Priority 2: orchestrator.pha (legacy)
-  const phaRef = cfg.orchestrator?.pha;
-  if (phaRef && cfg.models?.providers) {
-    try {
-      return resolveModel(phaRef, cfg);
-    } catch {
-      // Fall through
-    }
-  }
-
-  // Legacy: agentModel ref
-  if (cfg.agentModel && cfg.models?.providers) {
-    try {
-      return resolveModel(cfg.agentModel, cfg);
-    } catch {
-      // Fall through to legacy
-    }
-  }
-
-  // Legacy fallback: build from config.llm
+/** Build a ResolvedModel from legacy config.llm fields */
+function buildLegacyAgentModel(cfg: PHAConfig): ResolvedModel {
   const provider = cfg.llm.provider || "anthropic";
   const modelId = cfg.llm.modelId || DEFAULT_MODELS[provider] || "default";
   const apiKey = cfg.llm.apiKey || process.env[ENV_KEY_MAP[provider]] || undefined;
@@ -840,17 +994,31 @@ export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
     );
   }
 
-  const baseUrl = cfg.llm.baseUrl || PROVIDER_CONFIGS[provider]?.baseUrl;
-  const providerName = PROVIDER_CONFIGS[provider]?.name || provider;
-
   return {
     provider,
     modelId,
     apiKey,
-    baseUrl,
-    label: `${providerName} (${modelId})`,
+    baseUrl: cfg.llm.baseUrl || PROVIDER_CONFIGS[provider]?.baseUrl,
+    label: `${PROVIDER_CONFIGS[provider]?.name || provider} (${modelId})`,
     name: deriveModelName(modelId),
   };
+}
+
+/**
+ * Resolve the agent model. Falls back to legacy llm config if agentModel is not set.
+ */
+export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
+  const cfg = config || loadConfig();
+
+  // Try model refs in priority order
+  const refs = [cfg.agents?.pha?.model, cfg.orchestrator?.pha, cfg.agentModel];
+  for (const ref of refs) {
+    const resolved = tryResolveModel(ref, cfg);
+    if (resolved) return resolved;
+  }
+
+  // Legacy fallback: build from config.llm
+  return buildLegacyAgentModel(cfg);
 }
 
 /**
@@ -991,58 +1159,42 @@ export function resolveBenchmarkModels(config?: PHAConfig): ResolvedModel[] {
   }
 }
 
+/** Build a ResolvedModel from legacy embedding config */
+function buildLegacyEmbeddingModel(cfg: PHAConfig): ResolvedModel | null {
+  if (!cfg.embedding?.model) return null;
+  const apiKey =
+    cfg.llm.apiKey || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || undefined;
+  if (!apiKey) return null;
+
+  return {
+    provider: cfg.llm.provider,
+    modelId: cfg.embedding.model,
+    apiKey,
+    baseUrl:
+      cfg.llm.baseUrl ||
+      PROVIDER_CONFIGS[cfg.llm.provider]?.baseUrl ||
+      "https://openrouter.ai/api/v1",
+    label: cfg.embedding.model,
+    name: deriveModelName(cfg.embedding.model),
+  };
+}
+
 /**
  * Resolve the embedding model. Returns null if embedding is disabled.
  */
 export function resolveEmbeddingModel(config?: PHAConfig): ResolvedModel | null {
   const cfg = config || loadConfig();
-
-  // Check if embedding is disabled
   if (cfg.embedding?.enabled === false) return null;
 
-  // Orchestrator format: orchestrator.embedding
-  const embRef = cfg.orchestrator?.embedding;
-  if (embRef && cfg.models?.providers) {
-    try {
-      return resolveModel(embRef, cfg);
-    } catch {
-      // Fall through
-    }
+  // Try model refs in priority order
+  const refs = [cfg.orchestrator?.embedding, cfg.embeddingModel];
+  for (const ref of refs) {
+    const resolved = tryResolveModel(ref, cfg);
+    if (resolved) return resolved;
   }
 
-  // Legacy: embeddingModel ref
-  if (cfg.embeddingModel && cfg.models?.providers) {
-    try {
-      return resolveModel(cfg.embeddingModel, cfg);
-    } catch {
-      // Fall through
-    }
-  }
-
-  // Legacy: derive from config.embedding.model + llm provider
-  if (cfg.embedding?.model) {
-    const embModel = cfg.embedding.model;
-    // Try to find an API key from the LLM config or env
-    const apiKey =
-      cfg.llm.apiKey || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || undefined;
-
-    if (apiKey) {
-      const baseUrl =
-        cfg.llm.baseUrl ||
-        PROVIDER_CONFIGS[cfg.llm.provider]?.baseUrl ||
-        "https://openrouter.ai/api/v1";
-      return {
-        provider: cfg.llm.provider,
-        modelId: embModel,
-        apiKey,
-        baseUrl,
-        label: embModel,
-        name: deriveModelName(embModel),
-      };
-    }
-  }
-
-  return null;
+  // Legacy fallback
+  return buildLegacyEmbeddingModel(cfg);
 }
 
 /**
@@ -1360,4 +1512,16 @@ export function getJudgeModel(): BenchmarkModelConfig {
 export function getBenchmarkConcurrency(): number {
   const config = loadConfig();
   return config.benchmark?.concurrency || 1;
+}
+
+/** Check if a user is in the feature whitelist. enabled=true (default) enforces whitelist; enabled=false = everyone full access. */
+export function isWhitelistedUser(uid: string | null | undefined): boolean {
+  const config = loadConfig();
+  const wl = config.whitelist;
+  // No whitelist section or explicitly disabled = everyone gets full access
+  if (!wl || wl.enabled === false) return true;
+  // Whitelist enabled (default): check UUID
+  if (!uid) return false;
+  if (!wl.uuids?.length) return false;
+  return wl.uuids.includes(uid);
 }

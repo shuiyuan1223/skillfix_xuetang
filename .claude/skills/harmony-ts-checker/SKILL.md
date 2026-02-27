@@ -65,9 +65,7 @@ checker.py 无法覆盖以下需要语义理解的规则，需人工判断：
 | 规则 | 原因 |
 |------|------|
 | G.TYP.03 浮点数比较 | 需理解上下文是否为精确比较 |
-| G.MET.07 一致 return | 需追踪所有控制流路径 |
 | Ext-12.1 null/undefined 类型标注 | 需 TypeScript 类型推断 |
-| Ext-12.3/12.4 类型导入导出一致性 | 需区分值与类型 |
 | SEC.01 密钥强度判断 | 需判断字符串是否为真实密钥 |
 | SEC.07 代码重复语义相似度 | 仅检测文本完全重复，语义相似需人工 |
 | SEC.11 SQL 注入完整性 | 复杂拼接逻辑需人工确认 |
@@ -115,6 +113,7 @@ checker.py 无法覆盖以下需要语义理解的规则，需人工判断：
 |--------|------|----------|
 | Ext-2.1 | 严格模式 | 检查是否有 `'use strict'` 或 ES Module |
 | G.AOD.01 | 禁止 eval() | 搜索 `eval(` 调用 |
+| G.AOD.02 | 禁止隐式 eval | `setTimeout`/`setInterval` 禁止传入字符串参数 |
 | G.SCO.02 | 禁止 with(){} | 搜索 `with (` 语句 |
 | G.MET.08 | 禁止动态创建函数 | 搜索 `new Function(` |
 
@@ -143,6 +142,8 @@ checker.py 无法覆盖以下需要语义理解的规则，需人工判断：
 | 规则ID | 规则 |
 |--------|------|
 | G.VAR.01 | 使用 const/let，禁止 var |
+| G.DCL.04 | 禁止连续赋值（`a = b = c = 0`） |
+| G.DCL.05 | 不要用 undefined 初始化变量（`let x = undefined` → `let x`） |
 
 ### 五、数据类型（🔴 要求）
 | 规则ID | 规则 |
@@ -157,14 +158,18 @@ checker.py 无法覆盖以下需要语义理解的规则，需人工判断：
 | 规则ID | 规则 |
 |--------|------|
 | G.EXP.02 | 使用 ===/!== 代替 ==/!= |
+| G.EXP.03 | 禁止嵌套三元表达式 |
+| G.CTL.01 | switch 必须有 default 分支 |
 | G.CTL.06 | 条件表达式中不赋值 |
 
-### 七、函数（🔴 要求）
-| 规则ID | 规则 |
-|--------|------|
-| G.MET.07 | 一致的 return 语句 |
-| G.MET.10 | 用 rest 语法代替 arguments |
-| Ext-8.3 | 禁止 this 赋值给变量 |
+### 七、函数（🔴 要求 / 🟡 建议）
+| 规则ID | 级别 | 规则 |
+|--------|------|------|
+| G.MET.01 | 🟡 | 圈复杂度 ≤ 20 |
+| G.MET.02 | 🟡 | 函数体 ≤ 100 行（跳过空行和注释） |
+| G.MET.07 | 🔴 | 一致的 return 语句 |
+| G.MET.10 | 🔴 | 用 rest 语法代替 arguments |
+| Ext-8.3 | 🔴 | 禁止 this 赋值给变量 |
 
 ### 八、类与对象（🔴 要求）
 | 规则ID | 规则 |
@@ -192,6 +197,8 @@ checker.py 无法覆盖以下需要语义理解的规则，需人工判断：
 | Ext-12.3 | 类型导出一致性 | @typescript-eslint/consistent-type-exports |
 | Ext-12.4 | 类型导入一致性 | @typescript-eslint/consistent-type-imports |
 | Ext-12.5~12.11 | 禁止 any 系列 | @typescript-eslint/no-explicit-any 等 |
+| G.CMT.01-TS | 禁止 @ts-ignore，改用 @ts-expect-error | @typescript-eslint/ban-ts-comment |
+| G.CMT.02-TS | @ts-expect-error/@ts-nocheck 必须加说明（≥5字符） | @typescript-eslint/ban-ts-comment |
 
 ### 十二、安全审计（全部为 🔴 要求）
 
