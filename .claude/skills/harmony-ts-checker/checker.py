@@ -76,6 +76,7 @@ class HarmonyChecker:
         # 鸿蒙环境限制 (ERROR)
         self.check_strict_mode()
         self.check_eval()
+        self.check_implied_eval()
         self.check_with()
         self.check_new_function()
 
@@ -94,14 +95,20 @@ class HarmonyChecker:
 
         # 声明与初始化 (ERROR)
         self.check_var_usage()
+        self.check_multi_assign()
+        self.check_undef_init()
 
         # 数据类型 (ERROR)
         self.check_floating_decimal()
         self.check_nan_comparison()
         self.check_equality_operators()
+        self.check_nested_ternary()
+        self.check_default_case()
         self.check_cond_assign()
 
-        # 函数 (ERROR)
+        # 函数 (ERROR/WARN)
+        self.check_complexity()
+        self.check_max_lines_per_function()
         self.check_arguments_usage()
         self.check_this_alias()
 
@@ -122,6 +129,7 @@ class HarmonyChecker:
             self.check_function_return_type()
             self.check_type_imports()
             self.check_type_exports()
+            self.check_ts_comments()
 
         # 安全审计 (ERROR)
         self.check_hardcoded_secrets()
@@ -172,6 +180,16 @@ class HarmonyChecker:
                 self.add_issue("G.AOD.01", "禁止使用 eval()", Severity.ERROR, i,
                                f"发现 eval() 调用",
                                "使用 JSON.parse() 或其他安全方式替代")
+
+    def check_implied_eval(self):
+        """G.AOD.02: 禁止隐式 eval（setTimeout/setInterval 字符串参数）"""
+        for i, line in enumerate(self.lines, 1):
+            stripped = self._strip_comments(line)
+            match = re.search(r'\b(setTimeout|setInterval)\s*\(\s*[\'"`]', stripped)
+            if match:
+                self.add_issue("G.AOD.02", "禁止隐式 eval", Severity.ERROR, i,
+                               f"{match.group(1)} 传入了字符串参数（隐式 eval）",
+                               f"传入函数引用: {match.group(1)}(() => {{ ... }}, delay)")
 
     def check_with(self):
         """G.SCO.02: 禁止使用 with(){}"""
@@ -328,6 +346,25 @@ class HarmonyChecker:
                                "使用了 var 声明变量",
                                "改用 const（只读）或 let（可变）")
 
+    def check_multi_assign(self):
+        """G.DCL.04: 禁止连续赋值"""
+        for i, line in enumerate(self.lines, 1):
+            stripped = self._strip_comments(line)
+            # a = b = c = 0 模式：连续两个 = 号（排除 ==, ===, !=, !==, <=, >=, =>）
+            if re.search(r'(?<![=!<>])=(?!=)\s*\w+\s*(?<![=!<>])=(?!=)', stripped):
+                self.add_issue("G.DCL.04", "禁止连续赋值", Severity.ERROR, i,
+                               "使用了连续赋值（a = b = c）",
+                               "将赋值拆分为独立语句")
+
+    def check_undef_init(self):
+        """G.DCL.05: 不要用 undefined 初始化变量"""
+        for i, line in enumerate(self.lines, 1):
+            stripped = self._strip_comments(line)
+            if re.search(r'\b(?:let|var)\s+\w+\s*=\s*undefined\b', stripped):
+                self.add_issue("G.DCL.05", "不要用 undefined 初始化变量", Severity.ERROR, i,
+                               "用 undefined 显式初始化变量",
+                               "直接声明 let x; 即可，默认值就是 undefined")
+
     # ========== 数据类型 ==========
 
     def check_floating_decimal(self):
@@ -382,6 +419,42 @@ class HarmonyChecker:
                                "改用 !== 进行严格不等比较")
                 break
 
+    def check_nested_ternary(self):
+        """G.EXP.03: 禁止嵌套三元表达式"""
+        for i, line in enumerate(self.lines, 1):
+            stripped = self._strip_comments(line)
+            # 统计非 ?? 的 ? 出现次数（即三元运算符的 ?）
+            ternary_count = len(re.findall(r'(?<!\?)\?(?!\?)', stripped))
+            if ternary_count >= 2:
+                self.add_issue("G.EXP.03", "禁止嵌套三元表达式", Severity.ERROR, i,
+                               "发现嵌套的三元表达式",
+                               "拆分为 if/else 语句或提取为独立变量")
+
+    def check_default_case(self):
+        """G.CTL.01: switch 必须有 default 分支"""
+        in_switch = False
+        switch_line = 0
+        brace_depth = 0
+        switch_depth = 0
+        has_default = False
+        for i, line in enumerate(self.lines, 1):
+            stripped = self._strip_comments(line).strip()
+            if re.search(r'\bswitch\s*\(', stripped):
+                in_switch = True
+                switch_line = i
+                switch_depth = brace_depth
+                has_default = False
+            if in_switch:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                if re.search(r'\bdefault\s*:', stripped):
+                    has_default = True
+                if brace_depth <= switch_depth and in_switch and switch_line != i:
+                    if not has_default:
+                        self.add_issue("G.CTL.01", "switch 必须有 default 分支", Severity.ERROR, switch_line,
+                                       "switch 语句缺少 default 分支",
+                                       "添加 default: 分支处理未匹配的情况")
+                    in_switch = False
+
     def check_cond_assign(self):
         """G.CTL.06: 条件表达式中不赋值"""
         for i, line in enumerate(self.lines, 1):
@@ -396,6 +469,81 @@ class HarmonyChecker:
                                    "将赋值移到条件判断之前")
 
     # ========== 函数 ==========
+
+    def check_complexity(self):
+        """G.MET.01: 圈复杂度 ≤ 20（简化版：统计分支关键字数量）"""
+        # 找到每个函数并统计分支关键字
+        func_pattern = re.compile(
+            r'(?:(?:export\s+)?(?:async\s+)?function\s+(\w+)|'
+            r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(?.*?\)?\s*=>|'
+            r'(?:public|private|protected|static|async|\s)*(\w+)\s*\([^)]*\)\s*(?::\s*\w[^{]*)?\{)'
+        )
+        func_start = None
+        func_name = ""
+        func_line = 0
+        brace_depth = 0
+        branch_count = 0
+        branch_keywords = re.compile(r'\b(if|else\s+if|for|while|do|case|catch|\?\?|&&|\|\|)\b|\?[^?:]')
+
+        for i, line in enumerate(self.lines, 1):
+            stripped = self._strip_comments(line).strip()
+            match = func_pattern.search(stripped)
+            if match and func_start is None:
+                func_name = match.group(1) or match.group(2) or match.group(3) or "anonymous"
+                if func_name in ('if', 'for', 'while', 'switch', 'catch'):
+                    continue
+                func_start = i
+                func_line = i
+                brace_depth = 0
+                branch_count = 1  # 基础复杂度为 1
+
+            if func_start is not None:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                branch_count += len(branch_keywords.findall(stripped))
+                if brace_depth <= 0 and i > func_start:
+                    if branch_count > 20:
+                        self.add_issue("G.MET.01", "圈复杂度 ≤ 20", Severity.WARN, func_line,
+                                       f"函数 '{func_name}' 圈复杂度约为 {branch_count}（超过 20）",
+                                       "拆分为多个小函数，降低分支复杂度")
+                    func_start = None
+
+    def check_max_lines_per_function(self):
+        """G.MET.02: 函数体 ≤ 100 行（跳过空行和注释）"""
+        func_pattern = re.compile(
+            r'(?:(?:export\s+)?(?:async\s+)?function\s+(\w+)|'
+            r'(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\(?.*?\)?\s*=>|'
+            r'(?:public|private|protected|static|async|\s)*(\w+)\s*\([^)]*\)\s*(?::\s*\w[^{]*)?\{)'
+        )
+        func_start = None
+        func_name = ""
+        func_line = 0
+        brace_depth = 0
+        effective_lines = 0
+
+        for i, line in enumerate(self.lines, 1):
+            stripped = self._strip_comments(line).strip()
+            match = func_pattern.search(stripped)
+            if match and func_start is None:
+                func_name = match.group(1) or match.group(2) or match.group(3) or "anonymous"
+                if func_name in ('if', 'for', 'while', 'switch', 'catch'):
+                    continue
+                func_start = i
+                func_line = i
+                brace_depth = 0
+                effective_lines = 0
+
+            if func_start is not None:
+                brace_depth += stripped.count('{') - stripped.count('}')
+                # 统计有效行（跳过空行和纯注释行）
+                raw = line.strip()
+                if raw and not raw.startswith('//') and not raw.startswith('/*') and not raw.startswith('*'):
+                    effective_lines += 1
+                if brace_depth <= 0 and i > func_start:
+                    if effective_lines > 100:
+                        self.add_issue("G.MET.02", "函数体 ≤ 100 行", Severity.WARN, func_line,
+                                       f"函数 '{func_name}' 有效行数 {effective_lines}（超过 100 行）",
+                                       "拆分为多个小函数，每个函数职责单一")
+                    func_start = None
 
     def check_arguments_usage(self):
         """G.MET.10: 用 rest 语法代替 arguments"""
@@ -537,6 +685,32 @@ class HarmonyChecker:
         """Ext-12.3: 类型导出一致性"""
         # 类似 type_imports，完整检测需要 AST
         pass
+
+    def check_ts_comments(self):
+        """G.CMT.01-TS / G.CMT.02-TS: @ts-comment 规范"""
+        for i, line in enumerate(self.lines, 1):
+            stripped = line.strip()
+            # 禁止 @ts-ignore，改用 @ts-expect-error
+            if re.search(r'//\s*@ts-ignore\b', stripped):
+                self.add_issue("G.CMT.01-TS", "禁止 @ts-ignore", Severity.ERROR, i,
+                               "使用了 @ts-ignore",
+                               "改用 @ts-expect-error 并附加说明（至少 5 个字符）")
+            # @ts-expect-error 必须有说明
+            match = re.search(r'//\s*@ts-expect-error\s*(.*)', stripped)
+            if match:
+                desc = match.group(1).strip()
+                if len(desc) < 5:
+                    self.add_issue("G.CMT.02-TS", "@ts-expect-error 必须加说明", Severity.ERROR, i,
+                                   f"@ts-expect-error 说明不足（{len(desc)} 字符，至少需要 5 个）",
+                                   "添加有意义的说明，如 // @ts-expect-error 第三方库类型缺失")
+            # @ts-nocheck 必须有说明
+            match = re.search(r'//\s*@ts-nocheck\s*(.*)', stripped)
+            if match:
+                desc = match.group(1).strip()
+                if len(desc) < 5:
+                    self.add_issue("G.CMT.02-TS", "@ts-nocheck 必须加说明", Severity.ERROR, i,
+                                   f"@ts-nocheck 说明不足（{len(desc)} 字符，至少需要 5 个）",
+                                   "添加有意义的说明，如 // @ts-nocheck 自动生成文件")
 
     # ========== Google/ESLint 补充规则 ==========
 
