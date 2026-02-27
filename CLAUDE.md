@@ -79,9 +79,10 @@ pha tui           # 终端聊天界面
       "skillHint": "legacy-streaming"
     }
   },
-  "whitelist": {                  // 功能白名单（可选）
-    "uuids": ["huawei-uuid-001"] // 白名单内用户享受全量功能，其余仅 chat+dashboard
-  }                               // 未配置或 uuids 为空 = 所有用户受限
+  "whitelist": {                  // 功能白名单（可选，不配置此节 = 全员全量）
+    "enabled": true,              // true=受白名单约束（默认）; false=不受约束，全员全量
+    "uuids": ["huawei-uuid-001"] // enabled=true 时，仅列出的用户享受全量，其余仅 chat+dashboard
+  }
 }
 ```
 
