@@ -121,9 +121,7 @@ function printHeartRateSection(heartRate: HeartRateData): void {
   printSection("Heart Rate", icons.heart);
   const hrData =
     heartRate.readings.map((r) => r.value) ||
-    Array(24)
-      .fill(0)
-      .map((_, i) => 60 + Math.sin(i) * 10);
+    Array.from({ length: 24 }, (_, i) => 60 + Math.sin(i) * 10);
   printKV("Resting", `${c.bold(String(heartRate.restingAvg))} ${c.dim("bpm")}`);
   printKV(
     "Range",

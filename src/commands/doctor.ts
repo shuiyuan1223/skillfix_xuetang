@@ -65,7 +65,7 @@ function checkConfigDirPermissions(): Check {
   try {
     ensureConfigDir();
     const testFile = path.join(configDir, ".test");
-    fs.writeFileSync(testFile, "test");
+    fs.writeFileSync(testFile, "test", { mode: 0o640 });
     fs.unlinkSync(testFile);
     configDirWritable = true;
   } catch {

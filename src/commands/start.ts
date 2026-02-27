@@ -145,11 +145,11 @@ async function startBackground(
 
   const child = spawn(process.argv[0], args, {
     detached: true,
-    stdio: ["ignore", fs.openSync(getLogFile(), "a"), fs.openSync(getLogFile(), "a")],
+    stdio: ["ignore", fs.openSync(getLogFile(), "a", 0o640), fs.openSync(getLogFile(), "a", 0o640)],
     env: { ...process.env, PHA_API_KEY: params.apiKey, CLAUDECODE: undefined },
   });
 
-  fs.writeFileSync(getPidFile(), String(child.pid));
+  fs.writeFileSync(getPidFile(), String(child.pid), { mode: 0o640 });
   child.unref();
 
   await new Promise((resolve) => setTimeout(resolve, 500));

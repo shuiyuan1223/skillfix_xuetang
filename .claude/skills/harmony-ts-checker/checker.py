@@ -423,8 +423,12 @@ class HarmonyChecker:
         """G.EXP.03: 禁止嵌套三元表达式"""
         for i, line in enumerate(self.lines, 1):
             stripped = self._strip_comments(line)
-            # 统计非 ?? 的 ? 出现次数（即三元运算符的 ?）
-            ternary_count = len(re.findall(r'(?<!\?)\?(?!\?)', stripped))
+            # 先移除可选链 ?. 和 TS 条件类型 extends ... ? ... : ...
+            cleaned = re.sub(r'\?\.\s*', '', stripped)       # remove ?.
+            cleaned = re.sub(r'\?\s*:', '?:', cleaned)       # normalize ?: (optional param)
+            cleaned = re.sub(r'\w+\s*\?\s*:', '', cleaned)   # remove param?: type patterns
+            # 统计剩余的真正三元运算符 ?（非 ?? 和非 ?:）
+            ternary_count = len(re.findall(r'(?<!\?)\?(?!\?|:)', cleaned))
             if ternary_count >= 2:
                 self.add_issue("G.EXP.03", "禁止嵌套三元表达式", Severity.ERROR, i,
                                "发现嵌套的三元表达式",
@@ -459,14 +463,21 @@ class HarmonyChecker:
         """G.CTL.06: 条件表达式中不赋值"""
         for i, line in enumerate(self.lines, 1):
             stripped = self._strip_comments(line)
-            # if/while 条件中的单 =（排除 ==, ===, !=, !==, <=, >=, =>）
+            # if/while 条件中的单 =（排除 ==, ===, !=, !==, <=, >=, =>, +=, -=, *=, /=）
             match = re.search(r'\b(?:if|while)\s*\(', stripped)
             if match:
                 paren_content = self._extract_paren(stripped, match.end() - 1)
-                if paren_content and re.search(r'(?<![=!<>])=(?!=)', paren_content):
-                    self.add_issue("G.CTL.06", "条件表达式中不赋值", Severity.ERROR, i,
-                                   "在条件表达式中执行了赋值操作",
-                                   "将赋值移到条件判断之前")
+                if paren_content:
+                    # Remove arrow functions and default params before checking
+                    cleaned = re.sub(r'=>', '', paren_content)
+                    cleaned = re.sub(r'[+\-*/%|&^]?=', '', cleaned)  # remove compound assigns
+                    # Only flag if there's a bare = left after removing all valid patterns
+                    if re.search(r'(?<![=!<>])=(?![=>])', paren_content) and \
+                       not re.search(r'=>', paren_content) and \
+                       not re.search(r'[+\-*/%|&^]=', paren_content):
+                        self.add_issue("G.CTL.06", "条件表达式中不赋值", Severity.ERROR, i,
+                                       "在条件表达式中执行了赋值操作",
+                                       "将赋值移到条件判断之前")
 
     # ========== 函数 ==========
 
@@ -549,19 +560,18 @@ class HarmonyChecker:
         """G.MET.10: 用 rest 语法代替 arguments"""
         for i, line in enumerate(self.lines, 1):
             stripped = self._strip_comments(line)
-            if re.search(r'\barguments\b', stripped):
-                # 排除注释和字符串中的
-                if re.search(r'(?<![\'"])\barguments\s*[\.\[]', stripped) or \
-                   re.search(r'(?<![\'"])\barguments\s*\)', stripped):
-                    self.add_issue("G.MET.10", "用 rest 语法代替 arguments", Severity.ERROR, i,
-                                   "使用了 arguments 对象",
-                                   "改用 rest 语法: function fn(...args) {}")
+            # Only match bare `arguments` keyword, not `.arguments` property access
+            if re.search(r'(?<![.\w])arguments\s*[\.\[\)]', stripped):
+                self.add_issue("G.MET.10", "用 rest 语法代替 arguments", Severity.ERROR, i,
+                               "使用了 arguments 对象",
+                               "改用 rest 语法: function fn(...args) {}")
 
     def check_this_alias(self):
         """Ext-8.3: 禁止 this 赋值给变量"""
         for i, line in enumerate(self.lines, 1):
             stripped = self._strip_comments(line)
-            if re.search(r'\b(?:const|let|var)\s+\w+\s*=\s*this\b', stripped):
+            # Match: const self = this; — but NOT: const x = this.method()
+            if re.search(r'\b(?:const|let|var)\s+\w+\s*=\s*this\s*[;,\n]', stripped):
                 self.add_issue("Ext-8.3", "禁止 this 赋值给变量", Severity.ERROR, i,
                                "将 this 赋值给了变量",
                                "使用箭头函数保持 this 绑定")
@@ -954,10 +964,15 @@ class HarmonyChecker:
                 self.add_issue("SEC.03", "禁止残留调试代码", Severity.ERROR, i,
                                "发现 debugger 语句",
                                "删除 debugger 语句")
-            # 测试框架函数
-            if re.search(r'\b(?:describe|it|test)\s*\(', stripped) and not 'import' in stripped:
+            # 测试框架函数（排除 .test() 正则方法和 test( 在字符串/属性中）
+            if re.search(r'\b(?:describe|it)\s*\(', stripped) and 'import' not in stripped:
                 self.add_issue("SEC.03", "禁止残留测试代码", Severity.ERROR, i,
-                               "非测试文件中发现测试代码（describe/it/test）",
+                               "非测试文件中发现测试代码（describe/it）",
+                               "将测试代码移到 *.test.ts 或 *.spec.ts 文件中")
+            # test() — only match standalone `test(` at statement level, not .test() or "test("
+            if re.search(r'(?<![.\w\'"])test\s*\(', stripped) and 'import' not in stripped:
+                self.add_issue("SEC.03", "禁止残留测试代码", Severity.ERROR, i,
+                               "非测试文件中发现测试代码（test）",
                                "将测试代码移到 *.test.ts 或 *.spec.ts 文件中")
             # .only / .skip
             if re.search(r'\.(only|skip)\s*\(', stripped):

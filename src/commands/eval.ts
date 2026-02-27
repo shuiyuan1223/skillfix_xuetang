@@ -609,7 +609,7 @@ async function runParallelBenchmarks(
   console.log("");
   printHeader(`Benchmark — ${modelEntries.length} models (parallel)`, `${profile} profile`);
 
-  const perModelProgress = new Array(modelEntries.length).fill(0);
+  const perModelProgress = Array.from({ length: modelEntries.length }, () => 0);
   const testsPerModel = getBenchmarkTests({
     profile,
     category: options.category as BenchmarkCategory | undefined,
@@ -1528,7 +1528,7 @@ async function handleExport(options: Record<string, unknown>): Promise<void> {
 
   const data = traceCollector.exportTraces();
   const fs = await import("fs");
-  fs.writeFileSync(options.output as string, data);
+  fs.writeFileSync(options.output as string, data, { mode: 0o640 });
 
   spinner.stop("success");
   success(`Exported ${traces.length} traces to ${c.cyan(options.output as string)}`);

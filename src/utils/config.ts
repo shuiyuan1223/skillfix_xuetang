@@ -443,7 +443,7 @@ export function getConfigPath(): string {
 export function ensureConfigDir(): void {
   const dir = getConfigDir();
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o750 });
   }
 }
 
@@ -742,7 +742,7 @@ export function loadConfig(): PHAConfig {
     if (needsSave) {
       try {
         const clean = stripLegacyFieldsForSave(config);
-        fs.writeFileSync(configPath, JSON.stringify(clean, null, 2));
+        fs.writeFileSync(configPath, JSON.stringify(clean, null, 2), { mode: 0o640 });
       } catch {
         // Best-effort — don't fail loadConfig if write fails
       }
@@ -759,7 +759,7 @@ export function saveConfig(config: PHAConfig): void {
   ensureConfigDir();
   const configPath = getConfigPath();
   const clean = stripLegacyFieldsForSave(config);
-  fs.writeFileSync(configPath, JSON.stringify(clean, null, 2));
+  fs.writeFileSync(configPath, JSON.stringify(clean, null, 2), { mode: 0o640 });
   // Re-sync in-memory legacy fields after save
   syncLegacyFields(config);
 }

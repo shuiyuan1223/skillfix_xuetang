@@ -92,7 +92,7 @@ function handleStateInit(options: { remote?: string }): void {
 
   const gitignorePath = path.join(stateDir, ".gitignore");
   if (!fs.existsSync(gitignorePath)) {
-    fs.writeFileSync(gitignorePath, GITIGNORE_TEMPLATE, "utf-8");
+    fs.writeFileSync(gitignorePath, GITIGNORE_TEMPLATE, { encoding: "utf-8", mode: 0o640 });
     console.log(`${c.green(icons.success)} Created .pha/.gitignore`);
   } else {
     console.log(`${c.dim(`${icons.info} .pha/.gitignore already exists`)}`);
