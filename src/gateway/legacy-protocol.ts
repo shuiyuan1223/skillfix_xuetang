@@ -115,11 +115,9 @@ export class LegacyProtocolAdapter {
       }
 
       case "tool_execution_start": {
-        // Pre-tool buffered text is now confirmed as reasoning — flush it
-        if (!this.hasToolCalled && this.finalText.trim()) {
-          this.send({ event: "data", content: this.finalText, content_type: "reasoning" });
-          this.finalText = "";
-        }
+        // Pre-tool buffered text is discarded — it's internal model thinking,
+        // not meant for the user (often contains draft answers that would duplicate the final reply)
+        this.finalText = "";
 
         this.hasToolCalled = true;
         if (this.state === "pending" || this.state === "reasoning") {
