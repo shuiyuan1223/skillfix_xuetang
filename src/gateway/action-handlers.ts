@@ -82,9 +82,7 @@ import {
   listEvolutionVersions,
   getEvolutionVersionByBranch,
 } from "../memory/db.js";
-import {
-  readBenchmarkProgress,
-} from "../evolution/benchmark-progress.js";
+import { readBenchmarkProgress } from "../evolution/benchmark-progress.js";
 import {
   readFileFromBranch,
   readFileFromRef,
@@ -192,9 +190,7 @@ const handleSaClearChat: ActionHandler = async (session, _action, _payload, send
   session.saLastStreamedText = "";
   session.saSessionId = crypto.randomUUID();
   const saP = getAgentProfile("sa");
-  const saDir = saP.sessionPath
-    ? resolveSessionPath(saP.sessionPath, "system")
-    : undefined;
+  const saDir = saP.sessionPath ? resolveSessionPath(saP.sessionPath, "system") : undefined;
   touchSession(GatewaySession.SA_GLOBAL_UUID, `sa-${session.saSessionId}`, saDir);
   session.sendEvolutionLabUpdate(send);
 };
@@ -437,9 +433,7 @@ const handleSelectCommit: ActionHandler = async (_session, _action, payload, _se
 
 const handleRevertPrompt: ActionHandler = async (session, _action, _payload, send) => {
   if (!session.selectedPrompt) return;
-  setPromptsDir(
-    session.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
-  );
+  setPromptsDir(session.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha");
   try {
     const historyResult = await getPromptHistoryTool.execute({
       name: session.selectedPrompt,
@@ -457,9 +451,7 @@ const handleRevertPrompt: ActionHandler = async (session, _action, _payload, sen
 const handleSelectRevertCommit: ActionHandler = async (session, _action, payload, send) => {
   if (!payload?.commit || !session.selectedPrompt) return;
   const commit = payload.commit as { hash: string };
-  setPromptsDir(
-    session.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha"
-  );
+  setPromptsDir(session.promptsScope === "system" ? "src/prompts/system-agent" : "src/prompts/pha");
   try {
     await revertPromptTool.execute({ name: session.selectedPrompt, commitHash: commit.hash });
   } finally {
@@ -849,12 +841,7 @@ const handleTabChange: ActionHandler = async (session, _action, payload, send) =
 
   const view = session.currentView;
 
-  if (
-    view === "dashboard" ||
-    view === "health" ||
-    view === "sleep" ||
-    view === "activity"
-  ) {
+  if (view === "dashboard" || view === "health" || view === "sleep" || view === "activity") {
     await handleDashboardTabChange(session, tab, send);
   } else if (view === "memory") {
     await handleMemoryTabChange(session, tab, send);
@@ -881,8 +868,14 @@ const handleTabChange: ActionHandler = async (session, _action, payload, send) =
     await session.handleNavigate("settings/logs", send);
   } else {
     type EvolutionTab =
-      | "overview" | "traces" | "evaluations" | "benchmark"
-      | "runs" | "suggestions" | "config" | "versions";
+      | "overview"
+      | "traces"
+      | "evaluations"
+      | "benchmark"
+      | "runs"
+      | "suggestions"
+      | "config"
+      | "versions";
     session.evolutionTab = tab as EvolutionTab;
     await session.handleNavigate("settings/evolution-legacy", send);
   }
@@ -1145,10 +1138,16 @@ const handleSubmitCreateTestCase: ActionHandler = async (session, _action, paylo
     expected: {
       minScore,
       shouldMention: shouldMentionStr
-        ? shouldMentionStr.split(",").map((s) => s.trim()).filter(Boolean)
+        ? shouldMentionStr
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
         : undefined,
       shouldNotMention: shouldNotMentionStr
-        ? shouldNotMentionStr.split(",").map((s) => s.trim()).filter(Boolean)
+        ? shouldNotMentionStr
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
         : undefined,
     },
   });
@@ -1218,9 +1217,9 @@ const handleRunBenchmark: ActionHandler = async (session, action, payload, send)
     sendAll(send, modal);
   } else {
     const profile = (payload?.profile as "quick" | "full") || "quick";
-    session.runBenchmarkAsync(profile, send).catch((err: unknown) =>
-      logEvolution.error("Benchmark failed", { error: err })
-    );
+    session
+      .runBenchmarkAsync(profile, send)
+      .catch((err: unknown) => logEvolution.error("Benchmark failed", { error: err }));
   }
 };
 
@@ -1233,39 +1232,43 @@ const handleSubmitRunBenchmark: ActionHandler = async (session, _action, payload
     const benchmarkModels = getBenchmarkModels();
     for (const [name, modelConfig] of Object.entries(benchmarkModels)) {
       const apiKey = resolveBenchmarkModelApiKey(modelConfig);
-      session.runBenchmarkAsync(profile, send, {
-        provider: modelConfig.provider,
-        modelId: modelConfig.modelId,
-        apiKey,
-        baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
-        presetName: name,
-      }).catch((err: unknown) =>
-        logEvolution.error("Benchmark failed", { preset: name, error: err })
-      );
+      session
+        .runBenchmarkAsync(profile, send, {
+          provider: modelConfig.provider,
+          modelId: modelConfig.modelId,
+          apiKey,
+          baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
+          presetName: name,
+        })
+        .catch((err: unknown) =>
+          logEvolution.error("Benchmark failed", { preset: name, error: err })
+        );
     }
   } else if (modelPreset && modelPreset !== "__default__") {
     const benchmarkModels = getBenchmarkModels();
     const modelConfig = benchmarkModels[modelPreset];
     if (modelConfig) {
       const apiKey = resolveBenchmarkModelApiKey(modelConfig);
-      session.runBenchmarkAsync(profile, send, {
-        provider: modelConfig.provider,
-        modelId: modelConfig.modelId,
-        apiKey,
-        baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
-        presetName: modelPreset,
-      }).catch((err: unknown) =>
-        logEvolution.error("Benchmark failed", { preset: modelPreset, error: err })
-      );
+      session
+        .runBenchmarkAsync(profile, send, {
+          provider: modelConfig.provider,
+          modelId: modelConfig.modelId,
+          apiKey,
+          baseUrl: resolveBenchmarkModelBaseUrl(modelConfig),
+          presetName: modelPreset,
+        })
+        .catch((err: unknown) =>
+          logEvolution.error("Benchmark failed", { preset: modelPreset, error: err })
+        );
     } else {
-      session.runBenchmarkAsync(profile, send).catch((err: unknown) =>
-        logEvolution.error("Benchmark failed", { error: err })
-      );
+      session
+        .runBenchmarkAsync(profile, send)
+        .catch((err: unknown) => logEvolution.error("Benchmark failed", { error: err }));
     }
   } else {
-    session.runBenchmarkAsync(profile, send).catch((err: unknown) =>
-      logEvolution.error("Benchmark failed", { error: err })
-    );
+    session
+      .runBenchmarkAsync(profile, send)
+      .catch((err: unknown) => logEvolution.error("Benchmark failed", { error: err }));
   }
 };
 
@@ -1275,9 +1278,9 @@ const handleRunAutoLoop: ActionHandler = async (_session, _action, _payload, sen
 };
 
 const handleRunDiagnose: ActionHandler = async (session, _action, _payload, send) => {
-  session.runDiagnoseAsync(send).catch((err: unknown) =>
-    logEvolution.error("Diagnose failed", { error: err })
-  );
+  session
+    .runDiagnoseAsync(send)
+    .catch((err: unknown) => logEvolution.error("Diagnose failed", { error: err }));
 };
 
 const handleSwitchVersion: ActionHandler = async (session, _action, payload, send) => {
@@ -1506,16 +1509,23 @@ const handleViewPlan: ActionHandler = async (session, action, _payload, send) =>
     const weekStart = new Date(todayDate);
     weekStart.setDate(todayDate.getDate() - mondayOffset);
     const weekStartStr = weekStart.toISOString().split("T")[0];
-    const [weeklySteps, weeklySleep, todayHR, todayWorkouts, weeklyWorkouts, todayMetrics, todayBodyComp] =
-      await Promise.all([
-        source.getWeeklySteps(today).catch(() => []),
-        source.getWeeklySleep(today).catch(() => []),
-        source.getHeartRate(today).catch(() => null),
-        source.getWorkouts(today).catch(() => []),
-        source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
-        source.getMetrics(today).catch(() => null),
-        source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
-      ]);
+    const [
+      weeklySteps,
+      weeklySleep,
+      todayHR,
+      todayWorkouts,
+      weeklyWorkouts,
+      todayMetrics,
+      todayBodyComp,
+    ] = await Promise.all([
+      source.getWeeklySteps(today).catch(() => []),
+      source.getWeeklySleep(today).catch(() => []),
+      source.getHeartRate(today).catch(() => null),
+      source.getWorkouts(today).catch(() => []),
+      source.getWorkoutsRange?.(weekStartStr, today).catch(() => []) ?? Promise.resolve([]),
+      source.getMetrics(today).catch(() => null),
+      source.getBodyComposition?.(today).catch(() => null) ?? Promise.resolve(null),
+    ]);
     const snapshot: HealthSnapshot = {
       weeklySteps,
       weeklySleep,

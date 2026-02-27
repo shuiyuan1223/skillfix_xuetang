@@ -3354,9 +3354,7 @@ function loadEvolutionTabData(tab: string, tracesPage: number) {
 }
 
 /** Load external benchmark progress for overview/benchmark tabs. */
-function loadEvolutionExternalProgress(
-  tab: string
-):
+function loadEvolutionExternalProgress(tab: string):
   | Record<
       string,
       {
