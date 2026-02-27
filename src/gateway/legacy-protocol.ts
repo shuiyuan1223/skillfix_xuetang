@@ -23,7 +23,7 @@ export interface LegacySSEEvent {
 
 type AdapterState = "initial" | "reasoning" | "searching" | "pending" | "done";
 
-const TOOL_LABELS: Record<string, string> = {
+export const TOOL_LABELS: Record<string, string> = {
   get_health_data: "正在查询健康数据",
   get_heart_rate: "正在查询心率数据",
   get_sleep: "正在查询睡眠数据",

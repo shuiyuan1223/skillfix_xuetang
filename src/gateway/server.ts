@@ -39,7 +39,11 @@ import {
   getBenchmarkConcurrency,
   type LLMProvider,
 } from "../utils/config.js";
-import { installFetchInterceptor, cleanupOldLlmLogs } from "../utils/llm-logger.js";
+import {
+  installFetchInterceptor,
+  cleanupOldLlmLogs,
+  subscribeToLlmLogs,
+} from "../utils/llm-logger.js";
 import { migrateStateDir } from "../utils/state-migration.js";
 import { getMemoryManager } from "../memory/index.js";
 import { consolidateMemory } from "../memory/consolidation.js";
@@ -57,7 +61,7 @@ import { getUserStore } from "../data-sources/huawei/user-store.js";
 import { getHuaweiAuthUrl } from "../services/huawei-oauth-service.js";
 import { runOAuthFlowWithChrome } from "../services/chrome-mcp-client.js";
 import { getRemoteMCPTools } from "../services/remote-mcp-client.js";
-import { LegacyProtocolAdapter, type LegacySSEEvent } from "./legacy-protocol.js";
+import { LegacyProtocolAdapter, TOOL_LABELS, type LegacySSEEvent } from "./legacy-protocol.js";
 import {
   generateChatPage,
   generatePromptDetailModal,
@@ -2866,7 +2870,8 @@ export class GatewaySession {
   async handleLegacyChatSSE(
     content: string,
     writer: WritableStreamDefaultWriter<Uint8Array>,
-    encoder: TextEncoder
+    encoder: TextEncoder,
+    eventObserver?: (event: unknown) => void
   ): Promise<void> {
     let streamClosed = false;
     // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
@@ -2901,6 +2906,11 @@ export class GatewaySession {
       const adapter = new LegacyProtocolAdapter(sseSend);
 
       const unsubscribe = agent.subscribe((event) => {
+        try {
+          eventObserver?.(event);
+        } catch {
+          /* noop */
+        }
         adapter.handleAgentEvent(event);
       });
 
@@ -3602,11 +3612,88 @@ async function handleLegacyChat(req: Request, ctx: FetchContext): Promise<Respon
   return sseStreamResponse(session, body.message, "legacy-chat");
 }
 
+/** Build an event observer for /api/query that logs tool dispatch and agent lifecycle with sn. */
+function buildQueryEventObserver(sn: string | undefined): (event: unknown) => void {
+  const requestStart = Date.now();
+  let currentToolName: string | null = null;
+  let currentToolStart = 0;
+
+  // Accumulate tool_calls and tool_results across the entire query
+  const toolCallsList: string[] = [];
+  const toolResultsList: Array<{ tool: string; result: unknown }> = [];
+
+  // Subscribe to LLM logs to capture the final prompt (last LLM request during this query).
+  // Uses a window-based approach: subscribe at observer creation, unsubscribe at agent_end.
+  let lastLlmMessages: unknown = null;
+  const unsubscribeLlm = subscribeToLlmLogs((pair) => {
+    // Keep overwriting so we always have the LAST LLM call (which produces the final answer)
+    lastLlmMessages = (pair.requestData as Record<string, unknown>)?.messages ?? null;
+  });
+
+  return (event: unknown): void => {
+    const e = event as {
+      type?: string;
+      toolName?: string;
+      isError?: boolean;
+      result?: unknown;
+    };
+
+    switch (e.type) {
+      case "tool_execution_start":
+        currentToolName = e.toolName ?? null;
+        currentToolStart = Date.now();
+        toolCallsList.push(e.toolName ?? "unknown");
+        log.info("[query] tool.start", {
+          sn,
+          phase: "tool_start",
+          tool: e.toolName,
+          label: TOOL_LABELS[e.toolName ?? ""] ?? "正在查询数据",
+        });
+        break;
+
+      case "tool_execution_end": {
+        const durationMs = currentToolName ? Date.now() - currentToolStart : undefined;
+        toolResultsList.push({ tool: e.toolName ?? "unknown", result: e.result });
+        const resultStr = e.result != null ? JSON.stringify(e.result).slice(0, 1000) : undefined;
+        log.info("[query] tool.end", {
+          sn,
+          phase: "tool_end",
+          tool: e.toolName,
+          durationMs,
+          isError: e.isError ?? false,
+          result: resultStr,
+        });
+        currentToolName = null;
+        break;
+      }
+
+      case "agent_end": {
+        unsubscribeLlm();
+        const totalDurationMs = Date.now() - requestStart;
+        log.info("[query] agent.end", { sn, phase: "agent_end", totalDurationMs });
+        // Log summary with tool_calls, tool_results, and final_prompt in one entry
+        log.info("[query] summary", {
+          sn,
+          phase: "summary",
+          tool_calls: toolCallsList.join(", "),
+          tool_results: toolResultsList,
+          final_prompt: lastLlmMessages,
+        });
+        break;
+      }
+
+      default:
+        break;
+    }
+  };
+}
+
 /** Handle POST /api/query — 边想边搜 SSE (refresh_token or client_credentials). */
 async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
   const { readable, writable } = new TransformStream<Uint8Array>();
   const writer = writable.getWriter();
   const encoder = new TextEncoder();
+  const requestStart = Date.now();
 
   const sseSendRaw = (obj: unknown): void => {
     try {
@@ -3617,6 +3704,8 @@ async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
   };
 
   (async () => {
+    let sn: string | undefined;
+    let phase = "parse";
     try {
       const body = (await req.json()) as {
         grant_type?: string;
@@ -3627,40 +3716,84 @@ async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
         client_id?: string;
       };
 
-      const { grant_type = "refresh_token", Authorization, query, sn, uid, client_id } = body;
+      const { grant_type = "refresh_token", Authorization, query, uid, client_id } = body;
+      sn = body.sn;
+
+      // Log request params (mask auth token, keep first 6 chars for tracing)
+      log.info("[query] request", {
+        sn,
+        phase: "request",
+        grant_type,
+        query,
+        uid,
+        client_id,
+        auth_prefix: Authorization ? `${Authorization.slice(0, 6)}...` : undefined,
+      });
 
       if (!Authorization || !query) {
+        log.warn("[query] error", {
+          sn,
+          phase: "validation",
+          error: "Missing required fields: Authorization, query",
+        });
         sseSendRaw({ event: "error", content: "Missing required fields: Authorization, query" });
         sseSendRaw({ event: "finish" });
         writer.close().catch(() => {});
         return;
       }
 
-      log.info("[query] start", { sn, query, grant_type });
+      const eventObserver = buildQueryEventObserver(sn);
 
       if (grant_type === "client_credentials") {
+        phase = "validation";
         if (!uid || !client_id) {
+          log.warn("[query] error", {
+            sn,
+            phase: "validation",
+            error: "Missing required fields: uid, client_id",
+          });
           sseSendRaw({ event: "error", content: "Missing required fields: uid, client_id" });
           sseSendRaw({ event: "finish" });
           writer.close().catch(() => {});
           return;
         }
+
+        phase = "session";
         ensureUserDir(uid);
         const innerDataSource = createInnerDataSourceForUser(uid, Authorization, uid, client_id);
         const session = new GatewaySession(ctx.config, uid, innerDataSource);
-        await session.handleLegacyChatSSE(query, writer, encoder);
+        log.info("[query] session", {
+          sn,
+          phase: "session",
+          userId: uid,
+          sessionId: session.getSessionId(),
+          mode: "client_credentials",
+        });
+
+        phase = "agent";
+        await session.handleLegacyChatSSE(query, writer, encoder, eventObserver);
       } else {
         // grant_type=refresh_token (default)
+        phase = "auth";
         const fullConfig = loadConfig();
         const huaweiConfig = fullConfig.dataSources.huawei;
         if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
+          log.warn("[query] error", {
+            sn,
+            phase: "auth",
+            error: "Huawei credentials not configured",
+          });
           sseSendRaw({ event: "error", content: "Huawei credentials not configured" });
           sseSendRaw({ event: "finish" });
           writer.close().catch(() => {});
           return;
         }
+
+        log.info("[query] auth.start", { sn, phase: "auth_start", grant_type: "refresh_token" });
+
         let userId: string;
         try {
+          const authStart = Date.now();
           const { tokenData, userId: resolvedUid } = await huaweiAuth.refreshTokenAndGetUserId(
             Authorization,
             huaweiConfig.clientId,
@@ -3668,8 +3801,19 @@ async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
           );
           userId = resolvedUid;
           getUserStore().saveToken(userId, tokenData);
+          log.info("[query] auth.success", {
+            sn,
+            phase: "auth_success",
+            userId,
+            durationMs: Date.now() - authStart,
+            tokenExpiry: tokenData.expiresAt,
+          });
         } catch (e) {
-          log.error("[query] token refresh failed", { sn, error: String(e) });
+          log.error("[query] auth.failed", {
+            sn,
+            phase: "auth_failed",
+            error: String(e),
+          });
           sseSendRaw({
             event: "error",
             content: `Token refresh failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -3678,11 +3822,36 @@ async function handleQuery(req: Request, ctx: FetchContext): Promise<Response> {
           writer.close().catch(() => {});
           return;
         }
+
+        phase = "session";
         ensureUserDir(userId);
+        const isNew = !ctx.sessions.has(userId);
         const session = getOrCreateSessionFromMap(ctx.sessions, ctx.config, userId);
-        await session.handleLegacyChatSSE(query, writer, encoder);
+        log.info("[query] session", {
+          sn,
+          phase: "session",
+          userId,
+          sessionId: session.getSessionId(),
+          mode: "refresh_token",
+          isNew,
+        });
+
+        phase = "agent";
+        await session.handleLegacyChatSSE(query, writer, encoder, eventObserver);
       }
+
+      log.info("[query] done", {
+        sn,
+        phase: "done",
+        totalDurationMs: Date.now() - requestStart,
+      });
     } catch (e) {
+      log.error("[query] error", {
+        sn,
+        phase,
+        error: String(e),
+        totalDurationMs: Date.now() - requestStart,
+      });
       try {
         sseSendRaw({ event: "error", content: String(e) });
         sseSendRaw({ event: "finish" });
