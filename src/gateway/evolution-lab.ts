@@ -1486,39 +1486,7 @@ function generateIncidentsTab(ui: A2UIGenerator, data: EvolutionLabData): string
     );
     children.push(table);
 
-    // ---- Inline reclassify panel (shown below table for quick edits) ----
-    const typeEditBtns = (["bug", "effect", "unclassified"] as const).map((t2) =>
-      ui.button(t2, "incident_retype", {
-        variant: "outline",
-        size: "sm",
-        // payload applied per-click — row must be selected via view_incident first
-        payload: { type: t2 },
-      })
-    );
-    const priorityEditBtns = (["high", "medium", "low", "ignore"] as const).map((p) =>
-      ui.button(p, "incident_reprioritize", {
-        variant: "outline",
-        size: "sm",
-        payload: { priority: p },
-      })
-    );
-    children.push(
-      ui.column(
-        [
-          ui.text("点击行查看详情 · 快速改标签：", "caption"),
-          ui.row(
-            [
-              ui.text("类型 →", "caption"),
-              ...typeEditBtns,
-              ui.text("优先级 →", "caption"),
-              ...priorityEditBtns,
-            ],
-            { gap: 6, align: "center" }
-          ),
-        ],
-        { gap: 4, padding: 8 }
-      )
-    );
+    children.push(ui.text("点击行查看详情，可在弹窗中修改状态、类型和优先级", "caption"));
   } else {
     children.push(
       ui.column(
