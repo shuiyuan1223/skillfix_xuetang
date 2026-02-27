@@ -2026,6 +2026,9 @@ export const SETTINGS_ACTIONS = new Set([
   "settings_tags_toggle",
   "settings_copy_config",
   "settings_download_config",
+  "settings_cleanup_sessions",
+  "settings_cleanup_memory_logs",
+  "settings_cleanup_llm_logs",
 ]);
 
 /**

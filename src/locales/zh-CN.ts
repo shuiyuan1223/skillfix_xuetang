@@ -718,6 +718,12 @@ export const zhCN: LocaleMessages = {
     rawConfig: "原始配置",
     copyConfig: "复制到剪贴板",
     downloadConfig: "下载 config.json",
+    sectionDataManagement: "数据管理",
+    dataManagementDesc: "清理历史会话、记忆日志和 LLM 调试日志，释放磁盘空间。",
+    cleanupSessions: "清理会话 (>30天)",
+    cleanupMemoryLogs: "清理记忆日志 (>90天)",
+    cleanupLlmLogs: "清理 LLM 日志 (>7天)",
+    cleanupDone: "清理完成",
   },
 
   plans: {

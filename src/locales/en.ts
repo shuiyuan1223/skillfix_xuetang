@@ -729,6 +729,13 @@ export const en: LocaleMessages = {
     rawConfig: "Raw Config",
     copyConfig: "Copy to Clipboard",
     downloadConfig: "Download config.json",
+    sectionDataManagement: "Data Management",
+    dataManagementDesc:
+      "Clean up old sessions, memory logs, and LLM debug logs to free disk space.",
+    cleanupSessions: "Clean Sessions (>30d)",
+    cleanupMemoryLogs: "Clean Memory Logs (>90d)",
+    cleanupLlmLogs: "Clean LLM Logs (>7d)",
+    cleanupDone: "Cleanup done",
   },
 
   plans: {

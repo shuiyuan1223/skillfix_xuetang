@@ -149,11 +149,19 @@ export interface OrchestratorConfig {
 // Existing types (kept for backward compatibility)
 // ============================================================================
 
+export interface LLMLoggingConfig {
+  /** Log full request/response bodies (default: false — metadata only). */
+  includeContent?: boolean;
+  /** LLM log retention in days (default: 7). */
+  retentionDays?: number;
+}
+
 export interface LLMConfig {
   provider: LLMProvider;
   modelId?: string;
   apiKey?: string;
   baseUrl?: string;
+  logging?: LLMLoggingConfig;
 }
 
 export interface BenchmarkModelConfig {

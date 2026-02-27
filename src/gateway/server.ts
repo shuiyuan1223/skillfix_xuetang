@@ -52,6 +52,8 @@ import {
   appendToSession,
   loadLatestSession,
   resolveSessionPath,
+  cleanupOldSessions,
+  cleanupOldMemoryLogs,
   type SessionEntry,
 } from "../memory/session-store.js";
 
@@ -3618,6 +3620,8 @@ async function runStartupTasks(): Promise<void> {
     /* optional */
   }
   cleanupOldLlmLogs();
+  cleanupOldSessions();
+  cleanupOldMemoryLogs();
   const interrupted = markInterruptedBenchmarkRuns();
   if (interrupted > 0) log.info("Cleaned up interrupted benchmark runs", { count: interrupted });
   clearBenchmarkProgress();

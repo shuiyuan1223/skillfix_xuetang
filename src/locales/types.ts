@@ -745,6 +745,12 @@ export interface LocaleMessages {
     rawConfig: string;
     copyConfig: string;
     downloadConfig: string;
+    sectionDataManagement: string;
+    dataManagementDesc: string;
+    cleanupSessions: string;
+    cleanupMemoryLogs: string;
+    cleanupLlmLogs: string;
+    cleanupDone: string;
   };
 
   // Plans page

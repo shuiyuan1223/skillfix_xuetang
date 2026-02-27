@@ -2609,6 +2609,27 @@ function buildSettingsRawConfigCard(ui: A2UIGenerator, data: SettingsPageData): 
   return ui.card([rawEditor, rawActions], { title: t("settings.rawConfig"), padding: 20 });
 }
 
+function buildSettingsDataManagementCard(ui: A2UIGenerator): string {
+  const desc = ui.text(t("settings.dataManagementDesc"), "caption");
+  const sessionsBtn = ui.button(t("settings.cleanupSessions"), "settings_cleanup_sessions", {
+    variant: "outline",
+    size: "sm",
+    icon: "refresh-cw",
+  });
+  const memoryBtn = ui.button(t("settings.cleanupMemoryLogs"), "settings_cleanup_memory_logs", {
+    variant: "outline",
+    size: "sm",
+    icon: "refresh-cw",
+  });
+  const llmBtn = ui.button(t("settings.cleanupLlmLogs"), "settings_cleanup_llm_logs", {
+    variant: "outline",
+    size: "sm",
+    icon: "refresh-cw",
+  });
+  const btns = ui.row([sessionsBtn, memoryBtn, llmBtn], { gap: 8, style: "flex-wrap: wrap;" });
+  return ui.card([desc, btns], { title: t("settings.sectionDataManagement"), padding: 20 });
+}
+
 export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
   const ui = new A2UIGenerator("main");
   const saveIcon: SaveIconOpts = {
@@ -2640,6 +2661,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     buildSettingsBenchmarkCard(ui, data, saveIcon),
     buildSettingsMcpCard(ui, data, saveIcon),
     buildSettingsPluginsCard(ui, data, saveIcon),
+    buildSettingsDataManagementCard(ui),
     buildSettingsRawConfigCard(ui, data)
   );
   const root = ui.column(cards, { gap: 24, padding: 24 });

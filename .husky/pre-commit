@@ -1,1 +1,2 @@
+export PATH="/Users/foreignbill/.bun/bin:$PATH"
 bunx lint-staged
