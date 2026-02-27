@@ -10,9 +10,13 @@ import {
   ensureConfigDir,
   saveConfig,
   getConfigDir,
+  getStateDir,
   PROVIDER_CONFIGS,
+  isCryptoReady,
+  countPlaintextSensitiveFields,
   type LLMProvider,
 } from "../utils/config.js";
+import { getThirdKeySource } from "../utils/crypto.js";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -213,6 +217,68 @@ function checkDatabase(): Check {
   };
 }
 
+function checkEncryption(): Check[] {
+  const checks: Check[] = [];
+  const stateDir = getStateDir();
+  const ready = isCryptoReady(stateDir);
+
+  // Key files check
+  const keyAPath = path.join(stateDir, "keys", "key-a.bin");
+  const keyBPath = path.join(stateDir, "keys", "key-b.bin");
+  const keyAExists = fs.existsSync(keyAPath);
+  const keyBExists = fs.existsSync(keyBPath);
+
+  checks.push({
+    name: "Encryption Key Files",
+    status: keyAExists && keyBExists ? "pass" : "warn",
+    message:
+      keyAExists && keyBExists
+        ? "key-a.bin, key-b.bin present"
+        : `Missing: ${[!keyAExists && "key-a.bin", !keyBExists && "key-b.bin"].filter(Boolean).join(", ")}`,
+    detail: path.join(stateDir, "keys/"),
+    fixHint: keyAExists && keyBExists ? undefined : "pha encrypt-config",
+  });
+
+  // Third key source check
+  if (ready) {
+    const source = getThirdKeySource();
+    checks.push({
+      name: "Third-Party Key",
+      status: source === "environment" ? "pass" : "warn",
+      message:
+        source === "environment"
+          ? "PHA_THIRD_KEY (from environment)"
+          : "Using machine fingerprint fallback (dev mode)",
+      detail:
+        source === "machine-fingerprint"
+          ? "Set PHA_THIRD_KEY env for production security"
+          : undefined,
+      fixHint: source === "machine-fingerprint" ? "export PHA_THIRD_KEY=<your-secret>" : undefined,
+    });
+  }
+
+  // Plaintext fields check
+  if (isConfigured()) {
+    const plaintextCount = countPlaintextSensitiveFields();
+    if (plaintextCount > 0) {
+      checks.push({
+        name: "Sensitive Field Encryption",
+        status: "warn",
+        message: `${plaintextCount} sensitive field(s) still in plaintext`,
+        fixHint: "pha encrypt-config",
+      });
+    } else {
+      checks.push({
+        name: "Sensitive Field Encryption",
+        status: "pass",
+        message: "All sensitive fields encrypted",
+      });
+    }
+  }
+
+  return checks;
+}
+
 async function runAllChecks(): Promise<Check[]> {
   const checks: Check[] = [];
   const configExists = isConfigured();
@@ -236,6 +302,10 @@ async function runAllChecks(): Promise<Check[]> {
   }
 
   checks.push(checkDatabase());
+
+  // Encryption subsystem checks
+  checks.push(...checkEncryption());
+
   return checks;
 }
 

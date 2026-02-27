@@ -9,6 +9,7 @@ import { Database } from "bun:sqlite";
 import * as path from "path";
 import { mkdirSync, existsSync } from "fs";
 import { getStateDir, ensureConfigDir } from "../../utils/config.js";
+import { encrypt, decrypt } from "../../utils/crypto.js";
 import type { TokenData } from "./huawei-types.js";
 
 const DB_FILE = path.join("db", "oauth.db");
@@ -58,9 +59,10 @@ export class UserStore {
   }
 
   /**
-   * Save or update token for a user
+   * Save or update token for a user (auto-encrypts token values)
    */
   saveToken(uuid: string, token: TokenData): void {
+    const stateDir = getStateDir();
     const stmt = this.db.prepare(`
       INSERT INTO users (uuid, access_token, refresh_token, expires_at, token_type, scope, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -75,8 +77,8 @@ export class UserStore {
 
     stmt.run(
       uuid,
-      token.accessToken,
-      token.refreshToken,
+      encrypt(token.accessToken, stateDir),
+      encrypt(token.refreshToken, stateDir),
       token.expiresAt,
       token.tokenType || null,
       token.scope || null,
@@ -85,7 +87,7 @@ export class UserStore {
   }
 
   /**
-   * Get token for a user
+   * Get token for a user (auto-decrypts token values)
    */
   getToken(uuid: string): UserToken | null {
     const stmt = this.db.prepare(`
@@ -105,10 +107,11 @@ export class UserStore {
 
     if (!row) return null;
 
+    const stateDir = getStateDir();
     return {
       uuid: row.uuid,
-      accessToken: row.access_token,
-      refreshToken: row.refresh_token,
+      accessToken: decrypt(row.access_token, stateDir),
+      refreshToken: decrypt(row.refresh_token, stateDir),
       expiresAt: row.expires_at,
       tokenType: row.token_type || undefined,
       scope: row.scope || undefined,

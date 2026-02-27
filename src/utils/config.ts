@@ -12,6 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { encrypt, decrypt, isEncrypted, ensureKeyFiles, isCryptoReady } from "./crypto.js";
 
 // Session-scoped user ID (set during tool execution via runWithUserId)
 const userIdStore = new AsyncLocalStorage<string>();
@@ -449,6 +450,108 @@ export function ensureConfigDir(): void {
 }
 
 // ============================================================================
+// Sensitive field encryption
+// ============================================================================
+
+/** Dot-paths of fields that must be encrypted on disk. '*' matches any key. */
+const SENSITIVE_FIELDS = [
+  "llm.apiKey",
+  "models.providers.*.apiKey",
+  "dataSources.huawei.clientSecret",
+  "mcp.remoteServers.*.apiKey",
+];
+
+/**
+ * Recursively walk an object tree and transform leaf values at matching paths.
+ * Supports wildcard '*' to match any key in an object.
+ */
+function walkAndTransform(
+  obj: Record<string, unknown>,
+  pathParts: string[],
+  index: number,
+  transform: (v: unknown) => unknown
+): void {
+  if (index >= pathParts.length || obj == null || typeof obj !== "object") return;
+
+  const part = pathParts[index];
+  const isLast = index === pathParts.length - 1;
+
+  if (part === "*") {
+    // Wildcard: iterate all keys at this level
+    for (const key of Object.keys(obj)) {
+      const child = obj[key];
+      if (isLast) {
+        obj[key] = transform(child);
+      } else if (child != null && typeof child === "object") {
+        walkAndTransform(child as Record<string, unknown>, pathParts, index + 1, transform);
+      }
+    }
+  } else if (isLast) {
+    if (part in obj) {
+      obj[part] = transform(obj[part]);
+    }
+  } else {
+    const child = obj[part];
+    if (child != null && typeof child === "object") {
+      walkAndTransform(child as Record<string, unknown>, pathParts, index + 1, transform);
+    }
+  }
+}
+
+/** Encrypt all sensitive fields in-place (skip already-encrypted values) */
+function encryptSensitiveFields(obj: Record<string, unknown>, stateDir: string): void {
+  for (const fieldPath of SENSITIVE_FIELDS) {
+    walkAndTransform(obj, fieldPath.split("."), 0, (value) => {
+      if (typeof value === "string" && value && !isEncrypted(value)) {
+        return encrypt(value, stateDir);
+      }
+      return value;
+    });
+  }
+}
+
+/** Decrypt all sensitive fields in-place (plain values pass through) */
+function decryptSensitiveFields(obj: Record<string, unknown>, stateDir: string): void {
+  for (const fieldPath of SENSITIVE_FIELDS) {
+    walkAndTransform(obj, fieldPath.split("."), 0, (value) => {
+      if (typeof value === "string" && isEncrypted(value)) {
+        return decrypt(value, stateDir);
+      }
+      return value;
+    });
+  }
+}
+
+/**
+ * Count how many sensitive fields are still in plaintext (not encrypted).
+ * Used by `pha doctor` to report migration status.
+ */
+export function countPlaintextSensitiveFields(configPath?: string): number {
+  const cfgPath = configPath || getConfigPath();
+  if (!fs.existsSync(cfgPath)) return 0;
+
+  try {
+    const content = fs.readFileSync(cfgPath, "utf-8");
+    const raw = JSON.parse(content);
+    let count = 0;
+    for (const fieldPath of SENSITIVE_FIELDS) {
+      walkAndTransform(raw, fieldPath.split("."), 0, (value) => {
+        if (typeof value === "string" && value && !isEncrypted(value)) {
+          count++;
+        }
+        return value; // don't mutate
+      });
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
+// Re-export crypto utilities for convenience
+export { isCryptoReady, ensureKeyFiles, isEncrypted, encrypt, decrypt };
+
+// ============================================================================
 // Migration: old flat config → new unified model repository
 // ============================================================================
 
@@ -716,6 +819,16 @@ export function loadConfig(): PHAConfig {
   try {
     const content = fs.readFileSync(configPath, "utf-8");
     const loaded = JSON.parse(content);
+
+    // Decrypt sensitive fields before merging (operates on raw loaded object)
+    try {
+      const stateDir = getStateDir();
+      decryptSensitiveFields(loaded, stateDir);
+    } catch {
+      // If decryption fails (missing key files on first run, etc.), proceed with raw values.
+      // Fields that couldn't be decrypted stay as-is (enc:v1:... strings).
+    }
+
     // Deep-merge known nested sections so partial user configs
     // (e.g. { gateway: { port: 9000 } }) don't lose defaults like autoStart.
     const config = {
@@ -743,6 +856,12 @@ export function loadConfig(): PHAConfig {
     if (needsSave) {
       try {
         const clean = stripLegacyFieldsForSave(config);
+        // Encrypt sensitive fields before writing back
+        try {
+          encryptSensitiveFields(clean, getStateDir());
+        } catch {
+          // Best-effort encryption during migration
+        }
         fs.writeFileSync(configPath, JSON.stringify(clean, null, 2), { mode: 0o640 });
       } catch {
         // Best-effort — don't fail loadConfig if write fails
@@ -760,6 +879,16 @@ export function saveConfig(config: PHAConfig): void {
   ensureConfigDir();
   const configPath = getConfigPath();
   const clean = stripLegacyFieldsForSave(config);
+
+  // Encrypt sensitive fields before writing to disk
+  try {
+    const stateDir = getStateDir();
+    encryptSensitiveFields(clean, stateDir);
+  } catch {
+    // If encryption fails (e.g. key file issues), write plaintext as fallback.
+    // This preserves backward compatibility during first-time setup.
+  }
+
   fs.writeFileSync(configPath, JSON.stringify(clean, null, 2), { mode: 0o640 });
   // Re-sync in-memory legacy fields after save
   syncLegacyFields(config);
