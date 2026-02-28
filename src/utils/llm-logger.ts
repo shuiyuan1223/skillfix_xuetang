@@ -7,7 +7,7 @@
 
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { getStateDir } from './config.js';
+import { getStateDir, loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('LLM/Logger');
@@ -16,7 +16,7 @@ function getLogDir(): string {
   return join(getStateDir(), 'llm-logs');
 }
 
-// LLM API endpoints to intercept
+// LLM API endpoints to intercept (mutable so config-defined proxies can be added at startup)
 const LLM_API_PATTERNS: { domain: string; name: string }[] = [
   { domain: 'api.openai.com', name: 'openai' },
   { domain: 'api.anthropic.com', name: 'anthropic' },
@@ -28,6 +28,18 @@ const LLM_API_PATTERNS: { domain: string; name: string }[] = [
   { domain: 'api.deepseek.com', name: 'deepseek' },
   { domain: 'api.moonshot.cn', name: 'moonshot' },
 ];
+
+/** Register an extra domain to intercept (e.g. custom OpenAI-compatible proxy). */
+function registerLLMDomain(baseUrl: string, name: string): void {
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    if (!LLM_API_PATTERNS.some((p) => p.domain === hostname)) {
+      LLM_API_PATTERNS.push({ domain: hostname, name });
+    }
+  } catch {
+    // invalid URL, skip
+  }
+}
 
 function ensureLogDir(): void {
   if (!existsSync(getLogDir())) {
@@ -117,6 +129,41 @@ function notifyLlmSubscribers(entry: Record<string, unknown>): void {
       }
     }
   }
+}
+
+/** Whether full req/resp content should be logged (opt-in). */
+function isContentLoggingEnabled(): boolean {
+  try {
+    return loadConfig().llm?.logging?.includeContent === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Extract tool call names from a rebuilt response (metadata-only mode). */
+function extractToolCallNamesFromResponse(responseData: unknown): string[] {
+  if (!responseData || typeof responseData !== 'object') return [];
+  const d = responseData as Record<string, unknown>;
+  // Anthropic rebuilt: { type:"message", content:[{type:"tool_use",name:"..."}] }
+  if (d.type === 'message' && Array.isArray(d.content)) {
+    return (d.content as Array<Record<string, unknown>>)
+      .filter((c) => c.type === 'tool_use' && typeof c.name === 'string')
+      .map((c) => c.name as string);
+  }
+  // OpenAI rebuilt: { choices:[{message:{tool_calls:[{function:{name}}]}}] }
+  if (Array.isArray(d.choices) && d.choices.length > 0) {
+    const msg = (d.choices[0] as Record<string, unknown>).message as Record<string, unknown> | undefined;
+    const toolCalls = msg?.tool_calls;
+    if (Array.isArray(toolCalls)) {
+      return toolCalls
+        .map((tc: unknown) => {
+          const fn = (tc as Record<string, unknown>).function as Record<string, unknown> | undefined;
+          return fn?.name as string | undefined;
+        })
+        .filter((n): n is string => typeof n === 'string');
+    }
+  }
+  return [];
 }
 
 function logEntry(entry: Record<string, unknown>): void {
@@ -435,6 +482,10 @@ export interface LLMLogEntry {
   model?: string;
   status?: number;
   stream?: boolean;
+  // Pre-extracted metadata (populated in metadata-only mode so data can be omitted)
+  inputTokens?: number;
+  outputTokens?: number;
+  toolCallNames?: string[];
   data?: unknown;
 }
 
@@ -538,7 +589,13 @@ function calcLatency(reqTs: string, resTs?: string): number | undefined {
 
 /** Build a LLMCallPair from a request entry and optional response */
 function buildCallPair(id: number, req: LLMLogEntry, res?: LLMLogEntry): LLMCallPair {
-  const tokenUsage = res ? extractTokenUsage(res.data) : {};
+  // Token usage: prefer pre-extracted fields (metadata-only mode), fall back to parsing data
+  let tokenUsage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
+  if (res) {
+    tokenUsage = res.data
+      ? extractTokenUsage(res.data)
+      : { inputTokens: res.inputTokens, outputTokens: res.outputTokens };
+  }
   return {
     id,
     timestamp: req.timestamp,
@@ -605,6 +662,22 @@ export function getLlmModels(date?: string): string[] {
  * Install fetch interceptor to log all LLM API requests/responses
  */
 export function installFetchInterceptor(): void {
+  // Register any custom baseUrl from config so proxies (e.g. yunwu.ai) are also intercepted
+  try {
+    const cfg = loadConfig();
+    // config.models.providers.*.baseUrl
+    const providers = cfg.models?.providers;
+    if (providers) {
+      for (const [providerName, providerCfg] of Object.entries(providers)) {
+        if (providerCfg.baseUrl) registerLLMDomain(providerCfg.baseUrl, providerName);
+      }
+    }
+    // Legacy: config.llm.baseUrl
+    if (cfg.llm?.baseUrl) registerLLMDomain(cfg.llm.baseUrl, cfg.llm.provider ?? 'custom');
+  } catch {
+    // Config not available yet (e.g. first-run), skip
+  }
+
   const originalFetch = globalThis.fetch.bind(globalThis);
 
   const interceptedFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -634,13 +707,14 @@ export function installFetchInterceptor(): void {
 
     const meta = extractMeta(url, requestBody);
     const isStream = requestBody?.stream === true;
+    const includeContent = isContentLoggingEnabled();
 
-    // Log request with full body and metadata
+    // Log request: always log metadata; only include body when content logging enabled
     logEntry({
       type: 'request',
       url,
       ...meta,
-      data: requestBody,
+      ...(includeContent ? { data: requestBody } : {}),
     });
 
     // Make actual request
@@ -662,11 +736,9 @@ export function installFetchInterceptor(): void {
         if (result) {
           responseData = result.rebuilt;
         } else {
-          // Fallback: couldn't parse SSE events — include raw text for debugging
           responseData = { _raw_sse: true, _length: text.length, _preview: text.slice(0, 500) };
         }
       } else {
-        // Non-streaming: parse JSON directly
         try {
           responseData = JSON.parse(text);
         } catch {
@@ -674,13 +746,22 @@ export function installFetchInterceptor(): void {
         }
       }
 
+      // Always extract token counts and tool names for metadata
+      const tokens = extractTokenUsage(responseData);
+      const toolCallNames = extractToolCallNamesFromResponse(responseData);
+
       logEntry({
         type: 'response',
         url,
         ...meta,
         status: response.status,
         ...(isSSE ? { stream: true } : {}),
-        data: responseData,
+        // Pre-extracted metadata (always logged)
+        ...(tokens.inputTokens != null ? { inputTokens: tokens.inputTokens } : {}),
+        ...(tokens.outputTokens != null ? { outputTokens: tokens.outputTokens } : {}),
+        ...(toolCallNames.length > 0 ? { toolCallNames } : {}),
+        // Full body only when content logging enabled
+        ...(includeContent ? { data: responseData } : {}),
       });
     });
 
@@ -696,12 +777,22 @@ export function installFetchInterceptor(): void {
 /**
  * Clean up old LLM log files (older than maxAgeDays).
  */
-export function cleanupOldLlmLogs(maxAgeDays: number = 30): void {
+export function cleanupOldLlmLogs(maxAgeDays?: number): void {
+  // Default to config value or 30 days
+  const days =
+    maxAgeDays ??
+    (() => {
+      try {
+        return loadConfig().llm?.logging?.retentionDays ?? 30;
+      } catch {
+        return 30;
+      }
+    })();
   if (!existsSync(getLogDir())) {
     return;
   }
 
-  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   let deleted = 0;
 
   try {

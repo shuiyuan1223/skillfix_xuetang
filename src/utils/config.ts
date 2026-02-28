@@ -149,11 +149,19 @@ export interface OrchestratorConfig {
 // Existing types (kept for backward compatibility)
 // ============================================================================
 
+export interface LLMLoggingConfig {
+  /** Log full request/response bodies (default: false — metadata only). */
+  includeContent?: boolean;
+  /** LLM log retention in days (default: 7). */
+  retentionDays?: number;
+}
+
 export interface LLMConfig {
   provider: LLMProvider;
   modelId?: string;
   apiKey?: string;
   baseUrl?: string;
+  logging?: LLMLoggingConfig;
 }
 
 export interface BenchmarkModelConfig {
@@ -266,6 +274,15 @@ export interface PHAConfig {
   proactive?: {
     enabled?: boolean;
     checkIntervalMinutes?: number;
+  };
+  /** Slack integration configuration */
+  slack?: {
+    /** App-Level Token (xapp-...) for Socket Mode — obtained from Slack App settings */
+    appToken?: string;
+    /** Bot Token (xoxb-...) for posting replies and resolving user names */
+    botToken?: string;
+    /** Optional: only ingest messages from this channel ID (e.g. "C01234ABCDE") */
+    channelId?: string;
   };
   /** Plugin system configuration */
   plugins?: {

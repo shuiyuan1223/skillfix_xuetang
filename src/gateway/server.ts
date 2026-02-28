@@ -44,7 +44,14 @@ import { installFetchInterceptor, cleanupOldLlmLogs, subscribeToLlmLogs } from '
 import { migrateStateDir } from '../utils/state-migration.js';
 import { getMemoryManager } from '../memory/index.js';
 import { consolidateMemory } from '../memory/consolidation.js';
-import { appendToSession, loadLatestSession, resolveSessionPath, type SessionEntry } from '../memory/session-store.js';
+import {
+  appendToSession,
+  loadLatestSession,
+  resolveSessionPath,
+  cleanupOldSessions,
+  cleanupOldMemoryLogs,
+  type SessionEntry,
+} from '../memory/session-store.js';
 
 // Install fetch interceptor to log raw LLM API requests/responses
 installFetchInterceptor();
@@ -112,6 +119,13 @@ import {
   getBenchmarkRun,
   getScoreTrend,
   markInterruptedBenchmarkRuns,
+  deleteBenchmarkRun,
+  listIncidents,
+  getIncidentStats,
+  type IncidentRow,
+  type IncidentStatus,
+  type IncidentType,
+  type IncidentPriority,
 } from '../memory/db.js';
 import { BenchmarkRunner } from '../evolution/benchmark-runner.js';
 import {
@@ -389,22 +403,93 @@ function registerAPIRoutes(app: Hono): void {
     const body = await c.req.json();
     return c.json(await mcpHandler.callTool({ name: body.name, arguments: body.arguments || {} }));
   });
+  // Slack webhook endpoint — handles three integration modes:
+  //   1. url_verification  — Slack challenge during app setup
+  //   2. event_callback    — Events API (message in dedicated channel)
+  //   3. Slash Command / Outgoing Webhook — text + command/trigger_word fields
   app.post('/api/integrations/slack/webhook', async (c) => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const body = await c.req.json();
+
+    // ── 1. URL verification (Slack sends this when you save the Request URL) ──
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (body.type === 'url_verification') {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      return c.json({ challenge: body.challenge });
+    }
+
+    // ── 2. Events API: event_callback ─────────────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (body.type === 'event_callback') {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const event = body.event as Record<string, unknown> | undefined;
+      if (!event || event.type !== 'message' || event.bot_id) {
+        // Ignore non-message events and bot messages (avoid infinite loops)
+        return c.json({ ok: true });
+      }
+
+      // Respond 200 immediately — Slack requires response within 3 seconds
+      // Classification (LLM) runs asynchronously after response
+      void (async (): Promise<void> => {
+        try {
+          const { handleSlackWebhook } = await import('../integrations/slack-webhook.js');
+          const judgeModel = resolveAgentProfileModel('pha');
+          const llmCall = async (prompt: string): Promise<string> => {
+            const { MockDataSource: JudgeMockDS } = await import('../data-sources/mock.js');
+            const judgeAgent = await createPHAAgent({
+              apiKey: judgeModel.apiKey,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              provider: judgeModel.provider as any,
+              modelId: judgeModel.modelId,
+              baseUrl: judgeModel.baseUrl,
+              dataSource: new JudgeMockDS(),
+            });
+            return judgeAgent.chatAndWait(prompt);
+          };
+          await handleSlackWebhook(
+            {
+              text: String(event.text ?? ''),
+              user_id: String(event.user ?? ''),
+              channel_id: String(event.channel ?? ''),
+            },
+            llmCall
+          );
+        } catch {
+          // Errors logged silently — not surfaced to Slack for async events
+        }
+      })();
+
+      return c.json({ ok: true });
+    }
+
+    // ── 3. Slash Command / Outgoing Webhook ───────────────────────────────────
     try {
-      const body = await c.req.json();
       const { handleSlackWebhook } = await import('../integrations/slack-webhook.js');
-      const result = await handleSlackWebhook(body);
+      const judgeModel = resolveAgentProfileModel('pha');
+      const llmCall = async (prompt: string): Promise<string> => {
+        const { MockDataSource: JudgeMockDS } = await import('../data-sources/mock.js');
+        const judgeAgent = await createPHAAgent({
+          apiKey: judgeModel.apiKey,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          provider: judgeModel.provider as any,
+          modelId: judgeModel.modelId,
+          baseUrl: judgeModel.baseUrl,
+          dataSource: new JudgeMockDS(),
+        });
+        return judgeAgent.chatAndWait(prompt);
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+      const result = await handleSlackWebhook(body, llmCall);
       return c.json({
         response_type: 'in_channel',
-        text: result.issueUrl
-          ? `Feedback received! Issue created: ${result.issueUrl}`
-          : `Feedback received and classified as: ${result.classification.category} (${result.classification.severity})${result.error ? ` [Note: ${result.error}]` : ''}`,
+        text: result.message,
       });
     } catch (error) {
       return c.json(
         {
           response_type: 'ephemeral',
-          text: `Error processing feedback: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error processing bad case: ${error instanceof Error ? error.message : String(error)}`,
         },
         500
       );
@@ -905,9 +990,11 @@ export class GatewaySession {
   activeVersionBranch: string | null = null;
 
   // Evolution Lab state (5-Tab Dashboard)
-  evolutionActiveTab: 'overview' | 'benchmark' | 'versions' | 'data' = 'overview';
+  evolutionActiveTab: 'overview' | 'benchmark' | 'versions' | 'data' | 'incidents' = 'overview';
   evolutionDataSubTab: 'traces' | 'evaluations' | 'suggestions' = 'traces';
   evolutionSelectedVersion: string | null = null;
+  incidentsFilter: { status?: string; type?: string } = {};
+  selectedIncidentId: string | null = null;
   systemAgentChatMessages: PartsChatMessage[] = [];
   systemAgentStreaming = false;
   systemAgentStreamingContent = '';
@@ -2282,6 +2369,7 @@ export class GatewaySession {
       dataSubTab: this.evolutionDataSubTab,
       tracesPage: this.tracesPage,
       ...tabSpecific,
+      incidentsFilter: this.incidentsFilter,
     };
   }
 
@@ -2297,8 +2385,43 @@ export class GatewaySession {
         return this._loadVersionsTabData(benchmarkRuns);
       case 'data':
         return this._loadDataTabData();
+      case 'incidents':
+        return this._loadIncidentsTabData();
       default:
         return {};
+    }
+  }
+
+  /** Load incidents tab data. */
+  private _loadIncidentsTabData(): Pick<EvolutionLabData, 'incidents' | 'incidentStats'> {
+    try {
+      const filter = this.incidentsFilter;
+      const rows = listIncidents({
+        status: filter.status as IncidentStatus | undefined,
+        type: filter.type as IncidentType | undefined,
+        limit: 100,
+      });
+      return {
+        incidents: rows.map((r: IncidentRow) => ({
+          id: r.id,
+          timestamp: r.timestamp,
+          source: r.source,
+          reporter: r.reporter,
+          rawText: r.raw_text,
+          traceId: r.trace_id,
+          type: r.type,
+          status: r.status,
+          priority: r.priority,
+          classificationConfidence: r.classification_confidence,
+          classificationReason: r.classification_reason,
+          githubIssueUrl: r.github_issue_url,
+          githubIssueNumber: r.github_issue_number,
+          notes: r.notes,
+        })),
+        incidentStats: getIncidentStats(),
+      };
+    } catch {
+      return {};
     }
   }
 
@@ -3503,6 +3626,8 @@ async function runStartupTasks(): Promise<void> {
     /* optional */
   }
   cleanupOldLlmLogs();
+  cleanupOldSessions();
+  cleanupOldMemoryLogs();
   const interrupted = markInterruptedBenchmarkRuns();
   if (interrupted > 0) {
     log.info('Cleaned up interrupted benchmark runs', { count: interrupted });
@@ -4137,6 +4262,34 @@ export async function startGateway(
   log.info(`A2UI SSE at http://${displayHost}:${port}${basePath}/api/a2ui/events`);
   log.info(`MCP JSON-RPC at http://${displayHost}:${port}${basePath}/api/mcp`);
   log.info(`A2A Agent Card at http://${displayHost}:${port}${basePath}/.well-known/agent.json`);
+
+  // Start Slack Socket Mode if configured
+  const slackConfig = loadConfig().slack;
+  if (slackConfig?.appToken) {
+    void (async (): Promise<void> => {
+      try {
+        const { startSlackSocketMode } = await import('../integrations/slack-socket.js');
+        const judgeModel = resolveAgentProfileModel('pha');
+        const slackLlmCall = async (prompt: string): Promise<string> => {
+          const { MockDataSource: SlackMockDS } = await import('../data-sources/mock.js');
+          const slackAgent = await createPHAAgent({
+            apiKey: judgeModel.apiKey,
+            provider: judgeModel.provider as LLMProvider,
+            modelId: judgeModel.modelId,
+            baseUrl: judgeModel.baseUrl,
+            dataSource: new SlackMockDS(),
+          });
+          return slackAgent.chatAndWait(prompt);
+        };
+        startSlackSocketMode(slackConfig.appToken!, slackConfig.botToken, slackConfig.channelId, slackLlmCall);
+        log.info('Slack Socket Mode started', {
+          channelId: slackConfig.channelId ?? 'all channels',
+        });
+      } catch (err) {
+        log.warn('Slack Socket Mode failed to start', { error: String(err) });
+      }
+    })();
+  }
 
   installProcessHandlers(port);
 

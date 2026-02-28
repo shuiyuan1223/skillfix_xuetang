@@ -307,6 +307,21 @@ export interface LocaleMessages {
     noTracesHint: string;
     noSuggestionsHint: string;
     noEvaluationsYet: string;
+    // Incidents
+    incidentsSlackHint: string;
+    incidentsPending: string;
+    incidentsBug: string;
+    incidentsEffect: string;
+    incidentsResolvedWeek: string;
+    incidentsReporter: string;
+    incidentsDescription: string;
+    incidentsEmpty: string;
+    incidentsEmptyHint: string;
+    statusPending: string;
+    statusConfirmed: string;
+    statusSuspended: string;
+    statusResolved: string;
+    unclassified: string;
     model: string;
     latestChange: string;
     config: string;
@@ -412,6 +427,7 @@ export interface LocaleMessages {
     tabVersions: string;
     tabData: string;
     tabAgent: string;
+    tabIncidents: string;
     startEvolutionCycle: string;
     // Overview
     currentVersion: string;
@@ -729,6 +745,12 @@ export interface LocaleMessages {
     rawConfig: string;
     copyConfig: string;
     downloadConfig: string;
+    sectionDataManagement: string;
+    dataManagementDesc: string;
+    cleanupSessions: string;
+    cleanupMemoryLogs: string;
+    cleanupLlmLogs: string;
+    cleanupDone: string;
   };
 
   // Plans page

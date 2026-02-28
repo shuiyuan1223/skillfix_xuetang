@@ -283,6 +283,22 @@ export const en: LocaleMessages = {
     noTracesHint: 'No conversation traces recorded yet.',
     noSuggestionsHint: 'No optimization suggestions available.',
     noEvaluationsYet: 'No evaluations yet',
+    // Incidents
+    incidentsSlackHint: 'Issues reported via Slack webhook, tracked through their lifecycle',
+    incidentsPending: 'Pending',
+    incidentsBug: 'Bugs',
+    incidentsEffect: 'Effect Issues',
+    incidentsResolvedWeek: 'Resolved This Week',
+    incidentsReporter: 'Reporter',
+    incidentsDescription: 'Description',
+    incidentsEmpty: 'No incidents yet',
+    incidentsEmptyHint:
+      'Send a message to the Slack channel to trigger the webhook, or have the system agent report issues automatically',
+    statusPending: 'Pending',
+    statusConfirmed: 'Confirmed',
+    statusSuspended: 'Suspended',
+    statusResolved: 'Resolved',
+    unclassified: 'Unclassified',
     model: 'Model',
     latestChange: 'Latest Change',
     config: 'Config',
@@ -389,6 +405,7 @@ export const en: LocaleMessages = {
     tabVersions: 'Versions',
     tabData: 'Data',
     tabAgent: 'Agent',
+    tabIncidents: 'Incidents',
     startEvolutionCycle: 'Start Evolution Cycle',
     // Overview
     currentVersion: 'Current Version',
@@ -705,6 +722,12 @@ export const en: LocaleMessages = {
     rawConfig: 'Raw Config',
     copyConfig: 'Copy to Clipboard',
     downloadConfig: 'Download config.json',
+    sectionDataManagement: 'Data Management',
+    dataManagementDesc: 'Clean up old sessions, memory logs, and LLM debug logs to free disk space.',
+    cleanupSessions: 'Clean Sessions (>30d)',
+    cleanupMemoryLogs: 'Clean Memory Logs (>90d)',
+    cleanupLlmLogs: 'Clean LLM Logs (>7d)',
+    cleanupDone: 'Cleanup done',
   },
 
   plans: {

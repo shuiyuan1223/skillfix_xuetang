@@ -136,6 +136,23 @@ function createTables(db: Database): void {
       worktree_path TEXT,
       metadata TEXT
     );
+    CREATE TABLE IF NOT EXISTS incidents (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      source TEXT NOT NULL DEFAULT 'slack',      -- slack | manual | system
+      reporter TEXT,                              -- Slack username or identifier
+      raw_text TEXT NOT NULL,                     -- Original free-text description
+      trace_id TEXT,                              -- Optional link to traces table
+      type TEXT NOT NULL DEFAULT 'unclassified',  -- bug | effect | unclassified
+      status TEXT NOT NULL DEFAULT 'pending',     -- pending | confirmed | suspended | resolved | closed
+      priority TEXT NOT NULL DEFAULT 'medium',    -- high | medium | low | ignore
+      classification_confidence REAL,             -- 0.0 - 1.0
+      classification_reason TEXT,                 -- LLM explanation for classification
+      github_issue_url TEXT,
+      github_issue_number INTEGER,
+      notes TEXT,                                 -- Human notes added in Dashboard
+      resolved_at INTEGER
+    );
   `);
 }
 
@@ -155,6 +172,9 @@ function createIndexes(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_benchmark_results_test_case ON benchmark_results(test_case_id);
     CREATE INDEX IF NOT EXISTS idx_evolution_versions_status ON evolution_versions(status);
     CREATE INDEX IF NOT EXISTS idx_evolution_versions_branch ON evolution_versions(branch_name);
+    CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(status);
+    CREATE INDEX IF NOT EXISTS idx_incidents_type ON incidents(type);
+    CREATE INDEX IF NOT EXISTS idx_incidents_timestamp ON incidents(timestamp);
   `);
 }
 
@@ -166,6 +186,7 @@ function initializeSchema(db: Database): void {
   createIndexes(db);
   migrateTestCasesTable(db);
   migrateBenchmarkRunsTable(db);
+  migrateIncidentsTable(db);
 }
 
 /**
@@ -205,6 +226,22 @@ function migrateBenchmarkRunsTable(db: Database): void {
 
     if (!columnNames.includes('branch_name')) {
       db.exec('ALTER TABLE benchmark_runs ADD COLUMN branch_name TEXT');
+    }
+  } catch {
+    // Table might not exist yet on first run
+  }
+}
+
+/**
+ * Migrate incidents table to add new columns (future-proofing)
+ */
+function migrateIncidentsTable(db: Database): void {
+  try {
+    const tableInfo = db.prepare('PRAGMA table_info(incidents)').all() as Array<{ name: string }>;
+    const columnNames = tableInfo.map((c) => c.name);
+
+    if (!columnNames.includes('resolved_at')) {
+      db.exec('ALTER TABLE incidents ADD COLUMN resolved_at INTEGER');
     }
   } catch {
     // Table might not exist yet on first run
@@ -1189,4 +1226,195 @@ export function countTestCases(options: { category?: string; difficulty?: string
   const stmt = database.prepare(sql);
   const result = stmt.get(...params) as { count: number };
   return result.count;
+}
+
+// ============================================================================
+// Incident Operations
+// ============================================================================
+
+export type IncidentType = 'bug' | 'effect' | 'unclassified';
+export type IncidentStatus = 'pending' | 'confirmed' | 'suspended' | 'resolved' | 'closed';
+export type IncidentPriority = 'high' | 'medium' | 'low' | 'ignore';
+export type IncidentSource = 'slack' | 'manual' | 'system';
+
+export interface IncidentRow {
+  id: string;
+  timestamp: number;
+  source: IncidentSource;
+  reporter: string | null;
+  raw_text: string;
+  trace_id: string | null;
+  type: IncidentType;
+  status: IncidentStatus;
+  priority: IncidentPriority;
+  classification_confidence: number | null;
+  classification_reason: string | null;
+  github_issue_url: string | null;
+  github_issue_number: number | null;
+  notes: string | null;
+  resolved_at: number | null;
+}
+
+export function insertIncident(incident: {
+  id: string;
+  timestamp: number;
+  source: IncidentSource;
+  reporter?: string;
+  rawText: string;
+  traceId?: string;
+  type?: IncidentType;
+  status?: IncidentStatus;
+  priority?: IncidentPriority;
+  classificationConfidence?: number;
+  classificationReason?: string;
+}): void {
+  const database = getDatabase();
+  database
+    .prepare(
+      `INSERT INTO incidents (
+        id, timestamp, source, reporter, raw_text, trace_id,
+        type, status, priority, classification_confidence, classification_reason
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      incident.id,
+      incident.timestamp,
+      incident.source,
+      incident.reporter ?? null,
+      incident.rawText,
+      incident.traceId ?? null,
+      incident.type ?? 'unclassified',
+      incident.status ?? 'pending',
+      incident.priority ?? 'medium',
+      incident.classificationConfidence ?? null,
+      incident.classificationReason ?? null
+    );
+}
+
+export function getIncident(id: string): IncidentRow | null {
+  const database = getDatabase();
+  return (database.prepare('SELECT * FROM incidents WHERE id = ?').get(id) as IncidentRow | null) ?? null;
+}
+
+export function listIncidents(
+  options: {
+    status?: IncidentStatus;
+    type?: IncidentType;
+    priority?: IncidentPriority;
+    source?: IncidentSource;
+    limit?: number;
+    offset?: number;
+  } = {}
+): IncidentRow[] {
+  const database = getDatabase();
+  let sql = 'SELECT * FROM incidents WHERE 1=1';
+  const params: SQLParam[] = [];
+
+  if (options.status) {
+    sql += ' AND status = ?';
+    params.push(options.status);
+  }
+  if (options.type) {
+    sql += ' AND type = ?';
+    params.push(options.type);
+  }
+  if (options.priority) {
+    sql += ' AND priority = ?';
+    params.push(options.priority);
+  }
+  if (options.source) {
+    sql += ' AND source = ?';
+    params.push(options.source);
+  }
+
+  sql += ' ORDER BY timestamp DESC';
+  sql += ` LIMIT ${options.limit ?? 50}`;
+  if (options.offset) sql += ` OFFSET ${options.offset}`;
+
+  return database.prepare(sql).all(...params) as IncidentRow[];
+}
+
+export function updateIncidentStatus(id: string, status: IncidentStatus, notes?: string): void {
+  const database = getDatabase();
+  const resolvedAt = status === 'resolved' || status === 'closed' ? Date.now() : null;
+
+  if (notes !== undefined) {
+    database
+      .prepare('UPDATE incidents SET status = ?, notes = ?, resolved_at = ? WHERE id = ?')
+      .run(status, notes, resolvedAt, id);
+  } else {
+    database
+      .prepare(
+        'UPDATE incidents SET status = ?, resolved_at = CASE WHEN ? IS NOT NULL THEN ? ELSE resolved_at END WHERE id = ?'
+      )
+      .run(status, resolvedAt, resolvedAt, id);
+  }
+}
+
+export function updateIncidentType(id: string, type: IncidentType, priority?: IncidentPriority): void {
+  const database = getDatabase();
+  if (priority !== undefined) {
+    database.prepare('UPDATE incidents SET type = ?, priority = ? WHERE id = ?').run(type, priority, id);
+  } else {
+    database.prepare('UPDATE incidents SET type = ? WHERE id = ?').run(type, id);
+  }
+}
+
+export function updateIncidentGitHubIssue(id: string, issueNumber: number, issueUrl: string): void {
+  const database = getDatabase();
+  database
+    .prepare("UPDATE incidents SET github_issue_number = ?, github_issue_url = ?, status = 'confirmed' WHERE id = ?")
+    .run(issueNumber, issueUrl, id);
+}
+
+export function updateIncidentNotes(id: string, notes: string): void {
+  const database = getDatabase();
+  database.prepare('UPDATE incidents SET notes = ? WHERE id = ?').run(notes, id);
+}
+
+export function updateIncidentTraceId(id: string, traceId: string): void {
+  const database = getDatabase();
+  database.prepare('UPDATE incidents SET trace_id = ? WHERE id = ?').run(traceId, id);
+}
+
+export function updateIncidentRawText(id: string, rawText: string): void {
+  const database = getDatabase();
+  database.prepare('UPDATE incidents SET raw_text = ? WHERE id = ?').run(rawText, id);
+}
+
+export interface IncidentStats {
+  total: number;
+  pending: number;
+  confirmed: number;
+  suspended: number;
+  resolved: number;
+  bug: number;
+  effect: number;
+  unclassified: number;
+  resolvedThisWeek: number;
+  highPriority: number;
+}
+
+export function getIncidentStats(): IncidentStats {
+  const database = getDatabase();
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  const row = database
+    .prepare(
+      `SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+        SUM(CASE WHEN status = 'suspended' THEN 1 ELSE 0 END) as suspended,
+        SUM(CASE WHEN status IN ('resolved','closed') THEN 1 ELSE 0 END) as resolved,
+        SUM(CASE WHEN type = 'bug' THEN 1 ELSE 0 END) as bug,
+        SUM(CASE WHEN type = 'effect' THEN 1 ELSE 0 END) as effect,
+        SUM(CASE WHEN type = 'unclassified' THEN 1 ELSE 0 END) as unclassified,
+        SUM(CASE WHEN status IN ('resolved','closed') AND resolved_at >= ${weekAgo} THEN 1 ELSE 0 END) as resolvedThisWeek,
+        SUM(CASE WHEN priority = 'high' THEN 1 ELSE 0 END) as highPriority
+      FROM incidents`
+    )
+    .get() as IncidentStats;
+
+  return row;
 }

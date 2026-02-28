@@ -4,12 +4,22 @@
  * Each session is a separate .jsonl file under .pha/users/{uuid}/sessions/
  */
 
-import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  appendFileSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'fs';
 import { join } from 'path';
 import type { AgentMessage } from '@mariozechner/pi-agent-core';
 import type { UserMessage, AssistantMessage, ToolResultMessage } from '@mariozechner/pi-ai';
 import { getUserDir, ensureUserDir } from './profile.js';
 import { getStateDir } from '../utils/config.js';
+import { createLogger } from '../utils/logger.js';
 
 /**
  * Resolve a session path template by replacing {uid} placeholder.
@@ -315,4 +325,100 @@ function loadSessionFromPath(filePath: string): SessionEntry[] {
     }
   }
   return entries;
+}
+
+// ============================================================================
+// Retention / cleanup helpers
+// ============================================================================
+
+/**
+ * Delete session JSONL files older than retentionDays across all users.
+ * Preserves the latest session file per agent per user regardless of age.
+ */
+export function cleanupOldSessions(retentionDays = 30): void {
+  const usersDir = join(getStateDir(), 'users');
+  if (!existsSync(usersDir)) return;
+
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  let deleted = 0;
+
+  for (const userId of readdirSync(usersDir)) {
+    const sessionsDir = join(usersDir, userId, 'sessions');
+    if (!existsSync(sessionsDir)) continue;
+
+    // Group files by agent subdirectory (pha, pha4old, sa, …)
+    for (const agentId of readdirSync(sessionsDir)) {
+      const agentDir = join(sessionsDir, agentId);
+      try {
+        if (!statSync(agentDir).isDirectory()) continue;
+      } catch {
+        continue;
+      }
+
+      const files = readdirSync(agentDir)
+        .filter((f) => f.endsWith('.jsonl'))
+        .map((f) => ({ name: f, path: join(agentDir, f), mtime: 0 }));
+
+      for (const f of files) {
+        try {
+          f.mtime = statSync(f.path).mtimeMs;
+        } catch {
+          // skip
+        }
+      }
+
+      // Sort newest-first; always keep the latest file
+      files.sort((a, b) => b.mtime - a.mtime);
+
+      for (let i = 1; i < files.length; i++) {
+        if (files[i].mtime < cutoff) {
+          try {
+            unlinkSync(files[i].path);
+            deleted++;
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+  }
+
+  if (deleted > 0) {
+    createLogger('Memory').info('Cleaned up old session files', { deleted, retentionDays });
+  }
+}
+
+/**
+ * Delete daily memory log files (memory/YYYY-MM-DD.md) older than retentionDays.
+ * MEMORY.md itself is never deleted — it contains consolidated long-term facts.
+ */
+export function cleanupOldMemoryLogs(retentionDays = 90): void {
+  const usersDir = join(getStateDir(), 'users');
+  if (!existsSync(usersDir)) return;
+
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  let deleted = 0;
+
+  for (const userId of readdirSync(usersDir)) {
+    const memoryDir = join(usersDir, userId, 'memory');
+    if (!existsSync(memoryDir)) continue;
+
+    for (const file of readdirSync(memoryDir)) {
+      if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(file)) continue; // daily logs only
+      const filePath = join(memoryDir, file);
+      try {
+        const dateMs = new Date(file.replace('.md', '')).getTime();
+        if (!isNaN(dateMs) && dateMs < cutoff) {
+          unlinkSync(filePath);
+          deleted++;
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  if (deleted > 0) {
+    createLogger('Memory').info('Cleaned up old memory logs', { deleted, retentionDays });
+  }
 }

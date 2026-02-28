@@ -1,12 +1,24 @@
 /**
  * Slack Webhook Handler
  *
- * Receives team feedback from Slack, classifies it by benchmark category,
- * and creates GitHub issues for tracking.
+ * Receives incident reports from Slack, classifies them via LLM,
+ * and persists to the incidents database for Dashboard tracking.
+ *
+ * Supported Slack integration modes:
+ *   A) Outgoing Webhook (trigger word, e.g. "bad-case:")
+ *   B) Slash Command (/bad-case)
+ *   C) Events API (message in dedicated channel)
+ *
+ * Format accepted (free text):
+ *   "用户问了睡眠质量，Agent 回答跑题说了步数。TraceID: abc-123"
+ *   "/bad-case Agent 报错了，工具调用返回 null"
+ *
+ * GitHub Issue creation is intentionally NOT done here.
+ * It is handled by the System Agent via create_github_issue_for_incident MCP tool.
  */
 
-import type { BenchmarkCategory } from '../evolution/types.js';
-import { CATEGORY_LABELS } from '../evolution/benchmark-seed.js';
+import { insertIncident, type IncidentSource } from '../memory/db.js';
+import { classifyIncident, type ClassificationResult } from '../evolution/incident-classifier.js';
 
 export interface SlackWebhookPayload {
   token?: string;
@@ -19,216 +31,189 @@ export interface SlackWebhookPayload {
   text: string;
   timestamp?: string;
   trigger_word?: string;
+  // Slash command fields
+  command?: string;
+  response_url?: string;
 }
 
-export interface FeedbackClassification {
-  category: BenchmarkCategory | 'general';
-  severity: 'low' | 'medium' | 'high';
-  summary: string;
-  originalText: string;
-  userName: string;
-  timestamp: string;
+export interface IncidentIngestResult {
+  id: string;
+  classification: ClassificationResult;
+  traceId?: string;
+  persisted: boolean;
+  needsFollowUp: boolean; // true when confidence low or text too short — caller should track for follow-up
+  message: string;
 }
-
-// Keyword-based category classification
-const CATEGORY_KEYWORDS: Record<BenchmarkCategory, string[]> = {
-  'health-data-analysis': [
-    'data',
-    'sleep',
-    'heart rate',
-    'steps',
-    'calories',
-    'workout',
-    'activity',
-    'metrics',
-    'numbers',
-    'incorrect data',
-    'wrong data',
-  ],
-  'health-coaching': [
-    'goal',
-    'motivation',
-    'habit',
-    'progress',
-    'coaching',
-    'encourage',
-    'advice',
-    'recommendation',
-    'plan',
-  ],
-  'safety-boundaries': [
-    'unsafe',
-    'dangerous',
-    'diagnosis',
-    'diagnose',
-    'medical',
-    'emergency',
-    'prescribe',
-    'medication',
-    'treatment',
-    'fabricated',
-    'made up',
-    'hallucinated',
-  ],
-  'personalization-memory': [
-    'remember',
-    'forgot',
-    'context',
-    'profile',
-    'personal',
-    'previous conversation',
-    'last time',
-    'my preference',
-  ],
-  'communication-quality': [
-    'confusing',
-    'unclear',
-    'verbose',
-    'too long',
-    'tone',
-    'sensitive',
-    'insensitive',
-    'vague',
-    'not specific',
-    'generic',
-    'not actionable',
-  ],
-};
-
-const SEVERITY_KEYWORDS: Record<string, string[]> = {
-  high: ['urgent', 'critical', 'dangerous', 'emergency', 'broken', 'crash', 'wrong medical'],
-  medium: ['incorrect', 'missing', 'confusing', 'not working', 'bug', 'issue'],
-  low: ['suggestion', 'nice to have', 'minor', 'small', 'typo', 'wording'],
-};
 
 /**
- * Classify feedback text into a benchmark category
+ * Extract Trace ID from free-text if mentioned.
+ * Patterns: "TraceID: abc-123", "trace: abc", "trace_id=abc"
  */
-export function classifyFeedback(payload: SlackWebhookPayload): FeedbackClassification {
-  const text = payload.text.toLowerCase();
+function extractTraceId(text: string): string | undefined {
+  const match = text.match(/trace[_\s-]?id[:\s=]+([a-zA-Z0-9_-]{8,})/i);
+  return match?.[1];
+}
 
-  // Classify category
-  let bestCategory: BenchmarkCategory | 'general' = 'general';
-  let bestScore = 0;
+/**
+ * Strip trigger words and slash command prefixes from text.
+ */
+function normalizeText(payload: SlackWebhookPayload): string {
+  let text = payload.text ?? '';
 
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    let score = 0;
-    for (const keyword of keywords) {
-      if (text.includes(keyword.toLowerCase())) {
-        score++;
-      }
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      bestCategory = category as BenchmarkCategory;
+  // Strip trigger word (e.g. "bad-case: ...")
+  if (payload.trigger_word) {
+    text = text.replace(new RegExp(`^${payload.trigger_word}[:\\s]*`, 'i'), '').trim();
+  }
+
+  // Strip slash command (e.g. "/bad-case ...")
+  if (payload.command) {
+    text = text.replace(/^\/\S+\s*/, '').trim();
+  }
+
+  return text.trim();
+}
+
+/**
+ * Determine source based on payload shape
+ */
+function detectSource(payload: SlackWebhookPayload): IncidentSource {
+  if (payload.command) return 'slack'; // slash command
+  return 'slack';
+}
+
+/**
+ * Handle incoming Slack webhook — ingest, classify, persist.
+ *
+ * @param payload     Slack payload (Outgoing Webhook, Slash Command, or Events API)
+ * @param llmCall     LLM inference function (injected by server.ts)
+ */
+export async function handleSlackWebhook(
+  payload: SlackWebhookPayload,
+  llmCall?: (prompt: string) => Promise<string>
+): Promise<IncidentIngestResult> {
+  const rawText = normalizeText(payload);
+  const traceId = extractTraceId(rawText);
+  const source = detectSource(payload);
+  const reporter = payload.user_name ?? payload.user_id ?? undefined;
+
+  const id = crypto.randomUUID();
+
+  // LLM classification (if llmCall provided), else persist as unclassified
+  let classification: ClassificationResult = {
+    type: 'unclassified',
+    priority: 'medium',
+    confidence: 0,
+    reason: 'LLM not available at ingest time — pending manual classification.',
+  };
+
+  if (llmCall) {
+    try {
+      classification = await classifyIncident({ rawText, llmCall });
+    } catch {
+      // Keep unclassified fallback
     }
   }
 
-  // Classify severity
-  let severity: 'low' | 'medium' | 'high' = 'medium';
-  for (const [sev, keywords] of Object.entries(SEVERITY_KEYWORDS)) {
-    for (const keyword of keywords) {
-      if (text.includes(keyword.toLowerCase())) {
-        severity = sev as 'low' | 'medium' | 'high';
-        break;
-      }
-    }
+  // Persist to DB — always, regardless of classification outcome
+  try {
+    insertIncident({
+      id,
+      timestamp: Date.now(),
+      source,
+      reporter,
+      rawText,
+      traceId,
+      type: classification.type,
+      status: 'pending',
+      priority: classification.priority,
+      classificationConfidence: classification.confidence,
+      classificationReason: classification.reason,
+    });
+  } catch (err) {
+    return {
+      id,
+      classification,
+      traceId,
+      persisted: false,
+      needsFollowUp: false,
+      message: `Failed to persist incident: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 
-  // Generate summary
-  const summary = payload.text.length > 100 ? `${payload.text.substring(0, 100)}...` : payload.text;
+  const needsFollowUp = rawText.length < 10 || classification.confidence < 0.55;
 
   return {
-    category: bestCategory,
-    severity,
-    summary,
-    originalText: payload.text,
-    userName: payload.user_name || 'unknown',
-    timestamp: payload.timestamp || new Date().toISOString(),
+    id,
+    classification,
+    traceId,
+    persisted: true,
+    needsFollowUp,
+    message: buildReply(id, rawText, classification, traceId),
   };
 }
 
 /**
- * Build a GitHub issue body from classified feedback
+ * Build a conversational Slack reply based on classification quality.
+ *
+ * - High confidence + enough context  → confirm + brief summary
+ * - Low confidence or too vague       → confirm + ask ONE targeted follow-up
+ * - Unclassified                      → confirm + ask what went wrong
  */
-export function buildIssueBody(classification: FeedbackClassification): {
-  title: string;
-  body: string;
-  labels: string[];
-} {
-  const categoryLabel = classification.category === 'general' ? 'General' : CATEGORY_LABELS[classification.category];
+function buildReply(
+  id: string,
+  rawText: string,
+  classification: ClassificationResult,
+  traceId: string | undefined
+): string {
+  const shortId = id.slice(0, 8);
+  const isVague = rawText.length < 10 || classification.confidence < 0.55;
 
-  const title = `[Feedback] ${categoryLabel}: ${classification.summary}`;
+  const followUp = getFollowUp(classification, rawText);
 
-  const body = `## Team Feedback
+  if (isVague || classification.type === 'unclassified') {
+    // Acknowledge but ask for more context
+    return `已记录（\`${shortId}\`）。${traceId ? ` Trace: \`${traceId}\`` : ''}\n\n${followUp}`;
+  }
 
-**From:** ${classification.userName}
-**Category:** ${categoryLabel}
-**Severity:** ${classification.severity}
-**Timestamp:** ${classification.timestamp}
+  // Clear enough — confirm with light summary
+  const typeLabel: Record<string, string> = {
+    bug: '🐛 Bug',
+    effect: '📉 效果问题',
+    unclassified: '❓ 待分类',
+  };
+  const label = typeLabel[classification.type] ?? classification.type;
+  const priorityLabel: Record<string, string> = {
+    high: '⚠️ 高',
+    medium: '中',
+    low: '低',
+    ignore: '忽略',
+  };
+  const priority = priorityLabel[classification.priority] ?? classification.priority;
 
-## Original Feedback
-
-> ${classification.originalText}
-
-## Classification
-
-- **Benchmark Category:** ${classification.category}
-- **Severity:** ${classification.severity}
-
-## Action Items
-
-- [ ] Review feedback and determine if this is a valid issue
-- [ ] Add as benchmark test case if applicable
-- [ ] Run \`pha eval auto-loop\` if quality improvement is needed
-- [ ] Update prompts/skills if necessary
-
----
-*Auto-created from Slack feedback via PHA webhook*`;
-
-  const labels = ['feedback', `severity:${classification.severity}`, `category:${classification.category}`];
-
-  return { title, body, labels };
+  return `${label} 已记录（\`${shortId}\`），优先级 ${priority}。${
+    traceId ? ` Trace: \`${traceId}\`` : ''
+  }${followUp ? `\n\n${followUp}` : ''}`;
 }
 
 /**
- * Handle incoming Slack webhook
+ * Pick the single most useful follow-up question based on context.
  */
-export async function handleSlackWebhook(payload: SlackWebhookPayload): Promise<{
-  classification: FeedbackClassification;
-  issueUrl?: string;
-  error?: string;
-}> {
-  const classification = classifyFeedback(payload);
+function getFollowUp(classification: ClassificationResult, rawText: string): string {
+  const lower = rawText.toLowerCase();
 
-  // Try to create GitHub issue
-  try {
-    const issue = buildIssueBody(classification);
-    const issueUrl = await createGitHubIssue(issue.title, issue.body, issue.labels);
-    return { classification, issueUrl };
-  } catch (error) {
-    return {
-      classification,
-      error: `Failed to create GitHub issue: ${error instanceof Error ? error.message : String(error)}`,
-    };
+  if (classification.type === 'bug') {
+    // Bug but short description
+    return '能描述一下具体的异常行为吗？比如：工具调用失败、返回了错误数据、页面报错等。';
   }
-}
 
-/**
- * Create a GitHub issue using the gh CLI
- */
-async function createGitHubIssue(title: string, body: string, labels: string[]): Promise<string> {
-  const { execSync } = await import('child_process');
-
-  const labelArgs = labels.map((l) => `-l "${l}"`).join(' ');
-
-  try {
-    const result = execSync(
-      `gh issue create --title "${title.replace(/"/g, '\\"')}" --body "${body.replace(/"/g, '\\"')}" ${labelArgs}`,
-      { encoding: 'utf-8', timeout: 15000 }
-    );
-    return result.trim();
-  } catch (error) {
-    throw new Error(`gh CLI failed: ${error instanceof Error ? error.message : String(error)}`);
+  if (classification.type === 'effect') {
+    // Effect — ask what specifically was wrong
+    if (lower.includes('不好') || lower.includes('效果') || lower.includes('感觉')) {
+      return '能说说哪里不满意吗？是*回答太泛*、*建议不实用*、*答非所问*，还是*语气有问题*？';
+    }
+    return 'Agent 的回答具体哪里不符合预期？';
   }
+
+  // Unclassified or unclear
+  return '能多说一点吗？比如：Agent 具体回答了什么，以及哪里不对或不满意。';
 }

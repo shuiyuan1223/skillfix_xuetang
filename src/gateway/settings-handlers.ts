@@ -633,6 +633,7 @@ const SETTINGS_MUTATORS: Record<string, ConfigMutator> = {
 const TAG_OPS = new Set(['settings_agent_tag_toggle', 'settings_tags_toggle', 'settings_scope_toggle']);
 
 const COPY_OPS = new Set(['settings_copy_config', 'settings_download_config']);
+const CLEANUP_OPS = new Set(['settings_cleanup_sessions', 'settings_cleanup_memory_logs', 'settings_cleanup_llm_logs']);
 
 export async function handleSettingsAction(
   session: GatewaySession,
@@ -643,6 +644,26 @@ export async function handleSettingsAction(
   // Copy/download — frontend handles, just toast
   if (COPY_OPS.has(action)) {
     sendAll(send, generateToast(t('settings.saved'), 'success'));
+    return;
+  }
+
+  // Cleanup ops — call respective cleanup function, then toast
+  if (CLEANUP_OPS.has(action)) {
+    try {
+      if (action === 'settings_cleanup_sessions') {
+        const { cleanupOldSessions } = await import('../memory/session-store.js');
+        cleanupOldSessions();
+      } else if (action === 'settings_cleanup_memory_logs') {
+        const { cleanupOldMemoryLogs } = await import('../memory/session-store.js');
+        cleanupOldMemoryLogs();
+      } else if (action === 'settings_cleanup_llm_logs') {
+        const { cleanupOldLlmLogs } = await import('../utils/llm-logger.js');
+        cleanupOldLlmLogs();
+      }
+      sendAll(send, generateToast(t('settings.cleanupDone'), 'success'));
+    } catch {
+      sendAll(send, generateToast(t('settings.saveError'), 'error'));
+    }
     return;
   }
 

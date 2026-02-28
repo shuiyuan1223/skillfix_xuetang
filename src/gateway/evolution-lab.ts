@@ -119,6 +119,23 @@ interface ExternalProgressInfo {
   presetName?: string;
 }
 
+export interface IncidentInfo {
+  id: string;
+  timestamp: number;
+  source: string;
+  reporter?: string | null;
+  rawText: string;
+  traceId?: string | null;
+  type: string; // bug | effect | unclassified
+  status: string; // pending | confirmed | suspended | resolved | closed
+  priority: string; // high | medium | low | ignore
+  classificationConfidence?: number | null;
+  classificationReason?: string | null;
+  githubIssueUrl?: string | null;
+  githubIssueNumber?: number | null;
+  notes?: string | null;
+}
+
 interface VersionInfo {
   id: string;
   branchName: string;
@@ -141,7 +158,7 @@ export interface ComparisonRun {
 }
 
 export interface EvolutionLabData {
-  activeTab: 'overview' | 'benchmark' | 'versions' | 'data';
+  activeTab: 'overview' | 'benchmark' | 'versions' | 'data' | 'incidents';
   // Overview
   stats?: EvaluationStats;
   latestCategoryScores?: CategoryScoreInfo[];
@@ -180,6 +197,21 @@ export interface EvolutionLabData {
   tracesTotal?: number;
   evaluations?: EvaluationInfo[];
   suggestions?: SuggestionInfo[];
+  // Incidents
+  incidents?: IncidentInfo[];
+  incidentStats?: {
+    total: number;
+    pending: number;
+    confirmed: number;
+    suspended: number;
+    resolved: number;
+    bug: number;
+    effect: number;
+    unclassified: number;
+    resolvedThisWeek: number;
+    highPriority: number;
+  };
+  incidentsFilter?: { status?: string; type?: string };
   loading?: boolean;
 }
 
@@ -507,6 +539,9 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
   if (data.activeTab === 'data') {
     tabContentIds.data = generateDataTab(ui, data);
   }
+  if (data.activeTab === 'incidents') {
+    tabContentIds.incidents = generateIncidentsTab(ui, data);
+  }
   // ---- Tabs ----
   const tabs = ui.tabs(
     [
@@ -514,6 +549,7 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
       { id: 'benchmark', label: t('evolution.tabBenchmark'), icon: 'test-tube' },
       { id: 'versions', label: t('evolution.tabVersions'), icon: 'git-branch' },
       { id: 'data', label: t('evolution.tabData'), icon: 'file-text' },
+      { id: 'incidents', label: t('evolution.tabIncidents'), icon: 'alert-triangle' },
     ],
     data.activeTab,
     tabContentIds
@@ -1329,3 +1365,125 @@ function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
 }
 
 // (Agent Tab removed — now a standalone System Agent page)
+
+// ============================================================================
+// Tab 5: Incidents
+// ============================================================================
+
+function generateIncidentsTab(ui: A2UIGenerator, data: EvolutionLabData): string {
+  const children: string[] = [];
+  const stats = data.incidentStats;
+  const filter = data.incidentsFilter ?? {};
+
+  // ---- Header ----
+  const tabTitle = ui.text(t('evolution.tabIncidents'), 'h3');
+  const slackHint = ui.text(t('evolution.incidentsSlackHint'), 'caption');
+  children.push(ui.column([tabTitle, slackHint], { gap: 4 }));
+
+  // ---- Stats cards ----
+  if (stats) {
+    const pendingCard = ui.statCard({
+      title: t('evolution.incidentsPending'),
+      value: String(stats.pending),
+      icon: 'alert-triangle',
+      color: stats.pending > 0 ? '#f59e0b' : '#94a3b8',
+    });
+    const bugCard = ui.statCard({
+      title: t('evolution.incidentsBug'),
+      value: String(stats.bug),
+      icon: 'x',
+      color: stats.bug > 0 ? '#ef4444' : '#94a3b8',
+    });
+    const effectCard = ui.statCard({
+      title: t('evolution.incidentsEffect'),
+      value: String(stats.effect),
+      icon: 'trending-down',
+      color: '#94a3b8',
+    });
+    const resolvedCard = ui.statCard({
+      title: t('evolution.incidentsResolvedWeek'),
+      value: String(stats.resolvedThisWeek),
+      icon: 'check',
+      color: stats.resolvedThisWeek > 0 ? '#22c55e' : '#94a3b8',
+    });
+    children.push(ui.grid([pendingCard, bugCard, effectCard, resolvedCard], { columns: 4, gap: 12 }));
+  }
+
+  // ---- Filter row ----
+  const statusFilters: Array<{ label: string; value: string }> = [
+    { label: t('common.all'), value: '' },
+    { label: t('evolution.statusPending'), value: 'pending' },
+    { label: t('evolution.statusConfirmed'), value: 'confirmed' },
+    { label: t('evolution.statusSuspended'), value: 'suspended' },
+    { label: t('evolution.statusResolved'), value: 'resolved' },
+  ];
+  const typeFilters: Array<{ label: string; value: string }> = [
+    { label: t('common.all'), value: '' },
+    { label: 'Bug', value: 'bug' },
+    { label: 'Effect', value: 'effect' },
+    { label: t('evolution.unclassified'), value: 'unclassified' },
+  ];
+
+  const statusBtns = statusFilters.map((f) =>
+    ui.button(f.label, 'incidents_filter', {
+      variant: (filter.status ?? '') === f.value ? 'secondary' : 'ghost',
+      size: 'sm',
+      payload: { filterType: 'status', value: f.value },
+    })
+  );
+  const typeBtns = typeFilters.map((f) =>
+    ui.button(f.label, 'incidents_filter', {
+      variant: (filter.type ?? '') === f.value ? 'secondary' : 'ghost',
+      size: 'sm',
+      payload: { filterType: 'type', value: f.value },
+    })
+  );
+
+  children.push(
+    ui.row([ui.row(statusBtns, { gap: 4 }), ui.row(typeBtns, { gap: 4 })], {
+      gap: 16,
+      align: 'center',
+    })
+  );
+
+  // ---- Incidents table ----
+  if (data.incidents && data.incidents.length > 0) {
+    const rows = data.incidents.map((bc) => ({
+      id: bc.id.slice(0, 8),
+      _fullId: bc.id,
+      time: new Date(bc.timestamp).toLocaleString(),
+      reporter: bc.reporter ?? '-',
+      type: bc.type,
+      status: bc.status,
+      priority: bc.priority,
+      description: bc.rawText.slice(0, 80) + (bc.rawText.length > 80 ? '…' : ''),
+      issue: bc.githubIssueNumber ? `#${bc.githubIssueNumber}` : '-',
+    }));
+
+    const table = ui.dataTable(
+      [
+        { key: 'time', label: t('evolution.time'), sortable: true },
+        { key: 'reporter', label: t('evolution.incidentsReporter') },
+        { key: 'type', label: t('evolution.type'), render: 'badge' },
+        { key: 'status', label: t('skills.status'), render: 'badge' },
+        { key: 'priority', label: t('evolution.priority') },
+        { key: 'description', label: t('evolution.incidentsDescription') },
+        { key: 'issue', label: 'GitHub' },
+      ],
+      rows,
+      { onRowClick: 'view_incident' }
+    );
+    children.push(table);
+
+    children.push(ui.text('点击行查看详情，可在弹窗中修改状态、类型和优先级', 'caption'));
+  } else {
+    children.push(
+      ui.column(
+        [ui.text(t('evolution.incidentsEmpty'), 'caption'), ui.text(t('evolution.incidentsEmptyHint'), 'caption')],
+        { padding: 48, align: 'center', gap: 8 }
+      )
+    );
+  }
+
+  return ui.column(children, { gap: 16, padding: 16 });
+}

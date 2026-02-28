@@ -4,6 +4,10 @@ node_modules/
 # Build outputs
 dist/
 ui/dist/
+release/
+
+# Lock files (project uses bun, not npm)
+ui/package-lock.json
 
 # Runtime data
 /memory/
@@ -21,6 +25,7 @@ pha.json
 # IDE
 .idea/
 .vscode/
+.claude/settings.local.json
 *.swp
 *.swo
 .DS_Store

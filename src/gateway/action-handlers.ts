@@ -23,6 +23,7 @@ import { getAgentProfile } from '../agent/pha-agent.js';
 import { getMemoryManager } from '../memory/index.js';
 import {
   generateToast,
+  generateIncidentDetailModal,
   generateBenchmarkRunDetailModal,
   generateTraceDetailModal,
   generateEvaluationDetailModal,
@@ -71,8 +72,14 @@ import {
   deleteBenchmarkRun,
   listEvolutionVersions,
   getEvolutionVersionByBranch,
+  getIncident,
+  updateIncidentStatus,
+  updateIncidentType,
+  type IncidentType,
+  type IncidentPriority,
 } from '../memory/db.js';
 import { readBenchmarkProgress } from '../evolution/benchmark-progress.js';
+import { readLlmLogFile } from '../utils/llm-logger.js';
 import {
   readFileFromBranch,
   readFileFromRef,
@@ -655,7 +662,183 @@ const handleEvoSendMessage: ActionHandler = async (session, _action, payload, se
 
 const handleEvoTabChange: ActionHandler = async (session, _action, payload, send) => {
   if (payload?.tab) {
-    session.evolutionActiveTab = payload.tab as 'overview' | 'benchmark' | 'versions' | 'data';
+    session.evolutionActiveTab = payload.tab as 'overview' | 'benchmark' | 'versions' | 'data' | 'incidents';
+    session.sendEvolutionLabUpdate(send);
+  }
+};
+
+// ============================================================================
+// Incident handlers
+// ============================================================================
+
+const handleIncidentsFilter: ActionHandler = async (session, _action, payload, send) => {
+  if (!payload) return;
+  const { filterType, value } = payload as { filterType: string; value: string };
+  if (filterType === 'status') session.incidentsFilter = { ...session.incidentsFilter, status: value || undefined };
+  else if (filterType === 'type') session.incidentsFilter = { ...session.incidentsFilter, type: value || undefined };
+  session.evolutionActiveTab = 'incidents';
+  session.sendEvolutionLabUpdate(send);
+};
+
+const handleViewIncident: ActionHandler = async (session, _action, payload, send) => {
+  if (!payload?.row) return;
+  const row = payload.row as { _fullId?: string; id?: string };
+  const incidentId = row._fullId ?? row.id;
+  if (!incidentId) return;
+  session.selectedIncidentId = incidentId;
+  const bc = getIncident(incidentId);
+  if (!bc) return;
+
+  // Search LLM logs in ±60 min window around incident timestamp
+  const windowMs = 60 * 60 * 1000;
+  const fromMs = bc.timestamp - windowMs;
+  const toMs = bc.timestamp + windowMs;
+  // Read logs for both the incident date and adjacent dates (handles midnight boundary)
+  const incidentDate = new Date(bc.timestamp);
+  const prevDate = new Date(bc.timestamp - 24 * 60 * 60 * 1000);
+  const datesToRead = [prevDate.toISOString().split('T')[0], incidentDate.toISOString().split('T')[0]];
+  const allPairs = datesToRead.flatMap((d) => readLlmLogFile(d));
+  const traceEntries = allPairs
+    .filter((p) => {
+      const t = new Date(p.timestamp).getTime();
+      return !isNaN(t) && t >= fromMs && t <= toMs;
+    })
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 8)
+    .map((p) => ({
+      requestTime: p.timestamp,
+      model: p.model ?? '',
+      latencyMs: p.latencyMs ?? null,
+      userMessage: extractLastMsg(p.requestData),
+      assistantResponse: extractAssistantMsg(p.responseData),
+      toolCalls: extractToolNames(p.responseData),
+    }));
+
+  sendAll(
+    send,
+    generateIncidentDetailModal({
+      id: bc.id,
+      timestamp: bc.timestamp,
+      source: bc.source,
+      reporter: bc.reporter,
+      rawText: bc.raw_text,
+      traceId: bc.trace_id,
+      type: bc.type,
+      status: bc.status,
+      priority: bc.priority,
+      classificationConfidence: bc.classification_confidence,
+      classificationReason: bc.classification_reason,
+      githubIssueUrl: bc.github_issue_url,
+      githubIssueNumber: bc.github_issue_number,
+      notes: bc.notes,
+      traceEntries,
+    })
+  );
+};
+
+// --- LLM log extraction helpers (local, no re-export) ---
+function extractLastMsg(requestData: unknown): string | null {
+  if (!requestData || typeof requestData !== 'object') return null;
+  const d = requestData as Record<string, unknown>;
+  const messages = d.messages;
+  if (!Array.isArray(messages)) return null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i] as Record<string, unknown>;
+    if (msg.role !== 'user') continue;
+    if (typeof msg.content === 'string') return msg.content;
+    if (Array.isArray(msg.content)) {
+      const parts = (msg.content as Array<Record<string, unknown>>)
+        .filter((c) => c.type === 'text' && typeof c.text === 'string')
+        .map((c) => c.text as string);
+      if (parts.length > 0) return parts.join('\n');
+    }
+  }
+  return null;
+}
+
+function extractAssistantMsg(responseData: unknown): string | null {
+  if (!responseData || typeof responseData !== 'object') return null;
+  const d = responseData as Record<string, unknown>;
+  if (d.type === 'message' && Array.isArray(d.content)) {
+    const texts = (d.content as Array<Record<string, unknown>>)
+      .filter((c) => c.type === 'text' && typeof c.text === 'string')
+      .map((c) => c.text as string);
+    if (texts.length > 0) return texts.join('\n');
+  }
+  if (Array.isArray(d.choices) && d.choices.length > 0) {
+    const choice = d.choices[0] as Record<string, unknown>;
+    const msg = choice.message as Record<string, unknown> | undefined;
+    if (msg && typeof msg.content === 'string') return msg.content;
+  }
+  return null;
+}
+
+function extractToolNames(responseData: unknown): Array<{ name: string }> {
+  if (!responseData || typeof responseData !== 'object') return [];
+  const d = responseData as Record<string, unknown>;
+  if (d.type === 'message' && Array.isArray(d.content)) {
+    return (d.content as Array<Record<string, unknown>>)
+      .filter((c) => c.type === 'tool_use')
+      .map((c) => ({ name: (c.name as string) ?? 'unknown' }));
+  }
+  if (Array.isArray(d.choices) && d.choices.length > 0) {
+    const choice = d.choices[0] as Record<string, unknown>;
+    const msg = choice.message as Record<string, unknown> | undefined;
+    const toolCalls = msg?.tool_calls;
+    if (Array.isArray(toolCalls)) {
+      return toolCalls.map((tc: unknown) => {
+        const t = tc as Record<string, unknown>;
+        const fn = t.function as Record<string, unknown> | undefined;
+        return { name: (fn?.name as string) ?? 'unknown' };
+      });
+    }
+  }
+  return [];
+}
+
+const handleConfirmIncident: ActionHandler = async (session, _action, payload, send) => {
+  if (!payload?.id) return;
+  updateIncidentStatus(payload.id as string, 'confirmed', payload.notes as string | undefined);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  sendAll(send, generateToast('Incident 已确认', 'success'));
+  session.sendEvolutionLabUpdate(send);
+};
+
+const handleSuspendIncident: ActionHandler = async (session, _action, payload, send) => {
+  if (!payload?.id) return;
+  updateIncidentStatus(payload.id as string, 'suspended', payload.notes as string | undefined);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  sendAll(send, generateToast('Incident 已挂起', 'info'));
+  session.sendEvolutionLabUpdate(send);
+};
+
+const handleResolveIncident: ActionHandler = async (session, _action, payload, send) => {
+  if (!payload?.id) return;
+  updateIncidentStatus(payload.id as string, 'resolved', payload.notes as string | undefined);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  sendAll(send, generateToast('Incident 已解决 ✓', 'success'));
+  session.sendEvolutionLabUpdate(send);
+};
+
+const handleIncidentRetype: ActionHandler = async (session, _action, payload, send) => {
+  if (!payload?.type) return;
+  const id = (payload.id as string | undefined) ?? session.selectedIncidentId;
+  if (!id) return;
+  updateIncidentType(id, payload.type as IncidentType, payload.priority as IncidentPriority | undefined);
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  sendAll(send, generateToast(`类型已更新为 ${String(payload.type)}`, 'success'));
+  session.sendEvolutionLabUpdate(send);
+};
+
+const handleIncidentReprioritize: ActionHandler = async (session, _action, payload, send) => {
+  if (!payload?.priority) return;
+  const id = (payload.id as string | undefined) ?? session.selectedIncidentId;
+  if (!id) return;
+  const existing = getIncident(id);
+  if (existing) {
+    updateIncidentType(existing.id, existing.type as IncidentType, payload.priority as IncidentPriority);
+    send({ deleteSurface: { surfaceId: 'modal' } });
+    sendAll(send, generateToast(`优先级已更新为 ${String(payload.priority)}`, 'success'));
     session.sendEvolutionLabUpdate(send);
   }
 };
@@ -1765,6 +1948,15 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   clear_run_selection: handleClearRunSelection,
   run_test_case: handleRunTestCase,
 
+  // Incidents
+  incidents_filter: handleIncidentsFilter,
+  view_incident: handleViewIncident,
+  confirm_incident: handleConfirmIncident,
+  suspend_incident: handleSuspendIncident,
+  resolve_incident: handleResolveIncident,
+  incident_retype: handleIncidentRetype,
+  incident_reprioritize: handleIncidentReprioritize,
+
   // Integrations
   refresh_integrations: handleRefreshIntegrations,
 
@@ -1836,6 +2028,9 @@ export const SETTINGS_ACTIONS = new Set([
   'settings_tags_toggle',
   'settings_copy_config',
   'settings_download_config',
+  'settings_cleanup_sessions',
+  'settings_cleanup_memory_logs',
+  'settings_cleanup_llm_logs',
 ]);
 
 /**

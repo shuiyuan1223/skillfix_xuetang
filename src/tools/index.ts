@@ -22,6 +22,8 @@ import { planTools } from './plan-tools.js';
 import { proactiveTools } from './proactive-tools.js';
 import { weatherTools } from './weather-tool.js';
 import { dashboardTools } from './dashboard-tools.js';
+import { incidentTools } from './incident-tools.js';
+import { llmLogTools } from './llm-log-tools.js';
 
 // ===========================================================================
 // Global Registry — single source of truth for all tools
@@ -32,6 +34,8 @@ globalRegistry.registerAll([
   ...healthTools,
   ...gitTools,
   ...evolutionTools,
+  ...incidentTools,
+  ...llmLogTools,
   ...configTools,
   ...memoryTools,
   ...skillTools,
@@ -67,5 +71,7 @@ export * from './proactive-tools.js';
 export * from './weather-tool.js';
 export * from './dashboard-tools.js';
 export * from './dashboard-types.js';
+export * from './incident-tools.js';
+export * from './llm-log-tools.js';
 export * from './types.js';
 export { ToolRegistry, categoryToAgent, categoryToAgentTags } from './registry.js';

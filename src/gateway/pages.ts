@@ -2530,6 +2530,27 @@ function buildSettingsRawConfigCard(ui: A2UIGenerator, data: SettingsPageData): 
   return ui.card([rawEditor, rawActions], { title: t('settings.rawConfig'), padding: 20 });
 }
 
+function buildSettingsDataManagementCard(ui: A2UIGenerator): string {
+  const desc = ui.text(t('settings.dataManagementDesc'), 'caption');
+  const sessionsBtn = ui.button(t('settings.cleanupSessions'), 'settings_cleanup_sessions', {
+    variant: 'outline',
+    size: 'sm',
+    icon: 'refresh-cw',
+  });
+  const memoryBtn = ui.button(t('settings.cleanupMemoryLogs'), 'settings_cleanup_memory_logs', {
+    variant: 'outline',
+    size: 'sm',
+    icon: 'refresh-cw',
+  });
+  const llmBtn = ui.button(t('settings.cleanupLlmLogs'), 'settings_cleanup_llm_logs', {
+    variant: 'outline',
+    size: 'sm',
+    icon: 'refresh-cw',
+  });
+  const btns = ui.row([sessionsBtn, memoryBtn, llmBtn], { gap: 8, style: 'flex-wrap: wrap;' });
+  return ui.card([desc, btns], { title: t('settings.sectionDataManagement'), padding: 20 });
+}
+
 export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
   const ui = new A2UIGenerator('main');
   const saveIcon: SaveIconOpts = {
@@ -2563,6 +2584,7 @@ export function generateSettingsPage(data: SettingsPageData): A2UIMessage[] {
     buildSettingsBenchmarkCard(ui, data, saveIcon),
     buildSettingsMcpCard(ui, data, saveIcon),
     buildSettingsPluginsCard(ui, data, saveIcon),
+    buildSettingsDataManagementCard(ui),
     buildSettingsRawConfigCard(ui, data)
   );
   const root = ui.column(cards, { gap: 24, padding: 24 });
@@ -2827,6 +2849,157 @@ export function generateBenchmarkProgressComplete(data: {
 
   const root = ui.column([topRow, progressBar, badgeRow], { gap: 8, padding: 16 });
 
+  return ui.build(root);
+}
+
+// ============================================================================
+// Incident Detail Modal
+// ============================================================================
+
+export interface IncidentDetailModalData {
+  id: string;
+  timestamp: number;
+  source: string;
+  reporter?: string | null;
+  rawText: string;
+  traceId?: string | null;
+  type: string;
+  status: string;
+  priority: string;
+  classificationConfidence?: number | null;
+  classificationReason?: string | null;
+  githubIssueUrl?: string | null;
+  githubIssueNumber?: number | null;
+  notes?: string | null;
+  // LLM trace entries (auto-searched by timestamp window)
+  traceEntries?: Array<{
+    requestTime: string;
+    model: string;
+    latencyMs?: number | null;
+    userMessage?: string | null;
+    assistantResponse?: string | null;
+    toolCalls?: Array<{ name: string }>;
+  }>;
+}
+
+export function generateIncidentDetailModal(data: IncidentDetailModalData): A2UIMessage[] {
+  const ui = new A2UIGenerator('modal');
+  const children: string[] = [];
+
+  // ---- Meta info (each field as separate text element to ensure line breaks) ----
+  const time = new Date(data.timestamp).toLocaleString();
+  const confidence =
+    data.classificationConfidence != null ? ` (置信度 ${Math.round(data.classificationConfidence * 100)}%)` : '';
+
+  const metaFields: string[] = [
+    `**来源**: ${data.source}${data.reporter ? ` · ${data.reporter}` : ''}`,
+    `**时间**: ${time}`,
+    `**类型**: ${data.type}${confidence}`,
+    `**状态**: ${data.status}`,
+    `**优先级**: ${data.priority}`,
+    ...(data.traceId ? [`**TraceID**: \`${data.traceId}\``] : []),
+    ...(data.classificationReason ? [`**AI 分类原因**: ${data.classificationReason}`] : []),
+    ...(data.githubIssueNumber
+      ? [`**GitHub Issue**: [#${data.githubIssueNumber}](${data.githubIssueUrl ?? '#'})`]
+      : []),
+    ...(data.notes ? [`**备注**: ${data.notes}`] : []),
+  ];
+
+  const metaItems = metaFields.map((f) => ui.text(f, 'body', { markdown: true }));
+  children.push(ui.column(metaItems, { gap: 4 }));
+
+  // ---- Description ----
+  children.push(
+    ui.column([ui.text('描述', 'label'), ui.text(data.rawText, 'body', { markdown: true })], {
+      gap: 4,
+    })
+  );
+
+  // ---- Status actions ----
+  const statusActions: string[] = [];
+  if (data.status === 'pending' || data.status === 'confirmed' || data.status === 'suspended') {
+    if (data.status !== 'confirmed') {
+      statusActions.push(
+        ui.button('确认', 'confirm_incident', {
+          variant: 'primary',
+          size: 'sm',
+          payload: { id: data.id },
+        })
+      );
+    }
+    if (data.status !== 'suspended') {
+      statusActions.push(
+        ui.button('挂起', 'suspend_incident', {
+          variant: 'outline',
+          size: 'sm',
+          payload: { id: data.id },
+        })
+      );
+    }
+    statusActions.push(
+      ui.button('解决', 'resolve_incident', {
+        variant: 'outline',
+        size: 'sm',
+        payload: { id: data.id },
+      })
+    );
+  }
+  if (statusActions.length > 0) {
+    children.push(ui.column([ui.text('状态操作', 'label'), ui.row(statusActions, { gap: 8 })], { gap: 4 }));
+  }
+
+  // ---- Type & Priority edit ----
+  const typeBtns = (['bug', 'effect', 'unclassified'] as const).map((tp) =>
+    ui.button(tp, 'incident_retype', {
+      variant: data.type === tp ? 'secondary' : 'outline',
+      size: 'sm',
+      payload: { id: data.id, type: tp },
+    })
+  );
+  const priorityBtns = (['high', 'medium', 'low', 'ignore'] as const).map((p) =>
+    ui.button(p, 'incident_reprioritize', {
+      variant: data.priority === p ? 'secondary' : 'outline',
+      size: 'sm',
+      payload: { id: data.id, priority: p },
+    })
+  );
+  children.push(
+    ui.column(
+      [
+        ui.text('标签 / 优先级', 'label'),
+        ui.row([ui.text('类型:', 'caption'), ...typeBtns, ui.text('优先级:', 'caption'), ...priorityBtns], {
+          gap: 6,
+          align: 'center',
+        }),
+      ],
+      { gap: 4 }
+    )
+  );
+
+  // ---- LLM Trace section ----
+  if (data.traceEntries && data.traceEntries.length > 0) {
+    const traceElements = data.traceEntries.map((entry) => {
+      const latency = entry.latencyMs ? ` (${entry.latencyMs}ms)` : '';
+      const header = `**${entry.requestTime}** · ${entry.model}${latency}`;
+      const parts = [header];
+      if (entry.userMessage)
+        parts.push(`用户: ${entry.userMessage.slice(0, 200)}${entry.userMessage.length > 200 ? '…' : ''}`);
+      if (entry.assistantResponse)
+        parts.push(`回复: ${entry.assistantResponse.slice(0, 200)}${entry.assistantResponse.length > 200 ? '…' : ''}`);
+      if (entry.toolCalls && entry.toolCalls.length > 0)
+        parts.push(`工具: ${entry.toolCalls.map((tc) => tc.name).join(', ')}`);
+      return ui.text(parts.join('\n\n'), 'body', { markdown: true });
+    });
+    children.push(
+      ui.column([ui.text(`LLM Trace (±1小时 · ${data.traceEntries.length} 条)`, 'label'), ...traceElements], { gap: 8 })
+    );
+  } else {
+    children.push(ui.text('LLM Trace: 该时间窗口内无记录（需运行新版 Gateway 后才会开始采集日志）', 'caption'));
+  }
+
+  const content = ui.column(children, { gap: 16, padding: 8 });
+  const title = `Incident ${data.id.slice(0, 8)} · ${data.type} · ${data.status}`;
+  const root = ui.modal(title, [content], { size: 'lg' });
   return ui.build(root);
 }
 

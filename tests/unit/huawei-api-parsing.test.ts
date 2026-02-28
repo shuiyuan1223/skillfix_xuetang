@@ -29,8 +29,7 @@ import {
 
 // Import fixtures
 import heartRateResponse from "../fixtures/huawei-api/heart-rate-response.json";
-import stepsResponse from "../fixtures/huawei-api/steps-response.json";
-import sleepResponse from "../fixtures/huawei-api/sleep-response.json";
+
 import emptyResponse from "../fixtures/huawei-api/empty-response.json";
 import stressResponse from "../fixtures/huawei-api/stress-response.json";
 import ecgResponse from "../fixtures/huawei-api/ecg-response.json";
@@ -189,7 +188,7 @@ describe("parseECGResponse", () => {
     // Timestamps are 1770249600000000000 and 1770253200000000000
     // After sorting most recent first, the second (larger timestamp) should be first
     expect(new Date(result!.records[0].time).getTime()).toBeGreaterThan(
-      new Date(result!.records[1].time).getTime(),
+      new Date(result!.records[1].time).getTime()
     );
   });
 
