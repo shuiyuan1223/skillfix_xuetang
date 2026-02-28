@@ -69,7 +69,7 @@ export async function handleWorkbenchAction(
       handleSelectSkill(state, payload);
       break;
     case 'debug_toggle_skill':
-      handleToggleSkill(state, payload);
+      handleToggleSkill(state);
       break;
     case 'debug_skill_change':
       handleSkillChange(state, payload);
@@ -84,7 +84,7 @@ export async function handleWorkbenchAction(
       handleSelectPrompt(state, payload);
       break;
     case 'debug_activate_prompt':
-      handleActivatePrompt(state, payload);
+      handleActivatePrompt(state);
       break;
     case 'debug_prompt_change':
       handlePromptChange(state, payload);
@@ -115,8 +115,15 @@ export async function handleWorkbenchAction(
 
 // ── Individual handlers ───────────────────────────────────────
 
+function extractRowId(payload: Payload): string | undefined {
+  // onRowClick sends { row: { id, name, ... } }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const row = payload?.row as any;
+  return (row?.id ?? row?.name ?? payload?.id) as string | undefined;
+}
+
 function handleSelectSkill(state: WorkbenchState, payload: Payload): void {
-  const id = (payload?.id ?? payload?.skillName ?? payload?.rowId) as string | undefined;
+  const id = extractRowId(payload);
   if (!id) return;
   state.selectedSkillId = id;
   // Lazy-load content if not already edited
@@ -126,10 +133,9 @@ function handleSelectSkill(state: WorkbenchState, payload: Payload): void {
   }
 }
 
-function handleToggleSkill(state: WorkbenchState, payload: Payload): void {
-  const id = (payload?.id ?? payload?.rowId) as string | undefined;
-  if (!id) return;
-  const skill = state.skills.find((s) => s.id === id);
+function handleToggleSkill(state: WorkbenchState): void {
+  if (!state.selectedSkillId) return;
+  const skill = state.skills.find((s) => s.id === state.selectedSkillId);
   if (skill) skill.enabled = !skill.enabled;
 }
 
@@ -162,7 +168,7 @@ function handleRevertSkill(state: WorkbenchState): void {
 }
 
 function handleSelectPrompt(state: WorkbenchState, payload: Payload): void {
-  const id = (payload?.id ?? payload?.rowId) as string | undefined;
+  const id = extractRowId(payload);
   if (!id) return;
   state.selectedPromptId = id;
   const prompt = state.prompts.find((p) => p.id === id);
@@ -171,10 +177,11 @@ function handleSelectPrompt(state: WorkbenchState, payload: Payload): void {
   }
 }
 
-function handleActivatePrompt(state: WorkbenchState, payload: Payload): void {
-  const id = (payload?.id ?? payload?.rowId) as string | undefined;
-  if (!id) return;
-  state.activePromptId = id;
+function handleActivatePrompt(state: WorkbenchState): void {
+  // Activate the currently selected prompt
+  if (state.selectedPromptId) {
+    state.activePromptId = state.selectedPromptId;
+  }
 }
 
 function handlePromptChange(state: WorkbenchState, payload: Payload): void {

@@ -12,6 +12,7 @@ import { getSkillsDir } from '../tools/skill-tools.js';
 export interface WorkbenchSkillItem {
   id: string;
   name: string;
+  description: string;
   enabled: boolean;
   editedContent?: string;
   dirty?: boolean;
@@ -151,15 +152,28 @@ export async function initializeWorkbench(): Promise<WorkbenchState> {
   };
 }
 
+/** Extract description from SKILL.md YAML frontmatter */
+function extractDescription(content: string): string {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) return '';
+  const yaml = match[1];
+  const descMatch = yaml.match(/^description:\s*"?([^"\n]*)"?/m);
+  return descMatch ? descMatch[1].trim() : '';
+}
+
 export function loadWorkbenchSkills(): WorkbenchSkillItem[] {
   const dir = getWorkbenchSkillsDir();
   if (!existsSync(dir)) return [];
   const entries = readdirSync(dir).filter((f) => existsSync(join(dir, f, 'SKILL.md')));
-  return entries.sort().map((name) => ({
-    id: name,
-    name,
-    enabled: true,
-  }));
+  return entries.sort().map((name) => {
+    const content = readFileSync(join(dir, name, 'SKILL.md'), 'utf-8');
+    return {
+      id: name,
+      name,
+      description: extractDescription(content),
+      enabled: true,
+    };
+  });
 }
 
 export function loadWorkbenchPrompts(): WorkbenchPromptItem[] {

@@ -80,36 +80,41 @@ function buildEditorColumn(ui: A2UIGenerator, state: WorkbenchState): string {
 }
 
 function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
-  // Skill list as data table with checkboxes
-  const columns = [
-    { key: 'enabled', label: '', width: 40 },
-    { key: 'name', label: t('workbench.skillsTitle') },
-    { key: 'status', label: '' },
-  ];
-
+  // Skill list as data table — all values must be plain strings
   const rows = state.skills.map((s) => ({
     id: s.id,
-    enabled: { type: 'checkbox', checked: s.enabled, action: 'debug_toggle_skill' },
     name: s.name,
-    status: s.dirty ? t('workbench.modified') : '',
-    action: 'debug_select_skill',
-    selected: s.id === state.selectedSkillId,
+    description: s.description || '-',
+    status: s.enabled ? 'enabled' : 'disabled',
+    modified: s.dirty ? t('workbench.modified') : '',
   }));
 
-  const table = ui.dataTable(columns, rows, {
-    selectable: true,
-    selectedId: state.selectedSkillId,
-    onSelect: 'debug_select_skill',
-    compact: true,
-    maxHeight: 200,
-  });
+  const table = ui.dataTable(
+    [
+      { key: 'name', label: t('workbench.skillsTitle'), sortable: true },
+      { key: 'description', label: t('skills.description') },
+      { key: 'status', label: t('skills.status'), render: 'badge' },
+      { key: 'modified', label: '' },
+    ],
+    rows,
+    { onRowClick: 'debug_select_skill' }
+  );
 
-  // Editor for selected skill
   const parts: string[] = [table];
 
   if (state.selectedSkillId) {
     const skill = state.skills.find((s) => s.id === state.selectedSkillId);
     const content = skill?.editedContent ?? readWorkbenchSkillContent(state.selectedSkillId);
+
+    // Toggle + editor title row
+    const toggleBtn = ui.button(
+      skill?.enabled ? t('common.disable') : t('common.enable'),
+      'debug_toggle_skill',
+      { variant: skill?.enabled ? 'ghost' : 'primary', size: 'sm' }
+    );
+    const skillLabel = ui.text(state.selectedSkillId, 'h4');
+    const titleRow = ui.row([skillLabel, toggleBtn], { gap: 8, justify: 'space-between', align: 'center' });
+    parts.push(titleRow);
 
     const editor = ui.codeEditor(content, {
       language: 'markdown',
@@ -142,36 +147,41 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
 }
 
 function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
-  // Prompt list
-  const columns = [
-    { key: 'active', label: '', width: 40 },
-    { key: 'name', label: t('workbench.promptsTitle') },
-    { key: 'status', label: '' },
-  ];
-
+  // Prompt list — all values must be plain strings
   const rows = state.prompts.map((p) => ({
     id: p.id,
-    active: { type: 'radio', checked: p.id === state.activePromptId, action: 'debug_activate_prompt' },
     name: p.name,
-    status: p.dirty ? t('workbench.modified') : '',
-    action: 'debug_select_prompt',
-    selected: p.id === state.selectedPromptId,
+    status: p.id === state.activePromptId ? 'selected' : '-',
+    modified: p.dirty ? t('workbench.modified') : '',
   }));
 
-  const table = ui.dataTable(columns, rows, {
-    selectable: true,
-    selectedId: state.selectedPromptId,
-    onSelect: 'debug_select_prompt',
-    compact: true,
-    maxHeight: 200,
-  });
+  const table = ui.dataTable(
+    [
+      { key: 'name', label: t('workbench.promptsTitle'), sortable: true },
+      { key: 'status', label: 'Active', render: 'badge' },
+      { key: 'modified', label: '' },
+    ],
+    rows,
+    { onRowClick: 'debug_select_prompt' }
+  );
 
   const parts: string[] = [table];
 
   if (state.selectedPromptId) {
     const prompt = state.prompts.find((p) => p.id === state.selectedPromptId);
-    const content = prompt?.editedContent ?? readWorkbenchPromptContent(state.selectedPromptId);
 
+    // Activate button + title
+    const isActive = state.selectedPromptId === state.activePromptId;
+    const activateBtn = ui.button(
+      isActive ? 'Active' : 'Set Active',
+      'debug_activate_prompt',
+      { variant: isActive ? 'ghost' : 'primary', size: 'sm', disabled: isActive }
+    );
+    const promptLabel = ui.text(state.selectedPromptId, 'h4');
+    const titleRow = ui.row([promptLabel, activateBtn], { gap: 8, justify: 'space-between', align: 'center' });
+    parts.push(titleRow);
+
+    const content = prompt?.editedContent ?? readWorkbenchPromptContent(state.selectedPromptId);
     const editor = ui.codeEditor(content, {
       language: 'markdown',
       onChange: 'debug_prompt_change',
