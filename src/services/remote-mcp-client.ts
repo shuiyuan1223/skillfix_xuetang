@@ -5,15 +5,15 @@
  * Discovers tools and bridges them as AgentTools for PHA Agent.
  */
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { Type } from "@sinclair/typebox";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { loadConfig, type RemoteMCPServerConfig } from "../utils/config.js";
-import { createLogger } from "../utils/logger.js";
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { Type } from '@sinclair/typebox';
+import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import { loadConfig, type RemoteMCPServerConfig } from '../utils/config.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Service/RemoteMCP");
+const log = createLogger('Service/RemoteMCP');
 
 export class RemoteMCPClient {
   private client: Client | null = null;
@@ -28,7 +28,9 @@ export class RemoteMCPClient {
   }
 
   async connect(): Promise<void> {
-    if (this.connected) return;
+    if (this.connected) {
+      return;
+    }
 
     const url = new URL(this.config.url);
     const headers: Record<string, string> = {};
@@ -36,10 +38,7 @@ export class RemoteMCPClient {
       headers.Authorization = `Bearer ${this.config.apiKey}`;
     }
 
-    this.client = new Client(
-      { name: `pha-remote-${this.serverKey}`, version: "1.0.0" },
-      { capabilities: {} }
-    );
+    this.client = new Client({ name: `pha-remote-${this.serverKey}`, version: '1.0.0' }, { capabilities: {} });
 
     // Try Streamable HTTP first, fall back to SSE
     try {
@@ -52,10 +51,7 @@ export class RemoteMCPClient {
     } catch (_e) {
       log.info(`[${this.serverKey}] Streamable HTTP failed, trying SSE fallback...`);
       // Reset client for retry
-      this.client = new Client(
-        { name: `pha-remote-${this.serverKey}`, version: "1.0.0" },
-        { capabilities: {} }
-      );
+      this.client = new Client({ name: `pha-remote-${this.serverKey}`, version: '1.0.0' }, { capabilities: {} });
       try {
         this.transport = new SSEClientTransport(url, {
           requestInit: { headers },
@@ -64,10 +60,7 @@ export class RemoteMCPClient {
         this.connected = true;
         log.info(`[${this.serverKey}] Connected via SSE`);
       } catch (sseErr) {
-        log.error(
-          `[${this.serverKey}] Failed to connect`,
-          sseErr instanceof Error ? sseErr.message : sseErr
-        );
+        log.error(`[${this.serverKey}] Failed to connect`, sseErr instanceof Error ? sseErr.message : sseErr);
         this.client = null;
         this.transport = null;
         throw sseErr;
@@ -106,21 +99,23 @@ export class RemoteMCPClient {
       inputSchema?: Record<string, unknown>;
     }>
   > {
-    if (!this.client) throw new Error(`[RemoteMCP:${this.serverKey}] Not connected`);
+    if (!this.client) {
+      throw new Error(`[RemoteMCP:${this.serverKey}] Not connected`);
+    }
     const result = await this.client.listTools();
     return result.tools;
   }
 
   async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
-    if (!this.client) throw new Error(`[RemoteMCP:${this.serverKey}] Not connected`);
+    if (!this.client) {
+      throw new Error(`[RemoteMCP:${this.serverKey}] Not connected`);
+    }
     const result = await this.client.callTool({ name, arguments: args });
 
     // Extract text content
     if (result.content && Array.isArray(result.content)) {
-      const textContent = result.content.find(
-        (c: unknown) => (c as { type?: string }).type === "text"
-      );
-      if (textContent && typeof textContent === "object" && "text" in textContent) {
+      const textContent = result.content.find((c: unknown) => (c as { type?: string }).type === 'text');
+      if (textContent && typeof textContent === 'object' && 'text' in textContent) {
         const text = (textContent as { text: string }).text;
         try {
           return JSON.parse(text);
@@ -141,7 +136,9 @@ const clientPool = new Map<string, RemoteMCPClient>();
 
 function getOrCreateClient(serverKey: string, config: RemoteMCPServerConfig): RemoteMCPClient {
   let client = clientPool.get(serverKey);
-  if (client && client.config.url === config.url) return client;
+  if (client && client.config.url === config.url) {
+    return client;
+  }
 
   // URL changed — disconnect old one
   if (client) {
@@ -176,7 +173,7 @@ export async function disconnectAllRemoteMCPClients(): Promise<void> {
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 function jsonSchemaToTypebox(inputSchema?: Record<string, unknown>) {
-  if (!inputSchema || typeof inputSchema !== "object") {
+  if (!inputSchema || typeof inputSchema !== 'object') {
     return Type.Object({});
   }
   // Use Type.Unsafe to wrap the raw JSON Schema so pi-agent accepts it
@@ -192,13 +189,17 @@ function jsonSchemaToTypebox(inputSchema?: Record<string, unknown>) {
 export async function getRemoteMCPTools(): Promise<AgentTool<any>[]> {
   const config = loadConfig();
   const servers = config.mcp?.remoteServers;
-  if (!servers || Object.keys(servers).length === 0) return [];
+  if (!servers || Object.keys(servers).length === 0) {
+    return [];
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tools: AgentTool<any>[] = [];
 
   for (const [serverKey, serverConfig] of Object.entries(servers)) {
-    if (serverConfig.enabled === false) continue;
+    if (serverConfig.enabled === false) {
+      continue;
+    }
 
     const client = getOrCreateClient(serverKey, serverConfig);
 
@@ -216,20 +217,17 @@ export async function getRemoteMCPTools(): Promise<AgentTool<any>[]> {
           description: rt.description || `[${displayName}] ${toolName}`,
           label: toolName,
           parameters: schema,
-          execute: async (
-            _toolCallId: string,
-            params: Record<string, unknown>
-          ): Promise<AgentToolResult<unknown>> => {
+          execute: async (_toolCallId: string, params: Record<string, unknown>): Promise<AgentToolResult<unknown>> => {
             try {
               const result = await client.callTool(toolName, params);
               return {
-                content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+                content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
                 details: result,
               };
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
               return {
-                content: [{ type: "text", text: `Error calling ${toolName}: ${msg}` }],
+                content: [{ type: 'text', text: `Error calling ${toolName}: ${msg}` }],
                 details: { error: msg },
               };
             }
@@ -260,7 +258,9 @@ export async function getRemoteMCPToolDefinitions(): Promise<
 > {
   const config = loadConfig();
   const servers = config.mcp?.remoteServers;
-  if (!servers || Object.keys(servers).length === 0) return [];
+  if (!servers || Object.keys(servers).length === 0) {
+    return [];
+  }
 
   const defs: Array<{
     name: string;
@@ -270,7 +270,9 @@ export async function getRemoteMCPToolDefinitions(): Promise<
   }> = [];
 
   for (const [serverKey, serverConfig] of Object.entries(servers)) {
-    if (serverConfig.enabled === false) continue;
+    if (serverConfig.enabled === false) {
+      continue;
+    }
 
     const client = getOrCreateClient(serverKey, serverConfig);
     try {
@@ -282,7 +284,7 @@ export async function getRemoteMCPToolDefinitions(): Promise<
           name: rt.name,
           description: rt.description || rt.name,
           inputSchema: (rt.inputSchema as Record<string, unknown>) || {
-            type: "object",
+            type: 'object',
             properties: {},
           },
           serverKey,

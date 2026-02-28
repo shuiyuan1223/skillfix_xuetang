@@ -5,44 +5,54 @@
  * Provides MCP dispatch, AgentTool derivation, display names, and prompt generation.
  */
 
-import { Type } from "@sinclair/typebox";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import type { PHATool, ToolCategory, MCPToolResult } from "./types.js";
-import type { HealthDataSource } from "../data-sources/interface.js";
-import { createHealthTools } from "./health-data.js";
-import { runWithUserUuid } from "../utils/config.js";
+import { Type } from '@sinclair/typebox';
+import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { PHATool, ToolCategory, MCPToolResult } from './types.js';
+import type { HealthDataSource } from '../data-sources/interface.js';
+import { createHealthTools } from './health-data.js';
+import { runWithUserUuid } from '../utils/config.js';
 
 // Derive agent assignment from category
 // PHA Agent: health/memory/profile/config/skill (面向用户的健康助手)
 // System Agent: git/evolution/system/feedback/skill (面向开发者的系统进化)
 const PHA_CATEGORIES = new Set<ToolCategory>([
-  "health",
-  "memory",
-  "profile",
-  "config",
-  "skill",
-  "presentation",
-  "planning",
-  "proactive",
+  'health',
+  'memory',
+  'profile',
+  'config',
+  'skill',
+  'presentation',
+  'planning',
+  'proactive',
 ]);
-const SA_CATEGORIES = new Set<ToolCategory>(["git", "evolution", "system", "feedback", "skill"]);
+const SA_CATEGORIES = new Set<ToolCategory>(['git', 'evolution', 'system', 'feedback', 'skill']);
 
 export function categoryToAgent(category: ToolCategory): string {
   const inPHA = PHA_CATEGORIES.has(category);
   const inSA = SA_CATEGORIES.has(category);
-  if (inPHA && inSA) return "PHA / System";
-  if (inPHA) return "PHA";
-  if (inSA) return "System";
-  return "PHA";
+  if (inPHA && inSA) {
+    return 'PHA / System';
+  }
+  if (inPHA) {
+    return 'PHA';
+  }
+  if (inSA) {
+    return 'System';
+  }
+  return 'PHA';
 }
 
 export function categoryToAgentTags(category: ToolCategory): string[] {
   const tags: string[] = [];
   const inPHA = PHA_CATEGORIES.has(category);
   const inSA = SA_CATEGORIES.has(category);
-  if (inPHA) tags.push("pha", "pha4old");
-  if (inSA) tags.push("sa");
-  return tags.length > 0 ? tags : ["pha"];
+  if (inPHA) {
+    tags.push('pha', 'pha4old');
+  }
+  if (inSA) {
+    tags.push('sa');
+  }
+  return tags.length > 0 ? tags : ['pha'];
 }
 
 export class ToolRegistry {
@@ -88,7 +98,7 @@ export class ToolRegistry {
     const tool = this.tools.get(name);
     if (!tool) {
       return {
-        content: [{ type: "text", text: `Unknown tool: ${name}` }],
+        content: [{ type: 'text', text: `Unknown tool: ${name}` }],
         isError: true,
       };
     }
@@ -97,13 +107,13 @@ export class ToolRegistry {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = await tool.execute(args as any);
       return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };
     } catch (error) {
       return {
         content: [
           {
-            type: "text",
+            type: 'text',
             text: `Error: ${error instanceof Error ? error.message : String(error)}`,
           },
         ],
@@ -117,7 +127,7 @@ export class ToolRegistry {
       name: tool.name,
       description: tool.description,
       inputSchema: {
-        type: "object" as const,
+        type: 'object' as const,
         properties: tool.inputSchema.properties,
         required: tool.inputSchema.required,
       },
@@ -151,22 +161,19 @@ export class ToolRegistry {
       description: tool.description,
       label: tool.label || tool.displayName,
       parameters: schema,
-      execute: async (
-        _toolCallId: string,
-        params: Record<string, unknown>
-      ): Promise<AgentToolResult<unknown>> => {
+      execute: async (_toolCallId: string, params: Record<string, unknown>): Promise<AgentToolResult<unknown>> => {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const result = await tool.execute(params as any);
           const text = JSON.stringify(result, null, 2);
           return {
-            content: [{ type: "text" as const, text }],
+            content: [{ type: 'text' as const, text }],
             details: result,
           };
         } catch (error) {
           const text = `Error: ${error instanceof Error ? error.message : String(error)}`;
           return {
-            content: [{ type: "text" as const, text }],
+            content: [{ type: 'text' as const, text }],
             details: text,
           };
         }

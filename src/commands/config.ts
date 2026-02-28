@@ -2,7 +2,7 @@
  * Config command - Manage configuration
  */
 
-import type { Command } from "commander";
+import type { Command } from 'commander';
 import {
   loadConfig,
   getConfigValue,
@@ -10,10 +10,10 @@ import {
   unsetConfigValue,
   getConfigPath,
   isConfigured,
-} from "../utils/config.js";
+} from '../utils/config.js';
 
 export function registerConfigCommand(program: Command): void {
-  const configCmd = program.command("config").description("Manage PHA configuration");
+  const configCmd = program.command('config').description('Manage PHA configuration');
 
   // config (no subcommand) - show all config
   configCmd.action(() => {
@@ -23,32 +23,32 @@ export function registerConfigCommand(program: Command): void {
     }
 
     const config = loadConfig();
-    console.log("\nPHA Configuration\n");
-    console.log("Path:", getConfigPath());
-    console.log("");
+    console.log('\nPHA Configuration\n');
+    console.log('Path:', getConfigPath());
+    console.log('');
     console.log(JSON.stringify(config, null, 2));
-    console.log("");
+    console.log('');
     process.exit(0);
   });
 
   // config get <path>
   configCmd
-    .command("get <path>")
-    .description("Get a configuration value")
+    .command('get <path>')
+    .description('Get a configuration value')
     .action((path) => {
       const value = getConfigValue(path);
       if (value === undefined) {
         console.log(`No value found for: ${path}`);
       } else {
-        console.log(typeof value === "object" ? JSON.stringify(value, null, 2) : value);
+        console.log(typeof value === 'object' ? JSON.stringify(value, null, 2) : value);
       }
       process.exit(0);
     });
 
   // config set <path> <value>
   configCmd
-    .command("set <path> <value>")
-    .description("Set a configuration value")
+    .command('set <path> <value>')
+    .description('Set a configuration value')
     .action((path, value) => {
       setConfigValue(path, value);
       console.log(`Set ${path} = ${value}`);
@@ -57,8 +57,8 @@ export function registerConfigCommand(program: Command): void {
 
   // config unset <path>
   configCmd
-    .command("unset <path>")
-    .description("Remove a configuration value")
+    .command('unset <path>')
+    .description('Remove a configuration value')
     .action((path) => {
       unsetConfigValue(path);
       console.log(`Removed ${path}`);
@@ -67,8 +67,8 @@ export function registerConfigCommand(program: Command): void {
 
   // config path - show config file path
   configCmd
-    .command("path")
-    .description("Show configuration file path")
+    .command('path')
+    .description('Show configuration file path')
     .action(() => {
       console.log(getConfigPath());
       process.exit(0);
@@ -76,25 +76,25 @@ export function registerConfigCommand(program: Command): void {
 
   // config reset - reset to defaults
   configCmd
-    .command("reset")
-    .description("Reset configuration to defaults")
-    .option("--force", "Skip confirmation")
+    .command('reset')
+    .description('Reset configuration to defaults')
+    .option('--force', 'Skip confirmation')
     .action((options) => {
       if (!options.force) {
-        console.log("This will reset all configuration to defaults.");
-        console.log("Use --force to confirm.");
+        console.log('This will reset all configuration to defaults.');
+        console.log('Use --force to confirm.');
         return;
       }
 
-      const { ensureConfigDir, saveConfig } = require("../utils/config.js");
+      const { ensureConfigDir, saveConfig } = require('../utils/config.js');
       ensureConfigDir();
       saveConfig({
         gateway: { port: 8000, autoStart: false },
-        llm: { provider: "anthropic" },
-        dataSources: { type: "mock" },
-        tui: { theme: "dark", showToolCalls: true },
+        llm: { provider: 'anthropic' },
+        dataSources: { type: 'mock' },
+        tui: { theme: 'dark', showToolCalls: true },
       });
-      console.log("Configuration reset to defaults.");
+      console.log('Configuration reset to defaults.');
       process.exit(0);
     });
 }

@@ -5,17 +5,17 @@
  * in git worktree directories.
  */
 
-import { Type } from "@sinclair/typebox";
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
+import { Type } from '@sinclair/typebox';
+import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
 
 const ClaudeCodeSchema = Type.Object({
-  prompt: Type.String({ description: "The task prompt for Claude Code" }),
-  workingDirectory: Type.String({ description: "Directory to operate in (worktree path)" }),
+  prompt: Type.String({ description: 'The task prompt for Claude Code' }),
+  workingDirectory: Type.String({ description: 'Directory to operate in (worktree path)' }),
   allowedTools: Type.Optional(
-    Type.String({ description: "Comma-separated tool list. Default: Read,Edit,Write,Glob,Grep" })
+    Type.String({ description: 'Comma-separated tool list. Default: Read,Edit,Write,Glob,Grep' })
   ),
-  model: Type.Optional(Type.String({ description: "Model to use. Default: sonnet" })),
-  maxTurns: Type.Optional(Type.Number({ description: "Max agentic turns. Default: 20" })),
+  model: Type.Optional(Type.String({ description: 'Model to use. Default: sonnet' })),
+  maxTurns: Type.Optional(Type.Number({ description: 'Max agentic turns. Default: 20' })),
 });
 
 interface ClaudeCodeResult {
@@ -32,33 +32,30 @@ async function executeClaudeCode(params: {
   model?: string;
   maxTurns?: number;
 }): Promise<ClaudeCodeResult> {
-  const args = ["claude", "-p", "--output-format", "json", "--dangerously-skip-permissions"];
+  const args = ['claude', '-p', '--output-format', 'json', '--dangerously-skip-permissions'];
 
   if (params.model) {
-    args.push("--model", params.model);
+    args.push('--model', params.model);
   }
 
   if (params.maxTurns) {
-    args.push("--max-turns", String(params.maxTurns));
+    args.push('--max-turns', String(params.maxTurns));
   }
 
   if (params.allowedTools) {
-    args.push("--allowedTools", params.allowedTools);
+    args.push('--allowedTools', params.allowedTools);
   }
 
   try {
     const proc = Bun.spawn(args, {
       cwd: params.workingDirectory,
       stdin: new Response(params.prompt).body!,
-      stdout: "pipe",
-      stderr: "pipe",
+      stdout: 'pipe',
+      stderr: 'pipe',
       env: { ...process.env, CLAUDECODE: undefined },
     });
 
-    const [stdout, stderr] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-    ]);
+    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
 
     const exitCode = await proc.exited;
 
@@ -82,15 +79,15 @@ async function executeClaudeCode(params: {
     // Get changed files via git status
     let filesChanged: string[] = [];
     try {
-      const gitProc = Bun.spawn(["git", "status", "--porcelain"], {
+      const gitProc = Bun.spawn(['git', 'status', '--porcelain'], {
         cwd: params.workingDirectory,
-        stdout: "pipe",
-        stderr: "pipe",
+        stdout: 'pipe',
+        stderr: 'pipe',
       });
       const gitOut = await new Response(gitProc.stdout).text();
       await gitProc.exited;
       filesChanged = gitOut
-        .split("\n")
+        .split('\n')
         .filter((line) => line.trim())
         .map((line) => line.slice(3).trim());
     } catch {
@@ -111,10 +108,10 @@ async function executeClaudeCode(params: {
 }
 
 export const claudeCodeAgentTool: AgentTool<typeof ClaudeCodeSchema> = {
-  name: "claude_code",
+  name: 'claude_code',
   description:
-    "Execute coding tasks using Claude Code CLI in a specified directory. Use this to edit source files, refactor code, or apply changes in a git worktree.",
-  label: "Claude Code",
+    'Execute coding tasks using Claude Code CLI in a specified directory. Use this to edit source files, refactor code, or apply changes in a git worktree.',
+  label: 'Claude Code',
   parameters: ClaudeCodeSchema,
   execute: async (
     _toolCallId: string,
@@ -128,7 +125,7 @@ export const claudeCodeAgentTool: AgentTool<typeof ClaudeCodeSchema> = {
   ): Promise<AgentToolResult<unknown>> => {
     const result = await executeClaudeCode(params);
     return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       details: result,
     };
   },

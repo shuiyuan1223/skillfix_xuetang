@@ -5,14 +5,14 @@
  * Structure is compatible with OpenClaw's PluginRegistry (keeps typedHooks field name).
  */
 
-import type { PluginHookRegistration, PluginToolRegistration, PluginOrigin } from "./types.js";
+import type { PluginHookRegistration, PluginToolRegistration, PluginOrigin } from './types.js';
 
 export type PluginRecord = {
   id: string;
   name: string;
   source: string;
   origin: PluginOrigin;
-  status: "loaded" | "disabled" | "error";
+  status: 'loaded' | 'disabled' | 'error';
   error?: string;
   toolCount: number;
   hookCount: number;

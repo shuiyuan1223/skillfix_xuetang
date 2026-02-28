@@ -17,8 +17,8 @@
  * It is handled by the System Agent via create_github_issue_for_incident MCP tool.
  */
 
-import { insertIncident, type IncidentSource } from "../memory/db.js";
-import { classifyIncident, type ClassificationResult } from "../evolution/incident-classifier.js";
+import { insertIncident, type IncidentSource } from '../memory/db.js';
+import { classifyIncident, type ClassificationResult } from '../evolution/incident-classifier.js';
 
 export interface SlackWebhookPayload {
   token?: string;
@@ -58,16 +58,16 @@ function extractTraceId(text: string): string | undefined {
  * Strip trigger words and slash command prefixes from text.
  */
 function normalizeText(payload: SlackWebhookPayload): string {
-  let text = payload.text ?? "";
+  let text = payload.text ?? '';
 
   // Strip trigger word (e.g. "bad-case: ...")
   if (payload.trigger_word) {
-    text = text.replace(new RegExp(`^${payload.trigger_word}[:\\s]*`, "i"), "").trim();
+    text = text.replace(new RegExp(`^${payload.trigger_word}[:\\s]*`, 'i'), '').trim();
   }
 
   // Strip slash command (e.g. "/bad-case ...")
   if (payload.command) {
-    text = text.replace(/^\/\S+\s*/, "").trim();
+    text = text.replace(/^\/\S+\s*/, '').trim();
   }
 
   return text.trim();
@@ -77,8 +77,8 @@ function normalizeText(payload: SlackWebhookPayload): string {
  * Determine source based on payload shape
  */
 function detectSource(payload: SlackWebhookPayload): IncidentSource {
-  if (payload.command) return "slack"; // slash command
-  return "slack";
+  if (payload.command) return 'slack'; // slash command
+  return 'slack';
 }
 
 /**
@@ -100,10 +100,10 @@ export async function handleSlackWebhook(
 
   // LLM classification (if llmCall provided), else persist as unclassified
   let classification: ClassificationResult = {
-    type: "unclassified",
-    priority: "medium",
+    type: 'unclassified',
+    priority: 'medium',
     confidence: 0,
-    reason: "LLM not available at ingest time — pending manual classification.",
+    reason: 'LLM not available at ingest time — pending manual classification.',
   };
 
   if (llmCall) {
@@ -124,7 +124,7 @@ export async function handleSlackWebhook(
       rawText,
       traceId,
       type: classification.type,
-      status: "pending",
+      status: 'pending',
       priority: classification.priority,
       classificationConfidence: classification.confidence,
       classificationReason: classification.reason,
@@ -170,29 +170,29 @@ function buildReply(
 
   const followUp = getFollowUp(classification, rawText);
 
-  if (isVague || classification.type === "unclassified") {
+  if (isVague || classification.type === 'unclassified') {
     // Acknowledge but ask for more context
-    return `已记录（\`${shortId}\`）。${traceId ? ` Trace: \`${traceId}\`` : ""}\n\n${followUp}`;
+    return `已记录（\`${shortId}\`）。${traceId ? ` Trace: \`${traceId}\`` : ''}\n\n${followUp}`;
   }
 
   // Clear enough — confirm with light summary
   const typeLabel: Record<string, string> = {
-    bug: "🐛 Bug",
-    effect: "📉 效果问题",
-    unclassified: "❓ 待分类",
+    bug: '🐛 Bug',
+    effect: '📉 效果问题',
+    unclassified: '❓ 待分类',
   };
   const label = typeLabel[classification.type] ?? classification.type;
   const priorityLabel: Record<string, string> = {
-    high: "⚠️ 高",
-    medium: "中",
-    low: "低",
-    ignore: "忽略",
+    high: '⚠️ 高',
+    medium: '中',
+    low: '低',
+    ignore: '忽略',
   };
   const priority = priorityLabel[classification.priority] ?? classification.priority;
 
   return `${label} 已记录（\`${shortId}\`），优先级 ${priority}。${
-    traceId ? ` Trace: \`${traceId}\`` : ""
-  }${followUp ? `\n\n${followUp}` : ""}`;
+    traceId ? ` Trace: \`${traceId}\`` : ''
+  }${followUp ? `\n\n${followUp}` : ''}`;
 }
 
 /**
@@ -201,19 +201,19 @@ function buildReply(
 function getFollowUp(classification: ClassificationResult, rawText: string): string {
   const lower = rawText.toLowerCase();
 
-  if (classification.type === "bug") {
+  if (classification.type === 'bug') {
     // Bug but short description
-    return "能描述一下具体的异常行为吗？比如：工具调用失败、返回了错误数据、页面报错等。";
+    return '能描述一下具体的异常行为吗？比如：工具调用失败、返回了错误数据、页面报错等。';
   }
 
-  if (classification.type === "effect") {
+  if (classification.type === 'effect') {
     // Effect — ask what specifically was wrong
-    if (lower.includes("不好") || lower.includes("效果") || lower.includes("感觉")) {
-      return "能说说哪里不满意吗？是*回答太泛*、*建议不实用*、*答非所问*，还是*语气有问题*？";
+    if (lower.includes('不好') || lower.includes('效果') || lower.includes('感觉')) {
+      return '能说说哪里不满意吗？是*回答太泛*、*建议不实用*、*答非所问*，还是*语气有问题*？';
     }
-    return "Agent 的回答具体哪里不符合预期？";
+    return 'Agent 的回答具体哪里不符合预期？';
   }
 
   // Unclassified or unclear
-  return "能多说一点吗？比如：Agent 具体回答了什么，以及哪里不对或不满意。";
+  return '能多说一点吗？比如：Agent 具体回答了什么，以及哪里不对或不满意。';
 }

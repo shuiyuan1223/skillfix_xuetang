@@ -8,7 +8,7 @@
  * .toSorted() replaced with .slice().sort() for broader runtime compat.
  */
 
-import type { PluginRegistry } from "./registry.js";
+import type { PluginRegistry } from './registry.js';
 import type {
   PluginHookAfterCompactionEvent,
   PluginHookAfterToolCallEvent,
@@ -36,7 +36,7 @@ import type {
   PluginHookToolResultPersistContext,
   PluginHookToolResultPersistEvent,
   PluginHookToolResultPersistResult,
-} from "./types.js";
+} from './types.js';
 
 // Re-export types for consumers
 export type {
@@ -81,10 +81,7 @@ export type HookRunnerOptions = {
 /**
  * Get hooks for a specific hook name, sorted by priority (higher first).
  */
-function getHooksForName<K extends PluginHookName>(
-  registry: PluginRegistry,
-  hookName: K
-): PluginHookRegistration<K>[] {
+function getHooksForName<K extends PluginHookName>(registry: PluginRegistry, hookName: K): PluginHookRegistration<K>[] {
   return (registry.typedHooks as PluginHookRegistration<K>[])
     .filter((h) => h.hookName === hookName)
     .slice()
@@ -98,13 +95,15 @@ function getHooksForName<K extends PluginHookName>(
 async function runVoidHook<K extends PluginHookName>(
   registry: PluginRegistry,
   hookName: K,
-  event: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[0],
-  ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1],
+  event: Parameters<NonNullable<PluginHookRegistration<K>['handler']>>[0],
+  ctx: Parameters<NonNullable<PluginHookRegistration<K>['handler']>>[1],
   logger?: HookRunnerLogger,
   catchErrors = true
 ): Promise<void> {
   const hooks = getHooksForName(registry, hookName);
-  if (hooks.length === 0) return;
+  if (hooks.length === 0) {
+    return;
+  }
 
   logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers)`);
 
@@ -113,8 +112,11 @@ async function runVoidHook<K extends PluginHookName>(
       await (hook.handler as (event: unknown, ctx: unknown) => Promise<void>)(event, ctx);
     } catch (err) {
       const msg = `[hooks] ${hookName} handler from ${hook.pluginId} failed: ${String(err)}`;
-      if (catchErrors) logger?.error(msg);
-      else throw new Error(msg, { cause: err });
+      if (catchErrors) {
+        logger?.error(msg);
+      } else {
+        throw new Error(msg, { cause: err });
+      }
     }
   });
 
@@ -128,14 +130,16 @@ async function runVoidHook<K extends PluginHookName>(
 async function runModifyingHook<K extends PluginHookName, TResult>(
   registry: PluginRegistry,
   hookName: K,
-  event: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[0],
-  ctx: Parameters<NonNullable<PluginHookRegistration<K>["handler"]>>[1],
+  event: Parameters<NonNullable<PluginHookRegistration<K>['handler']>>[0],
+  ctx: Parameters<NonNullable<PluginHookRegistration<K>['handler']>>[1],
   logger?: HookRunnerLogger,
   catchErrors = true,
   mergeResults?: (accumulated: TResult | undefined, next: TResult) => TResult
 ): Promise<TResult | undefined> {
   const hooks = getHooksForName(registry, hookName);
-  if (hooks.length === 0) return undefined;
+  if (hooks.length === 0) {
+    return undefined;
+  }
 
   logger?.debug?.(`[hooks] running ${hookName} (${hooks.length} handlers, sequential)`);
 
@@ -143,9 +147,7 @@ async function runModifyingHook<K extends PluginHookName, TResult>(
 
   for (const hook of hooks) {
     try {
-      const handlerResult = await (
-        hook.handler as (event: unknown, ctx: unknown) => Promise<TResult>
-      )(event, ctx);
+      const handlerResult = await (hook.handler as (event: unknown, ctx: unknown) => Promise<TResult>)(event, ctx);
 
       if (handlerResult !== undefined && handlerResult !== null) {
         if (mergeResults && result !== undefined) {
@@ -156,8 +158,11 @@ async function runModifyingHook<K extends PluginHookName, TResult>(
       }
     } catch (err) {
       const msg = `[hooks] ${hookName} handler from ${hook.pluginId} failed: ${String(err)}`;
-      if (catchErrors) logger?.error(msg);
-      else throw new Error(msg, { cause: err });
+      if (catchErrors) {
+        logger?.error(msg);
+      } else {
+        throw new Error(msg, { cause: err });
+      }
     }
   }
 
@@ -174,8 +179,10 @@ function runToolResultPersistHook(
   logger?: HookRunnerLogger,
   catchErrors = true
 ): PluginHookToolResultPersistResult | undefined {
-  const hooks = getHooksForName(registry, "tool_result_persist");
-  if (hooks.length === 0) return undefined;
+  const hooks = getHooksForName(registry, 'tool_result_persist');
+  if (hooks.length === 0) {
+    return undefined;
+  }
 
   let current = event.message;
 
@@ -188,7 +195,7 @@ function runToolResultPersistHook(
         | Promise<unknown>;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (out && typeof (out as any).then === "function") {
+      if (out && typeof (out as any).then === 'function') {
         const msg =
           `[hooks] tool_result_persist handler from ${hook.pluginId} returned a Promise; ` +
           `this hook is synchronous and the result was ignored.`;
@@ -200,11 +207,16 @@ function runToolResultPersistHook(
       }
 
       const next = (out as PluginHookToolResultPersistResult | undefined)?.message;
-      if (next) current = next;
+      if (next) {
+        current = next;
+      }
     } catch (err) {
       const msg = `[hooks] tool_result_persist handler from ${hook.pluginId} failed: ${String(err)}`;
-      if (catchErrors) logger?.error(msg);
-      else throw new Error(msg, { cause: err });
+      if (catchErrors) {
+        logger?.error(msg);
+      } else {
+        throw new Error(msg, { cause: err });
+      }
     }
   }
 
@@ -218,9 +230,9 @@ function runToolResultPersistHook(
 function buildAgentHooks(registry: PluginRegistry, logger?: HookRunnerLogger, catchErrors = true) {
   return {
     runBeforeAgentStart: (event: PluginHookBeforeAgentStartEvent, ctx: PluginHookAgentContext) =>
-      runModifyingHook<"before_agent_start", PluginHookBeforeAgentStartResult>(
+      runModifyingHook<'before_agent_start', PluginHookBeforeAgentStartResult>(
         registry,
-        "before_agent_start",
+        'before_agent_start',
         event,
         ctx,
         logger,
@@ -234,11 +246,11 @@ function buildAgentHooks(registry: PluginRegistry, logger?: HookRunnerLogger, ca
         })
       ),
     runAgentEnd: (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext) =>
-      runVoidHook(registry, "agent_end", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'agent_end', event, ctx, logger, catchErrors),
     runBeforeCompaction: (event: PluginHookBeforeCompactionEvent, ctx: PluginHookAgentContext) =>
-      runVoidHook(registry, "before_compaction", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'before_compaction', event, ctx, logger, catchErrors),
     runAfterCompaction: (event: PluginHookAfterCompactionEvent, ctx: PluginHookAgentContext) =>
-      runVoidHook(registry, "after_compaction", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'after_compaction', event, ctx, logger, catchErrors),
   };
 }
 
@@ -246,18 +258,14 @@ function buildAgentHooks(registry: PluginRegistry, logger?: HookRunnerLogger, ca
  * Build message hook functions.
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-function buildMessageHooks(
-  registry: PluginRegistry,
-  logger?: HookRunnerLogger,
-  catchErrors = true
-) {
+function buildMessageHooks(registry: PluginRegistry, logger?: HookRunnerLogger, catchErrors = true) {
   return {
     runMessageReceived: (event: PluginHookMessageReceivedEvent, ctx: PluginHookMessageContext) =>
-      runVoidHook(registry, "message_received", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'message_received', event, ctx, logger, catchErrors),
     runMessageSending: (event: PluginHookMessageSendingEvent, ctx: PluginHookMessageContext) =>
-      runModifyingHook<"message_sending", PluginHookMessageSendingResult>(
+      runModifyingHook<'message_sending', PluginHookMessageSendingResult>(
         registry,
-        "message_sending",
+        'message_sending',
         event,
         ctx,
         logger,
@@ -268,7 +276,7 @@ function buildMessageHooks(
         })
       ),
     runMessageSent: (event: PluginHookMessageSentEvent, ctx: PluginHookMessageContext) =>
-      runVoidHook(registry, "message_sent", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'message_sent', event, ctx, logger, catchErrors),
   };
 }
 
@@ -279,9 +287,9 @@ function buildMessageHooks(
 function buildToolHooks(registry: PluginRegistry, logger?: HookRunnerLogger, catchErrors = true) {
   return {
     runBeforeToolCall: (event: PluginHookBeforeToolCallEvent, ctx: PluginHookToolContext) =>
-      runModifyingHook<"before_tool_call", PluginHookBeforeToolCallResult>(
+      runModifyingHook<'before_tool_call', PluginHookBeforeToolCallResult>(
         registry,
-        "before_tool_call",
+        'before_tool_call',
         event,
         ctx,
         logger,
@@ -293,11 +301,9 @@ function buildToolHooks(registry: PluginRegistry, logger?: HookRunnerLogger, cat
         })
       ),
     runAfterToolCall: (event: PluginHookAfterToolCallEvent, ctx: PluginHookToolContext) =>
-      runVoidHook(registry, "after_tool_call", event, ctx, logger, catchErrors),
-    runToolResultPersist: (
-      event: PluginHookToolResultPersistEvent,
-      ctx: PluginHookToolResultPersistContext
-    ) => runToolResultPersistHook(registry, event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'after_tool_call', event, ctx, logger, catchErrors),
+    runToolResultPersist: (event: PluginHookToolResultPersistEvent, ctx: PluginHookToolResultPersistContext) =>
+      runToolResultPersistHook(registry, event, ctx, logger, catchErrors),
   };
 }
 
@@ -315,19 +321,17 @@ export function createHookRunner(registry: PluginRegistry, options: HookRunnerOp
     ...buildToolHooks(registry, logger, catchErrors),
     // Session hooks
     runSessionStart: (event: PluginHookSessionStartEvent, ctx: PluginHookSessionContext) =>
-      runVoidHook(registry, "session_start", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'session_start', event, ctx, logger, catchErrors),
     runSessionEnd: (event: PluginHookSessionEndEvent, ctx: PluginHookSessionContext) =>
-      runVoidHook(registry, "session_end", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'session_end', event, ctx, logger, catchErrors),
     // Gateway hooks
     runGatewayStart: (event: PluginHookGatewayStartEvent, ctx: PluginHookGatewayContext) =>
-      runVoidHook(registry, "gateway_start", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'gateway_start', event, ctx, logger, catchErrors),
     runGatewayStop: (event: PluginHookGatewayStopEvent, ctx: PluginHookGatewayContext) =>
-      runVoidHook(registry, "gateway_stop", event, ctx, logger, catchErrors),
+      runVoidHook(registry, 'gateway_stop', event, ctx, logger, catchErrors),
     // Utility
-    hasHooks: (hookName: PluginHookName) =>
-      registry.typedHooks.some((h) => h.hookName === hookName),
-    getHookCount: (hookName: PluginHookName) =>
-      registry.typedHooks.filter((h) => h.hookName === hookName).length,
+    hasHooks: (hookName: PluginHookName) => registry.typedHooks.some((h) => h.hookName === hookName),
+    getHookCount: (hookName: PluginHookName) => registry.typedHooks.filter((h) => h.hookName === hookName).length,
   };
 }
 

@@ -5,12 +5,12 @@
  * and registration into the plugin registry.
  */
 
-import path from "node:path";
-import { createSubsystemLogger } from "../memory/compat.js";
-import { discoverPlugins, type PluginCandidate } from "./discovery.js";
-import { initializeGlobalHookRunner } from "./hook-runner-global.js";
-import { loadPluginManifest } from "./manifest.js";
-import { createEmptyRegistry, type PluginRecord, type PluginRegistry } from "./registry.js";
+import path from 'node:path';
+import { createSubsystemLogger } from '../memory/compat.js';
+import { discoverPlugins, type PluginCandidate } from './discovery.js';
+import { initializeGlobalHookRunner } from './hook-runner-global.js';
+import { loadPluginManifest } from './manifest.js';
+import { createEmptyRegistry, type PluginRecord, type PluginRegistry } from './registry.js';
 import type {
   AnyAgentTool,
   PHAPluginApi,
@@ -23,20 +23,18 @@ import type {
   PluginLogger,
   PluginOrigin,
   PluginToolRegistration,
-} from "./types.js";
+} from './types.js';
 
-const log = createSubsystemLogger("plugins");
+const log = createSubsystemLogger('plugins');
 
 function isToolFactory(tool: AnyAgentTool | PHAPluginToolFactory): tool is PHAPluginToolFactory {
-  return (
-    typeof tool === "function" && !("name" in tool && "description" in tool && "execute" in tool)
-  );
+  return typeof tool === 'function' && !('name' in tool && 'description' in tool && 'execute' in tool);
 }
 
 function pushPluginRecord(
   registry: PluginRegistry,
   base: { id: string; name: string; source: string; origin: PluginOrigin },
-  status: "error" | "disabled" | "loaded",
+  status: 'error' | 'disabled' | 'loaded',
   counts?: { toolCount: number; hookCount: number },
   error?: string
 ): void {
@@ -77,7 +75,9 @@ function createPluginApi(
     registerTool(tool: AnyAgentTool | PHAPluginToolFactory, opts?: PHAPluginToolOptions): void {
       if (isToolFactory(tool)) {
         const result = tool({});
-        if (!result) return;
+        if (!result) {
+          return;
+        }
         const tools = Array.isArray(result) ? result : [result];
         for (const t of tools) {
           toolRegs.push({ pluginId, tool: t, source: candidate.source });
@@ -88,14 +88,10 @@ function createPluginApi(
         registry.tools.push({ pluginId, tool, source: candidate.source });
       }
       const names = opts?.names || (opts?.name ? [opts.name] : toolRegs.map((r) => r.tool.name));
-      pluginLogger.debug?.(`registered tool(s): ${names.join(", ")}`);
+      pluginLogger.debug?.(`registered tool(s): ${names.join(', ')}`);
     },
 
-    on<K extends PluginHookName>(
-      hookName: K,
-      handler: PluginHookHandlerMap[K],
-      opts?: { priority?: number }
-    ): void {
+    on<K extends PluginHookName>(hookName: K, handler: PluginHookHandlerMap[K], opts?: { priority?: number }): void {
       const reg: PluginHookRegistration<K> = {
         pluginId,
         hookName,
@@ -116,10 +112,7 @@ async function loadSinglePlugin(
   registry: PluginRegistry,
   pluginConfigs?: Record<string, { enabled?: boolean; config?: unknown }>
 ): Promise<void> {
-  const base = (
-    id: string,
-    name?: string
-  ): { id: string; name: string; source: string; origin: PluginOrigin } => ({
+  const base = (id: string, name?: string): { id: string; name: string; source: string; origin: PluginOrigin } => ({
     id,
     name: name || id,
     source: candidate.source,
@@ -130,13 +123,7 @@ async function loadSinglePlugin(
   const manifestResult = loadPluginManifest(candidate.dir);
   if (!manifestResult.ok) {
     log.warn(`skipping ${candidate.dir}: ${manifestResult.error}`);
-    pushPluginRecord(
-      registry,
-      base(path.basename(candidate.dir)),
-      "error",
-      undefined,
-      manifestResult.error
-    );
+    pushPluginRecord(registry, base(path.basename(candidate.dir)), 'error', undefined, manifestResult.error);
     return;
   }
 
@@ -147,7 +134,7 @@ async function loadSinglePlugin(
   const pluginEntry = pluginConfigs?.[pluginId];
   if (pluginEntry?.enabled === false) {
     log.info(`plugin ${pluginId} is disabled`);
-    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), "disabled");
+    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), 'disabled');
     return;
   }
 
@@ -158,38 +145,32 @@ async function loadSinglePlugin(
   } catch (err) {
     const msg = `failed to import plugin ${pluginId}: ${String(err)}`;
     log.error(msg);
-    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), "error", undefined, msg);
+    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), 'error', undefined, msg);
     return;
   }
 
   // 4. Resolve plugin definition & create API
-  const pluginDef: PHAPluginModule =
-    (mod.default as PHAPluginModule) || (mod as unknown as PHAPluginModule);
+  const pluginDef: PHAPluginModule = (mod.default as PHAPluginModule) || (mod as unknown as PHAPluginModule);
   const toolRegs: PluginToolRegistration[] = [];
   const hookRegs: PluginHookRegistration[] = [];
-  const api = createPluginApi(
-    pluginId,
-    candidate,
-    manifest,
-    pluginEntry,
-    registry,
-    toolRegs,
-    hookRegs
-  );
+  const api = createPluginApi(pluginId, candidate, manifest, pluginEntry, registry, toolRegs, hookRegs);
 
   // 5. Call register
   try {
-    if (typeof pluginDef === "function") await pluginDef(api);
-    else if (pluginDef.register) await pluginDef.register(api);
+    if (typeof pluginDef === 'function') {
+      await pluginDef(api);
+    } else if (pluginDef.register) {
+      await pluginDef.register(api);
+    }
   } catch (err) {
     const msg = `plugin ${pluginId} register() failed: ${String(err)}`;
     log.error(msg);
-    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), "error", undefined, msg);
+    pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), 'error', undefined, msg);
     return;
   }
 
   // 6. Record success
-  pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), "loaded", {
+  pushPluginRecord(registry, base(pluginId, manifest.name || pluginId), 'loaded', {
     toolCount: toolRegs.length,
     hookCount: hookRegs.length,
   });
@@ -214,7 +195,7 @@ export async function loadPlugins(options: {
   }
 
   if (discovery.candidates.length === 0) {
-    log.debug("no plugins found");
+    log.debug('no plugins found');
     initializeGlobalHookRunner(registry);
     return registry;
   }

@@ -4,17 +4,13 @@
  * Client for calling Huawei Health Kit REST API endpoints.
  */
 
-import type { HuaweiAuth } from "./huawei-auth.js";
-import { huaweiAuth as defaultAuth } from "./huawei-auth.js";
-import {
-  HuaweiDataType,
-  type HuaweiPolymerizeResponse,
-  type HuaweiApiError,
-} from "./huawei-types.js";
-import { loadConfig } from "../../utils/config.js";
-import { saveToFileCache, getFromMemoryCache, saveToMemoryCache } from "./api-cache.js";
-import { getUserStore } from "./user-store.js";
-import { createLogger } from "../../utils/logger.js";
+import type { HuaweiAuth } from './huawei-auth.js';
+import { huaweiAuth as defaultAuth } from './huawei-auth.js';
+import { HuaweiDataType, type HuaweiPolymerizeResponse, type HuaweiApiError } from './huawei-types.js';
+import { loadConfig } from '../../utils/config.js';
+import { saveToFileCache, getFromMemoryCache, saveToMemoryCache } from './api-cache.js';
+import { getUserStore } from './user-store.js';
+import { createLogger } from '../../utils/logger.js';
 import {
   parseHeartRateResponse,
   parseStressResponse,
@@ -34,12 +30,12 @@ import {
   parseHRVResponse,
   parseEmotionResponse,
   parsePolymerizeDataRangeChunk,
-} from "./huawei-parsers.js";
+} from './huawei-parsers.js';
 
-const log = createLogger("Huawei/API");
+const log = createLogger('Huawei/API');
 
 // Huawei Health Kit API base URL (default, can be overridden in config)
-const DEFAULT_API_BASE = "https://health-api.cloud.huawei.com";
+const DEFAULT_API_BASE = 'https://health-api.cloud.huawei.com';
 
 // Track scope errors for re-auth detection
 const missingScopeErrors = new Set<string>();
@@ -67,34 +63,34 @@ function getApiBaseUrl(): string {
 // Data type names for the API
 // See: https://pub.dev/documentation/huawei_health/latest/huawei_health/DataType-class.html
 const DATA_TYPE_NAMES: Record<number, string> = {
-  [HuaweiDataType.STEPS]: "com.huawei.continuous.steps.delta",
-  [HuaweiDataType.DISTANCE]: "com.huawei.continuous.distance.delta",
-  [HuaweiDataType.CALORIES]: "com.huawei.continuous.calories.burnt",
+  [HuaweiDataType.STEPS]: 'com.huawei.continuous.steps.delta',
+  [HuaweiDataType.DISTANCE]: 'com.huawei.continuous.distance.delta',
+  [HuaweiDataType.CALORIES]: 'com.huawei.continuous.calories.burnt',
   // ACTIVE_MINUTES: fetched from dailyActivitySummary (activeHours), not polymerize
 };
 
 // Additional data type names for other health metrics
 const HEALTH_DATA_TYPES = {
-  HEART_RATE: "com.huawei.instantaneous.heart_rate",
-  HEART_RATE_STATISTICS: "com.huawei.continuous.heart_rate.statistics",
-  RESTING_HEART_RATE: "com.huawei.instantaneous.resting_heart_rate",
-  SLEEP: "com.huawei.continuous.sleep.segment",
-  SLEEP_STATISTICS: "com.huawei.continuous.sleep.statistics",
-  STRESS: "com.huawei.instantaneous.stress",
-  SPO2: "com.huawei.instantaneous.spo2",
-  ECG: "com.huawei.continuous.ecg_record",
-  BLOOD_PRESSURE: "com.huawei.instantaneous.blood_pressure",
-  BLOOD_GLUCOSE: "com.huawei.instantaneous.blood_glucose",
-  BODY_WEIGHT: "com.huawei.instantaneous.body_weight",
-  BODY_HEIGHT: "com.huawei.instantaneous.height",
-  BODY_TEMPERATURE: "com.huawei.instantaneous.body.temperature",
-  NUTRITION_RECORD: "com.huawei.health.record.nutrition_record",
-  MENSTRUAL_FLOW: "com.huawei.continuous.menstrual_flow",
-  DYSMENORRHOEA: "com.huawei.dysmenorrhoea",
-  PHYSICAL_SYMPTOMS: "com.huawei.physical_symptoms",
-  VO2MAX: "com.huawei.vo2max",
-  HRV: "com.huawei.instantaneous.heart_rate_variability",
-  EMOTION: "com.huawei.emotion",
+  HEART_RATE: 'com.huawei.instantaneous.heart_rate',
+  HEART_RATE_STATISTICS: 'com.huawei.continuous.heart_rate.statistics',
+  RESTING_HEART_RATE: 'com.huawei.instantaneous.resting_heart_rate',
+  SLEEP: 'com.huawei.continuous.sleep.segment',
+  SLEEP_STATISTICS: 'com.huawei.continuous.sleep.statistics',
+  STRESS: 'com.huawei.instantaneous.stress',
+  SPO2: 'com.huawei.instantaneous.spo2',
+  ECG: 'com.huawei.continuous.ecg_record',
+  BLOOD_PRESSURE: 'com.huawei.instantaneous.blood_pressure',
+  BLOOD_GLUCOSE: 'com.huawei.instantaneous.blood_glucose',
+  BODY_WEIGHT: 'com.huawei.instantaneous.body_weight',
+  BODY_HEIGHT: 'com.huawei.instantaneous.height',
+  BODY_TEMPERATURE: 'com.huawei.instantaneous.body.temperature',
+  NUTRITION_RECORD: 'com.huawei.health.record.nutrition_record',
+  MENSTRUAL_FLOW: 'com.huawei.continuous.menstrual_flow',
+  DYSMENORRHOEA: 'com.huawei.dysmenorrhoea',
+  PHYSICAL_SYMPTOMS: 'com.huawei.physical_symptoms',
+  VO2MAX: 'com.huawei.vo2max',
+  HRV: 'com.huawei.instantaneous.heart_rate_variability',
+  EMOTION: 'com.huawei.emotion',
 };
 
 export interface PolymerizeResult {
@@ -132,7 +128,7 @@ export class HuaweiHealthApi {
 
   private static getInnerBaseUrl(): string {
     const config = loadConfig();
-    return config.dataSources.huawei?.innerApiBaseUrl ?? "";
+    return config.dataSources.huawei?.innerApiBaseUrl ?? '';
   }
 
   constructor(auth: HuaweiAuth = defaultAuth, userUuid?: string, options?: HuaweiHealthApiOptions) {
@@ -171,10 +167,10 @@ export class HuaweiHealthApi {
       }
       const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
       if (this.userHuid) {
-        headers["x-huid"] = this.userHuid;
+        headers['x-huid'] = this.userHuid;
       }
       if (this.clientId) {
-        headers["x-client-id"] = this.clientId;
+        headers['x-client-id'] = this.clientId;
       }
       options = { ...options, headers };
     }
@@ -186,8 +182,8 @@ export class HuaweiHealthApi {
    */
   async getPolymerizeData(date: string): Promise<PolymerizeResult> {
     // Check memory cache first (include userUuid to isolate per-user cache)
-    const cacheKey = "polymerize";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'polymerize';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<PolymerizeResult>(cacheKey, cacheParams);
     if (cached) {
       return cached;
@@ -217,12 +213,10 @@ export class HuaweiHealthApi {
     // which avoids double-counting from multiple sources (phone + watch).
     const [polymerizeResults, summaryResult] = await Promise.all([
       Promise.all(
-        dataTypes.map((dataType) =>
-          this.fetchPolymerizeData(accessToken, dataType, startTime, endTime, timeZoneId)
-        )
+        dataTypes.map((dataType) => this.fetchPolymerizeData(accessToken, dataType, startTime, endTime, timeZoneId))
       ),
       this.getDailyActivitySummary(date).catch((e) => {
-        log.warn("Failed to get dailyActivitySummary", e);
+        log.warn('Failed to get dailyActivitySummary', e);
         return null;
       }),
     ]);
@@ -261,10 +255,18 @@ export class HuaweiHealthApi {
     // dailyActivitySummary is the authoritative source for steps (deduplicated total).
     // Always prefer it over polymerize delta sum when available.
     if (summaryResult) {
-      if (summaryResult.steps > 0) aggregated.steps = summaryResult.steps;
-      if (summaryResult.calories > 0) aggregated.calories = summaryResult.calories;
-      if (summaryResult.activeMinutes > 0) aggregated.activeMinutes = summaryResult.activeMinutes;
-      if (summaryResult.distance > 0) aggregated.distance = summaryResult.distance;
+      if (summaryResult.steps > 0) {
+        aggregated.steps = summaryResult.steps;
+      }
+      if (summaryResult.calories > 0) {
+        aggregated.calories = summaryResult.calories;
+      }
+      if (summaryResult.activeMinutes > 0) {
+        aggregated.activeMinutes = summaryResult.activeMinutes;
+      }
+      if (summaryResult.distance > 0) {
+        aggregated.distance = summaryResult.distance;
+      }
     }
 
     // Fallback: compute active minutes from activity records (workouts)
@@ -275,7 +277,7 @@ export class HuaweiHealthApi {
           aggregated.activeMinutes = records.reduce((sum, r) => sum + (r.duration || 0), 0);
         }
       } catch (e) {
-        log.warn("Failed to get activity records for activeMinutes fallback", e);
+        log.warn('Failed to get activity records for activeMinutes fallback', e);
       }
     }
 
@@ -298,25 +300,25 @@ export class HuaweiHealthApi {
     const accessToken = await this.getAccessToken();
     // API requires timeZone in +/-HHMM format (e.g. "+0800")
     const offsetMin = -new Date().getTimezoneOffset();
-    const sign = offsetMin >= 0 ? "+" : "-";
-    const hh = String(Math.floor(Math.abs(offsetMin) / 60)).padStart(2, "0");
-    const mm = String(Math.abs(offsetMin) % 60).padStart(2, "0");
+    const sign = offsetMin >= 0 ? '+' : '-';
+    const hh = String(Math.floor(Math.abs(offsetMin) / 60)).padStart(2, '0');
+    const mm = String(Math.abs(offsetMin) % 60).padStart(2, '0');
     const timeZone = `${sign}${hh}${mm}`;
 
     // API requires date in YYYYMMDD format (no dashes)
-    const dayStr = date.replace(/-/g, "");
+    const dayStr = date.replace(/-/g, '');
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:dailyActivitySummary`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         startDay: dayStr,
@@ -326,8 +328,8 @@ export class HuaweiHealthApi {
     });
 
     if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
-      log.warn("dailyActivitySummary failed", { status: response.status, body: errBody });
+      const errBody = await response.text().catch(() => '');
+      log.warn('dailyActivitySummary failed', { status: response.status, body: errBody });
       return { calories: 0, activeMinutes: 0, steps: 0, distance: 0 };
     }
 
@@ -372,15 +374,15 @@ export class HuaweiHealthApi {
       endTime: endTime.toString(),
     });
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/activityRecords?${params}`;
 
     const response = await this.apiFetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
     });
 
@@ -415,8 +417,8 @@ export class HuaweiHealthApi {
     min: number;
   }> {
     // Check memory cache first (include userUuid to isolate per-user cache)
-    const cacheKey = "heartRate";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'heartRate';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; value: number }>;
       avg: number;
@@ -433,16 +435,16 @@ export class HuaweiHealthApi {
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.HEART_RATE }],
@@ -453,7 +455,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("Heart rate polymerize failed", { status: response.status, errorText });
+      log.warn('Heart rate polymerize failed', { status: response.status, errorText });
       return { readings: [], avg: 0, max: 0, min: 0 };
     }
 
@@ -471,8 +473,8 @@ export class HuaweiHealthApi {
    * Get resting heart rate data
    */
   async getRestingHeartRateData(date: string): Promise<number | null> {
-    const cacheKey = "restingHeartRate";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'restingHeartRate';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<number>(cacheKey, cacheParams);
     if (cached !== undefined) {
       return cached;
@@ -483,15 +485,15 @@ export class HuaweiHealthApi {
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.RESTING_HEART_RATE }],
@@ -501,7 +503,7 @@ export class HuaweiHealthApi {
     });
 
     if (!response.ok) {
-      log.warn("Resting heart rate failed", { status: response.status });
+      log.warn('Resting heart rate failed', { status: response.status });
       return null;
     }
 
@@ -541,8 +543,8 @@ export class HuaweiHealthApi {
     max: number;
     min: number;
   } | null> {
-    const cacheKey = "stress";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'stress';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; value: number }>;
       current: number;
@@ -559,15 +561,15 @@ export class HuaweiHealthApi {
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.STRESS }],
@@ -578,7 +580,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("Stress data failed", { status: response.status, errorText });
+      log.warn('Stress data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -607,8 +609,8 @@ export class HuaweiHealthApi {
     max: number;
     min: number;
   } | null> {
-    const cacheKey = "spo2";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'spo2';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; value: number }>;
       current: number;
@@ -625,15 +627,15 @@ export class HuaweiHealthApi {
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.SPO2 }],
@@ -644,7 +646,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("SpO2 data failed", { status: response.status, errorText });
+      log.warn('SpO2 data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -679,8 +681,8 @@ export class HuaweiHealthApi {
     latestHeartRate: number | null;
     hasArrhythmia: boolean;
   } | null> {
-    const cacheKey = "ecg";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'ecg';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       records: Array<{
         time: string;
@@ -712,7 +714,7 @@ export class HuaweiHealthApi {
     const endTime = endDate.getTime() * 1000000;
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     const params = new URLSearchParams({
       startTime: startTime.toString(),
@@ -723,17 +725,17 @@ export class HuaweiHealthApi {
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
     const response = await this.apiFetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("ECG healthRecords failed", { status: response.status, errorText });
+      log.warn('ECG healthRecords failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -743,7 +745,9 @@ export class HuaweiHealthApi {
     saveToFileCache(cacheKey, { ...cacheParams, rawResponse: json }, null);
 
     const result = parseECGResponse(json);
-    if (!result) return null;
+    if (!result) {
+      return null;
+    }
 
     saveToMemoryCache(cacheKey, cacheParams, result);
     return result;
@@ -786,36 +790,36 @@ export class HuaweiHealthApi {
     const endTime = endDate.getTime() * 1000000;
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     // Use healthRecords endpoint with GET request
     const params = new URLSearchParams({
       startTime: startTime.toString(),
       endTime: endTime.toString(),
-      dataType: "com.huawei.health.record.sleep",
-      subDataType: "com.huawei.continuous.sleep.fragment",
+      dataType: 'com.huawei.health.record.sleep',
+      subDataType: 'com.huawei.continuous.sleep.fragment',
     });
 
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
     const response = await this.apiFetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("Sleep healthRecords failed", { status: response.status, errorText });
-      saveToFileCache("sleep-error", { date, startTime, endTime }, null, errorText);
+      log.warn('Sleep healthRecords failed', { status: response.status, errorText });
+      saveToFileCache('sleep-error', { date, startTime, endTime }, null, errorText);
       return null;
     }
 
     const json = await response.json();
-    saveToFileCache("sleep-success", { date }, json);
+    saveToFileCache('sleep-success', { date }, json);
 
     return parseSleepResponse(json, date);
   }
@@ -824,9 +828,7 @@ export class HuaweiHealthApi {
    * Get weekly sleep data using healthRecords API
    * Returns sleep duration for each day in the past 7 days
    */
-  async getWeeklySleepData(
-    endDate: string
-  ): Promise<Array<{ date: string; hours: number; sleepScore?: number }>> {
+  async getWeeklySleepData(endDate: string): Promise<Array<{ date: string; hours: number; sleepScore?: number }>> {
     const accessToken = await this.getAccessToken();
 
     const end = new Date(endDate);
@@ -841,27 +843,27 @@ export class HuaweiHealthApi {
     const endTime = end.getTime() * 1000000;
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     const params = new URLSearchParams({
       startTime: startTime.toString(),
       endTime: endTime.toString(),
-      dataType: "com.huawei.health.record.sleep",
+      dataType: 'com.huawei.health.record.sleep',
     });
 
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
     const response = await this.apiFetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
     });
 
     if (!response.ok) {
-      log.warn("Weekly sleep healthRecords failed", { status: response.status });
+      log.warn('Weekly sleep healthRecords failed', { status: response.status });
       return [];
     }
 
@@ -882,8 +884,8 @@ export class HuaweiHealthApi {
     avgSystolic: number;
     avgDiastolic: number;
   } | null> {
-    const cacheKey = "bloodPressure";
-    const cacheParams = { date, lookbackDays, userUuid: this.userUuid || "default" };
+    const cacheKey = 'bloodPressure';
+    const cacheParams = { date, lookbackDays, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; systolic: number; diastolic: number; pulse?: number }>;
       latestSystolic: number;
@@ -891,24 +893,28 @@ export class HuaweiHealthApi {
       avgSystolic: number;
       avgDiastolic: number;
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
     const startDate = new Date(`${date}T00:00:00`);
-    if (lookbackDays > 0) startDate.setDate(startDate.getDate() - lookbackDays);
+    if (lookbackDays > 0) {
+      startDate.setDate(startDate.getDate() - lookbackDays);
+    }
     const startTime = startDate.getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.BLOOD_PRESSURE }],
@@ -919,7 +925,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("Blood pressure data failed", { status: response.status, errorText });
+      log.warn('Blood pressure data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -948,8 +954,8 @@ export class HuaweiHealthApi {
     max: number;
     min: number;
   } | null> {
-    const cacheKey = "bloodGlucose";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'bloodGlucose';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; value: number }>;
       latest: number;
@@ -957,22 +963,24 @@ export class HuaweiHealthApi {
       max: number;
       min: number;
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
     const startTime = new Date(`${date}T00:00:00`).getTime();
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.BLOOD_GLUCOSE }],
@@ -983,7 +991,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("Blood glucose data failed", { status: response.status, errorText });
+      log.warn('Blood glucose data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -1015,8 +1023,8 @@ export class HuaweiHealthApi {
     bodyFatRate?: number;
     latestWeightDate?: string;
   } | null> {
-    const cacheKey = "bodyComposition";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'bodyComposition';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       weight?: number;
       height?: number;
@@ -1024,7 +1032,9 @@ export class HuaweiHealthApi {
       bodyFatRate?: number;
       latestWeightDate?: string;
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
 
@@ -1036,18 +1046,18 @@ export class HuaweiHealthApi {
     const endTime = endDate.getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     // Fetch weight (includes bmi + body_fat_rate fields) and height in parallel
     const [weightRes, heightRes] = await Promise.all(
       [HEALTH_DATA_TYPES.BODY_WEIGHT, HEALTH_DATA_TYPES.BODY_HEIGHT].map((dataTypeName) =>
         fetch(url, {
-          method: "POST",
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            "x-client-id": clientId,
+            'Content-Type': 'application/json',
+            'x-client-id': clientId,
           },
           body: JSON.stringify({
             polymerizeWith: [{ dataTypeName }],
@@ -1062,20 +1072,21 @@ export class HuaweiHealthApi {
     const parseWeightRes = async (
       res: Response | null
     ): Promise<ReturnType<typeof parseBodyCompositionWeightResponse>> => {
-      if (!res || !res.ok) return null;
+      if (!res || !res.ok) {
+        return null;
+      }
       const json = await res.json();
       return parseBodyCompositionWeightResponse(json);
     };
     const parseHeightRes = async (res: Response | null): Promise<number | null> => {
-      if (!res || !res.ok) return null;
+      if (!res || !res.ok) {
+        return null;
+      }
       const json = await res.json();
       return parseBodyCompositionHeightResponse(json);
     };
 
-    const [weightData, heightCm] = await Promise.all([
-      parseWeightRes(weightRes),
-      parseHeightRes(heightRes),
-    ]);
+    const [weightData, heightCm] = await Promise.all([parseWeightRes(weightRes), parseHeightRes(heightRes)]);
 
     if (!weightData && !heightCm) {
       return null;
@@ -1119,8 +1130,8 @@ export class HuaweiHealthApi {
     max: number;
     min: number;
   } | null> {
-    const cacheKey = "bodyTemperature";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'bodyTemperature';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       readings: Array<{ time: string; value: number }>;
       latest: number;
@@ -1128,22 +1139,24 @@ export class HuaweiHealthApi {
       max: number;
       min: number;
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
     const startTime = new Date(`${date}T00:00:00`).getTime();
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.BODY_TEMPERATURE }],
@@ -1154,7 +1167,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("Body temperature data failed", { status: response.status, errorText });
+      log.warn('Body temperature data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -1187,8 +1200,8 @@ export class HuaweiHealthApi {
     water?: number;
     meals: Array<{ time: string; calories: number }>;
   } | null> {
-    const cacheKey = "nutrition";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'nutrition';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       totalCalories: number;
       protein?: number;
@@ -1197,7 +1210,9 @@ export class HuaweiHealthApi {
       water?: number;
       meals: Array<{ time: string; calories: number }>;
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
 
@@ -1206,7 +1221,7 @@ export class HuaweiHealthApi {
     const endTime = new Date(`${date}T23:59:59.999`).getTime() * 1000000;
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     const params = new URLSearchParams({
       startTime: startTime.toString(),
@@ -1217,17 +1232,17 @@ export class HuaweiHealthApi {
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords?${params}`;
 
     const response = await this.apiFetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("Nutrition data failed", { status: response.status, errorText });
+      log.warn('Nutrition data failed', { status: response.status, errorText });
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
     }
@@ -1254,21 +1269,23 @@ export class HuaweiHealthApi {
    */
   async getMenstrualCycleData(date: string): Promise<{
     cycleDay?: number;
-    phase?: "menstrual" | "follicular" | "ovulatory" | "luteal";
+    phase?: 'menstrual' | 'follicular' | 'ovulatory' | 'luteal';
     periodStartDate?: string;
     cycleLength?: number;
     records: Array<{ date: string; status: string }>;
   } | null> {
-    const cacheKey = "menstrualCycle";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'menstrualCycle';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       cycleDay?: number;
-      phase?: "menstrual" | "follicular" | "ovulatory" | "luteal";
+      phase?: 'menstrual' | 'follicular' | 'ovulatory' | 'luteal';
       periodStartDate?: string;
       cycleLength?: number;
       records: Array<{ date: string; status: string }>;
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
 
@@ -1280,7 +1297,7 @@ export class HuaweiHealthApi {
     const endTime = endDate.getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     // Query menstrual_flow (primary indicator of period days)
@@ -1294,11 +1311,11 @@ export class HuaweiHealthApi {
     const responses = await Promise.all(
       menstrualTypes.map((dataTypeName) =>
         fetch(url, {
-          method: "POST",
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            "x-client-id": clientId,
+            'Content-Type': 'application/json',
+            'x-client-id': clientId,
           },
           body: JSON.stringify({
             polymerizeWith: [{ dataTypeName }],
@@ -1334,15 +1351,17 @@ export class HuaweiHealthApi {
    */
   async getVO2MaxData(date: string): Promise<{
     value: number;
-    level: "low" | "fair" | "good" | "excellent" | "superior";
+    level: 'low' | 'fair' | 'good' | 'excellent' | 'superior';
   } | null> {
-    const cacheKey = "vo2max";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'vo2max';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       value: number;
-      level: "low" | "fair" | "good" | "excellent" | "superior";
+      level: 'low' | 'fair' | 'good' | 'excellent' | 'superior';
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
 
@@ -1354,15 +1373,15 @@ export class HuaweiHealthApi {
     const endTime = endDate.getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.VO2MAX }],
@@ -1373,7 +1392,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("VO2Max data failed", { status: response.status, errorText });
+      log.warn('VO2Max data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -1403,8 +1422,8 @@ export class HuaweiHealthApi {
     min: number;
     readings: Array<{ time: string; value: number }>;
   } | null> {
-    const cacheKey = "hrv";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'hrv';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       rmssd: number;
       avg: number;
@@ -1412,14 +1431,16 @@ export class HuaweiHealthApi {
       min: number;
       readings: Array<{ time: string; value: number }>;
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
     const startTime = new Date(`${date}T00:00:00`).getTime();
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     // Try dedicated HRV data type first, then fall back to heart_rate.statistics
@@ -1427,11 +1448,11 @@ export class HuaweiHealthApi {
 
     for (const dataTypeName of dataTypeNames) {
       const response = await this.apiFetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-          "x-client-id": clientId,
+          'Content-Type': 'application/json',
+          'x-client-id': clientId,
         },
         body: JSON.stringify({
           polymerizeWith: [{ dataTypeName }],
@@ -1440,12 +1461,16 @@ export class HuaweiHealthApi {
         }),
       });
 
-      if (!response.ok) continue;
+      if (!response.ok) {
+        continue;
+      }
 
       const json = await response.json();
       const result = parseHRVResponse(json);
 
-      if (!result) continue;
+      if (!result) {
+        continue;
+      }
 
       saveToMemoryCache(cacheKey, cacheParams, result);
       saveToFileCache(cacheKey, { ...cacheParams, dataTypeName, rawResponse: json }, result);
@@ -1465,29 +1490,31 @@ export class HuaweiHealthApi {
     score: number;
     readings: Array<{ time: string; emotion: string; score: number }>;
   } | null> {
-    const cacheKey = "emotion";
-    const cacheParams = { date, userUuid: this.userUuid || "default" };
+    const cacheKey = 'emotion';
+    const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<{
       current: string;
       score: number;
       readings: Array<{ time: string; emotion: string; score: number }>;
     }>(cacheKey, cacheParams);
-    if (cached) return cached;
+    if (cached) {
+      return cached;
+    }
 
     const accessToken = await this.getAccessToken();
     const startTime = new Date(`${date}T00:00:00`).getTime();
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName: HEALTH_DATA_TYPES.EMOTION }],
@@ -1498,7 +1525,7 @@ export class HuaweiHealthApi {
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.warn("Emotion data failed", { status: response.status, errorText });
+      log.warn('Emotion data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
       return null;
@@ -1531,7 +1558,7 @@ export class HuaweiHealthApi {
   ): Promise<Array<{ date: string; values: Record<string, number> }>> {
     const accessToken = await this.getAccessToken();
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
     const timeZoneId = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
@@ -1544,20 +1571,22 @@ export class HuaweiHealthApi {
     while (chunkStart <= end) {
       const chunkEnd = new Date(chunkStart);
       chunkEnd.setDate(chunkEnd.getDate() + CHUNK_DAYS - 1);
-      if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+      if (chunkEnd > end) {
+        chunkEnd.setTime(end.getTime());
+      }
 
-      const chunkStartDate = `${chunkStart.getFullYear()}-${String(chunkStart.getMonth() + 1).padStart(2, "0")}-${String(chunkStart.getDate()).padStart(2, "0")}`;
-      const chunkEndDate = `${chunkEnd.getFullYear()}-${String(chunkEnd.getMonth() + 1).padStart(2, "0")}-${String(chunkEnd.getDate()).padStart(2, "0")}`;
+      const chunkStartDate = `${chunkStart.getFullYear()}-${String(chunkStart.getMonth() + 1).padStart(2, '0')}-${String(chunkStart.getDate()).padStart(2, '0')}`;
+      const chunkEndDate = `${chunkEnd.getFullYear()}-${String(chunkEnd.getMonth() + 1).padStart(2, '0')}-${String(chunkEnd.getDate()).padStart(2, '0')}`;
       const startTime = new Date(`${chunkStartDate}T00:00:00`).getTime();
       const endTime = new Date(`${chunkEndDate}T23:59:59.999`).getTime();
 
       try {
         const response = await this.apiFetch(url, {
-          method: "POST",
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            "x-client-id": clientId,
+            'Content-Type': 'application/json',
+            'x-client-id': clientId,
           },
           body: JSON.stringify({
             polymerizeWith: [{ dataTypeName }],
@@ -1571,7 +1600,7 @@ export class HuaweiHealthApi {
         });
 
         if (!response.ok) {
-          log.warn("Range polymerize failed", { dataTypeName, status: response.status });
+          log.warn('Range polymerize failed', { dataTypeName, status: response.status });
           chunkStart.setDate(chunkStart.getDate() + CHUNK_DAYS);
           continue;
         }
@@ -1580,7 +1609,7 @@ export class HuaweiHealthApi {
         const chunkData = parsePolymerizeDataRangeChunk(json);
         result.push(...chunkData);
       } catch (error) {
-        log.warn("Range polymerize error", { dataTypeName, error });
+        log.warn('Range polymerize error', { dataTypeName, error });
       }
 
       chunkStart.setDate(chunkStart.getDate() + CHUNK_DAYS);
@@ -1595,7 +1624,7 @@ export class HuaweiHealthApi {
   async testConnection(): Promise<{ success: boolean; steps?: number; error?: string }> {
     try {
       const now = new Date();
-      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const data = await this.getPolymerizeData(today);
       return { success: true, steps: data.steps };
     } catch (error) {
@@ -1620,17 +1649,17 @@ export class HuaweiHealthApi {
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
     const params = { dataTypeName, startTime, endTime };
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName }],
@@ -1663,18 +1692,18 @@ export class HuaweiHealthApi {
     const endTime = new Date(`${date}T23:59:59.999`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     // Try healthRecords endpoint
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecords`;
     const params = { dataType, startTime, endTime };
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         dataType,
@@ -1706,21 +1735,21 @@ export class HuaweiHealthApi {
     // For sleep, use overnight time range
     const prevDay = new Date(date);
     prevDay.setDate(prevDay.getDate() - 1);
-    const startTime = new Date(`${prevDay.toISOString().split("T")[0]}T18:00:00Z`).getTime();
+    const startTime = new Date(`${prevDay.toISOString().split('T')[0]}T18:00:00Z`).getTime();
     const endTime = new Date(`${date}T12:00:00Z`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:read`;
     const params = { dataTypeName, startTime, endTime };
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         dataTypeName,
@@ -1753,22 +1782,22 @@ export class HuaweiHealthApi {
     // For sleep, use overnight time range
     const prevDay = new Date(date);
     prevDay.setDate(prevDay.getDate() - 1);
-    const startTime = new Date(`${prevDay.toISOString().split("T")[0]}T18:00:00Z`).getTime();
+    const startTime = new Date(`${prevDay.toISOString().split('T')[0]}T18:00:00Z`).getTime();
     const endTime = new Date(`${date}T12:00:00Z`).getTime();
 
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     // Try healthRecordController endpoint
     const url = `${getApiBaseUrl()}/healthkit/v2/healthRecordController:getHealthRecord`;
     const params = { healthRecordDataType, startTime, endTime };
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         healthRecordDataType,
@@ -1792,65 +1821,61 @@ export class HuaweiHealthApi {
    * Debug method: List all available data types by trying common ones
    */
   async debugExploreDataTypes(date: string): Promise<void> {
-    log.info("Exploring available data types...");
+    log.info('Exploring available data types...');
 
     // Common dataTypeName patterns to try
     const dataTypeNames = [
       // Steps/Activity
-      "com.huawei.continuous.steps.delta",
-      "com.huawei.continuous.steps.total",
-      "com.huawei.instantaneous.steps",
+      'com.huawei.continuous.steps.delta',
+      'com.huawei.continuous.steps.total',
+      'com.huawei.instantaneous.steps',
       // Heart rate
-      "com.huawei.instantaneous.heart_rate",
-      "com.huawei.continuous.heart_rate.statistics",
+      'com.huawei.instantaneous.heart_rate',
+      'com.huawei.continuous.heart_rate.statistics',
       // Sleep - try various patterns
-      "com.huawei.continuous.sleep.segment",
-      "com.huawei.continuous.sleep.statistics",
-      "com.huawei.sleep",
-      "com.huawei.instantaneous.sleep",
-      "com.huawei.health.sleep",
-      "com.huawei.continuous.sleep",
+      'com.huawei.continuous.sleep.segment',
+      'com.huawei.continuous.sleep.statistics',
+      'com.huawei.sleep',
+      'com.huawei.instantaneous.sleep',
+      'com.huawei.health.sleep',
+      'com.huawei.continuous.sleep',
       // Calories
-      "com.huawei.continuous.calories.burnt",
-      "com.huawei.continuous.calories.delta",
+      'com.huawei.continuous.calories.burnt',
+      'com.huawei.continuous.calories.delta',
       // Distance
-      "com.huawei.continuous.distance.delta",
-      "com.huawei.continuous.distance.total",
+      'com.huawei.continuous.distance.delta',
+      'com.huawei.continuous.distance.total',
       // Other
-      "com.huawei.continuous.activity.duration",
-      "com.huawei.instantaneous.stress",
-      "com.huawei.instantaneous.blood_glucose",
-      "com.huawei.instantaneous.blood_pressure",
-      "com.huawei.instantaneous.body.temperature",
-      "com.huawei.instantaneous.oxygen_saturation",
+      'com.huawei.continuous.activity.duration',
+      'com.huawei.instantaneous.stress',
+      'com.huawei.instantaneous.blood_glucose',
+      'com.huawei.instantaneous.blood_pressure',
+      'com.huawei.instantaneous.body.temperature',
+      'com.huawei.instantaneous.oxygen_saturation',
     ];
 
     for (const name of dataTypeNames) {
       const result = await this.debugPolymerize(name, date);
-      const status = result.success ? "✓" : "✗";
-      const info = result.success
-        ? JSON.stringify(result.data).slice(0, 100)
-        : result.error?.slice(0, 60);
+      const status = result.success ? '✓' : '✗';
+      const info = result.success ? JSON.stringify(result.data).slice(0, 100) : result.error?.slice(0, 60);
       log.debug(`${status} ${name}`, { info });
     }
 
     // Try healthRecordController for sleep
-    log.debug("Trying healthRecordController for sleep");
-    const sleepTypes = ["com.huawei.health.record.sleep", "com.huawei.sleep.record", "sleep"];
+    log.debug('Trying healthRecordController for sleep');
+    const sleepTypes = ['com.huawei.health.record.sleep', 'com.huawei.sleep.record', 'sleep'];
     for (const type of sleepTypes) {
       const result = await this.debugHealthRecordController(type, date);
-      const status = result.success ? "✓" : "✗";
-      const info = result.success
-        ? JSON.stringify(result.data).slice(0, 100)
-        : result.error?.slice(0, 60);
+      const status = result.success ? '✓' : '✗';
+      const info = result.success ? JSON.stringify(result.data).slice(0, 100) : result.error?.slice(0, 60);
       log.debug(`${status} ${type} (healthRecordController)`, { info });
     }
 
     // Try various API paths for sleep
-    log.debug("Trying various API paths");
+    log.debug('Trying various API paths');
     await this.debugTryVariousEndpoints(date);
 
-    log.info("Results saved to .pha/api-cache/");
+    log.info('Results saved to .pha/api-cache/');
   }
 
   /**
@@ -1859,45 +1884,45 @@ export class HuaweiHealthApi {
   private async debugTryVariousEndpoints(date: string): Promise<void> {
     const accessToken = await this.getAccessToken();
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     const prevDay = new Date(date);
     prevDay.setDate(prevDay.getDate() - 1);
-    const startTime = new Date(`${prevDay.toISOString().split("T")[0]}T18:00:00Z`).getTime();
+    const startTime = new Date(`${prevDay.toISOString().split('T')[0]}T18:00:00Z`).getTime();
     const endTime = new Date(`${date}T12:00:00Z`).getTime();
 
     const endpoints = [
       // Try dataCollector endpoints
-      { path: "/healthkit/v2/dataCollectors", method: "GET" },
+      { path: '/healthkit/v2/dataCollectors', method: 'GET' },
     ];
 
     // Try polymerize with derived dataCollectorId for sleep
-    log.debug("Trying polymerize with dataCollectorId");
+    log.debug('Trying polymerize with dataCollectorId');
 
     // Construct derived dataCollectorId patterns for sleep
     // Format: derived:<type>:com.huawei.hwid:<hash> but we can try without the hash
     const sleepCollectorPatterns = [
-      "derived:sleep:com.huawei.hwid",
-      "derived:sleep_segment:com.huawei.hwid",
-      "derived:sleep:com.huawei.health",
-      "raw:sleep:com.huawei.health",
+      'derived:sleep:com.huawei.hwid',
+      'derived:sleep_segment:com.huawei.hwid',
+      'derived:sleep:com.huawei.health',
+      'raw:sleep:com.huawei.health',
     ];
 
     for (const collectorId of sleepCollectorPatterns) {
       const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
       try {
         const response = await this.apiFetch(url, {
-          method: "POST",
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            "x-client-id": clientId,
+            'Content-Type': 'application/json',
+            'x-client-id': clientId,
           },
           body: JSON.stringify({
             polymerizeWith: [
               {
-                dataTypeName: "com.huawei.continuous.sleep.statistics",
-                dataCollectorId: Buffer.from(collectorId).toString("base64"),
+                dataTypeName: 'com.huawei.continuous.sleep.statistics',
+                dataCollectorId: Buffer.from(collectorId).toString('base64'),
               },
             ],
             startTime,
@@ -1913,24 +1938,22 @@ export class HuaweiHealthApi {
           data = text;
         }
 
-        const status = response.ok ? "✓" : "✗";
-        const info = response.ok
-          ? JSON.stringify(data).slice(0, 80)
-          : `${response.status}: ${text.slice(0, 50)}`;
+        const status = response.ok ? '✓' : '✗';
+        const info = response.ok ? JSON.stringify(data).slice(0, 80) : `${response.status}: ${text.slice(0, 50)}`;
         log.debug(`${status} polymerize with collector`, { collectorId, info });
 
         saveToFileCache(`polymerize-collector/${collectorId}`, { collectorId }, data);
       } catch (err) {
-        log.debug("polymerize with collector failed", { collectorId, error: err });
+        log.debug('polymerize with collector failed', { collectorId, error: err });
       }
     }
 
-    log.debug("Trying other endpoints");
+    log.debug('Trying other endpoints');
 
     for (const ep of endpoints) {
-      const separator = ep.path.includes("?") ? "&" : "?";
+      const separator = ep.path.includes('?') ? '&' : '?';
       const url =
-        ep.method === "GET"
+        ep.method === 'GET'
           ? `${getApiBaseUrl()}${ep.path}${separator}startTime=${startTime}&endTime=${endTime}`
           : `${getApiBaseUrl()}${ep.path}`;
 
@@ -1939,10 +1962,10 @@ export class HuaweiHealthApi {
           method: ep.method,
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-            "x-client-id": clientId,
+            'Content-Type': 'application/json',
+            'x-client-id': clientId,
           },
-          ...(ep.method === "POST" && {
+          ...(ep.method === 'POST' && {
             body: JSON.stringify({ startTime, endTime }),
           }),
         });
@@ -1955,13 +1978,11 @@ export class HuaweiHealthApi {
           data = text;
         }
 
-        const status = response.ok ? "✓" : "✗";
-        const info = response.ok
-          ? JSON.stringify(data).slice(0, 80)
-          : `${response.status}: ${text.slice(0, 50)}`;
+        const status = response.ok ? '✓' : '✗';
+        const info = response.ok ? JSON.stringify(data).slice(0, 80) : `${response.status}: ${text.slice(0, 50)}`;
         log.debug(`${status} ${ep.method} ${ep.path}`, { info });
 
-        saveToFileCache(`endpoint${ep.path.replace(/\//g, "_")}`, { method: ep.method }, data);
+        saveToFileCache(`endpoint${ep.path.replace(/\//g, '_')}`, { method: ep.method }, data);
       } catch (err) {
         log.debug(`Endpoint failed: ${ep.method} ${ep.path}`, { error: err });
       }
@@ -1985,17 +2006,17 @@ export class HuaweiHealthApi {
 
     // Get client ID from config for x-client-id header
     const config = loadConfig();
-    const clientId = config.dataSources.huawei?.clientId || "";
+    const clientId = config.dataSources.huawei?.clientId || '';
 
     // v2 endpoint
     const url = `${getApiBaseUrl()}/healthkit/v2/sampleSet:polymerize`;
 
     const response = await this.apiFetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         // polymerizeWith is an array
@@ -2012,7 +2033,7 @@ export class HuaweiHealthApi {
     if (!response.ok) {
       // Try to continue with other data types
       const errorText = await response.text();
-      log.warn("Failed to fetch polymerize data", {
+      log.warn('Failed to fetch polymerize data', {
         dataTypeName,
         status: response.status,
         statusText: response.statusText,
@@ -2026,7 +2047,7 @@ export class HuaweiHealthApi {
     // Handle different response formats
     // Could be { data: [...] } or { group: [...] } or direct array
     if (Array.isArray(json)) {
-      return { data: json as HuaweiPolymerizeResponse["data"] };
+      return { data: json as HuaweiPolymerizeResponse['data'] };
     }
     if (json.group && Array.isArray(json.group)) {
       // Flatten group -> sampleSet -> samplePoints structure
@@ -2053,7 +2074,7 @@ export class HuaweiHealthApi {
       return json as unknown as HuaweiPolymerizeResponse;
     }
     // Unknown format, return empty
-    log.warn("Unknown response format", { dataTypeName, response: json });
+    log.warn('Unknown response format', { dataTypeName, response: json });
     return { data: [] };
   }
 
@@ -2065,11 +2086,7 @@ export class HuaweiHealthApi {
 
     try {
       const errorData = (await response.json()) as HuaweiApiError;
-      errorMessage =
-        errorData.error_description ||
-        errorData.ret?.msg ||
-        errorData.error ||
-        `HTTP ${response.status}`;
+      errorMessage = errorData.error_description || errorData.ret?.msg || errorData.error || `HTTP ${response.status}`;
     } catch {
       errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     }

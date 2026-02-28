@@ -18,26 +18,26 @@ import {
   createNextVersion,
   mergeVersion,
   abandonVersion,
-} from "../evolution/version-manager.js";
-import type { PHATool } from "./types.js";
+} from '../evolution/version-manager.js';
+import type { PHATool } from './types.js';
 
 // ============================================================================
 // git_status
 // ============================================================================
 
 export const gitStatusTool: PHATool<{ path?: string }> = {
-  name: "git_status",
-  description: "显示 Git 工作区状态（porcelain 格式）",
-  displayName: "工作区状态",
-  category: "git" as const,
-  icon: "git-branch",
-  label: "Git Status",
+  name: 'git_status',
+  description: '显示 Git 工作区状态（porcelain 格式）',
+  displayName: '工作区状态',
+  category: 'git' as const,
+  icon: 'git-branch',
+  label: 'Git Status',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       path: {
-        type: "string",
-        description: "Working directory path (defaults to project root)",
+        type: 'string',
+        description: 'Working directory path (defaults to project root)',
       },
     },
   },
@@ -45,7 +45,7 @@ export const gitStatusTool: PHATool<{ path?: string }> = {
     const output = getGitStatusPorcelain(args?.path);
     return {
       success: true,
-      status: output || "(clean)",
+      status: output || '(clean)',
       clean: !output,
     };
   },
@@ -56,26 +56,26 @@ export const gitStatusTool: PHATool<{ path?: string }> = {
 // ============================================================================
 
 export const gitLogTool: PHATool<{ limit?: number; branch?: string; all?: boolean }> = {
-  name: "git_log",
-  description: "显示提交历史，支持按分支筛选",
-  displayName: "提交历史",
-  category: "git" as const,
-  icon: "git-commit",
-  label: "Git Log",
+  name: 'git_log',
+  description: '显示提交历史，支持按分支筛选',
+  displayName: '提交历史',
+  category: 'git' as const,
+  icon: 'git-commit',
+  label: 'Git Log',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       limit: {
-        type: "number",
-        description: "Max commits to return (default: 20)",
+        type: 'number',
+        description: 'Max commits to return (default: 20)',
       },
       branch: {
-        type: "string",
-        description: "Branch name to show log for",
+        type: 'string',
+        description: 'Branch name to show log for',
       },
       all: {
-        type: "boolean",
-        description: "Show commits from all branches",
+        type: 'boolean',
+        description: 'Show commits from all branches',
       },
     },
   },
@@ -94,25 +94,25 @@ export const gitLogTool: PHATool<{ limit?: number; branch?: string; all?: boolea
 // ============================================================================
 
 export const gitShowFileTool: PHATool<{ branch: string; path: string }> = {
-  name: "git_show_file",
-  description: "从指定分支读取文件内容（无需切换分支）",
-  displayName: "查看文件",
-  category: "git" as const,
-  icon: "file-text",
-  label: "Git Show File",
+  name: 'git_show_file',
+  description: '从指定分支读取文件内容（无需切换分支）',
+  displayName: '查看文件',
+  category: 'git' as const,
+  icon: 'file-text',
+  label: 'Git Show File',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       branch: {
-        type: "string",
+        type: 'string',
         description: "Branch name (e.g., 'evo/v3', 'main')",
       },
       path: {
-        type: "string",
-        description: "File path relative to repo root",
+        type: 'string',
+        description: 'File path relative to repo root',
       },
     },
-    required: ["branch", "path"],
+    required: ['branch', 'path'],
   },
   execute: async (args: { branch: string; path: string }) => {
     const content = readFileFromBranch(args.branch, args.path);
@@ -127,7 +127,7 @@ export const gitShowFileTool: PHATool<{ branch: string; path: string }> = {
       branch: args.branch,
       path: args.path,
       content,
-      lines: content.split("\n").length,
+      lines: content.split('\n').length,
     };
   },
 };
@@ -137,33 +137,33 @@ export const gitShowFileTool: PHATool<{ branch: string; path: string }> = {
 // ============================================================================
 
 export const gitDiffTool: PHATool<{ branch: string; baseBranch?: string }> = {
-  name: "git_diff",
-  description: "获取两个分支之间的差异（实际 diff 内容）",
-  displayName: "查看差异",
-  category: "git" as const,
-  icon: "git-branch",
-  label: "Git Diff",
+  name: 'git_diff',
+  description: '获取两个分支之间的差异（实际 diff 内容）',
+  displayName: '查看差异',
+  category: 'git' as const,
+  icon: 'git-branch',
+  label: 'Git Diff',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       branch: {
-        type: "string",
+        type: 'string',
         description: "Branch to diff (e.g., 'evo/v3')",
       },
       baseBranch: {
-        type: "string",
+        type: 'string',
         description: "Base branch to diff against (default: 'main')",
       },
     },
-    required: ["branch"],
+    required: ['branch'],
   },
   execute: async (args: { branch: string; baseBranch?: string }) => {
     const diff = getGitDiffContent(args.branch, args.baseBranch);
     return {
       success: true,
       branch: args.branch,
-      baseBranch: args.baseBranch || "main",
-      diff: diff || "(no differences)",
+      baseBranch: args.baseBranch || 'main',
+      diff: diff || '(no differences)',
       hasDiff: !!diff,
     };
   },
@@ -174,14 +174,14 @@ export const gitDiffTool: PHATool<{ branch: string; baseBranch?: string }> = {
 // ============================================================================
 
 export const gitBranchListTool: PHATool<Record<string, never>> = {
-  name: "git_branch_list",
-  description: "列出所有进化分支（evo/*）",
-  displayName: "列出分支",
-  category: "git" as const,
-  icon: "git-branch",
-  label: "Git Branch List",
+  name: 'git_branch_list',
+  description: '列出所有进化分支（evo/*）',
+  displayName: '列出分支',
+  category: 'git' as const,
+  icon: 'git-branch',
+  label: 'Git Branch List',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {},
   },
   execute: async () => {
@@ -199,22 +199,22 @@ export const gitBranchListTool: PHATool<Record<string, never>> = {
 // ============================================================================
 
 export const gitBranchCreateTool: PHATool<{ triggerMode?: string; triggerRef?: string }> = {
-  name: "git_branch_create",
-  description: "创建新的进化分支（evo/vN），使用 git worktree 进行隔离修改",
-  displayName: "创建分支",
-  category: "git" as const,
-  icon: "git-branch",
-  label: "Git Branch Create",
+  name: 'git_branch_create',
+  description: '创建新的进化分支（evo/vN），使用 git worktree 进行隔离修改',
+  displayName: '创建分支',
+  category: 'git' as const,
+  icon: 'git-branch',
+  label: 'Git Branch Create',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       triggerMode: {
-        type: "string",
+        type: 'string',
         description: "What triggered this version (e.g., 'manual', 'auto-loop', 'agent')",
       },
       triggerRef: {
-        type: "string",
-        description: "Reference ID (e.g., benchmark run ID)",
+        type: 'string',
+        description: 'Reference ID (e.g., benchmark run ID)',
       },
     },
   },
@@ -242,21 +242,21 @@ export const gitBranchCreateTool: PHATool<{ triggerMode?: string; triggerRef?: s
 // ============================================================================
 
 export const gitBranchDeleteTool: PHATool<{ branch: string }> = {
-  name: "git_branch_delete",
-  description: "删除进化分支及其 worktree，标记为已放弃",
-  displayName: "删除分支",
-  category: "git" as const,
-  icon: "git-branch",
-  label: "Git Branch Delete",
+  name: 'git_branch_delete',
+  description: '删除进化分支及其 worktree，标记为已放弃',
+  displayName: '删除分支',
+  category: 'git' as const,
+  icon: 'git-branch',
+  label: 'Git Branch Delete',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       branch: {
-        type: "string",
+        type: 'string',
         description: "Branch name to delete (e.g., 'evo/v3')",
       },
     },
-    required: ["branch"],
+    required: ['branch'],
   },
   execute: async (args: { branch: string }) => {
     try {
@@ -279,14 +279,14 @@ export const gitBranchDeleteTool: PHATool<{ branch: string }> = {
 // ============================================================================
 
 export const gitWorktreeListTool: PHATool<Record<string, never>> = {
-  name: "git_worktree_list",
-  description: "列出活跃的 git worktree（拥有工作目录的进化分支）",
-  displayName: "工作树列表",
-  category: "git" as const,
-  icon: "git-branch",
-  label: "Git Worktree List",
+  name: 'git_worktree_list',
+  description: '列出活跃的 git worktree（拥有工作目录的进化分支）',
+  displayName: '工作树列表',
+  category: 'git' as const,
+  icon: 'git-branch',
+  label: 'Git Worktree List',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {},
   },
   execute: async () => {
@@ -304,30 +304,30 @@ export const gitWorktreeListTool: PHATool<Record<string, never>> = {
 // ============================================================================
 
 export const gitCommitTool: PHATool<{ files: string[]; message: string; cwd?: string }> = {
-  name: "git_commit",
-  description: "暂存指定文件并创建 git 提交",
-  displayName: "提交变更",
-  category: "git" as const,
-  icon: "git-commit",
-  label: "Git Commit",
+  name: 'git_commit',
+  description: '暂存指定文件并创建 git 提交',
+  displayName: '提交变更',
+  category: 'git' as const,
+  icon: 'git-commit',
+  label: 'Git Commit',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       files: {
-        type: "array",
-        items: { type: "string" },
-        description: "File paths to stage and commit",
+        type: 'array',
+        items: { type: 'string' },
+        description: 'File paths to stage and commit',
       },
       message: {
-        type: "string",
-        description: "Commit message",
+        type: 'string',
+        description: 'Commit message',
       },
       cwd: {
-        type: "string",
-        description: "Working directory (defaults to project root)",
+        type: 'string',
+        description: 'Working directory (defaults to project root)',
       },
     },
-    required: ["files", "message"],
+    required: ['files', 'message'],
   },
   execute: async (args: { files: string[]; message: string; cwd?: string }) => {
     const result = gitCommitFiles(args.files, args.message, args.cwd);
@@ -340,22 +340,22 @@ export const gitCommitTool: PHATool<{ files: string[]; message: string; cwd?: st
 // ============================================================================
 
 export const gitMergeTool: PHATool<{ branch: string }> = {
-  name: "git_merge",
+  name: 'git_merge',
   description:
-    "将进化分支合并到父分支（通常是 main）。重要：调用前必须先向用户展示变更内容（git_diff）并获得明确确认。",
-  displayName: "合并分支",
-  category: "git" as const,
-  icon: "git-merge",
-  label: "Git Merge",
+    '将进化分支合并到父分支（通常是 main）。重要：调用前必须先向用户展示变更内容（git_diff）并获得明确确认。',
+  displayName: '合并分支',
+  category: 'git' as const,
+  icon: 'git-merge',
+  label: 'Git Merge',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       branch: {
-        type: "string",
+        type: 'string',
         description: "Branch to merge (e.g., 'evo/v3')",
       },
     },
-    required: ["branch"],
+    required: ['branch'],
   },
   execute: async (args: { branch: string }) => {
     const result = mergeVersion(args.branch);
@@ -368,18 +368,18 @@ export const gitMergeTool: PHATool<{ branch: string }> = {
 // ============================================================================
 
 export const gitRevertTool: PHATool<{ cwd?: string }> = {
-  name: "git_revert",
-  description: "撤销当前分支的最后一次提交",
-  displayName: "撤销提交",
-  category: "git" as const,
-  icon: "git-commit",
-  label: "Git Revert",
+  name: 'git_revert',
+  description: '撤销当前分支的最后一次提交',
+  displayName: '撤销提交',
+  category: 'git' as const,
+  icon: 'git-commit',
+  label: 'Git Revert',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       cwd: {
-        type: "string",
-        description: "Working directory (defaults to project root)",
+        type: 'string',
+        description: 'Working directory (defaults to project root)',
       },
     },
   },
@@ -394,21 +394,21 @@ export const gitRevertTool: PHATool<{ cwd?: string }> = {
 // ============================================================================
 
 export const gitChangedFilesTool: PHATool<{ branch: string }> = {
-  name: "git_changed_files",
-  description: "列出某分支相对于父分支的变更文件",
-  displayName: "变更文件",
-  category: "git" as const,
-  icon: "file-text",
-  label: "Git Changed Files",
+  name: 'git_changed_files',
+  description: '列出某分支相对于父分支的变更文件',
+  displayName: '变更文件',
+  category: 'git' as const,
+  icon: 'file-text',
+  label: 'Git Changed Files',
   inputSchema: {
-    type: "object" as const,
+    type: 'object' as const,
     properties: {
       branch: {
-        type: "string",
+        type: 'string',
         description: "Branch name (e.g., 'evo/v3')",
       },
     },
-    required: ["branch"],
+    required: ['branch'],
   },
   execute: async (args: { branch: string }) => {
     const files = getChangedFilesOnBranch(args.branch);

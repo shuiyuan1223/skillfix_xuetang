@@ -4,7 +4,7 @@
 
 export interface UserProfile {
   nickname?: string;
-  gender?: "male" | "female";
+  gender?: 'male' | 'female';
   birthYear?: number;
   height?: number; // cm
   weight?: number; // kg
@@ -29,9 +29,9 @@ export interface UserProfile {
 }
 
 export interface UserPreferences {
-  language?: "zh" | "en";
+  language?: 'zh' | 'en';
   notificationEnabled?: boolean;
-  reminderFrequency?: "low" | "medium" | "high";
+  reminderFrequency?: 'low' | 'medium' | 'high';
 }
 
 export interface MemoryChunk {

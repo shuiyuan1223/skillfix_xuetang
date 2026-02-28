@@ -11,22 +11,22 @@
  * Format:    enc:v1:<base64(salt ‖ iv ‖ ciphertext ‖ authTag)>
  */
 
-import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync } from "node:fs";
-import { userInfo, hostname } from "node:os";
-import * as path from "node:path";
+import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'node:crypto';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, chmodSync } from 'node:fs';
+import { userInfo, hostname } from 'node:os';
+import * as path from 'node:path';
 
 // ---- Constants ----
 
-const ENC_PREFIX = "enc:v1:";
-const ALGORITHM = "aes-256-gcm" as const;
+const ENC_PREFIX = 'enc:v1:';
+const ALGORITHM = 'aes-256-gcm' as const;
 const PBKDF2_ITERATIONS = 600_000;
 const KEY_LENGTH = 32; // AES-256
 const SALT_LENGTH = 16; // 128-bit
 const IV_LENGTH = 12; // GCM standard nonce
 const AUTH_TAG_LENGTH = 16; // 128-bit
 const KEY_FILE_SIZE = 32; // 256-bit random
-const APP_SALT = "pha-config-encryption-v1";
+const APP_SALT = 'pha-config-encryption-v1';
 
 // ---- Public API ----
 
@@ -34,7 +34,7 @@ const APP_SALT = "pha-config-encryption-v1";
 export class ConfigDecryptionError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "ConfigDecryptionError";
+    this.name = 'ConfigDecryptionError';
   }
 }
 
@@ -59,12 +59,12 @@ export function encrypt(plaintext: string, stateDir: string): string {
     const cipher = createCipheriv(ALGORITHM, workKey, iv, {
       authTagLength: AUTH_TAG_LENGTH,
     });
-    const encrypted = Buffer.concat([cipher.update(plaintext, "utf-8"), cipher.final()]);
+    const encrypted = Buffer.concat([cipher.update(plaintext, 'utf-8'), cipher.final()]);
     const authTag = cipher.getAuthTag();
 
     // salt ‖ iv ‖ ciphertext ‖ authTag
     const combined = Buffer.concat([salt, iv, encrypted, authTag]);
-    return `${ENC_PREFIX}${combined.toString("base64")}`;
+    return `${ENC_PREFIX}${combined.toString('base64')}`;
   } finally {
     workKey.fill(0);
   }
@@ -82,18 +82,16 @@ export function decrypt(value: string, stateDir: string): string {
   const b64 = value.slice(ENC_PREFIX.length);
   let combined: Buffer;
   try {
-    combined = Buffer.from(b64, "base64");
+    combined = Buffer.from(b64, 'base64');
   } catch {
     throw new ConfigDecryptionError(
-      "Ciphertext base64 format is corrupted. The encrypted value may have been truncated or modified."
+      'Ciphertext base64 format is corrupted. The encrypted value may have been truncated or modified.'
     );
   }
 
   const minLength = SALT_LENGTH + IV_LENGTH + AUTH_TAG_LENGTH;
   if (combined.length < minLength) {
-    throw new ConfigDecryptionError(
-      "Ciphertext is too short — data may be corrupted or truncated."
-    );
+    throw new ConfigDecryptionError('Ciphertext is too short — data may be corrupted or truncated.');
   }
 
   const salt = combined.subarray(0, SALT_LENGTH);
@@ -109,11 +107,13 @@ export function decrypt(value: string, stateDir: string): string {
     });
     decipher.setAuthTag(authTag);
     const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    return decrypted.toString("utf-8");
+    return decrypted.toString('utf-8');
   } catch (err) {
-    if (err instanceof ConfigDecryptionError) throw err;
+    if (err instanceof ConfigDecryptionError) {
+      throw err;
+    }
     throw new ConfigDecryptionError(
-      "Decryption failed — key factors may have changed (PHA_THIRD_KEY, key files), or the ciphertext was tampered with."
+      'Decryption failed — key factors may have changed (PHA_THIRD_KEY, key files), or the ciphertext was tampered with.'
     );
   } finally {
     workKey.fill(0);
@@ -122,13 +122,13 @@ export function decrypt(value: string, stateDir: string): string {
 
 /** Check if encryption subsystem is ready (key files exist) */
 export function isCryptoReady(stateDir: string): boolean {
-  const keysDir = path.join(stateDir, "keys");
-  return existsSync(path.join(keysDir, "key-a.bin")) && existsSync(path.join(keysDir, "key-b.bin"));
+  const keysDir = path.join(stateDir, 'keys');
+  return existsSync(path.join(keysDir, 'key-a.bin')) && existsSync(path.join(keysDir, 'key-b.bin'));
 }
 
 /** Initialize key files if they don't exist. Idempotent. */
 export function ensureKeyFiles(stateDir: string): void {
-  const keysDir = path.join(stateDir, "keys");
+  const keysDir = path.join(stateDir, 'keys');
   if (!existsSync(keysDir)) {
     mkdirSync(keysDir, { recursive: true, mode: 0o700 });
   }
@@ -143,8 +143,8 @@ export function ensureKeyFiles(stateDir: string): void {
     // Best-effort
   }
 
-  const keyAPath = path.join(keysDir, "key-a.bin");
-  const keyBPath = path.join(keysDir, "key-b.bin");
+  const keyAPath = path.join(keysDir, 'key-a.bin');
+  const keyBPath = path.join(keysDir, 'key-b.bin');
 
   if (!existsSync(keyAPath)) {
     writeFileSync(keyAPath, randomBytes(KEY_FILE_SIZE), { mode: 0o600 });
@@ -155,9 +155,9 @@ export function ensureKeyFiles(stateDir: string): void {
 }
 
 /** Get the third-party key source mode (for diagnostics) */
-export function getThirdKeySource(): "environment" | "machine-fingerprint" {
+export function getThirdKeySource(): 'environment' | 'machine-fingerprint' {
   const envKey = process.env.PHA_THIRD_KEY?.trim();
-  return envKey ? "environment" : "machine-fingerprint";
+  return envKey ? 'environment' : 'machine-fingerprint';
 }
 
 // ---- Internal Implementation ----
@@ -169,14 +169,14 @@ export function getThirdKeySource(): "environment" | "machine-fingerprint" {
  */
 function deriveWorkKey(salt: Buffer, stateDir: string): Buffer {
   const thirdKey = getThirdKey();
-  const keyFileA = readKeyFile(path.join(stateDir, "keys", "key-a.bin"), "key-a.bin");
-  const keyFileB = readKeyFile(path.join(stateDir, "keys", "key-b.bin"), "key-b.bin");
+  const keyFileA = readKeyFile(path.join(stateDir, 'keys', 'key-a.bin'), 'key-a.bin');
+  const keyFileB = readKeyFile(path.join(stateDir, 'keys', 'key-b.bin'), 'key-b.bin');
 
   // Fixed-order concatenation
-  const keyMaterial = Buffer.concat([Buffer.from(thirdKey, "utf-8"), keyFileA, keyFileB]);
+  const keyMaterial = Buffer.concat([Buffer.from(thirdKey, 'utf-8'), keyFileA, keyFileB]);
 
   try {
-    return pbkdf2Sync(keyMaterial, salt, PBKDF2_ITERATIONS, KEY_LENGTH, "sha256");
+    return pbkdf2Sync(keyMaterial, salt, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha256');
   } finally {
     keyMaterial.fill(0);
   }
@@ -187,8 +187,8 @@ function readKeyFile(filePath: string, name: string): Buffer {
   if (!existsSync(filePath)) {
     throw new ConfigDecryptionError(
       `Key file "${name}" not found at ${filePath}. ` +
-        "If the file was deleted, encrypted values cannot be recovered. " +
-        "Run `pha encrypt-config` after restoring key files or re-configuring."
+        'If the file was deleted, encrypted values cannot be recovered. ' +
+        'Run `pha encrypt-config` after restoring key files or re-configuring.'
     );
   }
   return readFileSync(filePath);
@@ -201,7 +201,9 @@ function readKeyFile(filePath: string, name: string): Buffer {
  */
 function getThirdKey(): string {
   const envKey = process.env.PHA_THIRD_KEY?.trim();
-  if (envKey) return envKey;
+  if (envKey) {
+    return envKey;
+  }
 
   // Development mode fallback: machine fingerprint
   const machineId = getMachineId();
@@ -218,8 +220,8 @@ function getThirdKey(): string {
 function getMachineId(): string {
   // Linux /etc/machine-id
   try {
-    if (existsSync("/etc/machine-id")) {
-      return readFileSync("/etc/machine-id", "utf-8").trim();
+    if (existsSync('/etc/machine-id')) {
+      return readFileSync('/etc/machine-id', 'utf-8').trim();
     }
   } catch {
     // Fall through
@@ -227,10 +229,12 @@ function getMachineId(): string {
 
   // macOS /var/db/SystemIdentification/SharedInfo.plist fallback or hostname
   try {
-    if (existsSync("/var/db/SystemIdentification/SharedInfo.plist")) {
-      const content = readFileSync("/var/db/SystemIdentification/SharedInfo.plist", "utf-8");
+    if (existsSync('/var/db/SystemIdentification/SharedInfo.plist')) {
+      const content = readFileSync('/var/db/SystemIdentification/SharedInfo.plist', 'utf-8');
       const match = content.match(/<string>([A-F0-9-]+)<\/string>/);
-      if (match) return match[1];
+      if (match) {
+        return match[1];
+      }
     }
   } catch {
     // Fall through

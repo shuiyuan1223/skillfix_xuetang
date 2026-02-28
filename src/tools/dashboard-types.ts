@@ -10,17 +10,17 @@
 // ============================================================================
 
 export type WidgetType =
-  | "stat_row"
-  | "line_chart"
-  | "bar_chart"
-  | "progress_tracker"
-  | "data_table"
-  | "text_block"
-  | "milestone_timeline"
-  | "metric_grid"
-  | "score_gauge"
-  | "activity_rings"
-  | "radar_chart";
+  | 'stat_row'
+  | 'line_chart'
+  | 'bar_chart'
+  | 'progress_tracker'
+  | 'data_table'
+  | 'text_block'
+  | 'milestone_timeline'
+  | 'metric_grid'
+  | 'score_gauge'
+  | 'activity_rings'
+  | 'radar_chart';
 
 // --- Widget Config Types ---
 
@@ -31,7 +31,7 @@ export interface StatRowConfig {
     unit?: string;
     icon?: string;
     color?: string;
-    trend?: { direction: "up" | "down" | "stable"; value: string };
+    trend?: { direction: 'up' | 'down' | 'stable'; value: string };
   }>;
   columns?: number;
 }
@@ -66,7 +66,7 @@ export interface DataTableConfig {
 
 export interface TextBlockConfig {
   content: string;
-  variant?: "heading" | "subheading" | "body" | "caption";
+  variant?: 'heading' | 'subheading' | 'body' | 'caption';
 }
 
 export interface MilestoneTimelineConfig {
@@ -74,7 +74,7 @@ export interface MilestoneTimelineConfig {
     date: string;
     title: string;
     description?: string;
-    status?: "completed" | "current" | "upcoming";
+    status?: 'completed' | 'current' | 'upcoming';
     icon?: string;
   }>;
 }
@@ -94,7 +94,7 @@ export interface ScoreGaugeConfig {
   label?: string;
   value: number;
   max?: number; // default 100
-  size?: "sm" | "md" | "lg";
+  size?: 'sm' | 'md' | 'lg';
   thresholds?: Array<{ value: number; color: string }>;
 }
 

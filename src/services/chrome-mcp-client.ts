@@ -9,12 +9,12 @@
  * - Monitors network/URL for OAuth code capture
  */
 
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { loadConfig } from "../utils/config.js";
-import { createLogger } from "../utils/logger.js";
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { loadConfig } from '../utils/config.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Service/ChromeMCP");
+const log = createLogger('Service/ChromeMCP');
 
 export interface ChromePage {
   id: number;
@@ -40,8 +40,8 @@ export class ChromeMCPClient {
     const mcpConfig = config.mcp?.chromeMcp || {};
 
     return {
-      command: mcpConfig.command || "npx",
-      args: mcpConfig.args || ["-y", "chrome-devtools-mcp@latest", "--isolated"],
+      command: mcpConfig.command || 'npx',
+      args: mcpConfig.args || ['-y', 'chrome-devtools-mcp@latest', '--isolated'],
       browserUrl: mcpConfig.browserUrl,
       wsEndpoint: mcpConfig.wsEndpoint,
     };
@@ -53,34 +53,34 @@ export class ChromeMCPClient {
    */
   async connect(): Promise<void> {
     if (this.connected) {
-      log.info("Already connected");
+      log.info('Already connected');
       return;
     }
 
     const mcpConfig = this.getMCPConfig();
-    log.info("Starting chrome-devtools-mcp server...");
-    log.debug("Config", mcpConfig);
+    log.info('Starting chrome-devtools-mcp server...');
+    log.debug('Config', mcpConfig);
 
     // Build args with optional browserUrl/wsEndpoint
     const args = [...mcpConfig.args];
     if (mcpConfig.browserUrl) {
-      args.push("--browserUrl", mcpConfig.browserUrl);
+      args.push('--browserUrl', mcpConfig.browserUrl);
     }
     if (mcpConfig.wsEndpoint) {
-      args.push("--wsEndpoint", mcpConfig.wsEndpoint);
+      args.push('--wsEndpoint', mcpConfig.wsEndpoint);
     }
 
     // Create transport - it spawns the process automatically
     this.transport = new StdioClientTransport({
       command: mcpConfig.command,
       args,
-      stderr: "pipe",
+      stderr: 'pipe',
     });
 
     // Log stderr for debugging
     const stderrStream = this.transport.stderr;
     if (stderrStream) {
-      stderrStream.on("data", (data: Buffer) => {
+      stderrStream.on('data', (data: Buffer) => {
         const msg = data.toString().trim();
         if (msg) {
           log.debug(`stderr: ${msg}`);
@@ -88,14 +88,14 @@ export class ChromeMCPClient {
       });
     }
 
-    this.client = new Client({ name: "pha-oauth-client", version: "1.0.0" }, { capabilities: {} });
+    this.client = new Client({ name: 'pha-oauth-client', version: '1.0.0' }, { capabilities: {} });
 
     try {
       await this.client.connect(this.transport);
       this.connected = true;
-      log.info("Connected to MCP server");
+      log.info('Connected to MCP server');
     } catch (error) {
-      log.error("Failed to connect", error);
+      log.error('Failed to connect', error);
       throw error;
     }
   }
@@ -108,7 +108,7 @@ export class ChromeMCPClient {
       try {
         await this.client.close();
       } catch (e) {
-        log.warn("Error closing client", e);
+        log.warn('Error closing client', e);
       }
       this.client = null;
     }
@@ -116,12 +116,12 @@ export class ChromeMCPClient {
       try {
         await this.transport.close();
       } catch (e) {
-        log.warn("Error closing transport", e);
+        log.warn('Error closing transport', e);
       }
       this.transport = null;
     }
     this.connected = false;
-    log.info("Disconnected");
+    log.info('Disconnected');
   }
 
   /**
@@ -136,7 +136,7 @@ export class ChromeMCPClient {
    */
   private async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
     if (!this.client) {
-      throw new Error("Not connected to MCP server");
+      throw new Error('Not connected to MCP server');
     }
 
     log.debug(`Calling tool: ${name}`, JSON.stringify(args).slice(0, 100));
@@ -147,9 +147,9 @@ export class ChromeMCPClient {
     if (result.content && Array.isArray(result.content)) {
       const textContent = result.content.find((c: unknown) => {
         const item = c as { type?: string };
-        return item.type === "text";
+        return item.type === 'text';
       });
-      if (textContent && typeof textContent === "object" && "text" in textContent) {
+      if (textContent && typeof textContent === 'object' && 'text' in textContent) {
         const text = (textContent as { text: string }).text;
         try {
           return JSON.parse(text);
@@ -165,7 +165,7 @@ export class ChromeMCPClient {
    * List open pages
    */
   async listPages(): Promise<string> {
-    const result = await this.callTool("list_pages");
+    const result = await this.callTool('list_pages');
     return result as string;
   }
 
@@ -173,29 +173,29 @@ export class ChromeMCPClient {
    * Open a new page with URL
    */
   async newPage(url: string): Promise<unknown> {
-    return this.callTool("new_page", { url });
+    return this.callTool('new_page', { url });
   }
 
   /**
    * Navigate current page to URL
    */
   async navigatePage(url: string): Promise<unknown> {
-    return this.callTool("navigate_page", { type: "url", url });
+    return this.callTool('navigate_page', { type: 'url', url });
   }
 
   /**
    * Select a page by ID
    */
   async selectPage(pageId: number): Promise<void> {
-    await this.callTool("select_page", { pageId });
+    await this.callTool('select_page', { pageId });
   }
 
   /**
    * Get current page URL via evaluate_script
    */
   async getCurrentUrl(): Promise<string> {
-    const result = await this.callTool("evaluate_script", {
-      function: "() => window.location.href",
+    const result = await this.callTool('evaluate_script', {
+      function: '() => window.location.href',
     });
     return String(result);
   }
@@ -204,7 +204,7 @@ export class ChromeMCPClient {
    * Get all network entries from Performance API
    */
   async getNetworkEntries(): Promise<Array<{ name: string; entryType: string }>> {
-    const result = await this.callTool("evaluate_script", {
+    const result = await this.callTool('evaluate_script', {
       function: `() => {
         const entries = performance.getEntriesByType('navigation')
           .concat(performance.getEntriesByType('resource'));
@@ -219,7 +219,7 @@ export class ChromeMCPClient {
    * This captures all requests including XHR, redirects, etc.
    */
   async listNetworkRequests(): Promise<string> {
-    const result = await this.callTool("list_network_requests", {});
+    const result = await this.callTool('list_network_requests', {});
     return String(result);
   }
 
@@ -227,21 +227,21 @@ export class ChromeMCPClient {
    * Get a specific network request by ID
    */
   async getNetworkRequest(requestId: string): Promise<unknown> {
-    return this.callTool("get_network_request", { requestId });
+    return this.callTool('get_network_request', { requestId });
   }
 
   /**
    * Close a page by ID
    */
   async closePage(pageId: number): Promise<void> {
-    await this.callTool("close_page", { pageId });
+    await this.callTool('close_page', { pageId });
   }
 
   /**
    * Take a snapshot of the page
    */
   async takeSnapshot(): Promise<string> {
-    const result = await this.callTool("take_snapshot");
+    const result = await this.callTool('take_snapshot');
     return String(result);
   }
 
@@ -250,7 +250,7 @@ export class ChromeMCPClient {
    * Uses a script that captures any redirect attempts to hms:// protocol
    */
   async checkForHmsRedirect(): Promise<string | null> {
-    const result = await this.callTool("evaluate_script", {
+    const result = await this.callTool('evaluate_script', {
       function: `() => {
         // Check if there's a pending redirect to hms:// stored by our observer
         if (window.__hmsRedirectUrl) {
@@ -276,7 +276,7 @@ export class ChromeMCPClient {
       }`,
     });
     const url = result as string | null;
-    if (url && url.includes("code=")) {
+    if (url && url.includes('code=')) {
       return url;
     }
     return null;
@@ -286,9 +286,9 @@ export class ChromeMCPClient {
    * Install a redirect observer to capture hms:// redirects
    */
   async installRedirectObserver(): Promise<void> {
-    await this.callTool("evaluate_script", {
+    await this.callTool('evaluate_script', {
       function: `() => {
-        if (window.__hmsObserverInstalled) return;
+        if (window.__hmsObserverInstalled) { return; }
         window.__hmsObserverInstalled = true;
 
         // Override window.location setter to capture hms:// redirects
@@ -339,20 +339,18 @@ export class ChromeMCPClient {
   /**
    * Wait for URL to match pattern or network request containing code (polling)
    */
-  async waitForCodeInUrlOrNetwork(
-    options: { timeout?: number; pollInterval?: number } = {}
-  ): Promise<string> {
+  async waitForCodeInUrlOrNetwork(options: { timeout?: number; pollInterval?: number } = {}): Promise<string> {
     const { timeout = 180000, pollInterval = 1000 } = options;
     const startTime = Date.now();
     const codePattern = /[?&]code=([^&]+)/;
 
-    log.info("Waiting for OAuth code in URL or network...");
+    log.info('Waiting for OAuth code in URL or network...');
 
     // Install redirect observer
     try {
       await this.installRedirectObserver();
     } catch (e) {
-      log.warn("Could not install redirect observer", e);
+      log.warn('Could not install redirect observer', e);
     }
 
     while (Date.now() - startTime < timeout) {
@@ -365,7 +363,7 @@ export class ChromeMCPClient {
         const urlMatch = url.match(codePattern);
         if (urlMatch) {
           const code = decodeURIComponent(urlMatch[1]);
-          log.info("Found code in URL!");
+          log.info('Found code in URL!');
           return code;
         }
 
@@ -393,11 +391,11 @@ export class ChromeMCPClient {
           const networkMatch = networkData.match(codePattern);
           if (networkMatch) {
             const code = decodeURIComponent(networkMatch[1]);
-            log.info("Found code in network requests!");
+            log.info('Found code in network requests!');
             return code;
           }
         } catch (e) {
-          log.warn("Error getting network requests", e);
+          log.warn('Error getting network requests', e);
         }
 
         // Also check Performance API entries as fallback
@@ -416,7 +414,7 @@ export class ChromeMCPClient {
         }
       } catch (e) {
         // Page might be navigating, ignore errors
-        log.warn("Error checking", e);
+        log.warn('Error checking', e);
       }
       await new Promise((resolve) => setTimeout(resolve, pollInterval));
     }
@@ -466,7 +464,7 @@ export async function runOAuthFlowWithChrome(
     return { code };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    log.error("OAuth error", message);
+    log.error('OAuth error', message);
     return { error: message };
   }
   // Note: Don't disconnect here to allow reuse

@@ -5,7 +5,7 @@
  * This allows the auto-loop to optimize against specific user-reported problems.
  */
 
-import type { BenchmarkCategory, TestCase } from "./types.js";
+import type { BenchmarkCategory, TestCase } from './types.js';
 
 /**
  * Convert a GitHub issue into a TestCase using an LLM
@@ -49,22 +49,22 @@ Respond with ONLY the JSON, no other text.`;
     // Extract JSON from response (handle markdown code blocks)
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new Error("No JSON found in LLM response");
+      throw new Error('No JSON found in LLM response');
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
 
     return {
       id: `issue-${issueNumber}-${Date.now()}`,
-      category: parsed.category || "communication-quality",
+      category: parsed.category || 'communication-quality',
       query: parsed.query || issueTitle,
-      userUuid: parsed.userUuid || "active-user",
+      userUuid: parsed.userUuid || 'active-user',
       expected: {
         shouldMention: parsed.expected?.shouldMention || [],
         shouldNotMention: parsed.expected?.shouldNotMention || [],
         minScore: parsed.expected?.minScore || 70,
       },
-      difficulty: "medium",
+      difficulty: 'medium',
     };
   } catch {
     // Fallback: create a basic test case from the issue title
@@ -72,12 +72,12 @@ Respond with ONLY the JSON, no other text.`;
       id: `issue-${issueNumber}-${Date.now()}`,
       category: guessCategory(issueTitle, issueBody),
       query: issueTitle,
-      userUuid: "active-user",
+      userUuid: 'active-user',
       expected: {
         shouldMention: extractKeywords(issueTitle),
         minScore: 70,
       },
-      difficulty: "medium",
+      difficulty: 'medium',
     };
   }
 }
@@ -88,29 +88,19 @@ Respond with ONLY the JSON, no other text.`;
 function guessCategory(title: string, body: string): BenchmarkCategory {
   const text = `${title} ${body}`.toLowerCase();
 
-  if (text.includes("safety") || text.includes("harmful") || text.includes("medical advice")) {
-    return "safety-boundaries";
+  if (text.includes('safety') || text.includes('harmful') || text.includes('medical advice')) {
+    return 'safety-boundaries';
   }
-  if (
-    text.includes("coach") ||
-    text.includes("goal") ||
-    text.includes("exercise") ||
-    text.includes("diet")
-  ) {
-    return "health-coaching";
+  if (text.includes('coach') || text.includes('goal') || text.includes('exercise') || text.includes('diet')) {
+    return 'health-coaching';
   }
-  if (
-    text.includes("data") ||
-    text.includes("heart rate") ||
-    text.includes("sleep") ||
-    text.includes("steps")
-  ) {
-    return "health-data-analysis";
+  if (text.includes('data') || text.includes('heart rate') || text.includes('sleep') || text.includes('steps')) {
+    return 'health-data-analysis';
   }
-  if (text.includes("remember") || text.includes("memory") || text.includes("personal")) {
-    return "personalization-memory";
+  if (text.includes('remember') || text.includes('memory') || text.includes('personal')) {
+    return 'personalization-memory';
   }
-  return "communication-quality";
+  return 'communication-quality';
 }
 
 /**
@@ -120,7 +110,7 @@ function extractKeywords(text: string): string[] {
   return text
     .split(/\s+/)
     .filter((w) => w.length > 4)
-    .map((w) => w.toLowerCase().replace(/[^a-z]/g, ""))
+    .map((w) => w.toLowerCase().replace(/[^a-z]/g, ''))
     .filter(Boolean)
     .slice(0, 5);
 }

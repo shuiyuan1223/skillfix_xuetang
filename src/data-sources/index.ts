@@ -1,14 +1,14 @@
-export type * from "./interface.js";
-export * from "./mock.js";
-export * from "./huawei/index.js";
+export type * from './interface.js';
+export * from './mock.js';
+export * from './huawei/index.js';
 
-import type { HealthDataSource } from "./interface.js";
-import { MockDataSource } from "./mock.js";
-import { HuaweiHealthDataSource, createInnerHuaweiHealthApiForUser } from "./huawei/index.js";
-import { loadConfig } from "../utils/config.js";
-import { createLogger } from "../utils/logger.js";
+import type { HealthDataSource } from './interface.js';
+import { MockDataSource } from './mock.js';
+import { HuaweiHealthDataSource, createInnerHuaweiHealthApiForUser } from './huawei/index.js';
+import { loadConfig } from '../utils/config.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("DataSource");
+const log = createLogger('DataSource');
 
 /**
  * Create a data source based on configuration
@@ -19,13 +19,13 @@ export function createDataSource(userUuid?: string): HealthDataSource {
   const type = config.dataSources.type;
 
   switch (type) {
-    case "huawei":
+    case 'huawei':
       return new HuaweiHealthDataSource(userUuid);
-    case "apple":
+    case 'apple':
       // Apple Health not implemented yet, fallback to mock
-      log.warn("Apple Health not implemented, using mock data");
+      log.warn('Apple Health not implemented, using mock data');
       return new MockDataSource();
-    case "mock":
+    case 'mock':
     default:
       return new MockDataSource();
   }

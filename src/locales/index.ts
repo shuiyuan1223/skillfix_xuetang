@@ -13,21 +13,21 @@
  *   t('nav.chat')           // → "Chat"
  */
 
-import type { LocaleMessages, LocaleKey } from "./types.js";
-import { zhCN } from "./zh-CN.js";
-import { en } from "./en.js";
-import { createLogger } from "../utils/logger.js";
+import type { LocaleMessages, LocaleKey } from './types.js';
+import { zhCN } from './zh-CN.js';
+import { en } from './en.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("i18n");
+const log = createLogger('i18n');
 
 // Available locales
 const locales: Record<LocaleKey, LocaleMessages> = {
-  "zh-CN": zhCN,
+  'zh-CN': zhCN,
   en: en,
 };
 
 // Current locale (default to Chinese)
-let currentLocale: LocaleKey = "zh-CN";
+let currentLocale: LocaleKey = 'zh-CN';
 
 /**
  * Set the current locale
@@ -37,7 +37,7 @@ export function setLocale(locale: LocaleKey): void {
     currentLocale = locale;
   } else {
     log.warn(`Unknown locale: ${locale}, falling back to zh-CN`);
-    currentLocale = "zh-CN";
+    currentLocale = 'zh-CN';
   }
 }
 
@@ -68,14 +68,14 @@ export function getAvailableLocales(): LocaleKey[] {
  */
 export function t(key: string, params?: Record<string, string | number>): string {
   const messages = locales[currentLocale];
-  const keys = key.split(".");
+  const keys = key.split('.');
 
   // Navigate to the value
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let value: any = messages;
   for (const k of keys) {
-    if (value && typeof value === "object" && k in value) {
+    if (value && typeof value === 'object' && k in value) {
       value = value[k];
     } else {
       log.warn(`Missing translation for key: ${key} in locale: ${currentLocale}`);
@@ -83,7 +83,7 @@ export function t(key: string, params?: Record<string, string | number>): string
     }
   }
 
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     log.warn(`Translation key ${key} is not a string`);
     return key;
   }
@@ -99,4 +99,4 @@ export function t(key: string, params?: Record<string, string | number>): string
 }
 
 // Re-export types
-export type { LocaleMessages, LocaleKey } from "./types.js";
+export type { LocaleMessages, LocaleKey } from './types.js';

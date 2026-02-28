@@ -10,7 +10,7 @@ export interface PHATool<TArgs = Record<string, unknown>> {
   name: string;
   description: string;
   inputSchema: {
-    type: "object";
+    type: 'object';
     properties: Record<string, unknown>;
     required?: string[];
   };
@@ -26,36 +26,36 @@ export interface PHATool<TArgs = Record<string, unknown>> {
 }
 
 export type ToolCategory =
-  | "health"
-  | "memory"
-  | "skill"
-  | "config"
-  | "profile"
-  | "presentation"
-  | "planning"
-  | "proactive"
-  | "git"
-  | "evolution"
-  | "system"
-  | "feedback";
+  | 'health'
+  | 'memory'
+  | 'skill'
+  | 'config'
+  | 'profile'
+  | 'presentation'
+  | 'planning'
+  | 'proactive'
+  | 'git'
+  | 'evolution'
+  | 'system'
+  | 'feedback';
 
 /** All known tool categories (for UI enumeration) */
 export const ALL_TOOL_CATEGORIES: ToolCategory[] = [
-  "health",
-  "memory",
-  "skill",
-  "config",
-  "profile",
-  "presentation",
-  "planning",
-  "proactive",
-  "git",
-  "evolution",
-  "system",
-  "feedback",
+  'health',
+  'memory',
+  'skill',
+  'config',
+  'profile',
+  'presentation',
+  'planning',
+  'proactive',
+  'git',
+  'evolution',
+  'system',
+  'feedback',
 ];
 
 export interface MCPToolResult {
-  content: Array<{ type: "text"; text: string }>;
+  content: Array<{ type: 'text'; text: string }>;
   isError?: boolean;
 }

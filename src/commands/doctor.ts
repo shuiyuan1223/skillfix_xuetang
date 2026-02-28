@@ -2,7 +2,7 @@
  * Doctor command - Health checks and quick fixes
  */
 
-import type { Command } from "commander";
+import type { Command } from 'commander';
 import {
   isConfigured,
   loadConfig,
@@ -15,51 +15,43 @@ import {
   isCryptoReady,
   countPlaintextSensitiveFields,
   type LLMProvider,
-} from "../utils/config.js";
-import { getThirdKeySource } from "../utils/crypto.js";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
-import {
-  printHeader,
-  printSection,
-  printStatus,
-  printDivider,
-  c,
-  icons,
-  Spinner,
-} from "../utils/cli-ui.js";
+} from '../utils/config.js';
+import { getThirdKeySource } from '../utils/crypto.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { printHeader, printSection, printStatus, printDivider, c, icons, Spinner } from '../utils/cli-ui.js';
 
 interface Check {
   name: string;
-  status: "pass" | "warn" | "fail";
+  status: 'pass' | 'warn' | 'fail';
   message: string;
   detail?: string;
   fix?: () => void;
   fixHint?: string;
 }
 
-const PID_FILE = path.join(os.homedir(), ".pha", "gateway.pid");
+const PID_FILE = path.join(os.homedir(), '.pha', 'gateway.pid');
 
 function checkConfiguration(): Check {
   const configExists = isConfigured();
   return {
-    name: "Configuration",
-    status: configExists ? "pass" : "warn",
-    message: configExists ? "Configuration file exists" : "No configuration file found",
+    name: 'Configuration',
+    status: configExists ? 'pass' : 'warn',
+    message: configExists ? 'Configuration file exists' : 'No configuration file found',
     detail: configExists ? getConfigPath() : undefined,
     fix: configExists
       ? undefined
       : () => {
           ensureConfigDir();
           saveConfig({
-            gateway: { host: "0.0.0.0", port: 8000, autoStart: false },
-            llm: { provider: "anthropic" },
-            dataSources: { type: "mock" },
-            tui: { theme: "dark", showToolCalls: true },
+            gateway: { host: '0.0.0.0', port: 8000, autoStart: false },
+            llm: { provider: 'anthropic' },
+            dataSources: { type: 'mock' },
+            tui: { theme: 'dark', showToolCalls: true },
           });
         },
-    fixHint: "pha setup",
+    fixHint: 'pha setup',
   };
 }
 
@@ -68,27 +60,27 @@ function checkConfigDirPermissions(): Check {
   let configDirWritable = false;
   try {
     ensureConfigDir();
-    const testFile = path.join(configDir, ".test");
-    fs.writeFileSync(testFile, "test", { mode: 0o640 });
+    const testFile = path.join(configDir, '.test');
+    fs.writeFileSync(testFile, 'test', { mode: 0o640 });
     fs.unlinkSync(testFile);
     configDirWritable = true;
   } catch {
     configDirWritable = false;
   }
   return {
-    name: "Config Directory",
-    status: configDirWritable ? "pass" : "fail",
-    message: configDirWritable ? "Directory is writable" : "Directory is not writable",
+    name: 'Config Directory',
+    status: configDirWritable ? 'pass' : 'fail',
+    message: configDirWritable ? 'Directory is writable' : 'Directory is not writable',
     detail: configDir,
   };
 }
 
 function checkApiKey(configExists: boolean): Check {
   const foundProviders = [
-    process.env.ANTHROPIC_API_KEY && "Anthropic",
-    process.env.OPENAI_API_KEY && "OpenAI",
-    process.env.GOOGLE_API_KEY && "Google",
-    process.env.OPENROUTER_API_KEY && "OpenRouter",
+    process.env.ANTHROPIC_API_KEY && 'Anthropic',
+    process.env.OPENAI_API_KEY && 'OpenAI',
+    process.env.GOOGLE_API_KEY && 'Google',
+    process.env.OPENROUTER_API_KEY && 'OpenRouter',
   ].filter(Boolean) as string[];
   const hasAnyKey = foundProviders.length > 0;
 
@@ -96,39 +88,39 @@ function checkApiKey(configExists: boolean): Check {
   let configuredProviderHasKey = false;
   if (config?.llm.provider) {
     const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
-    configuredProviderHasKey = !!process.env[providerCfg?.envVar || ""] || !!config.llm.apiKey;
+    configuredProviderHasKey = !!process.env[providerCfg?.envVar || ''] || !!config.llm.apiKey;
   }
 
-  let apiKeyStatus: "pass" | "warn" | "fail";
+  let apiKeyStatus: 'pass' | 'warn' | 'fail';
   let apiKeyMessage: string;
   if (configuredProviderHasKey) {
-    apiKeyStatus = "pass";
-    apiKeyMessage = "API key configured for provider";
+    apiKeyStatus = 'pass';
+    apiKeyMessage = 'API key configured for provider';
   } else if (hasAnyKey) {
-    apiKeyStatus = "warn";
-    apiKeyMessage = `Found keys: ${foundProviders.join(", ")}`;
+    apiKeyStatus = 'warn';
+    apiKeyMessage = `Found keys: ${foundProviders.join(', ')}`;
   } else {
-    apiKeyStatus = "fail";
-    apiKeyMessage = "No API key found in environment";
+    apiKeyStatus = 'fail';
+    apiKeyMessage = 'No API key found in environment';
   }
 
   return {
-    name: "API Key",
+    name: 'API Key',
     status: apiKeyStatus,
     message: apiKeyMessage,
     detail: config?.llm.provider ? `Provider: ${config.llm.provider}` : undefined,
     fixHint: config?.llm.provider
       ? `export ${PROVIDER_CONFIGS[config.llm.provider as LLMProvider]?.envVar}=...`
-      : "export ANTHROPIC_API_KEY=sk-ant-...",
+      : 'export ANTHROPIC_API_KEY=sk-ant-...',
   };
 }
 
 function checkBunRuntime(): Check {
-  const hasBun = typeof Bun !== "undefined";
+  const hasBun = typeof Bun !== 'undefined';
   return {
-    name: "Bun Runtime",
-    status: hasBun ? "pass" : "warn",
-    message: hasBun ? "Bun is available" : "Not running on Bun",
+    name: 'Bun Runtime',
+    status: hasBun ? 'pass' : 'warn',
+    message: hasBun ? 'Bun is available' : 'Not running on Bun',
     detail: hasBun ? `v${Bun.version}` : undefined,
   };
 }
@@ -139,7 +131,7 @@ function checkGatewayPid(): Check {
   let gatewayPid: number | null = null;
   if (pidFileExists) {
     try {
-      gatewayPid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
+      gatewayPid = parseInt(fs.readFileSync(PID_FILE, 'utf-8').trim(), 10);
       try {
         process.kill(gatewayPid, 0);
         pidFileValid = true;
@@ -153,19 +145,19 @@ function checkGatewayPid(): Check {
 
   if (pidFileExists && !pidFileValid) {
     return {
-      name: "Gateway PID",
-      status: "warn",
-      message: "Stale PID file found",
-      detail: "Gateway not running but PID file exists",
+      name: 'Gateway PID',
+      status: 'warn',
+      message: 'Stale PID file found',
+      detail: 'Gateway not running but PID file exists',
       fix: () => {
         fs.unlinkSync(PID_FILE);
       },
     };
   }
   return {
-    name: "Gateway PID",
-    status: "pass",
-    message: pidFileExists ? "Gateway is running" : "Clean state",
+    name: 'Gateway PID',
+    status: 'pass',
+    message: pidFileExists ? 'Gateway is running' : 'Clean state',
     detail: pidFileValid ? `PID ${gatewayPid}` : undefined,
   };
 }
@@ -174,21 +166,21 @@ function checkGatewayPort(config: ReturnType<typeof loadConfig>): Check {
   const port = config.gateway.port;
   let portAvailable = true;
   try {
-    const server = Bun.serve({ port, fetch: () => new Response("test") });
+    const server = Bun.serve({ port, fetch: () => new Response('test') });
     server.stop();
   } catch {
     portAvailable = false;
   }
   return {
-    name: "Gateway Port",
-    status: portAvailable ? "pass" : "warn",
-    message: portAvailable ? "Port is available" : "Port is in use",
+    name: 'Gateway Port',
+    status: portAvailable ? 'pass' : 'warn',
+    message: portAvailable ? 'Port is available' : 'Port is in use',
     detail: `Port ${port}`,
   };
 }
 
 async function checkGatewayHealth(config: ReturnType<typeof loadConfig>): Promise<Check> {
-  const drBasePath = (config.gateway.basePath || "").replace(/\/+$/, "");
+  const drBasePath = (config.gateway.basePath || '').replace(/\/+$/, '');
   let gatewayHealthy = false;
   try {
     const response = await fetch(`http://localhost:${config.gateway.port}${drBasePath}/health`, {
@@ -199,20 +191,20 @@ async function checkGatewayHealth(config: ReturnType<typeof loadConfig>): Promis
     gatewayHealthy = false;
   }
   return {
-    name: "Gateway Health",
-    status: gatewayHealthy ? "pass" : "warn",
-    message: gatewayHealthy ? "Gateway is responding" : "Gateway not responding",
+    name: 'Gateway Health',
+    status: gatewayHealthy ? 'pass' : 'warn',
+    message: gatewayHealthy ? 'Gateway is responding' : 'Gateway not responding',
     detail: `http://localhost:${config.gateway.port}${drBasePath}`,
   };
 }
 
 function checkDatabase(): Check {
-  const dbPath = path.join(os.homedir(), ".pha", "pha.db");
+  const dbPath = path.join(os.homedir(), '.pha', 'pha.db');
   const dbExists = fs.existsSync(dbPath);
   return {
-    name: "Database",
-    status: dbExists ? "pass" : "pass",
-    message: dbExists ? "Database exists" : "Database will be created on first use",
+    name: 'Database',
+    status: dbExists ? 'pass' : 'pass',
+    message: dbExists ? 'Database exists' : 'Database will be created on first use',
     detail: dbExists ? dbPath : undefined,
   };
 }
@@ -223,37 +215,32 @@ function checkEncryption(): Check[] {
   const ready = isCryptoReady(stateDir);
 
   // Key files check
-  const keyAPath = path.join(stateDir, "keys", "key-a.bin");
-  const keyBPath = path.join(stateDir, "keys", "key-b.bin");
+  const keyAPath = path.join(stateDir, 'keys', 'key-a.bin');
+  const keyBPath = path.join(stateDir, 'keys', 'key-b.bin');
   const keyAExists = fs.existsSync(keyAPath);
   const keyBExists = fs.existsSync(keyBPath);
 
   checks.push({
-    name: "Encryption Key Files",
-    status: keyAExists && keyBExists ? "pass" : "warn",
+    name: 'Encryption Key Files',
+    status: keyAExists && keyBExists ? 'pass' : 'warn',
     message:
       keyAExists && keyBExists
-        ? "key-a.bin, key-b.bin present"
-        : `Missing: ${[!keyAExists && "key-a.bin", !keyBExists && "key-b.bin"].filter(Boolean).join(", ")}`,
-    detail: path.join(stateDir, "keys/"),
-    fixHint: keyAExists && keyBExists ? undefined : "pha encrypt-config",
+        ? 'key-a.bin, key-b.bin present'
+        : `Missing: ${[!keyAExists && 'key-a.bin', !keyBExists && 'key-b.bin'].filter(Boolean).join(', ')}`,
+    detail: path.join(stateDir, 'keys/'),
+    fixHint: keyAExists && keyBExists ? undefined : 'pha encrypt-config',
   });
 
   // Third key source check
   if (ready) {
     const source = getThirdKeySource();
     checks.push({
-      name: "Third-Party Key",
-      status: source === "environment" ? "pass" : "warn",
+      name: 'Third-Party Key',
+      status: source === 'environment' ? 'pass' : 'warn',
       message:
-        source === "environment"
-          ? "PHA_THIRD_KEY (from environment)"
-          : "Using machine fingerprint fallback (dev mode)",
-      detail:
-        source === "machine-fingerprint"
-          ? "Set PHA_THIRD_KEY env for production security"
-          : undefined,
-      fixHint: source === "machine-fingerprint" ? "export PHA_THIRD_KEY=<your-secret>" : undefined,
+        source === 'environment' ? 'PHA_THIRD_KEY (from environment)' : 'Using machine fingerprint fallback (dev mode)',
+      detail: source === 'machine-fingerprint' ? 'Set PHA_THIRD_KEY env for production security' : undefined,
+      fixHint: source === 'machine-fingerprint' ? 'export PHA_THIRD_KEY=<your-secret>' : undefined,
     });
   }
 
@@ -262,16 +249,16 @@ function checkEncryption(): Check[] {
     const plaintextCount = countPlaintextSensitiveFields();
     if (plaintextCount > 0) {
       checks.push({
-        name: "Sensitive Field Encryption",
-        status: "warn",
+        name: 'Sensitive Field Encryption',
+        status: 'warn',
         message: `${plaintextCount} sensitive field(s) still in plaintext`,
-        fixHint: "pha encrypt-config",
+        fixHint: 'pha encrypt-config',
       });
     } else {
       checks.push({
-        name: "Sensitive Field Encryption",
-        status: "pass",
-        message: "All sensitive fields encrypted",
+        name: 'Sensitive Field Encryption',
+        status: 'pass',
+        message: 'All sensitive fields encrypted',
       });
     }
   }
@@ -291,7 +278,7 @@ async function runAllChecks(): Promise<Check[]> {
   const pidCheck = checkGatewayPid();
   checks.push(pidCheck);
 
-  const pidIsValid = pidCheck.status === "pass" && pidCheck.detail?.startsWith("PID");
+  const pidIsValid = pidCheck.status === 'pass' && pidCheck.detail?.startsWith('PID');
   const config = configExists ? loadConfig() : null;
 
   if (!pidIsValid && configExists && config) {
@@ -310,42 +297,42 @@ async function runAllChecks(): Promise<Check[]> {
 }
 
 function printDoctorResults(checks: Check[], options: { fix?: boolean }): void {
-  console.log("");
-  printHeader(`${icons.doctor} PHA Doctor`, "System Diagnostics");
-  printSection("System Checks");
+  console.log('');
+  printHeader(`${icons.doctor} PHA Doctor`, 'System Diagnostics');
+  printSection('System Checks');
 
   for (const check of checks) {
-    type StatusType = "info" | "error" | "success" | "pending" | "warning";
-    const statusMap: Record<string, StatusType> = { pass: "success", warn: "warning" };
-    const statusType: StatusType = statusMap[check.status] ?? "error";
+    type StatusType = 'info' | 'error' | 'success' | 'pending' | 'warning';
+    const statusMap: Record<string, StatusType> = { pass: 'success', warn: 'warning' };
+    const statusType: StatusType = statusMap[check.status] ?? 'error';
     printStatus(statusType, check.name, check.detail);
-    if (check.message && check.status !== "pass") {
+    if (check.message && check.status !== 'pass') {
       console.log(`    ${c.dim(check.message)}`);
     }
-    if (check.fix && options.fix && check.status !== "pass") {
+    if (check.fix && options.fix && check.status !== 'pass') {
       try {
         check.fix();
-        console.log(`    ${c.green("→ Fixed!")}`);
+        console.log(`    ${c.green('→ Fixed!')}`);
       } catch (e) {
         console.log(`    ${c.red(`→ Fix failed: ${e}`)}`);
       }
-    } else if (check.fixHint && check.status !== "pass") {
-      console.log(`    ${c.cyan("→")} ${c.dim(check.fixHint)}`);
+    } else if (check.fixHint && check.status !== 'pass') {
+      console.log(`    ${c.cyan('→')} ${c.dim(check.fixHint)}`);
     }
   }
 
-  const passCount = checks.filter((ch) => ch.status === "pass").length;
-  const warnCount = checks.filter((ch) => ch.status === "warn").length;
-  const failCount = checks.filter((ch) => ch.status === "fail").length;
+  const passCount = checks.filter((ch) => ch.status === 'pass').length;
+  const warnCount = checks.filter((ch) => ch.status === 'warn').length;
+  const failCount = checks.filter((ch) => ch.status === 'fail').length;
 
-  console.log("");
+  console.log('');
   printDivider();
-  console.log("");
+  console.log('');
 
   const total = checks.length;
-  const passBar = c.green("█".repeat(Math.round((passCount / total) * 20)));
-  const warnBar = c.yellow("█".repeat(Math.round((warnCount / total) * 20)));
-  const failBar = c.red("█".repeat(Math.round((failCount / total) * 20)));
+  const passBar = c.green('█'.repeat(Math.round((passCount / total) * 20)));
+  const warnBar = c.yellow('█'.repeat(Math.round((warnCount / total) * 20)));
+  const failBar = c.red('█'.repeat(Math.round((failCount / total) * 20)));
 
   console.log(`  ${passBar}${warnBar}${failBar}`);
   console.log(
@@ -353,7 +340,7 @@ function printDoctorResults(checks: Check[], options: { fix?: boolean }): void {
   );
 
   if (failCount > 0) {
-    console.log(`\n  ${c.bold("Recommended actions:")}`);
+    console.log(`\n  ${c.bold('Recommended actions:')}`);
     const hasAnyKey = !!(
       process.env.ANTHROPIC_API_KEY ||
       process.env.OPENAI_API_KEY ||
@@ -361,40 +348,42 @@ function printDoctorResults(checks: Check[], options: { fix?: boolean }): void {
       process.env.OPENROUTER_API_KEY
     );
     if (!hasAnyKey) {
-      console.log(`  ${c.cyan("1.")} Set up your LLM provider API key`);
-      console.log(`     ${c.dim("export ANTHROPIC_API_KEY=sk-ant-...")}`);
+      console.log(`  ${c.cyan('1.')} Set up your LLM provider API key`);
+      console.log(`     ${c.dim('export ANTHROPIC_API_KEY=sk-ant-...')}`);
     }
     if (!isConfigured()) {
-      console.log(`  ${c.cyan("2.")} Run the setup wizard`);
-      console.log(`     ${c.dim("pha onboard")}`);
+      console.log(`  ${c.cyan('2.')} Run the setup wizard`);
+      console.log(`     ${c.dim('pha onboard')}`);
     }
-    const fixableCount = checks.filter((ch) => ch.fix && ch.status !== "pass").length;
+    const fixableCount = checks.filter((ch) => ch.fix && ch.status !== 'pass').length;
     if (fixableCount > 0 && !options.fix) {
-      console.log(
-        `\n  ${c.dim("Run")} ${c.cyan("pha doctor --fix")} ${c.dim(`to auto-fix ${fixableCount} issue(s)`)}`
-      );
+      console.log(`\n  ${c.dim('Run')} ${c.cyan('pha doctor --fix')} ${c.dim(`to auto-fix ${fixableCount} issue(s)`)}`);
     }
   } else if (warnCount === 0) {
-    console.log(`\n  ${c.green("✓")} ${c.bold("All checks passed!")} You're good to go.`);
+    console.log(`\n  ${c.green('✓')} ${c.bold('All checks passed!')} You're good to go.`);
   } else {
-    console.log(`\n  ${c.yellow("!")} System is functional with some warnings.`);
+    console.log(`\n  ${c.yellow('!')} System is functional with some warnings.`);
   }
-  console.log("");
+  console.log('');
 }
 
 export function registerDoctorCommand(program: Command): void {
   program
-    .command("doctor")
-    .description("Run health checks and diagnose issues")
-    .option("--fix", "Automatically fix issues where possible")
-    .option("--json", "Output as JSON")
+    .command('doctor')
+    .description('Run health checks and diagnose issues')
+    .option('--fix', 'Automatically fix issues where possible')
+    .option('--json', 'Output as JSON')
     .action(async (options) => {
-      const spinner = new Spinner("Running diagnostics...");
-      if (!options.json) spinner.start();
+      const spinner = new Spinner('Running diagnostics...');
+      if (!options.json) {
+        spinner.start();
+      }
 
       const checks = await runAllChecks();
 
-      if (!options.json) spinner.stop("success");
+      if (!options.json) {
+        spinner.stop('success');
+      }
 
       if (options.json) {
         console.log(JSON.stringify(checks, null, 2));

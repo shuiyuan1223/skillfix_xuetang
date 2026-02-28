@@ -54,9 +54,9 @@ export interface EvaluationResult {
 
   // Identified issues
   issues: Array<{
-    type: "accuracy" | "relevance" | "safety" | "completeness" | "tone";
+    type: 'accuracy' | 'relevance' | 'safety' | 'completeness' | 'tone';
     description: string;
-    severity: "low" | "medium" | "high";
+    severity: 'low' | 'medium' | 'high';
   }>;
 }
 
@@ -88,7 +88,7 @@ export interface AnalysisResult {
   weaknesses: Array<{
     category: string;
     description: string;
-    impact: "low" | "medium" | "high";
+    impact: 'low' | 'medium' | 'high';
     suggestedFix: string;
   }>;
 }
@@ -98,7 +98,7 @@ export interface OptimizationSuggestion {
   id: string;
   timestamp: number;
 
-  type: "prompt" | "tool" | "behavior";
+  type: 'prompt' | 'tool' | 'behavior';
 
   // What to change
   target: string;
@@ -110,7 +110,7 @@ export interface OptimizationSuggestion {
   expectedImprovement: string;
 
   // Validation
-  status: "pending" | "testing" | "validated" | "applied" | "rejected";
+  status: 'pending' | 'testing' | 'validated' | 'applied' | 'rejected';
   validationResults?: {
     before: number;
     after: number;
@@ -127,7 +127,7 @@ export interface SharpRating {
   category: string; // "Safety" | "Usefulness" | "Accuracy" | "Relevance" | "Personalization"
   subComponent: string; // "S1 Risk Disclosure" | "A1 Scientific Factual Correctness" | ...
   score: number; // 1.0 | 0.5 | 0.0
-  scoringType: "binary" | "3-point";
+  scoringType: 'binary' | '3-point';
   reason: string;
 }
 
@@ -177,25 +177,16 @@ export interface TestCase {
     safetyConcerns?: string[];
     expectedTools?: string[]; // Expected tool calls (get_sleep, get_heart_rate, etc.)
   };
-  difficulty?: "core" | "easy" | "medium" | "hard";
+  difficulty?: 'core' | 'easy' | 'medium' | 'hard';
 }
 
 // Benchmark category definitions
 export type BenchmarkCategory =
-  | "health-data-analysis"
-  | "health-coaching"
-  | "safety-boundaries"
-  | "personalization-memory"
-  | "communication-quality";
-
-/** @deprecated Use SHARP equal-weight categories instead */
-export interface CategoryDimensionWeights {
-  accuracy: number;
-  relevance: number;
-  helpfulness: number;
-  safety: number;
-  completeness: number;
-}
+  | 'health-data-analysis'
+  | 'health-coaching'
+  | 'safety-boundaries'
+  | 'personalization-memory'
+  | 'communication-quality';
 
 // Benchmark run - a single execution of the benchmark suite
 export interface BenchmarkRun {
@@ -209,7 +200,7 @@ export interface BenchmarkRun {
   failedCount: number;
   overallScore: number;
   durationMs: number;
-  profile: "quick" | "full";
+  profile: 'quick' | 'full';
   metadata?: Record<string, unknown>;
 }
 
@@ -242,13 +233,13 @@ export interface BenchmarkResult {
 }
 
 // Benchmark profile
-export type BenchmarkProfile = "quick" | "full";
+export type BenchmarkProfile = 'quick' | 'full';
 
 // Category weight configuration
 export interface CategoryWeightConfig {
   category: BenchmarkCategory;
   weight: number;
-  dimensionWeights: CategoryDimensionWeights; // @deprecated - kept for backward compat
+  dimensionWeights: Record<string, number>;
 }
 
 // Radar chart data point

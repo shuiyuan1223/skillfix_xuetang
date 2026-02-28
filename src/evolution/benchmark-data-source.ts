@@ -11,13 +11,10 @@ import type {
   HeartRateData,
   SleepData,
   WorkoutData,
-} from "../data-sources/interface.js";
+} from '../data-sources/interface.js';
 
 export interface FixtureHealthData {
-  metrics?: Record<
-    string,
-    { steps: number; calories: number; activeMinutes: number; distance?: number } | null
-  >;
+  metrics?: Record<string, { steps: number; calories: number; activeMinutes: number; distance?: number } | null>;
   heartRate?: Record<
     string,
     {
@@ -54,12 +51,11 @@ export interface FixtureHealthData {
  * Convert relative day keys (day_0, day_-1, etc.) to a date-keyed map.
  * day_0 = today, day_-1 = yesterday, etc.
  */
-function resolveRelativeDates<T>(
-  data: Record<string, T> | undefined,
-  baseDate?: Date
-): Map<string, T> {
+function resolveRelativeDates<T>(data: Record<string, T> | undefined, baseDate?: Date): Map<string, T> {
   const map = new Map<string, T>();
-  if (!data) return map;
+  if (!data) {
+    return map;
+  }
 
   const today = baseDate || new Date();
   for (const [key, value] of Object.entries(data)) {
@@ -68,7 +64,7 @@ function resolveRelativeDates<T>(
       const offset = parseInt(match[1], 10);
       const d = new Date(today);
       d.setDate(d.getDate() + offset);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = d.toISOString().split('T')[0];
       map.set(dateStr, value);
     }
   }
@@ -78,15 +74,14 @@ function resolveRelativeDates<T>(
 /**
  * Deep merge healthOverrides into base fixture data.
  */
-export function mergeFixtureOverrides(
-  base: FixtureHealthData,
-  overrides?: Record<string, unknown>
-): FixtureHealthData {
-  if (!overrides) return base;
+export function mergeFixtureOverrides(base: FixtureHealthData, overrides?: Record<string, unknown>): FixtureHealthData {
+  if (!overrides) {
+    return base;
+  }
 
   const merged = { ...base };
   for (const [key, value] of Object.entries(overrides)) {
-    if (key in merged && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    if (key in merged && typeof value === 'object' && value !== null && !Array.isArray(value)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const baseVal = (merged as any)[key] || {};
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,12 +95,9 @@ export function mergeFixtureOverrides(
 }
 
 export class BenchmarkDataSource implements HealthDataSource {
-  readonly name = "benchmark";
+  readonly name = 'benchmark';
 
-  private metricsMap: Map<
-    string,
-    { steps: number; calories: number; activeMinutes: number; distance?: number } | null
-  >;
+  private metricsMap: Map<string, { steps: number; calories: number; activeMinutes: number; distance?: number } | null>;
   private heartRateMap: Map<
     string,
     {
@@ -174,13 +166,17 @@ export class BenchmarkDataSource implements HealthDataSource {
 
   async getSleep(date: string): Promise<SleepData | null> {
     const data = this.sleepMap.get(date);
-    if (data === undefined || data === null) return null;
+    if (data === undefined || data === null) {
+      return null;
+    }
     return { date, ...data };
   }
 
   async getWorkouts(date: string): Promise<WorkoutData[]> {
     const data = this.workoutsMap.get(date);
-    if (!data || data.length === 0) return [];
+    if (!data || data.length === 0) {
+      return [];
+    }
     return data.map((w, i) => ({
       id: `benchmark-${date}-${i}`,
       date,
@@ -198,7 +194,7 @@ export class BenchmarkDataSource implements HealthDataSource {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = d.toISOString().split('T')[0];
       const metrics = await this.getMetrics(dateStr);
       result.push({ date: dateStr, steps: metrics.steps });
     }
@@ -211,7 +207,7 @@ export class BenchmarkDataSource implements HealthDataSource {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = d.toISOString().split('T')[0];
       const sleep = await this.getSleep(dateStr);
       result.push({ date: dateStr, hours: sleep?.durationHours ?? 0 });
     }
@@ -240,7 +236,7 @@ export class BenchmarkDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const m = await this.getMetrics(dateStr);
       result.push({
         date: dateStr,
@@ -262,7 +258,7 @@ export class BenchmarkDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const s = await this.getSleep(dateStr);
       result.push({ date: dateStr, hours: s?.durationHours ?? 0, qualityScore: s?.qualityScore });
       current.setDate(current.getDate() + 1);
@@ -278,7 +274,7 @@ export class BenchmarkDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const hr = await this.getHeartRate(dateStr);
       result.push({ date: dateStr, avg: hr.restingAvg, max: hr.maxToday, min: hr.minToday });
       current.setDate(current.getDate() + 1);
@@ -291,7 +287,7 @@ export class BenchmarkDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const workouts = await this.getWorkouts(dateStr);
       result.push(...workouts);
       current.setDate(current.getDate() + 1);

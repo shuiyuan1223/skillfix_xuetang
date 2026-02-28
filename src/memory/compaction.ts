@@ -16,15 +16,15 @@
  * - Proper logging at each fallback level
  */
 
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { UserMessage, AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
-import type { MemoryManager } from "./memory-manager.js";
-import { saveSessionTranscript, serializeMessages } from "./session-store.js";
-import { pruneContextMessages } from "./context-pruning.js";
-import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
-import { createLogger } from "../utils/logger.js";
+import type { AgentMessage } from '@mariozechner/pi-agent-core';
+import type { UserMessage, AssistantMessage, ToolResultMessage } from '@mariozechner/pi-ai';
+import type { MemoryManager } from './memory-manager.js';
+import { saveSessionTranscript, serializeMessages } from './session-store.js';
+import { pruneContextMessages } from './context-pruning.js';
+import { getGlobalHookRunner } from '../plugins/hook-runner-global.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("Memory/Compaction");
+const log = createLogger('Memory/Compaction');
 
 // ── Constants (from OpenClaw) ──────────────────────────────────────────
 
@@ -52,8 +52,10 @@ export interface LLMSummarizationConfig {
 // ── Token estimation ───────────────────────────────────────────────────
 
 function estimateMessageTokens(msg: AgentMessage): number {
-  if (!("content" in msg)) return 0;
-  const text = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+  if (!('content' in msg)) {
+    return 0;
+  }
+  const text = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
@@ -68,49 +70,58 @@ export function serializeMessagesForLLM(messages: AgentMessage[], maxChars = 500
   let totalLength = 0;
 
   for (const msg of messages) {
-    if (!("role" in msg)) continue;
+    if (!('role' in msg)) {
+      continue;
+    }
 
-    let line = "";
+    let line = '';
 
-    if (msg.role === "user") {
+    if (msg.role === 'user') {
       const userMsg = msg as UserMessage;
       const text =
-        typeof userMsg.content === "string"
+        typeof userMsg.content === 'string'
           ? userMsg.content
           : userMsg.content
-              .filter((b) => b.type === "text")
+              .filter((b) => b.type === 'text')
               .map((b) => (b as { text: string }).text)
-              .join("\n");
-      if (text) line = `User: ${text}`;
-    } else if (msg.role === "assistant") {
+              .join('\n');
+      if (text) {
+        line = `User: ${text}`;
+      }
+    } else if (msg.role === 'assistant') {
       const assistantMsg = msg as AssistantMessage;
       const textParts: string[] = [];
       const toolParts: string[] = [];
       for (const block of assistantMsg.content) {
-        if (block.type === "text") textParts.push(block.text);
-        else if (block.type === "toolCall") toolParts.push(`[Called ${block.name}]`);
+        if (block.type === 'text') {
+          textParts.push(block.text);
+        } else if (block.type === 'toolCall') {
+          toolParts.push(`[Called ${block.name}]`);
+        }
       }
       if (textParts.length > 0 || toolParts.length > 0) {
-        line = `Assistant: ${[...toolParts, ...textParts].join("\n")}`;
+        line = `Assistant: ${[...toolParts, ...textParts].join('\n')}`;
       }
-    } else if (msg.role === "toolResult") {
+    } else if (msg.role === 'toolResult') {
       const toolMsg = msg as ToolResultMessage;
       const text = toolMsg.content
-        .filter((b) => b.type === "text")
+        .filter((b) => b.type === 'text')
         .map((b) => (b as { text: string }).text)
-        .join("\n");
+        .join('\n');
       const truncated = text.length > 500 ? `${text.slice(0, 500)}...` : text;
-      line = `Tool(${toolMsg.toolName}): ${truncated || (toolMsg.isError ? "[error]" : "[ok]")}`;
+      line = `Tool(${toolMsg.toolName}): ${truncated || (toolMsg.isError ? '[error]' : '[ok]')}`;
     }
 
     if (line) {
-      if (totalLength + line.length > maxChars) break;
+      if (totalLength + line.length > maxChars) {
+        break;
+      }
       parts.push(line);
       totalLength += line.length;
     }
   }
 
-  return parts.join("\n\n");
+  return parts.join('\n\n');
 }
 
 // ── LLM summarization ──────────────────────────────────────────────────
@@ -133,7 +144,9 @@ async function callLLMForSummary(
   config: LLMSummarizationConfig,
   customInstructions?: string
 ): Promise<string | null> {
-  if (!content || content.length < 100) return null;
+  if (!content || content.length < 100) {
+    return null;
+  }
 
   const systemPrompt = customInstructions
     ? `${SUMMARIZATION_PROMPT}\n\nAdditional focus:\n${customInstructions}`
@@ -145,23 +158,21 @@ async function callLLMForSummary(
   try {
     let response: Response;
 
-    if (config.api === "anthropic-messages") {
-      const url = config.baseUrl
-        ? `${config.baseUrl}/v1/messages`
-        : "https://api.anthropic.com/v1/messages";
+    if (config.api === 'anthropic-messages') {
+      const url = config.baseUrl ? `${config.baseUrl}/v1/messages` : 'https://api.anthropic.com/v1/messages';
 
       response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "x-api-key": config.apiKey,
-          "anthropic-version": "2023-06-01",
+          'Content-Type': 'application/json',
+          'x-api-key': config.apiKey,
+          'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
           model: config.modelId,
           max_tokens: 1024,
           system: systemPrompt,
-          messages: [{ role: "user", content }],
+          messages: [{ role: 'user', content }],
         }),
         signal: controller.signal,
       });
@@ -176,27 +187,27 @@ async function callLLMForSummary(
       };
       return (
         data.content
-          ?.filter((b) => b.type === "text")
+          ?.filter((b) => b.type === 'text')
           .map((b) => b.text)
-          .join("\n") || null
+          .join('\n') || null
       );
     } else {
       const url = config.baseUrl
         ? `${config.baseUrl}/v1/chat/completions`
-        : "https://api.openai.com/v1/chat/completions";
+        : 'https://api.openai.com/v1/chat/completions';
 
       response = await fetch(url, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${config.apiKey}`,
         },
         body: JSON.stringify({
           model: config.modelId,
           max_tokens: 1024,
           messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content },
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content },
           ],
         }),
         signal: controller.signal,
@@ -213,10 +224,10 @@ async function callLLMForSummary(
       return data.choices?.[0]?.message?.content || null;
     }
   } catch (err) {
-    if ((err as Error).name === "AbortError") {
-      log.warn("LLM summarization timed out (30s)");
+    if ((err as Error).name === 'AbortError') {
+      log.warn('LLM summarization timed out (30s)');
     } else {
-      log.warn("LLM summarization failed", err);
+      log.warn('LLM summarization failed', err);
     }
     return null;
   } finally {
@@ -227,7 +238,9 @@ async function callLLMForSummary(
 // ── Splitting & chunking (ported from OpenClaw compaction.ts) ──────────
 
 function normalizeParts(parts: number, messageCount: number): number {
-  if (!Number.isFinite(parts) || parts <= 1) return 1;
+  if (!Number.isFinite(parts) || parts <= 1) {
+    return 1;
+  }
   return Math.min(Math.max(1, Math.floor(parts)), Math.max(1, messageCount));
 }
 
@@ -236,10 +249,14 @@ function normalizeParts(parts: number, messageCount: number): number {
  * Ported from OpenClaw splitMessagesByTokenShare.
  */
 export function splitMessagesByTokenShare(messages: AgentMessage[], parts = 2): AgentMessage[][] {
-  if (messages.length === 0) return [];
+  if (messages.length === 0) {
+    return [];
+  }
 
   const normalizedParts = normalizeParts(parts, messages.length);
-  if (normalizedParts <= 1) return [messages];
+  if (normalizedParts <= 1) {
+    return [messages];
+  }
 
   const totalTokens = estimateTokens(messages);
   const targetTokens = totalTokens / normalizedParts;
@@ -249,11 +266,7 @@ export function splitMessagesByTokenShare(messages: AgentMessage[], parts = 2): 
 
   for (const message of messages) {
     const messageTokens = estimateMessageTokens(message);
-    if (
-      chunks.length < normalizedParts - 1 &&
-      current.length > 0 &&
-      currentTokens + messageTokens > targetTokens
-    ) {
+    if (chunks.length < normalizedParts - 1 && current.length > 0 && currentTokens + messageTokens > targetTokens) {
       chunks.push(current);
       current = [];
       currentTokens = 0;
@@ -262,7 +275,9 @@ export function splitMessagesByTokenShare(messages: AgentMessage[], parts = 2): 
     currentTokens += messageTokens;
   }
 
-  if (current.length > 0) chunks.push(current);
+  if (current.length > 0) {
+    chunks.push(current);
+  }
   return chunks;
 }
 
@@ -271,11 +286,10 @@ export function splitMessagesByTokenShare(messages: AgentMessage[], parts = 2): 
  * Handles oversized single messages by isolating them into their own chunk.
  * Ported from OpenClaw chunkMessagesByMaxTokens.
  */
-export function chunkMessagesByMaxTokens(
-  messages: AgentMessage[],
-  maxTokens: number
-): AgentMessage[][] {
-  if (messages.length === 0) return [];
+export function chunkMessagesByMaxTokens(messages: AgentMessage[], maxTokens: number): AgentMessage[][] {
+  if (messages.length === 0) {
+    return [];
+  }
 
   const chunks: AgentMessage[][] = [];
   let currentChunk: AgentMessage[] = [];
@@ -300,7 +314,9 @@ export function chunkMessagesByMaxTokens(
     }
   }
 
-  if (currentChunk.length > 0) chunks.push(currentChunk);
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
   return chunks;
 }
 
@@ -310,7 +326,9 @@ export function chunkMessagesByMaxTokens(
  * Ported from OpenClaw computeAdaptiveChunkRatio.
  */
 export function computeAdaptiveChunkRatio(messages: AgentMessage[], contextWindow: number): number {
-  if (messages.length === 0) return BASE_CHUNK_RATIO;
+  if (messages.length === 0) {
+    return BASE_CHUNK_RATIO;
+  }
 
   const totalTokens = estimateTokens(messages);
   const avgTokens = totalTokens / messages.length;
@@ -347,7 +365,9 @@ async function summarizeChunks(
   customInstructions?: string,
   previousSummary?: string
 ): Promise<string | null> {
-  if (messages.length === 0) return previousSummary || null;
+  if (messages.length === 0) {
+    return previousSummary || null;
+  }
 
   const chunks = chunkMessagesByMaxTokens(messages, maxChunkTokens);
   let summary = previousSummary;
@@ -359,7 +379,9 @@ async function summarizeChunks(
       : serialized;
 
     const result = await callLLMForSummary(content, config, customInstructions);
-    if (result) summary = result;
+    if (result) {
+      summary = result;
+    }
   }
 
   return summary || null;
@@ -381,19 +403,15 @@ async function summarizeWithFallback(
   customInstructions?: string,
   previousSummary?: string
 ): Promise<string | null> {
-  if (messages.length === 0) return previousSummary || null;
+  if (messages.length === 0) {
+    return previousSummary || null;
+  }
 
   // Level 1: Try full summarization
   try {
-    const full = await summarizeChunks(
-      messages,
-      config,
-      maxChunkTokens,
-      customInstructions,
-      previousSummary
-    );
+    const full = await summarizeChunks(messages, config, maxChunkTokens, customInstructions, previousSummary);
     if (full) {
-      log.info("Level 1: Full LLM summary succeeded");
+      log.info('Level 1: Full LLM summary succeeded');
       return full;
     }
   } catch (err) {
@@ -406,11 +424,9 @@ async function summarizeWithFallback(
 
   for (const msg of messages) {
     if (isOversizedForSummary(msg, contextWindow)) {
-      const role = (msg as { role?: string }).role ?? "message";
+      const role = (msg as { role?: string }).role ?? 'message';
       const tokens = estimateMessageTokens(msg);
-      oversizedNotes.push(
-        `[Large ${role} (~${Math.round(tokens / 1000)}K tokens) omitted from summary]`
-      );
+      oversizedNotes.push(`[Large ${role} (~${Math.round(tokens / 1000)}K tokens) omitted from summary]`);
     } else {
       smallMessages.push(msg);
     }
@@ -418,18 +434,10 @@ async function summarizeWithFallback(
 
   if (smallMessages.length > 0) {
     try {
-      const partial = await summarizeChunks(
-        smallMessages,
-        config,
-        maxChunkTokens,
-        customInstructions,
-        previousSummary
-      );
+      const partial = await summarizeChunks(smallMessages, config, maxChunkTokens, customInstructions, previousSummary);
       if (partial) {
-        const notes = oversizedNotes.length > 0 ? `\n\n${oversizedNotes.join("\n")}` : "";
-        log.info(
-          `Level 2: Partial summary succeeded (excluded ${oversizedNotes.length} oversized messages)`
-        );
+        const notes = oversizedNotes.length > 0 ? `\n\n${oversizedNotes.join('\n')}` : '';
+        log.info(`Level 2: Partial summary succeeded (excluded ${oversizedNotes.length} oversized messages)`);
         return partial + notes;
       }
     } catch (err) {
@@ -438,7 +446,7 @@ async function summarizeWithFallback(
   }
 
   // Level 3: Return description
-  log.warn("Level 3: All LLM summarization failed, using description only");
+  log.warn('Level 3: All LLM summarization failed, using description only');
   return (
     `Context contained ${messages.length} messages (${oversizedNotes.length} oversized). ` +
     `Summary unavailable due to size limits.`
@@ -446,8 +454,8 @@ async function summarizeWithFallback(
 }
 
 const MERGE_SUMMARIES_INSTRUCTIONS =
-  "Merge these partial summaries into a single cohesive summary. Preserve decisions," +
-  " TODOs, open questions, and any constraints.";
+  'Merge these partial summaries into a single cohesive summary. Preserve decisions,' +
+  ' TODOs, open questions, and any constraints.';
 
 /**
  * Multi-stage summarization: split → per-chunk summary → merge.
@@ -461,7 +469,9 @@ async function summarizeMultiStage(
   previousSummary?: string,
   parts = 2
 ): Promise<string | null> {
-  if (messages.length === 0) return previousSummary || null;
+  if (messages.length === 0) {
+    return previousSummary || null;
+  }
 
   const chunkRatio = computeAdaptiveChunkRatio(messages, contextWindow);
   const maxChunkTokens = Math.max(1, Math.floor(contextWindow * chunkRatio));
@@ -470,34 +480,14 @@ async function summarizeMultiStage(
   const totalTokens = estimateTokens(messages);
 
   // Single-pass if small enough
-  if (
-    normalizedParts <= 1 ||
-    messages.length < minMessagesForSplit ||
-    totalTokens <= maxChunkTokens
-  ) {
-    return summarizeWithFallback(
-      messages,
-      config,
-      contextWindow,
-      maxChunkTokens,
-      customInstructions,
-      previousSummary
-    );
+  if (normalizedParts <= 1 || messages.length < minMessagesForSplit || totalTokens <= maxChunkTokens) {
+    return summarizeWithFallback(messages, config, contextWindow, maxChunkTokens, customInstructions, previousSummary);
   }
 
   // Split into parts and summarize each
-  const splits = splitMessagesByTokenShare(messages, normalizedParts).filter(
-    (chunk) => chunk.length > 0
-  );
+  const splits = splitMessagesByTokenShare(messages, normalizedParts).filter((chunk) => chunk.length > 0);
   if (splits.length <= 1) {
-    return summarizeWithFallback(
-      messages,
-      config,
-      contextWindow,
-      maxChunkTokens,
-      customInstructions,
-      previousSummary
-    );
+    return summarizeWithFallback(messages, config, contextWindow, maxChunkTokens, customInstructions, previousSummary);
   }
 
   log.info(
@@ -507,14 +497,18 @@ async function summarizeMultiStage(
   const partialSummaries: string[] = [];
   for (const chunk of splits) {
     const result = await summarizeWithFallback(chunk, config, contextWindow, maxChunkTokens);
-    if (result) partialSummaries.push(result);
+    if (result) {
+      partialSummaries.push(result);
+    }
   }
 
-  if (partialSummaries.length <= 1) return partialSummaries[0] || null;
+  if (partialSummaries.length <= 1) {
+    return partialSummaries[0] || null;
+  }
 
   // Merge partial summaries
   const summaryMessages: AgentMessage[] = partialSummaries.map((summary) => ({
-    role: "user" as const,
+    role: 'user' as const,
     content: summary,
     timestamp: Date.now(),
   }));
@@ -537,48 +531,52 @@ async function summarizeMultiStage(
 
 function summarizeOldMessages(messages: AgentMessage[]): string | null {
   const old = messages.slice(0, -20);
-  if (old.length < 4) return null;
+  if (old.length < 4) {
+    return null;
+  }
 
   const userMessages = old
-    .filter((m): m is UserMessage => m.role === "user")
-    .map((m) => (typeof m.content === "string" ? m.content : ""))
+    .filter((m): m is UserMessage => m.role === 'user')
+    .map((m) => (typeof m.content === 'string' ? m.content : ''))
     .filter(Boolean);
 
-  const toolCalls = old.filter((m) => m.role === "toolResult");
-  const errorCalls = old.filter((m) => m.role === "toolResult" && (m as ToolResultMessage).isError);
+  const toolCalls = old.filter((m) => m.role === 'toolResult');
+  const errorCalls = old.filter((m) => m.role === 'toolResult' && (m as ToolResultMessage).isError);
 
   const parts: string[] = [];
-  parts.push("## Conversation Summary (auto-saved before compaction)");
-  parts.push("");
+  parts.push('## Conversation Summary (auto-saved before compaction)');
+  parts.push('');
 
   if (userMessages.length > 0) {
-    parts.push("### User discussed:");
+    parts.push('### User discussed:');
     for (const msg of userMessages.slice(0, 10)) {
       parts.push(`- ${msg.slice(0, 200)}`);
     }
   }
 
   if (toolCalls.length > 0) {
-    parts.push("");
+    parts.push('');
     parts.push(`### Tools called: ${toolCalls.length} times`);
     if (errorCalls.length > 0) {
       parts.push(`### Tool errors: ${errorCalls.length}`);
     }
   }
 
-  return parts.join("\n");
+  return parts.join('\n');
 }
 
 // ── Compaction (truncation) ────────────────────────────────────────────
 
 function softTrimToolResult(msg: AgentMessage, maxChars: number): AgentMessage {
-  if (msg.role !== "toolResult") return msg;
+  if (msg.role !== 'toolResult') {
+    return msg;
+  }
   const toolMsg = msg as ToolResultMessage;
   const trimmedContent = toolMsg.content.map((block) => {
-    if (block.type === "text") {
-      const text = (block as { type: "text"; text: string }).text;
+    if (block.type === 'text') {
+      const text = (block as { type: 'text'; text: string }).text;
       if (text.length > maxChars) {
-        return { type: "text" as const, text: `${text.slice(0, maxChars)}\n[...truncated]` };
+        return { type: 'text' as const, text: `${text.slice(0, maxChars)}\n[...truncated]` };
       }
     }
     return block;
@@ -588,18 +586,20 @@ function softTrimToolResult(msg: AgentMessage, maxChars: number): AgentMessage {
 
 function compactMessages(messages: AgentMessage[], tokenLimit: number): AgentMessage[] {
   const trimmed = messages.map((m) => {
-    if (m.role === "toolResult") return softTrimToolResult(m, 800);
+    if (m.role === 'toolResult') {
+      return softTrimToolResult(m, 800);
+    }
     return m;
   });
 
-  const firstUser = trimmed.find((m) => m.role === "user");
+  const firstUser = trimmed.find((m) => m.role === 'user');
 
   for (const keepCount of [20, 10]) {
     const recent = trimmed.slice(-keepCount);
     if (estimateTokens(recent) <= tokenLimit) {
       const marker: UserMessage = {
-        role: "user",
-        content: "[Earlier conversation has been summarized and saved to memory.]",
+        role: 'user',
+        content: '[Earlier conversation has been summarized and saved to memory.]',
         timestamp: Date.now(),
       };
       if (firstUser && !recent.includes(firstUser)) {
@@ -640,13 +640,12 @@ export function createSACompactionFlush(config: SACompactionFlushConfig) {
     if (!flushed && tokens >= limit - config.flushThreshold && config.onFlush) {
       flushed = true;
       try {
-        const summary =
-          summarizeOldMessages(messages) || "Conversation continued (no extractable summary)";
+        const summary = summarizeOldMessages(messages) || 'Conversation continued (no extractable summary)';
         const transcript = serializeMessagesForLLM(messages, 5000);
         config.onFlush(summary, transcript);
-        log.info("SA pre-compaction flush completed");
+        log.info('SA pre-compaction flush completed');
       } catch (err) {
-        log.warn("SA flush failed", err);
+        log.warn('SA flush failed', err);
       }
     }
 
@@ -696,12 +695,12 @@ export function createCompactionFlush(
         try {
           saveSessionTranscript(userUuid, sessionId, oldMessages);
           const entries = serializeMessages(oldMessages);
-          const textContent = entries.map((e) => `${e.role}: ${e.content}`).join("\n");
+          const textContent = entries.map((e) => `${e.role}: ${e.content}`).join('\n');
           if (textContent) {
             memoryManager.appendSessionTranscript(userUuid, sessionId, textContent);
           }
         } catch (err) {
-          log.warn("Failed to save session transcript", err);
+          log.warn('Failed to save session transcript', err);
         }
       }
 
@@ -711,16 +710,14 @@ export function createCompactionFlush(
         try {
           summary = await summarizeMultiStage(oldMessages, llmConfig, config.contextWindow);
           if (summary) {
-            log.info("LLM summary generated successfully");
+            log.info('LLM summary generated successfully');
           }
         } catch (err) {
-          log.warn(
-            `LLM summarization failed completely: ${err instanceof Error ? err.message : String(err)}`
-          );
+          log.warn(`LLM summarization failed completely: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
       if (!summary) {
-        log.info("Using crude fallback summarization (no LLM)");
+        log.info('Using crude fallback summarization (no LLM)');
         summary = summarizeOldMessages(messages);
       }
 

@@ -21,7 +21,7 @@ import type {
   VO2MaxData,
   EmotionData,
   HRVData,
-} from "./interface.js";
+} from './interface.js';
 
 // Seeded random for consistent data per date
 function seededRandom(seed: string): () => number {
@@ -44,7 +44,7 @@ function randomInRange(rand: () => number, min: number, max: number): number {
 }
 
 export class MockDataSource implements HealthDataSource {
-  readonly name = "mock";
+  readonly name = 'mock';
 
   async getMetrics(date: string): Promise<HealthMetrics> {
     const rand = seededRandom(`${date}metrics`);
@@ -73,7 +73,7 @@ export class MockDataSource implements HealthDataSource {
 
     // Generate hourly readings
     for (let hour = 6; hour < 23; hour++) {
-      const timeStr = `${hour.toString().padStart(2, "0")}:00`;
+      const timeStr = `${hour.toString().padStart(2, '0')}:00`;
       // Heart rate varies throughout the day
       let baseHr = restingAvg;
       if (hour >= 7 && hour <= 9) baseHr += 20; // Morning activity
@@ -101,7 +101,9 @@ export class MockDataSource implements HealthDataSource {
     const rand = seededRandom(`${date}sleep`);
 
     // 10% chance of no sleep data
-    if (rand() < 0.1) return null;
+    if (rand() < 0.1) {
+      return null;
+    }
 
     const durationHours = randomInRange(rand, 55, 90) / 10; // 5.5-9.0 hours
     const totalMinutes = Math.floor(durationHours * 60);
@@ -114,10 +116,18 @@ export class MockDataSource implements HealthDataSource {
 
     // Calculate quality score based on duration and deep sleep
     let qualityScore = 50;
-    if (durationHours >= 7) qualityScore += 20;
-    if (durationHours >= 8) qualityScore += 10;
-    if (deep >= 90) qualityScore += 15;
-    if (awake <= 20) qualityScore += 5;
+    if (durationHours >= 7) {
+      qualityScore += 20;
+    }
+    if (durationHours >= 8) {
+      qualityScore += 10;
+    }
+    if (deep >= 90) {
+      qualityScore += 15;
+    }
+    if (awake <= 20) {
+      qualityScore += 5;
+    }
     qualityScore = Math.min(100, qualityScore);
 
     const bedHour = randomInRange(rand, 22, 24);
@@ -127,8 +137,8 @@ export class MockDataSource implements HealthDataSource {
       date,
       durationHours,
       qualityScore,
-      bedTime: `${(bedHour % 24).toString().padStart(2, "0")}:${randomInRange(rand, 0, 59).toString().padStart(2, "0")}`,
-      wakeTime: `${(wakeHour % 24).toString().padStart(2, "0")}:${randomInRange(rand, 0, 59).toString().padStart(2, "0")}`,
+      bedTime: `${(bedHour % 24).toString().padStart(2, '0')}:${randomInRange(rand, 0, 59).toString().padStart(2, '0')}`,
+      wakeTime: `${(wakeHour % 24).toString().padStart(2, '0')}:${randomInRange(rand, 0, 59).toString().padStart(2, '0')}`,
       stages: { deep, light, rem, awake },
     };
   }
@@ -137,9 +147,11 @@ export class MockDataSource implements HealthDataSource {
     const rand = seededRandom(`${date}workout`);
 
     // 40% chance of no workout
-    if (rand() < 0.4) return [];
+    if (rand() < 0.4) {
+      return [];
+    }
 
-    const workoutTypes = ["running", "walking", "cycling", "strength", "yoga"];
+    const workoutTypes = ['running', 'walking', 'cycling', 'strength', 'yoga'];
     const type = workoutTypes[randomInRange(rand, 0, workoutTypes.length - 1)];
 
     const workout: WorkoutData = {
@@ -150,7 +162,7 @@ export class MockDataSource implements HealthDataSource {
       caloriesBurned: randomInRange(rand, 150, 500),
     };
 
-    if (type === "running" || type === "cycling" || type === "walking") {
+    if (type === 'running' || type === 'cycling' || type === 'walking') {
       workout.distanceKm = randomInRange(rand, 20, 100) / 10;
       workout.avgHeartRate = randomInRange(rand, 110, 160);
     }
@@ -176,12 +188,14 @@ export class MockDataSource implements HealthDataSource {
   async getStress(date: string): Promise<StressData | null> {
     const rand = seededRandom(`${date}stress`);
     // 15% chance of no stress data
-    if (rand() < 0.15) return null;
+    if (rand() < 0.15) {
+      return null;
+    }
 
     const avg = randomInRange(rand, 25, 65);
     const readings: Array<{ time: string; value: number }> = [];
     for (let hour = 8; hour < 22; hour++) {
-      const timeStr = `${hour.toString().padStart(2, "0")}:00`;
+      const timeStr = `${hour.toString().padStart(2, '0')}:00`;
       let base = avg;
       if (hour >= 9 && hour <= 11) base += 10; // Morning work
       if (hour >= 14 && hour <= 16) base += 15; // Afternoon peak
@@ -206,12 +220,14 @@ export class MockDataSource implements HealthDataSource {
   async getSpO2(date: string): Promise<SpO2Data | null> {
     const rand = seededRandom(`${date}spo2`);
     // 20% chance of no SpO2 data
-    if (rand() < 0.2) return null;
+    if (rand() < 0.2) {
+      return null;
+    }
 
     const avg = randomInRange(rand, 95, 99);
     const readings: Array<{ time: string; value: number }> = [];
     for (let hour = 0; hour < 24; hour += 2) {
-      const timeStr = `${hour.toString().padStart(2, "0")}:00`;
+      const timeStr = `${hour.toString().padStart(2, '0')}:00`;
       readings.push({ time: timeStr, value: randomInRange(rand, avg - 2, Math.min(100, avg + 1)) });
     }
     const values = readings.map((r) => r.value);
@@ -229,14 +245,16 @@ export class MockDataSource implements HealthDataSource {
   async getBloodPressure(date: string): Promise<BloodPressureData | null> {
     const rand = seededRandom(`${date}bp`);
     // 25% chance of no data
-    if (rand() < 0.25) return null;
+    if (rand() < 0.25) {
+      return null;
+    }
 
     const readings: Array<{ time: string; systolic: number; diastolic: number }> = [];
     const numReadings = randomInRange(rand, 2, 3);
     const hours = [8, 14, 20];
     for (let i = 0; i < numReadings; i++) {
       readings.push({
-        time: `${hours[i].toString().padStart(2, "0")}:00`,
+        time: `${hours[i].toString().padStart(2, '0')}:00`,
         systolic: randomInRange(rand, 105, 140),
         diastolic: randomInRange(rand, 60, 90),
       });
@@ -258,14 +276,16 @@ export class MockDataSource implements HealthDataSource {
   async getBloodGlucose(date: string): Promise<BloodGlucoseData | null> {
     const rand = seededRandom(`${date}glucose`);
     // 30% chance of no data
-    if (rand() < 0.3) return null;
+    if (rand() < 0.3) {
+      return null;
+    }
 
     const readings: Array<{ time: string; value: number }> = [];
     const hours = [7, 12, 18, 21];
     const numReadings = randomInRange(rand, 3, 4);
     for (let i = 0; i < numReadings; i++) {
       readings.push({
-        time: `${hours[i].toString().padStart(2, "0")}:00`,
+        time: `${hours[i].toString().padStart(2, '0')}:00`,
         value: Math.round((3.9 + rand() * 3.9) * 10) / 10, // 3.9 - 7.8 mmol/L
       });
     }
@@ -284,7 +304,9 @@ export class MockDataSource implements HealthDataSource {
   async getBodyComposition(date: string): Promise<BodyCompositionData | null> {
     const rand = seededRandom(`${date}body`);
     // 30% chance of no data (not measured every day)
-    if (rand() < 0.3) return null;
+    if (rand() < 0.3) {
+      return null;
+    }
 
     const weight = Math.round((55 + rand() * 30) * 10) / 10; // 55-85 kg
     const height = Math.round(155 + rand() * 30); // 155-185 cm
@@ -305,14 +327,16 @@ export class MockDataSource implements HealthDataSource {
   async getBodyTemperature(date: string): Promise<BodyTemperatureData | null> {
     const rand = seededRandom(`${date}temp`);
     // 30% chance of no data
-    if (rand() < 0.3) return null;
+    if (rand() < 0.3) {
+      return null;
+    }
 
     const readings: Array<{ time: string; value: number }> = [];
     const numReadings = randomInRange(rand, 1, 3);
     const hours = [8, 14, 20];
     for (let i = 0; i < numReadings; i++) {
       readings.push({
-        time: `${hours[i].toString().padStart(2, "0")}:00`,
+        time: `${hours[i].toString().padStart(2, '0')}:00`,
         value: Math.round((36.1 + rand() * 1.1) * 10) / 10, // 36.1 - 37.2
       });
     }
@@ -331,12 +355,14 @@ export class MockDataSource implements HealthDataSource {
   async getNutrition(date: string): Promise<NutritionData | null> {
     const rand = seededRandom(`${date}nutrition`);
     // 20% chance of no data
-    if (rand() < 0.2) return null;
+    if (rand() < 0.2) {
+      return null;
+    }
 
     const meals: Array<{ time: string; calories: number }> = [
-      { time: "08:00", calories: randomInRange(rand, 300, 600) },
-      { time: "12:30", calories: randomInRange(rand, 500, 900) },
-      { time: "19:00", calories: randomInRange(rand, 400, 800) },
+      { time: '08:00', calories: randomInRange(rand, 300, 600) },
+      { time: '12:30', calories: randomInRange(rand, 500, 900) },
+      { time: '19:00', calories: randomInRange(rand, 400, 800) },
     ];
     const totalCalories = meals.reduce((sum, m) => sum + m.calories, 0);
 
@@ -354,26 +380,33 @@ export class MockDataSource implements HealthDataSource {
   async getMenstrualCycle(date: string): Promise<MenstrualCycleData | null> {
     const rand = seededRandom(`${date}cycle`);
     // 50% chance of no data (may not be applicable)
-    if (rand() < 0.5) return null;
+    if (rand() < 0.5) {
+      return null;
+    }
 
     const cycleLength = randomInRange(rand, 26, 32);
     const cycleDay = randomInRange(rand, 1, cycleLength);
-    const _phases: Array<"menstrual" | "follicular" | "ovulatory" | "luteal"> = [
-      "menstrual",
-      "follicular",
-      "ovulatory",
-      "luteal",
+    const _phases: Array<'menstrual' | 'follicular' | 'ovulatory' | 'luteal'> = [
+      'menstrual',
+      'follicular',
+      'ovulatory',
+      'luteal',
     ];
-    let phase: "menstrual" | "follicular" | "ovulatory" | "luteal";
-    if (cycleDay <= 5) phase = "menstrual";
-    else if (cycleDay <= 13) phase = "follicular";
-    else if (cycleDay <= 16) phase = "ovulatory";
-    else phase = "luteal";
+    let phase: 'menstrual' | 'follicular' | 'ovulatory' | 'luteal';
+    if (cycleDay <= 5) {
+      phase = 'menstrual';
+    } else if (cycleDay <= 13) {
+      phase = 'follicular';
+    } else if (cycleDay <= 16) {
+      phase = 'ovulatory';
+    } else {
+      phase = 'luteal';
+    }
 
     // Calculate period start date
     const d = new Date(date);
     d.setDate(d.getDate() - (cycleDay - 1));
-    const periodStartDate = d.toISOString().split("T")[0];
+    const periodStartDate = d.toISOString().split('T')[0];
 
     return {
       date,
@@ -388,15 +421,23 @@ export class MockDataSource implements HealthDataSource {
   async getVO2Max(date: string): Promise<VO2MaxData | null> {
     const rand = seededRandom(`${date}vo2max`);
     // 70% chance of data
-    if (rand() < 0.3) return null;
+    if (rand() < 0.3) {
+      return null;
+    }
 
     const value = randomInRange(rand, 35, 55);
-    let level: VO2MaxData["level"];
-    if (value < 35) level = "low";
-    else if (value < 40) level = "fair";
-    else if (value < 50) level = "good";
-    else if (value <= 55) level = "excellent";
-    else level = "superior";
+    let level: VO2MaxData['level'];
+    if (value < 35) {
+      level = 'low';
+    } else if (value < 40) {
+      level = 'fair';
+    } else if (value < 50) {
+      level = 'good';
+    } else if (value <= 55) {
+      level = 'excellent';
+    } else {
+      level = 'superior';
+    }
 
     return { date, value, level };
   }
@@ -404,9 +445,11 @@ export class MockDataSource implements HealthDataSource {
   async getEmotion(date: string): Promise<EmotionData | null> {
     const rand = seededRandom(`${date}emotion`);
     // 80% chance of data
-    if (rand() < 0.2) return null;
+    if (rand() < 0.2) {
+      return null;
+    }
 
-    const emotions = ["calm", "happy", "stressed", "anxious", "excited"];
+    const emotions = ['calm', 'happy', 'stressed', 'anxious', 'excited'];
     const current = emotions[randomInRange(rand, 0, emotions.length - 1)];
     const score = randomInRange(rand, 40, 95);
 
@@ -415,7 +458,7 @@ export class MockDataSource implements HealthDataSource {
     const readings: Array<{ time: string; emotion: string; score: number }> = [];
     for (let i = 0; i < numReadings; i++) {
       readings.push({
-        time: `${hours[i].toString().padStart(2, "0")}:00`,
+        time: `${hours[i].toString().padStart(2, '0')}:00`,
         emotion: emotions[randomInRange(rand, 0, emotions.length - 1)],
         score: randomInRange(rand, 40, 95),
       });
@@ -427,16 +470,20 @@ export class MockDataSource implements HealthDataSource {
   async getHRV(date: string): Promise<HRVData | null> {
     const rand = seededRandom(`${date}hrv`);
     // 80% chance of data
-    if (rand() < 0.2) return null;
+    if (rand() < 0.2) {
+      return null;
+    }
 
     const rmssd = randomInRange(rand, 20, 80);
     const readings: Array<{ time: string; value: number }> = [];
     const numReadings = randomInRange(rand, 12, 18);
     for (let i = 0; i < numReadings; i++) {
       const hour = 6 + i;
-      if (hour > 23) break;
+      if (hour > 23) {
+        break;
+      }
       readings.push({
-        time: `${hour.toString().padStart(2, "0")}:00`,
+        time: `${hour.toString().padStart(2, '0')}:00`,
         value: randomInRange(rand, rmssd - 15, rmssd + 15),
       });
     }
@@ -459,7 +506,7 @@ export class MockDataSource implements HealthDataSource {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = d.toISOString().split('T')[0];
       const metrics = await this.getMetrics(dateStr);
       result.push({ date: dateStr, steps: metrics.steps });
     }
@@ -474,7 +521,7 @@ export class MockDataSource implements HealthDataSource {
     for (let i = 6; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = d.toISOString().split('T')[0];
       const sleep = await this.getSleep(dateStr);
       result.push({ date: dateStr, hours: sleep?.durationHours ?? 0 });
     }
@@ -503,7 +550,7 @@ export class MockDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const m = await this.getMetrics(dateStr);
       result.push({
         date: dateStr,
@@ -525,7 +572,7 @@ export class MockDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const s = await this.getSleep(dateStr);
       result.push({ date: dateStr, hours: s?.durationHours ?? 0, qualityScore: s?.qualityScore });
       current.setDate(current.getDate() + 1);
@@ -541,7 +588,7 @@ export class MockDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const hr = await this.getHeartRate(dateStr);
       result.push({ date: dateStr, avg: hr.restingAvg, max: hr.maxToday, min: hr.minToday });
       current.setDate(current.getDate() + 1);
@@ -554,7 +601,7 @@ export class MockDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const workouts = await this.getWorkouts(dateStr);
       result.push(...workouts);
       current.setDate(current.getDate() + 1);
@@ -570,7 +617,7 @@ export class MockDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const rand = seededRandom(`${dateStr}stress-range`);
       const avg = randomInRange(rand, 20, 60);
       const max = avg + randomInRange(rand, 10, 30);
@@ -589,7 +636,7 @@ export class MockDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const rand = seededRandom(`${dateStr}spo2-range`);
       const avg = randomInRange(rand, 95, 99);
       const max = Math.min(100, avg + randomInRange(rand, 0, 1));
@@ -608,7 +655,7 @@ export class MockDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const rand = seededRandom(`${dateStr}bp-range`);
       result.push({
         date: dateStr,
@@ -628,7 +675,7 @@ export class MockDataSource implements HealthDataSource {
     const current = new Date(startDate);
     const end = new Date(endDate);
     while (current <= end) {
-      const dateStr = current.toISOString().split("T")[0];
+      const dateStr = current.toISOString().split('T')[0];
       const rand = seededRandom(`${dateStr}body-range`);
       // 30% chance of data per day
       if (rand() < 0.3) {

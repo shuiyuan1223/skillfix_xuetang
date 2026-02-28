@@ -101,17 +101,17 @@ export interface HuaweiPolymerizeRequest {
 
 // Activity mapping from Huawei to PHA types
 export const ACTIVITY_TYPE_MAP: Record<number, string> = {
-  [HuaweiActivityType.RUNNING]: "running",
-  [HuaweiActivityType.WALKING]: "walking",
-  [HuaweiActivityType.CYCLING]: "cycling",
-  [HuaweiActivityType.SWIMMING]: "swimming",
-  [HuaweiActivityType.HIKING]: "hiking",
-  [HuaweiActivityType.WORKOUT]: "workout",
-  [HuaweiActivityType.STRENGTH]: "strength",
-  [HuaweiActivityType.YOGA]: "yoga",
+  [HuaweiActivityType.RUNNING]: 'running',
+  [HuaweiActivityType.WALKING]: 'walking',
+  [HuaweiActivityType.CYCLING]: 'cycling',
+  [HuaweiActivityType.SWIMMING]: 'swimming',
+  [HuaweiActivityType.HIKING]: 'hiking',
+  [HuaweiActivityType.WORKOUT]: 'workout',
+  [HuaweiActivityType.STRENGTH]: 'strength',
+  [HuaweiActivityType.YOGA]: 'yoga',
 };
 
 // Map Huawei activity type to PHA workout type
 export function mapActivityType(huaweiType: number): string {
-  return ACTIVITY_TYPE_MAP[huaweiType] || "other";
+  return ACTIVITY_TYPE_MAP[huaweiType] || 'other';
 }

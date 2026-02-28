@@ -4,42 +4,42 @@
  * Handles OAuth flow for Huawei Health Kit API.
  */
 
-import { loadConfig } from "../../utils/config.js";
-import { createLogger } from "../../utils/logger.js";
-import type { TokenStore } from "./token-store.js";
-import { tokenStore as defaultTokenStore } from "./token-store.js";
-import type { UserStore } from "./user-store.js";
-import { getUserStore } from "./user-store.js";
-import type { HuaweiTokenResponse, TokenData } from "./huawei-types.js";
+import { loadConfig } from '../../utils/config.js';
+import { createLogger } from '../../utils/logger.js';
+import type { TokenStore } from './token-store.js';
+import { tokenStore as defaultTokenStore } from './token-store.js';
+import type { UserStore } from './user-store.js';
+import { getUserStore } from './user-store.js';
+import type { HuaweiTokenResponse, TokenData } from './huawei-types.js';
 
-const log = createLogger("Huawei/Auth");
+const log = createLogger('Huawei/Auth');
 
 // Huawei OAuth endpoints (defaults, can be overridden in config)
-const DEFAULT_AUTH_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/authorize";
-const DEFAULT_TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
-const DEFAULT_REDIRECT_URI = "hms://redirect_url";
+const DEFAULT_AUTH_URL = 'https://oauth-login.cloud.huawei.com/oauth2/v3/authorize';
+const DEFAULT_TOKEN_URL = 'https://oauth-login.cloud.huawei.com/oauth2/v3/token';
+const DEFAULT_REDIRECT_URI = 'hms://redirect_url';
 
 // Default scopes — used only when config.scopes is not set
 const DEFAULT_SCOPES = [
-  "openid",
-  "https://www.huawei.com/healthkit/step.read",
-  "https://www.huawei.com/healthkit/calories.read",
-  "https://www.huawei.com/healthkit/distance.read",
-  "https://www.huawei.com/healthkit/heartrate.read",
-  "https://www.huawei.com/healthkit/sleep.read",
-  "https://www.huawei.com/healthkit/activity.read",
-  "https://www.huawei.com/healthkit/activityrecord.read",
-  "https://www.huawei.com/healthkit/stress.read",
-  "https://www.huawei.com/healthkit/oxygensaturation.read",
-  "https://www.huawei.com/healthkit/hearthealth.read",
-  "https://www.huawei.com/healthkit/bloodpressure.read",
-  "https://www.huawei.com/healthkit/bloodglucose.read",
-  "https://www.huawei.com/healthkit/heightweight.read",
-  "https://www.huawei.com/healthkit/bodytemperature.read",
-  "https://www.huawei.com/healthkit/nutrition.read",
-  "https://www.huawei.com/healthkit/reproductive.read",
-  "https://www.huawei.com/healthkit/pulmonary.read",
-  "https://www.huawei.com/healthkit/emotion.read",
+  'openid',
+  'https://www.huawei.com/healthkit/step.read',
+  'https://www.huawei.com/healthkit/calories.read',
+  'https://www.huawei.com/healthkit/distance.read',
+  'https://www.huawei.com/healthkit/heartrate.read',
+  'https://www.huawei.com/healthkit/sleep.read',
+  'https://www.huawei.com/healthkit/activity.read',
+  'https://www.huawei.com/healthkit/activityrecord.read',
+  'https://www.huawei.com/healthkit/stress.read',
+  'https://www.huawei.com/healthkit/oxygensaturation.read',
+  'https://www.huawei.com/healthkit/hearthealth.read',
+  'https://www.huawei.com/healthkit/bloodpressure.read',
+  'https://www.huawei.com/healthkit/bloodglucose.read',
+  'https://www.huawei.com/healthkit/heightweight.read',
+  'https://www.huawei.com/healthkit/bodytemperature.read',
+  'https://www.huawei.com/healthkit/nutrition.read',
+  'https://www.huawei.com/healthkit/reproductive.read',
+  'https://www.huawei.com/healthkit/pulmonary.read',
+  'https://www.huawei.com/healthkit/emotion.read',
 ];
 
 function getConfigAuthBaseUrl(): string {
@@ -77,11 +77,11 @@ export class HuaweiAuth {
    */
   getAuthUrl(clientId: string, redirectUri?: string, scopes?: string[]): string {
     const params = new URLSearchParams({
-      response_type: "code",
+      response_type: 'code',
       client_id: clientId,
       redirect_uri: redirectUri || getConfigRedirectUri(),
-      scope: (scopes || getConfigScopes()).join(" "),
-      access_type: "offline", // Request refresh token
+      scope: (scopes || getConfigScopes()).join(' '),
+      access_type: 'offline', // Request refresh token
     });
 
     return `${getConfigAuthBaseUrl()}?${params.toString()}`;
@@ -90,14 +90,9 @@ export class HuaweiAuth {
   /**
    * Exchange authorization code for tokens
    */
-  async exchangeCode(
-    code: string,
-    clientId: string,
-    clientSecret: string,
-    redirectUri: string
-  ): Promise<TokenData> {
+  async exchangeCode(code: string, clientId: string, clientSecret: string, redirectUri: string): Promise<TokenData> {
     const body = new URLSearchParams({
-      grant_type: "authorization_code",
+      grant_type: 'authorization_code',
       code,
       client_id: clientId,
       client_secret: clientSecret,
@@ -105,9 +100,9 @@ export class HuaweiAuth {
     });
 
     const response = await fetch(getConfigTokenUrl(), {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: body.toString(),
     });
@@ -129,22 +124,18 @@ export class HuaweiAuth {
   /**
    * Refresh the access token using refresh token
    */
-  async refreshToken(
-    refreshToken: string,
-    clientId: string,
-    clientSecret: string
-  ): Promise<TokenData> {
+  async refreshToken(refreshToken: string, clientId: string, clientSecret: string): Promise<TokenData> {
     const body = new URLSearchParams({
-      grant_type: "refresh_token",
+      grant_type: 'refresh_token',
       refresh_token: refreshToken,
       client_id: clientId,
       client_secret: clientSecret,
     });
 
     const response = await fetch(getConfigTokenUrl(), {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: body.toString(),
     });
@@ -192,11 +183,7 @@ export class HuaweiAuth {
       throw new Error("Huawei credentials not configured. Run 'pha huawei setup' first.");
     }
 
-    const newToken = await this.refreshToken(
-      token.refreshToken,
-      huaweiConfig.clientId,
-      huaweiConfig.clientSecret
-    );
+    const newToken = await this.refreshToken(token.refreshToken, huaweiConfig.clientId, huaweiConfig.clientSecret);
 
     return newToken.accessToken;
   }
@@ -221,7 +208,7 @@ export class HuaweiAuth {
   private tokenResponseToData(response: HuaweiTokenResponse): TokenData {
     return {
       accessToken: response.access_token,
-      refreshToken: response.refresh_token || "",
+      refreshToken: response.refresh_token || '',
       expiresAt: Date.now() + response.expires_in * 1000,
       tokenType: response.token_type,
       scope: response.scope,
@@ -244,7 +231,7 @@ export class HuaweiAuth {
     redirectUri: string
   ): Promise<{ tokenData: TokenData; huaweiUserId?: string }> {
     const body = new URLSearchParams({
-      grant_type: "authorization_code",
+      grant_type: 'authorization_code',
       code,
       client_id: clientId,
       client_secret: clientSecret,
@@ -252,9 +239,9 @@ export class HuaweiAuth {
     });
 
     const response = await fetch(getConfigTokenUrl(), {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: body.toString(),
     });
@@ -273,16 +260,16 @@ export class HuaweiAuth {
       try {
         huaweiUserId = decodeIdToken(data.id_token);
       } catch (e) {
-        log.error("id_token decode failed:", e);
+        log.error('id_token decode failed:', e);
       }
     } else {
-      log.warn("Token response has no id_token, keys:", Object.keys(data).join(","));
+      log.warn('Token response has no id_token, keys:', Object.keys(data).join(','));
     }
     if (!huaweiUserId) {
       try {
         ({ userId: huaweiUserId } = await fetchUserInfoSub(tokenData.accessToken));
       } catch (e) {
-        log.error("UserInfo fallback failed:", e);
+        log.error('UserInfo fallback failed:', e);
       }
     }
 
@@ -293,22 +280,18 @@ export class HuaweiAuth {
    * Refresh token for a specific user
    * Does not store token - returns it for caller to store in UserStore
    */
-  async refreshTokenForUser(
-    refreshToken: string,
-    clientId: string,
-    clientSecret: string
-  ): Promise<TokenData> {
+  async refreshTokenForUser(refreshToken: string, clientId: string, clientSecret: string): Promise<TokenData> {
     const body = new URLSearchParams({
-      grant_type: "refresh_token",
+      grant_type: 'refresh_token',
       refresh_token: refreshToken,
       client_id: clientId,
       client_secret: clientSecret,
     });
 
     const response = await fetch(getConfigTokenUrl(), {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: body.toString(),
     });
@@ -340,7 +323,7 @@ export class HuaweiAuth {
     const token = store.getTokenData(uuid);
 
     if (!token) {
-      throw new Error("User not authenticated. Please authorize via the web UI.");
+      throw new Error('User not authenticated. Please authorize via the web UI.');
     }
 
     // If token is still valid, return it
@@ -416,12 +399,14 @@ export class HuaweiAuth {
  * Only decodes the payload (no signature verification — token comes from trusted HTTPS exchange).
  */
 export function decodeIdToken(idToken: string): string {
-  const parts = idToken.split(".");
-  if (parts.length !== 3) throw new Error("Invalid id_token format");
-  const payload = JSON.parse(
-    Buffer.from(parts[1].replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8")
-  );
-  if (!payload.sub) throw new Error("id_token missing sub claim");
+  const parts = idToken.split('.');
+  if (parts.length !== 3) {
+    throw new Error('Invalid id_token format');
+  }
+  const payload = JSON.parse(Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8'));
+  if (!payload.sub) {
+    throw new Error('id_token missing sub claim');
+  }
   return payload.sub;
 }
 
@@ -435,32 +420,30 @@ export function decodeIdToken(idToken: string): string {
  *   nsp_svc=huawei.oauth2.user.getTokenInfo&access_token=...&open_id=OPENID
  */
 async function fetchUserInfoSub(accessToken: string): Promise<{ userId: string; uid?: string }> {
-  const url = "https://oauth-api.cloud.huawei.com/rest.php";
+  const url = 'https://oauth-api.cloud.huawei.com/rest.php';
   const body = new URLSearchParams({
-    nsp_svc: "huawei.oauth2.user.getTokenInfo",
-    open_id: "OPENID",
+    nsp_svc: 'huawei.oauth2.user.getTokenInfo',
+    open_id: 'OPENID',
     access_token: accessToken,
   });
 
-  log.info("Fetching getTokenInfo from:", url);
+  log.info('Fetching getTokenInfo from:', url);
   const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
   });
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    log.error("getTokenInfo failed", { status: response.status, body: text.slice(0, 300) });
+    const text = await response.text().catch(() => '');
+    log.error('getTokenInfo failed', { status: response.status, body: text.slice(0, 300) });
     throw new Error(`getTokenInfo request failed: ${response.status}`);
   }
   const data = (await response.json()) as Record<string, unknown>;
-  log.info("getTokenInfo response keys:", Object.keys(data).join(","));
-  const userId = (data.union_id || data.open_id || data.unionID || data.openID || data.sub) as
-    | string
-    | undefined;
+  log.info('getTokenInfo response keys:', Object.keys(data).join(','));
+  const userId = (data.union_id || data.open_id || data.unionID || data.openID || data.sub) as string | undefined;
   if (!userId) {
-    log.error("getTokenInfo has no user ID:", JSON.stringify(data).slice(0, 300));
-    throw new Error("getTokenInfo response missing user ID");
+    log.error('getTokenInfo has no user ID:', JSON.stringify(data).slice(0, 300));
+    throw new Error('getTokenInfo response missing user ID');
   }
   const uid = (data.uid as string | undefined) || undefined;
   return { userId, uid };

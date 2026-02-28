@@ -6,13 +6,13 @@
  * and prevents concurrent benchmark runs.
  */
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from "fs";
-import { join } from "path";
-import { getStateDir } from "../utils/config.js";
+import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from 'fs';
+import { join } from 'path';
+import { getStateDir } from '../utils/config.js';
 
 export interface BenchmarkProgressInfo {
   running: boolean;
-  source: "cli" | "ui";
+  source: 'cli' | 'ui';
   profile: string;
   current: number;
   total: number;
@@ -25,7 +25,7 @@ export interface BenchmarkProgressInfo {
 }
 
 function getProgressFilePath(): string {
-  return join(getStateDir(), "benchmark-progress.json");
+  return join(getStateDir(), 'benchmark-progress.json');
 }
 
 export function writeBenchmarkProgress(info: BenchmarkProgressInfo): void {
@@ -38,9 +38,11 @@ export function writeBenchmarkProgress(info: BenchmarkProgressInfo): void {
 
 export function readBenchmarkProgress(): BenchmarkProgressInfo | null {
   const filePath = getProgressFilePath();
-  if (!existsSync(filePath)) return null;
+  if (!existsSync(filePath)) {
+    return null;
+  }
   try {
-    const data = JSON.parse(readFileSync(filePath, "utf-8")) as BenchmarkProgressInfo;
+    const data = JSON.parse(readFileSync(filePath, 'utf-8')) as BenchmarkProgressInfo;
     if (!data.running) {
       clearBenchmarkProgress();
       return null;
@@ -69,7 +71,9 @@ export function readBenchmarkProgress(): BenchmarkProgressInfo | null {
 export function clearBenchmarkProgress(): void {
   try {
     const filePath = getProgressFilePath();
-    if (existsSync(filePath)) unlinkSync(filePath);
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+    }
   } catch {
     /* ignore */
   }
@@ -83,10 +87,7 @@ function getRunProgressFilePath(trackingId: string): string {
   return join(getStateDir(), `benchmark-progress-${trackingId}.json`);
 }
 
-export function writeBenchmarkProgressForRun(
-  trackingId: string,
-  info: BenchmarkProgressInfo
-): void {
+export function writeBenchmarkProgressForRun(trackingId: string, info: BenchmarkProgressInfo): void {
   try {
     writeFileSync(getRunProgressFilePath(trackingId), JSON.stringify(info, null, 2));
   } catch {
@@ -97,7 +98,9 @@ export function writeBenchmarkProgressForRun(
 export function clearBenchmarkProgressForRun(trackingId: string): void {
   try {
     const filePath = getRunProgressFilePath(trackingId);
-    if (existsSync(filePath)) unlinkSync(filePath);
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+    }
   } catch {
     /* ignore */
   }
@@ -108,7 +111,7 @@ export function clearAllUiBenchmarkProgress(): void {
     const stateDir = getStateDir();
     const files = readdirSync(stateDir);
     for (const file of files) {
-      if (file.startsWith("benchmark-progress-") && file.endsWith(".json")) {
+      if (file.startsWith('benchmark-progress-') && file.endsWith('.json')) {
         try {
           unlinkSync(join(stateDir, file));
         } catch {
@@ -141,11 +144,13 @@ export function readAllBenchmarkProgress(): Record<string, BenchmarkProgressInfo
     const stateDir = getStateDir();
     const files = readdirSync(stateDir);
     for (const file of files) {
-      if (!file.startsWith("benchmark-progress-") || !file.endsWith(".json")) continue;
-      const trackingId = file.slice("benchmark-progress-".length, -".json".length);
+      if (!file.startsWith('benchmark-progress-') || !file.endsWith('.json')) {
+        continue;
+      }
+      const trackingId = file.slice('benchmark-progress-'.length, -'.json'.length);
       try {
         const filePath = join(stateDir, file);
-        const data = JSON.parse(readFileSync(filePath, "utf-8")) as BenchmarkProgressInfo;
+        const data = JSON.parse(readFileSync(filePath, 'utf-8')) as BenchmarkProgressInfo;
         if (!data.running) {
           try {
             unlinkSync(filePath);

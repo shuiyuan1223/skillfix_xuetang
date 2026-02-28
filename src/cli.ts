@@ -5,34 +5,31 @@
  * Command line interface for Personal Health Agent.
  */
 
-import { Command } from "commander";
-import { registerStartCommand } from "./commands/start.js";
-import { registerSetupCommand } from "./commands/setup.js";
-import { registerOnboardCommand } from "./commands/onboard.js";
-import { registerConfigCommand } from "./commands/config.js";
-import { registerGatewayCommand } from "./commands/gateway.js";
-import { registerTuiCommand } from "./commands/tui.js";
-import { registerHealthCommand } from "./commands/health.js";
-import { registerToolsCommand } from "./commands/tools.js";
-import { registerChatCommand } from "./commands/chat.js";
-import { registerEvalCommand } from "./commands/eval.js";
-import { registerStatusCommand } from "./commands/status.js";
-import { registerDoctorCommand } from "./commands/doctor.js";
-import { registerHuaweiCommand } from "./commands/huawei.js";
-import { registerAuthCommand } from "./commands/auth.js";
-import { registerWebCommand } from "./commands/web.js";
-import { registerStateCommand } from "./commands/state.js";
-import { registerInitCommand } from "./commands/init.js";
-import { registerGetCommand } from "./commands/get.js";
-import {
-  registerEncryptConfigCommand,
-  registerDecryptConfigCommand,
-} from "./commands/encrypt-config.js";
+import { Command } from 'commander';
+import { registerStartCommand } from './commands/start.js';
+import { registerSetupCommand } from './commands/setup.js';
+import { registerOnboardCommand } from './commands/onboard.js';
+import { registerConfigCommand } from './commands/config.js';
+import { registerGatewayCommand } from './commands/gateway.js';
+import { registerTuiCommand } from './commands/tui.js';
+import { registerHealthCommand } from './commands/health.js';
+import { registerToolsCommand } from './commands/tools.js';
+import { registerChatCommand } from './commands/chat.js';
+import { registerEvalCommand } from './commands/eval.js';
+import { registerStatusCommand } from './commands/status.js';
+import { registerDoctorCommand } from './commands/doctor.js';
+import { registerHuaweiCommand } from './commands/huawei.js';
+import { registerAuthCommand } from './commands/auth.js';
+import { registerWebCommand } from './commands/web.js';
+import { registerStateCommand } from './commands/state.js';
+import { registerInitCommand } from './commands/init.js';
+import { registerGetCommand } from './commands/get.js';
+import { registerEncryptConfigCommand, registerDecryptConfigCommand } from './commands/encrypt-config.js';
 
 const program = new Command();
 
 program
-  .name("pha")
+  .name('pha')
   .description(
     `
   🏥 Personal Health Agent - AI-powered health management
@@ -47,9 +44,9 @@ program
     $ pha tui --local   # Chat in terminal
 `.trim()
   )
-  .version("0.1.0")
+  .version('0.1.0')
   .addHelpText(
-    "after",
+    'after',
     `
 Examples:
   $ pha start                    Start gateway server

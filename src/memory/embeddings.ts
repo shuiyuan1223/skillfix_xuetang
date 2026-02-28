@@ -5,14 +5,11 @@
  * No local/Gemini/Voyage support needed.
  */
 
-import {
-  loadConfig,
-  resolveEmbeddingModel as resolveEmbeddingModelFromConfig,
-} from "../utils/config.js";
-import { formatErrorMessage } from "./compat.js";
-import { createOpenAiEmbeddingProvider, type OpenAiEmbeddingClient } from "./embeddings-openai.js";
+import { loadConfig, resolveEmbeddingModel as resolveEmbeddingModelFromConfig } from '../utils/config.js';
+import { formatErrorMessage } from './compat.js';
+import { createOpenAiEmbeddingProvider, type OpenAiEmbeddingClient } from './embeddings-openai.js';
 
-export type { OpenAiEmbeddingClient } from "./embeddings-openai.js";
+export type { OpenAiEmbeddingClient } from './embeddings-openai.js';
 
 export type EmbeddingProvider = {
   id: string;
@@ -24,7 +21,7 @@ export type EmbeddingProvider = {
 
 export type EmbeddingProviderResult = {
   provider: EmbeddingProvider;
-  requestedProvider: "openai" | "auto";
+  requestedProvider: 'openai' | 'auto';
   fallbackFrom?: string;
   fallbackReason?: string;
   openAi?: OpenAiEmbeddingClient;
@@ -60,16 +57,16 @@ export interface EmbeddingConfig {
  */
 export function createNoopEmbeddingProvider(): EmbeddingProviderResult {
   const provider: EmbeddingProvider = {
-    id: "noop",
-    model: "none",
+    id: 'noop',
+    model: 'none',
     embedQuery: async () => [],
     embedBatch: async (texts) => texts.map(() => []),
   };
   return {
     provider,
-    requestedProvider: "auto",
-    fallbackFrom: "openai",
-    fallbackReason: "No API key available — using BM25-only search",
+    requestedProvider: 'auto',
+    fallbackFrom: 'openai',
+    fallbackReason: 'No API key available — using BM25-only search',
   };
 }
 
@@ -77,14 +74,12 @@ export function createNoopEmbeddingProvider(): EmbeddingProviderResult {
  * Create embedding provider (PHA simplified version).
  * Always uses OpenAI-compatible API (works with OpenRouter).
  */
-export async function createEmbeddingProvider(
-  options: EmbeddingProviderOptions
-): Promise<EmbeddingProviderResult> {
+export async function createEmbeddingProvider(options: EmbeddingProviderOptions): Promise<EmbeddingProviderResult> {
   try {
     const { provider, client } = await createOpenAiEmbeddingProvider(options);
     return {
       provider,
-      requestedProvider: (options.provider as "openai" | "auto") || "openai",
+      requestedProvider: (options.provider as 'openai' | 'auto') || 'openai',
       openAi: client,
     };
   } catch (err) {
@@ -113,7 +108,9 @@ export function isEmbeddingEnabled(): boolean {
 export function resolveEmbeddingApiKey(): string | undefined {
   try {
     const resolved = resolveEmbeddingModelFromConfig();
-    if (resolved) return resolved.apiKey;
+    if (resolved) {
+      return resolved.apiKey;
+    }
   } catch {
     // ignore
   }
@@ -142,16 +139,18 @@ export function resolveEmbeddingApiKey(): string | undefined {
 export function resolveEmbeddingModel(): string {
   try {
     const resolved = resolveEmbeddingModelFromConfig();
-    if (resolved) return resolved.modelId;
+    if (resolved) {
+      return resolved.modelId;
+    }
   } catch {
     // ignore
   }
 
   try {
     const phaConfig = loadConfig();
-    return phaConfig.embedding?.model || "text-embedding-3-small";
+    return phaConfig.embedding?.model || 'text-embedding-3-small';
   } catch {
-    return "text-embedding-3-small";
+    return 'text-embedding-3-small';
   }
 }
 
@@ -161,18 +160,20 @@ export function resolveEmbeddingModel(): string {
 export function resolveEmbeddingBaseUrl(): string {
   try {
     const resolved = resolveEmbeddingModelFromConfig();
-    if (resolved?.baseUrl) return resolved.baseUrl;
+    if (resolved?.baseUrl) {
+      return resolved.baseUrl;
+    }
   } catch {
     // ignore
   }
 
   try {
     const phaConfig = loadConfig();
-    if (phaConfig.llm.provider === "openrouter" && phaConfig.llm.baseUrl) {
+    if (phaConfig.llm.provider === 'openrouter' && phaConfig.llm.baseUrl) {
       return phaConfig.llm.baseUrl;
     }
   } catch {
     // ignore
   }
-  return "https://openrouter.ai/api/v1";
+  return 'https://openrouter.ai/api/v1';
 }

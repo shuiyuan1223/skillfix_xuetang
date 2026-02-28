@@ -8,147 +8,144 @@
  * Usage: bun scripts/explore-huawei-api.ts
  */
 
-import { huaweiHealthApi } from "../src/data-sources/huawei/huawei-api.js";
-import { huaweiAuth } from "../src/data-sources/huawei/huawei-auth.js";
-import { saveToFileCache } from "../src/data-sources/huawei/api-cache.js";
-import { loadConfig } from "../src/utils/config.js";
+import { huaweiHealthApi } from '../src/data-sources/huawei/huawei-api.js';
+import { huaweiAuth } from '../src/data-sources/huawei/huawei-auth.js';
+import { saveToFileCache } from '../src/data-sources/huawei/api-cache.js';
+import { loadConfig } from '../src/utils/config.js';
 
 // All known Huawei Health Kit data types based on documentation
 // Reference: https://developer.huawei.com/consumer/cn/doc/hmscore-guides/scene-example-0000001050819089
 // Reference: https://pub.dev/packages/huawei_health (Flutter SDK)
 const POLYMERIZE_DATA_TYPES = [
   // ========== Steps & Activity ==========
-  "com.huawei.continuous.steps.delta",
-  "com.huawei.continuous.steps.total",
-  "com.huawei.instantaneous.steps",
-  "com.huawei.continuous.steps.rate",
-  "com.huawei.continuous.steps.rate.statistics",
+  'com.huawei.continuous.steps.delta',
+  'com.huawei.continuous.steps.total',
+  'com.huawei.instantaneous.steps',
+  'com.huawei.continuous.steps.rate',
+  'com.huawei.continuous.steps.rate.statistics',
 
   // ========== Distance ==========
-  "com.huawei.continuous.distance.delta",
-  "com.huawei.continuous.distance.total",
+  'com.huawei.continuous.distance.delta',
+  'com.huawei.continuous.distance.total',
 
   // ========== Calories ==========
-  "com.huawei.continuous.calories.burnt",
-  "com.huawei.continuous.calories.burnt.total",
-  "com.huawei.continuous.calories.delta",
-  "com.huawei.continuous.calories.total",
-  "com.huawei.continuous.calories.bmr",
-  "com.huawei.continuous.calories.consumed",
-  "com.huawei.instantaneous.calories.bmr",
+  'com.huawei.continuous.calories.burnt',
+  'com.huawei.continuous.calories.burnt.total',
+  'com.huawei.continuous.calories.delta',
+  'com.huawei.continuous.calories.total',
+  'com.huawei.continuous.calories.bmr',
+  'com.huawei.continuous.calories.consumed',
+  'com.huawei.instantaneous.calories.bmr',
 
   // ========== Heart Rate ==========
-  "com.huawei.instantaneous.heart_rate",
-  "com.huawei.continuous.heart_rate.statistics",
-  "com.huawei.instantaneous.heart_rate.resting",
-  "com.huawei.instantaneous.heart_rate.max",
-  "com.huawei.continuous.exercise.heart_rate",
+  'com.huawei.instantaneous.heart_rate',
+  'com.huawei.continuous.heart_rate.statistics',
+  'com.huawei.instantaneous.heart_rate.resting',
+  'com.huawei.instantaneous.heart_rate.max',
+  'com.huawei.continuous.exercise.heart_rate',
 
   // ========== Blood Pressure ==========
-  "com.huawei.instantaneous.blood_pressure",
+  'com.huawei.instantaneous.blood_pressure',
 
   // ========== Blood Glucose ==========
-  "com.huawei.instantaneous.blood_glucose",
+  'com.huawei.instantaneous.blood_glucose',
 
   // ========== Blood Oxygen (SpO2) ==========
-  "com.huawei.instantaneous.oxygen_saturation",
-  "com.huawei.instantaneous.spo2",
+  'com.huawei.instantaneous.oxygen_saturation',
+  'com.huawei.instantaneous.spo2',
 
   // ========== Body Temperature ==========
-  "com.huawei.instantaneous.body_temperature",
-  "com.huawei.instantaneous.skin_temperature",
+  'com.huawei.instantaneous.body_temperature',
+  'com.huawei.instantaneous.skin_temperature',
 
   // ========== Weight & Body Composition ==========
-  "com.huawei.instantaneous.body.weight",
-  "com.huawei.instantaneous.body.height",
-  "com.huawei.instantaneous.body.fat.rate",
-  "com.huawei.instantaneous.body.bmi",
-  "com.huawei.instantaneous.height",
-  "com.huawei.instantaneous.weight",
-  "com.huawei.continuous.body.fat.rate.statistics",
-  "com.huawei.continuous.body.weight.statistics",
-  "com.huawei.continuous.height.statistics",
+  'com.huawei.instantaneous.body.weight',
+  'com.huawei.instantaneous.body.height',
+  'com.huawei.instantaneous.body.fat.rate',
+  'com.huawei.instantaneous.body.bmi',
+  'com.huawei.instantaneous.height',
+  'com.huawei.instantaneous.weight',
+  'com.huawei.continuous.body.fat.rate.statistics',
+  'com.huawei.continuous.body.weight.statistics',
+  'com.huawei.continuous.height.statistics',
 
   // ========== Sleep ==========
-  "com.huawei.continuous.sleep",
-  "com.huawei.continuous.sleep.segment",
-  "com.huawei.continuous.sleep.statistics",
-  "com.huawei.continuous.sleep.fragment",
-  "com.huawei.instantaneous.sleep",
-  "com.huawei.statistics.sleep",
+  'com.huawei.continuous.sleep',
+  'com.huawei.continuous.sleep.segment',
+  'com.huawei.continuous.sleep.statistics',
+  'com.huawei.continuous.sleep.fragment',
+  'com.huawei.instantaneous.sleep',
+  'com.huawei.statistics.sleep',
 
   // ========== Stress ==========
-  "com.huawei.instantaneous.stress",
-  "com.huawei.continuous.stress.statistics",
-  "com.huawei.instantaneous.stress.statistics",
+  'com.huawei.instantaneous.stress',
+  'com.huawei.continuous.stress.statistics',
+  'com.huawei.instantaneous.stress.statistics',
 
   // ========== Activity ==========
-  "com.huawei.continuous.activity.segment",
-  "com.huawei.continuous.activity.duration",
-  "com.huawei.continuous.activity.statistics",
-  "com.huawei.instantaneous.activity",
-  "com.huawei.instantaneous.activity.sample",
+  'com.huawei.continuous.activity.segment',
+  'com.huawei.continuous.activity.duration',
+  'com.huawei.continuous.activity.statistics',
+  'com.huawei.instantaneous.activity',
+  'com.huawei.instantaneous.activity.sample',
 
   // ========== Exercise ==========
-  "com.huawei.continuous.exercise.heart_rate",
-  "com.huawei.continuous.exercise.speed",
-  "com.huawei.continuous.exercise.pace",
-  "com.huawei.continuous.exercise.intensity",
-  "com.huawei.continuous.exercise.intensity.statistics",
-  "com.huawei.continuous.workout.duration",
+  'com.huawei.continuous.exercise.heart_rate',
+  'com.huawei.continuous.exercise.speed',
+  'com.huawei.continuous.exercise.pace',
+  'com.huawei.continuous.exercise.intensity',
+  'com.huawei.continuous.exercise.intensity.statistics',
+  'com.huawei.continuous.workout.duration',
 
   // ========== Speed & Power ==========
-  "com.huawei.instantaneous.speed",
-  "com.huawei.continuous.speed.statistics",
-  "com.huawei.instantaneous.power.sample",
-  "com.huawei.continuous.power.statistics",
+  'com.huawei.instantaneous.speed',
+  'com.huawei.continuous.speed.statistics',
+  'com.huawei.instantaneous.power.sample',
+  'com.huawei.continuous.power.statistics',
 
   // ========== Location ==========
-  "com.huawei.continuous.location.sample",
-  "com.huawei.instantaneous.location.sample",
-  "com.huawei.instantaneous.location.trace",
-  "com.huawei.continuous.location.boundary.range",
+  'com.huawei.continuous.location.sample',
+  'com.huawei.instantaneous.location.sample',
+  'com.huawei.instantaneous.location.trace',
+  'com.huawei.continuous.location.boundary.range',
 
   // ========== Cycling ==========
-  "com.huawei.continuous.biking.wheel.rotation.total",
-  "com.huawei.instantaneous.biking.wheel.rotation",
-  "com.huawei.continuous.biking.pedaling.total",
-  "com.huawei.instantaneous.biking.pedaling.rate",
+  'com.huawei.continuous.biking.wheel.rotation.total',
+  'com.huawei.instantaneous.biking.wheel.rotation',
+  'com.huawei.continuous.biking.pedaling.total',
+  'com.huawei.instantaneous.biking.pedaling.rate',
 
   // ========== Hydration ==========
-  "com.huawei.instantaneous.hydration",
-  "com.huawei.instantaneous.hydrate",
+  'com.huawei.instantaneous.hydration',
+  'com.huawei.instantaneous.hydrate',
 
   // ========== Nutrition ==========
-  "com.huawei.instantaneous.nutrition",
-  "com.huawei.instantaneous.nutrition.facts",
-  "com.huawei.continuous.nutrition.facts.statistics",
+  'com.huawei.instantaneous.nutrition',
+  'com.huawei.instantaneous.nutrition.facts',
+  'com.huawei.continuous.nutrition.facts.statistics',
 
   // ========== Menstruation ==========
-  "com.huawei.instantaneous.menstrual_cycle",
-  "com.huawei.instantaneous.menstruation",
+  'com.huawei.instantaneous.menstrual_cycle',
+  'com.huawei.instantaneous.menstruation',
 
   // ========== VO2 Max & Fitness ==========
-  "com.huawei.instantaneous.vo2max",
+  'com.huawei.instantaneous.vo2max',
 ];
 
 // Health Record data types (accessed via /healthRecords endpoint)
 const HEALTH_RECORD_DATA_TYPES = [
-  "com.huawei.health.record.sleep",
-  "com.huawei.health.record.heartRate",
-  "com.huawei.health.record.bloodPressure",
-  "com.huawei.health.record.bloodGlucose",
-  "com.huawei.health.record.stress",
-  "com.huawei.health.record.weight",
-  "com.huawei.health.record.exercise",
-  "com.huawei.health.record.menstruation",
+  'com.huawei.health.record.sleep',
+  'com.huawei.health.record.heartRate',
+  'com.huawei.health.record.bloodPressure',
+  'com.huawei.health.record.bloodGlucose',
+  'com.huawei.health.record.stress',
+  'com.huawei.health.record.weight',
+  'com.huawei.health.record.exercise',
+  'com.huawei.health.record.menstruation',
 ];
 
 // Sub data types for health records
-const SUB_DATA_TYPES = [
-  "com.huawei.continuous.sleep.fragment",
-  "com.huawei.sleep.on_off_bed_record",
-];
+const SUB_DATA_TYPES = ['com.huawei.continuous.sleep.fragment', 'com.huawei.sleep.on_off_bed_record'];
 
 interface TestResult {
   dataType: string;
@@ -169,16 +166,16 @@ async function testPolymerizeDataType(
   endTime: number
 ): Promise<TestResult> {
   const config = loadConfig();
-  const apiBase = config.dataSources.huawei?.apiBaseUrl || "https://health-api.cloud.huawei.com";
+  const apiBase = config.dataSources.huawei?.apiBaseUrl || 'https://health-api.cloud.huawei.com';
   const url = `${apiBase}/healthkit/v2/sampleSet:polymerize`;
 
   try {
     const response = await fetch(url, {
-      method: "POST",
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
       body: JSON.stringify({
         polymerizeWith: [{ dataTypeName }],
@@ -196,16 +193,12 @@ async function testPolymerizeDataType(
     }
 
     // Save to cache
-    saveToFileCache(
-      `explore/polymerize/${dataTypeName}`,
-      { dataTypeName, startTime, endTime },
-      data
-    );
+    saveToFileCache(`explore/polymerize/${dataTypeName}`, { dataTypeName, startTime, endTime }, data);
 
     if (!response.ok) {
       return {
         dataType: dataTypeName,
-        endpoint: "polymerize",
+        endpoint: 'polymerize',
         success: false,
         status: response.status,
         hasData: false,
@@ -232,7 +225,7 @@ async function testPolymerizeDataType(
 
     return {
       dataType: dataTypeName,
-      endpoint: "polymerize",
+      endpoint: 'polymerize',
       success: true,
       status: response.status,
       hasData: sampleCount > 0,
@@ -242,7 +235,7 @@ async function testPolymerizeDataType(
   } catch (error) {
     return {
       dataType: dataTypeName,
-      endpoint: "polymerize",
+      endpoint: 'polymerize',
       success: false,
       hasData: false,
       error: error instanceof Error ? error.message : String(error),
@@ -258,7 +251,7 @@ async function testHealthRecordDataType(
   endTime: number
 ): Promise<TestResult> {
   const config = loadConfig();
-  const apiBase = config.dataSources.huawei?.apiBaseUrl || "https://health-api.cloud.huawei.com";
+  const apiBase = config.dataSources.huawei?.apiBaseUrl || 'https://health-api.cloud.huawei.com';
 
   const params = new URLSearchParams({
     startTime: startTime.toString(),
@@ -268,18 +261,18 @@ async function testHealthRecordDataType(
 
   // Add sub data types
   for (const subType of SUB_DATA_TYPES) {
-    params.append("subDataType", subType);
+    params.append('subDataType', subType);
   }
 
   const url = `${apiBase}/healthkit/v2/healthRecords?${params}`;
 
   try {
     const response = await fetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
     });
 
@@ -297,7 +290,7 @@ async function testHealthRecordDataType(
     if (!response.ok) {
       return {
         dataType,
-        endpoint: "healthRecords",
+        endpoint: 'healthRecords',
         success: false,
         status: response.status,
         hasData: false,
@@ -316,7 +309,7 @@ async function testHealthRecordDataType(
 
     return {
       dataType,
-      endpoint: "healthRecords",
+      endpoint: 'healthRecords',
       success: true,
       status: response.status,
       hasData: records.length > 0,
@@ -326,7 +319,7 @@ async function testHealthRecordDataType(
   } catch (error) {
     return {
       dataType,
-      endpoint: "healthRecords",
+      endpoint: 'healthRecords',
       success: false,
       hasData: false,
       error: error instanceof Error ? error.message : String(error),
@@ -341,7 +334,7 @@ async function testActivityRecords(
   endTime: number
 ): Promise<TestResult> {
   const config = loadConfig();
-  const apiBase = config.dataSources.huawei?.apiBaseUrl || "https://health-api.cloud.huawei.com";
+  const apiBase = config.dataSources.huawei?.apiBaseUrl || 'https://health-api.cloud.huawei.com';
 
   const params = new URLSearchParams({
     startTime: Math.floor(startTime / 1000000).toString(), // milliseconds
@@ -352,11 +345,11 @@ async function testActivityRecords(
 
   try {
     const response = await fetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
     });
 
@@ -368,12 +361,12 @@ async function testActivityRecords(
       data = { raw: text };
     }
 
-    saveToFileCache("explore/activityRecords", { startTime, endTime }, data);
+    saveToFileCache('explore/activityRecords', { startTime, endTime }, data);
 
     if (!response.ok) {
       return {
-        dataType: "activityRecords",
-        endpoint: "activityRecords",
+        dataType: 'activityRecords',
+        endpoint: 'activityRecords',
         success: false,
         status: response.status,
         hasData: false,
@@ -384,8 +377,8 @@ async function testActivityRecords(
     const records = data.activityRecord || data.activityRecords || [];
 
     return {
-      dataType: "activityRecords",
-      endpoint: "activityRecords",
+      dataType: 'activityRecords',
+      endpoint: 'activityRecords',
       success: true,
       status: response.status,
       hasData: records.length > 0,
@@ -393,8 +386,8 @@ async function testActivityRecords(
     };
   } catch (error) {
     return {
-      dataType: "activityRecords",
-      endpoint: "activityRecords",
+      dataType: 'activityRecords',
+      endpoint: 'activityRecords',
       success: false,
       hasData: false,
       error: error instanceof Error ? error.message : String(error),
@@ -404,16 +397,16 @@ async function testActivityRecords(
 
 async function testDataCollectors(accessToken: string, clientId: string): Promise<TestResult> {
   const config = loadConfig();
-  const apiBase = config.dataSources.huawei?.apiBaseUrl || "https://health-api.cloud.huawei.com";
+  const apiBase = config.dataSources.huawei?.apiBaseUrl || 'https://health-api.cloud.huawei.com';
   const url = `${apiBase}/healthkit/v2/dataCollectors`;
 
   try {
     const response = await fetch(url, {
-      method: "GET",
+      method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        "x-client-id": clientId,
+        'Content-Type': 'application/json',
+        'x-client-id': clientId,
       },
     });
 
@@ -425,13 +418,13 @@ async function testDataCollectors(accessToken: string, clientId: string): Promis
       data = { raw: text };
     }
 
-    saveToFileCache("explore/dataCollectors", {}, data);
+    saveToFileCache('explore/dataCollectors', {}, data);
 
     const collectors = data.dataCollector || [];
 
     return {
-      dataType: "dataCollectors",
-      endpoint: "dataCollectors",
+      dataType: 'dataCollectors',
+      endpoint: 'dataCollectors',
       success: response.ok,
       status: response.status,
       hasData: collectors.length > 0,
@@ -439,8 +432,8 @@ async function testDataCollectors(accessToken: string, clientId: string): Promis
     };
   } catch (error) {
     return {
-      dataType: "dataCollectors",
-      endpoint: "dataCollectors",
+      dataType: 'dataCollectors',
+      endpoint: 'dataCollectors',
       success: false,
       hasData: false,
       error: error instanceof Error ? error.message : String(error),
@@ -448,140 +441,147 @@ async function testDataCollectors(accessToken: string, clientId: string): Promis
   }
 }
 
-async function main() {
-  console.log("=".repeat(60));
-  console.log("Huawei Health Kit API Explorer");
-  console.log("=".repeat(60));
-  console.log();
+function getResultStatusIcon(result: TestResult): string {
+  if (!result.success) return '✗';
+  if (result.hasData) return '✓';
+  return '○';
+}
 
-  // Get access token
-  let accessToken: string;
-  try {
-    accessToken = await huaweiAuth.ensureValidToken();
-    console.log("✓ Access token obtained");
-  } catch (error) {
-    console.error("✗ Failed to get access token:", error);
-    process.exit(1);
+function getResultInfo(result: TestResult, unit: string): string {
+  if (!result.success) {
+    return result.error?.slice(0, 50) || 'unknown error';
   }
+  if (result.hasData) {
+    const fieldsSuffix = result.fields ? `, fields: ${result.fields.join(', ') || 'none'}` : '';
+    return `${result.sampleCount} ${unit}${fieldsSuffix}`;
+  }
+  return 'no data';
+}
 
-  const config = loadConfig();
-  const clientId = config.dataSources.huawei?.clientId || "";
+function getResultSummaryInfo(result: TestResult, unit: string): string {
+  if (result.hasData) {
+    return `${result.sampleCount} ${unit}`;
+  }
+  return result.error || 'no data';
+}
 
-  // Time ranges
+function logResultWithDetails(result: TestResult, label: string, unit: string): void {
+  const status = getResultStatusIcon(result);
+  const info = getResultInfo(result, unit);
+  console.log(`${status} ${label}`);
+  if (result.hasData || !result.success) {
+    console.log(`    ${info}`);
+  }
+}
+
+interface TimeRanges {
+  now: number;
+  oneDayAgo: number;
+  thirtyDaysAgo: number;
+  polymerizeStart: number;
+  polymerizeEnd: number;
+  healthRecordStart: number;
+  healthRecordEnd: number;
+}
+
+function computeTimeRanges(): TimeRanges {
   const now = Date.now();
-
-  // polymerize API: uses MILLISECONDS, max 1 day
   const oneDayAgo = now - 1 * 24 * 60 * 60 * 1000;
-  const polymerizeStart = oneDayAgo; // milliseconds
-  const polymerizeEnd = now;
-
-  // healthRecords API: uses NANOSECONDS (19 digits), can use longer range
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-  const healthRecordStart = thirtyDaysAgo * 1000000; // nanoseconds
-  const healthRecordEnd = now * 1000000;
 
-  console.log(
-    `\nPolymerize range: ${new Date(oneDayAgo).toISOString()} to ${new Date(now).toISOString()} (1 day, ms)`
-  );
-  console.log(
-    `HealthRecords range: ${new Date(thirtyDaysAgo).toISOString()} to ${new Date(now).toISOString()} (30 days, ns)`
-  );
-  console.log();
+  return {
+    now,
+    oneDayAgo,
+    thirtyDaysAgo,
+    polymerizeStart: oneDayAgo, // milliseconds
+    polymerizeEnd: now,
+    healthRecordStart: thirtyDaysAgo * 1000000, // nanoseconds
+    healthRecordEnd: now * 1000000,
+  };
+}
+
+async function runPolymerizeTests(accessToken: string, clientId: string, times: TimeRanges): Promise<TestResult[]> {
+  console.log('-'.repeat(60));
+  console.log('Testing Polymerize Data Types');
+  console.log('-'.repeat(60));
 
   const results: TestResult[] = [];
-
-  // Test polymerize data types
-  console.log("-".repeat(60));
-  console.log("Testing Polymerize Data Types");
-  console.log("-".repeat(60));
 
   for (const dataType of POLYMERIZE_DATA_TYPES) {
     const result = await testPolymerizeDataType(
       dataType,
       accessToken,
       clientId,
-      polymerizeStart,
-      polymerizeEnd
+      times.polymerizeStart,
+      times.polymerizeEnd
     );
     results.push(result);
-
-    const status = result.success ? (result.hasData ? "✓" : "○") : "✗";
-    const info = result.success
-      ? result.hasData
-        ? `${result.sampleCount} samples, fields: ${result.fields?.join(", ") || "none"}`
-        : "no data"
-      : result.error?.slice(0, 50);
-    console.log(`${status} ${dataType}`);
-    if (result.hasData || !result.success) {
-      console.log(`    ${info}`);
-    }
+    logResultWithDetails(result, dataType, 'samples');
   }
 
-  // Test health records
+  return results;
+}
+
+async function runHealthRecordTests(accessToken: string, clientId: string, times: TimeRanges): Promise<TestResult[]> {
   console.log();
-  console.log("-".repeat(60));
-  console.log("Testing Health Records");
-  console.log("-".repeat(60));
+  console.log('-'.repeat(60));
+  console.log('Testing Health Records');
+  console.log('-'.repeat(60));
+
+  const results: TestResult[] = [];
 
   for (const dataType of HEALTH_RECORD_DATA_TYPES) {
     const result = await testHealthRecordDataType(
       dataType,
       accessToken,
       clientId,
-      healthRecordStart,
-      healthRecordEnd
+      times.healthRecordStart,
+      times.healthRecordEnd
     );
     results.push(result);
-
-    const status = result.success ? (result.hasData ? "✓" : "○") : "✗";
-    const info = result.success
-      ? result.hasData
-        ? `${result.sampleCount} records, fields: ${result.fields?.join(", ") || "none"}`
-        : "no data"
-      : result.error?.slice(0, 50);
-    console.log(`${status} ${dataType}`);
-    if (result.hasData || !result.success) {
-      console.log(`    ${info}`);
-    }
+    logResultWithDetails(result, dataType, 'records');
   }
+
+  return results;
+}
+
+async function runMiscTests(accessToken: string, clientId: string, times: TimeRanges): Promise<TestResult[]> {
+  const results: TestResult[] = [];
 
   // Test activity records
   console.log();
-  console.log("-".repeat(60));
-  console.log("Testing Activity Records");
-  console.log("-".repeat(60));
+  console.log('-'.repeat(60));
+  console.log('Testing Activity Records');
+  console.log('-'.repeat(60));
 
   const activityResult = await testActivityRecords(
     accessToken,
     clientId,
-    healthRecordStart,
-    healthRecordEnd
+    times.healthRecordStart,
+    times.healthRecordEnd
   );
   results.push(activityResult);
-  console.log(
-    `${activityResult.success ? (activityResult.hasData ? "✓" : "○") : "✗"} activityRecords: ${
-      activityResult.hasData
-        ? `${activityResult.sampleCount} records`
-        : activityResult.error || "no data"
-    }`
-  );
+
+  const activityStatus = getResultStatusIcon(activityResult);
+  const activityInfo = getResultSummaryInfo(activityResult, 'records');
+  console.log(`${activityStatus} activityRecords: ${activityInfo}`);
 
   // Test data collectors
   const collectorsResult = await testDataCollectors(accessToken, clientId);
   results.push(collectorsResult);
-  console.log(
-    `${collectorsResult.success ? (collectorsResult.hasData ? "✓" : "○") : "✗"} dataCollectors: ${
-      collectorsResult.hasData
-        ? `${collectorsResult.sampleCount} collectors`
-        : collectorsResult.error || "no data"
-    }`
-  );
 
-  // Summary
+  const collectorsStatus = getResultStatusIcon(collectorsResult);
+  const collectorsInfo = getResultSummaryInfo(collectorsResult, 'collectors');
+  console.log(`${collectorsStatus} dataCollectors: ${collectorsInfo}`);
+
+  return results;
+}
+
+function printSummary(results: TestResult[]): void {
   console.log();
-  console.log("=".repeat(60));
-  console.log("Summary");
-  console.log("=".repeat(60));
+  console.log('='.repeat(60));
+  console.log('Summary');
+  console.log('='.repeat(60));
 
   const successful = results.filter((r) => r.success);
   const withData = results.filter((r) => r.hasData);
@@ -594,22 +594,30 @@ async function main() {
   console.log(`✗ Failed: ${failed.length}`);
 
   console.log();
-  console.log("Data types with data:");
+  console.log('Data types with data:');
   for (const r of withData) {
     console.log(`  - ${r.dataType} (${r.endpoint}): ${r.sampleCount} samples`);
   }
+}
 
-  // Save summary
+function saveSummaryToCache(results: TestResult[], times: TimeRanges): void {
+  const successful = results.filter((r) => r.success);
+  const withData = results.filter((r) => r.hasData);
+  const failed = results.filter((r) => !r.success);
+
   saveToFileCache(
-    "explore/summary",
+    'explore/summary',
     {},
     {
       timestamp: new Date().toISOString(),
       timeRanges: {
-        polymerize: { start: new Date(oneDayAgo).toISOString(), end: new Date(now).toISOString() },
+        polymerize: {
+          start: new Date(times.oneDayAgo).toISOString(),
+          end: new Date(times.now).toISOString(),
+        },
         healthRecords: {
-          start: new Date(thirtyDaysAgo).toISOString(),
-          end: new Date(now).toISOString(),
+          start: new Date(times.thirtyDaysAgo).toISOString(),
+          end: new Date(times.now).toISOString(),
         },
       },
       results,
@@ -621,9 +629,48 @@ async function main() {
       },
     }
   );
+}
+
+async function main() {
+  console.log('='.repeat(60));
+  console.log('Huawei Health Kit API Explorer');
+  console.log('='.repeat(60));
+  console.log();
+
+  // Get access token
+  let accessToken: string;
+  try {
+    accessToken = await huaweiAuth.ensureValidToken();
+    console.log('✓ Access token obtained');
+  } catch (error) {
+    console.error('✗ Failed to get access token:', error);
+    process.exit(1);
+  }
+
+  const config = loadConfig();
+  const clientId = config.dataSources.huawei?.clientId || '';
+
+  const times = computeTimeRanges();
+
+  console.log(
+    `\nPolymerize range: ${new Date(times.oneDayAgo).toISOString()} to ${new Date(times.now).toISOString()} (1 day, ms)`
+  );
+  console.log(
+    `HealthRecords range: ${new Date(times.thirtyDaysAgo).toISOString()} to ${new Date(times.now).toISOString()} (30 days, ns)`
+  );
+  console.log();
+
+  const polymerizeResults = await runPolymerizeTests(accessToken, clientId, times);
+  const healthRecordResults = await runHealthRecordTests(accessToken, clientId, times);
+  const miscResults = await runMiscTests(accessToken, clientId, times);
+
+  const results = [...polymerizeResults, ...healthRecordResults, ...miscResults];
+
+  printSummary(results);
+  saveSummaryToCache(results, times);
 
   console.log();
-  console.log("Results saved to .pha/api-cache/explore/");
+  console.log('Results saved to .pha/api-cache/explore/');
 }
 
 main().catch(console.error);

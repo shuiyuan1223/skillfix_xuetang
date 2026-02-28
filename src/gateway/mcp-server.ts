@@ -5,22 +5,22 @@
  * Uses globalRegistry as single source of truth for all tools.
  */
 
-import { globalRegistry } from "../tools/index.js";
-import { getRemoteMCPToolDefinitions, getRemoteMCPTools } from "../services/remote-mcp-client.js";
-import { createLogger } from "../utils/logger.js";
+import { globalRegistry } from '../tools/index.js';
+import { getRemoteMCPToolDefinitions, getRemoteMCPTools } from '../services/remote-mcp-client.js';
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("MCP-RPC");
+const log = createLogger('MCP-RPC');
 
 // JSON-RPC 2.0 types
 interface JsonRpcRequest {
-  jsonrpc: "2.0";
+  jsonrpc: '2.0';
   id?: string | number | null;
   method: string;
   params?: Record<string, unknown>;
 }
 
 interface JsonRpcResponse {
-  jsonrpc: "2.0";
+  jsonrpc: '2.0';
   id: string | number | null;
   result?: unknown;
   error?: { code: number; message: string; data?: unknown };
@@ -28,18 +28,18 @@ interface JsonRpcResponse {
 
 // MCP server info
 const SERVER_INFO = {
-  name: "pha-health",
-  version: "1.0.0",
+  name: 'pha-health',
+  version: '1.0.0',
 };
 
-const PROTOCOL_VERSION = "2024-11-05";
+const PROTOCOL_VERSION = '2024-11-05';
 
 function makeResult(id: string | number | null, result: unknown): JsonRpcResponse {
-  return { jsonrpc: "2.0", id, result };
+  return { jsonrpc: '2.0', id, result };
 }
 
 function makeError(id: string | number | null, code: number, message: string): JsonRpcResponse {
-  return { jsonrpc: "2.0", id, error: { code, message } };
+  return { jsonrpc: '2.0', id, error: { code, message } };
 }
 
 function handleInitialize(id: string | number | null): JsonRpcResponse {
@@ -66,7 +66,7 @@ async function handleToolsList(id: string | number | null): Promise<JsonRpcRespo
     remoteToolDefs = (await getRemoteMCPToolDefinitions()).map((d) => ({
       name: d.name,
       description: d.description,
-      inputSchema: d.inputSchema || { type: "object", properties: {} },
+      inputSchema: d.inputSchema || { type: 'object', properties: {} },
     }));
   } catch {
     // Remote tools unavailable
@@ -81,7 +81,7 @@ async function handleToolsCall(
 ): Promise<JsonRpcResponse> {
   const p = params as { name: string; arguments?: Record<string, unknown> } | undefined;
   if (!p?.name) {
-    return makeError(id, -32602, "Missing tool name");
+    return makeError(id, -32602, 'Missing tool name');
   }
 
   if (globalRegistry.has(p.name)) {
@@ -93,11 +93,10 @@ async function handleToolsCall(
     const remoteTools = await getRemoteMCPTools();
     const remoteTool = remoteTools.find((t) => t.name === p.name);
     if (remoteTool) {
-      const result = await remoteTool.execute("mcp-call", p.arguments || {});
+      const result = await remoteTool.execute('mcp-call', p.arguments || {});
       const text = result.content?.[0];
-      const textStr =
-        typeof text === "object" && "text" in text ? text.text : JSON.stringify(result);
-      return makeResult(id, { content: [{ type: "text", text: textStr }] });
+      const textStr = typeof text === 'object' && 'text' in text ? text.text : JSON.stringify(result);
+      return makeResult(id, { content: [{ type: 'text', text: textStr }] });
     }
   } catch {
     // Remote tools unavailable
@@ -113,9 +112,9 @@ type McpMethodHandler = (
 
 const MCP_METHOD_HANDLERS: Record<string, McpMethodHandler> = {
   initialize: (id) => handleInitialize(id),
-  "notifications/initialized": (id) => handleNotificationsInitialized(id),
-  "tools/list": (id) => handleToolsList(id),
-  "tools/call": (id, params) => handleToolsCall(id, params),
+  'notifications/initialized': (id) => handleNotificationsInitialized(id),
+  'tools/list': (id) => handleToolsList(id),
+  'tools/call': (id, params) => handleToolsCall(id, params),
   ping: (id) => makeResult(id, {}),
 };
 
@@ -125,8 +124,8 @@ const MCP_METHOD_HANDLERS: Record<string, McpMethodHandler> = {
 export async function handleMCPRequest(body: unknown): Promise<JsonRpcResponse> {
   const req = body as JsonRpcRequest;
 
-  if (!req.jsonrpc || req.jsonrpc !== "2.0" || !req.method) {
-    return makeError(req?.id ?? null, -32600, "Invalid Request");
+  if (!req.jsonrpc || req.jsonrpc !== '2.0' || !req.method) {
+    return makeError(req?.id ?? null, -32600, 'Invalid Request');
   }
 
   const id = req.id ?? null;
@@ -138,7 +137,7 @@ export async function handleMCPRequest(body: unknown): Promise<JsonRpcResponse> 
     }
     return makeError(id, -32601, `Method not found: ${req.method}`);
   } catch (error) {
-    log.error("MCP request failed", { method: req.method, error });
+    log.error('MCP request failed', { method: req.method, error });
     return makeError(id, -32603, error instanceof Error ? error.message : String(error));
   }
 }

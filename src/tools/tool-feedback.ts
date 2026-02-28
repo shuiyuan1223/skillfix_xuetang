@@ -6,18 +6,18 @@
  * Writes to .pha/system-agent/tool-wishlist.md
  */
 
-import { existsSync, readFileSync, appendFileSync, mkdirSync } from "fs";
-import { join } from "path";
-import { findProjectRoot } from "../utils/config.js";
-import type { PHATool } from "./types.js";
+import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { findProjectRoot } from '../utils/config.js';
+import type { PHATool } from './types.js';
 
 function getWishlistPath(): string {
   const root = findProjectRoot();
-  const dir = join(root, ".pha", "users", "system");
+  const dir = join(root, '.pha', 'users', 'system');
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  return join(dir, "tool-wishlist.md");
+  return join(dir, 'tool-wishlist.md');
 }
 
 export const suggestToolImprovementTool: PHATool<{
@@ -27,41 +27,40 @@ export const suggestToolImprovementTool: PHATool<{
   useCase: string;
   priority?: string;
 }> = {
-  name: "suggest_tool_improvement",
+  name: 'suggest_tool_improvement',
   description:
-    "记录工具改进建议或缺失能力。当发现现有工具集存在不足、可以更好地完成任务时调用。建议保存到工具愿望清单供开发团队审阅。",
-  displayName: "建议工具改进",
-  category: "feedback",
-  icon: "lightbulb",
-  label: "Suggest Tool Improvement",
+    '记录工具改进建议或缺失能力。当发现现有工具集存在不足、可以更好地完成任务时调用。建议保存到工具愿望清单供开发团队审阅。',
+  displayName: '建议工具改进',
+  category: 'feedback',
+  icon: 'lightbulb',
+  label: 'Suggest Tool Improvement',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
       toolName: {
-        type: "string",
+        type: 'string',
         description:
           "Name of the tool to improve, or a suggested name for a new tool (e.g., 'read_file', 'new: code_review')",
       },
       category: {
-        type: "string",
+        type: 'string',
         description:
           "Category: 'new_tool' (completely new), 'enhancement' (improve existing), 'bug' (tool doesn't work as expected), 'missing_param' (needs new parameter)",
       },
       description: {
-        type: "string",
-        description: "Detailed description of the improvement or new tool",
+        type: 'string',
+        description: 'Detailed description of the improvement or new tool',
       },
       useCase: {
-        type: "string",
-        description: "Specific scenario where this tool/improvement would be needed",
+        type: 'string',
+        description: 'Specific scenario where this tool/improvement would be needed',
       },
       priority: {
-        type: "string",
-        description:
-          "Priority: 'high' (blocks workflow), 'medium' (workaround exists), 'low' (nice to have)",
+        type: 'string',
+        description: "Priority: 'high' (blocks workflow), 'medium' (workaround exists), 'low' (nice to have)",
       },
     },
-    required: ["toolName", "category", "description", "useCase"],
+    required: ['toolName', 'category', 'description', 'useCase'],
   },
   execute: async (args: {
     toolName: string;
@@ -71,8 +70,8 @@ export const suggestToolImprovementTool: PHATool<{
     priority?: string;
   }) => {
     const wishlistPath = getWishlistPath();
-    const timestamp = new Date().toISOString().slice(0, 19).replace("T", " ");
-    const priority = args.priority || "medium";
+    const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const priority = args.priority || 'medium';
 
     const entry = `
 ## [${priority.toUpperCase()}] ${args.toolName} — ${args.category}
@@ -88,15 +87,15 @@ export const suggestToolImprovementTool: PHATool<{
 `;
 
     // Initialize file if empty
-    if (!existsSync(wishlistPath) || readFileSync(wishlistPath, "utf-8").trim() === "") {
+    if (!existsSync(wishlistPath) || readFileSync(wishlistPath, 'utf-8').trim() === '') {
       appendFileSync(
         wishlistPath,
-        "# 工具改进建议清单\n\n> SystemAgent 在使用过程中发现的工具缺口和改进建议。\n\n---\n",
-        "utf-8"
+        '# 工具改进建议清单\n\n> SystemAgent 在使用过程中发现的工具缺口和改进建议。\n\n---\n',
+        'utf-8'
       );
     }
 
-    appendFileSync(wishlistPath, entry, "utf-8");
+    appendFileSync(wishlistPath, entry, 'utf-8');
 
     return {
       success: true,
@@ -110,14 +109,14 @@ export const suggestToolImprovementTool: PHATool<{
 };
 
 export const listToolWishlistTool: PHATool<Record<string, never>> = {
-  name: "list_tool_wishlist",
-  description: "读取当前工具改进愿望清单，查看待处理的建议。",
-  displayName: "工具建议清单",
-  category: "feedback",
-  icon: "lightbulb",
-  label: "List Tool Wishlist",
+  name: 'list_tool_wishlist',
+  description: '读取当前工具改进愿望清单，查看待处理的建议。',
+  displayName: '工具建议清单',
+  category: 'feedback',
+  icon: 'lightbulb',
+  label: 'List Tool Wishlist',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {},
   },
   execute: async () => {
@@ -125,13 +124,13 @@ export const listToolWishlistTool: PHATool<Record<string, never>> = {
     if (!existsSync(wishlistPath)) {
       return {
         success: true,
-        content: "(empty — no suggestions yet)",
+        content: '(empty — no suggestions yet)',
         count: 0,
       };
     }
 
-    const content = readFileSync(wishlistPath, "utf-8");
-    const entries = content.split("---").filter((s) => s.includes("##")).length;
+    const content = readFileSync(wishlistPath, 'utf-8');
+    const entries = content.split('---').filter((s) => s.includes('##')).length;
 
     return {
       success: true,

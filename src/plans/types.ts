@@ -1,14 +1,14 @@
-export type PlanStatus = "active" | "paused" | "completed" | "archived";
-export type GoalStatus = "on_track" | "ahead" | "behind" | "completed" | "missed";
+export type PlanStatus = 'active' | 'paused' | 'completed' | 'archived';
+export type GoalStatus = 'on_track' | 'ahead' | 'behind' | 'completed' | 'missed';
 export type GoalMetric =
-  | "steps"
-  | "sleep_hours"
-  | "exercise_count"
-  | "heart_rate_resting"
-  | "weight"
-  | "calories"
-  | "active_minutes"
-  | "custom";
+  | 'steps'
+  | 'sleep_hours'
+  | 'exercise_count'
+  | 'heart_rate_resting'
+  | 'weight'
+  | 'calories'
+  | 'active_minutes'
+  | 'custom';
 
 export interface PlanGoal {
   id: string;
@@ -16,7 +16,7 @@ export interface PlanGoal {
   label: string;
   targetValue: number;
   unit: string;
-  frequency: "daily" | "weekly";
+  frequency: 'daily' | 'weekly';
   baselineValue?: number;
   currentValue?: number;
   status: GoalStatus;

@@ -4,8 +4,8 @@
  * Uses @clack/prompts for beautiful interactive CLI prompts.
  */
 
-import type { Command } from "commander";
-import * as p from "@clack/prompts";
+import type { Command } from 'commander';
+import * as p from '@clack/prompts';
 import {
   ensureConfigDir,
   saveConfig,
@@ -15,22 +15,22 @@ import {
   PROVIDER_CONFIGS,
   type LLMProvider,
   type PHAConfig,
-} from "../utils/config.js";
-import { c, icons } from "../utils/cli-ui.js";
-import { HuaweiAuth, tokenStore } from "../data-sources/huawei/index.js";
+} from '../utils/config.js';
+import { c, icons } from '../utils/cli-ui.js';
+import { HuaweiAuth, tokenStore } from '../data-sources/huawei/index.js';
 
 // Default redirect URI for Huawei OAuth (HMS scheme)
-const HUAWEI_REDIRECT_URI = "hms://redirect_url";
+const HUAWEI_REDIRECT_URI = 'hms://redirect_url';
 
 // API key URLs
 const KEY_URLS: Record<string, string> = {
-  anthropic: "https://console.anthropic.com/settings/keys",
-  openai: "https://platform.openai.com/api-keys",
-  google: "https://aistudio.google.com/apikey",
-  openrouter: "https://openrouter.ai/keys",
-  groq: "https://console.groq.com/keys",
-  mistral: "https://console.mistral.ai/api-keys",
-  xai: "https://console.x.ai/",
+  anthropic: 'https://console.anthropic.com/settings/keys',
+  openai: 'https://platform.openai.com/api-keys',
+  google: 'https://aistudio.google.com/apikey',
+  openrouter: 'https://openrouter.ai/keys',
+  groq: 'https://console.groq.com/keys',
+  mistral: 'https://console.mistral.ai/api-keys',
+  xai: 'https://console.x.ai/',
 };
 
 /**
@@ -38,7 +38,7 @@ const KEY_URLS: Record<string, string> = {
  */
 function handleCancel(value: unknown): never | void {
   if (p.isCancel(value)) {
-    p.cancel("Setup cancelled.");
+    p.cancel('Setup cancelled.');
     process.exit(0);
   }
 }
@@ -47,7 +47,9 @@ function handleCancel(value: unknown): never | void {
  * Format API key for preview
  */
 function formatApiKeyPreview(key: string): string {
-  if (key.length <= 12) return "****";
+  if (key.length <= 12) {
+    return '****';
+  }
   return `${key.slice(0, 6)}...${key.slice(-4)}`;
 }
 
@@ -58,11 +60,11 @@ async function setupHuaweiHealth(config: PHAConfig): Promise<boolean> {
   p.note(
     [
       "You'll need:",
-      "1. Huawei Developer Account (developer.huawei.com)",
-      "2. An app with Health Kit API enabled",
-      "3. OAuth 2.0 credentials (Client ID and Secret)",
-    ].join("\n"),
-    "Huawei Health Kit Setup"
+      '1. Huawei Developer Account (developer.huawei.com)',
+      '2. An app with Health Kit API enabled',
+      '3. OAuth 2.0 credentials (Client ID and Secret)',
+    ].join('\n'),
+    'Huawei Health Kit Setup'
   );
 
   // Check if already configured
@@ -75,7 +77,7 @@ async function setupHuaweiHealth(config: PHAConfig): Promise<boolean> {
 
     if (useExisting) {
       if (tokenStore.hasValidToken()) {
-        p.log.success("Already authorized");
+        p.log.success('Already authorized');
         return true;
       }
       return authorizeHuawei(config);
@@ -84,25 +86,25 @@ async function setupHuaweiHealth(config: PHAConfig): Promise<boolean> {
 
   // Get credentials
   const clientId = await p.text({
-    message: "Client ID",
-    placeholder: "Enter your Huawei Client ID",
+    message: 'Client ID',
+    placeholder: 'Enter your Huawei Client ID',
   });
   handleCancel(clientId);
 
   if (!clientId) {
-    p.log.warn("Skipping Huawei setup - using mock data");
-    config.dataSources.type = "mock";
+    p.log.warn('Skipping Huawei setup - using mock data');
+    config.dataSources.type = 'mock';
     return false;
   }
 
   const clientSecret = await p.password({
-    message: "Client Secret",
+    message: 'Client Secret',
   });
   handleCancel(clientSecret);
 
   if (!clientSecret) {
-    p.log.warn("Skipping Huawei setup - using mock data");
-    config.dataSources.type = "mock";
+    p.log.warn('Skipping Huawei setup - using mock data');
+    config.dataSources.type = 'mock';
     return false;
   }
 
@@ -111,7 +113,7 @@ async function setupHuaweiHealth(config: PHAConfig): Promise<boolean> {
     clientId: clientId as string,
     clientSecret: clientSecret as string,
   };
-  p.log.success("Credentials saved");
+  p.log.success('Credentials saved');
 
   return authorizeHuawei(config);
 }
@@ -130,45 +132,40 @@ async function authorizeHuawei(config: PHAConfig): Promise<boolean> {
 
   p.note(
     [
-      "Step 1: Open this URL in your browser:",
-      "",
+      'Step 1: Open this URL in your browser:',
+      '',
       authUrl,
-      "",
-      "Step 2: Log in and authorize the app",
+      '',
+      'Step 2: Log in and authorize the app',
       "Step 3: Copy the 'code' from the redirect URL",
-    ].join("\n"),
-    "OAuth Authorization"
+    ].join('\n'),
+    'OAuth Authorization'
   );
 
   const code = await p.text({
-    message: "Authorization Code",
-    placeholder: "Paste the code from the redirect URL",
+    message: 'Authorization Code',
+    placeholder: 'Paste the code from the redirect URL',
   });
   handleCancel(code);
 
   if (!code) {
-    p.log.warn("Authorization skipped - using mock data");
-    config.dataSources.type = "mock";
+    p.log.warn('Authorization skipped - using mock data');
+    config.dataSources.type = 'mock';
     return false;
   }
 
   const s = p.spinner();
-  s.start("Exchanging code for token...");
+  s.start('Exchanging code for token...');
 
   try {
-    await auth.exchangeCode(
-      code as string,
-      huaweiConfig.clientId,
-      huaweiConfig.clientSecret,
-      HUAWEI_REDIRECT_URI
-    );
-    s.stop("Authorization successful!");
+    await auth.exchangeCode(code as string, huaweiConfig.clientId, huaweiConfig.clientSecret, HUAWEI_REDIRECT_URI);
+    s.stop('Authorization successful!');
     return true;
   } catch (error) {
-    s.stop("Authorization failed");
+    s.stop('Authorization failed');
     p.log.error(error instanceof Error ? error.message : String(error));
-    p.log.warn("Falling back to mock data");
-    config.dataSources.type = "mock";
+    p.log.warn('Falling back to mock data');
+    config.dataSources.type = 'mock';
     return false;
   }
 }
@@ -180,54 +177,56 @@ async function setupEmbedding(config: PHAConfig): Promise<void> {
   const currentEnabled = config.embedding?.enabled !== false;
 
   const enabled = await p.confirm({
-    message: "Enable vector search for memory?",
+    message: 'Enable vector search for memory?',
     initialValue: currentEnabled,
   });
   handleCancel(enabled);
 
   if (!enabled) {
     config.embedding = { enabled: false };
-    if (config.orchestrator) config.orchestrator.embedding = undefined;
-    p.log.success("Vector search disabled");
+    if (config.orchestrator) {
+      config.orchestrator.embedding = undefined;
+    }
+    p.log.success('Vector search disabled');
     return;
   }
 
   // Use LLM's OpenRouter API key if available
-  const hasApiKey = config.llm.provider === "openrouter" && config.llm.apiKey;
+  const hasApiKey = config.llm.provider === 'openrouter' && config.llm.apiKey;
 
   if (!hasApiKey) {
     p.note(
       [
-        "Vector search requires OpenRouter API key.",
-        "You can use your existing OpenRouter LLM key.",
-        "",
-        "Get a key from: https://openrouter.ai/keys",
-      ].join("\n"),
-      "Embedding API"
+        'Vector search requires OpenRouter API key.',
+        'You can use your existing OpenRouter LLM key.',
+        '',
+        'Get a key from: https://openrouter.ai/keys',
+      ].join('\n'),
+      'Embedding API'
     );
   }
 
   // Model selection
   const model = await p.select({
-    message: "Embedding model",
+    message: 'Embedding model',
     options: [
       {
-        value: "openai/text-embedding-3-small",
-        label: "text-embedding-3-small (Recommended)",
-        hint: "Fast, 1536 dims, $0.02/1M tokens",
+        value: 'openai/text-embedding-3-small',
+        label: 'text-embedding-3-small (Recommended)',
+        hint: 'Fast, 1536 dims, $0.02/1M tokens',
       },
       {
-        value: "openai/text-embedding-3-large",
-        label: "text-embedding-3-large",
-        hint: "Higher quality, 3072 dims, $0.13/1M tokens",
+        value: 'openai/text-embedding-3-large',
+        label: 'text-embedding-3-large',
+        hint: 'Higher quality, 3072 dims, $0.13/1M tokens',
       },
       {
-        value: "openai/text-embedding-ada-002",
-        label: "text-embedding-ada-002",
-        hint: "Legacy, 1536 dims",
+        value: 'openai/text-embedding-ada-002',
+        label: 'text-embedding-ada-002',
+        hint: 'Legacy, 1536 dims',
       },
     ],
-    initialValue: config.embedding?.model || "openai/text-embedding-3-small",
+    initialValue: config.embedding?.model || 'openai/text-embedding-3-small',
   });
   handleCancel(model);
 
@@ -238,14 +237,16 @@ async function setupEmbedding(config: PHAConfig): Promise<void> {
   };
 
   // Sync to unified model repository
-  const embParts = modelStr.split("/");
+  const embParts = modelStr.split('/');
   const embName = embParts[embParts.length - 1];
   // Determine target provider (use orchestrator.pha's provider or first available)
-  let embProvider = "openrouter";
+  let embProvider = 'openrouter';
   const phaRef = config.orchestrator?.pha;
   if (phaRef) {
-    const slashIdx = phaRef.indexOf("/");
-    if (slashIdx > 0) embProvider = phaRef.substring(0, slashIdx);
+    const slashIdx = phaRef.indexOf('/');
+    if (slashIdx > 0) {
+      embProvider = phaRef.substring(0, slashIdx);
+    }
   } else if (config.llm?.provider) {
     embProvider = config.llm.provider;
   }
@@ -256,7 +257,9 @@ async function setupEmbedding(config: PHAConfig): Promise<void> {
       provModels.push({ name: embName, model: modelStr });
     }
   }
-  if (!config.orchestrator) config.orchestrator = {};
+  if (!config.orchestrator) {
+    config.orchestrator = {};
+  }
   config.orchestrator.embedding = `${embProvider}/${embName}`;
 
   p.log.success(`Embedding: ${modelStr}`);
@@ -264,9 +267,9 @@ async function setupEmbedding(config: PHAConfig): Promise<void> {
 
 export function registerOnboardCommand(program: Command): void {
   program
-    .command("onboard")
-    .description("Interactive configuration wizard")
-    .option("--reset", "Start fresh with full setup wizard")
+    .command('onboard')
+    .description('Interactive configuration wizard')
+    .option('--reset', 'Start fresh with full setup wizard')
     .action(async (options) => {
       p.intro(`${icons.health} PHA Setup Wizard`);
 
@@ -275,21 +278,21 @@ export function registerOnboardCommand(program: Command): void {
         const config = loadConfig();
 
         const action = await p.select({
-          message: "Configuration exists. What would you like to do?",
+          message: 'Configuration exists. What would you like to do?',
           options: [
-            { value: "edit", label: "Edit settings", hint: "Modify existing configuration" },
-            { value: "reset", label: "Full reset", hint: "Start fresh" },
-            { value: "exit", label: "Exit", hint: "Keep current settings" },
+            { value: 'edit', label: 'Edit settings', hint: 'Modify existing configuration' },
+            { value: 'reset', label: 'Full reset', hint: 'Start fresh' },
+            { value: 'exit', label: 'Exit', hint: 'Keep current settings' },
           ],
         });
         handleCancel(action);
 
-        if (action === "exit") {
-          p.outro("No changes made.");
+        if (action === 'exit') {
+          p.outro('No changes made.');
           return;
         }
 
-        if (action === "edit") {
+        if (action === 'edit') {
           await editConfig(config);
           process.exit(0);
         }
@@ -313,37 +316,37 @@ async function editConfig(config: PHAConfig): Promise<void> {
     const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
 
     const choice = await p.select({
-      message: "Select setting to edit",
+      message: 'Select setting to edit',
       options: [
         {
-          value: "provider",
-          label: "LLM Provider",
+          value: 'provider',
+          label: 'LLM Provider',
           hint: providerCfg?.name || config.llm.provider,
         },
-        { value: "model", label: "Model", hint: config.llm.modelId || "default" },
+        { value: 'model', label: 'Model', hint: config.llm.modelId || 'default' },
         {
-          value: "apikey",
-          label: "API Key",
-          hint: config.llm.apiKey ? "configured" : "from env",
+          value: 'apikey',
+          label: 'API Key',
+          hint: config.llm.apiKey ? 'configured' : 'from env',
         },
-        { value: "port", label: "Gateway Port", hint: String(config.gateway.port) },
-        { value: "datasource", label: "Data Source", hint: config.dataSources.type },
+        { value: 'port', label: 'Gateway Port', hint: String(config.gateway.port) },
+        { value: 'datasource', label: 'Data Source', hint: config.dataSources.type },
         {
-          value: "embedding",
-          label: "Embedding/Vector Search",
-          hint: config.embedding?.enabled !== false ? "enabled" : "disabled",
+          value: 'embedding',
+          label: 'Embedding/Vector Search',
+          hint: config.embedding?.enabled !== false ? 'enabled' : 'disabled',
         },
-        { value: "done", label: "Save & Exit", hint: hasChanges ? "Save changes" : "No changes" },
+        { value: 'done', label: 'Save & Exit', hint: hasChanges ? 'Save changes' : 'No changes' },
       ],
     });
     handleCancel(choice);
 
-    if (choice === "done") {
+    if (choice === 'done') {
       if (hasChanges) {
         saveConfig(config);
-        p.log.success("Configuration saved!");
+        p.log.success('Configuration saved!');
       }
-      p.outro("Done.");
+      p.outro('Done.');
       return;
     }
 
@@ -359,7 +362,7 @@ async function editProvider(config: PHAConfig): Promise<void> {
     hint: cfg.hint,
   }));
   const newProvider = await p.select({
-    message: "Select LLM provider",
+    message: 'Select LLM provider',
     options: providerOptions,
     initialValue: config.llm.provider,
   });
@@ -367,38 +370,54 @@ async function editProvider(config: PHAConfig): Promise<void> {
 
   config.llm.provider = newProvider as LLMProvider;
   const providerCfg = PROVIDER_CONFIGS[newProvider as LLMProvider];
-  if (providerCfg.baseUrl) config.llm.baseUrl = providerCfg.baseUrl;
-  else delete config.llm.baseUrl;
+  if (providerCfg.baseUrl) {
+    config.llm.baseUrl = providerCfg.baseUrl;
+  } else {
+    delete config.llm.baseUrl;
+  }
 
   const envKey = process.env[providerCfg.envVar];
   if (!envKey) {
-    if (KEY_URLS[newProvider as string])
-      p.note(`Get your API key from:\n${KEY_URLS[newProvider as string]}`, "API Key");
+    if (KEY_URLS[newProvider as string]) {
+      p.note(`Get your API key from:\n${KEY_URLS[newProvider as string]}`, 'API Key');
+    }
     const apiKey = await p.password({ message: `Enter ${providerCfg.name} API key` });
     handleCancel(apiKey);
-    if (apiKey) config.llm.apiKey = apiKey as string;
+    if (apiKey) {
+      config.llm.apiKey = apiKey as string;
+    }
   }
 
   config.llm.modelId = providerCfg.defaultModel;
-  if (!config.models) config.models = { providers: {} };
+  if (!config.models) {
+    config.models = { providers: {} };
+  }
   const pk = newProvider as string;
-  if (!config.models.providers[pk]) config.models.providers[pk] = { models: [] };
-  if (config.llm.apiKey) config.models.providers[pk].apiKey = config.llm.apiKey;
-  if (config.llm.baseUrl) config.models.providers[pk].baseUrl = config.llm.baseUrl;
+  if (!config.models.providers[pk]) {
+    config.models.providers[pk] = { models: [] };
+  }
+  if (config.llm.apiKey) {
+    config.models.providers[pk].apiKey = config.llm.apiKey;
+  }
+  if (config.llm.baseUrl) {
+    config.models.providers[pk].baseUrl = config.llm.baseUrl;
+  }
   const modelName = config.llm.modelId || providerCfg.defaultModel;
   if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
     config.models.providers[pk].models.push({ name: modelName, model: modelName });
   }
-  if (!config.orchestrator) config.orchestrator = {};
+  if (!config.orchestrator) {
+    config.orchestrator = {};
+  }
   config.orchestrator.pha = `${pk}/${modelName}`;
   p.log.success(`Provider: ${providerCfg.name}, Model: ${config.llm.modelId}`);
 }
 
 async function editModel(config: PHAConfig): Promise<void> {
   const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
-  const defaultModel = providerCfg?.defaultModel || "";
+  const defaultModel = providerCfg?.defaultModel || '';
   const newModel = await p.text({
-    message: "Model ID",
+    message: 'Model ID',
     placeholder: defaultModel,
     initialValue: config.llm.modelId || defaultModel,
   });
@@ -411,7 +430,9 @@ async function editModel(config: PHAConfig): Promise<void> {
     if (!config.models.providers[pk].models.find((m) => m.name === modelName)) {
       config.models.providers[pk].models.push({ name: modelName, model: modelName });
     }
-    if (!config.orchestrator) config.orchestrator = {};
+    if (!config.orchestrator) {
+      config.orchestrator = {};
+    }
     config.orchestrator.pha = `${pk}/${modelName}`;
   }
   p.log.success(`Model: ${config.llm.modelId}`);
@@ -420,7 +441,7 @@ async function editModel(config: PHAConfig): Promise<void> {
 async function editApiKey(config: PHAConfig): Promise<void> {
   const providerCfg = PROVIDER_CONFIGS[config.llm.provider as LLMProvider];
   if (KEY_URLS[config.llm.provider]) {
-    p.note(`Get your API key from:\n${KEY_URLS[config.llm.provider]}`, "API Key");
+    p.note(`Get your API key from:\n${KEY_URLS[config.llm.provider]}`, 'API Key');
   }
   const apiKey = await p.password({
     message: `Enter ${providerCfg?.name || config.llm.provider} API key`,
@@ -429,18 +450,22 @@ async function editApiKey(config: PHAConfig): Promise<void> {
   if (apiKey) {
     config.llm.apiKey = apiKey as string;
     const pk = config.llm.provider;
-    if (config.models?.providers?.[pk]) config.models.providers[pk].apiKey = apiKey as string;
-    p.log.success("API key updated");
+    if (config.models?.providers?.[pk]) {
+      config.models.providers[pk].apiKey = apiKey as string;
+    }
+    p.log.success('API key updated');
   }
 }
 
 async function editPort(config: PHAConfig): Promise<void> {
   const portStr = await p.text({
-    message: "Gateway port",
+    message: 'Gateway port',
     initialValue: String(config.gateway.port),
     validate: (value) => {
-      const num = parseInt(value || "", 10);
-      if (isNaN(num) || num < 1 || num > 65535) return "Please enter a valid port number (1-65535)";
+      const num = parseInt(value || '', 10);
+      if (isNaN(num) || num < 1 || num > 65535) {
+        return 'Please enter a valid port number (1-65535)';
+      }
       return undefined;
     },
   });
@@ -451,20 +476,22 @@ async function editPort(config: PHAConfig): Promise<void> {
 
 async function editDataSource(config: PHAConfig): Promise<void> {
   const newSource = await p.select({
-    message: "Select health data source",
+    message: 'Select health data source',
     options: [
-      { value: "mock", label: "Mock Data", hint: "For development/testing" },
-      { value: "huawei", label: "Huawei Health Kit", hint: "HarmonyOS/Android" },
-      { value: "apple", label: "Apple HealthKit", hint: "iOS/macOS (not implemented)" },
+      { value: 'mock', label: 'Mock Data', hint: 'For development/testing' },
+      { value: 'huawei', label: 'Huawei Health Kit', hint: 'HarmonyOS/Android' },
+      { value: 'apple', label: 'Apple HealthKit', hint: 'iOS/macOS (not implemented)' },
     ],
     initialValue: config.dataSources.type,
   });
   handleCancel(newSource);
-  if (newSource === "huawei") {
+  if (newSource === 'huawei') {
     const success = await setupHuaweiHealth(config);
-    if (success) config.dataSources.type = "huawei";
+    if (success) {
+      config.dataSources.type = 'huawei';
+    }
   } else {
-    config.dataSources.type = newSource as "mock" | "huawei" | "apple";
+    config.dataSources.type = newSource as 'mock' | 'huawei' | 'apple';
   }
   p.log.success(`Data source: ${config.dataSources.type}`);
 }
@@ -483,21 +510,26 @@ const editHandlers: Record<string, (config: PHAConfig) => Promise<void>> = {
  */
 async function handleEdit(choice: string, config: PHAConfig): Promise<void> {
   const handler = editHandlers[choice];
-  if (handler) await handler(config);
+  if (handler) {
+    await handler(config);
+  }
 }
 
 /** Wizard Step 1: select LLM provider, API key, model */
-async function wizardLLMProvider(
-  config: PHAConfig
-): Promise<(typeof PROVIDER_CONFIGS)[LLMProvider]> {
-  p.log.step("Step 1/4: LLM Provider");
+async function wizardLLMProvider(config: PHAConfig): Promise<(typeof PROVIDER_CONFIGS)[LLMProvider]> {
+  p.log.step('Step 1/4: LLM Provider');
 
   const detectedProviders: string[] = [];
   for (const cfg of Object.values(PROVIDER_CONFIGS)) {
-    if (process.env[cfg.envVar]) detectedProviders.push(`${c.green("\u2713")} Found ${cfg.envVar}`);
+    if (process.env[cfg.envVar]) {
+      detectedProviders.push(`${c.green('\u2713')} Found ${cfg.envVar}`);
+    }
   }
-  if (detectedProviders.length > 0) p.log.info(detectedProviders.join("\n"));
-  else p.log.warn("No API keys found in environment");
+  if (detectedProviders.length > 0) {
+    p.log.info(detectedProviders.join('\n'));
+  } else {
+    p.log.warn('No API keys found in environment');
+  }
 
   const providerOptions = Object.entries(PROVIDER_CONFIGS).map(([key, cfg]) => ({
     value: key,
@@ -505,7 +537,7 @@ async function wizardLLMProvider(
     hint: cfg.hint,
   }));
   const selectedProvider = await p.select({
-    message: "Select LLM provider",
+    message: 'Select LLM provider',
     options: providerOptions,
   });
   handleCancel(selectedProvider);
@@ -520,22 +552,29 @@ async function wizardLLMProvider(
       initialValue: true,
     });
     handleCancel(useExisting);
-    if (!useExisting) apiKey = undefined;
+    if (!useExisting) {
+      apiKey = undefined;
+    }
   }
   if (!apiKey) {
-    if (KEY_URLS[selectedProvider as string])
-      p.note(`Get your API key from:\n${KEY_URLS[selectedProvider as string]}`, "API Key");
+    if (KEY_URLS[selectedProvider as string]) {
+      p.note(`Get your API key from:\n${KEY_URLS[selectedProvider as string]}`, 'API Key');
+    }
     const newKey = await p.password({ message: `Enter ${providerCfg.name} API key` });
     handleCancel(newKey);
-    if (newKey) config.llm.apiKey = newKey as string;
+    if (newKey) {
+      config.llm.apiKey = newKey as string;
+    }
   } else {
     config.llm.apiKey = apiKey;
   }
 
-  if (providerCfg.baseUrl) config.llm.baseUrl = providerCfg.baseUrl;
+  if (providerCfg.baseUrl) {
+    config.llm.baseUrl = providerCfg.baseUrl;
+  }
 
   const model = await p.text({
-    message: "Model ID",
+    message: 'Model ID',
     placeholder: providerCfg.defaultModel,
     initialValue: providerCfg.defaultModel,
   });
@@ -547,22 +586,20 @@ async function wizardLLMProvider(
 
 /** Wizard Step 2: gateway port and auto-start */
 async function wizardGateway(config: PHAConfig): Promise<void> {
-  p.log.step("Step 2/4: Gateway");
+  p.log.step('Step 2/4: Gateway');
   const port = await p.text({
-    message: "Gateway port",
-    initialValue: "8000",
+    message: 'Gateway port',
+    initialValue: '8000',
     validate: (value) => {
-      const num = parseInt(value || "", 10);
-      return isNaN(num) || num < 1 || num > 65535
-        ? "Please enter a valid port number (1-65535)"
-        : undefined;
+      const num = parseInt(value || '', 10);
+      return isNaN(num) || num < 1 || num > 65535 ? 'Please enter a valid port number (1-65535)' : undefined;
     },
   });
   handleCancel(port);
   config.gateway.port = parseInt(port as string, 10);
 
   const autoStart = await p.confirm({
-    message: "Auto-start gateway on boot?",
+    message: 'Auto-start gateway on boot?',
     initialValue: false,
   });
   handleCancel(autoStart);
@@ -571,53 +608,51 @@ async function wizardGateway(config: PHAConfig): Promise<void> {
 
 /** Wizard Step 3: health data source */
 async function wizardHealthData(config: PHAConfig): Promise<void> {
-  p.log.step("Step 3/4: Health Data");
+  p.log.step('Step 3/4: Health Data');
   const dataSource = await p.select({
-    message: "Select health data source",
+    message: 'Select health data source',
     options: [
-      { value: "mock", label: "Mock Data", hint: "For development/testing" },
-      { value: "huawei", label: "Huawei Health Kit", hint: "HarmonyOS/Android" },
-      { value: "apple", label: "Apple HealthKit", hint: "iOS/macOS (not implemented)" },
+      { value: 'mock', label: 'Mock Data', hint: 'For development/testing' },
+      { value: 'huawei', label: 'Huawei Health Kit', hint: 'HarmonyOS/Android' },
+      { value: 'apple', label: 'Apple HealthKit', hint: 'iOS/macOS (not implemented)' },
     ],
   });
   handleCancel(dataSource);
-  if (dataSource === "huawei") {
-    if (await setupHuaweiHealth(config)) config.dataSources.type = "huawei";
+  if (dataSource === 'huawei') {
+    if (await setupHuaweiHealth(config)) {
+      config.dataSources.type = 'huawei';
+    }
   } else {
-    config.dataSources.type = dataSource as "mock" | "huawei" | "apple";
+    config.dataSources.type = dataSource as 'mock' | 'huawei' | 'apple';
   }
 }
 
 /** Wizard Step 4: embedding/vector search */
 async function wizardEmbedding(config: PHAConfig): Promise<void> {
-  p.log.step("Step 4/4: Memory & Vector Search");
-  if (config.llm.provider === "openrouter") {
+  p.log.step('Step 4/4: Memory & Vector Search');
+  if (config.llm.provider === 'openrouter') {
     const enableEmbedding = await p.confirm({
-      message: "Enable vector search for memory? (uses OpenRouter embeddings)",
+      message: 'Enable vector search for memory? (uses OpenRouter embeddings)',
       initialValue: true,
     });
     handleCancel(enableEmbedding);
-    config.embedding = enableEmbedding
-      ? { enabled: true, model: "openai/text-embedding-3-small" }
-      : { enabled: false };
-    if (enableEmbedding) p.log.success("Vector search enabled (text-embedding-3-small)");
+    config.embedding = enableEmbedding ? { enabled: true, model: 'openai/text-embedding-3-small' } : { enabled: false };
+    if (enableEmbedding) {
+      p.log.success('Vector search enabled (text-embedding-3-small)');
+    }
   } else {
     p.note(
-      [
-        "Vector search requires OpenRouter API for embeddings.",
-        "You can enable it later via 'pha onboard'.",
-      ].join("\n"),
-      "Vector Search"
+      ['Vector search requires OpenRouter API for embeddings.', "You can enable it later via 'pha onboard'."].join(
+        '\n'
+      ),
+      'Vector Search'
     );
     config.embedding = { enabled: false };
   }
 }
 
 /** Populate unified model repository from wizard selections */
-function populateModelRepository(
-  config: PHAConfig,
-  providerCfg: (typeof PROVIDER_CONFIGS)[LLMProvider]
-): void {
+function populateModelRepository(config: PHAConfig, providerCfg: (typeof PROVIDER_CONFIGS)[LLMProvider]): void {
   const providerKey = config.llm.provider;
   const modelEntry = {
     name: config.llm.modelId || providerCfg.defaultModel,
@@ -626,11 +661,14 @@ function populateModelRepository(
   const providerModels = [modelEntry];
   if (config.embedding?.enabled && config.embedding.model) {
     const embModelId = config.embedding.model;
-    const embParts = embModelId.split("/");
+    const embParts = embModelId.split('/');
     const embName = embParts[embParts.length - 1];
-    if (!providerModels.find((m) => m.name === embName))
+    if (!providerModels.find((m) => m.name === embName)) {
       providerModels.push({ name: embName, model: embModelId });
-    if (!config.orchestrator) config.orchestrator = {};
+    }
+    if (!config.orchestrator) {
+      config.orchestrator = {};
+    }
     config.orchestrator.embedding = `${providerKey}/${embName}`;
   }
   config.models = {
@@ -642,7 +680,9 @@ function populateModelRepository(
       },
     },
   };
-  if (!config.orchestrator) config.orchestrator = {};
+  if (!config.orchestrator) {
+    config.orchestrator = {};
+  }
   config.orchestrator.pha = `${providerKey}/${modelEntry.name}`;
 }
 
@@ -653,13 +693,13 @@ async function runFullWizard(): Promise<void> {
   ensureConfigDir();
 
   const config: PHAConfig = {
-    gateway: { host: "0.0.0.0", port: 8000, autoStart: false },
-    llm: { provider: "anthropic" },
-    dataSources: { type: "mock" },
-    tui: { theme: "dark", showToolCalls: true },
+    gateway: { host: '0.0.0.0', port: 8000, autoStart: false },
+    llm: { provider: 'anthropic' },
+    dataSources: { type: 'mock' },
+    tui: { theme: 'dark', showToolCalls: true },
   };
 
-  p.log.info("User ID will be set after Huawei OAuth authorization");
+  p.log.info('User ID will be set after Huawei OAuth authorization');
 
   const providerCfg = await wizardLLMProvider(config);
   await wizardGateway(config);
@@ -675,13 +715,13 @@ async function runFullWizard(): Promise<void> {
       `Model: ${config.llm.modelId}`,
       `Gateway: http://localhost:${config.gateway.port}`,
       `Data Source: ${config.dataSources.type}`,
-      `Vector Search: ${config.embedding?.enabled ? config.embedding.model : "disabled"}`,
+      `Vector Search: ${config.embedding?.enabled ? config.embedding.model : 'disabled'}`,
       `Config: ${getConfigPath()}`,
-    ].join("\n"),
-    "Configuration saved"
+    ].join('\n'),
+    'Configuration saved'
   );
 
-  p.log.info(`Tip: Run ${c.cyan("pha state init --remote <url>")} to sync .pha/ to a private repo`);
-  const nextCmd = config.dataSources.type === "huawei" ? `${c.cyan("pha auth")} then ` : "";
-  p.outro(`Next: Run ${nextCmd}${c.cyan("pha start")} or ${c.cyan("pha health")}`);
+  p.log.info(`Tip: Run ${c.cyan('pha state init --remote <url>')} to sync .pha/ to a private repo`);
+  const nextCmd = config.dataSources.type === 'huawei' ? `${c.cyan('pha auth')} then ` : '';
+  p.outro(`Next: Run ${nextCmd}${c.cyan('pha start')} or ${c.cyan('pha health')}`);
 }

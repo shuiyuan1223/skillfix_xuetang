@@ -13,13 +13,13 @@ import {
   statSync,
   unlinkSync,
   writeFileSync,
-} from "fs";
-import { join } from "path";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { UserMessage, AssistantMessage, ToolResultMessage } from "@mariozechner/pi-ai";
-import { getUserDir, ensureUserDir } from "./profile.js";
-import { getStateDir } from "../utils/config.js";
-import { createLogger } from "../utils/logger.js";
+} from 'fs';
+import { join } from 'path';
+import type { AgentMessage } from '@mariozechner/pi-agent-core';
+import type { UserMessage, AssistantMessage, ToolResultMessage } from '@mariozechner/pi-ai';
+import { getUserDir, ensureUserDir } from './profile.js';
+import { getStateDir } from '../utils/config.js';
+import { createLogger } from '../utils/logger.js';
 
 /**
  * Resolve a session path template by replacing {uid} placeholder.
@@ -32,7 +32,7 @@ export function resolveSessionPath(sessionPath: string, uid: string): string {
 
 export interface SessionEntry {
   timestamp: number;
-  role: "user" | "assistant" | "tool";
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   toolName?: string;
 }
@@ -52,31 +52,33 @@ export function serializeMessages(messages: AgentMessage[]): SessionEntry[] {
   const entries: SessionEntry[] = [];
 
   for (const msg of messages) {
-    if (!("role" in msg)) continue;
+    if (!('role' in msg)) {
+      continue;
+    }
 
-    if (msg.role === "user") {
+    if (msg.role === 'user') {
       const userMsg = msg as UserMessage;
       const text =
-        typeof userMsg.content === "string"
+        typeof userMsg.content === 'string'
           ? userMsg.content
           : userMsg.content
-              .filter((b) => b.type === "text")
+              .filter((b) => b.type === 'text')
               .map((b) => (b as { text: string }).text)
-              .join("\n");
+              .join('\n');
       if (text) {
         entries.push({
           timestamp: userMsg.timestamp || Date.now(),
-          role: "user",
+          role: 'user',
           content: text,
         });
       }
-    } else if (msg.role === "assistant") {
+    } else if (msg.role === 'assistant') {
       const assistantMsg = msg as AssistantMessage;
       const parts: string[] = [];
       for (const block of assistantMsg.content) {
-        if (block.type === "text") {
+        if (block.type === 'text') {
           parts.push(block.text);
-        } else if (block.type === "toolCall") {
+        } else if (block.type === 'toolCall') {
           parts.push(`[Tool Call: ${block.name}(${JSON.stringify(block.arguments)})]`);
         }
         // Skip thinking blocks — not useful for transcript
@@ -84,20 +86,20 @@ export function serializeMessages(messages: AgentMessage[]): SessionEntry[] {
       if (parts.length > 0) {
         entries.push({
           timestamp: assistantMsg.timestamp || Date.now(),
-          role: "assistant",
-          content: parts.join("\n"),
+          role: 'assistant',
+          content: parts.join('\n'),
         });
       }
-    } else if (msg.role === "toolResult") {
+    } else if (msg.role === 'toolResult') {
       const toolMsg = msg as ToolResultMessage;
       const text = toolMsg.content
-        .filter((b) => b.type === "text")
+        .filter((b) => b.type === 'text')
         .map((b) => (b as { text: string }).text)
-        .join("\n");
+        .join('\n');
       entries.push({
         timestamp: toolMsg.timestamp || Date.now(),
-        role: "tool",
-        content: text || (toolMsg.isError ? "[error]" : "[ok]"),
+        role: 'tool',
+        content: text || (toolMsg.isError ? '[error]' : '[ok]'),
         toolName: toolMsg.toolName,
       });
     }
@@ -122,25 +124,25 @@ const MAX_INJECTED_MESSAGES = 50;
 export function sessionToAgentMessages(
   entries: Array<{ role: string; content: string; timestamp?: number }>
 ): AgentMessage[] {
-  const filtered = entries.filter((e) => e.role === "user" || e.role === "assistant");
+  const filtered = entries.filter((e) => e.role === 'user' || e.role === 'assistant');
   const recent = filtered.slice(-MAX_INJECTED_MESSAGES);
 
   return recent.map((e) => {
     const ts = e.timestamp || Date.now();
-    if (e.role === "user") {
+    if (e.role === 'user') {
       return {
-        role: "user" as const,
+        role: 'user' as const,
         content: e.content,
         timestamp: ts,
       };
     }
     // Assistant: create a minimal AssistantMessage with required fields
     return {
-      role: "assistant" as const,
-      content: [{ type: "text" as const, text: e.content }],
-      api: "openai-completions" as const,
-      provider: "unknown",
-      model: "unknown",
+      role: 'assistant' as const,
+      content: [{ type: 'text' as const, text: e.content }],
+      api: 'openai-completions' as const,
+      provider: 'unknown',
+      model: 'unknown',
       usage: {
         input: 0,
         output: 0,
@@ -149,7 +151,7 @@ export function sessionToAgentMessages(
         totalTokens: 0,
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
       },
-      stopReason: "stop" as const,
+      stopReason: 'stop' as const,
       timestamp: ts,
     };
   });
@@ -159,7 +161,7 @@ export function sessionToAgentMessages(
  * Get the sessions directory for a user
  */
 function getSessionsDir(uuid: string): string {
-  return join(getUserDir(uuid), "sessions");
+  return join(getUserDir(uuid), 'sessions');
 }
 
 /**
@@ -167,12 +169,7 @@ function getSessionsDir(uuid: string): string {
  * Creates the file if it doesn't exist. Append-only JSONL format.
  * @param sessionDir Optional custom session directory (overrides default user sessions dir)
  */
-export function appendToSession(
-  uuid: string,
-  sessionId: string,
-  entries: SessionEntry[],
-  sessionDir?: string
-): void {
+export function appendToSession(uuid: string, sessionId: string, entries: SessionEntry[], sessionDir?: string): void {
   ensureUserDir(uuid);
   const sessionsDir = sessionDir || getSessionsDir(uuid);
   if (!existsSync(sessionsDir)) {
@@ -180,7 +177,7 @@ export function appendToSession(
   }
   const filePath = join(sessionsDir, `${sessionId}.jsonl`);
 
-  const lines = `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`;
+  const lines = `${entries.map((e) => JSON.stringify(e)).join('\n')}\n`;
   appendFileSync(filePath, lines);
 }
 
@@ -195,18 +192,14 @@ export function touchSession(uuid: string, sessionId: string, sessionDir?: strin
   if (!existsSync(sessionsDir)) {
     mkdirSync(sessionsDir, { recursive: true });
   }
-  writeFileSync(join(sessionsDir, `${sessionId}.jsonl`), "");
+  writeFileSync(join(sessionsDir, `${sessionId}.jsonl`), '');
 }
 
 /**
  * Save AgentMessage[] directly to a session transcript.
  * Convenience wrapper: serializes messages then appends.
  */
-export function saveSessionTranscript(
-  uuid: string,
-  sessionId: string,
-  messages: AgentMessage[]
-): void {
+export function saveSessionTranscript(uuid: string, sessionId: string, messages: AgentMessage[]): void {
   const entries = serializeMessages(messages);
   if (entries.length > 0) {
     appendToSession(uuid, sessionId, entries);
@@ -218,15 +211,17 @@ export function saveSessionTranscript(
  */
 export function listSessions(uuid: string, options?: { limit?: number }): SessionInfo[] {
   const sessionsDir = getSessionsDir(uuid);
-  if (!existsSync(sessionsDir)) return [];
+  if (!existsSync(sessionsDir)) {
+    return [];
+  }
 
   const files = readdirSync(sessionsDir)
-    .filter((f) => f.endsWith(".jsonl"))
+    .filter((f) => f.endsWith('.jsonl'))
     .map((f) => {
       const filePath = join(sessionsDir, f);
       const stat = statSync(filePath);
       return {
-        sessionId: f.replace(".jsonl", ""),
+        sessionId: f.replace('.jsonl', ''),
         path: filePath,
         createdAt: stat.mtimeMs,
         sizeBytes: stat.size,
@@ -246,12 +241,16 @@ export function listSessions(uuid: string, options?: { limit?: number }): Sessio
  */
 export function loadSession(uuid: string, sessionId: string): SessionEntry[] {
   const filePath = join(getSessionsDir(uuid), `${sessionId}.jsonl`);
-  if (!existsSync(filePath)) return [];
+  if (!existsSync(filePath)) {
+    return [];
+  }
 
-  const content = readFileSync(filePath, "utf-8");
+  const content = readFileSync(filePath, 'utf-8');
   const entries: SessionEntry[] = [];
-  for (const line of content.split("\n")) {
-    if (!line.trim()) continue;
+  for (const line of content.split('\n')) {
+    if (!line.trim()) {
+      continue;
+    }
     try {
       entries.push(JSON.parse(line));
     } catch {
@@ -271,14 +270,14 @@ export function loadLatestSession(
   uuid: string,
   options?: { prefix?: string; sessionDir?: string }
 ): { sessionId: string; entries: SessionEntry[] } | null {
-  const sessions = options?.sessionDir
-    ? listSessionsFromDir(options.sessionDir)
-    : listSessions(uuid);
+  const sessions = options?.sessionDir ? listSessionsFromDir(options.sessionDir) : listSessions(uuid);
   const prefix = options?.prefix;
   const match = prefix
     ? sessions.find((s) => s.sessionId.startsWith(prefix))
-    : sessions.find((s) => !s.sessionId.startsWith("sa-"));
-  if (!match) return null;
+    : sessions.find((s) => !s.sessionId.startsWith('sa-'));
+  if (!match) {
+    return null;
+  }
 
   const entries = loadSessionFromPath(match.path);
   return entries.length > 0 ? { sessionId: match.sessionId, entries } : null;
@@ -288,14 +287,16 @@ export function loadLatestSession(
  * List sessions from a custom directory path.
  */
 function listSessionsFromDir(dir: string): SessionInfo[] {
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir)) {
+    return [];
+  }
   return readdirSync(dir)
-    .filter((f) => f.endsWith(".jsonl"))
+    .filter((f) => f.endsWith('.jsonl'))
     .map((f) => {
       const filePath = join(dir, f);
       const stat = statSync(filePath);
       return {
-        sessionId: f.replace(".jsonl", ""),
+        sessionId: f.replace('.jsonl', ''),
         path: filePath,
         createdAt: stat.mtimeMs,
         sizeBytes: stat.size,
@@ -308,11 +309,15 @@ function listSessionsFromDir(dir: string): SessionInfo[] {
  * Load session entries from a file path.
  */
 function loadSessionFromPath(filePath: string): SessionEntry[] {
-  if (!existsSync(filePath)) return [];
-  const content = readFileSync(filePath, "utf-8");
+  if (!existsSync(filePath)) {
+    return [];
+  }
+  const content = readFileSync(filePath, 'utf-8');
   const entries: SessionEntry[] = [];
-  for (const line of content.split("\n")) {
-    if (!line.trim()) continue;
+  for (const line of content.split('\n')) {
+    if (!line.trim()) {
+      continue;
+    }
     try {
       entries.push(JSON.parse(line));
     } catch {
@@ -331,14 +336,14 @@ function loadSessionFromPath(filePath: string): SessionEntry[] {
  * Preserves the latest session file per agent per user regardless of age.
  */
 export function cleanupOldSessions(retentionDays = 30): void {
-  const usersDir = join(getStateDir(), "users");
+  const usersDir = join(getStateDir(), 'users');
   if (!existsSync(usersDir)) return;
 
   const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
   let deleted = 0;
 
   for (const userId of readdirSync(usersDir)) {
-    const sessionsDir = join(usersDir, userId, "sessions");
+    const sessionsDir = join(usersDir, userId, 'sessions');
     if (!existsSync(sessionsDir)) continue;
 
     // Group files by agent subdirectory (pha, pha4old, sa, …)
@@ -351,7 +356,7 @@ export function cleanupOldSessions(retentionDays = 30): void {
       }
 
       const files = readdirSync(agentDir)
-        .filter((f) => f.endsWith(".jsonl"))
+        .filter((f) => f.endsWith('.jsonl'))
         .map((f) => ({ name: f, path: join(agentDir, f), mtime: 0 }));
 
       for (const f of files) {
@@ -379,7 +384,7 @@ export function cleanupOldSessions(retentionDays = 30): void {
   }
 
   if (deleted > 0) {
-    createLogger("Memory").info("Cleaned up old session files", { deleted, retentionDays });
+    createLogger('Memory').info('Cleaned up old session files', { deleted, retentionDays });
   }
 }
 
@@ -388,21 +393,21 @@ export function cleanupOldSessions(retentionDays = 30): void {
  * MEMORY.md itself is never deleted — it contains consolidated long-term facts.
  */
 export function cleanupOldMemoryLogs(retentionDays = 90): void {
-  const usersDir = join(getStateDir(), "users");
+  const usersDir = join(getStateDir(), 'users');
   if (!existsSync(usersDir)) return;
 
   const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
   let deleted = 0;
 
   for (const userId of readdirSync(usersDir)) {
-    const memoryDir = join(usersDir, userId, "memory");
+    const memoryDir = join(usersDir, userId, 'memory');
     if (!existsSync(memoryDir)) continue;
 
     for (const file of readdirSync(memoryDir)) {
       if (!/^\d{4}-\d{2}-\d{2}\.md$/.test(file)) continue; // daily logs only
       const filePath = join(memoryDir, file);
       try {
-        const dateMs = new Date(file.replace(".md", "")).getTime();
+        const dateMs = new Date(file.replace('.md', '')).getTime();
         if (!isNaN(dateMs) && dateMs < cutoff) {
           unlinkSync(filePath);
           deleted++;
@@ -414,6 +419,6 @@ export function cleanupOldMemoryLogs(retentionDays = 90): void {
   }
 
   if (deleted > 0) {
-    createLogger("Memory").info("Cleaned up old memory logs", { deleted, retentionDays });
+    createLogger('Memory').info('Cleaned up old memory logs', { deleted, retentionDays });
   }
 }

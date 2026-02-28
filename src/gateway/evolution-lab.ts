@@ -5,9 +5,9 @@
  * Dashboard/GUI-centric. Agent mode moved to standalone System Agent page.
  */
 
-import { A2UIGenerator, type A2UIMessage } from "./a2ui.js";
-import { t } from "../locales/index.js";
-import { loadSharpRubrics } from "../evolution/benchmark-seed.js";
+import { A2UIGenerator, type A2UIMessage } from './a2ui.js';
+import { t } from '../locales/index.js';
+import { loadSharpRubrics } from '../evolution/benchmark-seed.js';
 
 // ============================================================================
 // Types
@@ -17,19 +17,19 @@ export interface PipelineStep {
   id: string;
   label: string;
   icon: string;
-  status: "pending" | "active" | "completed" | "failed" | "skipped";
+  status: 'pending' | 'active' | 'completed' | 'failed' | 'skipped';
 }
 
 interface TimelineEvent {
   id: string;
-  type: "branch" | "commit" | "benchmark" | "merge" | "revert" | "tag";
+  type: 'branch' | 'commit' | 'benchmark' | 'merge' | 'revert' | 'tag';
   label: string;
   description?: string;
   timestamp: number;
   branch?: string;
   hash?: string;
   score?: number;
-  status?: "success" | "failed" | "pending" | "active";
+  status?: 'success' | 'failed' | 'pending' | 'active';
   author?: string;
   filesChanged?: number;
   additions?: number;
@@ -40,7 +40,7 @@ interface TimelineEvent {
 interface SubComponentScore {
   name: string;
   score: number;
-  scoring: "binary" | "3-point";
+  scoring: 'binary' | '3-point';
 }
 
 interface CategoryScoreInfo {
@@ -63,12 +63,12 @@ interface BenchmarkRunInfo {
   duration_ms: number;
   modelId?: string;
   presetName?: string;
-  status?: "running" | "completed" | "failed";
+  status?: 'running' | 'completed' | 'failed';
 }
 
 interface ChangedFile {
   path: string;
-  status: "added" | "modified" | "deleted" | "renamed";
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
   additions?: number;
   deletions?: number;
 }
@@ -158,7 +158,7 @@ export interface ComparisonRun {
 }
 
 export interface EvolutionLabData {
-  activeTab: "overview" | "benchmark" | "versions" | "data" | "incidents";
+  activeTab: 'overview' | 'benchmark' | 'versions' | 'data' | 'incidents';
   // Overview
   stats?: EvaluationStats;
   latestCategoryScores?: CategoryScoreInfo[];
@@ -170,7 +170,7 @@ export interface EvolutionLabData {
   testCaseCount?: number;
   // Arena comparison
   selectedRunIds?: string[];
-  radarMode?: "categories" | "criteria";
+  radarMode?: 'categories' | 'criteria';
   comparisonRuns?: ComparisonRun[];
   // Benchmark
   testCases?: TestCaseInfo[];
@@ -191,7 +191,7 @@ export interface EvolutionLabData {
   changedFiles?: ChangedFile[];
   diffContent?: { before: string; after: string; path: string; unifiedDiff?: string };
   // Data
-  dataSubTab?: "traces" | "evaluations" | "suggestions";
+  dataSubTab?: 'traces' | 'evaluations' | 'suggestions';
   traces?: TraceInfo[];
   tracesPage?: number;
   tracesTotal?: number;
@@ -218,42 +218,42 @@ export interface EvolutionLabData {
 // Default pipeline steps
 export function getDefaultPipelineSteps(currentStep?: string): PipelineStep[] {
   const stepsConfig = [
-    { id: "benchmark", label: t("evolution.pipelineBenchmark"), icon: "test-tube" },
-    { id: "diagnose", label: t("evolution.pipelineDiagnose"), icon: "search" },
-    { id: "apply", label: t("evolution.pipelineApply"), icon: "zap" },
-    { id: "validate", label: t("evolution.pipelineValidate"), icon: "shield" },
+    { id: 'benchmark', label: t('evolution.pipelineBenchmark'), icon: 'test-tube' },
+    { id: 'diagnose', label: t('evolution.pipelineDiagnose'), icon: 'search' },
+    { id: 'apply', label: t('evolution.pipelineApply'), icon: 'zap' },
+    { id: 'validate', label: t('evolution.pipelineValidate'), icon: 'shield' },
   ];
 
   let foundActive = false;
   return stepsConfig.map((s) => {
     if (foundActive) {
-      return { ...s, status: "pending" as const };
+      return { ...s, status: 'pending' as const };
     }
     if (s.id === currentStep) {
       foundActive = true;
-      return { ...s, status: "active" as const };
+      return { ...s, status: 'active' as const };
     }
     if (currentStep) {
-      return { ...s, status: "completed" as const };
+      return { ...s, status: 'completed' as const };
     }
-    return { ...s, status: "pending" as const };
+    return { ...s, status: 'pending' as const };
   });
 }
 
 // Category label mapping
 // SHARP category color mapping
 export const SHARP_CATEGORY_COLORS: Record<string, string> = {
-  safety: "#ff6b6b",
-  usefulness: "#4ecdc4",
-  accuracy: "#ffe66d",
-  relevance: "#95e1d3",
-  personalization: "#dda0dd",
+  safety: '#ff6b6b',
+  usefulness: '#4ecdc4',
+  accuracy: '#ffe66d',
+  relevance: '#95e1d3',
+  personalization: '#dda0dd',
   // Legacy category names → same color mapping
-  "safety-boundaries": "#ff6b6b",
-  "health-coaching": "#4ecdc4",
-  "health-data-analysis": "#ffe66d",
-  "communication-quality": "#95e1d3",
-  "personalization-memory": "#dda0dd",
+  'safety-boundaries': '#ff6b6b',
+  'health-coaching': '#4ecdc4',
+  'health-data-analysis': '#ffe66d',
+  'communication-quality': '#95e1d3',
+  'personalization-memory': '#dda0dd',
 };
 
 /**
@@ -261,22 +261,22 @@ export const SHARP_CATEGORY_COLORS: Record<string, string> = {
  * Used to normalize old benchmark data so the radar chart always shows 19 criteria.
  */
 const SHARP_LEGACY_NAME_MAP: Record<string, string> = {
-  "risk disclosure": "S1 Risk Disclosure",
-  "medical boundary": "S2 Medical Boundary",
-  "harmful content prevention": "S3 Harmful Content Prevention",
-  "capability scoping": "S4 Capability Scoping",
-  "comprehensiveness and professionalism": "U1 Comprehensiveness",
-  "actionability and clarity": "U3 Actionability",
-  "readability and structure": "U4 Expression Quality",
-  "empathy and encouragement": "U5 Empathy and Tone",
-  "factual & scientific accuracy": "A1 Scientific Factual Correctness",
-  "computational accuracy": "A2 Computational Accuracy",
-  "data source adherence": "A4 User Data Citation Accuracy",
-  "rule-based recommendations": "A3 Logical Consistency",
-  "topic relevance": "R1 Topic Focus",
-  "domain specialization": "R2 Domain Specialization",
-  "effective personalization": "P1 Personalization Quality",
-  "contextual audience awareness": "P2 Audience Identification",
+  'risk disclosure': 'S1 Risk Disclosure',
+  'medical boundary': 'S2 Medical Boundary',
+  'harmful content prevention': 'S3 Harmful Content Prevention',
+  'capability scoping': 'S4 Capability Scoping',
+  'comprehensiveness and professionalism': 'U1 Comprehensiveness',
+  'actionability and clarity': 'U3 Actionability',
+  'readability and structure': 'U4 Expression Quality',
+  'empathy and encouragement': 'U5 Empathy and Tone',
+  'factual & scientific accuracy': 'A1 Scientific Factual Correctness',
+  'computational accuracy': 'A2 Computational Accuracy',
+  'data source adherence': 'A4 User Data Citation Accuracy',
+  'rule-based recommendations': 'A3 Logical Consistency',
+  'topic relevance': 'R1 Topic Focus',
+  'domain specialization': 'R2 Domain Specialization',
+  'effective personalization': 'P1 Personalization Quality',
+  'contextual audience awareness': 'P2 Audience Identification',
 };
 
 /** Normalize sub-component name: map SHARP 2.0 legacy names to SHARP 3.0 canonical names */
@@ -300,18 +300,20 @@ function getCanonicalCriteriaOrder(): Array<{ category: string; name: string }> 
 }
 
 export const RUN_COLORS = [
-  "rgb(99, 102, 241)",
-  "rgb(236, 72, 153)",
-  "rgb(34, 211, 238)",
-  "rgb(245, 158, 11)",
-  "rgb(16, 185, 129)",
+  'rgb(99, 102, 241)',
+  'rgb(236, 72, 153)',
+  'rgb(34, 211, 238)',
+  'rgb(245, 158, 11)',
+  'rgb(16, 185, 129)',
 ];
 
 /** Consistent model display: always show modelId, prefix with presetName if available */
 function formatModelDisplay(presetName?: string, modelId?: string): string {
-  if (!modelId) return presetName || "-";
+  if (!modelId) {
+    return presetName || '-';
+  }
   // Extract short model name from full ID (e.g. "anthropic/claude-opus-4.6" → "claude-opus-4.6")
-  const shortModel = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
+  const shortModel = modelId.includes('/') ? modelId.split('/').pop()! : modelId;
   if (presetName && presetName !== shortModel && presetName !== modelId) {
     return `${presetName} (${shortModel})`;
   }
@@ -319,9 +321,13 @@ function formatModelDisplay(presetName?: string, modelId?: string): string {
 }
 
 function getScoreColor(score: number): string {
-  if (score >= 0.9) return "#4ade80";
-  if (score >= 0.7) return "#fbbf24";
-  return "#f87171";
+  if (score >= 0.9) {
+    return '#4ade80';
+  }
+  if (score >= 0.7) {
+    return '#fbbf24';
+  }
+  return '#f87171';
 }
 
 /**
@@ -331,13 +337,13 @@ function getScoreColor(score: number): string {
  */
 function buildMultiSeriesRadarData(
   comparisonRuns: ComparisonRun[],
-  mode: "categories" | "criteria"
+  mode: 'categories' | 'criteria'
 ): Array<{
   label: string;
   data: Array<{ label: string; value: number; maxValue: number }>;
   color: string;
 }> {
-  if (mode === "categories") {
+  if (mode === 'categories') {
     return comparisonRuns.map((run) => ({
       label: run.label,
       color: run.color,
@@ -351,7 +357,7 @@ function buildMultiSeriesRadarData(
   // criteria mode: use canonical 19 SHARP 3.0 sub-components as fixed axis
   const criteriaOrder = getCanonicalCriteriaOrder();
   if (criteriaOrder.length === 0) {
-    return buildMultiSeriesRadarData(comparisonRuns, "categories");
+    return buildMultiSeriesRadarData(comparisonRuns, 'categories');
   }
   return comparisonRuns.map((run) => {
     // Build normalized lookup: lowercased canonical name → score
@@ -383,25 +389,27 @@ function buildMultiSeriesRadarData(
  */
 export function buildRadarChartData(
   runs: ComparisonRun[],
-  mode: "categories" | "criteria"
+  mode: 'categories' | 'criteria'
 ): {
   data: Array<Record<string, unknown>>;
   series: Array<{ key: string; name: string; color: string }>;
 } {
   // Pre-load canonical criteria order once (avoids repeated file I/O inside the loop)
-  const canonicalOrder = mode === "criteria" ? getCanonicalCriteriaOrder() : [];
+  const canonicalOrder = mode === 'criteria' ? getCanonicalCriteriaOrder() : [];
 
   // Build subjects (axis labels) and per-run scores
   const runDataPoints = runs.map((run) => {
     let dataPoints: Array<{ name: string; score: number }>;
-    if (mode === "criteria") {
+    if (mode === 'criteria') {
       // Build a map from lowercased normalized name → scores for this run
       const criteriaMap = new Map<string, number[]>();
       for (const cs of run.categoryScores) {
         for (const sub of cs.subComponents || []) {
           const score = sub.score <= 1 ? sub.score : sub.score / 100;
           const key = normalizeSubComponentName(sub.name).toLowerCase();
-          if (!criteriaMap.has(key)) criteriaMap.set(key, []);
+          if (!criteriaMap.has(key)) {
+            criteriaMap.set(key, []);
+          }
           criteriaMap.get(key)!.push(score);
         }
       }
@@ -454,35 +462,35 @@ export function buildRadarChartData(
 
 export function getCategoryLabel(category: string): string {
   const labelMap: Record<string, string> = {
-    "health-data-analysis": "Health Data Analysis",
-    "health-coaching": "Health Coaching",
-    "safety-boundaries": "Safety & Boundaries",
-    "personalization-memory": "Personalization & Memory",
-    "communication-quality": "Communication Quality",
+    'health-data-analysis': 'Health Data Analysis',
+    'health-coaching': 'Health Coaching',
+    'safety-boundaries': 'Safety & Boundaries',
+    'personalization-memory': 'Personalization & Memory',
+    'communication-quality': 'Communication Quality',
     // SHARP categories
-    safety: "Safety",
-    usefulness: "Usefulness",
-    accuracy: "Accuracy",
-    relevance: "Relevance",
-    personalization: "Personalization",
+    safety: 'Safety',
+    usefulness: 'Usefulness',
+    accuracy: 'Accuracy',
+    relevance: 'Relevance',
+    personalization: 'Personalization',
   };
   return labelMap[category] || category;
 }
 
 export function getCategoryIcon(category: string): string {
   const iconMap: Record<string, string> = {
-    safety: "shield",
-    usefulness: "lightbulb",
-    accuracy: "target",
-    relevance: "link",
-    personalization: "user",
-    "safety-boundaries": "shield",
-    "health-coaching": "lightbulb",
-    "health-data-analysis": "target",
-    "communication-quality": "link",
-    "personalization-memory": "user",
+    safety: 'shield',
+    usefulness: 'lightbulb',
+    accuracy: 'target',
+    relevance: 'link',
+    personalization: 'user',
+    'safety-boundaries': 'shield',
+    'health-coaching': 'lightbulb',
+    'health-data-analysis': 'target',
+    'communication-quality': 'link',
+    'personalization-memory': 'user',
   };
-  return iconMap[category] || "star";
+  return iconMap[category] || 'star';
 }
 
 // ============================================================================
@@ -490,27 +498,27 @@ export function getCategoryIcon(category: string): string {
 // ============================================================================
 
 export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
-  const ui = new A2UIGenerator("main");
+  const ui = new A2UIGenerator('main');
 
   // ---- Header ----
-  const titleId = ui.text(t("evolution.lab"), "h1");
-  const subtitleId = ui.text(t("evolution.labSubtitle"), "caption");
+  const titleId = ui.text(t('evolution.lab'), 'h1');
+  const subtitleId = ui.text(t('evolution.labSubtitle'), 'caption');
   const headerChildren = [titleId, subtitleId];
 
   if (data.activeVersionBranch) {
-    const badgeId = ui.badge(data.activeVersionBranch, { variant: "info" });
+    const badgeId = ui.badge(data.activeVersionBranch, { variant: 'info' });
     headerChildren.push(badgeId);
   }
 
-  const header = ui.row(headerChildren, { gap: 12, align: "center" });
+  const header = ui.row(headerChildren, { gap: 12, align: 'center' });
 
   // ---- Loading skeleton ----
   if (data.loading) {
-    const s1 = ui.skeleton({ variant: "rectangular", height: 80 });
-    const s2 = ui.skeleton({ variant: "rectangular", height: 80 });
-    const s3 = ui.skeleton({ variant: "rectangular", height: 80 });
+    const s1 = ui.skeleton({ variant: 'rectangular', height: 80 });
+    const s2 = ui.skeleton({ variant: 'rectangular', height: 80 });
+    const s3 = ui.skeleton({ variant: 'rectangular', height: 80 });
     const statsRow = ui.grid([s1, s2, s3], { columns: 3, gap: 16 });
-    const s4 = ui.skeleton({ variant: "rectangular", height: 250 });
+    const s4 = ui.skeleton({ variant: 'rectangular', height: 250 });
     const loadingContent = ui.column([statsRow, s4], { gap: 16, padding: 24 });
     const root = ui.column([header, loadingContent], { gap: 0, padding: 16 });
     return ui.build(root);
@@ -519,29 +527,29 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
   // ---- Tab Content ----
   const tabContentIds: Record<string, string> = {};
 
-  if (data.activeTab === "overview") {
+  if (data.activeTab === 'overview') {
     tabContentIds.overview = generateOverviewTab(ui, data);
   }
-  if (data.activeTab === "benchmark") {
+  if (data.activeTab === 'benchmark') {
     tabContentIds.benchmark = generateBenchmarkTab(ui, data);
   }
-  if (data.activeTab === "versions") {
+  if (data.activeTab === 'versions') {
     tabContentIds.versions = generateVersionsTab(ui, data);
   }
-  if (data.activeTab === "data") {
+  if (data.activeTab === 'data') {
     tabContentIds.data = generateDataTab(ui, data);
   }
-  if (data.activeTab === "incidents") {
+  if (data.activeTab === 'incidents') {
     tabContentIds.incidents = generateIncidentsTab(ui, data);
   }
   // ---- Tabs ----
   const tabs = ui.tabs(
     [
-      { id: "overview", label: t("evolution.tabOverview"), icon: "bar-chart" },
-      { id: "benchmark", label: t("evolution.tabBenchmark"), icon: "test-tube" },
-      { id: "versions", label: t("evolution.tabVersions"), icon: "git-branch" },
-      { id: "data", label: t("evolution.tabData"), icon: "file-text" },
-      { id: "incidents", label: t("evolution.tabIncidents"), icon: "alert-triangle" },
+      { id: 'overview', label: t('evolution.tabOverview'), icon: 'bar-chart' },
+      { id: 'benchmark', label: t('evolution.tabBenchmark'), icon: 'test-tube' },
+      { id: 'versions', label: t('evolution.tabVersions'), icon: 'git-branch' },
+      { id: 'data', label: t('evolution.tabData'), icon: 'file-text' },
+      { id: 'incidents', label: t('evolution.tabIncidents'), icon: 'alert-triangle' },
     ],
     data.activeTab,
     tabContentIds
@@ -551,7 +559,7 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
   const root = ui.column([header, content], {
     gap: 12,
     padding: 16,
-    className: "relative min-h-full",
+    className: 'relative min-h-full',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
 
@@ -568,15 +576,13 @@ export function generateEvolutionLab(data: EvolutionLabData): A2UIMessage[] {
  * - running   → "N|running"  (blue + pulse)
  * - failed    → "N|error"    (red)
  */
-function formatRunProgress(
-  r: BenchmarkRunInfo,
-  progressMap?: Record<string, ExternalProgressInfo>
-): string {
-  const status = r.status || (r.duration_ms && r.duration_ms > 0 ? "completed" : "running");
-  if (status === "completed") return "100|success";
-  if (status === "failed") {
-    const pct =
-      r.total_test_cases > 0 ? Math.round((r.passed_count / r.total_test_cases) * 100) : 0;
+function formatRunProgress(r: BenchmarkRunInfo, progressMap?: Record<string, ExternalProgressInfo>): string {
+  const status = r.status || (r.duration_ms && r.duration_ms > 0 ? 'completed' : 'running');
+  if (status === 'completed') {
+    return '100|success';
+  }
+  if (status === 'failed') {
+    const pct = r.total_test_cases > 0 ? Math.round((r.passed_count / r.total_test_cases) * 100) : 0;
     return `${pct}|error`;
   }
   // running — find matching progress entry from the map
@@ -606,29 +612,28 @@ function buildOverviewStatCards(ui: A2UIGenerator, data: EvolutionLabData): stri
     const displayScore = rawScore <= 1.0 ? rawScore : rawScore / 100;
     statCards.push(
       ui.scoreGauge(displayScore, {
-        label: t("evolution.latestRun"),
+        label: t('evolution.latestRun'),
         max: 1.0,
-        size: "lg",
+        size: 'lg',
       })
     );
   } else if (data.stats && data.stats.totalCount > 0) {
-    const avgNorm =
-      data.stats.averageScore <= 1.0 ? data.stats.averageScore : data.stats.averageScore / 100;
+    const avgNorm = data.stats.averageScore <= 1.0 ? data.stats.averageScore : data.stats.averageScore / 100;
     statCards.push(
       ui.scoreGauge(avgNorm, {
-        label: t("evolution.avgScore"),
+        label: t('evolution.avgScore'),
         max: 1.0,
-        size: "lg",
+        size: 'lg',
       })
     );
   } else {
     statCards.push(
       ui.statCard({
-        title: t("evolution.score"),
-        value: "-",
-        subtitle: t("evolution.noBenchmarkRuns"),
-        icon: "star",
-        color: "#94a3b8",
+        title: t('evolution.score'),
+        value: '-',
+        subtitle: t('evolution.noBenchmarkRuns'),
+        icon: 'star',
+        color: '#94a3b8',
       })
     );
   }
@@ -637,36 +642,36 @@ function buildOverviewStatCards(ui: A2UIGenerator, data: EvolutionLabData): stri
     const latest = data.benchmarkRuns[0];
     statCards.push(
       ui.statCard({
-        title: t("evolution.testCases"),
+        title: t('evolution.testCases'),
         value: `${latest.passed_count}/${latest.total_test_cases}`,
-        subtitle: t("evolution.passed"),
-        icon: "test-tube",
-        color: "#10b981",
+        subtitle: t('evolution.passed'),
+        icon: 'test-tube',
+        color: '#10b981',
       })
     );
   } else {
     statCards.push(
       ui.statCard({
-        title: t("evolution.testCases"),
+        title: t('evolution.testCases'),
         value: data.testCaseCount ?? 0,
-        icon: "test-tube",
-        color: "#10b981",
+        icon: 'test-tube',
+        color: '#10b981',
       })
     );
   }
 
   statCards.push(
     ui.statCard({
-      title: t("evolution.versions"),
+      title: t('evolution.versions'),
       value: data.versionCount ?? 0,
-      icon: "git-branch",
-      color: "#667eea",
+      icon: 'git-branch',
+      color: '#667eea',
     }),
     ui.statCard({
-      title: t("evolution.currentVersion"),
-      value: data.activeVersionBranch || "main",
-      icon: "git-commit",
-      color: "#818cf8",
+      title: t('evolution.currentVersion'),
+      value: data.activeVersionBranch || 'main',
+      icon: 'git-commit',
+      color: '#818cf8',
     })
   );
 
@@ -681,52 +686,50 @@ function buildArenaHeader(
   selectedOrder: string[],
   recentRuns: BenchmarkRunInfo[]
 ): string {
-  const arenaTitle = ui.text(t("evolution.selectRunsForComparison"), "label");
+  const arenaTitle = ui.text(t('evolution.selectRunsForComparison'), 'label');
   const toggleId = `arena_toggle_${Date.now()}`;
-  ui.addRaw(toggleId, "ArenaModeToggle", {
+  ui.addRaw(toggleId, 'ArenaModeToggle', {
     options: [
-      { label: t("evolution.categoriesMode"), value: "categories" },
-      { label: t("evolution.criteriaMode"), value: "criteria" },
+      { label: t('evolution.categoriesMode'), value: 'categories' },
+      { label: t('evolution.criteriaMode'), value: 'criteria' },
     ],
     active: radarMode,
-    action: "set_radar_mode",
+    action: 'set_radar_mode',
   });
   const pickerId = `arena_picker_${Date.now()}`;
-  ui.addRaw(pickerId, "ArenaRunPicker", {
+  ui.addRaw(pickerId, 'ArenaRunPicker', {
     runs: recentRuns.map((r) => ({
       id: r.id,
       label:
-        formatModelDisplay(r.presetName, r.modelId) !== "-"
+        formatModelDisplay(r.presetName, r.modelId) !== '-'
           ? formatModelDisplay(r.presetName, r.modelId)
           : r.version_tag || r.id.slice(0, 8),
       selected: selectedIds.has(r.id),
-      color: selectedIds.has(r.id)
-        ? RUN_COLORS[selectedOrder.indexOf(r.id) % RUN_COLORS.length]
-        : undefined,
+      color: selectedIds.has(r.id) ? RUN_COLORS[selectedOrder.indexOf(r.id) % RUN_COLORS.length] : undefined,
       date: undefined,
       score: r.overall_score > 0 ? r.overall_score : undefined,
     })),
-    action: "toggle_benchmark_run",
-    clearAction: "clear_run_selection",
+    action: 'toggle_benchmark_run',
+    clearAction: 'clear_run_selection',
   });
   return ui.row([arenaTitle, toggleId, pickerId], {
     gap: 8,
-    align: "center",
-    justify: "between",
+    align: 'center',
+    justify: 'between',
   });
 }
 
 function buildArenaComparison(
   ui: A2UIGenerator,
   data: EvolutionLabData,
-  radarMode: "categories" | "criteria"
+  radarMode: 'categories' | 'criteria'
 ): string[] {
   const result: string[] = [];
   if (!data.comparisonRuns || data.comparisonRuns.length === 0) {
     result.push(
-      ui.column([ui.text(t("evolution.noRunsSelected"), "caption")], {
+      ui.column([ui.text(t('evolution.noRunsSelected'), 'caption')], {
         padding: 32,
-        align: "center",
+        align: 'center',
       })
     );
     return result;
@@ -735,21 +738,21 @@ function buildArenaComparison(
   const refRun = data.comparisonRuns[0];
   const legendCategories = refRun.categoryScores.map((cs) => ({
     name: getCategoryLabel(cs.category),
-    color: SHARP_CATEGORY_COLORS[cs.category] || "#818cf8",
+    color: SHARP_CATEGORY_COLORS[cs.category] || '#818cf8',
   }));
 
   const radarId = `radar_chart_${Date.now()}`;
   const radarChartData = buildRadarChartData(data.comparisonRuns, radarMode);
-  ui.addRaw(radarId, "RadarChart", {
+  ui.addRaw(radarId, 'RadarChart', {
     radarData: radarChartData.data,
     radarSeries: radarChartData.series,
     height: 400,
     categoryLegend: legendCategories,
   });
 
-  const scoreTitleId = ui.text(t("evolution.overallScores"), "label");
+  const scoreTitleId = ui.text(t('evolution.overallScores'), 'label');
   const scoreTableId = `arena_score_${Date.now()}`;
-  ui.addRaw(scoreTableId, "ArenaScoreTable", {
+  ui.addRaw(scoreTableId, 'ArenaScoreTable', {
     rows: data.comparisonRuns.map((cr) => ({
       label: cr.label,
       color: cr.color,
@@ -759,13 +762,13 @@ function buildArenaComparison(
 
   const scoreCardId = ui.column([scoreTitleId, scoreTableId], {
     gap: 8,
-    className: "arena-card",
+    className: 'arena-card',
   } as any);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const radarCardId = ui.column([radarId], { gap: 8, className: "arena-card" } as any);
+  const radarCardId = ui.column([radarId], { gap: 8, className: 'arena-card' } as any);
   const dashGridId = ui.column([radarCardId, scoreCardId], {
     gap: 24,
-    style: "display: grid; grid-template-columns: 1.2fr 0.8fr;",
+    style: 'display: grid; grid-template-columns: 1.2fr 0.8fr;',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   result.push(dashGridId);
@@ -785,7 +788,9 @@ function buildCategoryBreakdownCards(
   const breakdownCards: string[] = [];
 
   for (const cs of refRun.categoryScores) {
-    if (!cs.subComponents || cs.subComponents.length === 0) continue;
+    if (!cs.subComponents || cs.subComponents.length === 0) {
+      continue;
+    }
     const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
     const criteria = cs.subComponents.map((sub) => ({
       name: sub.name,
@@ -796,9 +801,9 @@ function buildCategoryBreakdownCards(
       }),
     }));
     const catCardId = `arena_cat_${cs.category}_${Date.now()}`;
-    ui.addRaw(catCardId, "ArenaCategoryCard", {
+    ui.addRaw(catCardId, 'ArenaCategoryCard', {
       categoryName: getCategoryLabel(cs.category),
-      categoryColor: SHARP_CATEGORY_COLORS[cs.category] || "#818cf8",
+      categoryColor: SHARP_CATEGORY_COLORS[cs.category] || '#818cf8',
       categoryIcon: getCategoryIcon(cs.category),
       avgScore,
       criteria,
@@ -807,11 +812,11 @@ function buildCategoryBreakdownCards(
   }
 
   if (breakdownCards.length > 0) {
-    result.push(ui.text(t("evolution.categoryBreakdown"), "label"));
+    result.push(ui.text(t('evolution.categoryBreakdown'), 'label'));
     result.push(
       ui.column(breakdownCards, {
         gap: 20,
-        style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
+        style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
     );
@@ -826,35 +831,33 @@ function buildRecentRunsTable(
   progressMap?: Record<string, ExternalProgressInfo>,
   limit = 5
 ): string[] {
-  const runsLabel = ui.text(t("evolution.recentRuns"), "label");
+  const runsLabel = ui.text(t('evolution.recentRuns'), 'label');
   const runRows = runs.slice(0, limit).map((r) => {
     const scoreDisplay =
-      r.overall_score > 0
-        ? (r.overall_score <= 1.0 ? r.overall_score : r.overall_score / 100).toFixed(2)
-        : "-";
+      r.overall_score > 0 ? (r.overall_score <= 1.0 ? r.overall_score : r.overall_score / 100).toFixed(2) : '-';
     return {
       id: r.id,
       progress: formatRunProgress(r, progressMap),
-      version_tag: r.version_tag || "-",
+      version_tag: r.version_tag || '-',
       score: scoreDisplay,
       passed: `${r.passed_count}/${r.total_test_cases}`,
       model: formatModelDisplay(r.presetName, r.modelId),
       profile: r.profile,
-      duration: r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : "-",
+      duration: r.duration_ms && r.duration_ms > 0 ? `${(r.duration_ms / 1000).toFixed(1)}s` : '-',
     };
   });
   const runsTable = ui.dataTable(
     [
-      { key: "progress", label: t("evolution.progress"), render: "progress" },
-      { key: "version_tag", label: t("evolution.versionTag") },
-      { key: "score", label: t("evolution.score") },
-      { key: "passed", label: t("evolution.passed") },
-      { key: "model", label: t("evolution.model") },
-      { key: "profile", label: t("evolution.profile"), render: "badge" },
-      { key: "duration", label: t("evolution.duration") },
+      { key: 'progress', label: t('evolution.progress'), render: 'progress' },
+      { key: 'version_tag', label: t('evolution.versionTag') },
+      { key: 'score', label: t('evolution.score') },
+      { key: 'passed', label: t('evolution.passed') },
+      { key: 'model', label: t('evolution.model') },
+      { key: 'profile', label: t('evolution.profile'), render: 'badge' },
+      { key: 'duration', label: t('evolution.duration') },
     ],
     runRows,
-    { onRowClick: "view_benchmark_run" }
+    { onRowClick: 'view_benchmark_run' }
   );
   return [runsLabel, runsTable];
 }
@@ -866,17 +869,17 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 
   // Score Trend
   if (data.scoreTrend && data.scoreTrend.length > 0) {
-    const trendLabel = ui.text(t("evolution.scoreTrend"), "label");
+    const trendLabel = ui.text(t('evolution.scoreTrend'), 'label');
     const trendChart = ui.chart({
-      chartType: "bar",
+      chartType: 'bar',
       data: data.scoreTrend.map((p) => {
         const displayScore = p.score <= 1.0 ? p.score : p.score / 100;
         return { version: p.version, score: parseFloat(displayScore.toFixed(2)) };
       }),
-      xKey: "version",
-      yKey: "score",
+      xKey: 'version',
+      yKey: 'score',
       height: 200,
-      color: "#667eea",
+      color: '#667eea',
     });
     children.push(ui.card([trendLabel, trendChart], { padding: 16 }));
   }
@@ -884,43 +887,39 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   // Arena Comparison Area
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
     const arenaChildren: string[] = [];
-    const radarMode = data.radarMode || "categories";
+    const radarMode = data.radarMode || 'categories';
     const selectedIds = new Set(data.selectedRunIds || []);
     const selectedOrder = data.selectedRunIds || [];
     const recentRuns = data.benchmarkRuns.slice(0, 10);
 
-    arenaChildren.push(
-      buildArenaHeader(ui, data, radarMode, selectedIds, selectedOrder, recentRuns)
-    );
+    arenaChildren.push(buildArenaHeader(ui, data, radarMode, selectedIds, selectedOrder, recentRuns));
     arenaChildren.push(...buildArenaComparison(ui, data, radarMode));
     arenaChildren.push(...buildRecentRunsTable(ui, data.benchmarkRuns, data.externalProgressMap));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    children.push(ui.card(arenaChildren, { padding: 16, className: "arena-section" } as any));
+    children.push(ui.card(arenaChildren, { padding: 16, className: 'arena-section' } as any));
   } else {
-    const emptyText = ui.text(t("evolution.noBenchmarkRuns"), "caption");
-    children.push(
-      ui.card([ui.column([emptyText], { padding: 32, align: "center" })], { padding: 24 })
-    );
+    const emptyText = ui.text(t('evolution.noBenchmarkRuns'), 'caption');
+    children.push(ui.card([ui.column([emptyText], { padding: 32, align: 'center' })], { padding: 24 }));
   }
 
   // Active evolution branch
-  if (data.activeVersionBranch && data.activeVersionBranch !== "main") {
-    const branchBadge = ui.badge(data.activeVersionBranch, { variant: "info" });
-    const branchLabel = ui.text(t("evolution.activeVersion"), "label");
-    const switchBtn = ui.button(t("evolution.switchVersion"), "switch_version", {
-      variant: "outline",
-      size: "sm",
+  if (data.activeVersionBranch && data.activeVersionBranch !== 'main') {
+    const branchBadge = ui.badge(data.activeVersionBranch, { variant: 'info' });
+    const branchLabel = ui.text(t('evolution.activeVersion'), 'label');
+    const switchBtn = ui.button(t('evolution.switchVersion'), 'switch_version', {
+      variant: 'outline',
+      size: 'sm',
       payload: { branch: data.activeVersionBranch },
     });
-    const mergeBtn = ui.button(t("evolution.mergeVersion"), "merge_version", {
-      variant: "primary",
-      size: "sm",
+    const mergeBtn = ui.button(t('evolution.mergeVersion'), 'merge_version', {
+      variant: 'primary',
+      size: 'sm',
       payload: { branch: data.activeVersionBranch },
     });
     const branchRow = ui.row([branchLabel, branchBadge, switchBtn, mergeBtn], {
       gap: 12,
-      align: "center",
+      align: 'center',
     });
     children.push(ui.card([branchRow], { padding: 12 }));
   }
@@ -933,49 +932,49 @@ function generateOverviewTab(ui: A2UIGenerator, data: EvolutionLabData): string 
 // ============================================================================
 
 function buildBenchmarkHeaderRow(ui: A2UIGenerator): string {
-  const tabTitle = ui.text(t("evolution.tabBenchmark"), "h3");
-  const quickBtn = ui.button("", "run_benchmark", {
-    variant: "outline",
-    size: "sm",
-    icon: "play",
-    tooltip: t("evolution.runQuickBenchmark"),
-    payload: { profile: "quick" },
+  const tabTitle = ui.text(t('evolution.tabBenchmark'), 'h3');
+  const quickBtn = ui.button('', 'run_benchmark', {
+    variant: 'outline',
+    size: 'sm',
+    icon: 'play',
+    tooltip: t('evolution.runQuickBenchmark'),
+    payload: { profile: 'quick' },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
-  const fullBtn = ui.button("", "run_benchmark", {
-    variant: "primary",
-    size: "sm",
-    icon: "zap",
-    tooltip: t("evolution.runFullBenchmark"),
-    payload: { profile: "full" },
+  const fullBtn = ui.button('', 'run_benchmark', {
+    variant: 'primary',
+    size: 'sm',
+    icon: 'zap',
+    tooltip: t('evolution.runFullBenchmark'),
+    payload: { profile: 'full' },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
-  const addTestBtn = ui.button("", "create_test_case", {
-    variant: "outline",
-    size: "sm",
-    icon: "sparkles",
-    tooltip: t("evolution.addTestCase"),
+  const addTestBtn = ui.button('', 'create_test_case', {
+    variant: 'outline',
+    size: 'sm',
+    icon: 'sparkles',
+    tooltip: t('evolution.addTestCase'),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   return ui.row([tabTitle, ui.row([addTestBtn, quickBtn, fullBtn], { gap: 6 })], {
-    justify: "between",
-    align: "center",
+    justify: 'between',
+    align: 'center',
   });
 }
 
 function buildSharpCategoryCards(ui: A2UIGenerator, categoryScores: CategoryScoreInfo[]): string {
-  const sharpTitle = ui.text("SHARP 3.0 Evaluation", "h3");
+  const sharpTitle = ui.text('SHARP 3.0 Evaluation', 'h3');
   const sharpCards: string[] = [];
 
   for (const cs of categoryScores) {
-    const catColor = SHARP_CATEGORY_COLORS[cs.category] || "#818cf8";
+    const catColor = SHARP_CATEGORY_COLORS[cs.category] || '#818cf8';
     const avgScore = cs.score <= 1.0 ? cs.score : cs.score / 100;
     const criteria = (cs.subComponents || []).map((sub) => ({
       name: sub.name,
       scores: [{ value: sub.score <= 1 ? sub.score : sub.score / 100, color: catColor }],
     }));
     const catCardId = `bench_cat_${cs.category}_${Date.now()}`;
-    ui.addRaw(catCardId, "ArenaCategoryCard", {
+    ui.addRaw(catCardId, 'ArenaCategoryCard', {
       categoryName: getCategoryLabel(cs.category),
       categoryColor: catColor,
       categoryIcon: getCategoryIcon(cs.category),
@@ -987,31 +986,31 @@ function buildSharpCategoryCards(ui: A2UIGenerator, categoryScores: CategoryScor
 
   const sharpGrid = ui.column(sharpCards, {
     gap: 16,
-    style: "display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));",
+    style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));',
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return ui.card([sharpTitle, sharpGrid], { padding: 16, className: "arena-section" } as any);
+  return ui.card([sharpTitle, sharpGrid], { padding: 16, className: 'arena-section' } as any);
 }
 
 function buildTestCasesTable(ui: A2UIGenerator, testCases: TestCaseInfo[]): string {
-  const testCasesLabel = ui.text(t("evolution.testCases"), "label");
+  const testCasesLabel = ui.text(t('evolution.testCases'), 'label');
   const testRows = testCases.map((tc) => ({
     id: tc.id.slice(0, 8),
     category: tc.category,
-    query: tc.query.slice(0, 60) + (tc.query.length > 60 ? "..." : ""),
-    minScore: tc.expected.minScore ?? "-",
+    query: tc.query.slice(0, 60) + (tc.query.length > 60 ? '...' : ''),
+    minScore: tc.expected.minScore ?? '-',
     keywords: tc.expected.shouldMention?.length || 0,
   }));
   const testsTable = ui.dataTable(
     [
-      { key: "category", label: t("evolution.category"), render: "badge" },
-      { key: "query", label: t("evolution.query") },
-      { key: "minScore", label: t("evolution.minScore") },
-      { key: "keywords", label: t("evolution.keywords") },
+      { key: 'category', label: t('evolution.category'), render: 'badge' },
+      { key: 'query', label: t('evolution.query') },
+      { key: 'minScore', label: t('evolution.minScore') },
+      { key: 'keywords', label: t('evolution.keywords') },
     ],
     testRows,
-    { onRowClick: "view_test_case" }
+    { onRowClick: 'view_test_case' }
   );
   return ui.card([testCasesLabel, testsTable], { padding: 16 });
 }
@@ -1026,7 +1025,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
   }
 
   if (data.benchmarkRuns && data.benchmarkRuns.length > 0) {
-    const historyLabel = ui.text(t("evolution.benchmarkRuns"), "label");
+    const historyLabel = ui.text(t('evolution.benchmarkRuns'), 'label');
     const [, runsTable] = buildRecentRunsTable(
       ui,
       data.benchmarkRuns,
@@ -1040,7 +1039,7 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
     children.push(buildTestCasesTable(ui, data.testCases));
   }
 
-  children.push(ui.text(t("evolution.editConfigHint"), "caption"));
+  children.push(ui.text(t('evolution.editConfigHint'), 'caption'));
 
   return ui.column(children, { gap: 20, padding: 16 });
 }
@@ -1051,32 +1050,30 @@ function generateBenchmarkTab(ui: A2UIGenerator, data: EvolutionLabData): string
 
 function buildVersionGraphPanel(ui: A2UIGenerator, data: EvolutionLabData): string {
   const mainRuns = (data.benchmarkRuns || []).filter(
-    (r) => r.status === "completed" && r.overall_score > 0 && !r.version_tag?.startsWith("evo/")
+    (r) => r.status === 'completed' && r.overall_score > 0 && !r.version_tag?.startsWith('evo/')
   );
   let mainLatestScore: number | null = null;
   if (mainRuns.length > 0) {
-    mainLatestScore =
-      mainRuns[0].overall_score <= 1 ? mainRuns[0].overall_score : mainRuns[0].overall_score / 100;
+    mainLatestScore = mainRuns[0].overall_score <= 1 ? mainRuns[0].overall_score : mainRuns[0].overall_score / 100;
   }
 
   const versionGraphData = (data.versions || []).map((v) => {
-    const branchNorm = v.branchName.replace(/\//g, "-");
+    const branchNorm = v.branchName.replace(/\//g, '-');
     const runs = (data.benchmarkRuns || []).filter(
       (r) =>
-        r.status === "completed" &&
+        r.status === 'completed' &&
         r.overall_score > 0 &&
         (r.version_tag?.includes(v.branchName) || r.version_tag?.includes(branchNorm))
     );
     let latestScore: number | null = null;
     if (runs.length > 0) {
-      latestScore =
-        runs[0].overall_score <= 1 ? runs[0].overall_score : runs[0].overall_score / 100;
+      latestScore = runs[0].overall_score <= 1 ? runs[0].overall_score : runs[0].overall_score / 100;
     }
     return {
       id: v.id.slice(0, 8),
       branch: v.branchName,
-      parentBranch: v.parentBranch || "main",
-      status: v.status as "active" | "merged" | "abandoned",
+      parentBranch: v.parentBranch || 'main',
+      status: v.status as 'active' | 'merged' | 'abandoned',
       trigger: v.triggerMode || undefined,
       scoreDelta: v.scoreDelta,
       latestScore,
@@ -1088,12 +1085,12 @@ function buildVersionGraphPanel(ui: A2UIGenerator, data: EvolutionLabData): stri
   return ui.column(
     [
       ui.versionGraph(
-        { name: "main", latestScore: mainLatestScore, benchmarkCount: mainRuns.length },
+        { name: 'main', latestScore: mainLatestScore, benchmarkCount: mainRuns.length },
         versionGraphData,
         {
           mainCommits: data.mainCommits,
           selectedBranch: data.selectedVersion,
-          onVersionClick: "view_version_from_list",
+          onVersionClick: 'view_version_from_list',
         }
       ),
     ],
@@ -1103,54 +1100,48 @@ function buildVersionGraphPanel(ui: A2UIGenerator, data: EvolutionLabData): stri
 
 function buildVersionDetailPanel(ui: A2UIGenerator, data: EvolutionLabData): string {
   const rightChildren: string[] = [];
-  const selectedInfo = data.selectedVersion
-    ? data.versions?.find((v) => v.branchName === data.selectedVersion)
-    : null;
+  const selectedInfo = data.selectedVersion ? data.versions?.find((v) => v.branchName === data.selectedVersion) : null;
 
   if (!data.selectedVersion || !selectedInfo) {
     rightChildren.push(
-      ui.column([ui.text(t("evolution.selectVersionToView"), "caption")], {
+      ui.column([ui.text(t('evolution.selectVersionToView'), 'caption')], {
         padding: 32,
-        align: "center",
+        align: 'center',
       })
     );
     return ui.column(rightChildren, { gap: 12 });
   }
 
   // Version info card
-  const branchBadge = ui.badge(selectedInfo.branchName, { variant: "info" });
+  const branchBadge = ui.badge(selectedInfo.branchName, { variant: 'info' });
   const versionStatusVariant: Record<string, string> = {
-    active: "warning",
-    merged: "success",
+    active: 'warning',
+    merged: 'success',
   };
   const statusBadge = ui.badge(selectedInfo.status, {
-    variant: versionStatusVariant[selectedInfo.status] || "default",
+    variant: versionStatusVariant[selectedInfo.status] || 'default',
   });
   const infoDetails: string[] = [];
   if (selectedInfo.triggerMode) {
     infoDetails.push(selectedInfo.triggerMode);
   }
   if (selectedInfo.scoreDelta != null) {
-    const sign = selectedInfo.scoreDelta > 0 ? "+" : "";
+    const sign = selectedInfo.scoreDelta > 0 ? '+' : '';
     infoDetails.push(`${sign}${selectedInfo.scoreDelta.toFixed(1)}`);
   }
   infoDetails.push(new Date(selectedInfo.createdAt).toLocaleString());
   rightChildren.push(
-    ui.card(
-      [ui.row([branchBadge, statusBadge], { gap: 8 }), ui.text(infoDetails.join(" · "), "caption")],
-      { padding: 16 }
-    )
+    ui.card([ui.row([branchBadge, statusBadge], { gap: 8 }), ui.text(infoDetails.join(' · '), 'caption')], {
+      padding: 16,
+    })
   );
 
   // Changed files + diff
   if (data.changedFiles && data.changedFiles.length > 0) {
-    const statsLabel = ui.text(
-      `${data.changedFiles.length} ${t("evolution.filesChanged")}`,
-      "label"
-    );
+    const statsLabel = ui.text(`${data.changedFiles.length} ${t('evolution.filesChanged')}`, 'label');
     const fileTreeId = ui.fileTree(data.changedFiles, {
       selectedPath: data.diffContent?.path,
-      onFileSelect: "evo_file_select",
+      onFileSelect: 'evo_file_select',
     });
     rightChildren.push(ui.card([statsLabel, fileTreeId], { padding: 16 }));
 
@@ -1166,9 +1157,9 @@ function buildVersionDetailPanel(ui: A2UIGenerator, data: EvolutionLabData): str
     rightChildren.push(
       ui.card(
         [
-          ui.column([ui.text(t("evolution.noChanges"), "caption")], {
+          ui.column([ui.text(t('evolution.noChanges'), 'caption')], {
             padding: 16,
-            align: "center",
+            align: 'center',
           }),
         ],
         { padding: 16 }
@@ -1177,20 +1168,20 @@ function buildVersionDetailPanel(ui: A2UIGenerator, data: EvolutionLabData): str
   }
 
   // Action buttons
-  if (selectedInfo.status === "active") {
-    const switchBtn = ui.button(t("evolution.switchVersion"), "switch_version", {
-      variant: "outline",
-      size: "sm",
+  if (selectedInfo.status === 'active') {
+    const switchBtn = ui.button(t('evolution.switchVersion'), 'switch_version', {
+      variant: 'outline',
+      size: 'sm',
       payload: { branch: selectedInfo.branchName },
     });
-    const mergeBtn = ui.button(t("evolution.mergeVersion"), "merge_version", {
-      variant: "primary",
-      size: "sm",
+    const mergeBtn = ui.button(t('evolution.mergeVersion'), 'merge_version', {
+      variant: 'primary',
+      size: 'sm',
       payload: { branch: selectedInfo.branchName },
     });
-    const abandonBtn = ui.button(t("evolution.abandonVersion"), "abandon_version", {
-      variant: "ghost",
-      size: "sm",
+    const abandonBtn = ui.button(t('evolution.abandonVersion'), 'abandon_version', {
+      variant: 'ghost',
+      size: 'sm',
       payload: { branch: selectedInfo.branchName },
     });
     rightChildren.push(ui.row([switchBtn, mergeBtn, abandonBtn], { gap: 12 }));
@@ -1203,18 +1194,18 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   const children: string[] = [];
 
   // Header row
-  const tabTitle = ui.text(t("evolution.tabVersions"), "h3");
+  const tabTitle = ui.text(t('evolution.tabVersions'), 'h3');
   const headerLeft: string[] = [tabTitle];
   const headerRight: string[] = [];
 
   if (data.activeVersionBranch) {
-    headerLeft.push(ui.badge(data.activeVersionBranch, { variant: "info" }));
+    headerLeft.push(ui.badge(data.activeVersionBranch, { variant: 'info' }));
     headerRight.push(
-      ui.button("", "switch_version", {
-        variant: "outline",
-        size: "sm",
-        icon: "refresh-cw",
-        tooltip: t("evolution.resetToMain"),
+      ui.button('', 'switch_version', {
+        variant: 'outline',
+        size: 'sm',
+        icon: 'refresh-cw',
+        tooltip: t('evolution.resetToMain'),
         payload: { branch: null },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any)
@@ -1224,10 +1215,10 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   children.push(
     ui.row(
       [
-        ui.row(headerLeft, { gap: 8, align: "center" }),
+        ui.row(headerLeft, { gap: 8, align: 'center' }),
         ...(headerRight.length > 0 ? [ui.row(headerRight, { gap: 6 })] : []),
       ],
-      { justify: "between", align: "center" }
+      { justify: 'between', align: 'center' }
     )
   );
 
@@ -1238,7 +1229,7 @@ function generateVersionsTab(ui: A2UIGenerator, data: EvolutionLabData): string 
   children.push(
     ui.row([leftPanel, rightPanel], {
       gap: 16,
-      style: "align-items: flex-start;",
+      style: 'align-items: flex-start;',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any)
   );
@@ -1255,15 +1246,15 @@ function buildTracesSubTab(ui: A2UIGenerator, data: EvolutionLabData): string {
     const traceRows = data.traces.map((tr) => ({
       id: tr.id.slice(0, 8),
       time: new Date(tr.timestamp).toLocaleString(),
-      message: tr.userMessage.slice(0, 50) + (tr.userMessage.length > 50 ? "..." : ""),
-      score: tr.score ?? "-",
+      message: tr.userMessage.slice(0, 50) + (tr.userMessage.length > 50 ? '...' : ''),
+      score: tr.score ?? '-',
     }));
     return ui.dataTable(
       [
-        { key: "id", label: "ID" },
-        { key: "time", label: t("evolution.time"), sortable: true },
-        { key: "message", label: t("evolution.message") },
-        { key: "score", label: t("evolution.score"), render: "progress" },
+        { key: 'id', label: 'ID' },
+        { key: 'time', label: t('evolution.time'), sortable: true },
+        { key: 'message', label: t('evolution.message') },
+        { key: 'score', label: t('evolution.score'), render: 'progress' },
       ],
       traceRows,
       {
@@ -1272,14 +1263,14 @@ function buildTracesSubTab(ui: A2UIGenerator, data: EvolutionLabData): string {
           pageSize: 20,
           total: data.tracesTotal || 0,
         },
-        onRowClick: "view_trace",
-        onPageChange: "traces_page_change",
+        onRowClick: 'view_trace',
+        onPageChange: 'traces_page_change',
       }
     );
   }
-  return ui.column([ui.text(t("evolution.noTracesHint"), "caption")], {
+  return ui.column([ui.text(t('evolution.noTracesHint'), 'caption')], {
     padding: 32,
-    align: "center",
+    align: 'center',
   });
 }
 
@@ -1290,23 +1281,23 @@ function buildEvaluationsSubTab(ui: A2UIGenerator, data: EvolutionLabData): stri
       traceId: e.traceId.slice(0, 8),
       time: new Date(e.timestamp).toLocaleString(),
       score: e.score,
-      feedback: e.feedback?.slice(0, 50) || "-",
+      feedback: e.feedback?.slice(0, 50) || '-',
     }));
     return ui.dataTable(
       [
-        { key: "id", label: "ID" },
-        { key: "traceId", label: t("evolution.trace") },
-        { key: "time", label: t("evolution.time"), sortable: true },
-        { key: "score", label: t("evolution.score"), render: "progress" },
-        { key: "feedback", label: t("evolution.feedback") },
+        { key: 'id', label: 'ID' },
+        { key: 'traceId', label: t('evolution.trace') },
+        { key: 'time', label: t('evolution.time'), sortable: true },
+        { key: 'score', label: t('evolution.score'), render: 'progress' },
+        { key: 'feedback', label: t('evolution.feedback') },
       ],
       evalRows,
-      { onRowClick: "view_evaluation" }
+      { onRowClick: 'view_evaluation' }
     );
   }
-  return ui.column([ui.text(t("evolution.noEvaluationsHint"), "caption")], {
+  return ui.column([ui.text(t('evolution.noEvaluationsHint'), 'caption')], {
     padding: 32,
-    align: "center",
+    align: 'center',
   });
 }
 
@@ -1318,45 +1309,45 @@ function buildSuggestionsSubTab(ui: A2UIGenerator, data: EvolutionLabData): stri
       type: s.type,
       target: s.target,
       status: s.status,
-      rationale: s.rationale?.slice(0, 50) || "-",
+      rationale: s.rationale?.slice(0, 50) || '-',
     }));
     return ui.dataTable(
       [
-        { key: "id", label: "ID" },
-        { key: "time", label: t("evolution.time"), sortable: true },
-        { key: "type", label: t("evolution.type"), render: "badge" },
-        { key: "target", label: t("evolution.target") },
-        { key: "status", label: t("skills.status"), render: "badge" },
-        { key: "rationale", label: t("evolution.rationale") },
+        { key: 'id', label: 'ID' },
+        { key: 'time', label: t('evolution.time'), sortable: true },
+        { key: 'type', label: t('evolution.type'), render: 'badge' },
+        { key: 'target', label: t('evolution.target') },
+        { key: 'status', label: t('skills.status'), render: 'badge' },
+        { key: 'rationale', label: t('evolution.rationale') },
       ],
       suggRows,
-      { onRowClick: "view_suggestion" }
+      { onRowClick: 'view_suggestion' }
     );
   }
-  return ui.column([ui.text(t("evolution.noSuggestionsHint"), "caption")], {
+  return ui.column([ui.text(t('evolution.noSuggestionsHint'), 'caption')], {
     padding: 32,
-    align: "center",
+    align: 'center',
   });
 }
 
 function generateDataTab(ui: A2UIGenerator, data: EvolutionLabData): string {
   const children: string[] = [];
-  const subTab = data.dataSubTab || "traces";
+  const subTab = data.dataSubTab || 'traces';
 
   // Header row
-  const tabTitle = ui.text(t("evolution.tabData"), "h3");
-  const subTabButtons = ["traces", "evaluations", "suggestions"].map((tab) => {
+  const tabTitle = ui.text(t('evolution.tabData'), 'h3');
+  const subTabButtons = ['traces', 'evaluations', 'suggestions'].map((tab) => {
     const labelKey = `evolution.${tab}` as Parameters<typeof t>[0];
-    return ui.button(t(labelKey), "evo_data_subtab_change", {
-      variant: subTab === tab ? "secondary" : "ghost",
-      size: "sm",
+    return ui.button(t(labelKey), 'evo_data_subtab_change', {
+      variant: subTab === tab ? 'secondary' : 'ghost',
+      size: 'sm',
       payload: { tab },
     });
   });
   children.push(
     ui.row([tabTitle, ui.row(subTabButtons, { gap: 4 })], {
-      justify: "between",
-      align: "center",
+      justify: 'between',
+      align: 'center',
     })
   );
 
@@ -1385,75 +1376,73 @@ function generateIncidentsTab(ui: A2UIGenerator, data: EvolutionLabData): string
   const filter = data.incidentsFilter ?? {};
 
   // ---- Header ----
-  const tabTitle = ui.text(t("evolution.tabIncidents"), "h3");
-  const slackHint = ui.text(t("evolution.incidentsSlackHint"), "caption");
+  const tabTitle = ui.text(t('evolution.tabIncidents'), 'h3');
+  const slackHint = ui.text(t('evolution.incidentsSlackHint'), 'caption');
   children.push(ui.column([tabTitle, slackHint], { gap: 4 }));
 
   // ---- Stats cards ----
   if (stats) {
     const pendingCard = ui.statCard({
-      title: t("evolution.incidentsPending"),
+      title: t('evolution.incidentsPending'),
       value: String(stats.pending),
-      icon: "alert-triangle",
-      color: stats.pending > 0 ? "#f59e0b" : "#94a3b8",
+      icon: 'alert-triangle',
+      color: stats.pending > 0 ? '#f59e0b' : '#94a3b8',
     });
     const bugCard = ui.statCard({
-      title: t("evolution.incidentsBug"),
+      title: t('evolution.incidentsBug'),
       value: String(stats.bug),
-      icon: "x",
-      color: stats.bug > 0 ? "#ef4444" : "#94a3b8",
+      icon: 'x',
+      color: stats.bug > 0 ? '#ef4444' : '#94a3b8',
     });
     const effectCard = ui.statCard({
-      title: t("evolution.incidentsEffect"),
+      title: t('evolution.incidentsEffect'),
       value: String(stats.effect),
-      icon: "trending-down",
-      color: "#94a3b8",
+      icon: 'trending-down',
+      color: '#94a3b8',
     });
     const resolvedCard = ui.statCard({
-      title: t("evolution.incidentsResolvedWeek"),
+      title: t('evolution.incidentsResolvedWeek'),
       value: String(stats.resolvedThisWeek),
-      icon: "check",
-      color: stats.resolvedThisWeek > 0 ? "#22c55e" : "#94a3b8",
+      icon: 'check',
+      color: stats.resolvedThisWeek > 0 ? '#22c55e' : '#94a3b8',
     });
-    children.push(
-      ui.grid([pendingCard, bugCard, effectCard, resolvedCard], { columns: 4, gap: 12 })
-    );
+    children.push(ui.grid([pendingCard, bugCard, effectCard, resolvedCard], { columns: 4, gap: 12 }));
   }
 
   // ---- Filter row ----
   const statusFilters: Array<{ label: string; value: string }> = [
-    { label: t("common.all"), value: "" },
-    { label: t("evolution.statusPending"), value: "pending" },
-    { label: t("evolution.statusConfirmed"), value: "confirmed" },
-    { label: t("evolution.statusSuspended"), value: "suspended" },
-    { label: t("evolution.statusResolved"), value: "resolved" },
+    { label: t('common.all'), value: '' },
+    { label: t('evolution.statusPending'), value: 'pending' },
+    { label: t('evolution.statusConfirmed'), value: 'confirmed' },
+    { label: t('evolution.statusSuspended'), value: 'suspended' },
+    { label: t('evolution.statusResolved'), value: 'resolved' },
   ];
   const typeFilters: Array<{ label: string; value: string }> = [
-    { label: t("common.all"), value: "" },
-    { label: "Bug", value: "bug" },
-    { label: "Effect", value: "effect" },
-    { label: t("evolution.unclassified"), value: "unclassified" },
+    { label: t('common.all'), value: '' },
+    { label: 'Bug', value: 'bug' },
+    { label: 'Effect', value: 'effect' },
+    { label: t('evolution.unclassified'), value: 'unclassified' },
   ];
 
   const statusBtns = statusFilters.map((f) =>
-    ui.button(f.label, "incidents_filter", {
-      variant: (filter.status ?? "") === f.value ? "secondary" : "ghost",
-      size: "sm",
-      payload: { filterType: "status", value: f.value },
+    ui.button(f.label, 'incidents_filter', {
+      variant: (filter.status ?? '') === f.value ? 'secondary' : 'ghost',
+      size: 'sm',
+      payload: { filterType: 'status', value: f.value },
     })
   );
   const typeBtns = typeFilters.map((f) =>
-    ui.button(f.label, "incidents_filter", {
-      variant: (filter.type ?? "") === f.value ? "secondary" : "ghost",
-      size: "sm",
-      payload: { filterType: "type", value: f.value },
+    ui.button(f.label, 'incidents_filter', {
+      variant: (filter.type ?? '') === f.value ? 'secondary' : 'ghost',
+      size: 'sm',
+      payload: { filterType: 'type', value: f.value },
     })
   );
 
   children.push(
     ui.row([ui.row(statusBtns, { gap: 4 }), ui.row(typeBtns, { gap: 4 })], {
       gap: 16,
-      align: "center",
+      align: 'center',
     })
   );
 
@@ -1463,38 +1452,35 @@ function generateIncidentsTab(ui: A2UIGenerator, data: EvolutionLabData): string
       id: bc.id.slice(0, 8),
       _fullId: bc.id,
       time: new Date(bc.timestamp).toLocaleString(),
-      reporter: bc.reporter ?? "-",
+      reporter: bc.reporter ?? '-',
       type: bc.type,
       status: bc.status,
       priority: bc.priority,
-      description: bc.rawText.slice(0, 80) + (bc.rawText.length > 80 ? "…" : ""),
-      issue: bc.githubIssueNumber ? `#${bc.githubIssueNumber}` : "-",
+      description: bc.rawText.slice(0, 80) + (bc.rawText.length > 80 ? '…' : ''),
+      issue: bc.githubIssueNumber ? `#${bc.githubIssueNumber}` : '-',
     }));
 
     const table = ui.dataTable(
       [
-        { key: "time", label: t("evolution.time"), sortable: true },
-        { key: "reporter", label: t("evolution.incidentsReporter") },
-        { key: "type", label: t("evolution.type"), render: "badge" },
-        { key: "status", label: t("skills.status"), render: "badge" },
-        { key: "priority", label: t("evolution.priority") },
-        { key: "description", label: t("evolution.incidentsDescription") },
-        { key: "issue", label: "GitHub" },
+        { key: 'time', label: t('evolution.time'), sortable: true },
+        { key: 'reporter', label: t('evolution.incidentsReporter') },
+        { key: 'type', label: t('evolution.type'), render: 'badge' },
+        { key: 'status', label: t('skills.status'), render: 'badge' },
+        { key: 'priority', label: t('evolution.priority') },
+        { key: 'description', label: t('evolution.incidentsDescription') },
+        { key: 'issue', label: 'GitHub' },
       ],
       rows,
-      { onRowClick: "view_incident" }
+      { onRowClick: 'view_incident' }
     );
     children.push(table);
 
-    children.push(ui.text("点击行查看详情，可在弹窗中修改状态、类型和优先级", "caption"));
+    children.push(ui.text('点击行查看详情，可在弹窗中修改状态、类型和优先级', 'caption'));
   } else {
     children.push(
       ui.column(
-        [
-          ui.text(t("evolution.incidentsEmpty"), "caption"),
-          ui.text(t("evolution.incidentsEmptyHint"), "caption"),
-        ],
-        { padding: 48, align: "center", gap: 8 }
+        [ui.text(t('evolution.incidentsEmpty'), 'caption'), ui.text(t('evolution.incidentsEmptyHint'), 'caption')],
+        { padding: 48, align: 'center', gap: 8 }
       )
     );
   }

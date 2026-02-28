@@ -8,7 +8,7 @@ export function estimateUtf8Bytes(text: string): number {
   if (!text) {
     return 0;
   }
-  return Buffer.byteLength(text, "utf8");
+  return Buffer.byteLength(text, 'utf8');
 }
 
 export function splitTextToUtf8ByteLimit(text: string, maxUtf8Bytes: number): string[] {

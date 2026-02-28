@@ -8,8 +8,8 @@
  * the event loop / WebSocket message delivery.
  */
 
-import { exec as execCb } from "child_process";
-import { promisify } from "util";
+import { exec as execCb } from 'child_process';
+import { promisify } from 'util';
 
 const execPromise = promisify(execCb);
 
@@ -20,7 +20,7 @@ const execPromise = promisify(execCb);
 function getGhEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env };
   const token = env.GITHUB_TOKEN;
-  if (token && (token.includes("your_token") || token.length < 20)) {
+  if (token && (token.includes('your_token') || token.length < 20)) {
     delete env.GITHUB_TOKEN;
   }
   return env;
@@ -31,7 +31,7 @@ function getGhEnv(): NodeJS.ProcessEnv {
  */
 async function run(cmd: string, timeout = 15000): Promise<string> {
   const { stdout } = await execPromise(cmd, {
-    encoding: "utf-8",
+    encoding: 'utf-8',
     timeout,
     env: getGhEnv(),
   });
@@ -90,12 +90,12 @@ export async function createPR(options: {
   base?: string;
   labels?: string[];
 }): Promise<string> {
-  const labelArgs = options.labels?.map((l) => `-l "${l}"`).join(" ") || "";
-  const base = options.base || "main";
+  const labelArgs = options.labels?.map((l) => `-l "${l}"`).join(' ') || '';
+  const base = options.base || 'main';
 
   // Push current branch
   try {
-    const branch = (await run("git branch --show-current", 5000)).trim();
+    const branch = (await run('git branch --show-current', 5000)).trim();
     await run(`git push -u origin ${branch}`, 30000);
   } catch {
     // Push might fail if no remote
@@ -119,7 +119,7 @@ export async function commentOnIssue(issueNumber: number, body: string): Promise
  * Switch back to main branch
  */
 export async function switchToMain(): Promise<void> {
-  await run("git checkout main", 10000);
+  await run('git checkout main', 10000);
 }
 
 // ============================================================================
@@ -184,7 +184,7 @@ export async function listIssues(limit = 20): Promise<GitHubIssueListItem[]> {
       labels: ((i.labels as Array<{ name: string }>) || []).map((l) => l.name),
       createdAt: i.createdAt,
       updatedAt: i.updatedAt,
-      author: (i.author as { login: string })?.login || "unknown",
+      author: (i.author as { login: string })?.login || 'unknown',
     }));
   } catch {
     return [];
@@ -206,7 +206,7 @@ export async function listPRs(limit = 10): Promise<GitHubPR[]> {
       state: p.state,
       labels: ((p.labels as Array<{ name: string }>) || []).map((l) => l.name),
       createdAt: p.createdAt,
-      author: (p.author as { login: string })?.login || "unknown",
+      author: (p.author as { login: string })?.login || 'unknown',
       headRefName: p.headRefName,
       baseRefName: p.baseRefName,
       isDraft: p.isDraft || false,
@@ -220,31 +220,31 @@ export async function listPRs(limit = 10): Promise<GitHubPR[]> {
  * Get git branch info and recent commits
  */
 export async function getBranchInfo(): Promise<GitBranchInfo> {
-  let current = "unknown";
+  let current = 'unknown';
   let branches: string[] = [];
-  const recentCommits: GitBranchInfo["recentCommits"] = [];
+  const recentCommits: GitBranchInfo['recentCommits'] = [];
 
   // Run local git commands in parallel (they're fast but still non-blocking)
   const [currentRes, branchRes, logRes] = await Promise.allSettled([
-    run("git branch --show-current", 5000),
-    run("git branch --list --no-color", 5000),
+    run('git branch --show-current', 5000),
+    run('git branch --list --no-color', 5000),
     run('git log --oneline --format="%H|%h|%s|%ci|%an" -10', 5000),
   ]);
 
-  if (currentRes.status === "fulfilled") {
+  if (currentRes.status === 'fulfilled') {
     current = currentRes.value.trim();
   }
 
-  if (branchRes.status === "fulfilled") {
+  if (branchRes.status === 'fulfilled') {
     branches = branchRes.value
-      .split("\n")
-      .map((b) => b.replace(/^\*?\s+/, "").trim())
+      .split('\n')
+      .map((b) => b.replace(/^\*?\s+/, '').trim())
       .filter(Boolean);
   }
 
-  if (logRes.status === "fulfilled") {
-    for (const line of logRes.value.split("\n").filter(Boolean)) {
-      const [hash, shortHash, message, date, author] = line.split("|");
+  if (logRes.status === 'fulfilled') {
+    for (const line of logRes.value.split('\n').filter(Boolean)) {
+      const [hash, shortHash, message, date, author] = line.split('|');
       recentCommits.push({ hash, shortHash, message, date, author });
     }
   }
@@ -257,29 +257,29 @@ export async function getBranchInfo(): Promise<GitBranchInfo> {
  */
 export async function getRepoInfo(): Promise<GitHubRepoInfo | null> {
   try {
-    const result = await run("gh repo view --json name,url,defaultBranchRef");
+    const result = await run('gh repo view --json name,url,defaultBranchRef');
     const parsed = JSON.parse(result);
 
     // Get counts in parallel
     const [issueCountRes, prCountRes] = await Promise.allSettled([
-      run("gh issue list --state open --json number --jq length", 10000),
-      run("gh pr list --state open --json number --jq length", 10000),
+      run('gh issue list --state open --json number --jq length', 10000),
+      run('gh pr list --state open --json number --jq length', 10000),
     ]);
 
     let openIssueCount = 0;
     let openPRCount = 0;
 
-    if (issueCountRes.status === "fulfilled") {
+    if (issueCountRes.status === 'fulfilled') {
       openIssueCount = parseInt(issueCountRes.value.trim(), 10) || 0;
     }
-    if (prCountRes.status === "fulfilled") {
+    if (prCountRes.status === 'fulfilled') {
       openPRCount = parseInt(prCountRes.value.trim(), 10) || 0;
     }
 
     return {
       name: parsed.name,
       url: parsed.url,
-      defaultBranch: parsed.defaultBranchRef?.name || "main",
+      defaultBranch: parsed.defaultBranchRef?.name || 'main',
       openIssueCount,
       openPRCount,
     };

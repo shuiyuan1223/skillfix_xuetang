@@ -8,14 +8,14 @@
  * 4. Exchange code for token
  */
 
-import { loadConfig } from "../utils/config.js";
-import { huaweiAuth } from "../data-sources/huawei/huawei-auth.js";
-import { getUserStore } from "../data-sources/huawei/user-store.js";
-import { tokenStore } from "../data-sources/huawei/token-store.js";
+import { loadConfig } from '../utils/config.js';
+import { huaweiAuth } from '../data-sources/huawei/huawei-auth.js';
+import { getUserStore } from '../data-sources/huawei/user-store.js';
+import { tokenStore } from '../data-sources/huawei/token-store.js';
 
 // OAuth state tracking
 interface OAuthSession {
-  status: "pending" | "waiting_login" | "success" | "error";
+  status: 'pending' | 'waiting_login' | 'success' | 'error';
   pageId?: number;
   code?: string;
   error?: string;
@@ -33,7 +33,7 @@ export function getHuaweiAuthUrl(state: string): string {
   const clientId = config.dataSources.huawei?.clientId;
 
   if (!clientId) {
-    throw new Error("Huawei client ID not configured");
+    throw new Error('Huawei client ID not configured');
   }
 
   // HuaweiAuth.getAuthUrl reads scopes/redirectUri/baseUrl from config
@@ -48,7 +48,7 @@ export function startOAuthSession(sessionId: string): { authUrl: string; session
   const authUrl = getHuaweiAuthUrl(sessionId);
 
   oauthSessions.set(sessionId, {
-    status: "pending",
+    status: 'pending',
     startedAt: Date.now(),
   });
 
@@ -72,18 +72,18 @@ export async function completeOAuth(
 ): Promise<{ success: boolean; error?: string }> {
   const session = oauthSessions.get(sessionId);
   if (!session) {
-    return { success: false, error: "Session not found" };
+    return { success: false, error: 'Session not found' };
   }
 
   const config = loadConfig();
   const huaweiConfig = config.dataSources.huawei;
 
   if (!huaweiConfig?.clientId || !huaweiConfig?.clientSecret) {
-    return { success: false, error: "Huawei credentials not configured" };
+    return { success: false, error: 'Huawei credentials not configured' };
   }
 
   try {
-    const redirectUri = huaweiConfig.redirectUri || "hms://redirect_url";
+    const redirectUri = huaweiConfig.redirectUri || 'hms://redirect_url';
 
     // Exchange code for token + extract Huawei user ID
     const { tokenData, huaweiUserId } = await huaweiAuth.exchangeCodeForUser(
@@ -107,13 +107,13 @@ export async function completeOAuth(
     }
 
     // Update session
-    session.status = "success";
+    session.status = 'success';
     session.code = code;
 
     return { success: true };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    session.status = "error";
+    session.status = 'error';
     session.error = errorMsg;
     return { success: false, error: errorMsg };
   }

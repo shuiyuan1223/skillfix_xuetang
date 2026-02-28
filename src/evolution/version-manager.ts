@@ -8,19 +8,15 @@
  * Uses `git worktree` for isolated modifications and `git show` for reads.
  */
 
-import { execSync } from "child_process";
-import { existsSync, mkdirSync, rmSync } from "fs";
-import { join } from "path";
-import { createLogger } from "../utils/logger.js";
-import {
-  insertEvolutionVersion,
-  updateEvolutionVersion,
-  getEvolutionVersionByBranch,
-} from "../memory/db.js";
+import { execSync } from 'child_process';
+import { existsSync, mkdirSync, rmSync } from 'fs';
+import { join } from 'path';
+import { createLogger } from '../utils/logger.js';
+import { insertEvolutionVersion, updateEvolutionVersion, getEvolutionVersionByBranch } from '../memory/db.js';
 
-const log = createLogger("Evolution/Version");
-const WORKTREE_DIR = ".worktrees";
-const BRANCH_PREFIX = "evo/v";
+const log = createLogger('Evolution/Version');
+const WORKTREE_DIR = '.worktrees';
+const BRANCH_PREFIX = 'evo/v';
 
 export interface VersionInfo {
   id: string;
@@ -34,8 +30,8 @@ export interface VersionInfo {
  */
 export function getProjectRoot(): string {
   try {
-    return execSync("git rev-parse --show-toplevel", {
-      encoding: "utf-8",
+    return execSync('git rev-parse --show-toplevel', {
+      encoding: 'utf-8',
       timeout: 5000,
     }).trim();
   } catch {
@@ -48,13 +44,13 @@ export function getProjectRoot(): string {
  */
 export function getCurrentBranch(): string {
   try {
-    return execSync("git branch --show-current", {
-      encoding: "utf-8",
+    return execSync('git branch --show-current', {
+      encoding: 'utf-8',
       cwd: getProjectRoot(),
       timeout: 5000,
     }).trim();
   } catch {
-    return "main";
+    return 'main';
   }
 }
 
@@ -64,20 +60,22 @@ export function getCurrentBranch(): string {
 export function getNextVersionNumber(): number {
   try {
     const output = execSync("git branch -a --list 'evo/v*'", {
-      encoding: "utf-8",
+      encoding: 'utf-8',
       cwd: getProjectRoot(),
       timeout: 5000,
     }).trim();
 
-    if (!output) return 1;
+    if (!output) {
+      return 1;
+    }
 
     const numbers = output
-      .split("\n")
+      .split('\n')
       .map((b) =>
         b
           .trim()
-          .replace(/^\*?\s*/, "")
-          .replace(/^remotes\/origin\//, "")
+          .replace(/^\*?\s*/, '')
+          .replace(/^remotes\/origin\//, '')
       )
       .filter((b) => b.startsWith(BRANCH_PREFIX))
       .map((b) => parseInt(b.slice(BRANCH_PREFIX.length), 10))
@@ -94,7 +92,7 @@ export function getNextVersionNumber(): number {
  */
 export function getWorktreePath(branchName: string): string {
   const root = getProjectRoot();
-  const safeName = branchName.replace(/\//g, "-");
+  const safeName = branchName.replace(/\//g, '-');
   return join(root, WORKTREE_DIR, safeName);
 }
 
@@ -117,12 +115,12 @@ export function createWorktree(
 
   // Clean up stale worktree if directory already exists (e.g. from a previous failed run)
   if (existsSync(worktreePath)) {
-    log.warn("Stale worktree directory found, cleaning up", { worktreePath, branchName });
+    log.warn('Stale worktree directory found, cleaning up', { worktreePath, branchName });
     try {
       execSync(`git worktree remove "${worktreePath}" --force`, {
         cwd: root,
         timeout: 15000,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
     } catch {
       /* directory may not be a registered worktree — remove manually */
@@ -134,7 +132,7 @@ export function createWorktree(
     }
     // Prune any stale worktree references
     try {
-      execSync("git worktree prune", { cwd: root, timeout: 10000, stdio: "pipe" });
+      execSync('git worktree prune', { cwd: root, timeout: 10000, stdio: 'pipe' });
     } catch {
       /* best effort */
     }
@@ -145,7 +143,7 @@ export function createWorktree(
     execSync(`git branch -D "${branchName}"`, {
       cwd: root,
       timeout: 10000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch {
     /* branch doesn't exist — fine */
@@ -155,9 +153,9 @@ export function createWorktree(
   try {
     execSync(`git worktree add "${worktreePath}" -b "${branchName}"`, {
       cwd: root,
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 30000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch (error) {
     throw new Error(
@@ -190,9 +188,9 @@ export function removeWorktree(branchName: string): void {
   try {
     execSync(`git worktree remove "${worktreePath}" --force`, {
       cwd: root,
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 15000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch {
     // Worktree might already be removed
@@ -206,9 +204,9 @@ export function readFileFromBranch(branch: string, filePath: string): string | n
   try {
     return execSync(`git show "${branch}:${filePath}"`, {
       cwd: getProjectRoot(),
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 10000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch {
     return null;
@@ -221,16 +219,18 @@ export function readFileFromBranch(branch: string, filePath: string): string | n
 export function listEvolutionBranches(): string[] {
   try {
     const output = execSync("git branch --list 'evo/*'", {
-      encoding: "utf-8",
+      encoding: 'utf-8',
       cwd: getProjectRoot(),
       timeout: 5000,
     }).trim();
 
-    if (!output) return [];
+    if (!output) {
+      return [];
+    }
 
     return output
-      .split("\n")
-      .map((b) => b.trim().replace(/^\*?\s*/, ""))
+      .split('\n')
+      .map((b) => b.trim().replace(/^\*?\s*/, ''))
       .filter(Boolean);
   } catch {
     return [];
@@ -242,23 +242,25 @@ export function listEvolutionBranches(): string[] {
  */
 export function listWorktrees(): Array<{ path: string; branch: string }> {
   try {
-    const output = execSync("git worktree list --porcelain", {
-      encoding: "utf-8",
+    const output = execSync('git worktree list --porcelain', {
+      encoding: 'utf-8',
       cwd: getProjectRoot(),
       timeout: 5000,
     }).trim();
 
-    if (!output) return [];
+    if (!output) {
+      return [];
+    }
 
     const worktrees: Array<{ path: string; branch: string }> = [];
-    let currentPath = "";
+    let currentPath = '';
 
-    for (const line of output.split("\n")) {
-      if (line.startsWith("worktree ")) {
-        currentPath = line.slice("worktree ".length);
-      } else if (line.startsWith("branch ")) {
-        const branch = line.slice("branch refs/heads/".length);
-        if (currentPath && branch.startsWith("evo/")) {
+    for (const line of output.split('\n')) {
+      if (line.startsWith('worktree ')) {
+        currentPath = line.slice('worktree '.length);
+      } else if (line.startsWith('branch ')) {
+        const branch = line.slice('branch refs/heads/'.length);
+        if (currentPath && branch.startsWith('evo/')) {
           worktrees.push({ path: currentPath, branch });
         }
       }
@@ -275,14 +277,14 @@ export function listWorktrees(): Array<{ path: string; branch: string }> {
  */
 export function getChangedFilesOnBranch(branchName: string): string[] {
   try {
-    const parentBranch = getEvolutionVersionByBranch(branchName)?.parent_branch || "main";
+    const parentBranch = getEvolutionVersionByBranch(branchName)?.parent_branch || 'main';
     const output = execSync(`git diff --name-only "${parentBranch}...${branchName}"`, {
       cwd: getProjectRoot(),
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 10000,
     }).trim();
 
-    return output ? output.split("\n").filter(Boolean) : [];
+    return output ? output.split('\n').filter(Boolean) : [];
   } catch {
     return [];
   }
@@ -294,7 +296,7 @@ export function getChangedFilesOnBranch(branchName: string): string[] {
 export function mergeVersion(branchName: string): { success: boolean; error?: string } {
   const root = getProjectRoot();
   const version = getEvolutionVersionByBranch(branchName);
-  const parentBranch = version?.parent_branch || "main";
+  const parentBranch = version?.parent_branch || 'main';
 
   try {
     // Record merge-base before merging (so we can diff after merge)
@@ -302,9 +304,9 @@ export function mergeVersion(branchName: string): { success: boolean; error?: st
     try {
       mergeBase = execSync(`git merge-base "${parentBranch}" "${branchName}"`, {
         cwd: root,
-        encoding: "utf-8",
+        encoding: 'utf-8',
         timeout: 10000,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
     } catch {
       // If merge-base fails, proceed without it
@@ -316,16 +318,16 @@ export function mergeVersion(branchName: string): { success: boolean; error?: st
     // Merge into parent
     execSync(`git merge "${branchName}" --no-ff -m "Merge ${branchName}: evolution version"`, {
       cwd: root,
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 30000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     // Update status with mergeBase in metadata
     if (version) {
       const existingMeta = version.metadata ? JSON.parse(version.metadata) : {};
       updateEvolutionVersion(version.id, {
-        status: "merged",
+        status: 'merged',
         metadata: { ...existingMeta, mergeBase },
       });
     }
@@ -346,9 +348,9 @@ export function readFileFromRef(ref: string, filePath: string): string | null {
   try {
     return execSync(`git show "${ref}:${filePath}"`, {
       cwd: getProjectRoot(),
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 10000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
   } catch {
     return null;
@@ -360,19 +362,21 @@ export function readFileFromRef(ref: string, filePath: string): string | null {
  */
 export function getChangedFilesForVersion(branchName: string): string[] {
   const version = getEvolutionVersionByBranch(branchName);
-  if (!version) return [];
+  if (!version) {
+    return [];
+  }
 
   // Merged version: use saved mergeBase for diff
-  if (version.status === "merged") {
+  if (version.status === 'merged') {
     const meta = version.metadata ? JSON.parse(version.metadata) : {};
     if (meta.mergeBase) {
       try {
         const output = execSync(`git diff --name-only "${meta.mergeBase}" "${branchName}"`, {
           cwd: getProjectRoot(),
-          encoding: "utf-8",
+          encoding: 'utf-8',
           timeout: 10000,
         }).trim();
-        return output ? output.split("\n").filter(Boolean) : [];
+        return output ? output.split('\n').filter(Boolean) : [];
       } catch {
         return [];
       }
@@ -392,17 +396,14 @@ export function abandonVersion(branchName: string): void {
 
   const version = getEvolutionVersionByBranch(branchName);
   if (version) {
-    updateEvolutionVersion(version.id, { status: "abandoned" });
+    updateEvolutionVersion(version.id, { status: 'abandoned' });
   }
 }
 
 /**
  * Create a new evolution version with auto-incremented name
  */
-export function createNextVersion(options?: {
-  triggerMode?: string;
-  triggerRef?: string;
-}): VersionInfo {
+export function createNextVersion(options?: { triggerMode?: string; triggerRef?: string }): VersionInfo {
   const nextNum = getNextVersionNumber();
   const branchName = `${BRANCH_PREFIX}${nextNum}`;
   return createWorktree(branchName, options);
@@ -414,13 +415,13 @@ export function createNextVersion(options?: {
 export function getGitStatusPorcelain(path?: string): string {
   try {
     const cwd = path || getProjectRoot();
-    return execSync("git status --porcelain", {
+    return execSync('git status --porcelain', {
       cwd,
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 10000,
     }).trimEnd();
   } catch {
-    return "";
+    return '';
   }
 }
 
@@ -437,21 +438,20 @@ export function getGitLog(opts?: { limit?: number; branch?: string; all?: boolea
 }> {
   try {
     const limit = opts?.limit || 20;
-    const allFlag = opts?.all ? "--all" : "";
-    const branchArg = opts?.branch || "";
-    const output = execSync(
-      `git log ${allFlag} ${branchArg} --pretty=format:"%H|%h|%s|%ai|%an|%D" -n ${limit}`,
-      {
-        cwd: getProjectRoot(),
-        encoding: "utf-8",
-        timeout: 10000,
-      }
-    ).trim();
+    const allFlag = opts?.all ? '--all' : '';
+    const branchArg = opts?.branch || '';
+    const output = execSync(`git log ${allFlag} ${branchArg} --pretty=format:"%H|%h|%s|%ai|%an|%D" -n ${limit}`, {
+      cwd: getProjectRoot(),
+      encoding: 'utf-8',
+      timeout: 10000,
+    }).trim();
 
-    if (!output) return [];
+    if (!output) {
+      return [];
+    }
 
-    return output.split("\n").map((line) => {
-      const [hash, shortHash, message, date, author, refs] = line.split("|");
+    return output.split('\n').map((line) => {
+      const [hash, shortHash, message, date, author, refs] = line.split('|');
       return {
         hash,
         shortHash,
@@ -471,15 +471,15 @@ export function getGitLog(opts?: { limit?: number; branch?: string; all?: boolea
  */
 export function getGitDiffContent(branch: string, baseBranch?: string): string {
   try {
-    const base = baseBranch || "main";
+    const base = baseBranch || 'main';
     return execSync(`git diff "${base}...${branch}"`, {
       cwd: getProjectRoot(),
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 30000,
       maxBuffer: 5 * 1024 * 1024,
     }).trim();
   } catch {
-    return "";
+    return '';
   }
 }
 
@@ -497,20 +497,20 @@ export function gitCommitFiles(
     for (const f of fileList) {
       execSync(`git add "${f}"`, {
         cwd: workdir,
-        encoding: "utf-8",
+        encoding: 'utf-8',
         timeout: 10000,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
     }
     execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, {
       cwd: workdir,
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 15000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
-    const hash = execSync("git rev-parse --short HEAD", {
+    const hash = execSync('git rev-parse --short HEAD', {
       cwd: workdir,
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 5000,
     }).trim();
     return { success: true, commitHash: hash };
@@ -531,11 +531,11 @@ export function revertLastCommit(cwd?: string): {
 } {
   const workdir = cwd || getProjectRoot();
   try {
-    execSync("git revert HEAD --no-edit", {
+    execSync('git revert HEAD --no-edit', {
       cwd: workdir,
-      encoding: "utf-8",
+      encoding: 'utf-8',
       timeout: 15000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     return { success: true };
   } catch (error) {

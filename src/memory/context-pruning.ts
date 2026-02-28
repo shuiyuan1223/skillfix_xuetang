@@ -18,8 +18,8 @@
  * - Image blocks are estimated at 8000 chars for accurate budget tracking
  */
 
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { ImageContent, TextContent, ToolResultMessage } from "@mariozechner/pi-ai";
+import type { AgentMessage } from '@mariozechner/pi-agent-core';
+import type { ImageContent, TextContent, ToolResultMessage } from '@mariozechner/pi-ai';
 
 // ── Constants (from OpenClaw) ──────────────────────────────────────────
 
@@ -56,7 +56,7 @@ export const DEFAULT_CONTEXT_PRUNING_SETTINGS: ContextPruningSettings = {
   },
   hardClear: {
     enabled: true,
-    placeholder: "[Old tool result content cleared]",
+    placeholder: '[Old tool result content cleared]',
   },
 };
 
@@ -72,8 +72,7 @@ export interface PruningConfig {
 
 function configToSettings(config: PruningConfig): ContextPruningSettings {
   return {
-    keepLastAssistants:
-      config.protectedTurns ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.keepLastAssistants,
+    keepLastAssistants: config.protectedTurns ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.keepLastAssistants,
     softTrimRatio: config.softTrimThreshold ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.softTrimRatio,
     hardClearRatio: config.hardClearThreshold ?? DEFAULT_CONTEXT_PRUNING_SETTINGS.hardClearRatio,
     minPrunableToolChars: DEFAULT_CONTEXT_PRUNING_SETTINGS.minPrunableToolChars,
@@ -89,13 +88,13 @@ function configToSettings(config: PruningConfig): ContextPruningSettings {
 // ── Helpers (ported 1:1 from OpenClaw pruner.ts) ───────────────────────
 
 function asText(text: string): TextContent {
-  return { type: "text", text };
+  return { type: 'text', text };
 }
 
 function collectTextSegments(content: ReadonlyArray<TextContent | ImageContent>): string[] {
   const parts: string[] = [];
   for (const block of content) {
-    if (block.type === "text") {
+    if (block.type === 'text') {
       parts.push(block.text);
     }
   }
@@ -103,7 +102,9 @@ function collectTextSegments(content: ReadonlyArray<TextContent | ImageContent>)
 }
 
 function estimateJoinedTextLength(parts: string[]): number {
-  if (parts.length === 0) return 0;
+  if (parts.length === 0) {
+    return 0;
+  }
   let len = 0;
   for (const p of parts) {
     len += p.length;
@@ -113,14 +114,18 @@ function estimateJoinedTextLength(parts: string[]): number {
 }
 
 function takeHeadFromJoinedText(parts: string[], maxChars: number): string {
-  if (maxChars <= 0 || parts.length === 0) return "";
+  if (maxChars <= 0 || parts.length === 0) {
+    return '';
+  }
   let remaining = maxChars;
-  let out = "";
+  let out = '';
   for (let i = 0; i < parts.length && remaining > 0; i++) {
     if (i > 0) {
-      out += "\n";
+      out += '\n';
       remaining -= 1;
-      if (remaining <= 0) break;
+      if (remaining <= 0) {
+        break;
+      }
     }
     const p = parts[i];
     if (p.length <= remaining) {
@@ -135,7 +140,9 @@ function takeHeadFromJoinedText(parts: string[], maxChars: number): string {
 }
 
 function takeTailFromJoinedText(parts: string[], maxChars: number): string {
-  if (maxChars <= 0 || parts.length === 0) return "";
+  if (maxChars <= 0 || parts.length === 0) {
+    return '';
+  }
   let remaining = maxChars;
   const out: string[] = [];
   for (let i = parts.length - 1; i >= 0 && remaining > 0; i--) {
@@ -149,39 +156,51 @@ function takeTailFromJoinedText(parts: string[], maxChars: number): string {
       break;
     }
     if (remaining > 0 && i > 0) {
-      out.push("\n");
+      out.push('\n');
       remaining -= 1;
     }
   }
   out.reverse();
-  return out.join("");
+  return out.join('');
 }
 
 function hasImageBlocks(content: ReadonlyArray<TextContent | ImageContent>): boolean {
   for (const block of content) {
-    if (block.type === "image") return true;
+    if (block.type === 'image') {
+      return true;
+    }
   }
   return false;
 }
 
 function estimateMessageChars(message: AgentMessage): number {
-  if (message.role === "user") {
+  if (message.role === 'user') {
     const content = message.content;
-    if (typeof content === "string") return content.length;
+    if (typeof content === 'string') {
+      return content.length;
+    }
     let chars = 0;
     for (const b of content) {
-      if (b.type === "text") chars += b.text.length;
-      if (b.type === "image") chars += IMAGE_CHAR_ESTIMATE;
+      if (b.type === 'text') {
+        chars += b.text.length;
+      }
+      if (b.type === 'image') {
+        chars += IMAGE_CHAR_ESTIMATE;
+      }
     }
     return chars;
   }
 
-  if (message.role === "assistant") {
+  if (message.role === 'assistant') {
     let chars = 0;
     for (const b of message.content) {
-      if (b.type === "text") chars += b.text.length;
-      if (b.type === "thinking") chars += (b as { thinking: string }).thinking.length;
-      if (b.type === "toolCall") {
+      if (b.type === 'text') {
+        chars += b.text.length;
+      }
+      if (b.type === 'thinking') {
+        chars += (b as { thinking: string }).thinking.length;
+      }
+      if (b.type === 'toolCall') {
         try {
           chars += JSON.stringify((b as { arguments?: unknown }).arguments ?? {}).length;
         } catch {
@@ -192,11 +211,15 @@ function estimateMessageChars(message: AgentMessage): number {
     return chars;
   }
 
-  if (message.role === "toolResult") {
+  if (message.role === 'toolResult') {
     let chars = 0;
     for (const b of message.content) {
-      if (b.type === "text") chars += (b as TextContent).text.length;
-      if (b.type === "image") chars += IMAGE_CHAR_ESTIMATE;
+      if (b.type === 'text') {
+        chars += (b as TextContent).text.length;
+      }
+      if (b.type === 'image') {
+        chars += IMAGE_CHAR_ESTIMATE;
+      }
     }
     return chars;
   }
@@ -208,41 +231,49 @@ function estimateContextChars(messages: AgentMessage[]): number {
   return messages.reduce((sum, m) => sum + estimateMessageChars(m), 0);
 }
 
-function findAssistantCutoffIndex(
-  messages: AgentMessage[],
-  keepLastAssistants: number
-): number | null {
-  if (keepLastAssistants <= 0) return messages.length;
+function findAssistantCutoffIndex(messages: AgentMessage[], keepLastAssistants: number): number | null {
+  if (keepLastAssistants <= 0) {
+    return messages.length;
+  }
 
   let remaining = keepLastAssistants;
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i]?.role !== "assistant") continue;
+    if (messages[i]?.role !== 'assistant') {
+      continue;
+    }
     remaining--;
-    if (remaining === 0) return i;
+    if (remaining === 0) {
+      return i;
+    }
   }
   return null;
 }
 
 function findFirstUserIndex(messages: AgentMessage[]): number | null {
   for (let i = 0; i < messages.length; i++) {
-    if (messages[i]?.role === "user") return i;
+    if (messages[i]?.role === 'user') {
+      return i;
+    }
   }
   return null;
 }
 
-function softTrimToolResultMessage(
-  msg: ToolResultMessage,
-  settings: ContextPruningSettings
-): ToolResultMessage | null {
-  if (hasImageBlocks(msg.content as ReadonlyArray<TextContent | ImageContent>)) return null;
+function softTrimToolResultMessage(msg: ToolResultMessage, settings: ContextPruningSettings): ToolResultMessage | null {
+  if (hasImageBlocks(msg.content as ReadonlyArray<TextContent | ImageContent>)) {
+    return null;
+  }
 
   const parts = collectTextSegments(msg.content as ReadonlyArray<TextContent | ImageContent>);
   const rawLen = estimateJoinedTextLength(parts);
-  if (rawLen <= settings.softTrim.maxChars) return null;
+  if (rawLen <= settings.softTrim.maxChars) {
+    return null;
+  }
 
   const headChars = Math.max(0, settings.softTrim.headChars);
   const tailChars = Math.max(0, settings.softTrim.tailChars);
-  if (headChars + tailChars >= rawLen) return null;
+  if (headChars + tailChars >= rawLen) {
+    return null;
+  }
 
   const head = takeHeadFromJoinedText(parts, headChars);
   const tail = takeTailFromJoinedText(parts, tailChars);
@@ -273,18 +304,26 @@ function softTrimPhase(
 
   for (let i = pruneStartIndex; i < cutoffIndex; i++) {
     const msg = messages[i];
-    if (!msg || msg.role !== "toolResult") continue;
-    if (hasImageBlocks(msg.content as ReadonlyArray<TextContent | ImageContent>)) continue;
+    if (!msg || msg.role !== 'toolResult') {
+      continue;
+    }
+    if (hasImageBlocks(msg.content as ReadonlyArray<TextContent | ImageContent>)) {
+      continue;
+    }
 
     prunableToolIndexes.push(i);
 
     const updated = softTrimToolResultMessage(msg as unknown as ToolResultMessage, settings);
-    if (!updated) continue;
+    if (!updated) {
+      continue;
+    }
 
     const beforeChars = estimateMessageChars(msg);
     const afterChars = estimateMessageChars(updated as unknown as AgentMessage);
     chars += afterChars - beforeChars;
-    if (!next) next = messages.slice();
+    if (!next) {
+      next = messages.slice();
+    }
     next[i] = updated as unknown as AgentMessage;
   }
 
@@ -303,27 +342,37 @@ function hardClearPhase(
   let prunableToolChars = 0;
   for (const i of prunableToolIndexes) {
     const msg = outputAfterSoftTrim[i];
-    if (!msg || msg.role !== "toolResult") continue;
+    if (!msg || msg.role !== 'toolResult') {
+      continue;
+    }
     prunableToolChars += estimateMessageChars(msg);
   }
-  if (prunableToolChars < settings.minPrunableToolChars) return existingNext;
+  if (prunableToolChars < settings.minPrunableToolChars) {
+    return existingNext;
+  }
 
   let next = existingNext;
   let chars = totalChars;
   let ratio = chars / charWindow;
 
   for (const i of prunableToolIndexes) {
-    if (ratio < settings.hardClearRatio) break;
+    if (ratio < settings.hardClearRatio) {
+      break;
+    }
 
     const msg = (next ?? messages)[i];
-    if (!msg || msg.role !== "toolResult") continue;
+    if (!msg || msg.role !== 'toolResult') {
+      continue;
+    }
 
     const beforeChars = estimateMessageChars(msg);
     const cleared: ToolResultMessage = {
       ...msg,
       content: [asText(settings.hardClear.placeholder)],
     };
-    if (!next) next = messages.slice();
+    if (!next) {
+      next = messages.slice();
+    }
     next[i] = cleared as unknown as AgentMessage;
     const afterChars = estimateMessageChars(cleared as unknown as AgentMessage);
     chars += afterChars - beforeChars;
@@ -341,20 +390,28 @@ export function pruneContextMessages(
   const settings = settingsOverride ?? configToSettings(config);
   const contextWindowTokens = config.contextWindow;
 
-  if (!contextWindowTokens || contextWindowTokens <= 0) return messages;
+  if (!contextWindowTokens || contextWindowTokens <= 0) {
+    return messages;
+  }
 
   const charWindow = contextWindowTokens * CHARS_PER_TOKEN_ESTIMATE;
-  if (charWindow <= 0) return messages;
+  if (charWindow <= 0) {
+    return messages;
+  }
 
   const cutoffIndex = findAssistantCutoffIndex(messages, settings.keepLastAssistants);
-  if (cutoffIndex === null) return messages;
+  if (cutoffIndex === null) {
+    return messages;
+  }
 
   const firstUserIndex = findFirstUserIndex(messages);
   const pruneStartIndex = firstUserIndex === null ? messages.length : firstUserIndex;
 
   let totalChars = estimateContextChars(messages);
   let ratio = totalChars / charWindow;
-  if (ratio < settings.softTrimRatio) return messages;
+  if (ratio < settings.softTrimRatio) {
+    return messages;
+  }
 
   // Phase 1: Soft-trim
   const phase1 = softTrimPhase(messages, settings, pruneStartIndex, cutoffIndex, totalChars);
@@ -362,16 +419,11 @@ export function pruneContextMessages(
 
   const outputAfterSoftTrim = phase1.next ?? messages;
   ratio = totalChars / charWindow;
-  if (ratio < settings.hardClearRatio || !settings.hardClear.enabled) return outputAfterSoftTrim;
+  if (ratio < settings.hardClearRatio || !settings.hardClear.enabled) {
+    return outputAfterSoftTrim;
+  }
 
   // Phase 2: Hard-clear
-  const result = hardClearPhase(
-    messages,
-    settings,
-    phase1.prunableToolIndexes,
-    phase1.next,
-    totalChars,
-    charWindow
-  );
+  const result = hardClearPhase(messages, settings, phase1.prunableToolIndexes, phase1.next, totalChars, charWindow);
   return result ?? messages;
 }

@@ -5,10 +5,10 @@
  * test cases, and optimization suggestions.
  */
 
-import { Database } from "bun:sqlite";
-import { mkdirSync, existsSync } from "fs";
-import { dirname, join } from "path";
-import { getStateDir } from "../utils/config.js";
+import { Database } from 'bun:sqlite';
+import { mkdirSync, existsSync } from 'fs';
+import { dirname, join } from 'path';
+import { getStateDir } from '../utils/config.js';
 
 // Database instance singleton
 let db: Database | null = null;
@@ -17,9 +17,11 @@ let db: Database | null = null;
  * Get or create the database connection
  */
 export function getDatabase(dbPath?: string): Database {
-  if (db) return db;
+  if (db) {
+    return db;
+  }
 
-  const finalPath = dbPath || join(getStateDir(), "db", "evolution.db");
+  const finalPath = dbPath || join(getStateDir(), 'db', 'evolution.db');
 
   // Ensure data directory exists
   const dir = dirname(finalPath);
@@ -30,8 +32,8 @@ export function getDatabase(dbPath?: string): Database {
   db = new Database(finalPath, { create: true });
 
   // Enable WAL mode for better concurrent performance
-  db.exec("PRAGMA journal_mode = WAL");
-  db.exec("PRAGMA foreign_keys = ON");
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA foreign_keys = ON');
 
   // Initialize schema
   initializeSchema(db);
@@ -193,19 +195,19 @@ function initializeSchema(db: Database): void {
 function migrateTestCasesTable(db: Database): void {
   try {
     // Check if subcategory column exists
-    const tableInfo = db.prepare("PRAGMA table_info(test_cases)").all() as Array<{
+    const tableInfo = db.prepare('PRAGMA table_info(test_cases)').all() as Array<{
       name: string;
     }>;
     const columnNames = tableInfo.map((c) => c.name);
 
-    if (!columnNames.includes("subcategory")) {
-      db.exec("ALTER TABLE test_cases ADD COLUMN subcategory TEXT");
+    if (!columnNames.includes('subcategory')) {
+      db.exec('ALTER TABLE test_cases ADD COLUMN subcategory TEXT');
     }
-    if (!columnNames.includes("difficulty")) {
+    if (!columnNames.includes('difficulty')) {
       db.exec("ALTER TABLE test_cases ADD COLUMN difficulty TEXT DEFAULT 'medium'");
     }
-    if (!columnNames.includes("mock_context")) {
-      db.exec("ALTER TABLE test_cases ADD COLUMN mock_context TEXT");
+    if (!columnNames.includes('mock_context')) {
+      db.exec('ALTER TABLE test_cases ADD COLUMN mock_context TEXT');
     }
   } catch {
     // Table might not exist yet on first run, which is fine
@@ -217,13 +219,13 @@ function migrateTestCasesTable(db: Database): void {
  */
 function migrateBenchmarkRunsTable(db: Database): void {
   try {
-    const tableInfo = db.prepare("PRAGMA table_info(benchmark_runs)").all() as Array<{
+    const tableInfo = db.prepare('PRAGMA table_info(benchmark_runs)').all() as Array<{
       name: string;
     }>;
     const columnNames = tableInfo.map((c) => c.name);
 
-    if (!columnNames.includes("branch_name")) {
-      db.exec("ALTER TABLE benchmark_runs ADD COLUMN branch_name TEXT");
+    if (!columnNames.includes('branch_name')) {
+      db.exec('ALTER TABLE benchmark_runs ADD COLUMN branch_name TEXT');
     }
   } catch {
     // Table might not exist yet on first run
@@ -235,11 +237,11 @@ function migrateBenchmarkRunsTable(db: Database): void {
  */
 function migrateIncidentsTable(db: Database): void {
   try {
-    const tableInfo = db.prepare("PRAGMA table_info(incidents)").all() as Array<{ name: string }>;
+    const tableInfo = db.prepare('PRAGMA table_info(incidents)').all() as Array<{ name: string }>;
     const columnNames = tableInfo.map((c) => c.name);
 
-    if (!columnNames.includes("resolved_at")) {
-      db.exec("ALTER TABLE incidents ADD COLUMN resolved_at INTEGER");
+    if (!columnNames.includes('resolved_at')) {
+      db.exec('ALTER TABLE incidents ADD COLUMN resolved_at INTEGER');
     }
   } catch {
     // Table might not exist yet on first run
@@ -303,7 +305,7 @@ export function insertTrace(trace: {
 
 export function getTrace(id: string): TraceRow | null {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT * FROM traces WHERE id = ?");
+  const stmt = database.prepare('SELECT * FROM traces WHERE id = ?');
   return stmt.get(id) as TraceRow | null;
 }
 
@@ -319,30 +321,30 @@ export function listTraces(
   } = {}
 ): TraceRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM traces WHERE 1=1";
+  let sql = 'SELECT * FROM traces WHERE 1=1';
   const params: SQLParam[] = [];
 
   if (options.sessionId) {
-    sql += " AND session_id = ?";
+    sql += ' AND session_id = ?';
     params.push(options.sessionId);
   }
   if (options.startTime) {
-    sql += " AND timestamp >= ?";
+    sql += ' AND timestamp >= ?';
     params.push(options.startTime);
   }
   if (options.endTime) {
-    sql += " AND timestamp <= ?";
+    sql += ' AND timestamp <= ?';
     params.push(options.endTime);
   }
 
-  sql += " ORDER BY timestamp DESC";
+  sql += ' ORDER BY timestamp DESC';
 
   if (options.limit) {
-    sql += " LIMIT ?";
+    sql += ' LIMIT ?';
     params.push(options.limit);
   }
   if (options.offset) {
-    sql += " OFFSET ?";
+    sql += ' OFFSET ?';
     params.push(options.offset);
   }
 
@@ -352,7 +354,7 @@ export function listTraces(
 
 export function countTraces(): number {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT COUNT(*) as count FROM traces");
+  const stmt = database.prepare('SELECT COUNT(*) as count FROM traces');
   const result = stmt.get() as { count: number };
   return result.count;
 }
@@ -360,8 +362,8 @@ export function countTraces(): number {
 export function clearTraces(): void {
   const database = getDatabase();
   // Delete evaluations first due to foreign key constraint
-  database.exec("DELETE FROM evaluations");
-  database.exec("DELETE FROM traces");
+  database.exec('DELETE FROM evaluations');
+  database.exec('DELETE FROM traces');
 }
 
 // ============================================================================
@@ -411,13 +413,13 @@ export function insertEvaluation(evaluation: {
 
 export function getEvaluation(id: string): EvaluationRow | null {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT * FROM evaluations WHERE id = ?");
+  const stmt = database.prepare('SELECT * FROM evaluations WHERE id = ?');
   return stmt.get(id) as EvaluationRow | null;
 }
 
 export function getEvaluationByTraceId(traceId: string): EvaluationRow | null {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT * FROM evaluations WHERE trace_id = ?");
+  const stmt = database.prepare('SELECT * FROM evaluations WHERE trace_id = ?');
   return stmt.get(traceId) as EvaluationRow | null;
 }
 
@@ -430,26 +432,26 @@ export function listEvaluations(
   } = {}
 ): EvaluationRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM evaluations WHERE 1=1";
+  let sql = 'SELECT * FROM evaluations WHERE 1=1';
   const params: SQLParam[] = [];
 
   if (options.minScore !== undefined) {
-    sql += " AND overall_score >= ?";
+    sql += ' AND overall_score >= ?';
     params.push(options.minScore);
   }
   if (options.maxScore !== undefined) {
-    sql += " AND overall_score <= ?";
+    sql += ' AND overall_score <= ?';
     params.push(options.maxScore);
   }
 
-  sql += " ORDER BY timestamp DESC";
+  sql += ' ORDER BY timestamp DESC';
 
   if (options.limit) {
-    sql += " LIMIT ?";
+    sql += ' LIMIT ?';
     params.push(options.limit);
   }
   if (options.offset) {
-    sql += " OFFSET ?";
+    sql += ' OFFSET ?';
     params.push(options.offset);
   }
 
@@ -464,10 +466,10 @@ export function getEvaluationStats(): {
 } {
   const database = getDatabase();
 
-  const countStmt = database.prepare("SELECT COUNT(*) as count FROM evaluations");
+  const countStmt = database.prepare('SELECT COUNT(*) as count FROM evaluations');
   const countResult = countStmt.get() as { count: number };
 
-  const avgStmt = database.prepare("SELECT AVG(overall_score) as avg FROM evaluations");
+  const avgStmt = database.prepare('SELECT AVG(overall_score) as avg FROM evaluations');
   const avgResult = avgStmt.get() as { avg: number | null };
 
   // Score distribution in buckets: 0-20, 21-40, 41-60, 61-80, 81-100
@@ -543,14 +545,14 @@ export function insertTestCase(testCase: {
     JSON.stringify(testCase.expected),
     now,
     now,
-    testCase.difficulty ?? "medium",
+    testCase.difficulty ?? 'medium',
     null
   );
 }
 
 export function getTestCase(id: string): TestCaseRow | null {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT * FROM test_cases WHERE id = ?");
+  const stmt = database.prepare('SELECT * FROM test_cases WHERE id = ?');
   return stmt.get(id) as TestCaseRow | null;
 }
 
@@ -562,22 +564,22 @@ export function listTestCases(
   } = {}
 ): TestCaseRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM test_cases WHERE 1=1";
+  let sql = 'SELECT * FROM test_cases WHERE 1=1';
   const params: SQLParam[] = [];
 
   if (options.category) {
-    sql += " AND category = ?";
+    sql += ' AND category = ?';
     params.push(options.category);
   }
 
-  sql += " ORDER BY created_at DESC";
+  sql += ' ORDER BY created_at DESC';
 
   if (options.limit) {
-    sql += " LIMIT ?";
+    sql += ' LIMIT ?';
     params.push(options.limit);
   }
   if (options.offset) {
-    sql += " OFFSET ?";
+    sql += ' OFFSET ?';
     params.push(options.offset);
   }
 
@@ -587,7 +589,7 @@ export function listTestCases(
 
 export function deleteTestCase(id: string): void {
   const database = getDatabase();
-  const stmt = database.prepare("DELETE FROM test_cases WHERE id = ?");
+  const stmt = database.prepare('DELETE FROM test_cases WHERE id = ?');
   stmt.run(id);
 }
 
@@ -610,7 +612,7 @@ export interface SuggestionRow {
 export function insertSuggestion(suggestion: {
   id: string;
   timestamp: number;
-  type: "prompt" | "tool" | "behavior";
+  type: 'prompt' | 'tool' | 'behavior';
   target: string;
   currentValue?: string;
   suggestedValue: string;
@@ -634,7 +636,7 @@ export function insertSuggestion(suggestion: {
 
 export function getSuggestion(id: string): SuggestionRow | null {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT * FROM suggestions WHERE id = ?");
+  const stmt = database.prepare('SELECT * FROM suggestions WHERE id = ?');
   return stmt.get(id) as SuggestionRow | null;
 }
 
@@ -647,26 +649,26 @@ export function listSuggestions(
   } = {}
 ): SuggestionRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM suggestions WHERE 1=1";
+  let sql = 'SELECT * FROM suggestions WHERE 1=1';
   const params: SQLParam[] = [];
 
   if (options.status) {
-    sql += " AND status = ?";
+    sql += ' AND status = ?';
     params.push(options.status);
   }
   if (options.type) {
-    sql += " AND type = ?";
+    sql += ' AND type = ?';
     params.push(options.type);
   }
 
-  sql += " ORDER BY timestamp DESC";
+  sql += ' ORDER BY timestamp DESC';
 
   if (options.limit) {
-    sql += " LIMIT ?";
+    sql += ' LIMIT ?';
     params.push(options.limit);
   }
   if (options.offset) {
-    sql += " OFFSET ?";
+    sql += ' OFFSET ?';
     params.push(options.offset);
   }
 
@@ -676,7 +678,7 @@ export function listSuggestions(
 
 export function updateSuggestionStatus(
   id: string,
-  status: "pending" | "testing" | "validated" | "applied" | "rejected",
+  status: 'pending' | 'testing' | 'validated' | 'applied' | 'rejected',
   validationResults?: { before: number; after: number; improvement: number }
 ): void {
   const database = getDatabase();
@@ -736,7 +738,7 @@ export function insertBenchmarkRun(run: {
     run.failedCount,
     run.overallScore,
     run.durationMs ?? null,
-    run.profile ?? "quick",
+    run.profile ?? 'quick',
     run.metadata ? JSON.stringify(run.metadata) : null
   );
 }
@@ -775,7 +777,7 @@ export function findMatchingBenchmarkRun(criteria: {
 
 export function getBenchmarkRun(id: string): BenchmarkRunRow | null {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT * FROM benchmark_runs WHERE id = ?");
+  const stmt = database.prepare('SELECT * FROM benchmark_runs WHERE id = ?');
   return stmt.get(id) as BenchmarkRunRow | null;
 }
 
@@ -783,7 +785,7 @@ export function listBenchmarkRuns(
   options: { limit?: number; offset?: number; modelId?: string } = {}
 ): BenchmarkRunRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM benchmark_runs";
+  let sql = 'SELECT * FROM benchmark_runs';
   const params: SQLParam[] = [];
 
   if (options.modelId) {
@@ -791,14 +793,14 @@ export function listBenchmarkRuns(
     params.push(options.modelId);
   }
 
-  sql += " ORDER BY timestamp DESC";
+  sql += ' ORDER BY timestamp DESC';
 
   if (options.limit) {
-    sql += " LIMIT ?";
+    sql += ' LIMIT ?';
     params.push(options.limit);
   }
   if (options.offset) {
-    sql += " OFFSET ?";
+    sql += ' OFFSET ?';
     params.push(options.offset);
   }
 
@@ -820,26 +822,28 @@ export function updateBenchmarkRun(
   const params: SQLParam[] = [];
 
   if (updates.passedCount !== undefined) {
-    setClauses.push("passed_count = ?");
+    setClauses.push('passed_count = ?');
     params.push(updates.passedCount);
   }
   if (updates.failedCount !== undefined) {
-    setClauses.push("failed_count = ?");
+    setClauses.push('failed_count = ?');
     params.push(updates.failedCount);
   }
   if (updates.overallScore !== undefined) {
-    setClauses.push("overall_score = ?");
+    setClauses.push('overall_score = ?');
     params.push(updates.overallScore);
   }
   if (updates.durationMs !== undefined) {
-    setClauses.push("duration_ms = ?");
+    setClauses.push('duration_ms = ?');
     params.push(updates.durationMs);
   }
 
-  if (setClauses.length === 0) return;
+  if (setClauses.length === 0) {
+    return;
+  }
 
   params.push(id);
-  const stmt = database.prepare(`UPDATE benchmark_runs SET ${setClauses.join(", ")} WHERE id = ?`);
+  const stmt = database.prepare(`UPDATE benchmark_runs SET ${setClauses.join(', ')} WHERE id = ?`);
   stmt.run(...params);
 }
 
@@ -855,10 +859,10 @@ export function markInterruptedBenchmarkRuns(): number {
     // Delete runs with no progress (never started or interrupted before any test completed)
     database
       .prepare(
-        "DELETE FROM benchmark_runs WHERE ((duration_ms IS NULL OR duration_ms = 0) AND overall_score = 0) OR (duration_ms = -1 AND overall_score = 0)"
+        'DELETE FROM benchmark_runs WHERE ((duration_ms IS NULL OR duration_ms = 0) AND overall_score = 0) OR (duration_ms = -1 AND overall_score = 0)'
       )
       .run();
-    const row = database.prepare("SELECT changes() as c").get() as { c: number } | null;
+    const row = database.prepare('SELECT changes() as c').get() as { c: number } | null;
     return row?.c ?? 0;
   } catch {
     return 0;
@@ -871,10 +875,10 @@ export function markInterruptedBenchmarkRuns(): number {
 export function deleteBenchmarkRun(id: string): boolean {
   const database = getDatabase();
   try {
-    database.prepare("DELETE FROM benchmark_results WHERE run_id = ?").run(id);
-    database.prepare("DELETE FROM category_scores WHERE run_id = ?").run(id);
-    database.prepare("DELETE FROM benchmark_runs WHERE id = ?").run(id);
-    const row = database.prepare("SELECT changes() as c").get() as { c: number } | null;
+    database.prepare('DELETE FROM benchmark_results WHERE run_id = ?').run(id);
+    database.prepare('DELETE FROM category_scores WHERE run_id = ?').run(id);
+    database.prepare('DELETE FROM benchmark_runs WHERE id = ?').run(id);
+    const row = database.prepare('SELECT changes() as c').get() as { c: number } | null;
     return (row?.c ?? 0) > 0;
   } catch {
     return false;
@@ -925,9 +929,7 @@ export function insertCategoryScore(score: {
 
 export function listCategoryScores(runId: string): CategoryScoreRow[] {
   const database = getDatabase();
-  const stmt = database.prepare(
-    "SELECT * FROM category_scores WHERE run_id = ? ORDER BY category, subcategory"
-  );
+  const stmt = database.prepare('SELECT * FROM category_scores WHERE run_id = ? ORDER BY category, subcategory');
   return stmt.all(runId) as CategoryScoreRow[];
 }
 
@@ -1034,22 +1036,22 @@ export function listBenchmarkResults(
   options: { runId?: string; testCaseId?: string; limit?: number } = {}
 ): BenchmarkResultRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM benchmark_results WHERE 1=1";
+  let sql = 'SELECT * FROM benchmark_results WHERE 1=1';
   const params: SQLParam[] = [];
 
   if (options.runId) {
-    sql += " AND run_id = ?";
+    sql += ' AND run_id = ?';
     params.push(options.runId);
   }
   if (options.testCaseId) {
-    sql += " AND test_case_id = ?";
+    sql += ' AND test_case_id = ?';
     params.push(options.testCaseId);
   }
 
-  sql += " ORDER BY timestamp DESC";
+  sql += ' ORDER BY timestamp DESC';
 
   if (options.limit) {
-    sql += " LIMIT ?";
+    sql += ' LIMIT ?';
     params.push(options.limit);
   }
 
@@ -1103,7 +1105,7 @@ export function insertEvolutionVersion(version: {
     version.branchName,
     version.parentBranch ?? null,
     version.createdAt,
-    version.status ?? "active",
+    version.status ?? 'active',
     version.triggerMode ?? null,
     version.triggerRef ?? null,
     version.baselineRunId ?? null,
@@ -1117,13 +1119,13 @@ export function insertEvolutionVersion(version: {
 
 export function getEvolutionVersion(id: string): EvolutionVersionRow | null {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT * FROM evolution_versions WHERE id = ?");
+  const stmt = database.prepare('SELECT * FROM evolution_versions WHERE id = ?');
   return stmt.get(id) as EvolutionVersionRow | null;
 }
 
 export function getEvolutionVersionByBranch(branchName: string): EvolutionVersionRow | null {
   const database = getDatabase();
-  const stmt = database.prepare("SELECT * FROM evolution_versions WHERE branch_name = ?");
+  const stmt = database.prepare('SELECT * FROM evolution_versions WHERE branch_name = ?');
   return stmt.get(branchName) as EvolutionVersionRow | null;
 }
 
@@ -1131,26 +1133,26 @@ export function listEvolutionVersions(
   options: { status?: string; triggerMode?: string; limit?: number; offset?: number } = {}
 ): EvolutionVersionRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM evolution_versions WHERE 1=1";
+  let sql = 'SELECT * FROM evolution_versions WHERE 1=1';
   const params: SQLParam[] = [];
 
   if (options.status) {
-    sql += " AND status = ?";
+    sql += ' AND status = ?';
     params.push(options.status);
   }
   if (options.triggerMode) {
-    sql += " AND trigger_mode = ?";
+    sql += ' AND trigger_mode = ?';
     params.push(options.triggerMode);
   }
 
-  sql += " ORDER BY created_at DESC";
+  sql += ' ORDER BY created_at DESC';
 
   if (options.limit) {
-    sql += " LIMIT ?";
+    sql += ' LIMIT ?';
     params.push(options.limit);
   }
   if (options.offset) {
-    sql += " OFFSET ?";
+    sql += ' OFFSET ?';
     params.push(options.offset);
   }
 
@@ -1174,50 +1176,50 @@ export function updateEvolutionVersion(
   const params: SQLParam[] = [];
 
   if (updates.status !== undefined) {
-    setClauses.push("status = ?");
+    setClauses.push('status = ?');
     params.push(updates.status);
   }
   if (updates.latestRunId !== undefined) {
-    setClauses.push("latest_run_id = ?");
+    setClauses.push('latest_run_id = ?');
     params.push(updates.latestRunId);
   }
   if (updates.scoreDelta !== undefined) {
-    setClauses.push("score_delta = ?");
+    setClauses.push('score_delta = ?');
     params.push(updates.scoreDelta);
   }
   if (updates.filesChanged !== undefined) {
-    setClauses.push("files_changed = ?");
+    setClauses.push('files_changed = ?');
     params.push(JSON.stringify(updates.filesChanged));
   }
   if (updates.worktreePath !== undefined) {
-    setClauses.push("worktree_path = ?");
+    setClauses.push('worktree_path = ?');
     params.push(updates.worktreePath);
   }
   if (updates.metadata !== undefined) {
-    setClauses.push("metadata = ?");
+    setClauses.push('metadata = ?');
     params.push(JSON.stringify(updates.metadata));
   }
 
-  if (setClauses.length === 0) return;
+  if (setClauses.length === 0) {
+    return;
+  }
 
   params.push(id);
-  const stmt = database.prepare(
-    `UPDATE evolution_versions SET ${setClauses.join(", ")} WHERE id = ?`
-  );
+  const stmt = database.prepare(`UPDATE evolution_versions SET ${setClauses.join(', ')} WHERE id = ?`);
   stmt.run(...params);
 }
 
 export function countTestCases(options: { category?: string; difficulty?: string } = {}): number {
   const database = getDatabase();
-  let sql = "SELECT COUNT(*) as count FROM test_cases WHERE 1=1";
+  let sql = 'SELECT COUNT(*) as count FROM test_cases WHERE 1=1';
   const params: SQLParam[] = [];
 
   if (options.category) {
-    sql += " AND category = ?";
+    sql += ' AND category = ?';
     params.push(options.category);
   }
   if (options.difficulty) {
-    sql += " AND difficulty = ?";
+    sql += ' AND difficulty = ?';
     params.push(options.difficulty);
   }
 
@@ -1230,10 +1232,10 @@ export function countTestCases(options: { category?: string; difficulty?: string
 // Incident Operations
 // ============================================================================
 
-export type IncidentType = "bug" | "effect" | "unclassified";
-export type IncidentStatus = "pending" | "confirmed" | "suspended" | "resolved" | "closed";
-export type IncidentPriority = "high" | "medium" | "low" | "ignore";
-export type IncidentSource = "slack" | "manual" | "system";
+export type IncidentType = 'bug' | 'effect' | 'unclassified';
+export type IncidentStatus = 'pending' | 'confirmed' | 'suspended' | 'resolved' | 'closed';
+export type IncidentPriority = 'high' | 'medium' | 'low' | 'ignore';
+export type IncidentSource = 'slack' | 'manual' | 'system';
 
 export interface IncidentRow {
   id: string;
@@ -1281,9 +1283,9 @@ export function insertIncident(incident: {
       incident.reporter ?? null,
       incident.rawText,
       incident.traceId ?? null,
-      incident.type ?? "unclassified",
-      incident.status ?? "pending",
-      incident.priority ?? "medium",
+      incident.type ?? 'unclassified',
+      incident.status ?? 'pending',
+      incident.priority ?? 'medium',
       incident.classificationConfidence ?? null,
       incident.classificationReason ?? null
     );
@@ -1291,9 +1293,7 @@ export function insertIncident(incident: {
 
 export function getIncident(id: string): IncidentRow | null {
   const database = getDatabase();
-  return (
-    (database.prepare("SELECT * FROM incidents WHERE id = ?").get(id) as IncidentRow | null) ?? null
-  );
+  return (database.prepare('SELECT * FROM incidents WHERE id = ?').get(id) as IncidentRow | null) ?? null;
 }
 
 export function listIncidents(
@@ -1307,27 +1307,27 @@ export function listIncidents(
   } = {}
 ): IncidentRow[] {
   const database = getDatabase();
-  let sql = "SELECT * FROM incidents WHERE 1=1";
+  let sql = 'SELECT * FROM incidents WHERE 1=1';
   const params: SQLParam[] = [];
 
   if (options.status) {
-    sql += " AND status = ?";
+    sql += ' AND status = ?';
     params.push(options.status);
   }
   if (options.type) {
-    sql += " AND type = ?";
+    sql += ' AND type = ?';
     params.push(options.type);
   }
   if (options.priority) {
-    sql += " AND priority = ?";
+    sql += ' AND priority = ?';
     params.push(options.priority);
   }
   if (options.source) {
-    sql += " AND source = ?";
+    sql += ' AND source = ?';
     params.push(options.source);
   }
 
-  sql += " ORDER BY timestamp DESC";
+  sql += ' ORDER BY timestamp DESC';
   sql += ` LIMIT ${options.limit ?? 50}`;
   if (options.offset) sql += ` OFFSET ${options.offset}`;
 
@@ -1336,58 +1336,50 @@ export function listIncidents(
 
 export function updateIncidentStatus(id: string, status: IncidentStatus, notes?: string): void {
   const database = getDatabase();
-  const resolvedAt = status === "resolved" || status === "closed" ? Date.now() : null;
+  const resolvedAt = status === 'resolved' || status === 'closed' ? Date.now() : null;
 
   if (notes !== undefined) {
     database
-      .prepare("UPDATE incidents SET status = ?, notes = ?, resolved_at = ? WHERE id = ?")
+      .prepare('UPDATE incidents SET status = ?, notes = ?, resolved_at = ? WHERE id = ?')
       .run(status, notes, resolvedAt, id);
   } else {
     database
       .prepare(
-        "UPDATE incidents SET status = ?, resolved_at = CASE WHEN ? IS NOT NULL THEN ? ELSE resolved_at END WHERE id = ?"
+        'UPDATE incidents SET status = ?, resolved_at = CASE WHEN ? IS NOT NULL THEN ? ELSE resolved_at END WHERE id = ?'
       )
       .run(status, resolvedAt, resolvedAt, id);
   }
 }
 
-export function updateIncidentType(
-  id: string,
-  type: IncidentType,
-  priority?: IncidentPriority
-): void {
+export function updateIncidentType(id: string, type: IncidentType, priority?: IncidentPriority): void {
   const database = getDatabase();
   if (priority !== undefined) {
-    database
-      .prepare("UPDATE incidents SET type = ?, priority = ? WHERE id = ?")
-      .run(type, priority, id);
+    database.prepare('UPDATE incidents SET type = ?, priority = ? WHERE id = ?').run(type, priority, id);
   } else {
-    database.prepare("UPDATE incidents SET type = ? WHERE id = ?").run(type, id);
+    database.prepare('UPDATE incidents SET type = ? WHERE id = ?').run(type, id);
   }
 }
 
 export function updateIncidentGitHubIssue(id: string, issueNumber: number, issueUrl: string): void {
   const database = getDatabase();
   database
-    .prepare(
-      "UPDATE incidents SET github_issue_number = ?, github_issue_url = ?, status = 'confirmed' WHERE id = ?"
-    )
+    .prepare("UPDATE incidents SET github_issue_number = ?, github_issue_url = ?, status = 'confirmed' WHERE id = ?")
     .run(issueNumber, issueUrl, id);
 }
 
 export function updateIncidentNotes(id: string, notes: string): void {
   const database = getDatabase();
-  database.prepare("UPDATE incidents SET notes = ? WHERE id = ?").run(notes, id);
+  database.prepare('UPDATE incidents SET notes = ? WHERE id = ?').run(notes, id);
 }
 
 export function updateIncidentTraceId(id: string, traceId: string): void {
   const database = getDatabase();
-  database.prepare("UPDATE incidents SET trace_id = ? WHERE id = ?").run(traceId, id);
+  database.prepare('UPDATE incidents SET trace_id = ? WHERE id = ?').run(traceId, id);
 }
 
 export function updateIncidentRawText(id: string, rawText: string): void {
   const database = getDatabase();
-  database.prepare("UPDATE incidents SET raw_text = ? WHERE id = ?").run(rawText, id);
+  database.prepare('UPDATE incidents SET raw_text = ? WHERE id = ?').run(rawText, id);
 }
 
 export interface IncidentStats {

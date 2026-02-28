@@ -5,7 +5,7 @@
  * identical so OpenClaw plugin hook-registration code works without changes.
  */
 
-import type { AgentMessage, AgentTool } from "@mariozechner/pi-agent-core";
+import type { AgentMessage, AgentTool } from '@mariozechner/pi-agent-core';
 
 // =============================================================================
 // Plugin Logger
@@ -40,20 +40,20 @@ export type PHAPluginToolOptions = {
 // =============================================================================
 
 export type PluginHookName =
-  | "before_agent_start"
-  | "agent_end"
-  | "before_compaction"
-  | "after_compaction"
-  | "message_received"
-  | "message_sending"
-  | "message_sent"
-  | "before_tool_call"
-  | "after_tool_call"
-  | "tool_result_persist"
-  | "session_start"
-  | "session_end"
-  | "gateway_start"
-  | "gateway_stop";
+  | 'before_agent_start'
+  | 'agent_end'
+  | 'before_compaction'
+  | 'after_compaction'
+  | 'message_received'
+  | 'message_sending'
+  | 'message_sent'
+  | 'before_tool_call'
+  | 'after_tool_call'
+  | 'tool_result_persist'
+  | 'session_start'
+  | 'session_end'
+  | 'gateway_start'
+  | 'gateway_stop';
 
 // =============================================================================
 // Hook Event & Context Types (identical to OpenClaw)
@@ -224,54 +224,27 @@ export type PluginHookHandlerMap = {
     ctx: PluginHookAgentContext
   ) => Promise<PluginHookBeforeAgentStartResult | void> | PluginHookBeforeAgentStartResult | void;
   agent_end: (event: PluginHookAgentEndEvent, ctx: PluginHookAgentContext) => Promise<void> | void;
-  before_compaction: (
-    event: PluginHookBeforeCompactionEvent,
-    ctx: PluginHookAgentContext
-  ) => Promise<void> | void;
-  after_compaction: (
-    event: PluginHookAfterCompactionEvent,
-    ctx: PluginHookAgentContext
-  ) => Promise<void> | void;
-  message_received: (
-    event: PluginHookMessageReceivedEvent,
-    ctx: PluginHookMessageContext
-  ) => Promise<void> | void;
+  before_compaction: (event: PluginHookBeforeCompactionEvent, ctx: PluginHookAgentContext) => Promise<void> | void;
+  after_compaction: (event: PluginHookAfterCompactionEvent, ctx: PluginHookAgentContext) => Promise<void> | void;
+  message_received: (event: PluginHookMessageReceivedEvent, ctx: PluginHookMessageContext) => Promise<void> | void;
   message_sending: (
     event: PluginHookMessageSendingEvent,
     ctx: PluginHookMessageContext
   ) => Promise<PluginHookMessageSendingResult | void> | PluginHookMessageSendingResult | void;
-  message_sent: (
-    event: PluginHookMessageSentEvent,
-    ctx: PluginHookMessageContext
-  ) => Promise<void> | void;
+  message_sent: (event: PluginHookMessageSentEvent, ctx: PluginHookMessageContext) => Promise<void> | void;
   before_tool_call: (
     event: PluginHookBeforeToolCallEvent,
     ctx: PluginHookToolContext
   ) => Promise<PluginHookBeforeToolCallResult | void> | PluginHookBeforeToolCallResult | void;
-  after_tool_call: (
-    event: PluginHookAfterToolCallEvent,
-    ctx: PluginHookToolContext
-  ) => Promise<void> | void;
+  after_tool_call: (event: PluginHookAfterToolCallEvent, ctx: PluginHookToolContext) => Promise<void> | void;
   tool_result_persist: (
     event: PluginHookToolResultPersistEvent,
     ctx: PluginHookToolResultPersistContext
   ) => PluginHookToolResultPersistResult | void;
-  session_start: (
-    event: PluginHookSessionStartEvent,
-    ctx: PluginHookSessionContext
-  ) => Promise<void> | void;
-  session_end: (
-    event: PluginHookSessionEndEvent,
-    ctx: PluginHookSessionContext
-  ) => Promise<void> | void;
-  gateway_start: (
-    event: PluginHookGatewayStartEvent,
-    ctx: PluginHookGatewayContext
-  ) => Promise<void> | void;
-  gateway_stop: (
-    event: PluginHookGatewayStopEvent,
-    ctx: PluginHookGatewayContext
-  ) => Promise<void> | void;
+  session_start: (event: PluginHookSessionStartEvent, ctx: PluginHookSessionContext) => Promise<void> | void;
+  session_end: (event: PluginHookSessionEndEvent, ctx: PluginHookSessionContext) => Promise<void> | void;
+  gateway_start: (event: PluginHookGatewayStartEvent, ctx: PluginHookGatewayContext) => Promise<void> | void;
+  gateway_stop: (event: PluginHookGatewayStopEvent, ctx: PluginHookGatewayContext) => Promise<void> | void;
 };
 
 // =============================================================================
@@ -319,15 +292,11 @@ export type PHAPluginApi = {
   logger: PluginLogger;
   pluginConfig?: Record<string, unknown>;
   registerTool: (tool: AnyAgentTool | PHAPluginToolFactory, opts?: PHAPluginToolOptions) => void;
-  on: <K extends PluginHookName>(
-    hookName: K,
-    handler: PluginHookHandlerMap[K],
-    opts?: { priority?: number }
-  ) => void;
+  on: <K extends PluginHookName>(hookName: K, handler: PluginHookHandlerMap[K], opts?: { priority?: number }) => void;
 };
 
 // =============================================================================
 // Plugin Origin
 // =============================================================================
 
-export type PluginOrigin = "workspace" | "config";
+export type PluginOrigin = 'workspace' | 'config';

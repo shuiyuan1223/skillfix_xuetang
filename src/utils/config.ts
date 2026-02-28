@@ -9,10 +9,10 @@
  * Can be overridden via PHA_CONFIG_PATH environment variable.
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { AsyncLocalStorage } from "node:async_hooks";
-import { encrypt, decrypt, isEncrypted, ensureKeyFiles, isCryptoReady } from "./crypto.js";
+import * as fs from 'fs';
+import * as path from 'path';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { encrypt, decrypt, isEncrypted, ensureKeyFiles, isCryptoReady } from './crypto.js';
 
 // Session-scoped user ID (set during tool execution via runWithUserId)
 const userIdStore = new AsyncLocalStorage<string>();
@@ -34,64 +34,64 @@ export const runWithUserUuid = runWithUserId;
 // ============================================================================
 
 export type LLMProvider =
-  | "anthropic"
-  | "openai"
-  | "google"
-  | "openrouter"
-  | "moonshot"
-  | "deepseek"
-  | "groq"
-  | "mistral"
-  | "xai";
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'openrouter'
+  | 'moonshot'
+  | 'deepseek'
+  | 'groq'
+  | 'mistral'
+  | 'xai';
 
 /** All known provider identifiers */
 export const KNOWN_PROVIDERS: LLMProvider[] = [
-  "anthropic",
-  "openai",
-  "google",
-  "openrouter",
-  "moonshot",
-  "deepseek",
-  "groq",
-  "mistral",
-  "xai",
+  'anthropic',
+  'openai',
+  'google',
+  'openrouter',
+  'moonshot',
+  'deepseek',
+  'groq',
+  'mistral',
+  'xai',
 ];
 
 /** Provider → environment variable name */
 export const ENV_KEY_MAP: Record<LLMProvider, string> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  google: "GOOGLE_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  moonshot: "MOONSHOT_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
-  groq: "GROQ_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  xai: "XAI_API_KEY",
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  google: 'GOOGLE_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  moonshot: 'MOONSHOT_API_KEY',
+  deepseek: 'DEEPSEEK_API_KEY',
+  groq: 'GROQ_API_KEY',
+  mistral: 'MISTRAL_API_KEY',
+  xai: 'XAI_API_KEY',
 };
 
 /** Provider → default model ID */
 export const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  anthropic: "claude-sonnet-4-20250514",
-  openai: "gpt-4o",
-  google: "gemini-2.0-flash",
-  openrouter: "openrouter/auto",
-  moonshot: "moonshot-v1-128k",
-  deepseek: "deepseek-chat",
-  groq: "llama-3.3-70b-versatile",
-  mistral: "mistral-large-latest",
-  xai: "grok-2-1212",
+  anthropic: 'claude-sonnet-4-20250514',
+  openai: 'gpt-4o',
+  google: 'gemini-2.0-flash',
+  openrouter: 'openrouter/auto',
+  moonshot: 'moonshot-v1-128k',
+  deepseek: 'deepseek-chat',
+  groq: 'llama-3.3-70b-versatile',
+  mistral: 'mistral-large-latest',
+  xai: 'grok-2-1212',
 };
 
 /** Providers that are built into pi-ai (have proper compat settings) */
 export const BUILTIN_PROVIDERS: LLMProvider[] = [
-  "anthropic",
-  "openai",
-  "google",
-  "openrouter",
-  "groq",
-  "mistral",
-  "xai",
+  'anthropic',
+  'openai',
+  'google',
+  'openrouter',
+  'groq',
+  'mistral',
+  'xai',
 ];
 
 // ============================================================================
@@ -224,11 +224,11 @@ export interface PHAConfig {
   };
   llm: LLMConfig;
   dataSources: {
-    type: "mock" | "huawei" | "apple";
+    type: 'mock' | 'huawei' | 'apple';
     huawei?: HuaweiHealthKitConfig;
   };
   tui: {
-    theme: "dark" | "light";
+    theme: 'dark' | 'light';
     showToolCalls: boolean;
   };
   mcp?: MCPConfig;
@@ -260,13 +260,13 @@ export interface PHAConfig {
   benchmarkModels?: Record<string, BenchmarkModelConfig>;
 
   /** Evolution apply engine */
-  applyEngine?: "claude-code" | "pi-coding-agent";
+  applyEngine?: 'claude-code' | 'pi-coding-agent';
   /** Session context configuration */
   context?: {
     /** Default location for weather (city name) */
     location?: string;
     /** Hemisphere for season calculation (default: "north") */
-    hemisphere?: "north" | "south";
+    hemisphere?: 'north' | 'south';
     /** Base URL for the weather API (default: https://wttr.in) */
     weatherApiBaseUrl?: string;
   };
@@ -357,76 +357,76 @@ export const PROVIDER_CONFIGS: Record<
   }
 > = {
   anthropic: {
-    name: "Anthropic",
-    envVar: "ANTHROPIC_API_KEY",
-    defaultModel: "claude-sonnet-4-20250514",
-    hint: "Claude models",
+    name: 'Anthropic',
+    envVar: 'ANTHROPIC_API_KEY',
+    defaultModel: 'claude-sonnet-4-20250514',
+    hint: 'Claude models',
   },
   openai: {
-    name: "OpenAI",
-    envVar: "OPENAI_API_KEY",
-    defaultModel: "gpt-4o",
-    hint: "GPT models",
+    name: 'OpenAI',
+    envVar: 'OPENAI_API_KEY',
+    defaultModel: 'gpt-4o',
+    hint: 'GPT models',
   },
   google: {
-    name: "Google",
-    envVar: "GOOGLE_API_KEY",
-    defaultModel: "gemini-2.0-flash",
-    hint: "Gemini models",
+    name: 'Google',
+    envVar: 'GOOGLE_API_KEY',
+    defaultModel: 'gemini-2.0-flash',
+    hint: 'Gemini models',
   },
   openrouter: {
-    name: "OpenRouter",
-    envVar: "OPENROUTER_API_KEY",
-    baseUrl: "https://openrouter.ai/api/v1",
-    defaultModel: "openrouter/auto",
-    hint: "Multi-model gateway (Claude, GPT, Llama, etc.)",
+    name: 'OpenRouter',
+    envVar: 'OPENROUTER_API_KEY',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultModel: 'openrouter/auto',
+    hint: 'Multi-model gateway (Claude, GPT, Llama, etc.)',
   },
   moonshot: {
-    name: "Moonshot",
-    envVar: "MOONSHOT_API_KEY",
-    defaultModel: "moonshot-v1-128k",
-    hint: "Kimi models",
+    name: 'Moonshot',
+    envVar: 'MOONSHOT_API_KEY',
+    defaultModel: 'moonshot-v1-128k',
+    hint: 'Kimi models',
   },
   deepseek: {
-    name: "DeepSeek",
-    envVar: "DEEPSEEK_API_KEY",
-    defaultModel: "deepseek-chat",
-    hint: "DeepSeek models",
+    name: 'DeepSeek',
+    envVar: 'DEEPSEEK_API_KEY',
+    defaultModel: 'deepseek-chat',
+    hint: 'DeepSeek models',
   },
   groq: {
-    name: "Groq",
-    envVar: "GROQ_API_KEY",
-    defaultModel: "llama-3.3-70b-versatile",
-    hint: "Fast inference (Llama, Mixtral)",
+    name: 'Groq',
+    envVar: 'GROQ_API_KEY',
+    defaultModel: 'llama-3.3-70b-versatile',
+    hint: 'Fast inference (Llama, Mixtral)',
   },
   mistral: {
-    name: "Mistral AI",
-    envVar: "MISTRAL_API_KEY",
-    defaultModel: "mistral-large-latest",
-    hint: "Mistral models",
+    name: 'Mistral AI',
+    envVar: 'MISTRAL_API_KEY',
+    defaultModel: 'mistral-large-latest',
+    hint: 'Mistral models',
   },
   xai: {
-    name: "xAI",
-    envVar: "XAI_API_KEY",
-    defaultModel: "grok-2-1212",
-    hint: "Grok models",
+    name: 'xAI',
+    envVar: 'XAI_API_KEY',
+    defaultModel: 'grok-2-1212',
+    hint: 'Grok models',
   },
 };
 
 const DEFAULT_CONFIG: PHAConfig = {
   gateway: {
-    host: "0.0.0.0",
+    host: '0.0.0.0',
     port: 8000,
     autoStart: false,
   },
   llm: {
-    provider: "anthropic",
+    provider: 'anthropic',
   },
   dataSources: {
-    type: "mock",
+    type: 'mock',
   },
   tui: {
-    theme: "dark",
+    theme: 'dark',
     showToolCalls: true,
   },
 };
@@ -438,7 +438,7 @@ const DEFAULT_CONFIG: PHAConfig = {
 export function findProjectRoot(): string {
   let dir = process.cwd();
   while (dir !== path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, "package.json"))) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) {
       return dir;
     }
     dir = path.dirname(dir);
@@ -451,7 +451,7 @@ export function getStateDir(): string {
   if (override) {
     return path.resolve(override);
   }
-  return path.join(findProjectRoot(), ".pha");
+  return path.join(findProjectRoot(), '.pha');
 }
 
 export function getConfigDir(): string {
@@ -463,7 +463,7 @@ export function getConfigPath(): string {
   if (override) {
     return path.resolve(override);
   }
-  return path.join(getStateDir(), "config.json");
+  return path.join(getStateDir(), 'config.json');
 }
 
 export function ensureConfigDir(): void {
@@ -479,10 +479,10 @@ export function ensureConfigDir(): void {
 
 /** Dot-paths of fields that must be encrypted on disk. '*' matches any key. */
 const SENSITIVE_FIELDS = [
-  "llm.apiKey",
-  "models.providers.*.apiKey",
-  "dataSources.huawei.clientSecret",
-  "mcp.remoteServers.*.apiKey",
+  'llm.apiKey',
+  'models.providers.*.apiKey',
+  'dataSources.huawei.clientSecret',
+  'mcp.remoteServers.*.apiKey',
 ];
 
 /**
@@ -495,18 +495,20 @@ function walkAndTransform(
   index: number,
   transform: (v: unknown) => unknown
 ): void {
-  if (index >= pathParts.length || obj == null || typeof obj !== "object") return;
+  if (index >= pathParts.length || obj == null || typeof obj !== 'object') {
+    return;
+  }
 
   const part = pathParts[index];
   const isLast = index === pathParts.length - 1;
 
-  if (part === "*") {
+  if (part === '*') {
     // Wildcard: iterate all keys at this level
     for (const key of Object.keys(obj)) {
       const child = obj[key];
       if (isLast) {
         obj[key] = transform(child);
-      } else if (child != null && typeof child === "object") {
+      } else if (child != null && typeof child === 'object') {
         walkAndTransform(child as Record<string, unknown>, pathParts, index + 1, transform);
       }
     }
@@ -516,7 +518,7 @@ function walkAndTransform(
     }
   } else {
     const child = obj[part];
-    if (child != null && typeof child === "object") {
+    if (child != null && typeof child === 'object') {
       walkAndTransform(child as Record<string, unknown>, pathParts, index + 1, transform);
     }
   }
@@ -525,8 +527,8 @@ function walkAndTransform(
 /** Encrypt all sensitive fields in-place (skip already-encrypted values) */
 function encryptSensitiveFields(obj: Record<string, unknown>, stateDir: string): void {
   for (const fieldPath of SENSITIVE_FIELDS) {
-    walkAndTransform(obj, fieldPath.split("."), 0, (value) => {
-      if (typeof value === "string" && value && !isEncrypted(value)) {
+    walkAndTransform(obj, fieldPath.split('.'), 0, (value) => {
+      if (typeof value === 'string' && value && !isEncrypted(value)) {
         return encrypt(value, stateDir);
       }
       return value;
@@ -537,8 +539,8 @@ function encryptSensitiveFields(obj: Record<string, unknown>, stateDir: string):
 /** Decrypt all sensitive fields in-place (plain values pass through) */
 function decryptSensitiveFields(obj: Record<string, unknown>, stateDir: string): void {
   for (const fieldPath of SENSITIVE_FIELDS) {
-    walkAndTransform(obj, fieldPath.split("."), 0, (value) => {
-      if (typeof value === "string" && isEncrypted(value)) {
+    walkAndTransform(obj, fieldPath.split('.'), 0, (value) => {
+      if (typeof value === 'string' && isEncrypted(value)) {
         return decrypt(value, stateDir);
       }
       return value;
@@ -552,15 +554,17 @@ function decryptSensitiveFields(obj: Record<string, unknown>, stateDir: string):
  */
 export function countPlaintextSensitiveFields(configPath?: string): number {
   const cfgPath = configPath || getConfigPath();
-  if (!fs.existsSync(cfgPath)) return 0;
+  if (!fs.existsSync(cfgPath)) {
+    return 0;
+  }
 
   try {
-    const content = fs.readFileSync(cfgPath, "utf-8");
+    const content = fs.readFileSync(cfgPath, 'utf-8');
     const raw = JSON.parse(content);
     let count = 0;
     for (const fieldPath of SENSITIVE_FIELDS) {
-      walkAndTransform(raw, fieldPath.split("."), 0, (value) => {
-        if (typeof value === "string" && value && !isEncrypted(value)) {
+      walkAndTransform(raw, fieldPath.split('.'), 0, (value) => {
+        if (typeof value === 'string' && value && !isEncrypted(value)) {
           count++;
         }
         return value; // don't mutate
@@ -593,8 +597,12 @@ function ensureMigrationProvider(
       ...(baseUrl ? { baseUrl } : {}),
     };
   } else {
-    if (apiKey && !providers[key].apiKey) providers[key].apiKey = apiKey;
-    if (baseUrl && !providers[key].baseUrl) providers[key].baseUrl = baseUrl;
+    if (apiKey && !providers[key].apiKey) {
+      providers[key].apiKey = apiKey;
+    }
+    if (baseUrl && !providers[key].baseUrl) {
+      providers[key].baseUrl = baseUrl;
+    }
   }
 }
 
@@ -614,25 +622,29 @@ function addMigrationModel(
 
 /** Migrate top-level model assignment fields to orchestrator */
 function migrateOrchestratorFields(config: PHAConfig): boolean {
-  if (config.orchestrator) return false;
+  if (config.orchestrator) {
+    return false;
+  }
   if (
     !config.agentModel &&
     !config.systemAgentModel &&
     !config.embeddingModel &&
-    typeof config.judgeModel !== "string"
+    typeof config.judgeModel !== 'string'
   ) {
     return false;
   }
   config.orchestrator = {
     pha: config.agentModel,
     sa: config.systemAgentModel,
-    judge: typeof config.judgeModel === "string" ? config.judgeModel : undefined,
+    judge: typeof config.judgeModel === 'string' ? config.judgeModel : undefined,
     embedding: config.embeddingModel,
   };
   delete config.agentModel;
   delete config.systemAgentModel;
   delete config.embeddingModel;
-  if (typeof config.judgeModel === "string") delete config.judgeModel;
+  if (typeof config.judgeModel === 'string') {
+    delete config.judgeModel;
+  }
   return true;
 }
 
@@ -642,48 +654,45 @@ function migrateBenchmarkModels(
   providers: Record<string, ModelProviderConfig>,
   fallbackProvider: string
 ): void {
-  if (!config.benchmarkModels || Object.keys(config.benchmarkModels).length === 0) return;
+  if (!config.benchmarkModels || Object.keys(config.benchmarkModels).length === 0) {
+    return;
+  }
   const refs: string[] = [];
   for (const [name, cfg] of Object.entries(config.benchmarkModels)) {
     const bp = cfg.provider || fallbackProvider;
-    ensureMigrationProvider(
-      providers,
-      bp,
-      cfg.apiKey,
-      cfg.baseUrl || PROVIDER_CONFIGS[bp]?.baseUrl
-    );
+    ensureMigrationProvider(providers, bp, cfg.apiKey, cfg.baseUrl || PROVIDER_CONFIGS[bp]?.baseUrl);
     addMigrationModel(providers, bp, name, cfg.modelId, cfg.label);
     refs.push(`${bp}/${name}`);
   }
-  if (!config.benchmark) config.benchmark = {};
+  if (!config.benchmark) {
+    config.benchmark = {};
+  }
   config.benchmark.models = refs;
 }
 
 /** Migrate judge model (object format) to provider map + orchestrator */
-function migrateJudgeModel(
-  config: PHAConfig,
-  providers: Record<string, ModelProviderConfig>
-): void {
-  if (!config.judgeModel || typeof config.judgeModel !== "object") return;
+function migrateJudgeModel(config: PHAConfig, providers: Record<string, ModelProviderConfig>): void {
+  if (!config.judgeModel || typeof config.judgeModel !== 'object') {
+    return;
+  }
   const jm = config.judgeModel as BenchmarkModelConfig;
-  if (!jm.provider || !jm.modelId) return;
-  ensureMigrationProvider(
-    providers,
-    jm.provider,
-    jm.apiKey,
-    jm.baseUrl || PROVIDER_CONFIGS[jm.provider]?.baseUrl
-  );
+  if (!jm.provider || !jm.modelId) {
+    return;
+  }
+  ensureMigrationProvider(providers, jm.provider, jm.apiKey, jm.baseUrl || PROVIDER_CONFIGS[jm.provider]?.baseUrl);
   const jn = deriveModelName(jm.modelId);
   addMigrationModel(providers, jm.provider, jn, jm.modelId, jm.label);
-  if (config.orchestrator) config.orchestrator.judge = `${jm.provider}/${jn}`;
+  if (config.orchestrator) {
+    config.orchestrator.judge = `${jm.provider}/${jn}`;
+  }
   delete config.judgeModel;
 }
 
 /** Build new model repository from legacy config fields */
 function buildModelRepository(config: PHAConfig): Record<string, ModelProviderConfig> {
   const providers: Record<string, ModelProviderConfig> = {};
-  const llmProvider = config.llm.provider || "anthropic";
-  const llmModelId = config.llm.modelId || PROVIDER_CONFIGS[llmProvider]?.defaultModel || "default";
+  const llmProvider = config.llm.provider || 'anthropic';
+  const llmModelId = config.llm.modelId || PROVIDER_CONFIGS[llmProvider]?.defaultModel || 'default';
 
   // LLM → orchestrator.pha
   ensureMigrationProvider(
@@ -694,7 +703,9 @@ function buildModelRepository(config: PHAConfig): Record<string, ModelProviderCo
   );
   const agentModelName = deriveModelName(llmModelId);
   addMigrationModel(providers, llmProvider, agentModelName, llmModelId);
-  if (!config.orchestrator) config.orchestrator = {};
+  if (!config.orchestrator) {
+    config.orchestrator = {};
+  }
   config.orchestrator.pha = `${llmProvider}/${agentModelName}`;
 
   migrateBenchmarkModels(config, providers, llmProvider);
@@ -702,7 +713,7 @@ function buildModelRepository(config: PHAConfig): Record<string, ModelProviderCo
 
   // Embedding model
   if (config.embedding?.model && config.embedding.enabled !== false) {
-    const ep = llmProvider === "openrouter" ? "openrouter" : llmProvider;
+    const ep = llmProvider === 'openrouter' ? 'openrouter' : llmProvider;
     ensureMigrationProvider(providers, ep);
     const en = deriveModelName(config.embedding.model);
     addMigrationModel(providers, ep, en, config.embedding.model);
@@ -727,7 +738,9 @@ function migrateConfig(config: PHAConfig): boolean {
   }
 
   // Migrate top-level model assignment fields → orchestrator
-  if (migrateOrchestratorFields(config)) modified = true;
+  if (migrateOrchestratorFields(config)) {
+    modified = true;
+  }
 
   // Already migrated (model repository)
   if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
@@ -750,7 +763,7 @@ function migrateConfig(config: PHAConfig): boolean {
 /** Derive a short model name from a full model ID (e.g. "anthropic/claude-sonnet-4" → "claude-sonnet-4") */
 function deriveModelName(modelId: string): string {
   // If it contains a slash (provider/model format), take the part after the last slash
-  const parts = modelId.split("/");
+  const parts = modelId.split('/');
   return parts[parts.length - 1];
 }
 
@@ -825,7 +838,9 @@ export function stripLegacyFieldsForSave(config: PHAConfig): Record<string, unkn
     delete copy.agentModel;
     delete copy.systemAgentModel;
     delete copy.embeddingModel;
-    if (typeof copy.judgeModel === "string") delete copy.judgeModel;
+    if (typeof copy.judgeModel === 'string') {
+      delete copy.judgeModel;
+    }
   }
   return copy;
 }
@@ -841,7 +856,7 @@ export function loadConfig(): PHAConfig {
   }
 
   try {
-    const content = fs.readFileSync(configPath, "utf-8");
+    const content = fs.readFileSync(configPath, 'utf-8');
     const loaded = JSON.parse(content);
 
     // Decrypt sensitive fields before merging (operates on raw loaded object)
@@ -867,13 +882,13 @@ export function loadConfig(): PHAConfig {
     let needsSave = migrateConfig(config);
     // Check if file still has legacy fields that should be stripped
     if (config.models?.providers && Object.keys(config.models.providers).length > 0) {
-      if ("llm" in loaded || "embedding" in loaded || "benchmarkModels" in loaded) {
+      if ('llm' in loaded || 'embedding' in loaded || 'benchmarkModels' in loaded) {
         needsSave = true;
       }
     }
     // Check if file still has legacy model assignment fields
     if (config.orchestrator) {
-      if ("agentModel" in loaded || "systemAgentModel" in loaded || "embeddingModel" in loaded) {
+      if ('agentModel' in loaded || 'systemAgentModel' in loaded || 'embeddingModel' in loaded) {
         needsSave = true;
       }
     }
@@ -926,7 +941,7 @@ export function saveConfig(config: PHAConfig): void {
  * Parse a "provider/name" model reference.
  */
 export function parseModelRef(ref: string): { provider: string; name: string } {
-  const slashIdx = ref.indexOf("/");
+  const slashIdx = ref.indexOf('/');
   if (slashIdx === -1) {
     throw new Error(`Invalid model reference "${ref}": expected "provider/name" format`);
   }
@@ -947,14 +962,14 @@ export function resolveModel(ref: string, config?: PHAConfig): ResolvedModel {
   const providerCfg = cfg.models?.providers?.[provider];
   if (!providerCfg) {
     throw new Error(
-      `Provider "${provider}" not found in model repository. Available: ${Object.keys(cfg.models?.providers || {}).join(", ") || "(none)"}`
+      `Provider "${provider}" not found in model repository. Available: ${Object.keys(cfg.models?.providers || {}).join(', ') || '(none)'}`
     );
   }
 
   const modelDef = providerCfg.models.find((m) => m.name === name);
   if (!modelDef) {
     throw new Error(
-      `Model "${name}" not found in provider "${provider}". Available: ${providerCfg.models.map((m) => m.name).join(", ") || "(none)"}`
+      `Model "${name}" not found in provider "${provider}". Available: ${providerCfg.models.map((m) => m.name).join(', ') || '(none)'}`
     );
   }
 
@@ -963,7 +978,7 @@ export function resolveModel(ref: string, config?: PHAConfig): ResolvedModel {
   if (!apiKey) {
     const envVar = ENV_KEY_MAP[provider as LLMProvider] || PROVIDER_CONFIGS[provider]?.envVar;
     throw new Error(
-      `No API key found for provider "${provider}". Set it in config or via ${envVar || "environment variable"}.`
+      `No API key found for provider "${provider}". Set it in config or via ${envVar || 'environment variable'}.`
     );
   }
 
@@ -982,7 +997,9 @@ export function resolveModel(ref: string, config?: PHAConfig): ResolvedModel {
 
 /** Try resolving a model ref, returning null on failure */
 function tryResolveModel(ref: string | undefined, cfg: PHAConfig): ResolvedModel | null {
-  if (!ref || !cfg.models?.providers) return null;
+  if (!ref || !cfg.models?.providers) {
+    return null;
+  }
   try {
     return resolveModel(ref, cfg);
   } catch {
@@ -992,8 +1009,8 @@ function tryResolveModel(ref: string | undefined, cfg: PHAConfig): ResolvedModel
 
 /** Build a ResolvedModel from legacy config.llm fields */
 function buildLegacyAgentModel(cfg: PHAConfig): ResolvedModel {
-  const provider = cfg.llm.provider || "anthropic";
-  const modelId = cfg.llm.modelId || DEFAULT_MODELS[provider] || "default";
+  const provider = cfg.llm.provider || 'anthropic';
+  const modelId = cfg.llm.modelId || DEFAULT_MODELS[provider] || 'default';
   const apiKey = cfg.llm.apiKey || process.env[ENV_KEY_MAP[provider]] || undefined;
 
   if (!apiKey) {
@@ -1022,7 +1039,9 @@ export function resolveAgentModel(config?: PHAConfig): ResolvedModel {
   const refs = [cfg.agents?.pha?.model, cfg.orchestrator?.pha, cfg.agentModel];
   for (const ref of refs) {
     const resolved = tryResolveModel(ref, cfg);
-    if (resolved) return resolved;
+    if (resolved) {
+      return resolved;
+    }
   }
 
   // Legacy fallback: build from config.llm
@@ -1087,7 +1106,7 @@ export function resolveJudgeModel(config?: PHAConfig): ResolvedModel {
   }
 
   // Legacy: string ref
-  if (typeof cfg.judgeModel === "string" && cfg.models?.providers) {
+  if (typeof cfg.judgeModel === 'string' && cfg.models?.providers) {
     try {
       return resolveModel(cfg.judgeModel, cfg);
     } catch {
@@ -1096,7 +1115,7 @@ export function resolveJudgeModel(config?: PHAConfig): ResolvedModel {
   }
 
   // Old format: BenchmarkModelConfig object
-  if (cfg.judgeModel && typeof cfg.judgeModel === "object") {
+  if (cfg.judgeModel && typeof cfg.judgeModel === 'object') {
     const jm = cfg.judgeModel as BenchmarkModelConfig;
     if (jm.provider && jm.modelId) {
       const apiKey = jm.apiKey || resolveBenchmarkModelApiKey(jm) || undefined;
@@ -1137,7 +1156,9 @@ export function resolveBenchmarkModels(config?: PHAConfig): ResolvedModel[] {
         // Skip models that can't be resolved
       }
     }
-    if (models.length > 0) return models;
+    if (models.length > 0) {
+      return models;
+    }
   }
 
   // Old format: benchmarkModels
@@ -1145,7 +1166,9 @@ export function resolveBenchmarkModels(config?: PHAConfig): ResolvedModel[] {
     const models: ResolvedModel[] = [];
     for (const [presetName, modelCfg] of Object.entries(cfg.benchmarkModels)) {
       const apiKey = resolveBenchmarkModelApiKey(modelCfg);
-      if (!apiKey) continue;
+      if (!apiKey) {
+        continue;
+      }
       const baseUrl = resolveBenchmarkModelBaseUrl(modelCfg);
       models.push({
         provider: modelCfg.provider,
@@ -1156,7 +1179,9 @@ export function resolveBenchmarkModels(config?: PHAConfig): ResolvedModel[] {
         name: presetName,
       });
     }
-    if (models.length > 0) return models;
+    if (models.length > 0) {
+      return models;
+    }
   }
 
   // Fallback: agent model
@@ -1169,19 +1194,19 @@ export function resolveBenchmarkModels(config?: PHAConfig): ResolvedModel[] {
 
 /** Build a ResolvedModel from legacy embedding config */
 function buildLegacyEmbeddingModel(cfg: PHAConfig): ResolvedModel | null {
-  if (!cfg.embedding?.model) return null;
-  const apiKey =
-    cfg.llm.apiKey || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || undefined;
-  if (!apiKey) return null;
+  if (!cfg.embedding?.model) {
+    return null;
+  }
+  const apiKey = cfg.llm.apiKey || process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || undefined;
+  if (!apiKey) {
+    return null;
+  }
 
   return {
     provider: cfg.llm.provider,
     modelId: cfg.embedding.model,
     apiKey,
-    baseUrl:
-      cfg.llm.baseUrl ||
-      PROVIDER_CONFIGS[cfg.llm.provider]?.baseUrl ||
-      "https://openrouter.ai/api/v1",
+    baseUrl: cfg.llm.baseUrl || PROVIDER_CONFIGS[cfg.llm.provider]?.baseUrl || 'https://openrouter.ai/api/v1',
     label: cfg.embedding.model,
     name: deriveModelName(cfg.embedding.model),
   };
@@ -1192,13 +1217,17 @@ function buildLegacyEmbeddingModel(cfg: PHAConfig): ResolvedModel | null {
  */
 export function resolveEmbeddingModel(config?: PHAConfig): ResolvedModel | null {
   const cfg = config || loadConfig();
-  if (cfg.embedding?.enabled === false) return null;
+  if (cfg.embedding?.enabled === false) {
+    return null;
+  }
 
   // Try model refs in priority order
   const refs = [cfg.orchestrator?.embedding, cfg.embeddingModel];
   for (const ref of refs) {
     const resolved = tryResolveModel(ref, cfg);
-    if (resolved) return resolved;
+    if (resolved) {
+      return resolved;
+    }
   }
 
   // Legacy fallback
@@ -1233,7 +1262,9 @@ function resolveProviderApiKey(
   config: PHAConfig
 ): string | undefined {
   // 1. Provider-level apiKey in repository
-  if (providerCfg.apiKey) return providerCfg.apiKey;
+  if (providerCfg.apiKey) {
+    return providerCfg.apiKey;
+  }
 
   // 2. Environment variable
   const envVar = ENV_KEY_MAP[providerKey as LLMProvider] || PROVIDER_CONFIGS[providerKey]?.envVar;
@@ -1247,7 +1278,9 @@ function resolveProviderApiKey(
   }
 
   // 4. Fallback: llm apiKey (may work for OpenRouter multi-model)
-  if (config.llm.apiKey) return config.llm.apiKey;
+  if (config.llm.apiKey) {
+    return config.llm.apiKey;
+  }
 
   return undefined;
 }
@@ -1258,7 +1291,7 @@ function resolveProviderApiKey(
 
 export function getConfigValue(dotPath: string): unknown {
   const config = loadConfig();
-  const parts = dotPath.split(".");
+  const parts = dotPath.split('.');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = config;
 
@@ -1274,7 +1307,7 @@ export function getConfigValue(dotPath: string): unknown {
 
 export function setConfigValue(dotPath: string, value: unknown): void {
   const config = loadConfig();
-  const parts = dotPath.split(".");
+  const parts = dotPath.split('.');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = config;
 
@@ -1289,9 +1322,13 @@ export function setConfigValue(dotPath: string, value: unknown): void {
   const lastPart = parts[parts.length - 1];
 
   // Parse value
-  if (value === "true") value = true;
-  else if (value === "false") value = false;
-  else if (!isNaN(Number(value))) value = Number(value);
+  if (value === 'true') {
+    value = true;
+  } else if (value === 'false') {
+    value = false;
+  } else if (!isNaN(Number(value))) {
+    value = Number(value);
+  }
 
   current[lastPart] = value;
   saveConfig(config);
@@ -1299,7 +1336,7 @@ export function setConfigValue(dotPath: string, value: unknown): void {
 
 export function unsetConfigValue(dotPath: string): void {
   const config = loadConfig();
-  const parts = dotPath.split(".");
+  const parts = dotPath.split('.');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = config;
 
@@ -1328,7 +1365,9 @@ export function isConfigured(): boolean {
 export function getUserId(): string | null {
   // 1. AsyncLocalStorage (session-scoped, highest priority)
   const alsId = userIdStore.getStore();
-  if (alsId) return alsId;
+  if (alsId) {
+    return alsId;
+  }
   // 2. Config file
   const config = loadConfig();
   return config.uid || null;
@@ -1340,7 +1379,9 @@ export function getUserId(): string | null {
  */
 export function getUserUuid(): string {
   const id = getUserId();
-  if (!id) throw new Error("No user ID available. Please authenticate first.");
+  if (!id) {
+    throw new Error('No user ID available. Please authenticate first.');
+  }
   return id;
 }
 
@@ -1390,7 +1431,7 @@ export function getModelId(provider?: LLMProvider): string {
   }
 
   const providerConfig = PROVIDER_CONFIGS[p];
-  return providerConfig?.defaultModel || "default";
+  return providerConfig?.defaultModel || 'default';
 }
 
 /**
@@ -1421,11 +1462,13 @@ export function getBenchmarkModels(): Record<string, BenchmarkModelConfig> {
         // Skip unresolvable refs
       }
     }
-    if (Object.keys(result).length > 0) return result;
+    if (Object.keys(result).length > 0) {
+      return result;
+    }
   }
 
   const provider = config.llm.provider;
-  const modelId = config.llm.modelId || PROVIDER_CONFIGS[provider]?.defaultModel || "default";
+  const modelId = config.llm.modelId || PROVIDER_CONFIGS[provider]?.defaultModel || 'default';
   return {
     default: {
       provider,
@@ -1439,7 +1482,9 @@ export function getBenchmarkModels(): Record<string, BenchmarkModelConfig> {
  * @deprecated Use resolveModel() which already includes apiKey
  */
 export function resolveBenchmarkModelApiKey(model: BenchmarkModelConfig): string | undefined {
-  if (model.apiKey) return model.apiKey;
+  if (model.apiKey) {
+    return model.apiKey;
+  }
 
   const config = loadConfig();
 
@@ -1450,10 +1495,14 @@ export function resolveBenchmarkModelApiKey(model: BenchmarkModelConfig): string
   const providerConfig = PROVIDER_CONFIGS[model.provider];
   if (providerConfig) {
     const envVal = process.env[providerConfig.envVar];
-    if (envVal) return envVal;
+    if (envVal) {
+      return envVal;
+    }
   }
 
-  if (config.llm.apiKey) return config.llm.apiKey;
+  if (config.llm.apiKey) {
+    return config.llm.apiKey;
+  }
 
   return undefined;
 }
@@ -1462,7 +1511,9 @@ export function resolveBenchmarkModelApiKey(model: BenchmarkModelConfig): string
  * @deprecated Use resolveModel() which already includes baseUrl
  */
 export function resolveBenchmarkModelBaseUrl(model: BenchmarkModelConfig): string | undefined {
-  if (model.baseUrl) return model.baseUrl;
+  if (model.baseUrl) {
+    return model.baseUrl;
+  }
 
   const config = loadConfig();
 
@@ -1480,7 +1531,7 @@ export function getJudgeModel(): BenchmarkModelConfig {
   const config = loadConfig();
 
   // Legacy: judgeModel as object
-  if (config.judgeModel && typeof config.judgeModel === "object") {
+  if (config.judgeModel && typeof config.judgeModel === 'object') {
     const jm = config.judgeModel as BenchmarkModelConfig;
     if (jm.provider && jm.modelId) {
       return jm;
@@ -1488,7 +1539,7 @@ export function getJudgeModel(): BenchmarkModelConfig {
   }
 
   // New: judgeModel as string ref
-  if (config.judgeModel && typeof config.judgeModel === "string") {
+  if (config.judgeModel && typeof config.judgeModel === 'string') {
     try {
       const resolved = resolveModel(config.judgeModel, config);
       return {
@@ -1504,7 +1555,7 @@ export function getJudgeModel(): BenchmarkModelConfig {
   }
 
   const provider = config.llm.provider;
-  const modelId = config.llm.modelId || PROVIDER_CONFIGS[provider]?.defaultModel || "default";
+  const modelId = config.llm.modelId || PROVIDER_CONFIGS[provider]?.defaultModel || 'default';
   return {
     provider,
     modelId,
@@ -1527,9 +1578,15 @@ export function isWhitelistedUser(uid: string | null | undefined): boolean {
   const config = loadConfig();
   const wl = config.whitelist;
   // No whitelist section or explicitly disabled = everyone gets full access
-  if (!wl || wl.enabled === false) return true;
+  if (!wl || wl.enabled === false) {
+    return true;
+  }
   // Whitelist enabled (default): check UUID
-  if (!uid) return false;
-  if (!wl.uuids?.length) return false;
+  if (!uid) {
+    return false;
+  }
+  if (!wl.uuids?.length) {
+    return false;
+  }
   return wl.uuids.includes(uid);
 }
