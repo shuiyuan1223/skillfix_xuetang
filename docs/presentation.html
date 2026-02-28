@@ -66,6 +66,7 @@
   .tag-amber { background: rgba(251,191,36,0.15); color: #fbbf24; }
   .tag-rose { background: rgba(251,113,133,0.15); color: #fb7185; }
   .tag-blue { background: rgba(96,165,250,0.15); color: #60a5fa; }
+  .tag-teal { background: rgba(45,212,191,0.15); color: #2dd4bf; }
 
   /* ── Metric ── */
   .metric { text-align: center; }
@@ -95,6 +96,13 @@
   .layer-gateway { background: rgba(129,140,248,0.12); border: 1px solid rgba(129,140,248,0.25); color: #818cf8; }
   .layer-agent { background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.25); color: #fbbf24; }
   .layer-data { background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.25); color: #4ade80; }
+  /* OpenClaw 专属层样式 */
+  .layer-openclaw {
+    background: linear-gradient(135deg, rgba(45,212,191,0.12), rgba(96,165,250,0.08));
+    border: 2px solid rgba(45,212,191,0.4); color: #2dd4bf;
+    box-shadow: 0 0 24px rgba(45,212,191,0.08);
+  }
+  .layer-openclaw .arch-detail { color: #99f6e4; }
 
   /* ── List ── */
   ul { list-style: none; padding: 0; }
@@ -103,6 +111,7 @@
   .list-green li::before { background: #4ade80; }
   .list-amber li::before { background: #fbbf24; }
   .list-rose li::before { background: #fb7185; }
+  .list-teal li::before { background: #2dd4bf; }
 
   /* ── Timeline ── */
   .timeline { position: relative; padding-left: 24px; border-left: 2px solid rgba(129,140,248,0.3); }
@@ -154,6 +163,7 @@
   .glow-purple { background: #818cf8; }
   .glow-blue { background: #60a5fa; }
   .glow-green { background: #4ade80; }
+  .glow-teal { background: #2dd4bf; }
 
   /* ── Table ── */
   table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
@@ -166,6 +176,11 @@
     background: linear-gradient(135deg, rgba(129,140,248,0.08), rgba(192,132,252,0.08));
     border: 1px solid rgba(129,140,248,0.2); border-radius: 12px;
     padding: 20px 28px; font-size: 1.1rem; color: #c4b5fd; line-height: 1.6;
+  }
+  .emphasis-teal {
+    background: linear-gradient(135deg, rgba(45,212,191,0.08), rgba(96,165,250,0.06));
+    border: 1px solid rgba(45,212,191,0.25); border-radius: 12px;
+    padding: 20px 28px; font-size: 1.05rem; color: #99f6e4; line-height: 1.6;
   }
 
   /* ── Protocol Box ── */
@@ -193,6 +208,15 @@
   .pipeline-step .step-title { font-weight: 600; color: #e4e4e7; font-size: 1rem; }
   .pipeline-step .step-desc { color: #a1a1aa; font-size: 0.85rem; margin-top: 2px; }
   .pipeline-arrow { text-align: center; color: #52525b; font-size: 1rem; padding: 2px 0; }
+
+  /* ── Widget Preview ── */
+  .widget-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+  .widget-item {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 12px 14px; text-align: center;
+  }
+  .widget-item .w-icon { font-size: 1.4rem; margin-bottom: 6px; }
+  .widget-item .w-name { font-size: 0.75rem; color: #71717a; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -209,14 +233,15 @@
   <div class="glow glow-blue" style="bottom: -150px; left: -100px;"></div>
   <div class="text-center">
     <div style="margin-bottom: 24px;">
+      <span class="tag tag-teal">OpenClaw 核心层</span>
       <span class="tag tag-purple">AgentOS</span>
-      <span class="tag tag-green">AI-Native</span>
+      <span class="tag tag-green">全生成式 UI</span>
       <span class="tag tag-amber">Health</span>
     </div>
     <h1>PHA<br><span style="color: #71717a; font-weight: 400; font-size: 0.6em;">Personal Health Agent</span></h1>
-    <p class="subtitle" style="max-width: 640px; margin: 20px auto 0;">
-      基于 AgentOS 架构的 AI 驱动健康管理助手<br>
-      融合对话式交互、实时健康数据、自我进化能力的新一代智能健康系统
+    <p class="subtitle" style="max-width: 680px; margin: 20px auto 0;">
+      基于 OpenClaw 核心层的 AI 驱动健康管理助手<br>
+      全生成式 UI · MCP 工具体系 · Agent 自我进化 · 面向内部平台扩展
     </p>
     <p class="small mt-32">2026.02</p>
   </div>
@@ -250,70 +275,135 @@
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 3: AgentOS Architecture Overview -->
+<!-- SLIDE 3: Architecture — Three-Layer Overview -->
 <!-- ================================================================ -->
 <div class="slide" data-slide="2">
-  <h2>系统架构：<span class="highlight">AgentOS</span></h2>
-  <p class="mt-8" style="color:#71717a; margin-bottom: 32px;">前端是纯渲染器，所有 UI 由 Agent 生成 — 一切工具 MCP 化，一切能力 Skills 化</p>
-  <div class="flex-row gap-48">
-    <div class="col" style="max-width: 380px;">
+  <h2>系统架构：<span style="color:#2dd4bf;">OpenClaw 核心层</span> + <span class="highlight">全生成式 UI</span></h2>
+  <p style="color:#71717a; margin-bottom: 28px;">复用成熟的 Agent 运行时，PHA 专注于健康领域 + 全生成式 UI 层创新</p>
+  <div class="flex-row gap-40">
+    <div class="col" style="max-width: 400px;">
       <div class="flex-col gap-8">
         <div class="arch-layer layer-frontend">
-          Frontend（Web / TUI）
-          <div class="arch-detail">纯渲染器 — React A2UIRenderer / pi-tui</div>
+          前端层（Web UI / TUI）
+          <div class="arch-detail">纯渲染器 — React A2UIRenderer · pi-tui · 零业务逻辑</div>
         </div>
-        <div class="arch-arrow">↕ A2UI + AG-UI (HTTP + SSE)</div>
+        <div class="arch-arrow">↕ <span style="color:#818cf8; font-size:0.85rem;">A2UI 全生成式 UI 协议（HTTP + SSE）</span></div>
         <div class="arch-layer layer-gateway">
-          Gateway Server
-          <div class="arch-detail">A2UI 页面生成 · MCP · A2A · SSE 管理</div>
+          Gateway + A2UI 生成层
+          <div class="arch-detail">60+ 组件 · 23+ 页面服务端生成 · MCP · A2A · SSE</div>
         </div>
         <div class="arch-arrow">↕</div>
-        <div class="arch-layer layer-agent">
-          PHA Agent（多 Profile）
-          <div class="arch-detail">MCP Tools = 手（做事） · Skills = 脑（判断）</div>
+        <div class="arch-layer layer-openclaw" style="border-width: 2px;">
+          ★ OpenClaw 核心层（复用）
+          <div class="arch-detail">pi-agent-core · pi-tui · Agent SDK · 多 Provider 模型仓库</div>
         </div>
-        <div class="arch-arrow">↕</div>
+        <div class="arch-arrow">↕ <span style="color:#4ade80; font-size:0.85rem;">可替换数据源</span></div>
         <div class="arch-layer layer-data">
-          Data Sources + Plugins
-          <div class="arch-detail">华为健康 API · SQLite · 向量索引 · 插件系统</div>
+          数据源层（可扩展）
+          <div class="arch-detail">华为健康 API → 内部系统 · Slack · SQLite · 向量索引</div>
         </div>
       </div>
     </div>
-    <div class="col flex-col gap-24">
-      <div class="card card-sm">
-        <h3 style="color:#60a5fa;">A2UI 协议 · 60+ 组件</h3>
-        <p>Agent-to-UI — 服务端生成组件树，前端纯渲染。4 个 Surface：main / sidebar / modal / toast。涵盖布局、图表、表单、Diff、Git 时间线等。</p>
+    <div class="col flex-col gap-16">
+      <div class="emphasis-teal" style="padding: 14px 18px; font-size: 0.95rem;">
+        <strong style="color:#2dd4bf;">核心策略：复用 OpenClaw，不重造轮子</strong><br>
+        <span style="font-size: 0.88rem; color: #a1a1aa;">Agent 运行时、工具编排、模型调度均来自 OpenClaw；PHA 专注健康数据接入和 A2UI 生成式 UI 层。</span>
       </div>
       <div class="card card-sm">
-        <h3 style="color:#818cf8;">MCP 工具 · 30+</h3>
-        <p>JSON-RPC 2.0 Streamable HTTP。健康数据、Git 操作、记忆搜索、技能管理、计划与提醒等全域工具。</p>
+        <h3 style="color:#818cf8; font-size:1.05rem;">A2UI 全生成式 UI</h3>
+        <p style="font-size:0.9rem;">服务端生成完整组件树，前端纯渲染。新增页面 = 1 个函数，前端零改动。4 个 Surface：main / sidebar / modal / toast。</p>
       </div>
       <div class="card card-sm">
-        <h3 style="color:#fbbf24;">Skills 系统 · 20+</h3>
-        <p>SKILL.md 格式的可热插拔专家知识。自动触发、UI 可视化编辑、Git 追踪。覆盖睡眠、心脏、营养、进化等领域。</p>
+        <h3 style="color:#fbbf24; font-size:1.05rem;">MCP + Skills 双轨能力</h3>
+        <p style="font-size:0.9rem;">健康数据 / 操作 → MCP Tools（JSON-RPC 标准）。专家知识 / 判断框架 → Skills（热插拔 Markdown）。</p>
       </div>
-      <div class="card card-sm">
-        <h3 style="color:#4ade80;">双形态前端 + 多 Provider</h3>
-        <p>Web UI (React) 和 TUI (终端) 消费同一套 A2UI 数据。统一模型仓库支持 9 家 LLM Provider。</p>
+      <div class="card card-sm" style="border-color: rgba(45,212,191,0.25);">
+        <h3 style="color:#2dd4bf; font-size:1.05rem;">内部对接就绪</h3>
+        <p style="font-size:0.9rem;">数据源层抽象，华为健康 API 可替换为内部系统 API。Gateway 标准 HTTP 服务，A2A 协议支持多 Agent 协作。</p>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 4: Core Design Principles -->
+<!-- SLIDE 4: OpenClaw Core Layer — Reuse Strategy -->
 <!-- ================================================================ -->
 <div class="slide" data-slide="3" style="padding: 28px 64px;">
+  <div class="glow glow-teal" style="top: -80px; right: -80px; opacity: 0.08;"></div>
+  <h2 style="margin-bottom: 8px;"><span style="color:#2dd4bf;">OpenClaw</span> 核心层 — 复用而非重建</h2>
+  <p style="color:#71717a; margin-bottom: 20px;">PHA = OpenClaw 稳定内核 + 健康领域 + A2UI 生成式 UI 层</p>
+  <div class="grid-2" style="gap: 16px; margin-top: 8px;">
+    <div class="card" style="padding: 16px 20px; border-color: rgba(45,212,191,0.2);">
+      <span class="tag tag-teal">OpenClaw 提供</span>
+      <h3 style="margin-top: 10px; color: #2dd4bf;">稳定的 Agent 运行时</h3>
+      <ul class="list-teal" style="margin-top: 8px;">
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">pi-agent-core</strong> — 多轮对话、工具调用、流式输出、上下文管理</li>
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">pi-tui</strong> — 终端 UI 框架，TUI 前端直接复用</li>
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">统一模型仓库</strong> — 9 家 LLM Provider 灵活切换</li>
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">MCP 协议栈</strong> — JSON-RPC 2.0 Streamable HTTP</li>
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">Skills 框架</strong> — SKILL.md 格式，自动触发，热插拔</li>
+      </ul>
+    </div>
+    <div class="card" style="padding: 16px 20px;">
+      <span class="tag tag-purple">PHA 新增</span>
+      <h3 style="margin-top: 10px;">健康领域 + 生成式 UI</h3>
+      <ul style="margin-top: 8px;">
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">A2UI 协议</strong> — 全生成式 UI，60+ 组件，服务端驱动</li>
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">健康数据接入</strong> — 华为健康 REST API，多维度实时同步</li>
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">动态 Dashboard</strong> — Agent 驱动，自定义组合可视化</li>
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">Evolution Lab</strong> — SHARP 5 维基准测试 + 自主进化</li>
+        <li style="font-size:0.92rem;"><strong style="color:#e4e4e7;">Incident Pipeline</strong> — Slack 告警 → 根因定位 → 闭环</li>
+      </ul>
+    </div>
+    <div class="card" style="padding: 16px 20px; border-color: rgba(96,165,250,0.2);">
+      <span class="tag tag-blue">内部对接路径</span>
+      <h3 style="margin-top: 10px; color: #60a5fa;">面向内部平台扩展</h3>
+      <div class="protocol-box" style="margin-top: 10px; padding: 10px 14px; font-size: 0.78rem;"><span class="cm">// 替换数据源（实现同一接口）</span>
+<span class="kw">class</span> InternalHealthSource <span class="kw">implements</span> DataSourceInterface {
+  get_heart_rate(date) → fetch(<span class="str">internal-api/heart</span>)
+}
+<span class="cm">// Gateway 即标准服务，直接内部部署</span>
+<span class="cm">// A2A 协议支持接入内部 Agent 平台</span></div>
+    </div>
+    <div class="card" style="padding: 16px 20px;">
+      <span class="tag tag-amber">工程价值</span>
+      <h3 style="margin-top: 10px;">快速迭代，质量有保障</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+        <div style="text-align:center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+          <div style="font-size: 1.6rem; font-weight: 700; color: #2dd4bf;">↑</div>
+          <div style="font-size: 0.8rem; color: #71717a;">Agent 核心零维护</div>
+        </div>
+        <div style="text-align:center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+          <div style="font-size: 1.6rem; font-weight: 700; color: #4ade80;">×10</div>
+          <div style="font-size: 0.8rem; color: #71717a;">开发效率提升</div>
+        </div>
+        <div style="text-align:center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+          <div style="font-size: 1.6rem; font-weight: 700; color: #818cf8;">9+</div>
+          <div style="font-size: 0.8rem; color: #71717a;">LLM Provider 支持</div>
+        </div>
+        <div style="text-align:center; padding: 10px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+          <div style="font-size: 1.6rem; font-weight: 700; color: #fbbf24;">∞</div>
+          <div style="font-size: 0.8rem; color: #71717a;">数据源可替换</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 5: Core Design Principles -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="4" style="padding: 28px 64px;">
   <h2 style="margin-bottom: 14px;">核心设计原则</h2>
   <div class="grid-2" style="margin-top: 12px; gap: 14px;">
     <div class="card" style="padding: 16px 20px;">
       <span class="tag tag-purple">原则 1</span>
       <h3 style="margin-top: 10px; margin-bottom: 8px;">前端无业务逻辑</h3>
       <p style="font-size: 0.95rem;">Web UI 和 TUI 只接收 A2UI 消息并渲染。23+ 页面由服务端 A2UIGenerator 生成，前端做纯粹的 Component → DOM 映射。</p>
-      <div class="protocol-box" style="margin-top: 10px; padding: 8px 12px; font-size: 0.75rem;"><span class="cm">// 服务端</span>
+      <div class="protocol-box" style="margin-top: 10px; padding: 8px 12px; font-size: 0.75rem;"><span class="cm">// 服务端生成页面</span>
 <span class="kw">const</span> page = generateDashboardPage(data);
 send({ type: <span class="str">"page"</span>, surfaces: { main: page } });
-<span class="cm">// 前端</span>
+<span class="cm">// 前端只做渲染</span>
 handleMessage(msg) → render(msg.surfaces.main);</div>
     </div>
     <div class="card" style="padding: 16px 20px;">
@@ -334,15 +424,15 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
     <div class="card" style="padding: 16px 20px;">
       <span class="tag tag-rose">原则 4</span>
       <h3 style="margin-top: 10px; margin-bottom: 8px;">Agent 自主进化</h3>
-      <p style="font-size: 0.95rem;">Evolution Lab 提供 SHARP 5 维评估框架。System Agent 自主诊断弱项、在 Worktree 分支修改代码、展示 Diff、验证改进效果 — 无需人工审批。</p>
+      <p style="font-size: 0.95rem;">Evolution Lab 提供 SHARP 5 维评估框架。System Agent 自主诊断弱项、在 Worktree 分支修改代码、展示 Diff、验证改进效果。</p>
     </div>
   </div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 5: Feature - Chat -->
+<!-- SLIDE 6: Feature - Chat -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="4">
+<div class="slide" data-slide="5">
   <h2>功能展示：<span class="highlight">对话式健康助手</span></h2>
   <div class="flex-row gap-48" style="align-items: center;">
     <div class="col" style="flex: 1.2;">
@@ -370,9 +460,9 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 6: Feature - Dashboard -->
+<!-- SLIDE 7: Feature - Dashboard -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="5">
+<div class="slide" data-slide="6">
   <h2>功能展示：<span class="highlight">健康仪表盘</span></h2>
   <div class="flex-row gap-48" style="align-items: center;">
     <div class="col flex-col gap-24">
@@ -410,9 +500,70 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 7: Feature - Plans & Memory -->
+<!-- SLIDE 8: Feature - Dynamic Dashboard (NEW) -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="6">
+<div class="slide" data-slide="7" style="padding: 28px 64px;">
+  <h2 style="margin-bottom: 8px;">新功能：<span class="highlight">Agent 驱动的动态 Dashboard</span></h2>
+  <p style="color:#71717a; margin-bottom: 20px;">用一句话让 Agent 创建个性化可视化大屏 — 自定义、持久化、可随时刷新</p>
+  <div class="flex-row gap-40">
+    <div class="col flex-col gap-14">
+      <div class="emphasis" style="padding: 14px 18px; font-size: 0.95rem;">
+        用户：<em>"帮我创建一个 RHR 降心实验追踪的 Dashboard"</em><br>
+        <span style="color:#4ade80; font-size:0.88rem;">→ Agent 自动拉数据 → 调用 create_dashboard → 生成个性化大屏</span>
+      </div>
+      <div class="card card-sm">
+        <h3 style="font-size: 1rem; margin-bottom: 8px;">8 种 Widget 类型</h3>
+        <div class="widget-grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div class="widget-item"><div class="w-icon">📊</div><div class="w-name">stat_row</div></div>
+          <div class="widget-item"><div class="w-icon">📈</div><div class="w-name">line_chart</div></div>
+          <div class="widget-item"><div class="w-icon">📉</div><div class="w-name">bar_chart</div></div>
+          <div class="widget-item"><div class="w-icon">🎯</div><div class="w-name">progress_tracker</div></div>
+          <div class="widget-item"><div class="w-icon">⭕</div><div class="w-name">score_gauge</div></div>
+          <div class="widget-item"><div class="w-icon">🔵</div><div class="w-name">activity_rings</div></div>
+          <div class="widget-item"><div class="w-icon">🕸️</div><div class="w-name">radar_chart</div></div>
+          <div class="widget-item"><div class="w-icon">📋</div><div class="w-name">data_table</div></div>
+        </div>
+      </div>
+      <div class="card card-sm">
+        <h3 style="font-size: 1rem; margin-bottom: 8px;">核心特性</h3>
+        <ul class="list-green" style="font-size:0.88rem;">
+          <li>持久化到用户目录 — 服务重启后不丢失</li>
+          <li>刷新按钮触发 Agent 重新拉取真实数据</li>
+          <li>多 Dashboard 分 Tab 并排显示</li>
+          <li>Agent 调用 update_dashboard 随时更新</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col flex-col gap-14">
+      <div class="card card-sm">
+        <h3 style="font-size: 1rem; margin-bottom: 10px; color: #60a5fa;">工具调用链</h3>
+        <div class="protocol-box" style="font-size: 0.78rem; padding: 10px 14px;"><span class="cm">// 1. 先拉取真实健康数据</span>
+get_heart_rate({ period: <span class="str">"7d"</span> })
+→ [{ date: <span class="str">"2026-02-19"</span>, rhr: 72 }, ...]
+
+<span class="cm">// 2. 创建带真实数据的 Dashboard</span>
+create_dashboard({
+  title: <span class="str">"RHR降心实验追踪"</span>,
+  sections: [{
+    widgets: [{ type: <span class="str">"line_chart"</span>,
+      config: { data: realData }
+    }]
+  }]
+})
+<span class="cm">// 3. 页面即时更新，持久化</span></div>
+      </div>
+      <div class="card card-sm" style="border-color: rgba(129,140,248,0.2);">
+        <h3 style="font-size: 1rem; margin-bottom: 8px;">架构亮点</h3>
+        <p style="font-size: 0.88rem;">完全基于 A2UI 协议 — Dashboard 是服务端生成的组件树，前端零改动即可支持新 Widget。Agent 是唯一的 Dashboard 创作者，用户通过对话交互。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 9: Feature - Plans & Memory -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="8">
   <h2>功能展示：<span class="highlight">计划与记忆</span></h2>
   <div class="flex-row gap-32">
     <div class="col">
@@ -443,9 +594,82 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 8: Feature - Evolution Lab -->
+<!-- SLIDE 10: Feature - Incident Pipeline (NEW) -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="7">
+<div class="slide" data-slide="9">
+  <h2>新功能：<span class="highlight">Slack Incident 闭环 Pipeline</span></h2>
+  <p style="color:#71717a; margin-bottom: 24px;">从告警触发到根因定位再到修复建议 — Agent 驱动的全自动事故处理流程</p>
+  <div class="flex-row gap-40">
+    <div class="col" style="max-width: 460px;">
+      <div class="flex-col" style="gap: 8px;">
+        <div class="pipeline-step">
+          <div class="step-num" style="background: rgba(251,113,133,0.2); color: #fb7185;">1</div>
+          <div class="step-body">
+            <div class="step-title">Slack 告警触发</div>
+            <div class="step-desc">Slack 事故频道消息 → Webhook 接入 → PHA Incident Agent 启动</div>
+          </div>
+        </div>
+        <div class="pipeline-arrow">↓</div>
+        <div class="pipeline-step">
+          <div class="step-num" style="background: rgba(251,191,36,0.2); color: #fbbf24;">2</div>
+          <div class="step-body">
+            <div class="step-title">上下文收集</div>
+            <div class="step-desc">自动拉取告警时间段的健康数据、系统日志、近期变更记录</div>
+          </div>
+        </div>
+        <div class="pipeline-arrow">↓</div>
+        <div class="pipeline-step">
+          <div class="step-num" style="background: rgba(129,140,248,0.2); color: #818cf8;">3</div>
+          <div class="step-body">
+            <div class="step-title">根因定位</div>
+            <div class="step-desc">多维度关联分析 — 数据异常时间戳、组件依赖链、历史相似事故</div>
+          </div>
+        </div>
+        <div class="pipeline-arrow">↓</div>
+        <div class="pipeline-step">
+          <div class="step-num" style="background: rgba(74,222,128,0.2); color: #4ade80;">4</div>
+          <div class="step-body">
+            <div class="step-title">修复建议 + 闭环</div>
+            <div class="step-desc">生成带优先级的修复方案，回写 Slack，标记事故状态为 Resolved</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col flex-col gap-20">
+      <div class="card card-sm">
+        <h3 style="color: #fb7185;">关键能力</h3>
+        <ul class="list-rose" style="margin-top: 8px;">
+          <li style="font-size:0.92rem;">与 Slack Webhook 无缝集成，零人工分拨</li>
+          <li style="font-size:0.92rem;">MCP 工具统一调度：日志、监控、健康数据</li>
+          <li style="font-size:0.92rem;">根因置信度评分，多假设并行验证</li>
+          <li style="font-size:0.92rem;">事故知识库积累，相似事故召回加速</li>
+        </ul>
+      </div>
+      <div class="card card-sm" style="border-color: rgba(74,222,128,0.2);">
+        <h3 style="color: #4ade80;">效果</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+          <div style="text-align:center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+            <div style="font-size: 1.8rem; font-weight: 700; color: #4ade80;">&lt;2min</div>
+            <div style="font-size: 0.8rem; color: #71717a;">从告警到初步分析</div>
+          </div>
+          <div style="text-align:center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+            <div style="font-size: 1.8rem; font-weight: 700; color: #818cf8;">100%</div>
+            <div style="font-size: 0.8rem; color: #71717a;">告警自动响应率</div>
+          </div>
+        </div>
+      </div>
+      <div class="emphasis" style="padding: 14px 18px; font-size: 0.9rem;">
+        PHA 不仅是健康助手 —<br>
+        <strong>同样的 AgentOS 架构可扩展到企业级 AIOps 场景</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- SLIDE 11: Feature - Evolution Lab -->
+<!-- ================================================================ -->
+<div class="slide" data-slide="10">
   <h2>核心创新：<span class="highlight">Evolution Lab</span> — Agent 自我进化</h2>
   <div class="flex-row gap-48" style="align-items: center;">
     <div class="col" style="flex: 1.3;">
@@ -501,9 +725,9 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 9: Evolution Pipeline -->
+<!-- SLIDE 12: Evolution Pipeline -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="8">
+<div class="slide" data-slide="11">
   <h2>进化流水线：<span class="highlight">4 步自主进化</span></h2>
   <p style="color:#71717a; margin-bottom: 24px;">System Agent 在 Git Worktree 中自主操作，无需人工审批 — Diff 即结果</p>
   <div class="flex-row gap-48">
@@ -571,9 +795,9 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 10: Skills & Tools Ecosystem -->
+<!-- SLIDE 13: Skills & Tools Ecosystem -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="9" style="padding: 28px 64px;">
+<div class="slide" data-slide="12" style="padding: 28px 64px;">
   <h2 style="margin-bottom: 14px;">技能与工具生态</h2>
   <div class="flex-row gap-48" style="align-items: flex-start;">
     <div class="col flex-col" style="gap: 14px;">
@@ -593,25 +817,25 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
             <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">weekly-review</span>
             <span class="tag tag-green" style="font-size: 0.7rem; padding: 2px 8px;">goal-coach</span>
           </div>
-          <p style="font-size: 0.8rem; color: #71717a; margin-bottom: 6px; margin-top: 8px;">进化 & 系统</p>
+          <p style="font-size: 0.8rem; color: #71717a; margin-bottom: 6px; margin-top: 8px;">进化 & 系统 & 运维</p>
           <div class="flex-row" style="gap: 6px; flex-wrap: wrap;">
             <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">evolution-driver</span>
             <span class="tag tag-amber" style="font-size: 0.7rem; padding: 2px 8px;">benchmark-eval</span>
             <span class="tag tag-blue" style="font-size: 0.7rem; padding: 2px 8px;">diagnose-analyst</span>
-            <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">prompt-engineer</span>
+            <span class="tag tag-rose" style="font-size: 0.7rem; padding: 2px 8px;">incident-handler</span>
           </div>
         </div>
       </div>
       <div class="card card-sm" style="padding: 14px 18px;">
-        <span class="tag tag-purple" style="margin-bottom: 8px;">MCP Tools（手）· 30+</span>
-        <h3 style="margin-top: 6px; margin-bottom: 6px;">标准化工具 · 18 个模块</h3>
+        <span class="tag tag-purple" style="margin-bottom: 8px;">MCP Tools（手）· 35+</span>
+        <h3 style="margin-top: 6px; margin-bottom: 6px;">标准化工具 · 多模块覆盖</h3>
         <table style="font-size: 0.8rem;">
           <tr><td style="color:#60a5fa; width: 90px;">健康数据</td><td>heart_rate, sleep, steps, blood_oxygen, stress, activity...</td></tr>
           <tr><td style="color:#4ade80;">Git 操作</td><td>status, diff, log, merge, commit, branch... (12 个)</td></tr>
           <tr><td style="color:#fbbf24;">计划 & 主动</td><td>create_plan, create_reminder, proactive_check...</td></tr>
-          <tr><td style="color:#c084fc;">进化工具</td><td>run_benchmark, list_versions, create_version...</td></tr>
+          <tr><td style="color:#2dd4bf;">Dashboard</td><td>create_dashboard, update_dashboard</td></tr>
           <tr><td style="color:#fb7185;">记忆 & 画像</td><td>search_memory, get_profile, update_profile...</td></tr>
-          <tr><td style="color:#818cf8;">技能 & 配置</td><td>get_skill, list_skills, get_config, set_config...</td></tr>
+          <tr><td style="color:#818cf8;">进化工具</td><td>run_benchmark, list_versions, create_version...</td></tr>
         </table>
       </div>
     </div>
@@ -622,28 +846,29 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 11: Tech Stack & Protocols -->
+<!-- SLIDE 14: Tech Stack & Protocols -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="10">
+<div class="slide" data-slide="13">
   <h2>技术栈与协议</h2>
   <div class="grid-2 mt-24">
     <div class="card">
-      <h3>运行时</h3>
+      <h3>运行时（基于 OpenClaw）</h3>
       <table>
-        <tr><td style="width:140px; color:#818cf8;">Runtime</td><td>Bun (TypeScript)</td></tr>
-        <tr><td style="color:#818cf8;">Agent Core</td><td>pi-agent-core v0.51</td></tr>
+        <tr><td style="width:140px; color:#2dd4bf;">Agent Core</td><td>pi-agent-core（OpenClaw）</td></tr>
+        <tr><td style="color:#2dd4bf;">TUI</td><td>pi-tui（OpenClaw）</td></tr>
+        <tr><td style="color:#818cf8;">Runtime</td><td>Bun (TypeScript)</td></tr>
         <tr><td style="color:#818cf8;">Frontend</td><td>React + Vite + TailwindCSS</td></tr>
         <tr><td style="color:#818cf8;">Database</td><td>SQLite (Bun native) + sqlite-vec</td></tr>
-        <tr><td style="color:#818cf8;">Embedding</td><td>text-embedding-3-small (向量搜索)</td></tr>
+        <tr><td style="color:#818cf8;">Embedding</td><td>text-embedding-3-small（向量搜索）</td></tr>
       </table>
     </div>
     <div class="card">
       <h3>4 大通信协议</h3>
       <table>
-        <tr><td style="width:140px; color:#4ade80;">A2UI</td><td>Agent→UI 页面推送 (HTTP+SSE)</td></tr>
+        <tr><td style="width:140px; color:#4ade80;">A2UI</td><td>全生成式 UI 页面推送 (HTTP+SSE)</td></tr>
         <tr><td style="color:#4ade80;">AG-UI</td><td>聊天事件流 (POST SSE Streaming)</td></tr>
         <tr><td style="color:#4ade80;">MCP</td><td>JSON-RPC 2.0 Streamable HTTP</td></tr>
-        <tr><td style="color:#4ade80;">A2A</td><td>Agent-to-Agent 任务协调</td></tr>
+        <tr><td style="color:#4ade80;">A2A</td><td>Agent-to-Agent 任务协调（内部对接）</td></tr>
       </table>
     </div>
     <div class="card">
@@ -667,10 +892,10 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 12: A2UI Component System -->
+<!-- SLIDE 15: A2UI Component System -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="11" style="padding: 28px 64px;">
-  <h2 style="margin-bottom: 14px;"><span class="highlight">A2UI</span> 组件体系 — 60+ 组件驱动 23+ 页面</h2>
+<div class="slide" data-slide="14" style="padding: 28px 64px;">
+  <h2 style="margin-bottom: 14px;"><span class="highlight">A2UI</span> 全生成式 UI 协议 — 60+ 组件驱动 23+ 页面</h2>
   <div class="grid-3" style="gap: 14px; margin-top: 12px;">
     <div class="card card-sm" style="padding: 14px 18px;">
       <h3 style="font-size: 1rem; margin-bottom: 10px; color: #60a5fa;">布局 & 容器</h3>
@@ -717,7 +942,6 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
         <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">commit_list</span>
         <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">step_indicator</span>
         <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">evolution_pipeline</span>
-        <span class="tag tag-purple" style="font-size: 0.7rem; padding: 2px 8px;">version_graph</span>
       </div>
     </div>
     <div class="card card-sm" style="padding: 14px 18px;">
@@ -734,7 +958,7 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
     <div class="card card-sm" style="padding: 14px 18px;">
       <h3 style="font-size: 1rem; margin-bottom: 10px; color: #e4e4e7;">页面覆盖</h3>
       <p style="font-size: 0.85rem; margin-bottom: 8px;">23+ 导航视图，全部服务端生成：</p>
-      <p style="font-size: 0.8rem; color: #71717a;">Chat · Dashboard · Health · Sleep · Activity · Plans · Memory · Settings (7 子页) · Evolution Lab (5 Tab) · System Agent</p>
+      <p style="font-size: 0.8rem; color: #71717a;">Chat · Dashboard · Health · Sleep · Activity · Plans · Memory · Experiment · Settings (7 子页) · Evolution Lab (5 Tab) · System Agent</p>
     </div>
   </div>
   <div class="emphasis mt-24 text-center w-full" style="font-size: 0.95rem; padding: 14px 24px;">
@@ -743,13 +967,13 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 13: Current Results -->
+<!-- SLIDE 16: Current Results -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="12">
+<div class="slide" data-slide="15">
   <h2>当前成果</h2>
   <div class="grid-5 mt-32">
     <div class="card text-center">
-      <div class="metric-value highlight">30+</div>
+      <div class="metric-value highlight">35+</div>
       <div class="metric-label">MCP 工具</div>
     </div>
     <div class="card text-center">
@@ -775,11 +999,11 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
       <ul class="list-green">
         <li>对话式健康助手（多轮 + 工具调用 + Skill 触发）</li>
         <li>健康仪表盘（7 Tab 全维度数据）</li>
-        <li>华为健康数据实时对接</li>
+        <li>Agent 驱动的动态 Dashboard（8 种 Widget）</li>
+        <li>Slack Incident 闭环 Pipeline</li>
         <li>计划创建与主动提醒系统</li>
         <li>用户画像 + 记忆 + 向量搜索</li>
         <li>Evolution Lab 4 步自主进化闭环</li>
-        <li>SHARP 5 维基准测试框架</li>
         <li>双形态 UI（Web + TUI）</li>
       </ul>
     </div>
@@ -794,11 +1018,11 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
       </ul>
     </div>
     <div class="card">
-      <h3>技术特色</h3>
-      <ul class="list-amber">
-        <li>AgentOS 架构 — 前端零业务逻辑</li>
-        <li>A2UI 协议 — 60+ 组件服务端驱动</li>
-        <li>统一模型仓库 — 9 Provider 灵活切换</li>
+      <h3>架构亮点</h3>
+      <ul class="list-teal">
+        <li>OpenClaw 核心层复用 — Agent 运行时零维护</li>
+        <li>A2UI 全生成式 UI — 前端零业务逻辑</li>
+        <li>数据源层抽象 — 内部系统可无缝替换</li>
         <li>MCP + Skills 双轨 — 标准化 + 可进化</li>
         <li>4 协议支持 — A2UI / AG-UI / MCP / A2A</li>
       </ul>
@@ -807,9 +1031,9 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 14: System Agent -->
+<!-- SLIDE 17: System Agent -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="13">
+<div class="slide" data-slide="16">
   <h2>系统 Agent：<span class="highlight">自主运维智能体</span></h2>
   <div class="flex-row gap-48" style="align-items: center;">
     <div class="col" style="flex: 1.2;">
@@ -818,7 +1042,7 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
     <div class="col flex-col gap-24">
       <div>
         <h3>双 Agent 架构</h3>
-        <p>PHA 用户 Agent 负责面向用户的健康对话；System Agent (SA) 负责系统内部运维 — 基准测试、提示词优化、版本管理。两者独立 Profile 配置。</p>
+        <p>PHA 用户 Agent 负责面向用户的健康对话；System Agent (SA) 负责系统内部运维 — 基准测试、提示词优化、版本管理、Incident 处理。两者独立 Profile 配置。</p>
       </div>
       <div class="card card-sm">
         <h3>SA 自主能力</h3>
@@ -828,10 +1052,11 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
           <li>自主诊断弱项并直接应用修复</li>
           <li>展示 Diff 结果（可视化 diff_view 组件）</li>
           <li>重跑验证、对比效果后合并到 main</li>
+          <li>处理 Slack Incident，输出根因报告</li>
         </ul>
       </div>
       <div class="emphasis" style="font-size: 0.95rem; padding: 14px 20px;">
-        System Agent = <strong>自主进化引擎</strong><br>
+        System Agent = <strong>自主进化引擎 + 运维大脑</strong><br>
         Worktree 隔离 → 自主修改 → Diff 展示 → 验证合并
       </div>
     </div>
@@ -839,31 +1064,31 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 15: Future Roadmap -->
+<!-- SLIDE 18: Future Roadmap -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="14">
+<div class="slide" data-slide="17">
   <h2>未来展望</h2>
   <div class="grid-3 mt-24">
-    <div class="card" style="border-color: rgba(96,165,250,0.3);">
-      <span class="tag tag-blue" style="margin-bottom: 16px;">近期 · Q1 2026</span>
-      <h3 class="mt-8">能力深化</h3>
-      <ul>
-        <li>多数据源接入（Apple Health、Fitbit、小米）</li>
-        <li>运动识别与锻炼计划生成</li>
-        <li>睡眠质量深度分析（分期、呼吸率）</li>
-        <li>饮食记录与营养建议</li>
-        <li>异常检测与主动预警强化</li>
+    <div class="card" style="border-color: rgba(45,212,191,0.3);">
+      <span class="tag tag-teal" style="margin-bottom: 16px;">核心 · 内部对接</span>
+      <h3 class="mt-8">对接内部平台</h3>
+      <ul class="list-teal">
+        <li>替换华为健康 API → 内部健康数据系统</li>
+        <li>接入内部 Agent 平台（A2A 协议）</li>
+        <li>SSO 集成 + 内部权限体系</li>
+        <li>部署到内部 Kubernetes 集群</li>
+        <li>对接内部 LLM 服务</li>
       </ul>
     </div>
     <div class="card" style="border-color: rgba(129,140,248,0.3);">
       <span class="tag tag-purple" style="margin-bottom: 16px;">中期 · Q2-Q3 2026</span>
       <h3 class="mt-8">智能升级</h3>
       <ul>
+        <li>多数据源接入（Apple Health、Fitbit）</li>
         <li>多模态输入（语音对话、照片识别）</li>
         <li>家庭成员健康管理（多用户协同）</li>
-        <li>社区健康挑战与排行榜</li>
         <li>与医疗机构数据对接（体检报告）</li>
-        <li>插件生态系统扩展</li>
+        <li>Incident 智能预警（主动发现）</li>
       </ul>
     </div>
     <div class="card" style="border-color: rgba(251,191,36,0.3);">
@@ -871,42 +1096,47 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
       <h3 class="mt-8">生态扩展</h3>
       <ul>
         <li>开放 Skills 市场 — 第三方专家贡献</li>
-        <li>MCP 工具插件生态</li>
         <li>个人健康知识图谱</li>
         <li>预测性健康分析（长期趋势）</li>
         <li>AgentOS 标准化 — 开源框架输出</li>
+        <li>企业级 AIOps 平台</li>
       </ul>
     </div>
   </div>
-  <div class="emphasis mt-48 text-center w-full" style="font-size: 1.2rem;">
-    从<strong>健康数据展示</strong>到<strong>智能健康伙伴</strong>，再到<strong>自进化健康生态</strong><br>
-    PHA 不只是一个 App，而是一种新的人机健康协作范式
+  <div class="emphasis mt-40 text-center w-full" style="font-size: 1.1rem;">
+    OpenClaw 核心层 × 全生成式 UI × 可替换数据源<br>
+    <strong>从健康助手到企业内部 AI 平台 — 架构天然支持</strong>
   </div>
 </div>
 
 <!-- ================================================================ -->
-<!-- SLIDE 16: Thank You -->
+<!-- SLIDE 19: Thank You -->
 <!-- ================================================================ -->
-<div class="slide" data-slide="15">
+<div class="slide" data-slide="18">
   <div class="glow glow-purple" style="top: -100px; left: 50%; transform: translateX(-50%);"></div>
+  <div class="glow glow-teal" style="bottom: -150px; right: -100px; opacity:0.08;"></div>
   <div class="text-center">
     <h1 style="font-size: 3.6rem;">Thank You</h1>
-    <p class="subtitle mt-24" style="font-size: 1.3rem; max-width: 500px; margin-left: auto; margin-right: auto;">
+    <p class="subtitle mt-24" style="font-size: 1.3rem; max-width: 560px; margin-left: auto; margin-right: auto;">
       PHA — Personal Health Agent<br>
-      AI 驱动 · 数据融合 · 自主进化
+      OpenClaw 核心层 · 全生成式 UI · Agent 自主进化
     </p>
-    <div class="mt-48" style="display: flex; gap: 32px; justify-content: center;">
-      <div class="card card-sm text-center" style="min-width: 180px;">
+    <div class="mt-48" style="display: flex; gap: 24px; justify-content: center;">
+      <div class="card card-sm text-center" style="min-width: 160px;">
         <div style="color:#818cf8; font-size: 0.85rem; margin-bottom: 8px;">GitHub</div>
         <div style="font-size: 1rem;">ibytechaos/pha</div>
       </div>
-      <div class="card card-sm text-center" style="min-width: 180px;">
+      <div class="card card-sm text-center" style="min-width: 160px;">
         <div style="color:#4ade80; font-size: 0.85rem; margin-bottom: 8px;">技术栈</div>
         <div style="font-size: 1rem;">Bun + React + LLM</div>
       </div>
-      <div class="card card-sm text-center" style="min-width: 180px;">
+      <div class="card card-sm text-center" style="min-width: 160px; border-color: rgba(45,212,191,0.3);">
+        <div style="color:#2dd4bf; font-size: 0.85rem; margin-bottom: 8px;">核心层</div>
+        <div style="font-size: 1rem;">OpenClaw</div>
+      </div>
+      <div class="card card-sm text-center" style="min-width: 160px;">
         <div style="color:#fbbf24; font-size: 0.85rem; margin-bottom: 8px;">架构</div>
-        <div style="font-size: 1rem;">AgentOS</div>
+        <div style="font-size: 1rem;">AgentOS + A2UI</div>
       </div>
     </div>
   </div>
@@ -917,7 +1147,7 @@ sleep-coach/SKILL.md → 睡眠分析 + 建议</div>
 <!-- Navigation -->
 <div class="slide-nav">
   <button class="nav-btn" id="prevBtn" onclick="navigate(-1)">&#8592;</button>
-  <span class="slide-counter"><span id="currentSlide">1</span> / <span id="totalSlides">16</span></span>
+  <span class="slide-counter"><span id="currentSlide">1</span> / <span id="totalSlides">19</span></span>
   <button class="nav-btn" id="nextBtn" onclick="navigate(1)">&#8594;</button>
 </div>
 
