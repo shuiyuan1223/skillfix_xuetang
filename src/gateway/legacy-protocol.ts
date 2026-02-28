@@ -140,7 +140,6 @@ export class LegacyProtocolAdapter {
     },
 
     tool_execution_end: () => {
-      this.send({ event: 'rag_status', content: 'start_search' });
       this.state = 'reasoning';
       this.pendingText = '';
       this.finalText = '';
