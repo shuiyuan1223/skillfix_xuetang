@@ -80,12 +80,12 @@ function buildEditorColumn(ui: A2UIGenerator, state: WorkbenchState): string {
 }
 
 function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
-  // Skill list as data table — all values must be plain strings
+  // Skill list — status column is clickable to toggle enable/disable
   const rows = state.skills.map((s) => ({
     id: s.id,
     name: s.name,
     description: s.description || '-',
-    status: s.enabled ? 'enabled' : 'disabled',
+    status: s.enabled ? 'success' : 'error',
     modified: s.dirty ? t('workbench.modified') : '',
   }));
 
@@ -93,7 +93,7 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     [
       { key: 'name', label: t('workbench.skillsTitle'), sortable: true },
       { key: 'description', label: t('skills.description') },
-      { key: 'status', label: t('skills.status'), render: 'badge' },
+      { key: 'status', label: t('skills.status'), render: 'badge', action: 'debug_toggle_skill' },
       { key: 'modified', label: '' },
     ],
     rows,
@@ -106,20 +106,14 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     const skill = state.skills.find((s) => s.id === state.selectedSkillId);
     const content = skill?.editedContent ?? readWorkbenchSkillContent(state.selectedSkillId);
 
-    // Toggle + editor title row
-    const toggleBtn = ui.button(
-      skill?.enabled ? t('common.disable') : t('common.enable'),
-      'debug_toggle_skill',
-      { variant: skill?.enabled ? 'ghost' : 'primary', size: 'sm' }
-    );
-    const skillLabel = ui.text(state.selectedSkillId, 'h4');
-    const titleRow = ui.row([skillLabel, toggleBtn], { gap: 8, justify: 'space-between', align: 'center' });
-    parts.push(titleRow);
+    const skillLabel = ui.text(`${state.selectedSkillId} / SKILL.md`, 'h4');
+    parts.push(skillLabel);
 
     const editor = ui.codeEditor(content, {
       language: 'markdown',
       onChange: 'debug_skill_change',
-      minHeight: 250,
+      lineNumbers: true,
+      height: 400,
     });
     parts.push(editor);
 
@@ -136,29 +130,29 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
       icon: 'refresh-cw',
       disabled: !skill?.dirty,
     });
-    const btnRow = ui.row([saveBtn, revertBtn], { gap: 8 });
+    const btnRow = ui.row([saveBtn, revertBtn], { gap: 8, justify: 'end' });
     parts.push(btnRow);
   } else {
     const hint = ui.text(t('workbench.selectSkillHint'), 'caption', { muted: true });
     parts.push(hint);
   }
 
-  return ui.column(parts, { gap: 8 });
+  return ui.column(parts, { gap: 12 });
 }
 
 function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
-  // Prompt list — all values must be plain strings
+  // Prompt list — active column is clickable to set active prompt (radio-like)
   const rows = state.prompts.map((p) => ({
     id: p.id,
     name: p.name,
-    status: p.id === state.activePromptId ? 'selected' : '-',
+    active: p.id === state.activePromptId ? 'selected' : 'view',
     modified: p.dirty ? t('workbench.modified') : '',
   }));
 
   const table = ui.dataTable(
     [
+      { key: 'active', label: '', width: '60px', render: 'badge', action: 'debug_activate_prompt' },
       { key: 'name', label: t('workbench.promptsTitle'), sortable: true },
-      { key: 'status', label: 'Active', render: 'badge' },
       { key: 'modified', label: '' },
     ],
     rows,
@@ -170,22 +164,15 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
   if (state.selectedPromptId) {
     const prompt = state.prompts.find((p) => p.id === state.selectedPromptId);
 
-    // Activate button + title
-    const isActive = state.selectedPromptId === state.activePromptId;
-    const activateBtn = ui.button(
-      isActive ? 'Active' : 'Set Active',
-      'debug_activate_prompt',
-      { variant: isActive ? 'ghost' : 'primary', size: 'sm', disabled: isActive }
-    );
-    const promptLabel = ui.text(state.selectedPromptId, 'h4');
-    const titleRow = ui.row([promptLabel, activateBtn], { gap: 8, justify: 'space-between', align: 'center' });
-    parts.push(titleRow);
+    const promptLabel = ui.text(state.selectedPromptId + '.md', 'h4');
+    parts.push(promptLabel);
 
     const content = prompt?.editedContent ?? readWorkbenchPromptContent(state.selectedPromptId);
     const editor = ui.codeEditor(content, {
       language: 'markdown',
       onChange: 'debug_prompt_change',
-      minHeight: 250,
+      lineNumbers: true,
+      height: 400,
     });
     parts.push(editor);
 
@@ -201,14 +188,14 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
       icon: 'refresh-cw',
       disabled: !prompt?.dirty,
     });
-    const btnRow = ui.row([saveBtn, revertBtn], { gap: 8 });
+    const btnRow = ui.row([saveBtn, revertBtn], { gap: 8, justify: 'end' });
     parts.push(btnRow);
   } else {
     const hint = ui.text(t('workbench.selectPromptHint'), 'caption', { muted: true });
     parts.push(hint);
   }
 
-  return ui.column(parts, { gap: 8 });
+  return ui.column(parts, { gap: 12 });
 }
 
 // ── Column 3: Results ───────────────────────────────────────────

@@ -69,7 +69,7 @@ export async function handleWorkbenchAction(
       handleSelectSkill(state, payload);
       break;
     case 'debug_toggle_skill':
-      handleToggleSkill(state);
+      handleToggleSkill(state, payload);
       break;
     case 'debug_skill_change':
       handleSkillChange(state, payload);
@@ -84,7 +84,7 @@ export async function handleWorkbenchAction(
       handleSelectPrompt(state, payload);
       break;
     case 'debug_activate_prompt':
-      handleActivatePrompt(state);
+      handleActivatePrompt(state, payload);
       break;
     case 'debug_prompt_change':
       handlePromptChange(state, payload);
@@ -133,9 +133,11 @@ function handleSelectSkill(state: WorkbenchState, payload: Payload): void {
   }
 }
 
-function handleToggleSkill(state: WorkbenchState): void {
-  if (!state.selectedSkillId) return;
-  const skill = state.skills.find((s) => s.id === state.selectedSkillId);
+function handleToggleSkill(state: WorkbenchState, payload: Payload): void {
+  // Column action sends { row: { id, ... }, value }
+  const id = extractRowId(payload);
+  if (!id) return;
+  const skill = state.skills.find((s) => s.id === id);
   if (skill) skill.enabled = !skill.enabled;
 }
 
@@ -177,10 +179,11 @@ function handleSelectPrompt(state: WorkbenchState, payload: Payload): void {
   }
 }
 
-function handleActivatePrompt(state: WorkbenchState): void {
-  // Activate the currently selected prompt
-  if (state.selectedPromptId) {
-    state.activePromptId = state.selectedPromptId;
+function handleActivatePrompt(state: WorkbenchState, payload: Payload): void {
+  // Column action sends { row: { id, ... }, value }
+  const id = extractRowId(payload);
+  if (id) {
+    state.activePromptId = id;
   }
 }
 
@@ -254,7 +257,10 @@ async function handleRunInterpret(session: GatewaySession, send: SendFn): Promis
       })
       .join('\n\n');
 
+    const systemInstruction = '直接根据提供的健康数据进行分析和解读，输出完整的健康报告。不要反问用户，不要询问更多信息，不要使用任何工具，直接基于现有数据给出分析结果。';
+
     const finalMessage = [
+      systemInstruction,
       promptContent,
       skillGuides ? `<skill_guides>\n${skillGuides}\n</skill_guides>` : '',
       state.testData ? `<user_health_data>\n${state.testData}\n</user_health_data>` : '',
@@ -262,9 +268,9 @@ async function handleRunInterpret(session: GatewaySession, send: SendFn): Promis
       .filter(Boolean)
       .join('\n\n');
 
-    if (!finalMessage.trim()) {
+    if (!state.testData?.trim() && !promptContent?.trim()) {
       state.runStatus = 'error';
-      state.errorMessage = 'No prompt, skills, or test data provided';
+      state.errorMessage = 'No prompt or test data provided';
       rerender(session, send);
       return;
     }
