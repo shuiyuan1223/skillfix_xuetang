@@ -219,6 +219,8 @@ export class ProgressiveDashboardLoader {
   private dataSource: HealthDataSource;
   private send: SendFn;
   whitelisted = true;
+  // Internal abort controller: automatically cancels the previous load when a new one starts
+  private _loadAbort: AbortController | null = null;
 
   constructor(dataSource: HealthDataSource, send: SendFn) {
     this.dataSource = dataSource;
@@ -247,18 +249,37 @@ export class ProgressiveDashboardLoader {
   }
 
   /**
-   * Load data for a specific tab with progressive rendering
+   * Load data for a specific tab with progressive rendering.
+   * Accepts an optional AbortSignal so callers can cancel mid-load
+   * (e.g., when the user navigates away before data finishes loading).
+   *
+   * Calling load() again automatically cancels any previous in-progress load,
+   * so rapid tab switches don't produce stale page updates.
    */
-  async load(activeTab: TabId): Promise<void> {
+  async load(activeTab: TabId, signal?: AbortSignal): Promise<void> {
+    // Cancel any previous in-progress load
+    if (this._loadAbort) {
+      this._loadAbort.abort();
+    }
+    this._loadAbort = new AbortController();
+    const internalSignal = this._loadAbort.signal;
+
+    // Helper: check if this load has been superseded
+    const cancelled = (): boolean => internalSignal.aborted || (signal?.aborted ?? false);
+
     const today = getLocalDateString(new Date());
     const groups = getGroupsForTab(activeTab, this.dataSource, today);
 
     // 1. Send skeleton page immediately
+    if (cancelled()) return;
     sendDashboardPage(this.send, this.data, activeTab, true, this.whitelisted);
 
     // 2. Fire ALL fetchers across all groups in parallel
     const allFetchers = groups.flatMap((g) => g.fetchers);
     const results = await Promise.allSettled(allFetchers.map((f) => f()));
+
+    // If this load was superseded while fetchers were running, discard results
+    if (cancelled()) return;
 
     // Merge all successful results into data
     for (const result of results) {

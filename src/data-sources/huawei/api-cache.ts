@@ -6,6 +6,7 @@
  */
 
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { getStateDir } from '../../utils/config.js';
 import { getUserId } from '../../utils/config.js';
@@ -71,7 +72,8 @@ export function saveToFileCache(
     error,
   };
 
-  fs.writeFileSync(filepath, JSON.stringify(cacheData, null, 2), { mode: 0o640 });
+  // Fire-and-forget async write — cache is for debugging only
+  fsp.writeFile(filepath, JSON.stringify(cacheData, null, 2), { mode: 0o640 }).catch(() => {});
 }
 
 /**

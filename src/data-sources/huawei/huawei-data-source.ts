@@ -75,12 +75,38 @@ export class HuaweiHealthDataSource implements HealthDataSource {
     }
   }
 
+  // Token deduplication: avoids redundant validation when many data methods
+  // fire concurrently (e.g., during dashboard load with 20+ parallel fetchers).
+  private _tokenPromise: Promise<void> | null = null;
+  private _tokenValidUntil = 0;
+
   /**
    * Ensure valid token for this data source (handles multi-user).
    * If the exact UUID has no token, falls back to the first available token
    * in the store (handles UUID mismatch after re-auth).
+   *
+   * Uses promise deduplication: concurrent callers share the same validation
+   * promise, and the result is cached for 10 seconds.
    */
   private async ensureToken(): Promise<void> {
+    // Fast path: token was validated recently
+    if (Date.now() < this._tokenValidUntil) return;
+    // Dedup: reuse in-flight validation
+    if (this._tokenPromise) {
+      await this._tokenPromise;
+      return;
+    }
+
+    this._tokenPromise = this._doEnsureToken();
+    try {
+      await this._tokenPromise;
+      this._tokenValidUntil = Date.now() + 10_000; // 10s grace period
+    } finally {
+      this._tokenPromise = null;
+    }
+  }
+
+  private async _doEnsureToken(): Promise<void> {
     if (this.userUuid) {
       // Multi-user mode: use SQLite token
       try {
@@ -245,20 +271,25 @@ export class HuaweiHealthDataSource implements HealthDataSource {
   }
 
   /**
-   * Get weekly step data
+   * Get weekly step data using bulk getMetricsRange (3 parallel API calls
+   * instead of 7 sequential per-day calls).
    */
   async getWeeklySteps(endDate: string): Promise<Array<{ date: string; steps: number }>> {
-    const result: Array<{ date: string; steps: number }> = [];
     const end = new Date(endDate);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 6);
+    const startStr = toLocalDateStr(start);
 
+    const rangeData = await this.getMetricsRange(startStr, endDate);
+    const stepsMap = new Map(rangeData.map((d) => [d.date, d.steps]));
+
+    const result: Array<{ date: string; steps: number }> = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(end);
       d.setDate(d.getDate() - i);
       const dateStr = toLocalDateStr(d);
-      const metrics = await this.getMetrics(dateStr);
-      result.push({ date: dateStr, steps: metrics.steps });
+      result.push({ date: dateStr, steps: stepsMap.get(dateStr) ?? 0 });
     }
-
     return result;
   }
 

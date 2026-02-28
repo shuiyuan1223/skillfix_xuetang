@@ -88,7 +88,12 @@ async function navigateLegacyChat(session: GatewaySession): Promise<A2UIMessage[
   });
 }
 
-async function navigateDashboard(session: GatewaySession, view: string, send: SendFn): Promise<'early-return'> {
+async function navigateDashboard(
+  session: GatewaySession,
+  view: string,
+  send: SendFn,
+  signal?: AbortSignal
+): Promise<'early-return'> {
   // Map legacy views to dashboard tabs
   if (view === 'health') {
     session.dashboardTab = 'vitals';
@@ -112,7 +117,7 @@ async function navigateDashboard(session: GatewaySession, view: string, send: Se
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const loader = (session as any).dashboardLoader;
   loader.whitelisted = session.isWhitelisted();
-  await loader.load(session.dashboardTab);
+  await loader.load(session.dashboardTab, signal);
   return 'early-return';
 }
 
@@ -764,16 +769,16 @@ async function buildAgentProfilesAndTags(
 // ── Dispatch map ────────────────────────────────────────────────
 
 type NavResult = A2UIMessage[] | null | 'early-return';
-type NavHandler = (session: GatewaySession, view: string, send: SendFn) => Promise<NavResult>;
+type NavHandler = (session: GatewaySession, view: string, send: SendFn, signal?: AbortSignal) => Promise<NavResult>;
 
 const NAV_HANDLERS: Record<string, NavHandler> = {
   chat: async (s) => navigateChat(s),
   'system-agent': async (s) => navigateSystemAgent(s),
   'legacy-chat': async (s) => navigateLegacyChat(s),
-  dashboard: async (s, v, send) => navigateDashboard(s, v, send),
-  health: async (s, v, send) => navigateDashboard(s, v, send),
-  sleep: async (s, v, send) => navigateDashboard(s, v, send),
-  activity: async (s, v, send) => navigateDashboard(s, v, send),
+  dashboard: async (s, v, send, signal) => navigateDashboard(s, v, send, signal),
+  health: async (s, v, send, signal) => navigateDashboard(s, v, send, signal),
+  sleep: async (s, v, send, signal) => navigateDashboard(s, v, send, signal),
+  activity: async (s, v, send, signal) => navigateDashboard(s, v, send, signal),
   plans: async (s) => navigatePlans(s),
   memory: async (s, _v, send) => navigateMemory(s, send),
   'settings/prompts': async (s, _v, send) => navigatePrompts(s, send),
@@ -806,7 +811,12 @@ const NAV_HANDLERS: Record<string, NavHandler> = {
  * Dispatch navigation to the appropriate handler.
  * Returns the page data to be wrapped in buildPage, or null if the handler already sent.
  */
-export async function dispatchNavigation(session: GatewaySession, view: string, send: SendFn): Promise<void> {
+export async function dispatchNavigation(
+  session: GatewaySession,
+  view: string,
+  send: SendFn,
+  signal?: AbortSignal
+): Promise<void> {
   // Unsubscribe from logs when navigating away
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const s = session as any;
@@ -853,7 +863,7 @@ export async function dispatchNavigation(session: GatewaySession, view: string, 
 
   const handler = NAV_HANDLERS[view];
   if (handler) {
-    const result = await handler(session, view, send);
+    const result = await handler(session, view, send, signal);
     if (result === 'early-return' || result === null) {
       return;
     }

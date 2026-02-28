@@ -1463,6 +1463,8 @@ export class GatewaySession {
 
   // Per-session action lock for HTTP requests (prevents concurrent mutations)
   private _actionLock = false;
+  // AbortController for cancelling in-progress navigation (e.g., dashboard data loading)
+  private _navAbort: AbortController | null = null;
 
   /**
    * Handle incoming message (from HTTP action endpoint or legacy WS)
@@ -1539,9 +1541,22 @@ export class GatewaySession {
     payload?: Record<string, unknown>;
     view?: string;
   }): Promise<{ updates: unknown[] }> {
-    if (this._actionLock) {
+    const isNavigate = data.type === 'navigate' && data.view;
+
+    // Navigation requests bypass the action lock so users can switch tabs
+    // even while a slow page (e.g., dashboard) is loading.
+    // Cancel any in-progress navigation first.
+    if (isNavigate) {
+      if (this._navAbort) {
+        this._navAbort.abort();
+        this._navAbort = null;
+      }
+      // Release the action lock if held by previous navigation
+      this._actionLock = false;
+    } else if (this._actionLock) {
       return { updates: [{ type: 'error', message: 'Action in progress' }] };
     }
+
     this._actionLock = true;
 
     const collected: unknown[] = [];
@@ -1555,8 +1570,10 @@ export class GatewaySession {
     };
 
     try {
-      if (data.type === 'navigate' && data.view) {
-        await this.handleNavigate(data.view, collector);
+      if (isNavigate) {
+        this._navAbort = new AbortController();
+        await this.handleNavigate(data.view!, collector, this._navAbort.signal);
+        this._navAbort = null;
       } else if (data.type === 'action' && data.action) {
         await this.handleAction(data.action, data.payload, collector);
       } else if (data.type === 'user_message' && data.payload?.content) {
@@ -1728,8 +1745,8 @@ export class GatewaySession {
     return join(dir, filename);
   }
 
-  async handleNavigate(view: string, send: (msg: unknown) => void): Promise<void> {
-    await dispatchNavigation(this, view, send);
+  async handleNavigate(view: string, send: (msg: unknown) => void, signal?: AbortSignal): Promise<void> {
+    await dispatchNavigation(this, view, send, signal);
   }
 
   /** Set streaming flags at the start of a chat turn. */
