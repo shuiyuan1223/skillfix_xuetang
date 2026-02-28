@@ -274,9 +274,9 @@ export class ProgressiveDashboardLoader {
     if (cancelled()) return;
     sendDashboardPage(this.send, this.data, activeTab, true, this.whitelisted);
 
-    // 2. Fire ALL fetchers across all groups in parallel
+    // 2. Load all fetchers with concurrency limit to avoid overwhelming the API
     const allFetchers = groups.flatMap((g) => g.fetchers);
-    const results = await Promise.allSettled(allFetchers.map((f) => f()));
+    const results = await parallelLimit(allFetchers, 5);
 
     // If this load was superseded while fetchers were running, discard results
     if (cancelled()) return;
@@ -415,4 +415,27 @@ function parseDays(range: string): number {
     default:
       return 30;
   }
+}
+
+/**
+ * Run async tasks with a concurrency limit.
+ * Returns PromiseSettledResult[] in the same order as the input.
+ */
+async function parallelLimit<T>(fns: Array<() => Promise<T>>, limit: number): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(fns.length);
+  let idx = 0;
+
+  async function worker(): Promise<void> {
+    while (idx < fns.length) {
+      const i = idx++;
+      try {
+        results[i] = { status: 'fulfilled', value: await fns[i]() };
+      } catch (err) {
+        results[i] = { status: 'rejected', reason: err };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, fns.length) }, () => worker()));
+  return results;
 }
