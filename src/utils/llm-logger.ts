@@ -656,6 +656,38 @@ export function getLlmModels(date?: string): string[] {
   return [...new Set(pairs.map((p) => p.model).filter((m) => m !== 'unknown'))].sort();
 }
 
+// --- Main interceptor helpers ---
+
+/** Extract the URL string from the various fetch input types */
+function extractUrlString(input: string | URL | Request): string {
+  if (typeof input === 'string') {
+    return input;
+  }
+  if (input instanceof URL) {
+    return input.href;
+  }
+  return input.url;
+}
+
+/** Parse response body text into structured data, handling SSE vs JSON */
+function parseResponseData(text: string, url: string, isSSE: boolean): unknown {
+  if (isSSE) {
+    const result = rebuildSSEResponse(url, text);
+    if (result) {
+      return result.rebuilt;
+    }
+    // Fallback: couldn't parse SSE events — include raw text for debugging
+    return { _raw_sse: true, _length: text.length, _preview: text.slice(0, 500) };
+  }
+
+  // Non-streaming: parse JSON directly
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 // --- Main interceptor ---
 
 /**
@@ -681,14 +713,7 @@ export function installFetchInterceptor(): void {
   const originalFetch = globalThis.fetch.bind(globalThis);
 
   const interceptedFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    let url: string;
-    if (typeof input === 'string') {
-      url = input;
-    } else if (input instanceof URL) {
-      url = input.href;
-    } else {
-      url = input.url;
-    }
+    const url = extractUrlString(input);
 
     // Only intercept LLM API calls
     if (!isLLMEndpoint(url)) {
@@ -729,22 +754,7 @@ export function installFetchInterceptor(): void {
 
     // Log response asynchronously
     clonedResponse.text().then((text) => {
-      let responseData: unknown;
-
-      if (isSSE) {
-        const result = rebuildSSEResponse(url, text);
-        if (result) {
-          responseData = result.rebuilt;
-        } else {
-          responseData = { _raw_sse: true, _length: text.length, _preview: text.slice(0, 500) };
-        }
-      } else {
-        try {
-          responseData = JSON.parse(text);
-        } catch {
-          responseData = text;
-        }
-      }
+      const responseData = parseResponseData(text, url, isSSE);
 
       // Always extract token counts and tool names for metadata
       const tokens = extractTokenUsage(responseData);

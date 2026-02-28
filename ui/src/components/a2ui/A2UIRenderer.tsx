@@ -194,7 +194,14 @@ function ThinkingMessage({
 
   // Collapsible thinking + answer
   const isThinking = isActiveMsg && !hasAnswer;
-  const headerLabel = isThinking ? '思考中' : expanded ? '思考过程' : `已搜索 ${toolCount} 项数据`;
+  let headerLabel: string;
+  if (isThinking) {
+    headerLabel = '思考中';
+  } else if (expanded) {
+    headerLabel = '思考过程';
+  } else {
+    headerLabel = `已搜索 ${toolCount} 项数据`;
+  }
 
   return (
     <>
@@ -647,6 +654,135 @@ export function A2UIRenderer({
     );
   }
 
+  interface ChartRenderParams {
+    data: Record<string, unknown>[];
+    height: number;
+    xKey: string;
+    yKey: string;
+    color: string;
+    gradientId: string;
+    dense: boolean;
+    dotStyle: false | { r: number; fill: string };
+    axisStyle: { fontSize: number; fill: string; fillOpacity: number };
+    gridStroke: string;
+    gridOpacity: number;
+    tooltipStyle: {
+      contentStyle: Record<string, unknown>;
+      labelStyle: Record<string, unknown>;
+      itemStyle: Record<string, unknown>;
+    };
+  }
+
+  function renderBarChart(p: ChartRenderParams) {
+    return (
+      <ResponsiveContainer width="100%" height={p.height}>
+        <ComposedChart data={p.data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+          <defs>
+            <linearGradient id={p.gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={p.color} stopOpacity={0.12} />
+              <stop offset="100%" stopColor={p.color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={p.gridStroke} strokeOpacity={p.gridOpacity} vertical={false} />
+          <XAxis dataKey={p.xKey} tick={p.axisStyle} tickLine={false} axisLine={false} />
+          <YAxis tick={p.axisStyle} tickLine={false} axisLine={false} />
+          <Tooltip {...p.tooltipStyle} cursor={{ fill: 'currentColor', fillOpacity: 0.04 }} />
+          <Bar dataKey={p.yKey} fill={p.color} fillOpacity={0.6} radius={[3, 3, 0, 0]} />
+          <Area type="monotone" dataKey={p.yKey} fill={`url(#${p.gradientId})`} stroke="none" />
+          <Line
+            type="monotone"
+            dataKey={p.yKey}
+            stroke={p.color}
+            strokeWidth={2}
+            dot={p.dotStyle}
+            strokeOpacity={0.8}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  function renderAreaChart(p: ChartRenderParams) {
+    return (
+      <ResponsiveContainer width="100%" height={p.height}>
+        <AreaChart data={p.data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+          <defs>
+            <linearGradient id={p.gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={p.color} stopOpacity={0.25} />
+              <stop offset="100%" stopColor={p.color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={p.gridStroke} strokeOpacity={p.gridOpacity} vertical={false} />
+          <XAxis dataKey={p.xKey} tick={p.axisStyle} tickLine={false} axisLine={false} />
+          <YAxis tick={p.axisStyle} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+          <Tooltip {...p.tooltipStyle} />
+          <Area
+            type="monotone"
+            dataKey={p.yKey}
+            stroke={p.color}
+            strokeWidth={2}
+            fill={`url(#${p.gradientId})`}
+            dot={p.dotStyle}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  function renderPieChart(p: ChartRenderParams, chartType: string) {
+    const COLORS = [p.color, '#14b8a6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
+    const innerRadius = chartType === 'donut' ? '55%' : 0;
+    return (
+      <ResponsiveContainer width="100%" height={p.height}>
+        <PieChart>
+          <Tooltip {...p.tooltipStyle} />
+          <Pie
+            data={p.data}
+            dataKey={p.yKey}
+            nameKey={p.xKey}
+            cx="50%"
+            cy="50%"
+            innerRadius={innerRadius}
+            outerRadius="80%"
+            paddingAngle={2}
+            strokeWidth={0}
+          >
+            {p.data.map((_, i) => (
+              <Cell key={i} fill={COLORS[i % COLORS.length]} fillOpacity={0.85} />
+            ))}
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+    );
+  }
+
+  function renderLineChart(p: ChartRenderParams) {
+    return (
+      <ResponsiveContainer width="100%" height={p.height}>
+        <AreaChart data={p.data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+          <defs>
+            <linearGradient id={p.gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={p.color} stopOpacity={0.15} />
+              <stop offset="100%" stopColor={p.color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke={p.gridStroke} strokeOpacity={p.gridOpacity} vertical={false} />
+          <XAxis dataKey={p.xKey} tick={p.axisStyle} tickLine={false} axisLine={false} />
+          <YAxis tick={p.axisStyle} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
+          <Tooltip {...p.tooltipStyle} />
+          <Area
+            type="monotone"
+            dataKey={p.yKey}
+            stroke={p.color}
+            strokeWidth={p.dense ? 1.5 : 2.5}
+            fill={`url(#${p.gradientId})`}
+            dot={p.dotStyle}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    );
+  }
+
   function rcChart(c: A2UIComponent) {
     const chartType = prop(c, 'chartType') as string;
     const data = prop(c, 'data') as Record<string, unknown>[];
@@ -663,124 +799,42 @@ export function A2UIRenderer({
       );
     }
 
-    const axisStyle = { fontSize: 11, fill: 'currentColor', fillOpacity: 0.45 };
-    const gridStroke = 'currentColor';
-    const gridOpacity = 0.08;
-    const tooltipStyle = {
-      contentStyle: {
-        background: 'var(--color-surface-elevated)',
-        border: '1px solid rgb(var(--color-border))',
-        borderRadius: 8,
-        fontSize: 12,
-      },
-      labelStyle: { color: 'rgb(var(--color-text-secondary))' },
-      itemStyle: { color: 'rgb(var(--color-text))' },
-    };
-    const gradientId = `chart-grad-${c.id}`;
     const dense = data.length > 15;
-    const dotStyle = dense ? false : { r: 3, fill: color };
+    const p: ChartRenderParams = {
+      data,
+      height,
+      xKey,
+      yKey,
+      color,
+      gradientId: `chart-grad-${c.id}`,
+      dense,
+      dotStyle: dense ? false : { r: 3, fill: color },
+      axisStyle: { fontSize: 11, fill: 'currentColor', fillOpacity: 0.45 },
+      gridStroke: 'currentColor',
+      gridOpacity: 0.08,
+      tooltipStyle: {
+        contentStyle: {
+          background: 'var(--color-surface-elevated)',
+          border: '1px solid rgb(var(--color-border))',
+          borderRadius: 8,
+          fontSize: 12,
+        },
+        labelStyle: { color: 'rgb(var(--color-text-secondary))' },
+        itemStyle: { color: 'rgb(var(--color-text))' },
+      },
+    };
 
     if (chartType === 'bar') {
-      return (
-        <ResponsiveContainer width="100%" height={height}>
-          <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity={0.12} />
-                <stop offset="100%" stopColor={color} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
-            <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
-            <YAxis tick={axisStyle} tickLine={false} axisLine={false} />
-            <Tooltip {...tooltipStyle} cursor={{ fill: 'currentColor', fillOpacity: 0.04 }} />
-            <Bar dataKey={yKey} fill={color} fillOpacity={0.6} radius={[3, 3, 0, 0]} />
-            <Area type="monotone" dataKey={yKey} fill={`url(#${gradientId})`} stroke="none" />
-            <Line type="monotone" dataKey={yKey} stroke={color} strokeWidth={2} dot={dotStyle} strokeOpacity={0.8} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      );
+      return renderBarChart(p);
     }
-
     if (chartType === 'area') {
-      return (
-        <ResponsiveContainer width="100%" height={height}>
-          <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
-            <defs>
-              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity={0.25} />
-                <stop offset="100%" stopColor={color} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
-            <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
-            <YAxis tick={axisStyle} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
-            <Tooltip {...tooltipStyle} />
-            <Area
-              type="monotone"
-              dataKey={yKey}
-              stroke={color}
-              strokeWidth={2}
-              fill={`url(#${gradientId})`}
-              dot={dotStyle}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      );
+      return renderAreaChart(p);
     }
-
     if (chartType === 'pie' || chartType === 'donut') {
-      const COLORS = [color, '#14b8a6', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316'];
-      const innerRadius = chartType === 'donut' ? '55%' : 0;
-      return (
-        <ResponsiveContainer width="100%" height={height}>
-          <PieChart>
-            <Tooltip {...tooltipStyle} />
-            <Pie
-              data={data}
-              dataKey={yKey}
-              nameKey={xKey}
-              cx="50%"
-              cy="50%"
-              innerRadius={innerRadius}
-              outerRadius="80%"
-              paddingAngle={2}
-              strokeWidth={0}
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} fillOpacity={0.85} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
-      );
+      return renderPieChart(p, chartType);
     }
-
     // Default: line chart (also fallback for unknown types)
-    return (
-      <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.15} />
-              <stop offset="100%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} strokeOpacity={gridOpacity} vertical={false} />
-          <XAxis dataKey={xKey} tick={axisStyle} tickLine={false} axisLine={false} />
-          <YAxis tick={axisStyle} tickLine={false} axisLine={false} domain={['dataMin - 5', 'dataMax + 5']} />
-          <Tooltip {...tooltipStyle} />
-          <Area
-            type="monotone"
-            dataKey={yKey}
-            stroke={color}
-            strokeWidth={dense ? 1.5 : 2.5}
-            fill={`url(#${gradientId})`}
-            dot={dotStyle}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    );
+    return renderLineChart(p);
   }
 
   function rcTable(c: A2UIComponent) {
@@ -1123,29 +1177,9 @@ export function A2UIRenderer({
     );
   }
 
-  function rcAuthPage(c: A2UIComponent) {
-    const title = prop(c, 'title') as string;
-    const subtitle = prop(c, 'subtitle') as string;
-    const tagline = prop(c, 'tagline') as string;
-    const buttonLabel = prop(c, 'buttonLabel') as string;
-    const buttonAction = prop(c, 'buttonAction') as string;
-    const features = prop(c, 'features') as Array<{ icon: string; title: string; desc: string }>;
-    const footer = prop(c, 'footer') as string;
-
+  function rcAuthOrbs() {
     return (
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 50,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'rgb(var(--color-bg))',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Floating orbs — using design system primary & accent-2 */}
+      <>
         <div
           style={{
             position: 'absolute',
@@ -1172,8 +1206,138 @@ export function A2UIRenderer({
             animation: 'auth-orb 25s ease-in-out infinite reverse',
           }}
         />
+      </>
+    );
+  }
 
-        {/* Glass card */}
+  function rcAuthLogo() {
+    return (
+      <div
+        style={{
+          width: 64,
+          height: 64,
+          borderRadius: 16,
+          background: 'linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          animation: 'auth-float 3s ease-in-out infinite',
+          boxShadow: 'var(--shadow-glow)',
+          marginBottom: 8,
+        }}
+      >
+        <span
+          style={{ color: 'rgb(var(--color-primary-fg))' }}
+          className="[&>svg]:w-8 [&>svg]:h-8"
+          dangerouslySetInnerHTML={{ __html: getIcon('heart-pulse') }}
+        />
+      </div>
+    );
+  }
+
+  function rcAuthFeatures(features: Array<{ icon: string; title: string; desc: string }>) {
+    if (!features || features.length === 0) {
+      return null;
+    }
+    return (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 12,
+          width: '100%',
+          marginBottom: 24,
+        }}
+      >
+        {features.map((f, i) => (
+          <div
+            key={i}
+            style={{
+              padding: '16px 12px',
+              borderRadius: 16,
+              background: 'var(--color-surface-hover)',
+              border: '1px solid rgb(var(--color-border))',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+              animation: `auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.3 + i * 0.1}s backwards`,
+            }}
+          >
+            <span
+              style={{ color: 'rgb(var(--color-text-secondary))' }}
+              className="[&>svg]:w-5 [&>svg]:h-5"
+              dangerouslySetInnerHTML={{ __html: getIcon(f.icon) }}
+            />
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'rgb(var(--color-text-strong))' }}>
+              {f.title}
+            </span>
+            <span style={{ fontSize: '0.7rem', color: 'rgb(var(--color-text-muted))', lineHeight: 1.4 }}>{f.desc}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function rcAuthButton(label: string, action: string) {
+    return (
+      <button
+        onClick={() => sendAction(action)}
+        style={{
+          width: '100%',
+          padding: '14px 24px',
+          border: 'none',
+          borderRadius: 14,
+          cursor: 'pointer',
+          fontSize: '0.95rem',
+          fontWeight: 600,
+          fontFamily: 'inherit',
+          color: 'rgb(var(--color-primary-fg))',
+          letterSpacing: '-0.01em',
+          background: 'linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))',
+          boxShadow: 'var(--shadow-glow)',
+          animation:
+            'glow-pulse 3s ease-in-out infinite, auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s backwards',
+          transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.transform = 'scale(1.02)';
+          (e.currentTarget as HTMLElement).style.boxShadow = '0 0 40px var(--color-accent-glow)';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
+          (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-glow)';
+        }}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  function rcAuthPage(c: A2UIComponent) {
+    const title = prop(c, 'title') as string;
+    const subtitle = prop(c, 'subtitle') as string;
+    const tagline = prop(c, 'tagline') as string;
+    const buttonLabel = prop(c, 'buttonLabel') as string;
+    const buttonAction = prop(c, 'buttonAction') as string;
+    const features = prop(c, 'features') as Array<{ icon: string; title: string; desc: string }>;
+    const footer = prop(c, 'footer') as string;
+
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 50,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgb(var(--color-bg))',
+          overflow: 'hidden',
+        }}
+      >
+        {rcAuthOrbs()}
+
         <div
           style={{
             position: 'relative',
@@ -1195,29 +1359,8 @@ export function A2UIRenderer({
             gap: 8,
           }}
         >
-          {/* Logo */}
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              animation: 'auth-float 3s ease-in-out infinite',
-              boxShadow: 'var(--shadow-glow)',
-              marginBottom: 8,
-            }}
-          >
-            <span
-              style={{ color: 'rgb(var(--color-primary-fg))' }}
-              className="[&>svg]:w-8 [&>svg]:h-8"
-              dangerouslySetInnerHTML={{ __html: getIcon('heart-pulse') }}
-            />
-          </div>
+          {rcAuthLogo()}
 
-          {/* Title with shimmer */}
           <h1
             style={{
               fontSize: '2.5rem',
@@ -1237,7 +1380,6 @@ export function A2UIRenderer({
             {title}
           </h1>
 
-          {/* Subtitle */}
           <p
             style={{
               fontSize: '1rem',
@@ -1250,7 +1392,6 @@ export function A2UIRenderer({
             {subtitle}
           </p>
 
-          {/* Tagline */}
           <p
             style={{
               fontSize: '0.85rem',
@@ -1262,91 +1403,11 @@ export function A2UIRenderer({
             {tagline}
           </p>
 
-          {/* Features */}
-          {features && features.length > 0 && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 12,
-                width: '100%',
-                marginBottom: 24,
-              }}
-            >
-              {features.map((f, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: '16px 12px',
-                    borderRadius: 16,
-                    background: 'var(--color-surface-hover)',
-                    border: '1px solid rgb(var(--color-border))',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 8,
-                    animation: `auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${0.3 + i * 0.1}s backwards`,
-                  }}
-                >
-                  <span
-                    style={{ color: 'rgb(var(--color-text-secondary))' }}
-                    className="[&>svg]:w-5 [&>svg]:h-5"
-                    dangerouslySetInnerHTML={{ __html: getIcon(f.icon) }}
-                  />
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'rgb(var(--color-text-strong))' }}>
-                    {f.title}
-                  </span>
-                  <span style={{ fontSize: '0.7rem', color: 'rgb(var(--color-text-muted))', lineHeight: 1.4 }}>
-                    {f.desc}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          {rcAuthFeatures(features)}
+          {rcAuthButton(buttonLabel, buttonAction)}
 
-          {/* Auth button */}
-          <button
-            onClick={() => sendAction(buttonAction)}
-            style={{
-              width: '100%',
-              padding: '14px 24px',
-              border: 'none',
-              borderRadius: 14,
-              cursor: 'pointer',
-              fontSize: '0.95rem',
-              fontWeight: 600,
-              fontFamily: 'inherit',
-              color: 'rgb(var(--color-primary-fg))',
-              letterSpacing: '-0.01em',
-              background: 'linear-gradient(135deg, rgb(var(--color-primary)), rgb(var(--color-accent-2)))',
-              boxShadow: 'var(--shadow-glow)',
-              animation:
-                'glow-pulse 3s ease-in-out infinite, auth-feature-enter 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.6s backwards',
-              transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.transform = 'scale(1.02)';
-              (e.currentTarget as HTMLElement).style.boxShadow = '0 0 40px var(--color-accent-glow)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.transform = 'scale(1)';
-              (e.currentTarget as HTMLElement).style.boxShadow = 'var(--shadow-glow)';
-            }}
-          >
-            {buttonLabel}
-          </button>
-
-          {/* Footer */}
           {footer && (
-            <p
-              style={{
-                fontSize: '0.75rem',
-                color: 'rgb(var(--color-text-muted))',
-                margin: '12px 0 0',
-              }}
-            >
-              {footer}
-            </p>
+            <p style={{ fontSize: '0.75rem', color: 'rgb(var(--color-text-muted))', margin: '12px 0 0' }}>{footer}</p>
           )}
         </div>
       </div>

@@ -929,13 +929,10 @@ function buildHeartTab(ui: A2UIGenerator, data: DashboardData, loading: boolean)
 }
 
 // ============================================================================
-// Tab: Trends
+// Tab: Trends (helpers)
 // ============================================================================
 
-function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
-  const children: string[] = [];
-
-  // Time range selector
+function buildTrendsSelectorRow(ui: A2UIGenerator, data: DashboardData): string {
   const rangeSelect = ui.formInput('trends_range', 'select', {
     label: t('dashboard.timeRange'),
     value: data.trendsRange || '1w',
@@ -950,7 +947,6 @@ function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
     onChange: 'change_trends_range',
   });
 
-  // Metric selector
   const metricSelect = ui.formInput('trends_metric', 'select', {
     label: t('dashboard.selectMetric'),
     value: data.trendsMetric || 'steps',
@@ -965,10 +961,79 @@ function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
     onChange: 'change_trends_metric',
   });
 
-  const selectorsRow = ui.row([rangeSelect, metricSelect], { gap: 16 });
-  children.push(selectorsRow);
+  return ui.row([rangeSelect, metricSelect], { gap: 16 });
+}
 
-  // Trends chart
+function buildTrendsChart(
+  ui: A2UIGenerator,
+  trendsData: Array<{ date: string; value: number }>,
+  metricLabel: string
+): string {
+  const chartTitle = ui.text(metricLabel, 'h3');
+  const chart = ui.chart({
+    chartType: 'line',
+    data: trendsData.map((d) => ({
+      label: d.date.slice(5), // MM-DD format
+      value: d.value,
+    })),
+    xKey: 'label',
+    yKey: 'value',
+    height: 300,
+    color: '#3b82f6',
+  });
+  return ui.card([chartTitle, chart], { padding: 20 });
+}
+
+function buildMonthlySummarySection(
+  ui: A2UIGenerator,
+  trendsData: Array<{ date: string; value: number }>,
+  metricUnit: string
+): string {
+  const summaryTitle = ui.text(t('dashboard.monthlySummary'), 'h3');
+  const monthMap = new Map<string, number[]>();
+  for (const pt of trendsData) {
+    const monthKey = pt.date.slice(0, 7); // YYYY-MM
+    if (!monthMap.has(monthKey)) {
+      monthMap.set(monthKey, []);
+    }
+    monthMap.get(monthKey)!.push(pt.value);
+  }
+  const summaryRows = Array.from(monthMap.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([month, values]) => {
+      const avg = values.reduce((a, b) => a + b, 0) / values.length;
+      const max = Math.max(...values);
+      const min = Math.min(...values);
+      return {
+        period: month,
+        average: `${Math.round(avg)}${metricUnit}`,
+        max: `${Math.round(max)}${metricUnit}`,
+        min: `${Math.round(min)}${metricUnit}`,
+        days: String(values.length),
+      };
+    });
+  const summaryTable = ui.table(
+    [
+      { key: 'period', label: t('dashboard.timeRange') },
+      { key: 'average', label: t('dashboard.weeklyAverage') },
+      { key: 'max', label: 'Max' },
+      { key: 'min', label: 'Min' },
+      { key: 'days', label: t('dashboard.days') },
+    ],
+    summaryRows
+  );
+  return ui.card([summaryTitle, summaryTable], { padding: 20 });
+}
+
+// ============================================================================
+// Tab: Trends
+// ============================================================================
+
+function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
+  const children: string[] = [];
+
+  children.push(buildTrendsSelectorRow(ui, data));
+
   if (data.trendsData && data.trendsData.length > 0) {
     const metricLabels: Record<string, string> = {
       steps: t('activity.steps'),
@@ -989,55 +1054,8 @@ function buildTrendsTab(ui: A2UIGenerator, data: DashboardData): string {
     const metricLabel = metricLabels[data.trendsMetric || 'steps'] || '';
     const metricUnit = metricUnits[data.trendsMetric || 'steps'] || '';
 
-    const chartTitle = ui.text(metricLabel, 'h3');
-    const chart = ui.chart({
-      chartType: 'line',
-      data: data.trendsData.map((d) => ({
-        label: d.date.slice(5), // MM-DD format
-        value: d.value,
-      })),
-      xKey: 'label',
-      yKey: 'value',
-      height: 300,
-      color: '#3b82f6',
-    });
-    children.push(ui.card([chartTitle, chart], { padding: 20 }));
-
-    // Monthly summary table (computed from trends data)
-    const summaryTitle = ui.text(t('dashboard.monthlySummary'), 'h3');
-    const monthMap = new Map<string, number[]>();
-    for (const pt of data.trendsData) {
-      const monthKey = pt.date.slice(0, 7); // YYYY-MM
-      if (!monthMap.has(monthKey)) {
-        monthMap.set(monthKey, []);
-      }
-      monthMap.get(monthKey)!.push(pt.value);
-    }
-    const summaryRows = Array.from(monthMap.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([month, values]) => {
-        const avg = values.reduce((a, b) => a + b, 0) / values.length;
-        const max = Math.max(...values);
-        const min = Math.min(...values);
-        return {
-          period: month,
-          average: `${Math.round(avg)}${metricUnit}`,
-          max: `${Math.round(max)}${metricUnit}`,
-          min: `${Math.round(min)}${metricUnit}`,
-          days: String(values.length),
-        };
-      });
-    const summaryTable = ui.table(
-      [
-        { key: 'period', label: t('dashboard.timeRange') },
-        { key: 'average', label: t('dashboard.weeklyAverage') },
-        { key: 'max', label: 'Max' },
-        { key: 'min', label: 'Min' },
-        { key: 'days', label: t('dashboard.days') },
-      ],
-      summaryRows
-    );
-    children.push(ui.card([summaryTitle, summaryTable], { padding: 20 }));
+    children.push(buildTrendsChart(ui, data.trendsData, metricLabel));
+    children.push(buildMonthlySummarySection(ui, data.trendsData, metricUnit));
   } else if (data.trendsData && data.trendsData.length === 0) {
     const emptyText = ui.text(t('dashboard.noTrendsData'), 'caption');
     children.push(ui.card([emptyText], { padding: 20, align: 'center' }));

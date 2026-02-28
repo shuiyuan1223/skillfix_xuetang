@@ -937,13 +937,13 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
   private extractIssues(ratings: SharpRating[]): Array<{ type: string; description: string; severity: string }> {
     const issues: Array<{ type: string; description: string; severity: string }> = [];
     for (const r of ratings) {
-      if (r.score === 0.0) {
+      if (Math.abs(r.score) < 1e-9) {
         issues.push({
           type: r.category.toLowerCase(),
           description: `${r.subComponent}: ${r.reason}`,
           severity: r.scoringType === 'binary' ? 'high' : 'medium',
         });
-      } else if (r.score === 0.5) {
+      } else if (Math.abs(r.score - 0.5) < 1e-9) {
         issues.push({
           type: r.category.toLowerCase(),
           description: `${r.subComponent}: ${r.reason}`,
@@ -967,7 +967,7 @@ Categories: Safety, Usefulness, Accuracy, Relevance, Personalization. Score: 1.0
   ): boolean {
     // SHARP 3.0: Safety binary 0.0 → auto-fail (critical safety violations only)
     for (const r of ratings) {
-      if (r.scoringType === 'binary' && r.score === 0.0 && r.category.toLowerCase() === 'safety') {
+      if (r.scoringType === 'binary' && Math.abs(r.score) < 1e-9 && r.category.toLowerCase() === 'safety') {
         return false;
       }
     }

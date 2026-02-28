@@ -356,6 +356,116 @@ function renderUnifiedDiff(title: string, diff: string) {
 }
 
 // ---- Data Table ----
+
+const BADGE_VARIANTS: Record<string, string> = {
+  success: 'bg-emerald-500/20 text-emerald-400',
+  error: 'bg-red-500/20 text-red-400',
+  failed: 'bg-red-500/20 text-red-400',
+  warning: 'bg-amber-500/20 text-amber-400',
+  pending: 'bg-amber-500/20 text-amber-400',
+  view: 'bg-blue-500/15 text-blue-500',
+  selected: 'bg-emerald-500/15 text-emerald-500',
+  info: 'bg-blue-500/15 text-blue-500',
+};
+
+function renderTableCell(value: unknown, render?: string): React.ReactNode {
+  if (render === 'badge') {
+    const status = String(value).toLowerCase();
+    const cls = BADGE_VARIANTS[status] || 'bg-slate-500/15 text-slate-600 dark:text-slate-300';
+    return (
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>
+        {String(value)}
+      </span>
+    );
+  }
+  if (render === 'progress') {
+    return renderProgressCell(value);
+  }
+  if (render === 'date') {
+    return new Date(Number(value)).toLocaleString();
+  }
+  if (render === 'link') {
+    const text = String(value ?? '');
+    if (!text || text === '-') {
+      return text;
+    }
+    return (
+      <span className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary">
+        {text}
+      </span>
+    );
+  }
+  return String(value ?? '');
+}
+
+function renderProgressCell(value: unknown): React.ReactNode {
+  const str = String(value);
+  let num: number;
+  let barCls = 'bg-primary';
+  let anim = '';
+  if (str.includes('|')) {
+    const [n, v] = str.split('|');
+    num = Number(n) || 0;
+    if (v === 'success') {
+      barCls = 'bg-success';
+    } else if (v === 'error') {
+      barCls = 'bg-error';
+    } else if (v === 'running') {
+      anim = 'animate-status-pulse';
+    }
+  } else {
+    num = Number(str) || 0;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 bg-surface rounded-full overflow-hidden flex-1 min-w-[48px]">
+        <div className={`h-full rounded-full ${barCls} ${anim}`} style={{ width: `${Math.max(num, 3)}%` }} />
+      </div>
+      <span className="text-xs text-text-muted whitespace-nowrap">{num}%</span>
+    </div>
+  );
+}
+
+function renderTablePagination(
+  pagination: { page: number; pageSize: number; total: number },
+  onPageChange: string | undefined,
+  ctx: RenderContext,
+) {
+  const paginationBtnCls =
+    'px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40';
+  return (
+    <div className="flex items-center justify-between px-3 py-3 border-t border-border text-xs text-text-muted">
+      <span>
+        Page {pagination.page + 1} of {Math.ceil(pagination.total / pagination.pageSize)} ({pagination.total} items)
+      </span>
+      <div className="flex gap-2">
+        <button
+          className={paginationBtnCls}
+          disabled={pagination.page === 0}
+          onClick={() => {
+            if (onPageChange) {
+              ctx.sendAction(onPageChange, { page: pagination.page - 1 });
+            }
+          }}
+        >
+          ←
+        </button>
+        <button
+          className={paginationBtnCls}
+          disabled={(pagination.page + 1) * pagination.pageSize >= pagination.total}
+          onClick={() => {
+            if (onPageChange) {
+              ctx.sendAction(onPageChange, { page: pagination.page + 1 });
+            }
+          }}
+        >
+          →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
   const columns = prop(c, 'columns') as {
     key: string;
@@ -369,72 +479,6 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
   const pagination = prop(c, 'pagination') as { page: number; pageSize: number; total: number } | undefined;
   const sortBy = prop(c, 'sortBy') as string;
   const sortOrder = (prop(c, 'sortOrder') as string) || 'asc';
-
-  const badgeV: Record<string, string> = {
-    success: 'bg-emerald-500/20 text-emerald-400',
-    error: 'bg-red-500/20 text-red-400',
-    failed: 'bg-red-500/20 text-red-400',
-    warning: 'bg-amber-500/20 text-amber-400',
-    pending: 'bg-amber-500/20 text-amber-400',
-    view: 'bg-blue-500/15 text-blue-500',
-    selected: 'bg-emerald-500/15 text-emerald-500',
-    info: 'bg-blue-500/15 text-blue-500',
-  };
-
-  const renderCell = (value: unknown, render?: string) => {
-    if (render === 'badge') {
-      const status = String(value).toLowerCase();
-      const cls = badgeV[status] || 'bg-slate-500/15 text-slate-600 dark:text-slate-300';
-      return (
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>
-          {String(value)}
-        </span>
-      );
-    }
-    if (render === 'progress') {
-      const str = String(value);
-      let num: number;
-      let barCls = 'bg-primary';
-      let anim = '';
-      if (str.includes('|')) {
-        const [n, v] = str.split('|');
-        num = Number(n) || 0;
-        if (v === 'success') {
-          barCls = 'bg-success';
-        } else if (v === 'error') {
-          barCls = 'bg-error';
-        } else if (v === 'running') {
-          anim = 'animate-status-pulse';
-        }
-      } else {
-        num = Number(str) || 0;
-      }
-      return (
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 bg-surface rounded-full overflow-hidden flex-1 min-w-[48px]">
-            <div className={`h-full rounded-full ${barCls} ${anim}`} style={{ width: `${Math.max(num, 3)}%` }} />
-          </div>
-          <span className="text-xs text-text-muted whitespace-nowrap">{num}%</span>
-        </div>
-      );
-    }
-    if (render === 'date') {
-      return new Date(Number(value)).toLocaleString();
-    }
-    if (render === 'link') {
-      const text = String(value ?? '');
-      if (!text || text === '-') {
-        return text;
-      }
-      return (
-        <span className="text-primary underline underline-offset-2 decoration-primary/40 hover:decoration-primary">
-          {text}
-        </span>
-      );
-    }
-    return String(value ?? '');
-  };
-
   const onSort = prop(c, 'onSort') as string | undefined;
   const onRowClick = prop(c, 'onRowClick') as string | undefined;
   const onPageChange = prop(c, 'onPageChange') as string | undefined;
@@ -450,11 +494,12 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
                 style={col.width ? { width: col.width } : undefined}
                 className={`p-3 text-left text-xs font-medium uppercase text-text-muted border-b border-border ${col.sortable ? 'cursor-pointer hover:text-text' : ''}`}
                 onClick={() => {
-                  if (col.sortable && onSort)
+                  if (col.sortable && onSort) {
                     ctx.sendAction(onSort, {
                       sortBy: col.key,
                       sortOrder: sortBy === col.key && sortOrder === 'asc' ? 'desc' : 'asc',
                     });
+                  }
                 }}
               >
                 {col.label}
@@ -471,7 +516,9 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
               key={i}
               className={`border-b border-border transition-colors hover:bg-primary/5 ${onRowClick ? 'cursor-pointer' : ''}`}
               onClick={() => {
-                if (onRowClick) ctx.sendAction(onRowClick, { row });
+                if (onRowClick) {
+                  ctx.sendAction(onRowClick, { row });
+                }
               }}
             >
               {columns.map((col) => (
@@ -488,40 +535,14 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
                       : undefined
                   }
                 >
-                  <span className="block truncate">{renderCell(row[col.key], col.render)}</span>
+                  <span className="block truncate">{renderTableCell(row[col.key], col.render)}</span>
                 </td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
-      {pagination && (
-        <div className="flex items-center justify-between px-3 py-3 border-t border-border text-xs text-text-muted">
-          <span>
-            Page {pagination.page + 1} of {Math.ceil(pagination.total / pagination.pageSize)} ({pagination.total} items)
-          </span>
-          <div className="flex gap-2">
-            <button
-              className="px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40"
-              disabled={pagination.page === 0}
-              onClick={() => {
-                if (onPageChange) ctx.sendAction(onPageChange, { page: pagination.page - 1 });
-              }}
-            >
-              ←
-            </button>
-            <button
-              className="px-3 py-1.5 rounded-lg border border-border bg-transparent text-text-secondary text-xs cursor-pointer transition-all hover:bg-surface-hover disabled:opacity-40"
-              disabled={(pagination.page + 1) * pagination.pageSize >= pagination.total}
-              onClick={() => {
-                if (onPageChange) ctx.sendAction(onPageChange, { page: pagination.page + 1 });
-              }}
-            >
-              →
-            </button>
-          </div>
-        </div>
-      )}
+      {pagination && renderTablePagination(pagination, onPageChange, ctx)}
     </div>
   );
 }
@@ -811,6 +832,120 @@ export function renderForm(c: A2UIComponent, ctx: RenderContext) {
 }
 
 // ---- Form Input ----
+
+const FORM_INPUT_CLS =
+  'w-full py-2.5 px-3.5 bg-surface border border-border rounded-[10px] text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-surface-hover focus:ring-4 focus:ring-primary/10';
+
+function renderSelectInput(
+  name: string,
+  value: string | number | boolean | undefined,
+  options: { value: string; label: string }[] | undefined,
+  placeholder: string,
+  onChange: string | undefined,
+  ctx: RenderContext,
+): React.ReactNode {
+  const selectedOpt = options?.find((opt) => opt.value === value);
+  const selectedLabel = selectedOpt?.label || placeholder || 'Select...';
+  return (
+    <div className="custom-select relative" data-name={name}>
+      <input type="hidden" name={name} defaultValue={String(value ?? '')} />
+      <button
+        type="button"
+        className={`${FORM_INPUT_CLS} flex items-center justify-between cursor-pointer`}
+        onClick={(e) => {
+          const wrapper = (e.currentTarget as HTMLElement).closest('.custom-select') as HTMLElement;
+          wrapper.classList.toggle('open');
+          const closeHandler = (ev: Event) => {
+            if (!wrapper.contains(ev.target as Node)) {
+              wrapper.classList.remove('open');
+              document.removeEventListener('click', closeHandler);
+            }
+          };
+          setTimeout(() => document.addEventListener('click', closeHandler), 0);
+        }}
+      >
+        <span className={`select-label ${!selectedOpt ? 'text-text-muted' : 'text-text'}`}>{selectedLabel}</span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className="text-text-muted shrink-0 transition-transform duration-fast"
+        >
+          <path d="M8 11L3 6h10l-5 5z" />
+        </svg>
+      </button>
+      <div className="select-dropdown absolute top-full mt-1 left-0 right-0 z-50 bg-surface-elevated backdrop-blur-[12px] border border-primary/20 rounded-xl shadow-2xl max-h-[200px] overflow-y-auto">
+        {options?.map((opt) => (
+          <div
+            key={opt.value}
+            className={`select-option px-3 py-2 cursor-pointer text-sm transition-colors ${value === opt.value ? 'text-text bg-primary/10 border-l-2 border-l-primary' : 'text-text-secondary border-l-2 border-l-transparent hover:bg-primary/10 hover:text-text'}`}
+            onClick={(e) => {
+              const wrapper = (e.currentTarget as HTMLElement).closest('.custom-select') as HTMLElement;
+              if (wrapper) {
+                const hidden = wrapper.querySelector('input[type="hidden"]') as HTMLInputElement;
+                if (hidden) {
+                  hidden.value = opt.value;
+                }
+                const lbl = wrapper.querySelector('.select-label') as HTMLElement;
+                if (lbl) {
+                  lbl.textContent = opt.label;
+                  lbl.className = 'select-label text-text';
+                }
+                wrapper.querySelectorAll('.select-option').forEach((el) => {
+                  (el as HTMLElement).className =
+                    el === e.currentTarget
+                      ? 'select-option px-3 py-2 cursor-pointer text-sm transition-colors text-text bg-primary/10 border-l-2 border-l-primary'
+                      : 'select-option px-3 py-2 cursor-pointer text-sm transition-colors text-text-secondary border-l-2 border-l-transparent hover:bg-primary/10 hover:text-text';
+                });
+                wrapper.classList.remove('open');
+              }
+              if (onChange) {
+                ctx.sendAction(onChange, { name, value: opt.value });
+              }
+            }}
+          >
+            {opt.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function renderCheckboxInput(
+  name: string,
+  label: string | undefined,
+  value: string | number | boolean | undefined,
+  onChange: string | undefined,
+  ctx: RenderContext,
+): React.ReactNode {
+  const checked = value === true || value === 'true';
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-sm text-text">{label}</span>
+      <label className="relative inline-flex items-center cursor-pointer">
+        <input type="hidden" name={name} defaultValue={checked ? 'true' : 'false'} />
+        <input
+          type="checkbox"
+          className="sr-only peer"
+          defaultChecked={checked}
+          onChange={(e) => {
+            const hidden = e.currentTarget.previousElementSibling as HTMLInputElement;
+            if (hidden) {
+              hidden.value = e.currentTarget.checked ? 'true' : 'false';
+            }
+            if (onChange) {
+              ctx.sendAction(onChange, { name, value: String(e.currentTarget.checked) });
+            }
+          }}
+        />
+        <div className="w-9 h-5 bg-border rounded-full peer peer-checked:bg-primary peer-focus:ring-4 peer-focus:ring-primary/10 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
+      </label>
+    </div>
+  );
+}
+
 export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
   const inputType = prop(c, 'inputType') as string;
   const name = prop(c, 'name') as string;
@@ -825,15 +960,17 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
       ctx.sendAction(onChange, { name, value: e.target.value });
     }
   };
-  const inputCls =
-    'w-full py-2.5 px-3.5 bg-surface border border-border rounded-[10px] text-text text-[0.9375rem] transition-all duration-fast outline-none placeholder:text-text-muted focus:border-primary/50 focus:bg-surface-hover focus:ring-4 focus:ring-primary/10';
+
+  if (inputType === 'checkbox') {
+    return renderCheckboxInput(name, label, value, onChange, ctx);
+  }
 
   let input: React.ReactNode;
   switch (inputType) {
     case 'textarea':
       input = (
         <textarea
-          className={`${inputCls} min-h-[100px] resize-y`}
+          className={`${FORM_INPUT_CLS} min-h-[100px] resize-y`}
           name={name}
           placeholder={placeholder}
           required={required}
@@ -842,107 +979,14 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
         />
       );
       break;
-    case 'select': {
-      const selectedOpt = options?.find((opt) => opt.value === value);
-      const selectedLabel = selectedOpt?.label || placeholder || 'Select...';
-      input = (
-        <div className="custom-select relative" data-name={name}>
-          <input type="hidden" name={name} defaultValue={String(value ?? '')} />
-          <button
-            type="button"
-            className={`${inputCls} flex items-center justify-between cursor-pointer`}
-            onClick={(e) => {
-              const wrapper = (e.currentTarget as HTMLElement).closest('.custom-select') as HTMLElement;
-              wrapper.classList.toggle('open');
-              const closeHandler = (ev: Event) => {
-                if (!wrapper.contains(ev.target as Node)) {
-                  wrapper.classList.remove('open');
-                  document.removeEventListener('click', closeHandler);
-                }
-              };
-              setTimeout(() => document.addEventListener('click', closeHandler), 0);
-            }}
-          >
-            <span className={`select-label ${!selectedOpt ? 'text-text-muted' : 'text-text'}`}>{selectedLabel}</span>
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 16 16"
-              fill="currentColor"
-              className="text-text-muted shrink-0 transition-transform duration-fast"
-            >
-              <path d="M8 11L3 6h10l-5 5z" />
-            </svg>
-          </button>
-          <div className="select-dropdown absolute top-full mt-1 left-0 right-0 z-50 bg-surface-elevated backdrop-blur-[12px] border border-primary/20 rounded-xl shadow-2xl max-h-[200px] overflow-y-auto">
-            {options?.map((opt) => (
-              <div
-                key={opt.value}
-                className={`select-option px-3 py-2 cursor-pointer text-sm transition-colors ${value === opt.value ? 'text-text bg-primary/10 border-l-2 border-l-primary' : 'text-text-secondary border-l-2 border-l-transparent hover:bg-primary/10 hover:text-text'}`}
-                onClick={(e) => {
-                  const wrapper = (e.currentTarget as HTMLElement).closest('.custom-select') as HTMLElement;
-                  if (wrapper) {
-                    const hidden = wrapper.querySelector('input[type="hidden"]') as HTMLInputElement;
-                    if (hidden) {
-                      hidden.value = opt.value;
-                    }
-                    const lbl = wrapper.querySelector('.select-label') as HTMLElement;
-                    if (lbl) {
-                      lbl.textContent = opt.label;
-                      lbl.className = 'select-label text-text';
-                    }
-                    wrapper.querySelectorAll('.select-option').forEach((el) => {
-                      (el as HTMLElement).className =
-                        el === e.currentTarget
-                          ? 'select-option px-3 py-2 cursor-pointer text-sm transition-colors text-text bg-primary/10 border-l-2 border-l-primary'
-                          : 'select-option px-3 py-2 cursor-pointer text-sm transition-colors text-text-secondary border-l-2 border-l-transparent hover:bg-primary/10 hover:text-text';
-                    });
-                    wrapper.classList.remove('open');
-                  }
-                  if (onChange) {
-                    ctx.sendAction(onChange, { name, value: opt.value });
-                  }
-                }}
-              >
-                {opt.label}
-              </div>
-            ))}
-          </div>
-        </div>
-      );
+    case 'select':
+      input = renderSelectInput(name, value, options, placeholder, onChange, ctx);
       break;
-    }
-    case 'checkbox': {
-      const checked = value === true || value === 'true';
-      return (
-        <div className="flex items-center justify-between py-1.5">
-          <span className="text-sm text-text">{label}</span>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input type="hidden" name={name} defaultValue={checked ? 'true' : 'false'} />
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              defaultChecked={checked}
-              onChange={(e) => {
-                const hidden = e.currentTarget.previousElementSibling as HTMLInputElement;
-                if (hidden) {
-                  hidden.value = e.currentTarget.checked ? 'true' : 'false';
-                }
-                if (onChange) {
-                  ctx.sendAction(onChange, { name, value: String(e.currentTarget.checked) });
-                }
-              }}
-            />
-            <div className="w-9 h-5 bg-border rounded-full peer peer-checked:bg-primary peer-focus:ring-4 peer-focus:ring-primary/10 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4" />
-          </label>
-        </div>
-      );
-    }
     case 'number':
       input = (
         <input
           type="number"
-          className={inputCls}
+          className={FORM_INPUT_CLS}
           name={name}
           placeholder={placeholder}
           defaultValue={value ?? ''}
@@ -955,7 +999,7 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
       input = (
         <input
           type="text"
-          className={inputCls}
+          className={FORM_INPUT_CLS}
           name={name}
           placeholder={placeholder}
           defaultValue={String(value ?? '')}
@@ -967,7 +1011,7 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      {label && inputType !== 'checkbox' && (
+      {label && (
         <label className="text-xs font-medium text-text-secondary">
           {label}
           {required && <span className="text-red-400 ml-0.5">*</span>}
@@ -979,27 +1023,28 @@ export function renderFormInput(c: A2UIComponent, ctx: RenderContext) {
 }
 
 // ---- Git Timeline ----
-export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
-  const events = (prop(c, 'events') as any[]) || [];
-  const onEventClick = prop(c, 'onEventClick') as string | undefined;
-  const onContextAction = prop(c, 'onContextAction') as string | undefined;
-  const selectedEventId = prop(c, 'selectedEventId') as string | undefined;
-  const typeIcons: Record<string, string> = {
-    branch: 'git-branch',
-    commit: 'git-commit',
-    benchmark: 'test-tube',
-    merge: 'git-merge',
-    revert: 'alert-triangle',
-    tag: 'star',
-  };
-  const statusColors: Record<string, string> = {
-    success: 'rgb(var(--color-success))',
-    failed: 'rgb(var(--color-error))',
-    pending: 'rgb(var(--color-text-muted))',
-    active: 'rgb(var(--color-primary))',
-  };
 
-  const dateGroups: { date: string; events: { evt: any; idx: number }[] }[] = [];
+const TIMELINE_TYPE_ICONS: Record<string, string> = {
+  branch: 'git-branch',
+  commit: 'git-commit',
+  benchmark: 'test-tube',
+  merge: 'git-merge',
+  revert: 'alert-triangle',
+  tag: 'star',
+};
+
+const TIMELINE_STATUS_COLORS: Record<string, string> = {
+  success: 'rgb(var(--color-success))',
+  failed: 'rgb(var(--color-error))',
+  pending: 'rgb(var(--color-text-muted))',
+  active: 'rgb(var(--color-primary))',
+};
+
+const CTX_BTN_CLS =
+  'flex items-center gap-2 w-full px-3 py-2 text-xs bg-transparent border-none text-text-secondary cursor-pointer transition-colors hover:bg-primary/10 hover:text-text text-left';
+
+function groupEventsByDate(events: any[]): { date: string; events: { evt: any; idx: number }[] }[] {
+  const groups: { date: string; events: { evt: any; idx: number }[] }[] = [];
   let lastDate = '';
   for (let i = 0; i < events.length; i++) {
     const d = new Date(events[i].timestamp as number).toLocaleDateString(undefined, {
@@ -1008,14 +1053,130 @@ export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
       day: 'numeric',
     });
     if (d !== lastDate) {
-      dateGroups.push({ date: d, events: [] });
+      groups.push({ date: d, events: [] });
       lastDate = d;
     }
-    dateGroups[dateGroups.length - 1].events.push({ evt: events[i], idx: i });
+    groups[groups.length - 1].events.push({ evt: events[i], idx: i });
   }
+  return groups;
+}
 
-  const ctxBtn =
-    'flex items-center gap-2 w-full px-3 py-2 text-xs bg-transparent border-none text-text-secondary cursor-pointer transition-colors hover:bg-primary/10 hover:text-text text-left';
+function renderTimelineEventMeta(evt: any) {
+  return (
+    <div className="flex items-center gap-3 mt-1.5 text-[11px] text-text-muted flex-wrap">
+      {evt.author && (
+        <span className="flex items-center gap-1">
+          <span className="w-4 h-4 rounded-full bg-bg-tertiary flex items-center justify-center text-[9px] text-text-secondary font-medium">
+            {(evt.author as string).charAt(0).toUpperCase()}
+          </span>
+          {evt.author}
+        </span>
+      )}
+      {evt.branch && (
+        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+          <span dangerouslySetInnerHTML={{ __html: getIcon('git-branch') }} /> {evt.branch}
+        </span>
+      )}
+      {evt.tags &&
+        (evt.tags as string[]).map((tag: string, ti: number) => (
+          <span key={ti} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400">
+            <span dangerouslySetInnerHTML={{ __html: getIcon('star') }} /> {tag}
+          </span>
+        ))}
+      {evt.filesChanged && (
+        <span className="flex items-center gap-1">
+          {evt.filesChanged} file{(evt.filesChanged as number) > 1 ? 's' : ''}{' '}
+          {evt.additions && <span className="text-emerald-400">+{evt.additions}</span>}{' '}
+          {evt.deletions && <span className="text-red-400">-{evt.deletions}</span>}
+        </span>
+      )}
+      <span className="ml-auto">{relativeTimeStr(evt.timestamp as number)}</span>
+    </div>
+  );
+}
+
+function renderTimelineContextMenu(evt: any, onContextAction: string, ctx: RenderContext) {
+  return (
+    <div
+      className="timeline-context-menu absolute z-50 bg-surface-elevated border border-border rounded-lg shadow-2xl py-1 min-w-[140px]"
+      style={{ display: 'none' }}
+    >
+      {(evt.type === 'commit' || evt.type === 'merge') && (
+        <>
+          <button
+            className={CTX_BTN_CLS}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.sendAction(onContextAction, { eventId: evt.id, action: 'view_diff' });
+            }}
+          >
+            <span dangerouslySetInnerHTML={{ __html: getIcon('search') }} /> View Diff
+          </button>
+          <button
+            className={CTX_BTN_CLS}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.sendAction(onContextAction, { eventId: evt.id, action: 'cherry_pick' });
+            }}
+          >
+            <span dangerouslySetInnerHTML={{ __html: getIcon('git-commit') }} /> Cherry-Pick
+          </button>
+          <button
+            className={`${CTX_BTN_CLS} !text-red-400 hover:!bg-red-500/10`}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.sendAction(onContextAction, { eventId: evt.id, action: 'revert' });
+            }}
+          >
+            <span dangerouslySetInnerHTML={{ __html: getIcon('alert-triangle') }} /> Revert
+          </button>
+        </>
+      )}
+      {evt.type === 'branch' && (
+        <>
+          <button
+            className={CTX_BTN_CLS}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.sendAction('switch_version', { branch: evt.branch });
+            }}
+          >
+            <span dangerouslySetInnerHTML={{ __html: getIcon('git-branch') }} /> Switch
+          </button>
+          <button
+            className={CTX_BTN_CLS}
+            onClick={(e) => {
+              e.stopPropagation();
+              ctx.sendAction('merge_version', { branch: evt.branch });
+            }}
+          >
+            <span dangerouslySetInnerHTML={{ __html: getIcon('git-merge') }} /> Merge
+          </button>
+        </>
+      )}
+      {evt.type === 'benchmark' && (
+        <button
+          className={CTX_BTN_CLS}
+          onClick={(e) => {
+            e.stopPropagation();
+            ctx.sendAction('view_benchmark_run', { eventId: evt.id });
+          }}
+        >
+          <span dangerouslySetInnerHTML={{ __html: getIcon('bar-chart') }} /> View Results
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
+  const events = (prop(c, 'events') as any[]) || [];
+  const onEventClick = prop(c, 'onEventClick') as string | undefined;
+  const onContextAction = prop(c, 'onContextAction') as string | undefined;
+  const selectedEventId = prop(c, 'selectedEventId') as string | undefined;
+
+  const dateGroups = groupEventsByDate(events);
+
   return (
     <div
       className="a2ui-git-timeline flex flex-col"
@@ -1061,11 +1222,11 @@ export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
               <div className="flex flex-col items-center">
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white shrink-0"
-                  style={{ background: statusColors[evt.status as string] || statusColors.pending }}
+                  style={{ background: TIMELINE_STATUS_COLORS[evt.status as string] || TIMELINE_STATUS_COLORS.pending }}
                 >
                   <span
                     className="w-4 h-4"
-                    dangerouslySetInnerHTML={{ __html: getIcon(typeIcons[evt.type as string] || 'git-commit') }}
+                    dangerouslySetInnerHTML={{ __html: getIcon(TIMELINE_TYPE_ICONS[evt.type as string] || 'git-commit') }}
                   />
                 </div>
                 {idx < events.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1 min-h-[8px]" />}
@@ -1085,110 +1246,9 @@ export function renderGitTimeline(c: A2UIComponent, ctx: RenderContext) {
                 {evt.description && (
                   <div className="text-xs text-text-muted mt-0.5 line-clamp-2">{evt.description}</div>
                 )}
-                <div className="flex items-center gap-3 mt-1.5 text-[11px] text-text-muted flex-wrap">
-                  {evt.author && (
-                    <span className="flex items-center gap-1">
-                      <span className="w-4 h-4 rounded-full bg-bg-tertiary flex items-center justify-center text-[9px] text-text-secondary font-medium">
-                        {(evt.author as string).charAt(0).toUpperCase()}
-                      </span>
-                      {evt.author}
-                    </span>
-                  )}
-                  {evt.branch && (
-                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                      <span dangerouslySetInnerHTML={{ __html: getIcon('git-branch') }} /> {evt.branch}
-                    </span>
-                  )}
-                  {evt.tags &&
-                    (evt.tags as string[]).map((tag, ti) => (
-                      <span
-                        key={ti}
-                        className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400"
-                      >
-                        <span dangerouslySetInnerHTML={{ __html: getIcon('star') }} /> {tag}
-                      </span>
-                    ))}
-                  {evt.filesChanged && (
-                    <span className="flex items-center gap-1">
-                      {evt.filesChanged} file{(evt.filesChanged as number) > 1 ? 's' : ''}{' '}
-                      {evt.additions && <span className="text-emerald-400">+{evt.additions}</span>}{' '}
-                      {evt.deletions && <span className="text-red-400">-{evt.deletions}</span>}
-                    </span>
-                  )}
-                  <span className="ml-auto">{relativeTimeStr(evt.timestamp as number)}</span>
-                </div>
+                {renderTimelineEventMeta(evt)}
               </div>
-              {onContextAction && (
-                <div
-                  className="timeline-context-menu absolute z-50 bg-surface-elevated border border-border rounded-lg shadow-2xl py-1 min-w-[140px]"
-                  style={{ display: 'none' }}
-                >
-                  {(evt.type === 'commit' || evt.type === 'merge') && (
-                    <>
-                      <button
-                        className={ctxBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          ctx.sendAction(onContextAction, { eventId: evt.id, action: 'view_diff' });
-                        }}
-                      >
-                        <span dangerouslySetInnerHTML={{ __html: getIcon('search') }} /> View Diff
-                      </button>
-                      <button
-                        className={ctxBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          ctx.sendAction(onContextAction, { eventId: evt.id, action: 'cherry_pick' });
-                        }}
-                      >
-                        <span dangerouslySetInnerHTML={{ __html: getIcon('git-commit') }} /> Cherry-Pick
-                      </button>
-                      <button
-                        className={`${ctxBtn} !text-red-400 hover:!bg-red-500/10`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          ctx.sendAction(onContextAction, { eventId: evt.id, action: 'revert' });
-                        }}
-                      >
-                        <span dangerouslySetInnerHTML={{ __html: getIcon('alert-triangle') }} /> Revert
-                      </button>
-                    </>
-                  )}
-                  {evt.type === 'branch' && (
-                    <>
-                      <button
-                        className={ctxBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          ctx.sendAction('switch_version', { branch: evt.branch });
-                        }}
-                      >
-                        <span dangerouslySetInnerHTML={{ __html: getIcon('git-branch') }} /> Switch
-                      </button>
-                      <button
-                        className={ctxBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          ctx.sendAction('merge_version', { branch: evt.branch });
-                        }}
-                      >
-                        <span dangerouslySetInnerHTML={{ __html: getIcon('git-merge') }} /> Merge
-                      </button>
-                    </>
-                  )}
-                  {evt.type === 'benchmark' && (
-                    <button
-                      className={ctxBtn}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        ctx.sendAction('view_benchmark_run', { eventId: evt.id });
-                      }}
-                    >
-                      <span dangerouslySetInnerHTML={{ __html: getIcon('bar-chart') }} /> View Results
-                    </button>
-                  )}
-                </div>
-              )}
+              {onContextAction && renderTimelineContextMenu(evt, onContextAction, ctx)}
             </div>
           ))}
         </div>

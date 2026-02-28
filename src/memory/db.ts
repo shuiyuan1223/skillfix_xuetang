@@ -41,7 +41,7 @@ export function getDatabase(dbPath?: string): Database {
   return db;
 }
 
-function createTables(db: Database): void {
+function createCoreTracingTables(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS traces (
       id TEXT PRIMARY KEY,
@@ -63,6 +63,11 @@ function createTables(db: Database): void {
       feedback TEXT,
       issues TEXT
     );
+  `);
+}
+
+function createBenchmarkTables(db: Database): void {
+  db.exec(`
     CREATE TABLE IF NOT EXISTS test_cases (
       id TEXT PRIMARY KEY,
       category TEXT NOT NULL,
@@ -71,17 +76,6 @@ function createTables(db: Database): void {
       expected TEXT NOT NULL,
       created_at INTEGER,
       updated_at INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS suggestions (
-      id TEXT PRIMARY KEY,
-      timestamp INTEGER NOT NULL,
-      type TEXT NOT NULL,
-      target TEXT NOT NULL,
-      current_value TEXT,
-      suggested_value TEXT NOT NULL,
-      rationale TEXT,
-      status TEXT DEFAULT 'pending',
-      validation_results TEXT
     );
     CREATE TABLE IF NOT EXISTS benchmark_runs (
       id TEXT PRIMARY KEY,
@@ -121,6 +115,22 @@ function createTables(db: Database): void {
       issues TEXT,
       duration_ms INTEGER
     );
+  `);
+}
+
+function createEvolutionTables(db: Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      target TEXT NOT NULL,
+      current_value TEXT,
+      suggested_value TEXT NOT NULL,
+      rationale TEXT,
+      status TEXT DEFAULT 'pending',
+      validation_results TEXT
+    );
     CREATE TABLE IF NOT EXISTS evolution_versions (
       id TEXT PRIMARY KEY,
       branch_name TEXT NOT NULL UNIQUE,
@@ -154,6 +164,12 @@ function createTables(db: Database): void {
       resolved_at INTEGER
     );
   `);
+}
+
+function createTables(db: Database): void {
+  createCoreTracingTables(db);
+  createBenchmarkTables(db);
+  createEvolutionTables(db);
 }
 
 function createIndexes(db: Database): void {
