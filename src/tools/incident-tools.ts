@@ -257,8 +257,7 @@ export const createGitHubIssueForIncidentTool: PHATool<{
       };
     }
 
-    const typeLabel =
-      row.type === "bug" ? "bug" : row.type === "effect" ? "effect" : "needs-triage";
+    const typeLabel = row.type === "bug" || row.type === "effect" ? row.type : "needs-triage";
     const priorityLabel = `priority:${row.priority}`;
 
     const title =
