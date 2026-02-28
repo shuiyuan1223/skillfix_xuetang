@@ -26,9 +26,9 @@ import {
   type IncidentStatus,
   type IncidentPriority,
   type IncidentSource,
-} from "../memory/db.js";
-import { isGitHubCLIAvailable, createGitHubIssue } from "../evolution/github-issues.js";
-import type { PHATool } from "./types.js";
+} from '../memory/db.js';
+import { isGitHubCLIAvailable, createGitHubIssue } from '../evolution/github-issues.js';
+import type { PHATool } from './types.js';
 
 // ============================================================================
 // list_incidents
@@ -39,24 +39,24 @@ export const listIncidentsTool: PHATool<{
   type?: string;
   limit?: number;
 }> = {
-  name: "list_incidents",
-  description: "列出 incidents，支持按状态和类型筛选",
-  displayName: "Incidents 列表",
-  category: "evolution",
-  icon: "alert-triangle",
-  label: "List Incidents",
+  name: 'list_incidents',
+  description: '列出 incidents，支持按状态和类型筛选',
+  displayName: 'Incidents 列表',
+  category: 'evolution',
+  icon: 'alert-triangle',
+  label: 'List Incidents',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
       status: {
-        type: "string",
-        description: "Filter by status: pending | confirmed | suspended | resolved | closed",
+        type: 'string',
+        description: 'Filter by status: pending | confirmed | suspended | resolved | closed',
       },
       type: {
-        type: "string",
-        description: "Filter by type: bug | effect | unclassified",
+        type: 'string',
+        description: 'Filter by type: bug | effect | unclassified',
       },
-      limit: { type: "number", description: "Max results (default 50)" },
+      limit: { type: 'number', description: 'Max results (default 50)' },
     },
   },
   execute: async (args) => {
@@ -76,7 +76,7 @@ export const listIncidentsTool: PHATool<{
         type: r.type,
         status: r.status,
         priority: r.priority,
-        summary: r.raw_text.slice(0, 120) + (r.raw_text.length > 120 ? "..." : ""),
+        summary: r.raw_text.slice(0, 120) + (r.raw_text.length > 120 ? '...' : ''),
         confidence: r.classification_confidence,
         hasGitHubIssue: !!r.github_issue_url,
         githubIssueNumber: r.github_issue_number,
@@ -91,18 +91,18 @@ export const listIncidentsTool: PHATool<{
 // ============================================================================
 
 export const getIncidentTool: PHATool<{ id: string }> = {
-  name: "get_incident",
-  description: "获取 incident 的完整详情",
-  displayName: "Incident 详情",
-  category: "evolution",
-  icon: "alert-triangle",
-  label: "Get Incident",
+  name: 'get_incident',
+  description: '获取 incident 的完整详情',
+  displayName: 'Incident 详情',
+  category: 'evolution',
+  icon: 'alert-triangle',
+  label: 'Get Incident',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      id: { type: "string", description: "Incident ID" },
+      id: { type: 'string', description: 'Incident ID' },
     },
-    required: ["id"],
+    required: ['id'],
   },
   execute: async (args) => {
     const row = getIncident(args.id);
@@ -140,23 +140,23 @@ export const updateIncidentStatusTool: PHATool<{
   status: string;
   notes?: string;
 }> = {
-  name: "update_incident_status",
-  description: "更新 incident 状态：确认、挂起、解决或关闭",
-  displayName: "更新 Incident 状态",
-  category: "evolution",
-  icon: "check",
-  label: "Update Incident Status",
+  name: 'update_incident_status',
+  description: '更新 incident 状态：确认、挂起、解决或关闭',
+  displayName: '更新 Incident 状态',
+  category: 'evolution',
+  icon: 'check',
+  label: 'Update Incident Status',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      id: { type: "string", description: "Incident ID" },
+      id: { type: 'string', description: 'Incident ID' },
       status: {
-        type: "string",
-        description: "New status: pending | confirmed | suspended | resolved | closed",
+        type: 'string',
+        description: 'New status: pending | confirmed | suspended | resolved | closed',
       },
-      notes: { type: "string", description: "Optional notes explaining the status change" },
+      notes: { type: 'string', description: 'Optional notes explaining the status change' },
     },
-    required: ["id", "status"],
+    required: ['id', 'status'],
   },
   execute: async (args) => {
     const existing = getIncident(args.id);
@@ -181,24 +181,24 @@ export const updateIncidentTypeTool: PHATool<{
   priority?: string;
   notes?: string;
 }> = {
-  name: "update_incident_type",
-  description: "修改 incident 的类型分类（bug/effect）和优先级",
-  displayName: "修改 Incident 类型",
-  category: "evolution",
-  icon: "alert-triangle",
-  label: "Update Incident Type",
+  name: 'update_incident_type',
+  description: '修改 incident 的类型分类（bug/effect）和优先级',
+  displayName: '修改 Incident 类型',
+  category: 'evolution',
+  icon: 'alert-triangle',
+  label: 'Update Incident Type',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      id: { type: "string", description: "Incident ID" },
-      type: { type: "string", description: "New type: bug | effect | unclassified" },
+      id: { type: 'string', description: 'Incident ID' },
+      type: { type: 'string', description: 'New type: bug | effect | unclassified' },
       priority: {
-        type: "string",
-        description: "Optional new priority: high | medium | low | ignore",
+        type: 'string',
+        description: 'Optional new priority: high | medium | low | ignore',
       },
-      notes: { type: "string", description: "Optional notes for the reclassification" },
+      notes: { type: 'string', description: 'Optional notes for the reclassification' },
     },
-    required: ["id", "type"],
+    required: ['id', 'type'],
   },
   execute: async (args) => {
     const existing = getIncident(args.id);
@@ -209,7 +209,7 @@ export const updateIncidentTypeTool: PHATool<{
 
     return {
       success: true,
-      message: `Incident ${args.id} reclassified as: ${args.type}${args.priority ? ` (${args.priority})` : ""}`,
+      message: `Incident ${args.id} reclassified as: ${args.type}${args.priority ? ` (${args.priority})` : ''}`,
     };
   },
 };
@@ -223,27 +223,26 @@ export const createGitHubIssueForIncidentTool: PHATool<{
   titleOverride?: string;
   additionalContext?: string;
 }> = {
-  name: "create_github_issue_for_incident",
-  description: "为 incident 创建 GitHub Issue（需要 gh CLI 认证）。自动打 label：bug 或 effect。",
-  displayName: "创建 GitHub Issue",
-  category: "evolution",
-  icon: "git-branch",
-  label: "Create GitHub Issue",
+  name: 'create_github_issue_for_incident',
+  description: '为 incident 创建 GitHub Issue（需要 gh CLI 认证）。自动打 label：bug 或 effect。',
+  displayName: '创建 GitHub Issue',
+  category: 'evolution',
+  icon: 'git-branch',
+  label: 'Create GitHub Issue',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      id: { type: "string", description: "Incident ID" },
+      id: { type: 'string', description: 'Incident ID' },
       titleOverride: {
-        type: "string",
-        description:
-          "Optional custom issue title. Defaults to LLM-suggested title or raw_text summary.",
+        type: 'string',
+        description: 'Optional custom issue title. Defaults to LLM-suggested title or raw_text summary.',
       },
       additionalContext: {
-        type: "string",
-        description: "Extra context to include in the issue body",
+        type: 'string',
+        description: 'Extra context to include in the issue body',
       },
     },
-    required: ["id"],
+    required: ['id'],
   },
   execute: async (args) => {
     const row = getIncident(args.id);
@@ -253,16 +252,14 @@ export const createGitHubIssueForIncidentTool: PHATool<{
       return {
         success: false,
         error:
-          "gh CLI is not available or not authenticated. Run `gh auth status` to check. The incident remains in pending state in the Dashboard.",
+          'gh CLI is not available or not authenticated. Run `gh auth status` to check. The incident remains in pending state in the Dashboard.',
       };
     }
 
-    const typeLabel = row.type === "bug" || row.type === "effect" ? row.type : "needs-triage";
+    const typeLabel = row.type === 'bug' || row.type === 'effect' ? row.type : 'needs-triage';
     const priorityLabel = `priority:${row.priority}`;
 
-    const title =
-      args.titleOverride ??
-      (row.raw_text.length <= 80 ? row.raw_text : `${row.raw_text.slice(0, 77)}...`);
+    const title = args.titleOverride ?? (row.raw_text.length <= 80 ? row.raw_text : `${row.raw_text.slice(0, 77)}...`);
 
     const body = buildIssueBody(row, args.additionalContext);
 
@@ -270,7 +267,7 @@ export const createGitHubIssueForIncidentTool: PHATool<{
       const result = await createGitHubIssue({
         title,
         body,
-        labels: [typeLabel, priorityLabel, "incident"],
+        labels: [typeLabel, priorityLabel, 'incident'],
       });
 
       updateIncidentGitHubIssue(args.id, result.number, result.url);
@@ -290,63 +287,60 @@ export const createGitHubIssueForIncidentTool: PHATool<{
   },
 };
 
-function buildIssueBody(
-  row: ReturnType<typeof getIncident> & object,
-  additionalContext?: string
-): string {
-  if (!row) return "";
+function buildIssueBody(row: ReturnType<typeof getIncident> & object, additionalContext?: string): string {
+  if (!row) return '';
   const lines: string[] = [];
 
-  lines.push("## Incident Report");
-  lines.push("");
+  lines.push('## Incident Report');
+  lines.push('');
   lines.push(`**Source:** ${row.source}`);
   if (row.reporter) lines.push(`**Reporter:** ${row.reporter}`);
   lines.push(`**Type:** ${row.type}`);
   lines.push(`**Priority:** ${row.priority}`);
   lines.push(`**Reported at:** ${new Date(row.timestamp).toISOString()}`);
-  lines.push("");
-  lines.push("## Description");
-  lines.push("");
+  lines.push('');
+  lines.push('## Description');
+  lines.push('');
   lines.push(row.raw_text);
 
   if (row.trace_id) {
-    lines.push("");
+    lines.push('');
     lines.push(`## Linked Trace`);
     lines.push(`Trace ID: \`${row.trace_id}\``);
-    lines.push("_(View in Evolution Lab → Data → Traces)_");
+    lines.push('_(View in Evolution Lab → Data → Traces)_');
   }
 
   if (row.classification_reason) {
-    lines.push("");
-    lines.push("## AI Classification");
+    lines.push('');
+    lines.push('## AI Classification');
     lines.push(`> ${row.classification_reason}`);
     lines.push(`> Confidence: ${((row.classification_confidence ?? 0) * 100).toFixed(0)}%`);
   }
 
   if (additionalContext) {
-    lines.push("");
-    lines.push("## Additional Context");
+    lines.push('');
+    lines.push('## Additional Context');
     lines.push(additionalContext);
   }
 
-  lines.push("");
-  lines.push("## Action Items");
-  if (row.type === "bug") {
-    lines.push("- [ ] Reproduce the issue with a minimal test case");
-    lines.push("- [ ] Add a unit test to `tests/unit/` to prevent regression");
-    lines.push("- [ ] Fix the root cause");
-    lines.push("- [ ] Mark incident as `resolved` in the Dashboard");
+  lines.push('');
+  lines.push('## Action Items');
+  if (row.type === 'bug') {
+    lines.push('- [ ] Reproduce the issue with a minimal test case');
+    lines.push('- [ ] Add a unit test to `tests/unit/` to prevent regression');
+    lines.push('- [ ] Fix the root cause');
+    lines.push('- [ ] Mark incident as `resolved` in the Dashboard');
   } else {
-    lines.push("- [ ] Confirm this is an effect/quality issue (not a bug)");
-    lines.push("- [ ] At iteration end: review with algorithm team");
-    lines.push("- [ ] Add to Benchmark test cases if appropriate");
-    lines.push("- [ ] Mark incident as `closed` in the Dashboard after iteration");
+    lines.push('- [ ] Confirm this is an effect/quality issue (not a bug)');
+    lines.push('- [ ] At iteration end: review with algorithm team');
+    lines.push('- [ ] Add to Benchmark test cases if appropriate');
+    lines.push('- [ ] Mark incident as `closed` in the Dashboard after iteration');
   }
-  lines.push("");
-  lines.push("---");
-  lines.push("_Auto-created from PHA Incidents Dashboard_");
+  lines.push('');
+  lines.push('---');
+  lines.push('_Auto-created from PHA Incidents Dashboard_');
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 // ============================================================================
@@ -361,42 +355,42 @@ export const convertIncidentToTestCaseTool: PHATool<{
   shouldNotMention?: string[];
   minScore?: number;
 }> = {
-  name: "convert_incident_to_test_case",
+  name: 'convert_incident_to_test_case',
   description:
-    "将已确认的 effect 类 incident 转为 Benchmark TestCase，纳入回归防护。适用于算法专家审核后的 effect 类问题。",
-  displayName: "转为测试用例",
-  category: "evolution",
-  icon: "test-tube",
-  label: "Convert to Test Case",
+    '将已确认的 effect 类 incident 转为 Benchmark TestCase，纳入回归防护。适用于算法专家审核后的 effect 类问题。',
+  displayName: '转为测试用例',
+  category: 'evolution',
+  icon: 'test-tube',
+  label: 'Convert to Test Case',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      id: { type: "string", description: "Incident ID" },
+      id: { type: 'string', description: 'Incident ID' },
       category: {
-        type: "string",
+        type: 'string',
         description:
-          "Benchmark category: health-data-analysis | health-coaching | safety-boundaries | personalization-memory | communication-quality",
+          'Benchmark category: health-data-analysis | health-coaching | safety-boundaries | personalization-memory | communication-quality',
       },
-      query: { type: "string", description: "The user query that triggers this scenario" },
+      query: { type: 'string', description: 'The user query that triggers this scenario' },
       shouldMention: {
-        type: "array",
-        items: { type: "string" },
-        description: "Keywords the agent response should contain",
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Keywords the agent response should contain',
       },
       shouldNotMention: {
-        type: "array",
-        items: { type: "string" },
-        description: "Keywords the agent response should NOT contain",
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Keywords the agent response should NOT contain',
       },
-      minScore: { type: "number", description: "Minimum acceptable score (0-100, default 70)" },
+      minScore: { type: 'number', description: 'Minimum acceptable score (0-100, default 70)' },
     },
-    required: ["id", "category", "query"],
+    required: ['id', 'category', 'query'],
   },
   execute: async (args) => {
     const row = getIncident(args.id);
     if (!row) return { success: false, error: `Incident not found: ${args.id}` };
 
-    if (row.status !== "confirmed") {
+    if (row.status !== 'confirmed') {
       return {
         success: false,
         error: `Incident must be in 'confirmed' status before converting to a test case. Current status: ${row.status}`,
@@ -417,7 +411,7 @@ export const convertIncidentToTestCaseTool: PHATool<{
     });
 
     // Mark incident as closed after converting
-    updateIncidentStatus(args.id, "closed", `Converted to benchmark test case: ${testCaseId}`);
+    updateIncidentStatus(args.id, 'closed', `Converted to benchmark test case: ${testCaseId}`);
 
     return {
       success: true,
@@ -432,14 +426,14 @@ export const convertIncidentToTestCaseTool: PHATool<{
 // ============================================================================
 
 export const getIncidentStatsTool: PHATool<Record<string, never>> = {
-  name: "get_incident_stats",
-  description: "获取 incidents 聚合统计，用于 Dashboard 概览",
-  displayName: "Incidents 统计",
-  category: "evolution",
-  icon: "bar-chart",
-  label: "Get Incident Stats",
+  name: 'get_incident_stats',
+  description: '获取 incidents 聚合统计，用于 Dashboard 概览',
+  displayName: 'Incidents 统计',
+  category: 'evolution',
+  icon: 'bar-chart',
+  label: 'Get Incident Stats',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {},
   },
   execute: async () => {
@@ -457,20 +451,20 @@ export const updateIncidentTraceTool: PHATool<{
   traceId: string;
   notes?: string;
 }> = {
-  name: "update_incident_trace",
-  description: "关联 incident 的 trace_id，用于在 LLM 日志中定位根因",
-  displayName: "关联 Trace",
-  category: "evolution",
-  icon: "link",
-  label: "Update Incident Trace",
+  name: 'update_incident_trace',
+  description: '关联 incident 的 trace_id，用于在 LLM 日志中定位根因',
+  displayName: '关联 Trace',
+  category: 'evolution',
+  icon: 'link',
+  label: 'Update Incident Trace',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
-      id: { type: "string", description: "Incident ID" },
-      traceId: { type: "string", description: "Trace ID to link (session ID or LLM log entry)" },
-      notes: { type: "string", description: "Optional notes about the root cause findings" },
+      id: { type: 'string', description: 'Incident ID' },
+      traceId: { type: 'string', description: 'Trace ID to link (session ID or LLM log entry)' },
+      notes: { type: 'string', description: 'Optional notes about the root cause findings' },
     },
-    required: ["id", "traceId"],
+    required: ['id', 'traceId'],
   },
   execute: async (args) => {
     const existing = getIncident(args.id);

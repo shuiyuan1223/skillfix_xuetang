@@ -15,11 +15,11 @@
  *   slack.channelId  — optional channel ID filter
  */
 
-import { createLogger } from "../utils/logger.js";
+import { createLogger } from '../utils/logger.js';
 
-const log = createLogger("slack-socket");
+const log = createLogger('slack-socket');
 
-const SLACK_CONNECTIONS_OPEN = "https://slack.com/api/apps.connections.open";
+const SLACK_CONNECTIONS_OPEN = 'https://slack.com/api/apps.connections.open';
 const RECONNECT_DELAY_MS = 5_000;
 const MAX_RECONNECT_DELAY_MS = 60_000;
 
@@ -47,32 +47,30 @@ interface SlackSocketEnvelope {
 
 /** Prefixes that indicate the user is reporting an incident. Case-insensitive. */
 const INCIDENT_TRIGGERS = [
-  "/badcase",
-  "/bad-case",
-  "badcase:",
-  "bad case:",
-  "我这有个badcase",
-  "我有个badcase",
-  "我这有一个badcase",
-  "我有一个badcase",
-  "有个问题反馈",
-  "反馈:",
-  "feedback:",
+  '/badcase',
+  '/bad-case',
+  'badcase:',
+  'bad case:',
+  '我这有个badcase',
+  '我有个badcase',
+  '我这有一个badcase',
+  '我有一个badcase',
+  '有个问题反馈',
+  '反馈:',
+  'feedback:',
 ];
 
 /**
  * Detect if a message is an incident report.
  * Returns the cleaned text (trigger prefix stripped) if so.
  */
-function parseIncidentReport(
-  text: string
-): { isIncident: true; cleanText: string } | { isIncident: false } {
+function parseIncidentReport(text: string): { isIncident: true; cleanText: string } | { isIncident: false } {
   const lower = text.toLowerCase();
   for (const trigger of INCIDENT_TRIGGERS) {
     if (lower.startsWith(trigger.toLowerCase())) {
       const cleanText = text
         .slice(trigger.length)
-        .replace(/^[：:\s]+/, "")
+        .replace(/^[：:\s]+/, '')
         .trim();
       return { isIncident: true, cleanText };
     }
@@ -87,49 +85,43 @@ function parseIncidentReport(
  * Fetches relevant DB context and lets the LLM formulate a response.
  * Does NOT use full agent tool-calling — uses context injection for read ops.
  */
-async function handleSaChat(
-  message: string,
-  llmCall: (prompt: string) => Promise<string>
-): Promise<string> {
+async function handleSaChat(message: string, llmCall: (prompt: string) => Promise<string>): Promise<string> {
   // Gather context from DB
-  let incidentContext = "（数据获取失败）";
-  let benchmarkContext = "（数据获取失败）";
+  let incidentContext = '（数据获取失败）';
+  let benchmarkContext = '（数据获取失败）';
 
   try {
-    const { listIncidents, getIncidentStats } = await import("../memory/db.js");
+    const { listIncidents, getIncidentStats } = await import('../memory/db.js');
     const stats = getIncidentStats();
-    const pending = listIncidents({ status: "pending", limit: 5 });
+    const pending = listIncidents({ status: 'pending', limit: 5 });
 
     incidentContext = `总计 ${stats.total} | 待处理 ${stats.pending} | Bug ${stats.bug} | Effect ${stats.effect} | 本周已解决 ${stats.resolvedThisWeek}${
       pending.length > 0
         ? `\n待处理（最新5条）:\n${pending
             .map(
               (bc) =>
-                `  • [${bc.id.slice(0, 8)}] *${bc.type}* / ${bc.priority} — ${bc.raw_text.slice(0, 80)}${bc.raw_text.length > 80 ? "…" : ""}`
+                `  • [${bc.id.slice(0, 8)}] *${bc.type}* / ${bc.priority} — ${bc.raw_text.slice(0, 80)}${bc.raw_text.length > 80 ? '…' : ''}`
             )
-            .join("\n")}`
-        : "\n暂无待处理"
+            .join('\n')}`
+        : '\n暂无待处理'
     }`;
   } catch {
     // keep default
   }
 
   try {
-    const { listBenchmarkRuns, listCategoryScores } = await import("../memory/db.js");
+    const { listBenchmarkRuns, listCategoryScores } = await import('../memory/db.js');
     const runs = listBenchmarkRuns({ limit: 3 });
     if (runs.length === 0) {
-      benchmarkContext = "暂无 Benchmark 运行记录";
+      benchmarkContext = '暂无 Benchmark 运行记录';
     } else {
       benchmarkContext = runs
         .map((run) => {
           const scores = listCategoryScores(run.id);
-          const avg =
-            scores.length > 0
-              ? (scores.reduce((s, c) => s + c.score, 0) / scores.length).toFixed(1)
-              : "N/A";
+          const avg = scores.length > 0 ? (scores.reduce((s, c) => s + c.score, 0) / scores.length).toFixed(1) : 'N/A';
           return `• ${new Date(run.timestamp).toLocaleDateString()} | 综合 ${avg} | ${run.passed_count}/${run.total_test_cases} 通过 | ${run.id.slice(0, 8)}`;
         })
-        .join("\n");
+        .join('\n');
     }
   } catch {
     // keep default
@@ -163,7 +155,7 @@ ${message}
   try {
     return await llmCall(prompt);
   } catch {
-    return "抱歉，SA 暂时无法响应，请稍后重试。";
+    return '抱歉，SA 暂时无法响应，请稍后重试。';
   }
 }
 
@@ -171,8 +163,8 @@ ${message}
 
 async function getWssUrl(appToken: string): Promise<string> {
   const resp = await fetch(SLACK_CONNECTIONS_OPEN, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${appToken}`, "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { Authorization: `Bearer ${appToken}`, 'Content-Type': 'application/json' },
   });
   if (!resp.ok) throw new Error(`apps.connections.open HTTP ${resp.status}`);
   const raw: unknown = await resp.json();
@@ -183,8 +175,8 @@ async function getWssUrl(appToken: string): Promise<string> {
 
 async function getBotUserId(botToken: string): Promise<string | undefined> {
   try {
-    const resp = await fetch("https://slack.com/api/auth.test", {
-      method: "POST",
+    const resp = await fetch('https://slack.com/api/auth.test', {
+      method: 'POST',
       headers: { Authorization: `Bearer ${botToken}` },
     });
     const raw: unknown = await resp.json();
@@ -205,33 +197,24 @@ async function resolveDisplayName(userId: string, botToken: string): Promise<str
     const data = raw as Record<string, unknown>;
     const user = data.user as Record<string, unknown> | undefined;
     const profile = user?.profile as Record<string, unknown> | undefined;
-    return (
-      String(profile?.display_name ?? "").trim() ||
-      String(profile?.real_name ?? "").trim() ||
-      userId
-    );
+    return String(profile?.display_name ?? '').trim() || String(profile?.real_name ?? '').trim() || userId;
   } catch {
     return userId;
   }
 }
 
-async function postThreadReply(
-  channel: string,
-  threadTs: string,
-  text: string,
-  botToken: string
-): Promise<void> {
+async function postThreadReply(channel: string, threadTs: string, text: string, botToken: string): Promise<void> {
   try {
-    await fetch("https://slack.com/api/chat.postMessage", {
-      method: "POST",
+    await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${botToken}`,
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({ channel, thread_ts: threadTs, text }),
     });
   } catch (err) {
-    log.warn("Failed to post Slack thread reply", { error: String(err) });
+    log.warn('Failed to post Slack thread reply', { error: String(err) });
   }
 }
 
@@ -249,7 +232,7 @@ export function startSlackSocketMode(
   if (botToken) {
     void getBotUserId(botToken).then((id) => {
       botUserId = id;
-      if (id) log.info("Slack bot user ID resolved", { botUserId: id });
+      if (id) log.info('Slack bot user ID resolved', { botUserId: id });
     });
   }
 
@@ -259,7 +242,7 @@ export function startSlackSocketMode(
       try {
         wssUrl = await getWssUrl(appToken);
       } catch (err) {
-        log.warn("Failed to get Slack WSS URL, will retry", {
+        log.warn('Failed to get Slack WSS URL, will retry', {
           error: String(err),
           retryMs: reconnectDelay,
         });
@@ -270,12 +253,12 @@ export function startSlackSocketMode(
 
       const ws = new WebSocket(wssUrl);
 
-      ws.addEventListener("open", () => {
-        log.info("Slack Socket Mode: connected");
+      ws.addEventListener('open', () => {
+        log.info('Slack Socket Mode: connected');
         reconnectDelay = RECONNECT_DELAY_MS;
       });
 
-      ws.addEventListener("message", (ev: MessageEvent) => {
+      ws.addEventListener('message', (ev: MessageEvent) => {
         let envelope: SlackSocketEnvelope;
         try {
           envelope = JSON.parse(String(ev.data)) as SlackSocketEnvelope;
@@ -287,49 +270,46 @@ export function startSlackSocketMode(
           ws.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
         }
 
-        if (envelope.type === "hello") {
-          log.info("Slack Socket Mode: handshake complete");
+        if (envelope.type === 'hello') {
+          log.info('Slack Socket Mode: handshake complete');
           return;
         }
 
-        if (envelope.type === "disconnect") {
-          log.info("Slack Socket Mode: server requested disconnect", { reason: envelope.reason });
+        if (envelope.type === 'disconnect') {
+          log.info('Slack Socket Mode: server requested disconnect', { reason: envelope.reason });
           ws.close();
           return;
         }
 
-        if (envelope.type !== "events_api") return;
+        if (envelope.type !== 'events_api') return;
 
         const event = envelope.payload?.event;
-        if (!event || event.type !== "message") return;
+        if (!event || event.type !== 'message') return;
         if (event.subtype) return; // system messages: channel_join, etc.
         if (event.bot_id) return; // bot messages — avoid loops
 
-        const rawText = (event.text ?? "").trim();
+        const rawText = (event.text ?? '').trim();
         if (!rawText) return;
 
         // Require @mention
         if (botUserId) {
-          const mentionRe = new RegExp(`<@${botUserId}>`, "i");
+          const mentionRe = new RegExp(`<@${botUserId}>`, 'i');
           if (!mentionRe.test(rawText)) return;
         }
 
         // Strip @mention
-        const text = botUserId
-          ? rawText.replace(new RegExp(`<@${botUserId}>\\s*`, "gi"), "").trim()
-          : rawText;
+        const text = botUserId ? rawText.replace(new RegExp(`<@${botUserId}>\\s*`, 'gi'), '').trim() : rawText;
 
         if (!text) return;
 
         if (channelId && event.channel !== channelId) return;
 
-        const userId = event.user ?? "";
-        const channel = event.channel ?? "";
-        const ts = event.ts ?? "";
+        const userId = event.user ?? '';
+        const channel = event.channel ?? '';
+        const ts = event.ts ?? '';
 
         void (async (): Promise<void> => {
-          const displayName =
-            botToken && userId ? await resolveDisplayName(userId, botToken) : userId;
+          const displayName = botToken && userId ? await resolveDisplayName(userId, botToken) : userId;
 
           // ── Route: incident report vs SA chat ───────────────────────────────
           const parsed = parseIncidentReport(text);
@@ -339,7 +319,7 @@ export function startSlackSocketMode(
             // New explicit incident report — clear any pending follow-up for this user
             pendingFollowups.delete(userId);
             try {
-              const { handleSlackWebhook } = await import("./slack-webhook.js");
+              const { handleSlackWebhook } = await import('./slack-webhook.js');
               const result = await handleSlackWebhook(
                 { text: parsed.cleanText, user_id: displayName, channel_id: channel },
                 llmCall
@@ -353,7 +333,7 @@ export function startSlackSocketMode(
                 });
               }
             } catch {
-              replyText = "❌ Incident 上报失败，请稍后重试。";
+              replyText = '❌ Incident 上报失败，请稍后重试。';
             }
           } else {
             // Check if this is a follow-up answer to a previous vague incident
@@ -361,12 +341,12 @@ export function startSlackSocketMode(
             if (pending) {
               pendingFollowups.delete(userId);
               try {
-                const { updateIncidentRawText } = await import("../memory/db.js");
+                const { updateIncidentRawText } = await import('../memory/db.js');
                 const combined = `${pending.originalText}\n追加信息: ${text}`;
                 updateIncidentRawText(pending.incidentId, combined);
                 replyText = `已补充到之前的记录（\`${pending.incidentId.slice(0, 8)}\`），谢谢！`;
               } catch {
-                replyText = "❌ 补充信息更新失败，请稍后重试。";
+                replyText = '❌ 补充信息更新失败，请稍后重试。';
               }
             } else {
               // SA Chat path
@@ -380,14 +360,14 @@ export function startSlackSocketMode(
         })();
       });
 
-      ws.addEventListener("close", () => {
-        log.info("Slack Socket Mode: connection closed, reconnecting", { retryMs: reconnectDelay });
+      ws.addEventListener('close', () => {
+        log.info('Slack Socket Mode: connection closed, reconnecting', { retryMs: reconnectDelay });
         setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
       });
 
-      ws.addEventListener("error", (err) => {
-        log.warn("Slack Socket Mode: WebSocket error", { error: String(err) });
+      ws.addEventListener('error', (err) => {
+        log.warn('Slack Socket Mode: WebSocket error', { error: String(err) });
       });
     })();
   };

@@ -10,7 +10,7 @@
  *   unclassified — not enough info to determine
  */
 
-import type { IncidentType, IncidentPriority } from "../memory/db.js";
+import type { IncidentType, IncidentPriority } from '../memory/db.js';
 
 export interface ClassificationResult {
   type: IncidentType;
@@ -75,21 +75,18 @@ export async function classifyIncident(opts: {
 
   const traceSection = traceContext
     ? `## Linked Trace Context
-User Message: ${traceContext.userMessage ?? "(unknown)"}
-Agent Response: ${traceContext.agentResponse?.slice(0, 500) ?? "(unknown)"}${
-        traceContext.toolCalls ? `\nTool Calls: ${traceContext.toolCalls.slice(0, 300)}` : ""
+User Message: ${traceContext.userMessage ?? '(unknown)'}
+Agent Response: ${traceContext.agentResponse?.slice(0, 500) ?? '(unknown)'}${
+        traceContext.toolCalls ? `\nTool Calls: ${traceContext.toolCalls.slice(0, 300)}` : ''
       }`
-    : "";
+    : '';
 
-  const prompt = CLASSIFICATION_PROMPT.replace("{RAW_TEXT}", rawText).replace(
-    "{TRACE_CONTEXT}",
-    traceSection
-  );
+  const prompt = CLASSIFICATION_PROMPT.replace('{RAW_TEXT}', rawText).replace('{TRACE_CONTEXT}', traceSection);
 
   try {
     const response = await llmCall(prompt);
     const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON in LLM response");
+    if (!jsonMatch) throw new Error('No JSON in LLM response');
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const parsed: {
@@ -101,24 +98,23 @@ Agent Response: ${traceContext.agentResponse?.slice(0, 500) ?? "(unknown)"}${
     } = JSON.parse(jsonMatch[0]);
 
     return {
-      type: (["bug", "effect", "unclassified"].includes(parsed.type ?? "")
+      type: (['bug', 'effect', 'unclassified'].includes(parsed.type ?? '')
         ? parsed.type
-        : "unclassified") as IncidentType,
-      priority: (["high", "medium", "low", "ignore"].includes(parsed.priority ?? "")
+        : 'unclassified') as IncidentType,
+      priority: (['high', 'medium', 'low', 'ignore'].includes(parsed.priority ?? '')
         ? parsed.priority
-        : "medium") as IncidentPriority,
-      confidence:
-        typeof parsed.confidence === "number" ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
-      reason: parsed.reason ?? "LLM classification",
+        : 'medium') as IncidentPriority,
+      confidence: typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
+      reason: parsed.reason ?? 'LLM classification',
       suggestedTitle: parsed.suggestedTitle ?? undefined,
     };
   } catch {
     // Fallback: return unclassified with low confidence
     return {
-      type: "unclassified",
-      priority: "medium",
+      type: 'unclassified',
+      priority: 'medium',
       confidence: 0.1,
-      reason: "Classification failed — LLM response could not be parsed. Manual review needed.",
+      reason: 'Classification failed — LLM response could not be parsed. Manual review needed.',
     };
   }
 }

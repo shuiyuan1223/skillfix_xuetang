@@ -7,9 +7,9 @@
  * Category: "evolution" → available to System Agent (SA)
  */
 
-import { readLlmLogFile } from "../utils/llm-logger.js";
-import { getIncident } from "../memory/db.js";
-import type { PHATool } from "./types.js";
+import { readLlmLogFile } from '../utils/llm-logger.js';
+import { getIncident } from '../memory/db.js';
+import type { PHATool } from './types.js';
 
 // ============================================================================
 // search_llm_logs
@@ -22,35 +22,35 @@ export const searchLlmLogsTool: PHATool<{
   windowMinutes?: number;
   maxEntries?: number;
 }> = {
-  name: "search_llm_logs",
+  name: 'search_llm_logs',
   description:
-    "在 LLM 请求/响应日志中搜索指定时间窗口内的调用记录，用于定位 incident 根因。可直接传 incidentId 自动计算时间窗口，或手动传 fromMs/toMs。",
-  displayName: "搜索 LLM 日志",
-  category: "evolution",
-  icon: "search",
-  label: "Search LLM Logs",
+    '在 LLM 请求/响应日志中搜索指定时间窗口内的调用记录，用于定位 incident 根因。可直接传 incidentId 自动计算时间窗口，或手动传 fromMs/toMs。',
+  displayName: '搜索 LLM 日志',
+  category: 'evolution',
+  icon: 'search',
+  label: 'Search LLM Logs',
   inputSchema: {
-    type: "object",
+    type: 'object',
     properties: {
       incidentId: {
-        type: "string",
-        description: "Incident ID — 自动从 DB 获取时间戳作为窗口中心",
+        type: 'string',
+        description: 'Incident ID — 自动从 DB 获取时间戳作为窗口中心',
       },
       fromMs: {
-        type: "number",
-        description: "Time range start (Unix ms). incidentId 优先；二者均缺省时取当天最近记录",
+        type: 'number',
+        description: 'Time range start (Unix ms). incidentId 优先；二者均缺省时取当天最近记录',
       },
       toMs: {
-        type: "number",
-        description: "Time range end (Unix ms)",
+        type: 'number',
+        description: 'Time range end (Unix ms)',
       },
       windowMinutes: {
-        type: "number",
-        description: "围绕 incident 时间戳的窗口大小（分钟，默认 60）",
+        type: 'number',
+        description: '围绕 incident 时间戳的窗口大小（分钟，默认 60）',
       },
       maxEntries: {
-        type: "number",
-        description: "返回最多几条记录（默认 10）",
+        type: 'number',
+        description: '返回最多几条记录（默认 10）',
       },
     },
   },
@@ -76,8 +76,8 @@ export const searchLlmLogsTool: PHATool<{
     const datesToRead = new Set<string | undefined>();
     if (fromMs && toMs) {
       // May span midnight — collect all relevant dates
-      const startDate = new Date(fromMs).toISOString().split("T")[0];
-      const endDate = new Date(toMs).toISOString().split("T")[0];
+      const startDate = new Date(fromMs).toISOString().split('T')[0];
+      const endDate = new Date(toMs).toISOString().split('T')[0];
       datesToRead.add(startDate);
       if (endDate !== startDate) datesToRead.add(endDate);
     } else {
@@ -153,7 +153,7 @@ function truncate(s: string, maxLen: number): string {
 }
 
 function extractLastUserMessage(requestData: unknown): string | null {
-  if (!requestData || typeof requestData !== "object") return null;
+  if (!requestData || typeof requestData !== 'object') return null;
   const d = requestData as Record<string, unknown>;
 
   const messages = d.messages;
@@ -162,14 +162,14 @@ function extractLastUserMessage(requestData: unknown): string | null {
   // Find the last message with role === "user"
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i] as Record<string, unknown>;
-    if (msg.role !== "user") continue;
-    if (typeof msg.content === "string") return msg.content;
+    if (msg.role !== 'user') continue;
+    if (typeof msg.content === 'string') return msg.content;
     if (Array.isArray(msg.content)) {
       // Anthropic multi-part content: [{type:"text", text:"..."}]
       const textParts = (msg.content as Array<Record<string, unknown>>)
-        .filter((c) => c.type === "text" && typeof c.text === "string")
+        .filter((c) => c.type === 'text' && typeof c.text === 'string')
         .map((c) => c.text as string);
-      if (textParts.length > 0) return textParts.join("\n");
+      if (textParts.length > 0) return textParts.join('\n');
     }
   }
 
@@ -177,36 +177,36 @@ function extractLastUserMessage(requestData: unknown): string | null {
 }
 
 function extractAssistantText(responseData: unknown): string | null {
-  if (!responseData || typeof responseData !== "object") return null;
+  if (!responseData || typeof responseData !== 'object') return null;
   const d = responseData as Record<string, unknown>;
 
   // Anthropic rebuilt format: { type:"message", content: [{type:"text",text:"..."}] }
-  if (d.type === "message" && Array.isArray(d.content)) {
+  if (d.type === 'message' && Array.isArray(d.content)) {
     const textBlocks = (d.content as Array<Record<string, unknown>>)
-      .filter((c) => c.type === "text" && typeof c.text === "string")
+      .filter((c) => c.type === 'text' && typeof c.text === 'string')
       .map((c) => c.text as string);
-    if (textBlocks.length > 0) return textBlocks.join("\n");
+    if (textBlocks.length > 0) return textBlocks.join('\n');
   }
 
   // OpenAI rebuilt format: { choices: [{message:{content:"..."}}] }
   if (Array.isArray(d.choices) && d.choices.length > 0) {
     const choice = d.choices[0] as Record<string, unknown>;
     const message = choice.message as Record<string, unknown> | undefined;
-    if (message && typeof message.content === "string") return message.content;
+    if (message && typeof message.content === 'string') return message.content;
   }
 
   return null;
 }
 
 function extractToolCalls(responseData: unknown): Array<{ name: string; input: unknown }> {
-  if (!responseData || typeof responseData !== "object") return [];
+  if (!responseData || typeof responseData !== 'object') return [];
   const d = responseData as Record<string, unknown>;
 
   // Anthropic rebuilt format: { content: [{type:"tool_use",name:"...",input:{}}] }
-  if (d.type === "message" && Array.isArray(d.content)) {
+  if (d.type === 'message' && Array.isArray(d.content)) {
     return (d.content as Array<Record<string, unknown>>)
-      .filter((c) => c.type === "tool_use")
-      .map((c) => ({ name: (c.name as string) ?? "unknown", input: c.input }));
+      .filter((c) => c.type === 'tool_use')
+      .map((c) => ({ name: (c.name as string) ?? 'unknown', input: c.input }));
   }
 
   // OpenAI rebuilt format: { choices: [{message:{tool_calls:[{function:{name,arguments}}]}}] }
@@ -219,14 +219,14 @@ function extractToolCalls(responseData: unknown): Array<{ name: string; input: u
         const t = tc as Record<string, unknown>;
         const fn = t.function as Record<string, unknown> | undefined;
         let input: unknown = fn?.arguments;
-        if (typeof input === "string") {
+        if (typeof input === 'string') {
           try {
             input = JSON.parse(input);
           } catch {
             // keep as string
           }
         }
-        return { name: (fn?.name as string) ?? "unknown", input };
+        return { name: (fn?.name as string) ?? 'unknown', input };
       });
     }
   }
