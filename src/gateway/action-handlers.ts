@@ -1064,6 +1064,11 @@ const handleTabChange: ActionHandler = async (session, _action, payload, send) =
   } else if (view === 'settings/logs') {
     session.logsTab = tab as 'system' | 'llm';
     await session.handleNavigate('settings/logs', send);
+  } else if (view === 'workbench') {
+    if (session.workbenchState) {
+      session.workbenchState.activeTab = tab === 'prompts' ? 'prompts' : 'skills';
+    }
+    await session.handleNavigate('workbench', send);
   } else {
     type EvolutionTab =
       | 'overview'

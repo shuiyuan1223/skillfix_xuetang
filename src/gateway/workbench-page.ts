@@ -42,7 +42,7 @@ export function generateWorkbenchPage(state: WorkbenchState): A2UIMessage[] {
 
 function buildTestDataColumn(ui: A2UIGenerator, state: WorkbenchState): string {
   const label = ui.text(t('workbench.testData'), 'h3');
-  const charCount = ui.badge(`${state.testData.length} ${t('workbench.chars')}`, { variant: 'secondary' });
+  const charCount = ui.badge(`${state.testData.length} ${t('workbench.chars')}`, { variant: 'info' });
   const labelRow = ui.row([label, charCount], { gap: 8, justify: 'space-between', align: 'center' });
 
   const editor = ui.codeEditor(state.testData, {
@@ -73,8 +73,7 @@ function buildEditorColumn(ui: A2UIGenerator, state: WorkbenchState): string {
       { id: 'prompts', label: t('workbench.tabPrompts'), icon: 'file-text' },
     ],
     state.activeTab,
-    { skills: skillsContent, prompts: promptsContent },
-    { actionIds: ['debug_switch_tab'] }
+    { skills: skillsContent, prompts: promptsContent }
   );
 
   return tabs;
@@ -261,39 +260,38 @@ function buildStatusBar(ui: A2UIGenerator, state: WorkbenchState): string {
 
   // Run status
   const statusVariant = {
-    ready: 'secondary',
+    ready: 'info',
     running: 'warning',
     done: 'success',
-    error: 'destructive',
+    error: 'error',
   }[state.runStatus] as string;
   badges.push(ui.badge(t(`workbench.${state.runStatus}`), { variant: statusVariant }));
 
   // Active prompt
   if (state.activePromptId) {
-    badges.push(ui.badge(state.activePromptId, { variant: 'outline', icon: 'file-text' }));
+    badges.push(ui.badge(state.activePromptId, { variant: 'info' }));
   }
 
   // Enabled skills count
   const enabledCount = state.skills.filter((s) => s.enabled).length;
   badges.push(ui.badge(`${enabledCount}/${state.skills.length} ${t('workbench.tabSkills')}`, {
-    variant: 'outline',
-    icon: 'puzzle',
+    variant: 'info',
   }));
 
   // Tokens (if result exists)
   if (state.currentResult?.tokens) {
-    badges.push(ui.badge(`${state.currentResult.tokens} ${t('workbench.tokens')}`, { variant: 'outline' }));
+    badges.push(ui.badge(`${state.currentResult.tokens} ${t('workbench.tokens')}`, { variant: 'info' }));
   }
 
   // Duration
   if (state.currentResult?.durationMs) {
     const secs = (state.currentResult.durationMs / 1000).toFixed(1);
-    badges.push(ui.badge(`${secs}s`, { variant: 'outline', icon: 'clock' }));
+    badges.push(ui.badge(`${secs}s`, { variant: 'info' }));
   }
 
   // Error message
   if (state.runStatus === 'error' && state.errorMessage) {
-    badges.push(ui.badge(state.errorMessage, { variant: 'destructive' }));
+    badges.push(ui.badge(state.errorMessage, { variant: 'error' }));
   }
 
   return ui.row(badges, { gap: 8, align: 'center' });

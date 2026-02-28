@@ -23,7 +23,6 @@ type Payload = Record<string, unknown> | undefined;
 // ── Action set ────────────────────────────────────────────────
 
 export const WORKBENCH_ACTIONS = new Set([
-  'debug_switch_tab',
   'debug_select_skill',
   'debug_toggle_skill',
   'debug_skill_change',
@@ -66,9 +65,6 @@ export async function handleWorkbenchAction(
   }
 
   switch (action) {
-    case 'debug_switch_tab':
-      handleSwitchTab(state, payload);
-      break;
     case 'debug_select_skill':
       handleSelectSkill(state, payload);
       break;
@@ -118,11 +114,6 @@ export async function handleWorkbenchAction(
 }
 
 // ── Individual handlers ───────────────────────────────────────
-
-function handleSwitchTab(state: WorkbenchState, payload: Payload): void {
-  const tab = (payload?.tab as string) || 'skills';
-  state.activeTab = tab === 'prompts' ? 'prompts' : 'skills';
-}
 
 function handleSelectSkill(state: WorkbenchState, payload: Payload): void {
   const id = (payload?.id ?? payload?.skillName ?? payload?.rowId) as string | undefined;
