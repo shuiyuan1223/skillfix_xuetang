@@ -75,13 +75,14 @@ export function saveToFileCache(
 }
 
 /**
- * Get from memory cache if valid
+ * Get from memory cache if valid.
+ * Returns undefined on cache miss, or the cached value (which may be null for 403 errors).
  */
 export function getFromMemoryCache<T>(
   endpoint: string,
   params: Record<string, unknown>,
   ttl: number = DEFAULT_TTL
-): T | null {
+): T | undefined {
   const key = getCacheKey(endpoint, params);
   const cached = memoryCache.get(key);
 
@@ -89,7 +90,7 @@ export function getFromMemoryCache<T>(
     return cached.data as T;
   }
 
-  return null;
+  return undefined;
 }
 
 /**

@@ -174,7 +174,13 @@ export class HuaweiHealthApi {
       }
       options = { ...options, headers };
     }
-    return fetch(url, options);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -185,7 +191,7 @@ export class HuaweiHealthApi {
     const cacheKey = 'polymerize';
     const cacheParams = { date, userUuid: this.userUuid || 'default' };
     const cached = getFromMemoryCache<PolymerizeResult>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -425,7 +431,7 @@ export class HuaweiHealthApi {
       max: number;
       min: number;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -552,7 +558,7 @@ export class HuaweiHealthApi {
       max: number;
       min: number;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -583,6 +589,7 @@ export class HuaweiHealthApi {
       log.warn('Stress data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
+      saveToMemoryCache(cacheKey, cacheParams, null);
       return null;
     }
 
@@ -618,7 +625,7 @@ export class HuaweiHealthApi {
       max: number;
       min: number;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -649,6 +656,7 @@ export class HuaweiHealthApi {
       log.warn('SpO2 data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
+      saveToMemoryCache(cacheKey, cacheParams, null);
       return null;
     }
 
@@ -694,7 +702,7 @@ export class HuaweiHealthApi {
       latestHeartRate: number | null;
       hasArrhythmia: boolean;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -738,6 +746,7 @@ export class HuaweiHealthApi {
       log.warn('ECG healthRecords failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
+      saveToMemoryCache(cacheKey, cacheParams, null);
       return null;
     }
 
@@ -893,7 +902,7 @@ export class HuaweiHealthApi {
       avgSystolic: number;
       avgDiastolic: number;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -928,6 +937,7 @@ export class HuaweiHealthApi {
       log.warn('Blood pressure data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
+      saveToMemoryCache(cacheKey, cacheParams, null);
       return null;
     }
 
@@ -963,7 +973,7 @@ export class HuaweiHealthApi {
       max: number;
       min: number;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -994,6 +1004,7 @@ export class HuaweiHealthApi {
       log.warn('Blood glucose data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
+      saveToMemoryCache(cacheKey, cacheParams, null);
       return null;
     }
 
@@ -1032,7 +1043,7 @@ export class HuaweiHealthApi {
       bodyFatRate?: number;
       latestWeightDate?: string;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1139,7 +1150,7 @@ export class HuaweiHealthApi {
       max: number;
       min: number;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1170,6 +1181,7 @@ export class HuaweiHealthApi {
       log.warn('Body temperature data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
+      saveToMemoryCache(cacheKey, cacheParams, null);
       return null;
     }
 
@@ -1210,7 +1222,7 @@ export class HuaweiHealthApi {
       water?: number;
       meals: Array<{ time: string; calories: number }>;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1283,7 +1295,7 @@ export class HuaweiHealthApi {
       cycleLength?: number;
       records: Array<{ date: string; status: string }>;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1359,7 +1371,7 @@ export class HuaweiHealthApi {
       value: number;
       level: 'low' | 'fair' | 'good' | 'excellent' | 'superior';
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1395,6 +1407,7 @@ export class HuaweiHealthApi {
       log.warn('VO2Max data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
+      saveToMemoryCache(cacheKey, cacheParams, null);
       return null;
     }
 
@@ -1431,7 +1444,7 @@ export class HuaweiHealthApi {
       min: number;
       readings: Array<{ time: string; value: number }>;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1497,7 +1510,7 @@ export class HuaweiHealthApi {
       score: number;
       readings: Array<{ time: string; emotion: string; score: number }>;
     }>(cacheKey, cacheParams);
-    if (cached) {
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1528,6 +1541,7 @@ export class HuaweiHealthApi {
       log.warn('Emotion data failed', { status: response.status, errorText });
       // 403 = Huawei API limitation, re-auth won't fix
       saveToFileCache(cacheKey, cacheParams, null, errorText);
+      saveToMemoryCache(cacheKey, cacheParams, null);
       return null;
     }
 

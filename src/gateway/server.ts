@@ -1545,13 +1545,13 @@ export class GatewaySession {
     this._actionLock = true;
 
     const collected: unknown[] = [];
+    // Collect messages for the HTTP response only.
+    // Do NOT duplicate to SSE — the client processes the HTTP response
+    // synchronously, so pushing the same messages through SSE causes
+    // double-rendering and visual "flash-back" on page transitions.
     // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     const collector = (msg: unknown) => {
       collected.push(msg);
-      // Also push through SSE if connected (for async listeners)
-      if (this._activeSend && this._activeSend !== collector) {
-        this._activeSend(msg);
-      }
     };
 
     try {
