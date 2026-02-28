@@ -9,7 +9,7 @@ import type { HealthDataSource } from '../data-sources/interface.js';
 import { generateDashboardPage, type DashboardData, type TabId } from './dashboard-pages.js';
 import { generateSidebar } from './pages.js';
 import { t } from '../locales/index.js';
-import { A2UIGenerator, SURFACE_TOAST } from './a2ui.js';
+import { A2UIGenerator } from './a2ui.js';
 import { getMissingScopeErrors } from '../data-sources/huawei/huawei-api.js';
 
 type SendFn = (msg: unknown) => void;
@@ -17,33 +17,6 @@ type SendFn = (msg: unknown) => void;
 interface LoadGroup {
   label: string;
   fetchers: Array<() => Promise<Partial<DashboardData>>>;
-}
-
-/**
- * Send a progress toast notification
- */
-function sendProgress(send: SendFn, current: number, total: number, label: string): void {
-  const ui = new A2UIGenerator(SURFACE_TOAST);
-  const progressText = t('dashboard.loadingProgress')
-    .replace('{current}', String(current))
-    .replace('{total}', String(total));
-  const text = ui.text(`${progressText} - ${label}`, 'caption');
-  const prog = ui.progress(Math.round((current / total) * 100), {
-    maxValue: 100,
-    size: 'sm',
-    color: '#3b82f6',
-  });
-  const root = ui.column([text, prog], { gap: 4, padding: 8 });
-  for (const msg of ui.build(root)) {
-    send(msg);
-  }
-}
-
-/**
- * Clear the progress toast
- */
-function clearProgress(send: SendFn): void {
-  send({ deleteSurface: { surfaceId: SURFACE_TOAST } });
 }
 
 /**
@@ -283,36 +256,25 @@ export class ProgressiveDashboardLoader {
     // 1. Send skeleton page immediately
     sendDashboardPage(this.send, this.data, activeTab, true, this.whitelisted);
 
-    // 2. Load groups sequentially, rendering after each group
-    for (let i = 0; i < groups.length; i++) {
-      const group = groups[i];
-      const results = await Promise.allSettled(group.fetchers.map((f) => f()));
+    // 2. Fire ALL fetchers across all groups in parallel
+    const allFetchers = groups.flatMap((g) => g.fetchers);
+    const results = await Promise.allSettled(allFetchers.map((f) => f()));
 
-      // Merge successful results into data
-      for (const result of results) {
-        if (result.status === 'fulfilled' && result.value) {
-          Object.assign(this.data, result.value);
-        }
+    // Merge all successful results into data
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        Object.assign(this.data, result.value);
       }
-
-      // Send progress notification
-      sendProgress(this.send, i + 1, groups.length, group.label);
-
-      // Re-render with accumulated data
-      const isLastGroup = i === groups.length - 1;
-      sendDashboardPage(this.send, this.data, activeTab, !isLastGroup, this.whitelisted);
     }
 
-    // 3. Check for scope errors after all groups loaded
+    // 3. Check for scope errors
     const scopeErrors = getMissingScopeErrors();
     if (scopeErrors.length > 0) {
       this.data.scopeErrors = scopeErrors;
-      // Re-send final page with scope error banner
-      sendDashboardPage(this.send, this.data, activeTab, false, this.whitelisted);
     }
 
-    // 4. Clear progress toast
-    clearProgress(this.send);
+    // 4. Send final page (single re-render)
+    sendDashboardPage(this.send, this.data, activeTab, false, this.whitelisted);
   }
 
   /**
