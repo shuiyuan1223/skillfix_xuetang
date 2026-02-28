@@ -2057,6 +2057,15 @@ export async function dispatchAction(
     return;
   }
 
+  // 2b. Workbench actions
+  {
+    const { WORKBENCH_ACTIONS, handleWorkbenchAction } = await import('./workbench-handlers.js');
+    if (WORKBENCH_ACTIONS.has(action)) {
+      await handleWorkbenchAction(session, action, payload, send);
+      return;
+    }
+  }
+
   // 3. Prefix-based actions
   for (const { prefix, handler: prefixHandler } of PREFIX_HANDLERS) {
     if (action.startsWith(prefix)) {

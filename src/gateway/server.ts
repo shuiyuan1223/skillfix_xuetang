@@ -1008,6 +1008,9 @@ export class GatewaySession {
     unifiedDiff?: string;
   } | null = null;
 
+  // Workbench state
+  workbenchState: import('./workbench-init.js').WorkbenchState | null = null;
+
   // Arena comparison state
   benchmarkSelectedRunIds: Set<string> = new Set();
   benchmarkRadarMode: 'categories' | 'criteria' = 'categories';

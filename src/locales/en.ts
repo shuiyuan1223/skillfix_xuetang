@@ -23,6 +23,7 @@ export const en: LocaleMessages = {
     logs: 'Logs',
     settings: 'Settings',
     legacyChat: 'Think & Search',
+    workbench: 'Debug Workbench',
   },
 
   systemAgent: {
@@ -796,6 +797,34 @@ export const en: LocaleMessages = {
     dashboardCreated: 'Dashboard Created',
     empty: 'No experiment dashboards yet',
     emptyHint: 'Ask me to create one in chat',
+  },
+
+  workbench: {
+    title: 'Debug Workbench',
+    subtitle: 'Test and iterate health Skills and interpretation Prompts',
+    tabSkills: 'Skills',
+    tabPrompts: 'Prompts',
+    testData: 'Test Data',
+    testDataPlaceholder: 'Paste health data JSON or natural language description...',
+    clearData: 'Clear',
+    runInterpret: 'Run Interpretation',
+    previousResult: 'Previous Result',
+    currentResult: 'Current Result',
+    noResult: 'No results yet. Click "Run Interpretation" to start.',
+    ready: 'Ready',
+    running: 'Running...',
+    done: 'Done',
+    error: 'Error',
+    tokens: 'Tokens',
+    chars: 'chars',
+    skillsTitle: 'Skills',
+    promptsTitle: 'Prompts',
+    selectSkillHint: 'Select a skill to view and edit',
+    selectPromptHint: 'Select a prompt to view and edit',
+    saved: 'Saved',
+    reverted: 'Reverted',
+    modified: 'Modified',
+    unsaved: 'Unsaved',
   },
 
   auth: {

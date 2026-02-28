@@ -23,6 +23,7 @@ export interface LocaleMessages {
     logs: string;
     settings: string;
     legacyChat: string;
+    workbench: string;
   };
 
   // System Agent
@@ -823,6 +824,35 @@ export interface LocaleMessages {
     dashboardCreated: string;
     empty: string;
     emptyHint: string;
+  };
+
+  // Workbench (Skill Debug)
+  workbench: {
+    title: string;
+    subtitle: string;
+    tabSkills: string;
+    tabPrompts: string;
+    testData: string;
+    testDataPlaceholder: string;
+    clearData: string;
+    runInterpret: string;
+    previousResult: string;
+    currentResult: string;
+    noResult: string;
+    ready: string;
+    running: string;
+    done: string;
+    error: string;
+    tokens: string;
+    chars: string;
+    skillsTitle: string;
+    promptsTitle: string;
+    selectSkillHint: string;
+    selectPromptHint: string;
+    saved: string;
+    reverted: string;
+    modified: string;
+    unsaved: string;
   };
 
   // OAuth / Authorization

@@ -23,6 +23,7 @@ export const zhCN: LocaleMessages = {
     logs: '日志',
     settings: '设置',
     legacyChat: '边想边搜',
+    workbench: '调试工作台',
   },
 
   systemAgent: {
@@ -791,6 +792,34 @@ export const zhCN: LocaleMessages = {
     dashboardCreated: '仪表盘已创建',
     empty: '还没有实验仪表盘',
     emptyHint: '在聊天中让我帮你创建一个',
+  },
+
+  workbench: {
+    title: '调试工作台',
+    subtitle: '测试和迭代健康技能与解读提示词',
+    tabSkills: '技能',
+    tabPrompts: '提示词',
+    testData: '测试数据',
+    testDataPlaceholder: '粘贴健康数据 JSON 或自然语言描述...',
+    clearData: '清空',
+    runInterpret: '运行解读',
+    previousResult: '上次结果',
+    currentResult: '当前结果',
+    noResult: '暂无结果，点击「运行解读」开始',
+    ready: '就绪',
+    running: '运行中...',
+    done: '完成',
+    error: '错误',
+    tokens: 'Tokens',
+    chars: '字符',
+    skillsTitle: '技能列表',
+    promptsTitle: '提示词列表',
+    selectSkillHint: '选择一个技能查看和编辑',
+    selectPromptHint: '选择一个提示词查看和编辑',
+    saved: '已保存',
+    reverted: '已回退',
+    modified: '已修改',
+    unsaved: '未保存',
   },
 
   auth: {

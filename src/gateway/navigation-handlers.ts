@@ -41,6 +41,8 @@ import {
   generateExperimentPage,
 } from './pages.js';
 import { generateEvolutionLab } from './evolution-lab.js';
+import { generateWorkbenchPage } from './workbench-page.js';
+import { initializeWorkbench } from './workbench-init.js';
 import { discoverPlugins } from '../plugins/discovery.js';
 import { loadPluginManifest } from '../plugins/manifest.js';
 import { readLogFile, subscribeToLogs, type LogEntry, createLogger } from '../utils/logger.js';
@@ -805,6 +807,10 @@ const NAV_HANDLERS: Record<string, NavHandler> = {
   'settings/logs': async (s, _v, send) => navigateLogs(s, send),
   'settings/general': async (s) => navigateGeneral(s),
   experiment: async (s) => navigateExperiment(s),
+  workbench: async (s) => {
+    if (!s.workbenchState) s.workbenchState = await initializeWorkbench();
+    return generateWorkbenchPage(s.workbenchState);
+  },
 };
 
 /**

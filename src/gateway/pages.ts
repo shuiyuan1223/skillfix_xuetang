@@ -100,6 +100,7 @@ export function generateSidebar(activeView: string, whitelisted = true): A2UIMes
     { id: 'legacy-chat', label: t('nav.legacyChat'), icon: 'search' },
     { id: 'evolution', label: t('nav.evolution'), icon: 'test-tube' },
     { id: 'system-agent', label: t('nav.systemAgent'), icon: 'bot' },
+    { id: 'workbench', label: t('nav.workbench'), icon: 'flask' },
   ]);
 
   // Settings navigation
