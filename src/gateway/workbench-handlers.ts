@@ -41,6 +41,7 @@ export const WORKBENCH_ACTIONS = new Set([
   'debug_disable_all_skills',
   'debug_toggle_skills_list',
   'debug_toggle_prompts_list',
+  'debug_export_zip',
 ]);
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -136,6 +137,9 @@ export async function handleWorkbenchAction(
     case 'debug_copy_messages':
       // Handled client-side in App.tsx — no server action needed
       return;
+    case 'debug_export_zip':
+      // Handled client-side in App.tsx — no server action needed
+      return;
     default:
       log.warn('Unknown workbench action', { action });
       return;
@@ -195,6 +199,7 @@ function handleRevertSkill(state: WorkbenchState): void {
   if (skill) {
     skill.editedContent = readWorkbenchSkillContent(skill.id);
     skill.dirty = false;
+    log.info('Skill reverted', { skillId: skill.id });
   }
 }
 
@@ -240,6 +245,7 @@ function handleRevertPrompt(state: WorkbenchState): void {
   if (prompt) {
     prompt.editedContent = readWorkbenchPromptContent(prompt.id);
     prompt.dirty = false;
+    log.info('Prompt reverted', { promptId: prompt.id });
   }
 }
 
@@ -249,6 +255,7 @@ function handleUserdataChange(state: WorkbenchState, payload: Payload): void {
 
 function handleClearData(state: WorkbenchState): void {
   state.testData = '';
+  log.info('Test data cleared');
 }
 
 // ── Run Interpretation (background) ──────────────────────────
@@ -306,7 +313,8 @@ async function doRunInterpret(session: GatewaySession): Promise<void> {
       })
       .join('\n\n');
 
-    const systemInstruction = '直接根据提供的健康数据进行分析和解读，输出完整的健康报告。不要反问用户，不要询问更多信息，不要使用任何工具，直接基于现有数据给出分析结果。';
+    const systemInstruction =
+      '直接根据提供的健康数据进行分析和解读，输出完整的健康报告。不要反问用户，不要询问更多信息，不要使用任何工具，直接基于现有数据给出分析结果。';
 
     const finalMessage = [
       systemInstruction,
@@ -363,6 +371,11 @@ async function doRunInterpret(session: GatewaySession): Promise<void> {
             rerenderViaSSE(session);
           }
         }
+      } else if (ev.type === 'error') {
+        log.error('Workbench agent error event', { error: ev.error });
+        state.runStatus = 'error';
+        state.errorMessage = ev.error?.message || 'Agent error';
+        rerenderViaSSE(session);
       }
     });
 

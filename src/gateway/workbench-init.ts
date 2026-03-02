@@ -142,9 +142,7 @@ export async function initializeWorkbench(): Promise<WorkbenchState> {
   const srcSkillsDir = getSkillsDir();
 
   // Seed skills if workbench skills dir is empty
-  const existingSkills = readdirSync(skillsDir).filter((f) =>
-    existsSync(join(skillsDir, f, 'SKILL.md'))
-  );
+  const existingSkills = readdirSync(skillsDir).filter((f) => existsSync(join(skillsDir, f, 'SKILL.md')));
   if (existingSkills.length === 0) {
     for (const name of SEED_SKILL_NAMES) {
       const srcPath = join(srcSkillsDir, name, 'SKILL.md');
@@ -198,7 +196,7 @@ export function loadWorkbenchSkills(): WorkbenchSkillItem[] {
       id: name,
       name,
       description: extractDescription(content),
-      enabled: true,
+      enabled: false,
     };
   });
 }

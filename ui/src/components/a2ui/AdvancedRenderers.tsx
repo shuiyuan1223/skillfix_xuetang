@@ -207,13 +207,14 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
     <div className="code-editor-container" style={{ height: typeof height === 'number' ? height + 'px' : height }}>
       {lineNumbersEl}
       <textarea
+        key={c.id}
         className="code-textarea"
         spellCheck={false}
-        defaultValue={value}
-        onInput={(e) => {
+        value={value}
+        onChange={(e) => {
           const onChange = prop(c, 'onChange');
           if (onChange) {
-            ctx.sendAction(onChange as string, { value: (e.target as HTMLTextAreaElement).value });
+            ctx.sendAction(onChange as string, { value: e.target.value });
           }
         }}
         onScroll={syncScroll}

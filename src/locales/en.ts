@@ -832,6 +832,7 @@ export const en: LocaleMessages = {
     disableAll: 'Disable All',
     expand: 'Expand List',
     collapse: 'Collapse List',
+    exportZip: 'Download ZIP',
   },
 
   auth: {

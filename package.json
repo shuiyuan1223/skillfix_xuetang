@@ -50,6 +50,8 @@
     "@mariozechner/pi-tui": "^0.51.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@sinclair/typebox": "^0.34.0",
+    "@types/archiver": "^7.0.0",
+    "archiver": "^7.0.1",
     "chokidar": "^5.0.0",
     "commander": "^14.0.0",
     "hono": "^4.6.0",

@@ -5,6 +5,7 @@ import { generateUUID } from './lib/utils';
 import { ICONS } from './lib/icons';
 import { i18n } from './lib/i18n';
 import { A2UIRenderer } from './components/a2ui/A2UIRenderer';
+import JSZip from 'jszip';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -499,6 +500,118 @@ export function App() {
   }, [checkExtension, startOAuthWithExtension, startOAuthWithMCP]);
 
   // ---------------------------------------------------------------------------
+  // Workbench ZIP Export
+  // ---------------------------------------------------------------------------
+
+  const exportWorkbenchZip = useCallback(async () => {
+    try {
+      const zip = new JSZip();
+
+      // Extract workbench state from mainData
+      // The workbench page stores skills and prompts in the component tree
+      const mainDataSnap = mainDataRef.current;
+      if (!mainDataSnap) {
+        sendActionRaw('show_toast', { message: 'No workbench data available', variant: 'error' });
+        return;
+      }
+
+      // Find skills and prompts data from the component tree
+      // Skills are in a DataTable component, prompts in another DataTable
+      const skillsFolder = zip.folder('skills');
+      const promptsFolder = zip.folder('prompts');
+
+      // Parse the component tree to extract skills and prompts
+      // The workbench state is embedded in the page components
+      let skillsData: any[] = [];
+      let promptsData: any[] = [];
+
+      // Traverse components to find DataTable components with skills/prompts
+      const findDataInComponents = (components: A2UIComponent[]) => {
+        for (const c of components) {
+          const type = componentType(c);
+
+          // DataTable components contain the skills/prompts rows
+          if (type === 'DataTable') {
+            const rows = prop(c, 'rows') as any[];
+            if (rows && rows.length > 0) {
+              // Check if this is skills table (has 'status' column) or prompts table (has 'active' column)
+              const firstRow = rows[0];
+              if (firstRow.status !== undefined) {
+                skillsData = rows;
+              } else if (firstRow.active !== undefined) {
+                promptsData = rows;
+              }
+            }
+          }
+
+          // CodeEditor components contain the actual content
+          if (type === 'CodeEditor') {
+            const editorId = prop(c, 'id') as string;
+            const value = prop(c, 'value') as string;
+
+            // Skill editor IDs: wb_skill_editor_{skillId}
+            if (editorId?.startsWith('wb_skill_editor_')) {
+              const skillId = editorId.replace('wb_skill_editor_', '');
+              if (skillsFolder && value) {
+                const skillSubfolder = skillsFolder.folder(skillId);
+                skillSubfolder?.file('SKILL.md', value);
+              }
+            }
+
+            // Prompt editor IDs: wb_prompt_editor_{promptId}
+            if (editorId?.startsWith('wb_prompt_editor_')) {
+              const promptId = editorId.replace('wb_prompt_editor_', '');
+              if (promptsFolder && value) {
+                promptsFolder.file(`${promptId}.md`, value);
+              }
+            }
+          }
+
+          // Recursively search in child components
+          const children = prop(c, 'children');
+          if (Array.isArray(children)) {
+            findDataInComponents(children);
+          }
+        }
+      };
+
+      findDataInComponents(mainDataSnap.components);
+
+      // If we didn't find content in editors, we need to fetch from server
+      // For now, show a message that user should select skills/prompts first
+      const skillFiles = skillsFolder?.file(/.*/) || [];
+      const promptFiles = promptsFolder?.file(/.*/) || [];
+
+      if (skillFiles.length === 0 && promptFiles.length === 0) {
+        sendActionRaw('show_toast', {
+          message: 'Please select and view skills/prompts before exporting',
+          variant: 'warning'
+        });
+        return;
+      }
+
+      // Generate ZIP file
+      const blob = await zip.generateAsync({ type: 'blob' });
+
+      // Trigger download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      a.download = `workbench-export-${timestamp}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      sendActionRaw('show_toast', { message: 'Export successful!', variant: 'success' });
+    } catch (err) {
+      console.error('[Workbench] Export failed:', err);
+      sendActionRaw('show_toast', { message: 'Export failed', variant: 'error' });
+    }
+  }, [sendActionRaw]);
+
+  // ---------------------------------------------------------------------------
   // Core actions
   // ---------------------------------------------------------------------------
 
@@ -512,20 +625,57 @@ export function App() {
         return;
       }
 
+      // Handle workbench export zip locally on the frontend
+      if (action === 'debug_export_zip') {
+        exportWorkbenchZip();
+        return;
+      }
+
       // Handle workbench copy messages locally on the frontend
       if (action === 'debug_copy_messages') {
         const text = (payload?.text as string) || '';
         if (text) {
-          navigator.clipboard
-            .writeText(text)
-            .then(() => {
-              sendActionRaw('show_toast', { message: 'Messages copied!', variant: 'success' });
-            })
-            .catch(() => {
-              sendActionRaw('show_toast', { message: 'Copy failed', variant: 'error' });
-            });
+          // Try modern clipboard API first
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard
+              .writeText(text)
+              .then(() => {
+                sendActionRaw('show_toast', { message: 'Messages copied!', variant: 'success' });
+              })
+              .catch(() => {
+                // Fallback to legacy method
+                fallbackCopyToClipboard(text);
+              });
+          } else {
+            // Use legacy method directly if clipboard API not available
+            fallbackCopyToClipboard(text);
+          }
         }
         return;
+      }
+
+      // Fallback copy method for older browsers or non-HTTPS contexts
+      function fallbackCopyToClipboard(text: string) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        try {
+          const successful = document.execCommand('copy');
+          if (successful) {
+            sendActionRaw('show_toast', { message: 'Messages copied!', variant: 'success' });
+          } else {
+            sendActionRaw('show_toast', { message: 'Copy failed', variant: 'error' });
+          }
+        } catch (err) {
+          sendActionRaw('show_toast', { message: 'Copy failed', variant: 'error' });
+        } finally {
+          document.body.removeChild(textarea);
+        }
       }
 
       // Handle copy/download config locally on the frontend
@@ -878,6 +1028,31 @@ export function App() {
             });
             break;
           }
+
+          case 'download': {
+            // Handle file download
+            const downloadMsg = msg as any;
+            const { filename, content, mimeType } = downloadMsg;
+            if (filename && content) {
+              try {
+                const blob = new Blob([Uint8Array.from(atob(content), (c) => c.charCodeAt(0))], {
+                  type: mimeType || 'application/octet-stream',
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                console.error('[Download] Failed:', err);
+              }
+            }
+            break;
+          }
+
           default:
             break;
         }

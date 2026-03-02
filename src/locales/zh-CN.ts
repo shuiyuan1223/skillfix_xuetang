@@ -827,6 +827,7 @@ export const zhCN: LocaleMessages = {
     disableAll: '全部禁用',
     expand: '展开列表',
     collapse: '折叠列表',
+    exportZip: '下载 ZIP',
   },
 
   auth: {

@@ -860,6 +860,7 @@ export interface LocaleMessages {
     disableAll: string;
     expand: string;
     collapse: string;
+    exportZip: string;
   };
 
   // OAuth / Authorization

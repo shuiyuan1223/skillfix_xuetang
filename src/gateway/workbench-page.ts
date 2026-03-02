@@ -17,7 +17,16 @@ export function generateWorkbenchPage(state: WorkbenchState): A2UIMessage[] {
   // ── Header ──────────────────────────────────────────────────
   const title = ui.text(t('workbench.title'), 'h1');
   const subtitle = ui.text(t('workbench.subtitle'), 'caption', { muted: true });
-  const header = ui.column([title, subtitle], { gap: 4 });
+  const exportBtn = ui.button(t('workbench.exportZip'), 'debug_export_zip', {
+    variant: 'secondary',
+    size: 'sm',
+    icon: 'save',
+  });
+  const headerRow = ui.row([ui.column([title, subtitle], { gap: 4 }), exportBtn], {
+    gap: 16,
+    justify: 'space-between',
+    align: 'center',
+  });
 
   // ── Column 1: Test Data ─────────────────────────────────────
   const col1 = buildTestDataColumn(ui, state);
@@ -31,7 +40,7 @@ export function generateWorkbenchPage(state: WorkbenchState): A2UIMessage[] {
   // ── Three-column grid ───────────────────────────────────────
   const grid = ui.grid([col1, col2, col3], { columns: '320px 1fr 1fr', gap: 16 });
 
-  const root = ui.column([header, grid], { gap: 16, padding: 24 });
+  const root = ui.column([headerRow, grid], { gap: 16, padding: 24 });
   return ui.build(root);
 }
 
@@ -42,7 +51,10 @@ function buildTestDataColumn(ui: A2UIGenerator, state: WorkbenchState): string {
   const charCount = ui.badge(`${state.testData.length} ${t('workbench.chars')}`, { variant: 'info' });
   const labelRow = ui.row([label, charCount], { gap: 8, justify: 'space-between', align: 'center' });
 
-  const editor = ui.codeEditor(state.testData, {
+  // Use addRaw with stable ID to ensure React updates the editor value
+  const editorId = 'wb_testdata_editor';
+  ui.addRaw(editorId, 'CodeEditor', {
+    value: state.testData,
     language: 'json',
     onChange: 'debug_userdata_change',
     placeholder: t('workbench.testDataPlaceholder'),
@@ -55,7 +67,7 @@ function buildTestDataColumn(ui: A2UIGenerator, state: WorkbenchState): string {
     icon: 'x',
   });
 
-  return ui.column([labelRow, editor, clearBtn], { gap: 8 });
+  return ui.column([labelRow, editorId, clearBtn], { gap: 8 });
 }
 
 // ── Column 2: Editor ────────────────────────────────────────────
@@ -194,7 +206,7 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
   if (state.selectedPromptId) {
     const prompt = state.prompts.find((p) => p.id === state.selectedPromptId);
 
-    const promptLabel = ui.text(state.selectedPromptId + '.md', 'h4');
+    const promptLabel = ui.text(`${state.selectedPromptId}.md`, 'h4');
     parts.push(promptLabel);
 
     const content = prompt?.editedContent ?? readWorkbenchPromptContent(state.selectedPromptId);
@@ -303,9 +315,11 @@ function buildStatusBar(ui: A2UIGenerator, state: WorkbenchState): string {
 
   // Enabled skills count
   const enabledCount = state.skills.filter((s) => s.enabled).length;
-  badges.push(ui.badge(`${enabledCount}/${state.skills.length} ${t('workbench.tabSkills')}`, {
-    variant: 'info',
-  }));
+  badges.push(
+    ui.badge(`${enabledCount}/${state.skills.length} ${t('workbench.tabSkills')}`, {
+      variant: 'info',
+    })
+  );
 
   // Tokens (if result exists)
   if (state.currentResult?.tokens) {
