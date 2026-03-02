@@ -42,6 +42,7 @@ export const WORKBENCH_ACTIONS = new Set([
   'debug_toggle_skills_list',
   'debug_toggle_prompts_list',
   'debug_export_zip',
+  'workbench_get_export_data',
 ]);
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -139,6 +140,10 @@ export async function handleWorkbenchAction(
       return;
     case 'debug_export_zip':
       // Handled client-side in App.tsx — no server action needed
+      return;
+    case 'workbench_get_export_data':
+      // Return all skills and prompts content for ZIP export
+      handleGetExportData(state, send);
       return;
     default:
       log.warn('Unknown workbench action', { action });
@@ -256,6 +261,27 @@ function handleUserdataChange(state: WorkbenchState, payload: Payload): void {
 function handleClearData(state: WorkbenchState): void {
   state.testData = '';
   log.info('Test data cleared');
+}
+
+function handleGetExportData(state: WorkbenchState, send: SendFn): void {
+  // Read all skills and prompts content from disk
+  const skills = state.skills.map((s) => ({
+    id: s.id,
+    name: s.name,
+    content: s.editedContent ?? readWorkbenchSkillContent(s.id),
+  }));
+
+  const prompts = state.prompts.map((p) => ({
+    id: p.id,
+    name: p.name,
+    content: p.editedContent ?? readWorkbenchPromptContent(p.id),
+  }));
+
+  // Send data response
+  send({
+    type: 'data',
+    data: { skills, prompts },
+  });
 }
 
 // ── Run Interpretation (background) ──────────────────────────

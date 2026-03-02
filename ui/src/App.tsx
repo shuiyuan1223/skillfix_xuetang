@@ -505,89 +505,49 @@ export function App() {
 
   const exportWorkbenchZip = useCallback(async () => {
     try {
-      const zip = new JSZip();
+      // Fetch all skills and prompts from server
+      const response = await fetch(`${BASE_PATH}/api/a2ui/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'action',
+          action: 'workbench_get_export_data'
+        }),
+      });
 
-      // Extract workbench state from mainData
-      // The workbench page stores skills and prompts in the component tree
-      const mainDataSnap = mainDataRef.current;
-      if (!mainDataSnap) {
-        sendActionRaw('show_toast', { message: 'No workbench data available', variant: 'error' });
-        return;
+      if (!response.ok) {
+        throw new Error('Failed to fetch workbench data');
       }
 
-      // Find skills and prompts data from the component tree
-      // Skills are in a DataTable component, prompts in another DataTable
-      const skillsFolder = zip.folder('skills');
-      const promptsFolder = zip.folder('prompts');
+      const result = await response.json();
+      const { skills, prompts } = result.data || {};
 
-      // Parse the component tree to extract skills and prompts
-      // The workbench state is embedded in the page components
-      let skillsData: any[] = [];
-      let promptsData: any[] = [];
-
-      // Traverse components to find DataTable components with skills/prompts
-      const findDataInComponents = (components: A2UIComponent[]) => {
-        for (const c of components) {
-          const type = componentType(c);
-
-          // DataTable components contain the skills/prompts rows
-          if (type === 'DataTable') {
-            const rows = prop(c, 'rows') as any[];
-            if (rows && rows.length > 0) {
-              // Check if this is skills table (has 'status' column) or prompts table (has 'active' column)
-              const firstRow = rows[0];
-              if (firstRow.status !== undefined) {
-                skillsData = rows;
-              } else if (firstRow.active !== undefined) {
-                promptsData = rows;
-              }
-            }
-          }
-
-          // CodeEditor components contain the actual content
-          if (type === 'CodeEditor') {
-            const editorId = prop(c, 'id') as string;
-            const value = prop(c, 'value') as string;
-
-            // Skill editor IDs: wb_skill_editor_{skillId}
-            if (editorId?.startsWith('wb_skill_editor_')) {
-              const skillId = editorId.replace('wb_skill_editor_', '');
-              if (skillsFolder && value) {
-                const skillSubfolder = skillsFolder.folder(skillId);
-                skillSubfolder?.file('SKILL.md', value);
-              }
-            }
-
-            // Prompt editor IDs: wb_prompt_editor_{promptId}
-            if (editorId?.startsWith('wb_prompt_editor_')) {
-              const promptId = editorId.replace('wb_prompt_editor_', '');
-              if (promptsFolder && value) {
-                promptsFolder.file(`${promptId}.md`, value);
-              }
-            }
-          }
-
-          // Recursively search in child components
-          const children = prop(c, 'children');
-          if (Array.isArray(children)) {
-            findDataInComponents(children);
-          }
-        }
-      };
-
-      findDataInComponents(mainDataSnap.components);
-
-      // If we didn't find content in editors, we need to fetch from server
-      // For now, show a message that user should select skills/prompts first
-      const skillFiles = skillsFolder?.file(/.*/) || [];
-      const promptFiles = promptsFolder?.file(/.*/) || [];
-
-      if (skillFiles.length === 0 && promptFiles.length === 0) {
+      if (!skills || !prompts || (skills.length === 0 && prompts.length === 0)) {
         sendActionRaw('show_toast', {
-          message: 'Please select and view skills/prompts before exporting',
+          message: 'No skills or prompts to export',
           variant: 'warning'
         });
         return;
+      }
+
+      // Create ZIP file
+      const zip = new JSZip();
+      const skillsFolder = zip.folder('skills');
+      const promptsFolder = zip.folder('prompts');
+
+      // Add skills
+      for (const skill of skills) {
+        if (skillsFolder && skill.id && skill.content) {
+          const skillSubfolder = skillsFolder.folder(skill.id);
+          skillSubfolder?.file('SKILL.md', skill.content);
+        }
+      }
+
+      // Add prompts
+      for (const prompt of prompts) {
+        if (promptsFolder && prompt.id && prompt.content) {
+          promptsFolder.file(`${prompt.id}.md`, prompt.content);
+        }
       }
 
       // Generate ZIP file
