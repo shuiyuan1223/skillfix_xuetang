@@ -808,7 +808,9 @@ const NAV_HANDLERS: Record<string, NavHandler> = {
   'settings/general': async (s) => navigateGeneral(s),
   experiment: async (s) => navigateExperiment(s),
   workbench: async (s) => {
-    if (!s.workbenchState) s.workbenchState = await initializeWorkbench();
+    // Always re-initialize: unsaved changes (edits, enable/disable) are
+    // session-local and should not persist across page navigations.
+    s.workbenchState = await initializeWorkbench();
     return generateWorkbenchPage(s.workbenchState);
   },
 };

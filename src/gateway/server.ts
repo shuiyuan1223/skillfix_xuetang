@@ -1218,6 +1218,15 @@ export class GatewaySession {
   }
 
   /**
+   * Get the active SSE push function (if connected).
+   * Used by async handlers (workbench streaming) that need to push
+   * updates via SSE rather than the HTTP action collector.
+   */
+  getActiveSend(): SendFn | null {
+    return this._activeSend;
+  }
+
+  /**
    * Check if the current user is authenticated with Huawei
    */
   isUserAuthenticated(): boolean {

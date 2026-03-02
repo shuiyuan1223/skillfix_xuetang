@@ -366,6 +366,11 @@ const BADGE_VARIANTS: Record<string, string> = {
   view: 'bg-blue-500/15 text-blue-500',
   selected: 'bg-emerald-500/15 text-emerald-500',
   info: 'bg-blue-500/15 text-blue-500',
+  // Chinese locale variants
+  '启用': 'bg-emerald-500/20 text-emerald-400',
+  '禁用': 'bg-red-500/20 text-red-400',
+  enabled: 'bg-emerald-500/20 text-emerald-400',
+  disabled: 'bg-red-500/20 text-red-400',
 };
 
 function renderTableCell(value: unknown, render?: string): React.ReactNode {

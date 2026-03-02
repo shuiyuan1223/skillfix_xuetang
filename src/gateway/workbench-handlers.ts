@@ -1,5 +1,5 @@
 /**
- * Workbench Action Handlers — 15 actions for the Skill Debug Workbench
+ * Workbench Action Handlers — actions for the Skill Debug Workbench
  */
 
 import { createLogger } from '../utils/logger.js';
@@ -36,6 +36,11 @@ export const WORKBENCH_ACTIONS = new Set([
   'debug_userdata_change',
   'debug_clear_data',
   'debug_run_interpret',
+  'debug_copy_messages',
+  'debug_enable_all_skills',
+  'debug_disable_all_skills',
+  'debug_toggle_skills_list',
+  'debug_toggle_prompts_list',
 ]);
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -48,6 +53,16 @@ function rerender(session: GatewaySession, send: SendFn): void {
   const state = session.workbenchState;
   if (!state) return;
   sendAll(send, session.buildPage('workbench', generateWorkbenchPage(state)));
+}
+
+/**
+ * Push a re-render via the live SSE connection (bypassing HTTP collector).
+ */
+function rerenderViaSSE(session: GatewaySession): void {
+  const sseSend = session.getActiveSend();
+  if (sseSend) {
+    rerender(session, sseSend);
+  }
 }
 
 // ── Dispatcher ────────────────────────────────────────────────
@@ -101,9 +116,25 @@ export async function handleWorkbenchAction(
     case 'debug_clear_data':
       handleClearData(state);
       break;
+    case 'debug_enable_all_skills':
+      for (const s of state.skills) s.enabled = true;
+      break;
+    case 'debug_disable_all_skills':
+      for (const s of state.skills) s.enabled = false;
+      break;
+    case 'debug_toggle_skills_list':
+      state.skillsListExpanded = !state.skillsListExpanded;
+      break;
+    case 'debug_toggle_prompts_list':
+      state.promptsListExpanded = !state.promptsListExpanded;
+      break;
     case 'debug_run_interpret':
-      // Async — re-render happens inside
-      await handleRunInterpret(session, send);
+      // Fire-and-forget: run in background so action lock is released
+      // immediately and other actions (skill switching) remain responsive.
+      runInterpretInBackground(session, send);
+      break;
+    case 'debug_copy_messages':
+      // Handled client-side in App.tsx — no server action needed
       return;
     default:
       log.warn('Unknown workbench action', { action });
@@ -126,15 +157,13 @@ function handleSelectSkill(state: WorkbenchState, payload: Payload): void {
   const id = extractRowId(payload);
   if (!id) return;
   state.selectedSkillId = id;
-  // Lazy-load content if not already edited
   const skill = state.skills.find((s) => s.id === id);
-  if (skill && !skill.editedContent) {
+  if (skill && !skill.dirty) {
     skill.editedContent = readWorkbenchSkillContent(id);
   }
 }
 
 function handleToggleSkill(state: WorkbenchState, payload: Payload): void {
-  // Column action sends { row: { id, ... }, value }
   const id = extractRowId(payload);
   if (!id) return;
   const skill = state.skills.find((s) => s.id === id);
@@ -174,13 +203,12 @@ function handleSelectPrompt(state: WorkbenchState, payload: Payload): void {
   if (!id) return;
   state.selectedPromptId = id;
   const prompt = state.prompts.find((p) => p.id === id);
-  if (prompt && !prompt.editedContent) {
+  if (prompt && !prompt.dirty) {
     prompt.editedContent = readWorkbenchPromptContent(id);
   }
 }
 
 function handleActivatePrompt(state: WorkbenchState, payload: Payload): void {
-  // Column action sends { row: { id, ... }, value }
   const id = extractRowId(payload);
   if (id) {
     state.activePromptId = id;
@@ -223,32 +251,53 @@ function handleClearData(state: WorkbenchState): void {
   state.testData = '';
 }
 
-// ── Run Interpretation ────────────────────────────────────────
+// ── Run Interpretation (background) ──────────────────────────
 
-async function handleRunInterpret(session: GatewaySession, send: SendFn): Promise<void> {
+/** Extract text content from pi-agent message content blocks */
+function extractTextFromContent(content: unknown[]): string {
+  return content
+    .map((block) => {
+      if (typeof block === 'string') return block;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const b = block as any;
+      if (b?.type === 'text') return b.text as string;
+      return '';
+    })
+    .join('');
+}
+
+/**
+ * Launch interpretation in the background so the action lock is released
+ * immediately. All UI updates are pushed via SSE.
+ */
+function runInterpretInBackground(session: GatewaySession, _send: SendFn): void {
   const state = session.workbenchState;
   if (!state) return;
+  if (state.runStatus === 'running') return; // already running
 
-  // Move current → previous
-  if (state.currentResult) {
-    state.previousResult = state.currentResult;
-    state.currentResult = null;
-  }
-
+  // Clear previous result
+  state.currentResult = null;
   state.runStatus = 'running';
   state.errorMessage = undefined;
-  rerender(session, send);
+
+  // Fire-and-forget — errors are caught inside
+  void doRunInterpret(session).catch((err) => {
+    log.error('Workbench background interpret failed', { error: err });
+  });
+}
+
+async function doRunInterpret(session: GatewaySession): Promise<void> {
+  const state = session.workbenchState;
+  if (!state) return;
 
   const startTime = Date.now();
 
   try {
-    // Build the composite prompt
     const promptContent = state.activePromptId
       ? (state.prompts.find((p) => p.id === state.activePromptId)?.editedContent ??
         readWorkbenchPromptContent(state.activePromptId))
       : '';
 
-    // Collect enabled skill guides
     const skillGuides = state.skills
       .filter((s) => s.enabled)
       .map((s) => {
@@ -271,11 +320,10 @@ async function handleRunInterpret(session: GatewaySession, send: SendFn): Promis
     if (!state.testData?.trim() && !promptContent?.trim()) {
       state.runStatus = 'error';
       state.errorMessage = 'No prompt or test data provided';
-      rerender(session, send);
+      rerenderViaSSE(session);
       return;
     }
 
-    // Create isolated agent (same pattern as Slack webhook judge)
     const { createPHAAgent, resolveAgentProfileModel } = await import('../agent/pha-agent.js');
     const { MockDataSource } = await import('../data-sources/mock.js');
     const model = resolveAgentProfileModel('pha');
@@ -289,14 +337,48 @@ async function handleRunInterpret(session: GatewaySession, send: SendFn): Promis
       dataSource: new MockDataSource(),
     });
 
-    const resultText = await agent.chatAndWait(finalMessage);
-    const durationMs = Date.now() - startTime;
+    let accumulatedText = '';
+    let lastRenderTime = 0;
+    const RENDER_INTERVAL_MS = 500;
 
     state.currentResult = {
-      text: resultText,
+      text: '',
       timestamp: Date.now(),
-      durationMs,
+      messages: finalMessage,
     };
+
+    const unsubscribe = agent.subscribe((event) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ev = event as any;
+      if (ev.type === 'message_start' || ev.type === 'message_update') {
+        if (ev.message?.role === 'assistant' && ev.message?.content) {
+          accumulatedText = extractTextFromContent(ev.message.content as unknown[]);
+          if (state.currentResult) {
+            state.currentResult.text = accumulatedText;
+          }
+
+          const now = Date.now();
+          if (now - lastRenderTime >= RENDER_INTERVAL_MS) {
+            lastRenderTime = now;
+            rerenderViaSSE(session);
+          }
+        }
+      }
+    });
+
+    try {
+      await agent.chat(finalMessage);
+      await agent.getAgent().waitForIdle();
+    } finally {
+      unsubscribe();
+    }
+
+    const durationMs = Date.now() - startTime;
+
+    if (state.currentResult) {
+      state.currentResult.text = accumulatedText;
+      state.currentResult.durationMs = durationMs;
+    }
     state.runStatus = 'done';
   } catch (err) {
     log.error('Workbench interpretation failed', { error: err });
@@ -304,5 +386,5 @@ async function handleRunInterpret(session: GatewaySession, send: SendFn): Promis
     state.errorMessage = err instanceof Error ? err.message : String(err);
   }
 
-  rerender(session, send);
+  rerenderViaSSE(session);
 }

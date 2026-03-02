@@ -825,6 +825,13 @@ export const en: LocaleMessages = {
     reverted: 'Reverted',
     modified: 'Modified',
     unsaved: 'Unsaved',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+    copyMessages: 'Copy Messages',
+    enableAll: 'Enable All',
+    disableAll: 'Disable All',
+    expand: 'Expand List',
+    collapse: 'Collapse List',
   },
 
   auth: {

@@ -264,6 +264,7 @@
     background: rgba(var(--color-text-muted), 0.5);
   }
 
+
   /* ========== Arena Dashboard ========== */
   .arena-toggle {
     display: flex;
@@ -729,6 +730,29 @@
     border-color: rgb(var(--color-primary) / 0.3);
     color: rgb(var(--color-text-secondary));
   }
+}
+
+/* ========== Scrollbar: always-visible variant ========== */
+.scrollbar-visible {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.scrollbar-visible::-webkit-scrollbar {
+  width: 8px;
+  -webkit-appearance: none;
+  display: block;
+}
+.scrollbar-visible::-webkit-scrollbar-track {
+  background: rgba(128, 128, 128, 0.12);
+  border-radius: 4px;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.4);
+  border-radius: 4px;
+  min-height: 30px;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.6);
 }
 
 /* ========== Grid Shell Layout (OpenClaw-inspired) ========== */

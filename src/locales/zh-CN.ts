@@ -820,6 +820,13 @@ export const zhCN: LocaleMessages = {
     reverted: '已回退',
     modified: '已修改',
     unsaved: '未保存',
+    enabled: '启用',
+    disabled: '禁用',
+    copyMessages: '复制 Messages',
+    enableAll: '全部启用',
+    disableAll: '全部禁用',
+    expand: '展开列表',
+    collapse: '折叠列表',
   },
 
   auth: {

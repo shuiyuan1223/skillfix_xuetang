@@ -512,6 +512,22 @@ export function App() {
         return;
       }
 
+      // Handle workbench copy messages locally on the frontend
+      if (action === 'debug_copy_messages') {
+        const text = (payload?.text as string) || '';
+        if (text) {
+          navigator.clipboard
+            .writeText(text)
+            .then(() => {
+              sendActionRaw('show_toast', { message: 'Messages copied!', variant: 'success' });
+            })
+            .catch(() => {
+              sendActionRaw('show_toast', { message: 'Copy failed', variant: 'error' });
+            });
+        }
+        return;
+      }
+
       // Handle copy/download config locally on the frontend
       if (action === 'settings_copy_config' || action === 'settings_download_config') {
         // Find the code_editor component in current main data to get raw config

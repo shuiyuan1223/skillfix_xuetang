@@ -853,6 +853,13 @@ export interface LocaleMessages {
     reverted: string;
     modified: string;
     unsaved: string;
+    enabled: string;
+    disabled: string;
+    copyMessages: string;
+    enableAll: string;
+    disableAll: string;
+    expand: string;
+    collapse: string;
   };
 
   // OAuth / Authorization

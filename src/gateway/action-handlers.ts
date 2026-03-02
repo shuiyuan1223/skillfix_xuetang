@@ -1067,8 +1067,11 @@ const handleTabChange: ActionHandler = async (session, _action, payload, send) =
   } else if (view === 'workbench') {
     if (session.workbenchState) {
       session.workbenchState.activeTab = tab === 'prompts' ? 'prompts' : 'skills';
+      // Re-render in place — don't re-navigate (which would re-initialize state)
+      const { generateWorkbenchPage } = await import('./workbench-page.js');
+      const page = session.buildPage('workbench', generateWorkbenchPage(session.workbenchState));
+      for (const msg of page) send(msg);
     }
-    await session.handleNavigate('workbench', send);
   } else {
     type EvolutionTab =
       | 'overview'

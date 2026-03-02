@@ -3,7 +3,7 @@
  *
  * Col 1: Test data input
  * Col 2: Skills/Prompts editor (tabs)
- * Col 3: Results (previous vs current)
+ * Col 3: Results + status bar
  */
 
 import { A2UIGenerator, type A2UIMessage } from './a2ui.js';
@@ -25,16 +25,13 @@ export function generateWorkbenchPage(state: WorkbenchState): A2UIMessage[] {
   // ── Column 2: Skills/Prompts Editor ─────────────────────────
   const col2 = buildEditorColumn(ui, state);
 
-  // ── Column 3: Results ───────────────────────────────────────
+  // ── Column 3: Results + Status Bar ────────────────────────────
   const col3 = buildResultsColumn(ui, state);
 
   // ── Three-column grid ───────────────────────────────────────
   const grid = ui.grid([col1, col2, col3], { columns: '320px 1fr 1fr', gap: 16 });
 
-  // ── Status bar ──────────────────────────────────────────────
-  const statusBar = buildStatusBar(ui, state);
-
-  const root = ui.column([header, grid, statusBar], { gap: 16, padding: 24 });
+  const root = ui.column([header, grid], { gap: 16, padding: 24 });
   return ui.build(root);
 }
 
@@ -80,14 +77,30 @@ function buildEditorColumn(ui: A2UIGenerator, state: WorkbenchState): string {
 }
 
 function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
-  // Skill list — status column is clickable to toggle enable/disable
   const rows = state.skills.map((s) => ({
     id: s.id,
     name: s.name,
     description: s.description || '-',
-    status: s.enabled ? 'success' : 'error',
+    status: s.enabled ? t('workbench.enabled') : t('workbench.disabled'),
     modified: s.dirty ? t('workbench.modified') : '',
   }));
+
+  const enableAllBtn = ui.button(t('workbench.enableAll'), 'debug_enable_all_skills', {
+    variant: 'ghost',
+    size: 'sm',
+    icon: 'check',
+  });
+  const disableAllBtn = ui.button(t('workbench.disableAll'), 'debug_disable_all_skills', {
+    variant: 'ghost',
+    size: 'sm',
+    icon: 'x',
+  });
+  const toggleListBtn = ui.button(
+    state.skillsListExpanded ? t('workbench.collapse') : t('workbench.expand'),
+    'debug_toggle_skills_list',
+    { variant: 'ghost', size: 'sm', icon: state.skillsListExpanded ? 'chevron-right' : 'chevron-right' }
+  );
+  const batchRow = ui.row([enableAllBtn, disableAllBtn, toggleListBtn], { gap: 8, justify: 'end' });
 
   const table = ui.dataTable(
     [
@@ -100,7 +113,12 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     { onRowClick: 'debug_select_skill' }
   );
 
-  const parts: string[] = [table];
+  // Wrap table in a collapsible container
+  const tableContainer = state.skillsListExpanded
+    ? ui.column([table], { gap: 0 })
+    : ui.column([table], { gap: 0, style: 'max-height: 300px; overflow-y: scroll;', className: 'scrollbar-visible' });
+
+  const parts: string[] = [batchRow, tableContainer];
 
   if (state.selectedSkillId) {
     const skill = state.skills.find((s) => s.id === state.selectedSkillId);
@@ -109,15 +127,16 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     const skillLabel = ui.text(`${state.selectedSkillId} / SKILL.md`, 'h4');
     parts.push(skillLabel);
 
-    const editor = ui.codeEditor(content, {
+    const editorId = `wb_skill_editor_${state.selectedSkillId}`;
+    ui.addRaw(editorId, 'CodeEditor', {
+      value: content,
       language: 'markdown',
       onChange: 'debug_skill_change',
       lineNumbers: true,
       height: 400,
     });
-    parts.push(editor);
+    parts.push(editorId);
 
-    // Save / Revert buttons
     const saveBtn = ui.button(t('common.save'), 'debug_save_skill', {
       variant: 'primary',
       size: 'sm',
@@ -141,13 +160,19 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
 }
 
 function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
-  // Prompt list — active column is clickable to set active prompt (radio-like)
   const rows = state.prompts.map((p) => ({
     id: p.id,
     name: p.name,
     active: p.id === state.activePromptId ? 'selected' : 'view',
     modified: p.dirty ? t('workbench.modified') : '',
   }));
+
+  const toggleListBtn = ui.button(
+    state.promptsListExpanded ? t('workbench.collapse') : t('workbench.expand'),
+    'debug_toggle_prompts_list',
+    { variant: 'ghost', size: 'sm', icon: state.promptsListExpanded ? 'chevron-right' : 'chevron-right' }
+  );
+  const toolbarRow = ui.row([toggleListBtn], { gap: 8, justify: 'end' });
 
   const table = ui.dataTable(
     [
@@ -159,7 +184,12 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     { onRowClick: 'debug_select_prompt' }
   );
 
-  const parts: string[] = [table];
+  // Wrap table in a collapsible container
+  const tableContainer = state.promptsListExpanded
+    ? ui.column([table], { gap: 0 })
+    : ui.column([table], { gap: 0, style: 'max-height: 300px; overflow-y: scroll;', className: 'scrollbar-visible' });
+
+  const parts: string[] = [toolbarRow, tableContainer];
 
   if (state.selectedPromptId) {
     const prompt = state.prompts.find((p) => p.id === state.selectedPromptId);
@@ -168,13 +198,16 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     parts.push(promptLabel);
 
     const content = prompt?.editedContent ?? readWorkbenchPromptContent(state.selectedPromptId);
-    const editor = ui.codeEditor(content, {
+
+    const editorId = `wb_prompt_editor_${state.selectedPromptId}`;
+    ui.addRaw(editorId, 'CodeEditor', {
+      value: content,
       language: 'markdown',
       onChange: 'debug_prompt_change',
       lineNumbers: true,
       height: 400,
     });
-    parts.push(editor);
+    parts.push(editorId);
 
     const saveBtn = ui.button(t('common.save'), 'debug_save_prompt', {
       variant: 'primary',
@@ -207,45 +240,44 @@ function buildResultsColumn(ui: A2UIGenerator, state: WorkbenchState): string {
     disabled: state.runStatus === 'running',
   });
 
-  const parts: string[] = [runBtn];
+  // Copy messages button (when result with messages exists)
+  const actionBtns: string[] = [runBtn];
+  if (state.currentResult?.messages) {
+    const copyBtn = ui.button(t('workbench.copyMessages'), 'debug_copy_messages', {
+      variant: 'secondary',
+      size: 'sm',
+      icon: 'link',
+      payload: { text: state.currentResult.messages },
+    });
+    actionBtns.push(copyBtn);
+  }
+  const actionRow = ui.row(actionBtns, { gap: 8, align: 'center' });
+
+  const parts: string[] = [actionRow];
 
   if (state.runStatus === 'running') {
     const spinner = ui.badge(t('workbench.running'), { variant: 'warning', icon: 'loader' });
     parts.push(spinner);
   }
 
-  if (state.previousResult && state.currentResult) {
-    // Side-by-side comparison
-    const prevLabel = ui.text(t('workbench.previousResult'), 'h4', { muted: true });
-    const prevContent = ui.codeEditor(state.previousResult.text, {
-      language: 'markdown',
-      readOnly: true,
-      minHeight: 200,
-    });
-    const prevCol = ui.column([prevLabel, prevContent], { gap: 4 });
-
+  if (state.currentResult?.text) {
     const currLabel = ui.text(t('workbench.currentResult'), 'h4');
-    const currContent = ui.codeEditor(state.currentResult.text, {
+    const currId = 'wb_result_curr';
+    ui.addRaw(currId, 'CodeEditor', {
+      value: state.currentResult.text,
       language: 'markdown',
-      readOnly: true,
-      minHeight: 200,
+      readonly: true,
+      height: 400,
     });
-    const currCol = ui.column([currLabel, currContent], { gap: 4 });
-
-    const comparison = ui.grid([prevCol, currCol], { columns: '1fr 1fr', gap: 12 });
-    parts.push(comparison);
-  } else if (state.currentResult) {
-    const currLabel = ui.text(t('workbench.currentResult'), 'h4');
-    const currContent = ui.codeEditor(state.currentResult.text, {
-      language: 'markdown',
-      readOnly: true,
-      minHeight: 300,
-    });
-    parts.push(currLabel, currContent);
-  } else {
+    parts.push(currLabel, currId);
+  } else if (state.runStatus !== 'running') {
     const hint = ui.text(t('workbench.noResult'), 'caption', { muted: true });
     parts.push(hint);
   }
+
+  // ── Status bar (inside results column) ────────────────────────
+  const statusBar = buildStatusBar(ui, state);
+  parts.push(statusBar);
 
   return ui.column(parts, { gap: 12 });
 }

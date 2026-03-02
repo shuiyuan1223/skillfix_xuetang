@@ -31,6 +31,8 @@ export interface WorkbenchResult {
   timestamp: number;
   tokens?: number;
   durationMs?: number;
+  /** Full composite prompt sent to LLM (for copy-to-clipboard) */
+  messages?: string;
 }
 
 export interface WorkbenchState {
@@ -42,9 +44,10 @@ export interface WorkbenchState {
   activePromptId: string | null;
   testData: string;
   currentResult: WorkbenchResult | null;
-  previousResult: WorkbenchResult | null;
   runStatus: 'ready' | 'running' | 'done' | 'error';
   errorMessage?: string;
+  skillsListExpanded?: boolean;
+  promptsListExpanded?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -172,7 +175,6 @@ export async function initializeWorkbench(): Promise<WorkbenchState> {
     activePromptId: prompts.length > 0 ? prompts[0].id : null,
     testData: '',
     currentResult: null,
-    previousResult: null,
     runStatus: 'ready',
   };
 }
