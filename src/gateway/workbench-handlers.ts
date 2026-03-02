@@ -277,9 +277,9 @@ function handleGetExportData(state: WorkbenchState, send: SendFn): void {
     content: p.editedContent ?? readWorkbenchPromptContent(p.id),
   }));
 
-  // Send data response
+  // Send data response (will be collected by HTTP collector)
   send({
-    type: 'data',
+    type: 'workbench_export_data',
     data: { skills, prompts },
   });
 }

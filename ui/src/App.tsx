@@ -520,7 +520,15 @@ export function App() {
       }
 
       const result = await response.json();
-      const { skills, prompts } = result.data || {};
+
+      // The response is { updates: [...] }, find the workbench_export_data message
+      const dataMessage = result.updates?.find((msg: any) => msg.type === 'workbench_export_data');
+
+      if (!dataMessage || !dataMessage.data) {
+        throw new Error('No data returned from server');
+      }
+
+      const { skills, prompts } = dataMessage.data;
 
       if (!skills || !prompts || (skills.length === 0 && prompts.length === 0)) {
         sendActionRaw('show_toast', {
