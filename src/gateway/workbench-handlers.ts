@@ -75,6 +75,12 @@ export async function handleWorkbenchAction(
   payload: Payload,
   send: SendFn
 ): Promise<void> {
+  // Auto-initialize workbench state if not present
+  if (!session.workbenchState) {
+    const { initializeWorkbench } = await import('./workbench-init.js');
+    session.workbenchState = await initializeWorkbench();
+  }
+
   const state = session.workbenchState;
   if (!state) {
     log.warn('Workbench action without state', { action });
