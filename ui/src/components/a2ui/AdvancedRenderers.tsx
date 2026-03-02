@@ -161,47 +161,20 @@ function relativeTimeStr(ts: number | string): string {
 }
 
 // ---- Code Editor ----
-export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
+// CodeEditor component wrapper for hooks
+function CodeEditorComponent({
+  c,
+  ctx,
+  lineNumbersEl,
+  syncScroll
+}: {
+  c: A2UIComponent;
+  ctx: RenderContext;
+  lineNumbersEl: React.ReactNode;
+  syncScroll?: (e: React.UIEvent) => void;
+}) {
   const value = prop(c, 'value') as string;
-  const readonly = prop(c, 'readonly') as boolean;
   const height = prop(c, 'height') || 400;
-  const lineNumbers = prop(c, 'lineNumbers') !== false;
-  const lines = value.split('\n');
-
-  let highlightedHtml = '';
-  if (readonly) {
-    // Simple HTML escaping fallback (hljs can be added later)
-    highlightedHtml = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  const lineNumbersEl = lineNumbers ? (
-    <div className="code-line-numbers" id={`code-ln-${c.id || 'default'}`}>
-      {lines.map((_, i) => (
-        <div key={i}>{i + 1}</div>
-      ))}
-    </div>
-  ) : null;
-
-  const syncScroll = lineNumbers
-    ? (e: React.UIEvent) => {
-        const el = e.currentTarget as HTMLElement;
-        const ln = el.closest('.code-editor-container')?.querySelector('.code-line-numbers') as HTMLElement | null;
-        if (ln) {
-          ln.scrollTop = el.scrollTop;
-        }
-      }
-    : undefined;
-
-  if (readonly) {
-    return (
-      <div className="code-editor-container" style={{ height: typeof height === 'number' ? height + 'px' : height }}>
-        {lineNumbersEl}
-        <pre className="code-highlight" onScroll={syncScroll}>
-          <code className="hljs" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
-        </pre>
-      </div>
-    );
-  }
 
   // Track IME composition state and local value during composition
   const [isComposing, setIsComposing] = React.useState(false);
@@ -250,6 +223,51 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
       />
     </div>
   );
+}
+
+export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
+  const value = prop(c, 'value') as string;
+  const readonly = prop(c, 'readonly') as boolean;
+  const height = prop(c, 'height') || 400;
+  const lineNumbers = prop(c, 'lineNumbers') !== false;
+  const lines = value.split('\n');
+
+  let highlightedHtml = '';
+  if (readonly) {
+    // Simple HTML escaping fallback (hljs can be added later)
+    highlightedHtml = value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  const lineNumbersEl = lineNumbers ? (
+    <div className="code-line-numbers" id={`code-ln-${c.id || 'default'}`}>
+      {lines.map((_, i) => (
+        <div key={i}>{i + 1}</div>
+      ))}
+    </div>
+  ) : null;
+
+  const syncScroll = lineNumbers
+    ? (e: React.UIEvent) => {
+        const el = e.currentTarget as HTMLElement;
+        const ln = el.closest('.code-editor-container')?.querySelector('.code-line-numbers') as HTMLElement | null;
+        if (ln) {
+          ln.scrollTop = el.scrollTop;
+        }
+      }
+    : undefined;
+
+  if (readonly) {
+    return (
+      <div className="code-editor-container" style={{ height: typeof height === 'number' ? height + 'px' : height }}>
+        {lineNumbersEl}
+        <pre className="code-highlight" onScroll={syncScroll}>
+          <code className="hljs" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+        </pre>
+      </div>
+    );
+  }
+
+  return <CodeEditorComponent c={c} ctx={ctx} lineNumbersEl={lineNumbersEl} syncScroll={syncScroll} />;
 }
 
 // ---- Commit List ----
