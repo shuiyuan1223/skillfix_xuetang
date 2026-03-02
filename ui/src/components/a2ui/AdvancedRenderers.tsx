@@ -203,6 +203,9 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
     );
   }
 
+  // Track IME composition state
+  const [isComposing, setIsComposing] = React.useState(false);
+
   return (
     <div className="code-editor-container" style={{ height: typeof height === 'number' ? height + 'px' : height }}>
       {lineNumbersEl}
@@ -210,11 +213,23 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
         key={c.id}
         className="code-textarea"
         spellCheck={false}
-        value={value}
-        onChange={(e) => {
+        defaultValue={value}
+        onCompositionStart={() => setIsComposing(true)}
+        onCompositionEnd={(e) => {
+          setIsComposing(false);
+          // Send action after composition ends
           const onChange = prop(c, 'onChange');
           if (onChange) {
-            ctx.sendAction(onChange as string, { value: e.target.value });
+            ctx.sendAction(onChange as string, { value: (e.target as HTMLTextAreaElement).value });
+          }
+        }}
+        onChange={(e) => {
+          // Only send action if not composing (IME input)
+          if (!isComposing) {
+            const onChange = prop(c, 'onChange');
+            if (onChange) {
+              ctx.sendAction(onChange as string, { value: e.target.value });
+            }
           }
         }}
         onScroll={syncScroll}
