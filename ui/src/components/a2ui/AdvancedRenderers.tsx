@@ -203,8 +203,16 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
     );
   }
 
-  // Track IME composition state
+  // Track IME composition state and local value during composition
   const [isComposing, setIsComposing] = React.useState(false);
+  const [localValue, setLocalValue] = React.useState(value);
+
+  // Sync local value when prop value changes (e.g., clear, revert, switch skill)
+  React.useEffect(() => {
+    if (!isComposing) {
+      setLocalValue(value);
+    }
+  }, [value, isComposing]);
 
   return (
     <div className="code-editor-container" style={{ height: typeof height === 'number' ? height + 'px' : height }}>
@@ -213,22 +221,28 @@ export function renderCodeEditor(c: A2UIComponent, ctx: RenderContext) {
         key={c.id}
         className="code-textarea"
         spellCheck={false}
-        defaultValue={value}
-        onCompositionStart={() => setIsComposing(true)}
+        value={localValue}
+        onCompositionStart={() => {
+          setIsComposing(true);
+        }}
         onCompositionEnd={(e) => {
           setIsComposing(false);
+          const newValue = (e.target as HTMLTextAreaElement).value;
+          setLocalValue(newValue);
           // Send action after composition ends
           const onChange = prop(c, 'onChange');
           if (onChange) {
-            ctx.sendAction(onChange as string, { value: (e.target as HTMLTextAreaElement).value });
+            ctx.sendAction(onChange as string, { value: newValue });
           }
         }}
         onChange={(e) => {
+          const newValue = e.target.value;
+          setLocalValue(newValue);
           // Only send action if not composing (IME input)
           if (!isComposing) {
             const onChange = prop(c, 'onChange');
             if (onChange) {
-              ctx.sendAction(onChange as string, { value: e.target.value });
+              ctx.sendAction(onChange as string, { value: newValue });
             }
           }
         }}
