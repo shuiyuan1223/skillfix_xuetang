@@ -43,6 +43,10 @@ export const WORKBENCH_ACTIONS = new Set([
   'debug_disable_all_skills',
   'debug_toggle_skills_list',
   'debug_toggle_prompts_list',
+  'debug_toggle_skill_preview',
+  'debug_toggle_prompt_preview',
+  'debug_toggle_testdata_preview',
+  'debug_toggle_result_view',
   'debug_export_zip',
   'workbench_get_export_data',
 ]);
@@ -144,6 +148,18 @@ export async function handleWorkbenchAction(
     case 'debug_toggle_prompts_list':
       state.promptsListExpanded = !state.promptsListExpanded;
       break;
+    case 'debug_toggle_skill_preview':
+      state.skillPreviewMode = !state.skillPreviewMode;
+      break;
+    case 'debug_toggle_prompt_preview':
+      state.promptPreviewMode = !state.promptPreviewMode;
+      break;
+    case 'debug_toggle_testdata_preview':
+      state.testDataPreviewMode = !state.testDataPreviewMode;
+      break;
+    case 'debug_toggle_result_view':
+      state.resultViewMode = state.resultViewMode === 'source' ? 'rendered' : 'source';
+      break;
     case 'debug_run_interpret':
       // Fire-and-forget: run in background so action lock is released
       // immediately and other actions (skill switching) remain responsive.
@@ -180,6 +196,7 @@ function handleSelectSkill(state: WorkbenchState, payload: Payload): void {
   const id = extractRowId(payload);
   if (!id) return;
   state.selectedSkillId = id;
+  state.skillPreviewMode = false;
   const skill = state.skills.find((s) => s.id === id);
   if (skill && !skill.dirty) {
     skill.editedContent = readWorkbenchSkillContent(id);
@@ -226,6 +243,7 @@ function handleSelectPrompt(state: WorkbenchState, payload: Payload): void {
   const id = extractRowId(payload);
   if (!id) return;
   state.selectedPromptId = id;
+  state.promptPreviewMode = false;
   const prompt = state.prompts.find((p) => p.id === id);
   if (prompt && !prompt.dirty) {
     prompt.editedContent = readWorkbenchPromptContent(id);

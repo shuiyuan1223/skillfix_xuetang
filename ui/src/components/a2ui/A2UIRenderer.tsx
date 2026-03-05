@@ -518,12 +518,20 @@ export function A2UIRenderer({
       label: 'text-xs font-medium uppercase tracking-widest text-text-muted',
     };
     const variantClass = textVariants[variant] || textVariants.body;
+    const isMarkdown = prop(c, 'markdown') as boolean;
+    if (isMarkdown) {
+      return (
+        <div className={`text-sm ${className}`} style={parseStyle(extraStyle)}>
+          <Markdown>{text}</Markdown>
+        </div>
+      );
+    }
     return (
       <span
         className={`${variantClass} ${className}`}
         style={parseStyle(`color: ${color}; font-weight: ${weight}; ${extraStyle}`)}
       >
-        {prop(c, 'markdown') ? <Markdown>{text}</Markdown> : text}
+        {text}
       </span>
     );
   }

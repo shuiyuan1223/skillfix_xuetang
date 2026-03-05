@@ -48,6 +48,10 @@ export interface WorkbenchState {
   errorMessage?: string;
   skillsListExpanded?: boolean;
   promptsListExpanded?: boolean;
+  skillPreviewMode?: boolean;
+  promptPreviewMode?: boolean;
+  testDataPreviewMode?: boolean;
+  resultViewMode?: 'rendered' | 'source';
 }
 
 // ── Helpers ────────────────────────────────────────────────────

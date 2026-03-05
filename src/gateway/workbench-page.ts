@@ -51,7 +51,33 @@ function buildTestDataColumn(ui: A2UIGenerator, state: WorkbenchState): string {
   const charCount = ui.badge(`${state.testData.length} ${t('workbench.chars')}`, { variant: 'info' });
   const labelRow = ui.row([label, charCount], { gap: 8, justify: 'space-between', align: 'center' });
 
-  // Use addRaw with stable ID to ensure React updates the editor value
+  const editBtn = ui.button('编辑', 'debug_toggle_testdata_preview', {
+    variant: state.testDataPreviewMode ? 'ghost' : 'secondary',
+    size: 'sm',
+  });
+  const previewBtn = ui.button('预览', 'debug_toggle_testdata_preview', {
+    variant: state.testDataPreviewMode ? 'secondary' : 'ghost',
+    size: 'sm',
+  });
+  const toggleRow = ui.row([editBtn, previewBtn], { gap: 4 });
+
+  const clearBtn = ui.button(t('workbench.clearData'), 'debug_clear_data', {
+    variant: 'ghost',
+    size: 'sm',
+    icon: 'x',
+  });
+
+  if (state.testDataPreviewMode) {
+    const previewId = 'wb_testdata_preview';
+    ui.addRaw(previewId, 'Text', {
+      text: state.testData,
+      markdown: true,
+      style:
+        'min-height:300px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+    });
+    return ui.column([labelRow, toggleRow, previewId, clearBtn], { gap: 8 });
+  }
+
   const editorId = 'wb_testdata_editor';
   ui.addRaw(editorId, 'CodeEditor', {
     value: state.testData,
@@ -61,13 +87,7 @@ function buildTestDataColumn(ui: A2UIGenerator, state: WorkbenchState): string {
     minHeight: 300,
   });
 
-  const clearBtn = ui.button(t('workbench.clearData'), 'debug_clear_data', {
-    variant: 'ghost',
-    size: 'sm',
-    icon: 'x',
-  });
-
-  return ui.column([labelRow, editorId, clearBtn], { gap: 8 });
+  return ui.column([labelRow, toggleRow, editorId, clearBtn], { gap: 8 });
 }
 
 // ── Column 2: Editor ────────────────────────────────────────────
@@ -138,32 +158,51 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     const content = skill?.editedContent ?? readWorkbenchSkillContent(state.selectedSkillId);
 
     const skillLabel = ui.text(`${state.selectedSkillId} / SKILL.md`, 'h4');
-    parts.push(skillLabel);
 
-    const editorId = `wb_skill_editor_${state.selectedSkillId}`;
-    ui.addRaw(editorId, 'CodeEditor', {
-      value: content,
-      language: 'markdown',
-      onChange: 'debug_skill_change',
-      lineNumbers: true,
-      height: 400,
+    const editBtn = ui.button('编辑', 'debug_toggle_skill_preview', {
+      variant: state.skillPreviewMode ? 'ghost' : 'secondary',
+      size: 'sm',
     });
-    parts.push(editorId);
+    const previewBtn = ui.button('预览', 'debug_toggle_skill_preview', {
+      variant: state.skillPreviewMode ? 'secondary' : 'ghost',
+      size: 'sm',
+    });
+    const toggleRow = ui.row([editBtn, previewBtn], { gap: 4 });
 
-    const saveBtn = ui.button(t('common.save'), 'debug_save_skill', {
-      variant: 'primary',
-      size: 'sm',
-      icon: 'save',
-      disabled: !skill?.dirty,
-    });
-    const revertBtn = ui.button(t('common.revert'), 'debug_revert_skill', {
-      variant: 'ghost',
-      size: 'sm',
-      icon: 'refresh-cw',
-      disabled: !skill?.dirty,
-    });
-    const btnRow = ui.row([saveBtn, revertBtn], { gap: 8, justify: 'end' });
-    parts.push(btnRow);
+    if (state.skillPreviewMode) {
+      const previewId = `wb_skill_preview_${state.selectedSkillId}`;
+      ui.addRaw(previewId, 'Text', {
+        text: content,
+        markdown: true,
+        style:
+          'height:400px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+      });
+      parts.push(skillLabel, toggleRow, previewId);
+    } else {
+      const editorId = `wb_skill_editor_${state.selectedSkillId}`;
+      ui.addRaw(editorId, 'CodeEditor', {
+        value: content,
+        language: 'markdown',
+        onChange: 'debug_skill_change',
+        lineNumbers: true,
+        height: 400,
+      });
+
+      const saveBtn = ui.button(t('common.save'), 'debug_save_skill', {
+        variant: 'primary',
+        size: 'sm',
+        icon: 'save',
+        disabled: !skill?.dirty,
+      });
+      const revertBtn = ui.button(t('common.revert'), 'debug_revert_skill', {
+        variant: 'ghost',
+        size: 'sm',
+        icon: 'refresh-cw',
+        disabled: !skill?.dirty,
+      });
+      const btnRow = ui.row([saveBtn, revertBtn], { gap: 8, justify: 'end' });
+      parts.push(skillLabel, toggleRow, editorId, btnRow);
+    }
   } else {
     const hint = ui.text(t('workbench.selectSkillHint'), 'caption', { muted: true });
     parts.push(hint);
@@ -218,36 +257,54 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
 
   if (state.selectedPromptId) {
     const prompt = state.prompts.find((p) => p.id === state.selectedPromptId);
-
-    const promptLabel = ui.text(`${state.selectedPromptId}.md`, 'h4');
-    parts.push(promptLabel);
-
     const content = prompt?.editedContent ?? readWorkbenchPromptContent(state.selectedPromptId);
 
-    const editorId = `wb_prompt_editor_${state.selectedPromptId}`;
-    ui.addRaw(editorId, 'CodeEditor', {
-      value: content,
-      language: 'markdown',
-      onChange: 'debug_prompt_change',
-      lineNumbers: true,
-      height: 400,
-    });
-    parts.push(editorId);
+    const promptLabel = ui.text(`${state.selectedPromptId}.md`, 'h4');
 
-    const saveBtn = ui.button(t('common.save'), 'debug_save_prompt', {
-      variant: 'primary',
+    const editBtn = ui.button('编辑', 'debug_toggle_prompt_preview', {
+      variant: state.promptPreviewMode ? 'ghost' : 'secondary',
       size: 'sm',
-      icon: 'save',
-      disabled: !prompt?.dirty,
     });
-    const revertBtn = ui.button(t('common.revert'), 'debug_revert_prompt', {
-      variant: 'ghost',
+    const previewBtn = ui.button('预览', 'debug_toggle_prompt_preview', {
+      variant: state.promptPreviewMode ? 'secondary' : 'ghost',
       size: 'sm',
-      icon: 'refresh-cw',
-      disabled: !prompt?.dirty,
     });
-    const btnRow = ui.row([saveBtn, revertBtn], { gap: 8, justify: 'end' });
-    parts.push(btnRow);
+    const toggleRow = ui.row([editBtn, previewBtn], { gap: 4 });
+
+    if (state.promptPreviewMode) {
+      const previewId = `wb_prompt_preview_${state.selectedPromptId}`;
+      ui.addRaw(previewId, 'Text', {
+        text: content,
+        markdown: true,
+        style:
+          'height:400px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+      });
+      parts.push(promptLabel, toggleRow, previewId);
+    } else {
+      const editorId = `wb_prompt_editor_${state.selectedPromptId}`;
+      ui.addRaw(editorId, 'CodeEditor', {
+        value: content,
+        language: 'markdown',
+        onChange: 'debug_prompt_change',
+        lineNumbers: true,
+        height: 400,
+      });
+
+      const saveBtn = ui.button(t('common.save'), 'debug_save_prompt', {
+        variant: 'primary',
+        size: 'sm',
+        icon: 'save',
+        disabled: !prompt?.dirty,
+      });
+      const revertBtn = ui.button(t('common.revert'), 'debug_revert_prompt', {
+        variant: 'ghost',
+        size: 'sm',
+        icon: 'refresh-cw',
+        disabled: !prompt?.dirty,
+      });
+      const btnRow = ui.row([saveBtn, revertBtn], { gap: 8, justify: 'end' });
+      parts.push(promptLabel, toggleRow, editorId, btnRow);
+    }
   } else {
     const hint = ui.text(t('workbench.selectPromptHint'), 'caption', { muted: true });
     parts.push(hint);
@@ -286,15 +343,41 @@ function buildResultsColumn(ui: A2UIGenerator, state: WorkbenchState): string {
   }
 
   if (state.currentResult?.text) {
-    const currLabel = ui.text(t('workbench.currentResult'), 'h4');
-    const currId = 'wb_result_curr';
-    ui.addRaw(currId, 'CodeEditor', {
-      value: state.currentResult.text,
-      language: 'markdown',
-      readonly: true,
-      height: 400,
+    const resultMode = state.resultViewMode ?? 'rendered';
+    const modeLabel = ui.text(t('workbench.currentResult'), 'h4');
+    const renderedBtn = ui.button('渲染', 'debug_toggle_result_view', {
+      variant: resultMode === 'rendered' ? 'secondary' : 'ghost',
+      size: 'sm',
     });
-    parts.push(currLabel, currId);
+    const sourceBtn = ui.button('源码', 'debug_toggle_result_view', {
+      variant: resultMode === 'source' ? 'secondary' : 'ghost',
+      size: 'sm',
+    });
+    const viewToggleRow = ui.row([modeLabel, renderedBtn, sourceBtn], {
+      gap: 8,
+      align: 'center',
+      justify: 'space-between',
+    });
+
+    if (resultMode === 'source') {
+      const currId = 'wb_result_curr';
+      ui.addRaw(currId, 'CodeEditor', {
+        value: state.currentResult.text,
+        language: 'markdown',
+        readonly: true,
+        height: 400,
+      });
+      parts.push(viewToggleRow, currId);
+    } else {
+      const renderedId = 'wb_result_rendered';
+      ui.addRaw(renderedId, 'Text', {
+        text: state.currentResult.text,
+        markdown: true,
+        style:
+          'height:400px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+      });
+      parts.push(viewToggleRow, renderedId);
+    }
   } else if (state.runStatus !== 'running') {
     const hint = ui.text(t('workbench.noResult'), 'caption', { muted: true });
     parts.push(hint);

@@ -40,11 +40,18 @@ export function Markdown({ children }: { children: string }): React.ReactElement
         },
         a: ({ href, children }) =>
           React.createElement('a', { href, target: '_blank', rel: 'noopener noreferrer' }, children),
-        h2: ({ children }) => React.createElement('h2', null, children),
-        h3: ({ children }) => React.createElement('h3', null, children),
-        h4: ({ children }) => React.createElement('h4', null, children),
-        strong: ({ children }) => React.createElement('strong', null, children),
-        em: ({ children }) => React.createElement('em', null, children),
+        h1: ({ children }) =>
+          React.createElement('h1', { className: 'text-2xl font-bold mt-5 mb-2 leading-tight' }, children),
+        h2: ({ children }) =>
+          React.createElement('h2', { className: 'text-xl font-semibold mt-4 mb-2 leading-tight' }, children),
+        h3: ({ children }) => React.createElement('h3', { className: 'text-base font-semibold mt-3 mb-1' }, children),
+        h4: ({ children }) => React.createElement('h4', { className: 'text-sm font-semibold mt-2 mb-1' }, children),
+        p: ({ children }) => React.createElement('p', { className: 'mb-2 leading-relaxed' }, children),
+        ul: ({ children }) => React.createElement('ul', { className: 'list-disc pl-5 mb-2 space-y-0.5' }, children),
+        ol: ({ children }) => React.createElement('ol', { className: 'list-decimal pl-5 mb-2 space-y-0.5' }, children),
+        li: ({ children }) => React.createElement('li', { className: 'text-sm' }, children),
+        strong: ({ children }) => React.createElement('strong', { className: 'font-semibold' }, children),
+        em: ({ children }) => React.createElement('em', { className: 'italic' }, children),
       },
     },
     children
