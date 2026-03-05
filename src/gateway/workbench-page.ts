@@ -8,7 +8,7 @@
 
 import { A2UIGenerator, type A2UIMessage } from './a2ui.js';
 import { t } from '../locales/index.js';
-import type { WorkbenchState } from './workbench-init.js';
+import type { WorkbenchState, WorkbenchResult } from './workbench-init.js';
 import { readWorkbenchSkillContent, readWorkbenchPromptContent } from './workbench-init.js';
 
 export function generateWorkbenchPage(state: WorkbenchState): A2UIMessage[] {
@@ -73,7 +73,7 @@ function buildTestDataColumn(ui: A2UIGenerator, state: WorkbenchState): string {
       text: state.testData,
       markdown: true,
       style:
-        'min-height:300px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+        'min-height:600px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
     });
     return ui.column([labelRow, toggleRow, previewId, clearBtn], { gap: 8 });
   }
@@ -84,7 +84,7 @@ function buildTestDataColumn(ui: A2UIGenerator, state: WorkbenchState): string {
     language: 'json',
     onChange: 'debug_userdata_change',
     placeholder: t('workbench.testDataPlaceholder'),
-    minHeight: 300,
+    height: 600,
   });
 
   return ui.column([labelRow, toggleRow, editorId, clearBtn], { gap: 8 });
@@ -149,7 +149,7 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
   // Wrap table in a collapsible container
   const tableContainer = state.skillsListExpanded
     ? ui.column([table], { gap: 0 })
-    : ui.column([table], { gap: 0, style: 'max-height: 300px; overflow-y: scroll;', className: 'scrollbar-visible' });
+    : ui.column([table], { gap: 0, style: 'max-height: 160px; overflow-y: scroll;', className: 'scrollbar-visible' });
 
   const parts: string[] = [batchRow, tableContainer];
 
@@ -175,7 +175,7 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
         text: content,
         markdown: true,
         style:
-          'height:400px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+          'height:500px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
       });
       parts.push(skillLabel, toggleRow, previewId);
     } else {
@@ -185,7 +185,7 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
         language: 'markdown',
         onChange: 'debug_skill_change',
         lineNumbers: true,
-        height: 400,
+        height: 500,
       });
 
       const saveBtn = ui.button(t('common.save'), 'debug_save_skill', {
@@ -251,7 +251,7 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
   // Wrap table in a collapsible container
   const tableContainer = state.promptsListExpanded
     ? ui.column([table], { gap: 0 })
-    : ui.column([table], { gap: 0, style: 'max-height: 300px; overflow-y: scroll;', className: 'scrollbar-visible' });
+    : ui.column([table], { gap: 0, style: 'max-height: 160px; overflow-y: scroll;', className: 'scrollbar-visible' });
 
   const parts: string[] = [batchRow, tableContainer];
 
@@ -277,7 +277,7 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
         text: content,
         markdown: true,
         style:
-          'height:400px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+          'height:500px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
       });
       parts.push(promptLabel, toggleRow, previewId);
     } else {
@@ -287,7 +287,7 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
         language: 'markdown',
         onChange: 'debug_prompt_change',
         lineNumbers: true,
-        height: 400,
+        height: 500,
       });
 
       const saveBtn = ui.button(t('common.save'), 'debug_save_prompt', {
@@ -319,66 +319,16 @@ function buildResultsColumn(ui: A2UIGenerator, state: WorkbenchState): string {
   const runBtn = ui.button(t('workbench.runInterpret'), 'debug_run_interpret', {
     variant: 'primary',
     icon: 'play',
-    disabled: state.runStatus === 'running',
   });
-
-  // Copy messages button (when result with messages exists)
-  const actionBtns: string[] = [runBtn];
-  if (state.currentResult?.messages) {
-    const copyBtn = ui.button(t('workbench.copyMessages'), 'debug_copy_messages', {
-      variant: 'secondary',
-      size: 'sm',
-      icon: 'link',
-      payload: { text: state.currentResult.messages },
-    });
-    actionBtns.push(copyBtn);
-  }
-  const actionRow = ui.row(actionBtns, { gap: 8, align: 'center' });
+  const actionRow = ui.row([runBtn], { gap: 8, align: 'center' });
 
   const parts: string[] = [actionRow];
 
-  if (state.runStatus === 'running') {
-    const spinner = ui.badge(t('workbench.running'), { variant: 'warning', icon: 'loader' });
-    parts.push(spinner);
+  for (const result of state.results.slice(0, 3)) {
+    parts.push(buildResultCard(ui, state, result));
   }
 
-  if (state.currentResult?.text) {
-    const resultMode = state.resultViewMode ?? 'rendered';
-    const modeLabel = ui.text(t('workbench.currentResult'), 'h4');
-    const renderedBtn = ui.button('渲染', 'debug_toggle_result_view', {
-      variant: resultMode === 'rendered' ? 'secondary' : 'ghost',
-      size: 'sm',
-    });
-    const sourceBtn = ui.button('源码', 'debug_toggle_result_view', {
-      variant: resultMode === 'source' ? 'secondary' : 'ghost',
-      size: 'sm',
-    });
-    const viewToggleRow = ui.row([modeLabel, renderedBtn, sourceBtn], {
-      gap: 8,
-      align: 'center',
-      justify: 'space-between',
-    });
-
-    if (resultMode === 'source') {
-      const currId = 'wb_result_curr';
-      ui.addRaw(currId, 'CodeEditor', {
-        value: state.currentResult.text,
-        language: 'markdown',
-        readonly: true,
-        height: 400,
-      });
-      parts.push(viewToggleRow, currId);
-    } else {
-      const renderedId = 'wb_result_rendered';
-      ui.addRaw(renderedId, 'Text', {
-        text: state.currentResult.text,
-        markdown: true,
-        style:
-          'height:400px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
-      });
-      parts.push(viewToggleRow, renderedId);
-    }
-  } else if (state.runStatus !== 'running') {
+  if (state.results.length === 0) {
     const hint = ui.text(t('workbench.noResult'), 'caption', { muted: true });
     parts.push(hint);
   }
@@ -390,56 +340,103 @@ function buildResultsColumn(ui: A2UIGenerator, state: WorkbenchState): string {
   return ui.column(parts, { gap: 12 });
 }
 
+function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: WorkbenchResult): string {
+  const viewMode = state.resultViewModes[result.id] ?? 'rendered';
+  const isStreaming = result.status === 'running';
+
+  // Header: timestamp + run stats badges
+  const ts = new Date(result.timestamp).toLocaleTimeString();
+  const headerItems: string[] = [ui.text(ts, 'caption', { muted: true })];
+  if (result.enabledPromptCount !== undefined && result.totalPromptCount !== undefined) {
+    headerItems.push(
+      ui.badge(`${result.enabledPromptCount}/${result.totalPromptCount} ${t('workbench.tabPrompts')}`, {
+        variant: 'info',
+        tooltip: result.enabledPromptNames || t('workbench.noPromptsEnabled'),
+      })
+    );
+  }
+  if (result.enabledSkillCount !== undefined && result.totalSkillCount !== undefined) {
+    headerItems.push(
+      ui.badge(`${result.enabledSkillCount}/${result.totalSkillCount} ${t('workbench.tabSkills')}`, {
+        variant: 'info',
+        tooltip: result.enabledSkillNames || t('workbench.noSkillsEnabled'),
+      })
+    );
+  }
+  if (result.tokens) {
+    headerItems.push(ui.badge(`${result.tokens} ${t('workbench.tokens')}`, { variant: 'info' }));
+  }
+  if (result.durationMs) {
+    headerItems.push(ui.badge(`${(result.durationMs / 1000).toFixed(1)}s`, { variant: 'info' }));
+  }
+  if (isStreaming) {
+    headerItems.push(ui.badge(t('workbench.running'), { variant: 'warning', icon: 'loader' }));
+  }
+  if (result.status === 'error') {
+    headerItems.push(ui.badge(result.errorMessage ?? t('workbench.error'), { variant: 'error' }));
+  }
+  const headerRow = ui.row(headerItems, { gap: 8, align: 'center' });
+
+  // Controls: [渲染] [源码] + copy button
+  const renderedBtn = ui.button('渲染', 'debug_toggle_result_view', {
+    variant: viewMode === 'rendered' ? 'secondary' : 'ghost',
+    size: 'sm',
+    payload: { resultId: result.id },
+  });
+  const sourceBtn = ui.button('源码', 'debug_toggle_result_view', {
+    variant: viewMode === 'source' ? 'secondary' : 'ghost',
+    size: 'sm',
+    payload: { resultId: result.id },
+  });
+  const controlItems: string[] = [renderedBtn, sourceBtn];
+  if (result.messages) {
+    controlItems.push(
+      ui.button(t('workbench.copyMessages'), 'debug_copy_messages', {
+        variant: 'ghost',
+        size: 'sm',
+        icon: 'link',
+        payload: { text: result.messages },
+      })
+    );
+  }
+  const controlRow = ui.row(controlItems, { gap: 4, justify: 'end' });
+
+  // Content
+  let contentId: string;
+  if (viewMode === 'source') {
+    contentId = `wb_result_${result.id}_src`;
+    ui.addRaw(contentId, 'CodeEditor', {
+      value: result.text,
+      language: 'markdown',
+      readonly: true,
+      height: 600,
+    });
+  } else {
+    contentId = `wb_result_${result.id}_rendered`;
+    ui.addRaw(contentId, 'Text', {
+      text: result.text,
+      markdown: true,
+      style:
+        'min-height:60px; max-height:600px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+    });
+  }
+
+  const cardContent = ui.column([headerRow, controlRow, contentId], { gap: 8 });
+  return ui.card([cardContent], { padding: 12 });
+}
+
 // ── Status Bar ──────────────────────────────────────────────────
 
 function buildStatusBar(ui: A2UIGenerator, state: WorkbenchState): string {
   const badges: string[] = [];
 
-  // Run status
-  const statusVariant = {
-    ready: 'info',
-    running: 'warning',
-    done: 'success',
-    error: 'error',
-  }[state.runStatus] as string;
-  badges.push(ui.badge(t(`workbench.${state.runStatus}`), { variant: statusVariant }));
-
-  // Enabled prompts count with tooltip
-  const enabledPrompts = state.prompts.filter((p) => p.enabled);
-  const enabledPromptCount = enabledPrompts.length;
-  const enabledPromptNames = enabledPrompts.map((p) => p.name).join(', ');
-  badges.push(
-    ui.badge(`${enabledPromptCount}/${state.prompts.length} ${t('workbench.tabPrompts')}`, {
-      variant: 'info',
-      tooltip: enabledPromptNames || t('workbench.noPromptsEnabled'),
-    })
-  );
-
-  // Enabled skills count with tooltip showing enabled skill names
-  const enabledSkills = state.skills.filter((s) => s.enabled);
-  const enabledCount = enabledSkills.length;
-  const enabledSkillNames = enabledSkills.map((s) => s.name).join(', ');
-  badges.push(
-    ui.badge(`${enabledCount}/${state.skills.length} ${t('workbench.tabSkills')}`, {
-      variant: 'info',
-      tooltip: enabledSkillNames || t('workbench.noSkillsEnabled'),
-    })
-  );
-
-  // Tokens (if result exists)
-  if (state.currentResult?.tokens) {
-    badges.push(ui.badge(`${state.currentResult.tokens} ${t('workbench.tokens')}`, { variant: 'info' }));
-  }
-
-  // Duration
-  if (state.currentResult?.durationMs) {
-    const secs = (state.currentResult.durationMs / 1000).toFixed(1);
-    badges.push(ui.badge(`${secs}s`, { variant: 'info' }));
-  }
-
-  // Error message
-  if (state.runStatus === 'error' && state.errorMessage) {
-    badges.push(ui.badge(state.errorMessage, { variant: 'error' }));
+  const runningCount = state.results.filter((r) => r.status === 'running').length;
+  if (runningCount > 0) {
+    badges.push(ui.badge(`${runningCount} ${t('workbench.running')}`, { variant: 'warning', icon: 'loader' }));
+  } else if (state.results.length === 0) {
+    badges.push(ui.badge(t('workbench.ready'), { variant: 'info' }));
+  } else {
+    badges.push(ui.badge(t('workbench.done'), { variant: 'success' }));
   }
 
   return ui.row(badges, { gap: 8, align: 'center' });

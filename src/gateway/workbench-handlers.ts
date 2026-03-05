@@ -12,6 +12,7 @@ import {
   writeWorkbenchSkillContent,
   writeWorkbenchPromptContent,
   type WorkbenchState,
+  type WorkbenchResult,
 } from './workbench-init.js';
 import type { GatewaySession, SendFn } from './server.js';
 import type { A2UIMessage } from './a2ui.js';
@@ -157,9 +158,13 @@ export async function handleWorkbenchAction(
     case 'debug_toggle_testdata_preview':
       state.testDataPreviewMode = !state.testDataPreviewMode;
       break;
-    case 'debug_toggle_result_view':
-      state.resultViewMode = state.resultViewMode === 'source' ? 'rendered' : 'source';
+    case 'debug_toggle_result_view': {
+      const resultId = payload?.resultId as string;
+      if (!resultId) break;
+      const cur = state.resultViewModes[resultId] ?? 'rendered';
+      state.resultViewModes[resultId] = cur === 'source' ? 'rendered' : 'source';
       break;
+    }
     case 'debug_run_interpret':
       // Fire-and-forget: run in background so action lock is released
       // immediately and other actions (skill switching) remain responsive.
@@ -338,20 +343,35 @@ function extractTextFromContent(content: unknown[]): string {
 function runInterpretInBackground(session: GatewaySession, _send: SendFn): void {
   const state = session.workbenchState;
   if (!state) return;
-  if (state.runStatus === 'running') return; // already running
 
-  // Clear previous result
-  state.currentResult = null;
-  state.runStatus = 'running';
-  state.errorMessage = undefined;
+  const newResult: WorkbenchResult = {
+    id: `r_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+    text: '',
+    timestamp: Date.now(),
+    status: 'running',
+    enabledPromptCount: state.prompts.filter((p) => p.enabled).length,
+    totalPromptCount: state.prompts.length,
+    enabledPromptNames: state.prompts
+      .filter((p) => p.enabled)
+      .map((p) => p.name)
+      .join(', '),
+    enabledSkillCount: state.skills.filter((s) => s.enabled).length,
+    totalSkillCount: state.skills.length,
+    enabledSkillNames: state.skills
+      .filter((s) => s.enabled)
+      .map((s) => s.name)
+      .join(', '),
+  };
+  state.results.unshift(newResult);
+  state.currentResult = newResult;
 
   // Fire-and-forget — errors are caught inside
-  void doRunInterpret(session).catch((err) => {
+  void doRunInterpret(session, newResult).catch((err) => {
     log.error('Workbench background interpret failed', { error: err });
   });
 }
 
-async function doRunInterpret(session: GatewaySession): Promise<void> {
+async function doRunInterpret(session: GatewaySession, result: WorkbenchResult): Promise<void> {
   const state = session.workbenchState;
   if (!state) return;
 
@@ -384,8 +404,8 @@ async function doRunInterpret(session: GatewaySession): Promise<void> {
       .join('\n\n');
 
     if (!state.testData?.trim() && !promptContent?.trim()) {
-      state.runStatus = 'error';
-      state.errorMessage = 'No prompt or test data provided';
+      result.status = 'error';
+      result.errorMessage = 'No prompt or test data provided';
       rerenderViaSSE(session);
       return;
     }
@@ -407,11 +427,7 @@ async function doRunInterpret(session: GatewaySession): Promise<void> {
     let lastRenderTime = 0;
     const RENDER_INTERVAL_MS = 500;
 
-    state.currentResult = {
-      text: '',
-      timestamp: Date.now(),
-      messages: finalMessage,
-    };
+    result.messages = finalMessage;
 
     const unsubscribe = agent.subscribe((event) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -419,9 +435,7 @@ async function doRunInterpret(session: GatewaySession): Promise<void> {
       if (ev.type === 'message_start' || ev.type === 'message_update') {
         if (ev.message?.role === 'assistant' && ev.message?.content) {
           accumulatedText = extractTextFromContent(ev.message.content as unknown[]);
-          if (state.currentResult) {
-            state.currentResult.text = accumulatedText;
-          }
+          result.text = accumulatedText;
 
           const now = Date.now();
           if (now - lastRenderTime >= RENDER_INTERVAL_MS) {
@@ -431,8 +445,8 @@ async function doRunInterpret(session: GatewaySession): Promise<void> {
         }
       } else if (ev.type === 'error') {
         log.error('Workbench agent error event', { error: ev.error });
-        state.runStatus = 'error';
-        state.errorMessage = ev.error?.message || 'Agent error';
+        result.status = 'error';
+        result.errorMessage = ev.error?.message || 'Agent error';
         rerenderViaSSE(session);
       }
     });
@@ -444,17 +458,13 @@ async function doRunInterpret(session: GatewaySession): Promise<void> {
       unsubscribe();
     }
 
-    const durationMs = Date.now() - startTime;
-
-    if (state.currentResult) {
-      state.currentResult.text = accumulatedText;
-      state.currentResult.durationMs = durationMs;
-    }
-    state.runStatus = 'done';
+    result.text = accumulatedText;
+    result.durationMs = Date.now() - startTime;
+    result.status = 'done';
   } catch (err) {
     log.error('Workbench interpretation failed', { error: err });
-    state.runStatus = 'error';
-    state.errorMessage = err instanceof Error ? err.message : String(err);
+    result.status = 'error';
+    result.errorMessage = err instanceof Error ? err.message : String(err);
   }
 
   rerenderViaSSE(session);
