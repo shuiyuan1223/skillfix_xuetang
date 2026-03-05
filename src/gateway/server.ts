@@ -28,6 +28,7 @@ import { getDataSource } from '../tools/health-data.js';
 import { createDataSourceForUser, createInnerDataSourceForUser } from '../data-sources/index.js';
 import { t } from '../locales/index.js';
 import type { HealthDataSource } from '../data-sources/interface.js';
+import type { WorkbenchState } from './workbench-init.js';
 import {
   loadConfig,
   getUserId,
@@ -877,6 +878,11 @@ export class GatewaySession {
   // User identification (from cookie)
   public userUuid: string | null = null;
 
+  // Monotonically increasing render sequence number.
+  // Stamped into every beginRendering message so the client can discard
+  // stale SSE updates that arrive after a fresher HTTP action response.
+  private _renderSeq = 0;
+
   // Active push function — bound to the SSE connection on connect.
   // Async tasks (benchmark, agent streaming) use this to push updates.
   private _activeSend: SendFn | null = null;
@@ -931,9 +937,12 @@ export class GatewaySession {
   customDashboards = new Map<string, DashboardDefinition>();
   activeDashboardTab: string | null = null;
 
-  /** Build a page with sidebar */
+  /** Build a page with sidebar, stamping a monotonic _seq into every beginRendering. */
   buildPage(view: string, mainPage: A2UIMessage[]): A2UIMessage[] {
-    return generatePage(view, mainPage, this.isWhitelisted());
+    const seq = ++this._renderSeq;
+    return generatePage(view, mainPage, this.isWhitelisted()).map((msg) =>
+      'beginRendering' in msg ? { beginRendering: { ...msg.beginRendering, _seq: seq } } : msg
+    );
   }
 
   // Memory system-agent sub-state
@@ -1009,7 +1018,7 @@ export class GatewaySession {
   } | null = null;
 
   // Workbench state
-  workbenchState: import('./workbench-init.js').WorkbenchState | null = null;
+  workbenchState: WorkbenchState | null = null;
 
   // Arena comparison state
   benchmarkSelectedRunIds: Set<string> = new Set();

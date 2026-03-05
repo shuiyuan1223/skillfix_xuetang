@@ -25,7 +25,7 @@ export interface A2UIComponent {
 /** v0.8 standard messages */
 export type A2UIMessage =
   | { surfaceUpdate: { surfaceId: string; components: A2UIComponent[] } }
-  | { beginRendering: { surfaceId: string; root: string; catalogId?: string } }
+  | { beginRendering: { surfaceId: string; root: string; catalogId?: string; _seq?: number } }
   | { deleteSurface: { surfaceId: string } }
   | { dataModelUpdate: { surfaceId: string; path: string; contents: unknown } };
 

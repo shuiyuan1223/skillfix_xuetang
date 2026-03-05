@@ -112,6 +112,10 @@ export function App() {
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
   const handleMessageRef = useRef<(msg: WSMessage) => void>(() => {});
   const pendingSurface = useRef(new Map<string, A2UIComponent[]>());
+  // Tracks the highest _seq applied per surfaceId.  SSE updates with a lower
+  // seq than the last applied are stale (buffered before a fresher action
+  // response) and must be discarded to prevent overwriting correct state.
+  const lastAppliedSeqRef = useRef(new Map<string, number>());
 
   // Keep mainDataRef in sync with mainData state
   mainDataRef.current = mainData;
@@ -769,6 +773,7 @@ export function App() {
   const sendNavigate = useCallback((view: string) => {
     lastViewRef.current = view;
     setPageKey((k) => k + 1);
+    lastAppliedSeqRef.current.clear(); // new view → fresh seq tracking
 
     // Close mobile sidebar with animation
     setMobileSidebarOpen((open) => {
@@ -933,7 +938,19 @@ export function App() {
         return;
       }
       if ('beginRendering' in msg) {
-        const { surfaceId, root } = msg.beginRendering;
+        const { surfaceId, root, _seq } = msg.beginRendering;
+        // Stale-update guard: if the server stamped a sequence number, discard
+        // any update whose seq is not strictly greater than the last applied.
+        // This prevents nginx-buffered SSE messages (generated before an action
+        // was processed) from overwriting the fresher HTTP action response.
+        if (_seq !== undefined) {
+          const lastSeq = lastAppliedSeqRef.current.get(surfaceId) ?? -1;
+          if (_seq <= lastSeq) {
+            pendingSurface.current.delete(surfaceId); // drop buffered components
+            return;
+          }
+          lastAppliedSeqRef.current.set(surfaceId, _seq);
+        }
         const components = pendingSurface.current.get(surfaceId);
         if (!components) {
           return;
