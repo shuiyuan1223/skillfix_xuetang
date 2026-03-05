@@ -55,9 +55,13 @@ async function postAction(data: Record<string, unknown>, handleMessage: (msg: WS
     }
     const { updates } = (await res.json()) as { updates: unknown[] };
     if (updates) {
-      for (const msg of updates) {
-        handleMessage(msg as WSMessage);
-      }
+      // Use startTransition so action-response re-renders are non-urgent,
+      // consistent with SSE updates — user interactions stay responsive.
+      startTransition(() => {
+        for (const msg of updates) {
+          handleMessage(msg as WSMessage);
+        }
+      });
     }
   } catch (e) {
     console.error('[A2UI] Action error:', e);

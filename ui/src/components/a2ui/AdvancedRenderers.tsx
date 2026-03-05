@@ -570,7 +570,7 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
         <tbody>
           {rows.map((row, i) => (
             <tr
-              key={i}
+              key={String(row['id'] ?? row['name'] ?? i)}
               className={`border-b border-border transition-colors hover:bg-primary/5 ${onRowClick ? 'cursor-pointer' : ''}`}
               onClick={() => {
                 if (onRowClick) {
