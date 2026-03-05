@@ -179,10 +179,13 @@ function CodeEditorComponent({
   // Track IME composition state and local value during composition
   const [isComposing, setIsComposing] = React.useState(false);
   const [localValue, setLocalValue] = React.useState(value);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
-  // Sync local value when prop value changes (e.g., clear, revert, switch skill)
+  // Sync local value when prop value changes (e.g., clear, revert, switch skill).
+  // Skip sync if the textarea currently has focus — user is actively typing and
+  // SSE re-renders must not overwrite their in-progress input.
   React.useEffect(() => {
-    if (!isComposing) {
+    if (!isComposing && document.activeElement !== textareaRef.current) {
       setLocalValue(value);
     }
   }, [value, isComposing]);
@@ -191,6 +194,7 @@ function CodeEditorComponent({
     <div className="code-editor-container" style={{ height: typeof height === 'number' ? height + 'px' : height }}>
       {lineNumbersEl}
       <textarea
+        ref={textareaRef}
         key={c.id}
         className="code-textarea"
         spellCheck={false}

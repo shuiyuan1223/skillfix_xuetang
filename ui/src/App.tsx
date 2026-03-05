@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, startTransition } from 'react';
 import type { A2UISurfaceData, A2UIComponent, WSMessage, AGUIEvent, MessagePart, QuickReply } from './lib/types';
 import { componentType, prop, withProp } from './lib/types';
 import { generateUUID } from './lib/utils';
@@ -1074,7 +1074,12 @@ export function App() {
         try {
           const msg = JSON.parse(event.data) as WSMessage;
           if ((msg as any).type === 'throttled') return; // Graceful 429: ignore, browser retries per retry: field
-          handleMessage(msg);
+          // Mark SSE-pushed updates as non-urgent so React 18 can let user
+          // interactions (clicks, keystrokes) take priority and not get
+          // interrupted by rapid streaming re-renders on high-latency connections.
+          startTransition(() => {
+            handleMessage(msg);
+          });
         } catch (e) {
           console.error('[SSE] Parse error:', e);
         }
