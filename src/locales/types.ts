@@ -861,6 +861,7 @@ export interface LocaleMessages {
     expand: string;
     collapse: string;
     exportZip: string;
+    noPromptsEnabled: string;
   };
 
   // OAuth / Authorization

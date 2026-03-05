@@ -833,6 +833,7 @@ export const en: LocaleMessages = {
     expand: 'Expand List',
     collapse: 'Collapse List',
     exportZip: 'Download ZIP',
+    noPromptsEnabled: 'No prompts enabled',
   },
 
   auth: {

@@ -578,7 +578,7 @@ export function renderDataTable(c: A2UIComponent, ctx: RenderContext) {
                 <td
                   key={col.key}
                   className={`p-3 max-w-[300px] ${col.action && row[col.key] && String(row[col.key]) !== '-' ? 'cursor-pointer' : ''}`}
-                  title={String(row[col.key] ?? '')}
+                  title={col.render === 'badge' && row[`${col.key}Tooltip`] ? String(row[`${col.key}Tooltip`]) : String(row[col.key] ?? '')}
                   onClick={
                     col.action && row[col.key] && String(row[col.key]) !== '-'
                       ? (e) => {

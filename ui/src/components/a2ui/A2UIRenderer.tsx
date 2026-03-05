@@ -1027,6 +1027,7 @@ export function A2UIRenderer({
   function rcBadge(c: A2UIComponent) {
     const text = prop(c, 'text') as string;
     const variant = (prop(c, 'variant') as string) || 'default';
+    const tooltip = prop(c, 'tooltip') as string | undefined;
     const badgeVariants: Record<string, string> = {
       default: 'bg-slate-500/20 text-slate-300',
       success: 'bg-emerald-500/20 text-emerald-400',
@@ -1034,11 +1035,25 @@ export function A2UIRenderer({
       error: 'bg-red-500/20 text-red-400',
       info: 'bg-blue-500/20 text-blue-400',
     };
-    return (
+    const badge = (
       <span
         className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${badgeVariants[variant] || badgeVariants.default}`}
       >
         {text}
+      </span>
+    );
+    if (!tooltip) return badge;
+    const items = tooltip.split(', ').filter(Boolean);
+    return (
+      <span className="relative group inline-flex">
+        {badge}
+        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 hidden group-hover:flex flex-col gap-0.5 min-w-max max-w-56 bg-surface border border-border rounded-lg px-3 py-2 shadow-lg">
+          {items.map((item, i) => (
+            <span key={i} className="text-xs text-text-secondary whitespace-nowrap leading-5">
+              {item}
+            </span>
+          ))}
+        </span>
       </span>
     );
   }

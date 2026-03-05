@@ -94,6 +94,7 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     name: s.name,
     description: s.description || '-',
     status: s.enabled ? t('workbench.enabled') : t('workbench.disabled'),
+    statusTooltip: s.name, // 技能名称作为 tooltip
     modified: s.dirty ? t('workbench.modified') : '',
   }));
 
@@ -175,21 +176,33 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
   const rows = state.prompts.map((p) => ({
     id: p.id,
     name: p.name,
-    active: p.id === state.activePromptId ? 'selected' : 'view',
+    description: p.description || '-',
+    status: p.enabled ? t('workbench.enabled') : t('workbench.disabled'),
     modified: p.dirty ? t('workbench.modified') : '',
   }));
 
+  const enableAllBtn = ui.button(t('workbench.enableAll'), 'debug_enable_all_prompts', {
+    variant: 'ghost',
+    size: 'sm',
+    icon: 'check',
+  });
+  const disableAllBtn = ui.button(t('workbench.disableAll'), 'debug_disable_all_prompts', {
+    variant: 'ghost',
+    size: 'sm',
+    icon: 'x',
+  });
   const toggleListBtn = ui.button(
     state.promptsListExpanded ? t('workbench.collapse') : t('workbench.expand'),
     'debug_toggle_prompts_list',
-    { variant: 'ghost', size: 'sm', icon: state.promptsListExpanded ? 'chevron-right' : 'chevron-right' }
+    { variant: 'ghost', size: 'sm', icon: 'chevron-right' }
   );
-  const toolbarRow = ui.row([toggleListBtn], { gap: 8, justify: 'end' });
+  const batchRow = ui.row([enableAllBtn, disableAllBtn, toggleListBtn], { gap: 8, justify: 'end' });
 
   const table = ui.dataTable(
     [
-      { key: 'active', label: '', width: '60px', render: 'badge', action: 'debug_activate_prompt' },
       { key: 'name', label: t('workbench.promptsTitle'), sortable: true },
+      { key: 'description', label: t('skills.description') },
+      { key: 'status', label: t('skills.status'), render: 'badge', action: 'debug_toggle_prompt' },
       { key: 'modified', label: '' },
     ],
     rows,
@@ -201,7 +214,7 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
     ? ui.column([table], { gap: 0 })
     : ui.column([table], { gap: 0, style: 'max-height: 300px; overflow-y: scroll;', className: 'scrollbar-visible' });
 
-  const parts: string[] = [toolbarRow, tableContainer];
+  const parts: string[] = [batchRow, tableContainer];
 
   if (state.selectedPromptId) {
     const prompt = state.prompts.find((p) => p.id === state.selectedPromptId);
@@ -308,16 +321,25 @@ function buildStatusBar(ui: A2UIGenerator, state: WorkbenchState): string {
   }[state.runStatus] as string;
   badges.push(ui.badge(t(`workbench.${state.runStatus}`), { variant: statusVariant }));
 
-  // Active prompt
-  if (state.activePromptId) {
-    badges.push(ui.badge(state.activePromptId, { variant: 'info' }));
-  }
+  // Enabled prompts count with tooltip
+  const enabledPrompts = state.prompts.filter((p) => p.enabled);
+  const enabledPromptCount = enabledPrompts.length;
+  const enabledPromptNames = enabledPrompts.map((p) => p.name).join(', ');
+  badges.push(
+    ui.badge(`${enabledPromptCount}/${state.prompts.length} ${t('workbench.tabPrompts')}`, {
+      variant: 'info',
+      tooltip: enabledPromptNames || t('workbench.noPromptsEnabled'),
+    })
+  );
 
-  // Enabled skills count
-  const enabledCount = state.skills.filter((s) => s.enabled).length;
+  // Enabled skills count with tooltip showing enabled skill names
+  const enabledSkills = state.skills.filter((s) => s.enabled);
+  const enabledCount = enabledSkills.length;
+  const enabledSkillNames = enabledSkills.map((s) => s.name).join(', ');
   badges.push(
     ui.badge(`${enabledCount}/${state.skills.length} ${t('workbench.tabSkills')}`, {
       variant: 'info',
+      tooltip: enabledSkillNames || t('workbench.noSkillsEnabled'),
     })
   );
 

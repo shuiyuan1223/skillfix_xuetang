@@ -21,7 +21,8 @@ export interface WorkbenchSkillItem {
 export interface WorkbenchPromptItem {
   id: string;
   name: string;
-  active: boolean;
+  description: string;
+  enabled: boolean;
   editedContent?: string;
   dirty?: boolean;
 }
@@ -41,7 +42,6 @@ export interface WorkbenchState {
   prompts: WorkbenchPromptItem[];
   selectedSkillId: string | null;
   selectedPromptId: string | null;
-  activePromptId: string | null;
   testData: string;
   currentResult: WorkbenchResult | null;
   runStatus: 'ready' | 'running' | 'done' | 'error';
@@ -170,7 +170,6 @@ export async function initializeWorkbench(): Promise<WorkbenchState> {
     prompts,
     selectedSkillId: null,
     selectedPromptId: null,
-    activePromptId: prompts.length > 0 ? prompts[0].id : null,
     testData: '',
     currentResult: null,
     runStatus: 'ready',
@@ -201,15 +200,31 @@ export function loadWorkbenchSkills(): WorkbenchSkillItem[] {
   });
 }
 
+/** Extract a short description from the first non-heading non-empty line */
+function extractPromptDescription(content: string): string {
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      return trimmed.length > 60 ? `${trimmed.slice(0, 60)}…` : trimmed;
+    }
+  }
+  return '';
+}
+
 export function loadWorkbenchPrompts(): WorkbenchPromptItem[] {
   const dir = getWorkbenchPromptsDir();
   if (!existsSync(dir)) return [];
   const files = readdirSync(dir).filter((f) => f.endsWith('.md'));
-  return files.sort().map((f) => ({
-    id: f.replace(/\.md$/, ''),
-    name: f.replace(/\.md$/, ''),
-    active: false,
-  }));
+  return files.sort().map((f) => {
+    const id = f.replace(/\.md$/, '');
+    const content = existsSync(join(dir, f)) ? readFileSync(join(dir, f), 'utf-8') : '';
+    return {
+      id,
+      name: id,
+      description: extractPromptDescription(content),
+      enabled: false,
+    };
+  });
 }
 
 export function readWorkbenchSkillContent(skillId: string): string {

@@ -29,10 +29,12 @@ export const WORKBENCH_ACTIONS = new Set([
   'debug_save_skill',
   'debug_revert_skill',
   'debug_select_prompt',
-  'debug_activate_prompt',
+  'debug_toggle_prompt',
   'debug_prompt_change',
   'debug_save_prompt',
   'debug_revert_prompt',
+  'debug_enable_all_prompts',
+  'debug_disable_all_prompts',
   'debug_userdata_change',
   'debug_clear_data',
   'debug_run_interpret',
@@ -106,8 +108,8 @@ export async function handleWorkbenchAction(
     case 'debug_select_prompt':
       handleSelectPrompt(state, payload);
       break;
-    case 'debug_activate_prompt':
-      handleActivatePrompt(state, payload);
+    case 'debug_toggle_prompt':
+      handleTogglePrompt(state, payload);
       break;
     case 'debug_prompt_change':
       handlePromptChange(state, payload);
@@ -129,6 +131,12 @@ export async function handleWorkbenchAction(
       break;
     case 'debug_disable_all_skills':
       for (const s of state.skills) s.enabled = false;
+      break;
+    case 'debug_enable_all_prompts':
+      for (const p of state.prompts) p.enabled = true;
+      break;
+    case 'debug_disable_all_prompts':
+      for (const p of state.prompts) p.enabled = false;
       break;
     case 'debug_toggle_skills_list':
       state.skillsListExpanded = !state.skillsListExpanded;
@@ -224,11 +232,11 @@ function handleSelectPrompt(state: WorkbenchState, payload: Payload): void {
   }
 }
 
-function handleActivatePrompt(state: WorkbenchState, payload: Payload): void {
+function handleTogglePrompt(state: WorkbenchState, payload: Payload): void {
   const id = extractRowId(payload);
-  if (id) {
-    state.activePromptId = id;
-  }
+  if (!id) return;
+  const prompt = state.prompts.find((p) => p.id === id);
+  if (prompt) prompt.enabled = !prompt.enabled;
 }
 
 function handlePromptChange(state: WorkbenchState, payload: Payload): void {
@@ -332,10 +340,10 @@ async function doRunInterpret(session: GatewaySession): Promise<void> {
   const startTime = Date.now();
 
   try {
-    const promptContent = state.activePromptId
-      ? (state.prompts.find((p) => p.id === state.activePromptId)?.editedContent ??
-        readWorkbenchPromptContent(state.activePromptId))
-      : '';
+    const promptContent = state.prompts
+      .filter((p) => p.enabled)
+      .map((p) => p.editedContent ?? readWorkbenchPromptContent(p.id))
+      .join('\n\n');
 
     const skillGuides = state.skills
       .filter((s) => s.enabled)
