@@ -74,6 +74,32 @@ function rerenderViaSSE(session: GatewaySession): void {
   }
 }
 
+/**
+ * Send a lightweight delta update for a single result's text via SSE.
+ * Patches only the text/value prop of the active result component (~100 bytes),
+ * avoiding the full 100KB page rebuild that caused main-thread blocking.
+ */
+function sendResultTextViaSSE(session: GatewaySession, result: WorkbenchResult): void {
+  const sseSend = session.getActiveSend();
+  if (!sseSend) return;
+  const state = session.workbenchState;
+  if (!state) return;
+  const viewMode = state.resultViewModes[result.id] ?? 'rendered';
+  if (viewMode === 'source') {
+    sseSend({
+      dataModelUpdate: { surfaceId: 'main', path: `wb_result_${result.id}_src`, contents: { value: result.text } },
+    });
+  } else {
+    sseSend({
+      dataModelUpdate: {
+        surfaceId: 'main',
+        path: `wb_result_${result.id}_rendered`,
+        contents: { text: result.text },
+      },
+    });
+  }
+}
+
 // ── Dispatcher ────────────────────────────────────────────────
 
 export async function handleWorkbenchAction(
@@ -440,7 +466,7 @@ async function doRunInterpret(session: GatewaySession, result: WorkbenchResult):
           const now = Date.now();
           if (now - lastRenderTime >= RENDER_INTERVAL_MS) {
             lastRenderTime = now;
-            rerenderViaSSE(session);
+            sendResultTextViaSSE(session, result);
           }
         }
       } else if (ev.type === 'error') {

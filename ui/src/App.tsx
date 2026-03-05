@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, startTransition } from 'react';
-import type { A2UISurfaceData, A2UIComponent, WSMessage, AGUIEvent, MessagePart, QuickReply } from './lib/types';
+import type { A2UISurfaceData, A2UIComponent, WSMessage, AGUIEvent, MessagePart, QuickReply, DataModelUpdateMessage } from './lib/types';
 import { componentType, prop, withProp } from './lib/types';
 import { generateUUID } from './lib/utils';
 import { ICONS } from './lib/icons';
@@ -961,6 +961,25 @@ export function App() {
       }
       if ('deleteSurface' in msg) {
         clearSurface(msg.deleteSurface.surfaceId);
+        return;
+      }
+      if ('dataModelUpdate' in msg) {
+        const { surfaceId, path: componentId, contents } = (msg as DataModelUpdateMessage).dataModelUpdate;
+        const propUpdates = contents as Record<string, unknown>;
+        const patcher = (prev: A2UISurfaceData | null): A2UISurfaceData | null => {
+          if (!prev) return prev;
+          const idx = prev.components.findIndex((c) => c.id === componentId);
+          if (idx === -1) return prev;
+          const updated = [...prev.components];
+          let comp = updated[idx];
+          for (const [key, value] of Object.entries(propUpdates)) {
+            comp = withProp(comp, key, value);
+          }
+          updated[idx] = comp;
+          return { ...prev, components: updated };
+        };
+        if (surfaceId === 'main') setMainData(patcher);
+        else if (surfaceId === 'sidebar') setSidebarData(patcher);
         return;
       }
 

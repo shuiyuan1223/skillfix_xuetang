@@ -28,6 +28,9 @@ export interface BeginRenderingMessage {
 export interface DeleteSurfaceMessage {
   deleteSurface: { surfaceId: string };
 }
+export interface DataModelUpdateMessage {
+  dataModelUpdate: { surfaceId: string; path: string; contents: unknown };
+}
 
 export function componentType(c: A2UIComponent): string {
   return Object.keys(c.component)[0] || '';
@@ -208,6 +211,7 @@ export type WSMessage =
   | SurfaceUpdateMessage
   | BeginRenderingMessage
   | DeleteSurfaceMessage
+  | DataModelUpdateMessage
   | AgentTextMessage
   | ToolCallMessage
   | ErrorMessage
