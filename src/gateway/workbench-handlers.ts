@@ -13,6 +13,7 @@ import {
   writeWorkbenchPromptContent,
   type WorkbenchState,
   type WorkbenchResult,
+  WORKBENCH_MODELS,
 } from './workbench-init.js';
 import type { GatewaySession, SendFn } from './server.js';
 import type { A2UIMessage } from './a2ui.js';
@@ -48,6 +49,7 @@ export const WORKBENCH_ACTIONS = new Set([
   'debug_toggle_prompt_preview',
   'debug_toggle_testdata_preview',
   'debug_toggle_result_view',
+  'debug_select_model',
   'debug_export_zip',
   'workbench_get_export_data',
 ]);
@@ -183,6 +185,9 @@ export async function handleWorkbenchAction(
       break;
     case 'debug_toggle_testdata_preview':
       state.testDataPreviewMode = !state.testDataPreviewMode;
+      break;
+    case 'debug_select_model':
+      state.selectedModelId = (payload?.modelId as string) ?? state.selectedModelId;
       break;
     case 'debug_toggle_result_view': {
       const resultId = payload?.resultId as string;
@@ -387,6 +392,8 @@ function runInterpretInBackground(session: GatewaySession, _send: SendFn): void 
       .filter((s) => s.enabled)
       .map((s) => s.name)
       .join(', '),
+    modelId: state.selectedModelId,
+    modelLabel: WORKBENCH_MODELS.find((m) => m.id === state.selectedModelId)?.label,
   };
   state.results.unshift(newResult);
   state.currentResult = newResult;
@@ -444,7 +451,7 @@ async function doRunInterpret(session: GatewaySession, result: WorkbenchResult):
       apiKey: model.apiKey,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
       provider: model.provider as any,
-      modelId: model.modelId,
+      modelId: result.modelId || model.modelId,
       baseUrl: model.baseUrl,
       dataSource: new MockDataSource(),
     });

@@ -7,6 +7,14 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFi
 import { getStateDir } from '../utils/config.js';
 import { getSkillsDir } from '../tools/skill-tools.js';
 
+// ── Candidate models ────────────────────────────────────────────
+
+export const WORKBENCH_MODELS = [
+  { id: 'z-ai/glm-5', label: 'GLM-5' },
+  { id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5' },
+  { id: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2' },
+];
+
 // ── Types ──────────────────────────────────────────────────────
 
 export interface WorkbenchSkillItem {
@@ -33,6 +41,8 @@ export interface WorkbenchResult {
   timestamp: number;
   status: 'running' | 'done' | 'error';
   errorMessage?: string;
+  modelId?: string;
+  modelLabel?: string;
   tokens?: number;
   durationMs?: number;
   /** Full composite prompt sent to LLM (for copy-to-clipboard) */
@@ -56,6 +66,7 @@ export interface WorkbenchState {
   currentResult: WorkbenchResult | null;
   results: WorkbenchResult[];
   resultViewModes: Record<string, 'rendered' | 'source'>;
+  selectedModelId: string;
   skillsListExpanded?: boolean;
   promptsListExpanded?: boolean;
   skillPreviewMode?: boolean;
@@ -187,6 +198,7 @@ export async function initializeWorkbench(): Promise<WorkbenchState> {
     currentResult: null,
     results: [],
     resultViewModes: {},
+    selectedModelId: WORKBENCH_MODELS[2].id,
   };
 }
 

@@ -834,6 +834,7 @@ export const en: LocaleMessages = {
     collapse: 'Collapse List',
     exportZip: 'Download ZIP',
     noPromptsEnabled: 'No prompts enabled',
+    selectModel: 'Select Model',
   },
 
   auth: {

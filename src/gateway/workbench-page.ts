@@ -9,7 +9,7 @@
 import { A2UIGenerator, type A2UIMessage } from './a2ui.js';
 import { t } from '../locales/index.js';
 import type { WorkbenchState, WorkbenchResult } from './workbench-init.js';
-import { readWorkbenchSkillContent, readWorkbenchPromptContent } from './workbench-init.js';
+import { readWorkbenchSkillContent, readWorkbenchPromptContent, WORKBENCH_MODELS } from './workbench-init.js';
 
 export function generateWorkbenchPage(state: WorkbenchState): A2UIMessage[] {
   const ui = new A2UIGenerator('main');
@@ -316,11 +316,21 @@ function buildPromptsTab(ui: A2UIGenerator, state: WorkbenchState): string {
 // ── Column 3: Results ───────────────────────────────────────────
 
 function buildResultsColumn(ui: A2UIGenerator, state: WorkbenchState): string {
+  // Model selector toggle buttons
+  const modelBtns = WORKBENCH_MODELS.map((m) =>
+    ui.button(m.label, 'debug_select_model', {
+      variant: state.selectedModelId === m.id ? 'secondary' : 'ghost',
+      size: 'sm',
+      payload: { modelId: m.id },
+    })
+  );
+  const modelRow = ui.row(modelBtns, { gap: 4 });
+
   const runBtn = ui.button(t('workbench.runInterpret'), 'debug_run_interpret', {
     variant: 'primary',
     icon: 'play',
   });
-  const actionRow = ui.row([runBtn], { gap: 8, align: 'center' });
+  const actionRow = ui.row([modelRow, runBtn], { gap: 8, align: 'center' });
 
   const parts: string[] = [actionRow];
 
@@ -347,6 +357,9 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
   // Header: timestamp + run stats badges
   const ts = new Date(result.timestamp).toLocaleTimeString();
   const headerItems: string[] = [ui.text(ts, 'caption', { muted: true })];
+  if (result.modelLabel) {
+    headerItems.push(ui.badge(result.modelLabel, { variant: 'info' }));
+  }
   if (result.enabledPromptCount !== undefined && result.totalPromptCount !== undefined) {
     headerItems.push(
       ui.badge(`${result.enabledPromptCount}/${result.totalPromptCount} ${t('workbench.tabPrompts')}`, {

@@ -829,6 +829,7 @@ export const zhCN: LocaleMessages = {
     collapse: '折叠列表',
     exportZip: '下载 ZIP',
     noPromptsEnabled: '无启用提示词',
+    selectModel: '选择模型',
   },
 
   auth: {
