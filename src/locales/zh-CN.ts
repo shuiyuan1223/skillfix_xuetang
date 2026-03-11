@@ -803,6 +803,7 @@ export const zhCN: LocaleMessages = {
     testDataPlaceholder: '粘贴健康数据 JSON 或自然语言描述...',
     clearData: '清空',
     runInterpret: '运行解读',
+    runDiff: '对比差异',
     previousResult: '上次结果',
     currentResult: '当前结果',
     noResult: '暂无结果，点击「运行解读」开始',
@@ -829,6 +830,8 @@ export const zhCN: LocaleMessages = {
     collapse: '折叠列表',
     exportZip: '下载 ZIP',
     noPromptsEnabled: '无启用提示词',
+    noSkillsEnabled: '无启用技能',
+    diffModeHint: '对比模式已开启 — 点击运行解读将同时生成前后版本解读',
     selectModel: '选择模型',
   },
 

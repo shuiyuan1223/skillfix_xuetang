@@ -22,6 +22,8 @@ export interface WorkbenchSkillItem {
   name: string;
   description: string;
   enabled: boolean;
+  /** Baseline content captured at workbench initialization (used for diff/impact analysis) */
+  baselineContent?: string;
   editedContent?: string;
   dirty?: boolean;
 }
@@ -31,13 +33,14 @@ export interface WorkbenchPromptItem {
   name: string;
   description: string;
   enabled: boolean;
+  /** Baseline content captured at workbench initialization (used for diff/impact analysis) */
+  baselineContent?: string;
   editedContent?: string;
   dirty?: boolean;
 }
 
-export interface WorkbenchResult {
+export interface WorkbenchResultBase {
   id: string;
-  text: string;
   timestamp: number;
   status: 'running' | 'done' | 'error';
   errorMessage?: string;
@@ -45,8 +48,6 @@ export interface WorkbenchResult {
   modelLabel?: string;
   tokens?: number;
   durationMs?: number;
-  /** Full composite prompt sent to LLM (for copy-to-clipboard) */
-  messages?: string;
   /** Snapshot of enabled/total counts at run time */
   enabledPromptCount?: number;
   totalPromptCount?: number;
@@ -55,6 +56,38 @@ export interface WorkbenchResult {
   enabledSkillNames?: string;
   enabledPromptNames?: string;
 }
+
+export interface WorkbenchInterpretResult extends WorkbenchResultBase {
+  kind: 'interpret';
+  text: string;
+  /** Full composite prompt sent to LLM (for copy-to-clipboard) */
+  messages?: string;
+}
+
+export interface WorkbenchDiffResult extends WorkbenchResultBase {
+  kind: 'diff';
+  /** Progress text while running (and fallback content on error) */
+  text: string;
+  /** Baseline run (before changes) */
+  beforeOutput?: string;
+  beforeMessages?: string;
+  /** Current run (after changes) */
+  afterOutput?: string;
+  afterMessages?: string;
+  /** Unified diff of outputs (optional; if missing, UI falls back to before/after view) */
+  outputUnifiedDiff?: string;
+  /** Diff of any changed skill/prompt content vs baseline */
+  skillDiffs?: Array<{ id: string; enabled: boolean; before: string; after: string; unifiedDiff?: string }>;
+  promptDiffs?: Array<{ id: string; enabled: boolean; before: string; after: string; unifiedDiff?: string }>;
+  /** Model-generated analysis summary (markdown) */
+  analysisText?: string;
+  /** LLM-annotated before output with semantic highlights */
+  annotatedBefore?: string;
+  /** LLM-annotated after output with semantic highlights */
+  annotatedAfter?: string;
+}
+
+export type WorkbenchResult = WorkbenchInterpretResult | WorkbenchDiffResult;
 
 export interface WorkbenchState {
   activeTab: 'skills' | 'prompts';
@@ -72,6 +105,8 @@ export interface WorkbenchState {
   skillPreviewMode?: boolean;
   promptPreviewMode?: boolean;
   testDataPreviewMode?: boolean;
+  /** When true, clicking "Run" triggers diff comparison instead of single interpretation */
+  diffMode?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -199,6 +234,7 @@ export async function initializeWorkbench(): Promise<WorkbenchState> {
     results: [],
     resultViewModes: {},
     selectedModelId: WORKBENCH_MODELS[2].id,
+    diffMode: false,
   };
 }
 
@@ -222,6 +258,7 @@ export function loadWorkbenchSkills(): WorkbenchSkillItem[] {
       name,
       description: extractDescription(content),
       enabled: false,
+      baselineContent: content,
     };
   });
 }
@@ -249,6 +286,7 @@ export function loadWorkbenchPrompts(): WorkbenchPromptItem[] {
       name: id,
       description: extractPromptDescription(content),
       enabled: false,
+      baselineContent: content,
     };
   });
 }

@@ -836,6 +836,7 @@ export interface LocaleMessages {
     testDataPlaceholder: string;
     clearData: string;
     runInterpret: string;
+    runDiff: string;
     previousResult: string;
     currentResult: string;
     noResult: string;
@@ -862,6 +863,8 @@ export interface LocaleMessages {
     collapse: string;
     exportZip: string;
     noPromptsEnabled: string;
+    noSkillsEnabled: string;
+    diffModeHint: string;
     selectModel: string;
   };
 

@@ -326,11 +326,17 @@ function buildResultsColumn(ui: A2UIGenerator, state: WorkbenchState): string {
   );
   const modelRow = ui.row(modelBtns, { gap: 4 });
 
+  const diffToggleBtn = ui.button(t('workbench.runDiff'), 'debug_run_diff_interpret', {
+    variant: state.diffMode ? 'secondary' : 'ghost',
+    size: 'sm',
+    icon: 'git-branch',
+  });
   const runBtn = ui.button(t('workbench.runInterpret'), 'debug_run_interpret', {
     variant: 'primary',
-    icon: 'play',
+    icon: state.diffMode ? 'git-branch' : 'play',
   });
-  const actionRow = ui.row([modelRow, runBtn], { gap: 8, align: 'center' });
+  const runRow = ui.row([diffToggleBtn, runBtn], { gap: 8, align: 'center' });
+  const actionRow = ui.row([modelRow, runRow], { gap: 8, align: 'center', justify: 'space-between' });
 
   const parts: string[] = [actionRow];
 
@@ -402,7 +408,7 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
     payload: { resultId: result.id },
   });
   const controlItems: string[] = [renderedBtn, sourceBtn];
-  if (result.messages) {
+  if (result.kind === 'interpret' && result.messages) {
     controlItems.push(
       ui.button(t('workbench.copyMessages'), 'debug_copy_messages', {
         variant: 'ghost',
@@ -412,6 +418,28 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
       })
     );
   }
+  if (result.kind === 'diff') {
+    if (result.beforeMessages) {
+      controlItems.push(
+        ui.button('复制旧 Messages', 'debug_copy_messages', {
+          variant: 'ghost',
+          size: 'sm',
+          icon: 'link',
+          payload: { text: result.beforeMessages },
+        })
+      );
+    }
+    if (result.afterMessages) {
+      controlItems.push(
+        ui.button('复制新 Messages', 'debug_copy_messages', {
+          variant: 'ghost',
+          size: 'sm',
+          icon: 'link',
+          payload: { text: result.afterMessages },
+        })
+      );
+    }
+  }
   const controlRow = ui.row(controlItems, { gap: 4, justify: 'end' });
 
   // Content
@@ -419,19 +447,109 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
   if (viewMode === 'source') {
     contentId = `wb_result_${result.id}_src`;
     ui.addRaw(contentId, 'CodeEditor', {
-      value: result.text,
-      language: 'markdown',
+      value:
+        result.kind === 'diff'
+          ? JSON.stringify(
+              {
+                kind: result.kind,
+                status: result.status,
+                errorMessage: result.errorMessage,
+                beforeOutput: result.beforeOutput,
+                afterOutput: result.afterOutput,
+                analysisText: result.analysisText,
+                skillDiffs: result.skillDiffs?.map((d) => ({ id: d.id, enabled: d.enabled })),
+                promptDiffs: result.promptDiffs?.map((d) => ({ id: d.id, enabled: d.enabled })),
+              },
+              null,
+              2
+            )
+          : result.text,
+      language: result.kind === 'diff' ? 'json' : 'markdown',
       readonly: true,
       height: 600,
     });
   } else {
-    contentId = `wb_result_${result.id}_rendered`;
-    ui.addRaw(contentId, 'Text', {
-      text: result.text,
-      markdown: true,
-      style:
-        'min-height:60px; max-height:600px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
-    });
+    if (result.kind === 'diff' && result.status === 'done') {
+      const parts: string[] = [];
+
+      if (result.analysisText) {
+        const analysisId = `wb_result_${result.id}_analysis`;
+        ui.addRaw(analysisId, 'Text', {
+          text: result.analysisText,
+          markdown: true,
+          style:
+            'min-height:60px; max-height:260px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+        });
+        parts.push(analysisId);
+      }
+
+      if (result.skillDiffs?.length || result.promptDiffs?.length) {
+        const diffChildren: string[] = [];
+        for (const d of result.promptDiffs ?? []) {
+          diffChildren.push(
+            ui.diffView(d.before, d.after, {
+              title: `${d.enabled ? '[启用] ' : ''}${d.id}.md`,
+              unifiedDiff: d.unifiedDiff,
+            })
+          );
+        }
+        for (const d of result.skillDiffs ?? []) {
+          diffChildren.push(
+            ui.diffView(d.before, d.after, {
+              title: `${d.enabled ? '[启用] ' : ''}${d.id} / SKILL.md`,
+              unifiedDiff: d.unifiedDiff,
+            })
+          );
+        }
+        if (diffChildren.length) {
+          parts.push(ui.collapsible('Skill/Prompt 变更 Diff', diffChildren, { expanded: false }));
+        }
+      }
+
+      if (result.annotatedBefore != null || result.annotatedAfter != null) {
+        const outputParts: string[] = [];
+        if (result.annotatedBefore != null) {
+          const beforeLabel = ui.text('修改前解读', 'h4');
+          const beforeId = `wb_result_${result.id}_annotated_before`;
+          ui.addRaw(beforeId, 'Text', {
+            text: result.annotatedBefore,
+            markdown: true,
+            style:
+              'min-height:60px; max-height:400px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+          });
+          outputParts.push(beforeLabel, beforeId);
+        }
+        if (result.annotatedAfter != null) {
+          const afterLabel = ui.text('修改后解读', 'h4');
+          const afterId = `wb_result_${result.id}_annotated_after`;
+          ui.addRaw(afterId, 'Text', {
+            text: result.annotatedAfter,
+            markdown: true,
+            style:
+              'min-height:60px; max-height:400px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+          });
+          outputParts.push(afterLabel, afterId);
+        }
+        parts.push(ui.collapsible('解读对比（语义标注）', outputParts, { expanded: true }));
+      } else if (result.beforeOutput != null && result.afterOutput != null) {
+        parts.push(
+          ui.diffView(result.beforeOutput, result.afterOutput, {
+            title: '解读输出差异',
+            unifiedDiff: result.outputUnifiedDiff,
+          })
+        );
+      }
+
+      contentId = ui.column(parts, { gap: 10 });
+    } else {
+      contentId = `wb_result_${result.id}_rendered`;
+      ui.addRaw(contentId, 'Text', {
+        text: result.text,
+        markdown: true,
+        style:
+          'min-height:60px; max-height:600px; overflow-y:auto; padding:16px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+      });
+    }
   }
 
   const cardContent = ui.column([headerRow, controlRow, contentId], { gap: 8 });

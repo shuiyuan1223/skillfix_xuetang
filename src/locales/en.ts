@@ -808,6 +808,7 @@ export const en: LocaleMessages = {
     testDataPlaceholder: 'Paste health data JSON or natural language description...',
     clearData: 'Clear',
     runInterpret: 'Run Interpretation',
+    runDiff: 'Compare Diff',
     previousResult: 'Previous Result',
     currentResult: 'Current Result',
     noResult: 'No results yet. Click "Run Interpretation" to start.',
@@ -834,6 +835,8 @@ export const en: LocaleMessages = {
     collapse: 'Collapse List',
     exportZip: 'Download ZIP',
     noPromptsEnabled: 'No prompts enabled',
+    noSkillsEnabled: 'No skills enabled',
+    diffModeHint: 'Compare mode active — run will compare before/after',
     selectModel: 'Select Model',
   },
 

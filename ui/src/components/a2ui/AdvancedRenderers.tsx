@@ -326,24 +326,24 @@ export function renderDiffView(c: A2UIComponent, ctx: RenderContext) {
         <div className="px-4 py-2 text-sm font-medium text-text border-b border-border bg-surface">{title}</div>
       )}
       <div className="grid grid-cols-2">
-        <div className="border-r border-border">
+        <div className="border-r border-border min-w-0 overflow-hidden">
           <div className="px-4 py-2 text-xs font-medium text-text-muted bg-surface border-b border-border">Before</div>
-          <div className="font-mono text-xs">
+          <div className="font-mono text-xs overflow-x-auto">
             {beforeLines.map((line, i) => (
               <div key={i} className={`flex ${afterLines[i] !== line ? 'bg-red-500/10' : ''}`}>
                 <span className="w-10 text-right pr-2 text-text-muted select-none shrink-0 py-px">{i + 1}</span>
-                <span className="flex-1 py-px px-2 whitespace-pre">{line || ' '}</span>
+                <span className="min-w-0 py-px px-2 whitespace-pre-wrap break-words">{line || ' '}</span>
               </div>
             ))}
           </div>
         </div>
-        <div>
+        <div className="min-w-0 overflow-hidden">
           <div className="px-4 py-2 text-xs font-medium text-text-muted bg-surface border-b border-border">After</div>
-          <div className="font-mono text-xs">
+          <div className="font-mono text-xs overflow-x-auto">
             {afterLines.map((line, i) => (
               <div key={i} className={`flex ${beforeLines[i] !== line ? 'bg-emerald-500/10' : ''}`}>
                 <span className="w-10 text-right pr-2 text-text-muted select-none shrink-0 py-px">{i + 1}</span>
-                <span className="flex-1 py-px px-2 whitespace-pre">{line || ' '}</span>
+                <span className="min-w-0 py-px px-2 whitespace-pre-wrap break-words">{line || ' '}</span>
               </div>
             ))}
           </div>

@@ -177,6 +177,10 @@ pha eval run           # 运行评估
 
 # 进化实验室 (Web UI)
 # 导航到 Evolution Lab，Agent 驱动进化流程
+
+# 技能调试工作台 (Web UI)
+# 侧边栏点击"调试工作台"，测试和迭代 Skills/Prompts
+# 详细使用指南：docs/workbench-guide.md
 ```
 
 ## API 端点
