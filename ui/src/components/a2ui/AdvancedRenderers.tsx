@@ -796,6 +796,7 @@ export function renderModalComponent(c: A2UIComponent, ctx: RenderContext) {
     md: 'max-w-[600px] w-[90%]',
     lg: 'max-w-[800px] w-[90%]',
     xl: 'max-w-[1000px] w-[95%]',
+    '2xl': 'max-w-[1400px] w-[97%]',
   };
   return (
     <div

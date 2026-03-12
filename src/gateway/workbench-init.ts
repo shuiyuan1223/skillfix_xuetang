@@ -107,6 +107,8 @@ export interface WorkbenchState {
   testDataPreviewMode?: boolean;
   /** When true, clicking "Run" triggers diff comparison instead of single interpretation */
   diffMode?: boolean;
+  /** Cache for "before" LLM output — reused if before content unchanged between runs */
+  beforeOutputCache?: { beforeMessage: string; output: string };
 }
 
 // ── Helpers ────────────────────────────────────────────────────

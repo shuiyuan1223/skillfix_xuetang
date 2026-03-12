@@ -21,7 +21,7 @@ import {
   WORKBENCH_MODELS,
 } from './workbench-init.js';
 import type { GatewaySession, SendFn } from './server.js';
-import type { A2UIMessage } from './a2ui.js';
+import { A2UIGenerator, type A2UIMessage } from './a2ui.js';
 import { getProjectRoot } from '../evolution/version-manager.js';
 
 const log = createLogger('Workbench');
@@ -59,6 +59,7 @@ export const WORKBENCH_ACTIONS = new Set([
   'debug_select_model',
   'debug_export_zip',
   'workbench_get_export_data',
+  'debug_open_diff_modal',
 ]);
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -261,6 +262,16 @@ export async function handleWorkbenchAction(
       // Return all skills and prompts content for ZIP export
       handleGetExportData(state, send);
       return;
+    case 'debug_open_diff_modal': {
+      const resultId = payload?.resultId as string;
+      const diffResult = state.results.find((r) => r.id === resultId && r.kind === 'diff') as
+        | WorkbenchDiffResult
+        | undefined;
+      if (diffResult) {
+        sendAll(send, generateDiffModal(diffResult));
+      }
+      return; // don't rerender main page
+    }
     default:
       log.warn('Unknown workbench action', { action });
       return;
@@ -570,6 +581,79 @@ async function doRunInterpret(session: GatewaySession, result: WorkbenchInterpre
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Diff detail modal — 3-column layout: skill/prompt diffs | before | after
+// ─────────────────────────────────────────────────────────────────────────────
+
+function generateDiffModal(result: WorkbenchDiffResult): A2UIMessage[] {
+  const ui = new A2UIGenerator('modal');
+  const parts: string[] = [];
+
+  // Summary section
+  if (result.analysisText) {
+    const summaryId = `modal_summary_${result.id}`;
+    ui.addRaw(summaryId, 'Text', {
+      text: result.analysisText,
+      markdown: true,
+      style:
+        'padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+    });
+    parts.push(ui.text('变更摘要', 'h4'), summaryId);
+  }
+
+  // Col 1: Skill/Prompt diffs
+  const diffParts: string[] = [];
+  for (const d of result.promptDiffs ?? []) {
+    diffParts.push(
+      ui.diffView(d.before, d.after, {
+        title: `${d.enabled ? '[启用] ' : ''}${d.id}.md`,
+        unifiedDiff: d.unifiedDiff,
+      })
+    );
+  }
+  for (const d of result.skillDiffs ?? []) {
+    diffParts.push(
+      ui.diffView(d.before, d.after, {
+        title: `${d.enabled ? '[启用] ' : ''}${d.id} / SKILL.md`,
+        unifiedDiff: d.unifiedDiff,
+      })
+    );
+  }
+  const col1 = ui.column([ui.text('Skill/Prompt 变更', 'h4'), ...diffParts], {
+    gap: 12,
+    style: 'overflow-y:auto; max-height:60vh;',
+  });
+
+  // Col 2: Before output with highlights
+  const beforeId = `modal_before_${result.id}`;
+  ui.addRaw(beforeId, 'Text', {
+    text: result.annotatedBefore ?? result.beforeOutput ?? '（未生成）',
+    markdown: true,
+    className: result.annotatedBefore ? 'semantic-annotation' : '',
+    style:
+      'padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px; overflow-y:auto; max-height:60vh;',
+  });
+  const col2 = ui.column([ui.text('修改前解读', 'h4'), beforeId], { gap: 8 });
+
+  // Col 3: After output with highlights
+  const afterId = `modal_after_${result.id}`;
+  ui.addRaw(afterId, 'Text', {
+    text: result.annotatedAfter ?? result.afterOutput ?? '（未生成）',
+    markdown: true,
+    className: result.annotatedAfter ? 'semantic-annotation' : '',
+    style:
+      'padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px; overflow-y:auto; max-height:60vh;',
+  });
+  const col3 = ui.column([ui.text('修改后解读', 'h4'), afterId], { gap: 8 });
+
+  const grid = ui.grid([col1, col2, col3], { columns: '1fr 1fr 1fr', gap: 16 });
+  parts.push(grid);
+
+  const content = ui.column(parts, { gap: 12 });
+  const root = ui.modal('对比差异详情', [content], { size: '2xl' });
+  return ui.build(root);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Diff interpretation (baseline vs current) + GLM-5 impact analysis
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -790,17 +874,33 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
     return;
   }
 
-  result.text = '1/3 生成基线解读（Before）...';
-  sendResultTextViaSSE(session, result);
-  const before = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: beforeMessage, temperature: 0 });
+  // Check baseline cache: if "before" content hasn't changed, reuse cached output
+  let beforeText: string;
+  let afterText: string;
+  const cachedBefore = state.beforeOutputCache;
+  if (cachedBefore && cachedBefore.beforeMessage === beforeMessage) {
+    log.info('Diff: reusing cached before output');
+    result.text = '使用缓存 Before 解读，生成 After 解读...';
+    sendResultTextViaSSE(session, result);
+    const afterResult = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: afterMessage, temperature: 0 });
+    beforeText = cachedBefore.output;
+    afterText = afterResult.text;
+  } else {
+    result.text = '并发生成 Before / After 解读...';
+    sendResultTextViaSSE(session, result);
+    const [beforeResult, afterResult] = await Promise.all([
+      runOneLLMCall({ modelId: 'z-ai/glm-5', input: beforeMessage, temperature: 0 }),
+      runOneLLMCall({ modelId: 'z-ai/glm-5', input: afterMessage, temperature: 0 }),
+    ]);
+    beforeText = beforeResult.text;
+    afterText = afterResult.text;
+    // Cache for next run
+    state.beforeOutputCache = { beforeMessage, output: beforeText };
+  }
 
-  result.text = '2/3 生成当前解读（After）...';
-  sendResultTextViaSSE(session, result);
-  const after = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: afterMessage, temperature: 0 });
+  const outputUnifiedDiff = getUnifiedDiff(beforeText, afterText);
 
-  const outputUnifiedDiff = getUnifiedDiff(before.text, after.text);
-
-  result.text = '3/3 语义分析：标注变更影响段落...';
+  result.text = '语义分析：标注变更影响段落...';
   sendResultTextViaSSE(session, result);
 
   const diffSummaryInput = [
@@ -826,10 +926,10 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
       .map((d) => `### Skill: ${d.id}/SKILL.md\n\n${truncateForPrompt(d.unifiedDiff ?? '（无法获取 diff）', 8000)}`),
     '',
     '【Before 输出（修改前的解读）】',
-    truncateForPrompt(before.text, 15000),
+    truncateForPrompt(beforeText, 15000),
     '',
     '【After 输出（修改后的解读）】',
-    truncateForPrompt(after.text, 15000),
+    truncateForPrompt(afterText, 15000),
     '',
     '【输出格式（严格遵守，不得在标记外输出任何文字）】',
     '',
@@ -861,11 +961,11 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
     });
   }
 
-  // Always display the guaranteed full texts (before.text / after.text).
+  // Always display the guaranteed full texts.
   // Extract **bold phrases** that the LLM identified as affected, then inject
   // those highlights into the full text — so the user sees complete context + highlights.
-  const annotatedBefore = applyHighlightsToFullText(before.text, llmAnnotatedBefore);
-  const annotatedAfter = applyHighlightsToFullText(after.text, llmAnnotatedAfter);
+  const annotatedBefore = applyHighlightsToFullText(beforeText, llmAnnotatedBefore);
+  const annotatedAfter = applyHighlightsToFullText(afterText, llmAnnotatedAfter);
   log.info('Diff highlights applied', {
     beforeHighlights: (llmAnnotatedBefore?.match(/\*\*[^*]+\*\*/g) ?? []).length,
     afterHighlights: (llmAnnotatedAfter?.match(/\*\*[^*]+\*\*/g) ?? []).length,
@@ -873,8 +973,8 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
 
   result.beforeMessages = beforeMessage;
   result.afterMessages = afterMessage;
-  result.beforeOutput = before.text;
-  result.afterOutput = after.text;
+  result.beforeOutput = beforeText;
+  result.afterOutput = afterText;
   result.outputUnifiedDiff = outputUnifiedDiff;
   result.promptDiffs = promptDiffs.map((d) => ({
     id: d.id,

@@ -331,9 +331,9 @@ function buildResultsColumn(ui: A2UIGenerator, state: WorkbenchState): string {
     size: 'sm',
     icon: 'git-branch',
   });
-  const runBtn = ui.button(t('workbench.runInterpret'), 'debug_run_interpret', {
-    variant: 'primary',
-    icon: state.diffMode ? 'git-branch' : 'play',
+  const runBtn = ui.button(state.diffMode ? '运行对比' : t('workbench.runInterpret'), 'debug_run_interpret', {
+    variant: state.diffMode ? 'accent' : 'primary',
+    icon: state.diffMode ? 'git-merge' : 'play',
   });
   const runRow = ui.row([diffToggleBtn, runBtn], { gap: 8, align: 'center' });
   const actionRow = ui.row([modelRow, runRow], { gap: 8, align: 'center', justify: 'space-between' });
@@ -419,6 +419,16 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
     );
   }
   if (result.kind === 'diff') {
+    if (result.status === 'done') {
+      controlItems.push(
+        ui.button('展开对比', 'debug_open_diff_modal', {
+          variant: 'secondary',
+          size: 'sm',
+          icon: 'git-branch',
+          payload: { resultId: result.id },
+        })
+      );
+    }
     if (result.beforeMessages) {
       controlItems.push(
         ui.button('复制旧 Messages', 'debug_copy_messages', {
