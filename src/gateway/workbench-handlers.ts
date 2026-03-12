@@ -623,11 +623,17 @@ function truncateForPrompt(s: string, maxChars: number): string {
   return `${head}\n\n...(truncated ${s.length - maxChars} chars)...\n\n${tail}`;
 }
 
-async function runOneLLMCall(args: { modelId: string; input: string }): Promise<{ text: string }> {
+async function runOneLLMCall(args: {
+  modelId: string;
+  input: string;
+  temperature?: number;
+}): Promise<{ text: string }> {
   const { createPHAAgent, resolveAgentProfileModel } = await import('../agent/pha-agent.js');
   const { MockDataSource } = await import('../data-sources/mock.js');
+  const { streamSimple } = await import('@mariozechner/pi-ai');
   const model = resolveAgentProfileModel('pha');
 
+  const temperature = args.temperature;
   const agent = await createPHAAgent({
     apiKey: model.apiKey,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
@@ -635,6 +641,11 @@ async function runOneLLMCall(args: { modelId: string; input: string }): Promise<
     modelId: args.modelId,
     baseUrl: model.baseUrl,
     dataSource: new MockDataSource(),
+    ...(temperature !== undefined && {
+      agentOptions: {
+        streamFn: (m, ctx, opts) => streamSimple(m, ctx, { ...opts, temperature }),
+      },
+    }),
   });
 
   let accumulatedText = '';
@@ -781,11 +792,11 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
 
   result.text = '1/3 生成基线解读（Before）...';
   sendResultTextViaSSE(session, result);
-  const before = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: beforeMessage });
+  const before = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: beforeMessage, temperature: 0 });
 
   result.text = '2/3 生成当前解读（After）...';
   sendResultTextViaSSE(session, result);
-  const after = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: afterMessage });
+  const after = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: afterMessage, temperature: 0 });
 
   const outputUnifiedDiff = getUnifiedDiff(before.text, after.text);
 
@@ -830,7 +841,7 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
     '（After 输出原文完整复制，将受影响的关键句用 **关键句** 包裹，其余原样保留）',
   ].join('\n');
 
-  const analysis = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: diffSummaryInput });
+  const analysis = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: diffSummaryInput, temperature: 0 });
 
   // Parse structured sections from LLM response.
   // Use [^\S\n]*\r?\n? to allow optional trailing spaces + optional CRLF after the marker,
