@@ -63,6 +63,38 @@ export const WORKBENCH_ACTIONS = new Set([
 
 // ── Helpers ───────────────────────────────────────────────────
 
+/**
+ * Extract **bold phrases** from LLM-annotated text and inject them into the
+ * guaranteed full text. This ensures the display always shows the complete
+ * original interpretation, with LLM-identified highlights applied inline.
+ *
+ * If llmAnnotated is null/undefined (LLM skipped annotation), returns fullText as-is.
+ */
+function applyHighlightsToFullText(fullText: string, llmAnnotated: string | undefined): string {
+  if (!llmAnnotated) return fullText;
+
+  // Extract **phrase** segments (min 4 chars to avoid tiny false matches)
+  const phrases: string[] = [];
+  const boldRegex = /\*\*([^*]{4,})\*\*/g;
+  let m;
+  while ((m = boldRegex.exec(llmAnnotated)) !== null) {
+    phrases.push(m[1]);
+  }
+
+  if (phrases.length === 0) return fullText;
+
+  // Sort longest-first so shorter sub-phrases don't clobber longer ones
+  phrases.sort((a, b) => b.length - a.length);
+
+  let result = fullText;
+  for (const phrase of phrases) {
+    // Skip if already wrapped in ** (avoid double-bolding)
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(`(?<!\\*)${escaped}(?!\\*)`, 'g'), `**${phrase}**`);
+  }
+  return result;
+}
+
 function sendAll(send: SendFn, messages: A2UIMessage[]): void {
   for (const msg of messages) send(msg);
 }
@@ -808,9 +840,8 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
   const beforeMatch = analysis.text.match(/<<<ANNOTATED_BEFORE>>>[^\S\n]*\r?\n?([\s\S]*?)(?=<<<ANNOTATED_AFTER>>>|$)/);
   const afterMatch = analysis.text.match(/<<<ANNOTATED_AFTER>>>[^\S\n]*\r?\n?([\s\S]*?)$/);
   const analysisText = summaryMatch?.[1]?.trim() ?? analysis.text;
-  // Only fall back to plain text if LLM completely ignored the format
-  const annotatedBefore = beforeMatch?.[1]?.trim() ?? before.text;
-  const annotatedAfter = afterMatch?.[1]?.trim() ?? after.text;
+  const llmAnnotatedBefore = beforeMatch?.[1]?.trim();
+  const llmAnnotatedAfter = afterMatch?.[1]?.trim();
   if (!beforeMatch || !afterMatch) {
     log.warn('Diff analysis: LLM did not follow marker format', {
       hasBeforeMarker: !!beforeMatch,
@@ -818,6 +849,16 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
       rawLength: analysis.text.length,
     });
   }
+
+  // Always display the guaranteed full texts (before.text / after.text).
+  // Extract **bold phrases** that the LLM identified as affected, then inject
+  // those highlights into the full text — so the user sees complete context + highlights.
+  const annotatedBefore = applyHighlightsToFullText(before.text, llmAnnotatedBefore);
+  const annotatedAfter = applyHighlightsToFullText(after.text, llmAnnotatedAfter);
+  log.info('Diff highlights applied', {
+    beforeHighlights: (llmAnnotatedBefore?.match(/\*\*[^*]+\*\*/g) ?? []).length,
+    afterHighlights: (llmAnnotatedAfter?.match(/\*\*[^*]+\*\*/g) ?? []).length,
+  });
 
   result.beforeMessages = beforeMessage;
   result.afterMessages = afterMessage;
