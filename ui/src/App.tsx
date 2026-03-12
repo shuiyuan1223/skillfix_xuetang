@@ -43,12 +43,17 @@ function getUserId(): string | null {
 }
 
 /** Send an action to the A2UI HTTP endpoint and process response updates. */
-async function postAction(data: Record<string, unknown>, handleMessage: (msg: WSMessage) => void): Promise<void> {
+async function postAction(
+  data: Record<string, unknown>,
+  handleMessage: (msg: WSMessage) => void,
+  signal?: AbortSignal
+): Promise<void> {
   try {
     const res = await fetch(`${BASE_PATH}/api/a2ui/action`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+      signal,
     });
     if (!res.ok) {
       return;
@@ -64,6 +69,7 @@ async function postAction(data: Record<string, unknown>, handleMessage: (msg: WS
       });
     }
   } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') return; // navigate was superseded
     console.error('[A2UI] Action error:', e);
   }
 }
@@ -109,6 +115,7 @@ export function App() {
   const extensionDetectedRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
   const lastViewRef = useRef<string | null>(null);
+  const navAbortRef = useRef<AbortController | null>(null);
   const mainDataRef = useRef<A2UISurfaceData | null>(null);
   const handleMessageRef = useRef<(msg: WSMessage) => void>(() => {});
   const pendingSurface = useRef(new Map<string, A2UIComponent[]>());
@@ -775,6 +782,14 @@ export function App() {
     setPageKey((k) => k + 1);
     lastAppliedSeqRef.current.clear(); // new view → fresh seq tracking
 
+    // Cancel any in-flight navigate request so a slow previous navigation
+    // can't overwrite the new page with a stale response.
+    if (navAbortRef.current) {
+      navAbortRef.current.abort();
+    }
+    navAbortRef.current = new AbortController();
+    const navSignal = navAbortRef.current.signal;
+
     // Close mobile sidebar with animation
     setMobileSidebarOpen((open) => {
       if (open) {
@@ -795,7 +810,7 @@ export function App() {
     chatInitializedRef.current = false;
     setChatMessages([]);
 
-    postAction({ type: 'navigate', view }, handleMessageRef.current);
+    postAction({ type: 'navigate', view }, handleMessageRef.current, navSignal);
   }, []);
 
   // ---------------------------------------------------------------------------

@@ -808,9 +808,11 @@ const NAV_HANDLERS: Record<string, NavHandler> = {
   'settings/general': async (s) => navigateGeneral(s),
   experiment: async (s) => navigateExperiment(s),
   workbench: async (s) => {
-    // Always re-initialize: unsaved changes (edits, enable/disable) are
-    // session-local and should not persist across page navigations.
-    s.workbenchState = await initializeWorkbench();
+    // Only initialize once per session. Re-initializing would lose any
+    // in-progress diff results and user edits.
+    if (!s.workbenchState) {
+      s.workbenchState = await initializeWorkbench();
+    }
     return generateWorkbenchPage(s.workbenchState);
   },
 };
@@ -875,9 +877,17 @@ export async function dispatchNavigation(
     if (result === 'early-return' || result === null) {
       return;
     }
+    // A newer navigation was requested while this one was processing.
+    // Discard this stale result so it doesn't overwrite the newer page.
+    if (signal?.aborted) {
+      return;
+    }
     // result is A2UIMessage[]
     sendAll(send, session.buildPage(view, result));
   } else {
+    if (signal?.aborted) {
+      return;
+    }
     // Default: chat page
     const mainPage = generateChatPage({
       messages: session.chatMessages,
