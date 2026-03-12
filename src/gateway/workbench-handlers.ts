@@ -941,7 +941,12 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
     '（After 输出原文完整复制，将受影响的关键句用 **关键句** 包裹，其余原样保留）',
   ].join('\n');
 
-  const analysis = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: diffSummaryInput, temperature: 0 });
+  // Retry once if LLM returns empty (network blip / rate limit)
+  let analysis = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: diffSummaryInput, temperature: 0 });
+  if (!analysis.text.trim()) {
+    log.warn('Diff analysis returned empty, retrying once...');
+    analysis = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: diffSummaryInput, temperature: 0 });
+  }
 
   // Parse structured sections from LLM response.
   // Use [^\S\n]*\r?\n? to allow optional trailing spaces + optional CRLF after the marker,

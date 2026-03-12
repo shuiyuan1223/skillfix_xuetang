@@ -1654,9 +1654,9 @@ select:focus {
 /* ========== Semantic Annotation Highlights ========== */
 /* Bold text inside semantic annotation blocks gets a visible background highlight */
 .semantic-annotation strong {
-  background-color: rgba(251, 191, 36, 0.25);
-  color: rgb(251, 191, 36);
-  padding: 1px 3px;
+  background-color: rgba(251, 191, 36, 0.35);
+  color: inherit;
+  padding: 1px 4px;
   border-radius: 3px;
-  font-weight: 600;
+  font-weight: inherit;
 }
