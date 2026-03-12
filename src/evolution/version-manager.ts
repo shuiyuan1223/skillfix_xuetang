@@ -33,6 +33,7 @@ export function getProjectRoot(): string {
     return execSync('git rev-parse --show-toplevel', {
       encoding: 'utf-8',
       timeout: 5000,
+      windowsHide: true,
     }).trim();
   } catch {
     return process.cwd();
@@ -48,6 +49,7 @@ export function getCurrentBranch(): string {
       encoding: 'utf-8',
       cwd: getProjectRoot(),
       timeout: 5000,
+      windowsHide: true,
     }).trim();
   } catch {
     return 'main';
@@ -63,6 +65,7 @@ export function getNextVersionNumber(): number {
       encoding: 'utf-8',
       cwd: getProjectRoot(),
       timeout: 5000,
+      windowsHide: true,
     }).trim();
 
     if (!output) {
@@ -222,6 +225,7 @@ export function listEvolutionBranches(): string[] {
       encoding: 'utf-8',
       cwd: getProjectRoot(),
       timeout: 5000,
+      windowsHide: true,
     }).trim();
 
     if (!output) {
@@ -246,6 +250,7 @@ export function listWorktrees(): Array<{ path: string; branch: string }> {
       encoding: 'utf-8',
       cwd: getProjectRoot(),
       timeout: 5000,
+      windowsHide: true,
     }).trim();
 
     if (!output) {
@@ -282,6 +287,7 @@ export function getChangedFilesOnBranch(branchName: string): string[] {
       cwd: getProjectRoot(),
       encoding: 'utf-8',
       timeout: 10000,
+      windowsHide: true,
     }).trim();
 
     return output ? output.split('\n').filter(Boolean) : [];
@@ -375,6 +381,7 @@ export function getChangedFilesForVersion(branchName: string): string[] {
           cwd: getProjectRoot(),
           encoding: 'utf-8',
           timeout: 10000,
+          windowsHide: true,
         }).trim();
         return output ? output.split('\n').filter(Boolean) : [];
       } catch {
@@ -419,6 +426,7 @@ export function getGitStatusPorcelain(path?: string): string {
       cwd,
       encoding: 'utf-8',
       timeout: 10000,
+      windowsHide: true,
     }).trimEnd();
   } catch {
     return '';
@@ -444,6 +452,7 @@ export function getGitLog(opts?: { limit?: number; branch?: string; all?: boolea
       cwd: getProjectRoot(),
       encoding: 'utf-8',
       timeout: 10000,
+      windowsHide: true,
     }).trim();
 
     if (!output) {
@@ -477,6 +486,7 @@ export function getGitDiffContent(branch: string, baseBranch?: string): string {
       encoding: 'utf-8',
       timeout: 30000,
       maxBuffer: 5 * 1024 * 1024,
+      windowsHide: true,
     }).trim();
   } catch {
     return '';
@@ -512,6 +522,7 @@ export function gitCommitFiles(
       cwd: workdir,
       encoding: 'utf-8',
       timeout: 5000,
+      windowsHide: true,
     }).trim();
     return { success: true, commitHash: hash };
   } catch (error) {

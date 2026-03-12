@@ -1545,8 +1545,16 @@ export class GatewaySession {
     }
 
     // Use client-provided view on reconnect (avoids cross-browser sync),
-    // fall back to session's currentView for first connection
-    const view = clientView || this.currentView;
+    // fall back to session's currentView for first connection.
+    // If sidebar.include restricts views and doesn't include the default 'chat',
+    // use the first included view so the user sees the right page immediately.
+    let view = clientView || this.currentView;
+    if (!clientView && view === 'chat') {
+      const sidebarInclude = loadConfig().gateway.sidebar?.include;
+      if (sidebarInclude?.length && !sidebarInclude.includes('chat')) {
+        view = sidebarInclude[0];
+      }
+    }
     await this.handleNavigate(view, collector);
     return collected;
   }
@@ -1626,8 +1634,16 @@ export class GatewaySession {
     }
 
     // Use client-provided view on reconnect (avoids cross-browser sync),
-    // fall back to session's currentView for first connection
-    const view = clientView || this.currentView;
+    // fall back to session's currentView for first connection.
+    // If sidebar.include restricts views and doesn't include the default 'chat',
+    // use the first included view so the user sees the right page immediately.
+    let view = clientView || this.currentView;
+    if (!clientView && view === 'chat') {
+      const sidebarInclude = loadConfig().gateway.sidebar?.include;
+      if (sidebarInclude?.length && !sidebarInclude.includes('chat')) {
+        view = sidebarInclude[0];
+      }
+    }
     await this.handleNavigate(view, send);
   }
 

@@ -764,10 +764,10 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
     '你是”Skill/Prompt 变更语义影响分析器”。请基于 Skill/Prompt 的修改内容，理解语义上改变了什么规则或行为，然后在 Before/After 输出中用 **粗体** 标注受影响的关键句子或段落。',
     '',
     '要求：',
-    '- 严格按照下面的输出格式，不要在格式标记之外输出任何额外文字',
+    '- 你的输出必须且只能包含下面三个标记段落，不要在标记之前或之外输出任何文字（包括”好的”、”以下是”等开场白）',
     '- 用 **粗体** 标注 Before 输出中体现”旧行为/被修改规则”的关键句子或段落',
     '- 用 **粗体** 标注 After 输出中体现”新行为/变更影响”的关键句子或段落',
-    '- 保留原文其他内容（不要改写）',
+    '- 保留原文其他内容（不要改写、不要缩减）',
     '- 如果变更对某段输出没有可辨识的影响，则不标注',
     '',
     '【变更 Diff（仅启用项）】',
@@ -784,24 +784,37 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
     '【After 输出（修改后的解读）】',
     truncateForPrompt(after.text, 15000),
     '',
-    '输出格式（严格按此格式，三条分隔线必须独占完整一行）：',
+    '【输出格式（严格遵守）】',
+    '你的回复必须严格按照以下格式，每个标记独占一行，标记本身不要添加任何符号或空格：',
+    '',
     '<<<SUMMARY>>>',
-    '（2-3句话总结：Skill/Prompt 语义上改变了什么规则，对输出产生了什么影响）',
+    '（在这里写2-3句话：Skill/Prompt 语义上改变了什么规则，对输出产生了什么影响）',
     '<<<ANNOTATED_BEFORE>>>',
-    '（Before 输出原文，将体现旧行为的关键句用 **...** 包裹，其余原样保留）',
+    '（在这里把 Before 输出原文完整复制，将体现旧行为的关键句用 **关键句** 包裹，其余原样保留，不要省略任何内容）',
     '<<<ANNOTATED_AFTER>>>',
-    '（After 输出原文，将体现新行为/变更影响的关键句用 **...** 包裹，其余原样保留）',
+    '（在这里把 After 输出原文完整复制，将体现新行为/变更影响的关键句用 **关键句** 包裹，其余原样保留，不要省略任何内容）',
   ].join('\n');
 
   const analysis = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: diffSummaryInput });
 
-  // Parse structured sections from LLM response
-  const summaryMatch = analysis.text.match(/<<<SUMMARY>>>\n([\s\S]*?)(?=<<<ANNOTATED_BEFORE>>>|$)/);
-  const beforeMatch = analysis.text.match(/<<<ANNOTATED_BEFORE>>>\n([\s\S]*?)(?=<<<ANNOTATED_AFTER>>>|$)/);
-  const afterMatch = analysis.text.match(/<<<ANNOTATED_AFTER>>>\n([\s\S]*?)$/);
+  // Parse structured sections from LLM response.
+  // Use [^\S\n]*\r?\n? to allow optional trailing spaces + optional CRLF after the marker,
+  // covering both "<<<MARKER>>>\n" and "<<<MARKER>>>\r\n" and edge cases where LLM omits newline.
+  log.info('Diff analysis LLM raw output (first 500 chars)', { preview: analysis.text.slice(0, 500) });
+  const summaryMatch = analysis.text.match(/<<<SUMMARY>>>[^\S\n]*\r?\n?([\s\S]*?)(?=<<<ANNOTATED_BEFORE>>>|$)/);
+  const beforeMatch = analysis.text.match(/<<<ANNOTATED_BEFORE>>>[^\S\n]*\r?\n?([\s\S]*?)(?=<<<ANNOTATED_AFTER>>>|$)/);
+  const afterMatch = analysis.text.match(/<<<ANNOTATED_AFTER>>>[^\S\n]*\r?\n?([\s\S]*?)$/);
   const analysisText = summaryMatch?.[1]?.trim() ?? analysis.text;
+  // Only fall back to plain text if LLM completely ignored the format
   const annotatedBefore = beforeMatch?.[1]?.trim() ?? before.text;
   const annotatedAfter = afterMatch?.[1]?.trim() ?? after.text;
+  if (!beforeMatch || !afterMatch) {
+    log.warn('Diff analysis: LLM did not follow marker format', {
+      hasBeforeMarker: !!beforeMatch,
+      hasAfterMarker: !!afterMatch,
+      rawLength: analysis.text.length,
+    });
+  }
 
   result.beforeMessages = beforeMessage;
   result.afterMessages = afterMessage;
