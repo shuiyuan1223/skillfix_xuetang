@@ -514,6 +514,7 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
           ui.addRaw(beforeId, 'Text', {
             text: result.annotatedBefore,
             markdown: true,
+            className: 'semantic-annotation',
             style:
               'min-height:60px; max-height:400px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
           });
@@ -525,6 +526,7 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
           ui.addRaw(afterId, 'Text', {
             text: result.annotatedAfter,
             markdown: true,
+            className: 'semantic-annotation',
             style:
               'min-height:60px; max-height:400px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
           });
