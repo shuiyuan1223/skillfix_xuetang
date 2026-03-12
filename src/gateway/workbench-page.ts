@@ -472,17 +472,49 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
     if (result.kind === 'diff' && result.status === 'done') {
       const parts: string[] = [];
 
+      // 1. 变更摘要
       if (result.analysisText) {
         const analysisId = `wb_result_${result.id}_analysis`;
         ui.addRaw(analysisId, 'Text', {
           text: result.analysisText,
           markdown: true,
           style:
-            'min-height:60px; max-height:260px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
+            'min-height:40px; max-height:200px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
         });
         parts.push(analysisId);
       }
 
+      // 2. Before / After 全文展示（高亮标注受影响句子）
+      //    annotatedBefore/annotatedAfter = 原文完整复制 + **受影响句** 包裹
+      //    若 LLM 未输出则 fallback 到原始 beforeOutput/afterOutput
+      const beforeText = result.annotatedBefore ?? result.beforeOutput;
+      const afterText = result.annotatedAfter ?? result.afterOutput;
+      if (beforeText != null) {
+        const beforeLabel = ui.text('修改前解读', 'h3');
+        const beforeId = `wb_result_${result.id}_annotated_before`;
+        ui.addRaw(beforeId, 'Text', {
+          text: beforeText,
+          markdown: true,
+          className: result.annotatedBefore != null ? 'semantic-annotation' : '',
+          style:
+            'padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px; overflow-y:auto; max-height:500px;',
+        });
+        parts.push(beforeLabel, beforeId);
+      }
+      if (afterText != null) {
+        const afterLabel = ui.text('修改后解读', 'h3');
+        const afterId = `wb_result_${result.id}_annotated_after`;
+        ui.addRaw(afterId, 'Text', {
+          text: afterText,
+          markdown: true,
+          className: result.annotatedAfter != null ? 'semantic-annotation' : '',
+          style:
+            'padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px; overflow-y:auto; max-height:500px;',
+        });
+        parts.push(afterLabel, afterId);
+      }
+
+      // 3. Skill/Prompt 变更 Diff（折叠，按需展开）
       if (result.skillDiffs?.length || result.promptDiffs?.length) {
         const diffChildren: string[] = [];
         for (const d of result.promptDiffs ?? []) {
@@ -506,43 +538,7 @@ function buildResultCard(ui: A2UIGenerator, state: WorkbenchState, result: Workb
         }
       }
 
-      if (result.annotatedBefore != null || result.annotatedAfter != null) {
-        const outputParts: string[] = [];
-        if (result.annotatedBefore != null) {
-          const beforeLabel = ui.text('修改前解读', 'h4');
-          const beforeId = `wb_result_${result.id}_annotated_before`;
-          ui.addRaw(beforeId, 'Text', {
-            text: result.annotatedBefore,
-            markdown: true,
-            className: 'semantic-annotation',
-            style:
-              'min-height:60px; max-height:400px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
-          });
-          outputParts.push(beforeLabel, beforeId);
-        }
-        if (result.annotatedAfter != null) {
-          const afterLabel = ui.text('修改后解读', 'h4');
-          const afterId = `wb_result_${result.id}_annotated_after`;
-          ui.addRaw(afterId, 'Text', {
-            text: result.annotatedAfter,
-            markdown: true,
-            className: 'semantic-annotation',
-            style:
-              'min-height:60px; max-height:400px; overflow-y:auto; padding:12px; background:var(--color-surface-code); border:1px solid var(--color-border); border-radius:8px;',
-          });
-          outputParts.push(afterLabel, afterId);
-        }
-        parts.push(ui.collapsible('解读对比（语义标注）', outputParts, { expanded: true }));
-      } else if (result.beforeOutput != null && result.afterOutput != null) {
-        parts.push(
-          ui.diffView(result.beforeOutput, result.afterOutput, {
-            title: '解读输出差异',
-            unifiedDiff: result.outputUnifiedDiff,
-          })
-        );
-      }
-
-      contentId = ui.column(parts, { gap: 10 });
+      contentId = ui.column(parts, { gap: 12 });
     } else {
       contentId = `wb_result_${result.id}_rendered`;
       ui.addRaw(contentId, 'Text', {
