@@ -10,9 +10,8 @@ import { getSkillsDir } from '../tools/skill-tools.js';
 // ── Candidate models ────────────────────────────────────────────
 
 export const WORKBENCH_MODELS = [
-  { id: 'z-ai/glm-5', label: 'GLM-5' },
-  { id: 'moonshotai/kimi-k2.5', label: 'Kimi K2.5' },
-  { id: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2' },
+  { id: 'glm-5', label: 'GLM-5' },
+  { id: 'kimik25', label: 'Kimi K2.5' },
 ];
 
 // ── Types ──────────────────────────────────────────────────────
@@ -235,7 +234,7 @@ export async function initializeWorkbench(): Promise<WorkbenchState> {
     currentResult: null,
     results: [],
     resultViewModes: {},
-    selectedModelId: WORKBENCH_MODELS[2].id,
+    selectedModelId: WORKBENCH_MODELS[0].id,
     diffMode: false,
   };
 }
