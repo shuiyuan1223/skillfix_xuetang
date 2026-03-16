@@ -112,6 +112,8 @@ export interface ModelDefinition {
 export interface ModelProviderConfig {
   baseUrl?: string;
   apiKey?: string;
+  accessKey?: string;
+  secretKey?: string;
   models: ModelDefinition[];
 }
 

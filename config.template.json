@@ -10,14 +10,6 @@
       ]
     }
   },
-  "llm": {
-    "provider": "openai",
-    "apiKey": "placeholder",
-    "baseUrl": "http://10.32.214.120:8080/service/ds_diversion/llm/v1",
-    "modelId": "glm-5",
-    "accessKey": "YOUR_ACCESS_KEY",
-    "secretKey": "YOUR_SECRET_KEY"
-  },
   "dataSources": {
     "type": "mock"
   },
@@ -33,6 +25,8 @@
       "openai": {
         "apiKey": "placeholder",
         "baseUrl": "http://10.32.214.120:8080/service/ds_diversion/llm/v1",
+        "accessKey": "YOUR_ACCESS_KEY",
+        "secretKey": "YOUR_SECRET_KEY",
         "models": [
           {
             "name": "glm-5",

@@ -417,7 +417,14 @@ export class PHAAgent {
     }
 
     const cfg = loadConfig();
-    const model = resolveModelInstance(provider, modelId, config.baseUrl, cfg.llm.accessKey, cfg.llm.secretKey);
+    const providerCfg = cfg.models?.providers?.[provider];
+    const model = resolveModelInstance(
+      provider,
+      modelId,
+      config.baseUrl,
+      providerCfg?.accessKey,
+      providerCfg?.secretKey
+    );
     const systemPrompt = buildAgentSystemPrompt(this.userUuid, config.profile);
     const tools = resolveAgentTools(config, this.userUuid);
 
