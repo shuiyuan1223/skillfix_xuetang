@@ -37,7 +37,13 @@ stream: true
 - **修复**：将 `WORKBENCH_MODELS` 改为 `[{ id: 'glm-5' }, { id: 'kimik25' }]`，默认选中从 `[2]` 改为 `[0]`
 - 验证：LLM log 中 model 字段从 `z-ai/glm-5` 变为 `glm-5`，UI 正确显示输出 ✓
 
-### 7. Workbench skill 列表只保留血糖
+### 7. 对比差异模式输出空 — 已解决
+- **根因**：`runDiffInterpretInBackground` / `doRunDiffInterpret` 走独立链路，所有 `runOneLLMCall` 调用均硬编码 `modelId: 'z-ai/glm-5'`（共 6 处），与 `state.selectedModelId` 完全无关
+- 链路：`debug_run_interpret` → `diffMode=true` → `runDiffInterpretInBackground` → `doRunDiffInterpret` → `runOneLLMCall({ modelId: 'z-ai/glm-5', ... })`
+- **修复**：`workbench-handlers.ts` 中全局替换 `z-ai/glm-5` → `glm-5`（6 处）
+- 涉及位置：newResult.modelId（line 779）、before/after 并发调用（892-893）、cache miss 单次调用（885）、diffSummary 分析调用（945、948）
+
+### 8. Workbench skill 列表只保留血糖
 - **根因**：`SEED_SKILL_NAMES` 原本包含 12 个 skill，seed 逻辑仅在目录为空时执行，已有 skill 不会被清理
 - **修复**：
   1. `SEED_SKILL_NAMES` 改为 `['blood-sugar']`

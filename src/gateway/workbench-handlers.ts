@@ -776,7 +776,7 @@ function runDiffInterpretInBackground(session: GatewaySession): void {
       .map((s) => s.name)
       .join(', '),
     // Diff mode is fixed to GLM-5 per requirements.
-    modelId: 'z-ai/glm-5',
+    modelId: 'glm-5',
     modelLabel: 'GLM-5',
   };
 
@@ -882,15 +882,15 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
     log.info('Diff: reusing cached before output');
     result.text = '使用缓存 Before 解读，生成 After 解读...';
     sendResultTextViaSSE(session, result);
-    const afterResult = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: afterMessage, temperature: 0 });
+    const afterResult = await runOneLLMCall({ modelId: 'glm-5', input: afterMessage, temperature: 0 });
     beforeText = cachedBefore.output;
     afterText = afterResult.text;
   } else {
     result.text = '并发生成 Before / After 解读...';
     sendResultTextViaSSE(session, result);
     const [beforeResult, afterResult] = await Promise.all([
-      runOneLLMCall({ modelId: 'z-ai/glm-5', input: beforeMessage, temperature: 0 }),
-      runOneLLMCall({ modelId: 'z-ai/glm-5', input: afterMessage, temperature: 0 }),
+      runOneLLMCall({ modelId: 'glm-5', input: beforeMessage, temperature: 0 }),
+      runOneLLMCall({ modelId: 'glm-5', input: afterMessage, temperature: 0 }),
     ]);
     beforeText = beforeResult.text;
     afterText = afterResult.text;
@@ -942,10 +942,10 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
   ].join('\n');
 
   // Retry once if LLM returns empty (network blip / rate limit)
-  let analysis = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: diffSummaryInput, temperature: 0 });
+  let analysis = await runOneLLMCall({ modelId: 'glm-5', input: diffSummaryInput, temperature: 0 });
   if (!analysis.text.trim()) {
     log.warn('Diff analysis returned empty, retrying once...');
-    analysis = await runOneLLMCall({ modelId: 'z-ai/glm-5', input: diffSummaryInput, temperature: 0 });
+    analysis = await runOneLLMCall({ modelId: 'glm-5', input: diffSummaryInput, temperature: 0 });
   }
 
   // Parse structured sections from LLM response.
