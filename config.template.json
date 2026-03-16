@@ -1,0 +1,82 @@
+{
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 8513,
+    "autoStart": false,
+    "basePath": "/health_sport/pha-debugger",
+    "sidebar": {
+      "include": [
+        "workbench"
+      ]
+    }
+  },
+  "llm": {
+    "provider": "openai",
+    "apiKey": "placeholder",
+    "baseUrl": "http://10.32.214.120:8080/service/ds_diversion/llm/v1",
+    "modelId": "glm-5",
+    "accessKey": "YOUR_ACCESS_KEY",
+    "secretKey": "YOUR_SECRET_KEY"
+  },
+  "dataSources": {
+    "type": "mock"
+  },
+  "tui": {
+    "theme": "dark",
+    "showToolCalls": true
+  },
+  "orchestrator": {
+    "pha": "openai/glm-5"
+  },
+  "models": {
+    "providers": {
+      "openai": {
+        "apiKey": "placeholder",
+        "baseUrl": "http://10.32.214.120:8080/service/ds_diversion/llm/v1",
+        "models": [
+          {
+            "name": "glm-5",
+            "model": "glm-5"
+          },
+          {
+            "name": "kimik25",
+            "model": "kimik25"
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "pha": {
+      "workspace": "users/{uid}",
+      "sessionPath": "users/{uid}/sessions/pha",
+      "skills": {
+        "include": ["blood-sugar"]
+      }
+    },
+    "pha4old": {
+      "workspace": "users/{uid}",
+      "sessionPath": "users/{uid}/sessions/pha4old"
+    },
+    "sa": {
+      "workspace": "users/system",
+      "sessionPath": "users/system/sessions/sa"
+    }
+  },
+  "tags": [
+    "analysis", "api", "architecture", "behavior-change", "benchmark",
+    "blood-oxygen", "blood-pressure", "blood-sugar", "body-composition",
+    "body-temperature", "cardiovascular", "code-review", "daily-summary",
+    "data-analysis", "data-source", "date-range", "debugging", "diabetes",
+    "diagnosis", "diet", "evaluation", "evolution", "exercise", "fever",
+    "goals", "health-plan", "heart-rate", "hrv", "integration", "mcp",
+    "menstrual-cycle", "mental-health", "nutrition", "optimization",
+    "overview", "parsing", "periodization", "pha", "pha-markdown",
+    "pipeline", "planning", "playground", "proactive", "prompt-engineering",
+    "quality", "reasoning", "recommendations", "regression", "reminders",
+    "report", "reproductive-health", "sa", "search", "self-improvement",
+    "sleep", "spo2", "streaming", "stress", "time", "tool-design",
+    "tracking", "training", "trends", "weekly-review", "weight",
+    "workflow", "workout"
+  ]
+}

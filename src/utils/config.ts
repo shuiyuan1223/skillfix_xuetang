@@ -161,6 +161,8 @@ export interface LLMConfig {
   modelId?: string;
   apiKey?: string;
   baseUrl?: string;
+  accessKey?: string;
+  secretKey?: string;
   logging?: LLMLoggingConfig;
 }
 

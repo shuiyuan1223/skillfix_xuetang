@@ -15,6 +15,7 @@ import { getModel, type Model } from '@mariozechner/pi-ai';
 import { globalRegistry } from '../tools/index.js';
 import { getMemoryManager } from '../memory/index.js';
 import { createCompactionFlush, type LLMSummarizationConfig } from '../memory/compaction.js';
+import { createHmac } from 'crypto';
 import {
   getUserId,
   type LLMProvider,
@@ -219,8 +220,15 @@ export interface PHAAgentConfig {
 // LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createCustomModel(provider: string, modelId: string, baseUrl: string): Model<any> {
-  return {
+function createCustomModel(
+  provider: string,
+  modelId: string,
+  baseUrl: string,
+  accessKey?: string,
+  secretKey?: string
+): Model<any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const model: Model<any> = {
     id: modelId,
     name: modelId,
     api: 'openai-completions' as const,
@@ -232,10 +240,32 @@ function createCustomModel(provider: string, modelId: string, baseUrl: string): 
     contextWindow: 128000,
     maxTokens: 16384,
   };
+
+  if (accessKey && secretKey) {
+    const _secretKey = secretKey;
+    const _accessKey = accessKey;
+    Object.defineProperty(model, 'headers', {
+      get() {
+        const ts = Date.now();
+        const sign = createHmac('sha256', _secretKey).update(String(ts)).digest('base64');
+        return { accessKey: _accessKey, ts: String(ts), sign, call_from: 'hagent' };
+      },
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  return model;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function resolveModelInstance(provider: string, modelId: string, baseUrl?: string): Model<any> {
+function resolveModelInstance(
+  provider: string,
+  modelId: string,
+  baseUrl?: string,
+  accessKey?: string,
+  secretKey?: string
+): Model<any> {
   if (BUILTIN_PROVIDERS.includes(provider as LLMProvider)) {
     // @ts-expect-error - dynamic model selection
     const model = getModel(provider, modelId);
@@ -245,7 +275,7 @@ function resolveModelInstance(provider: string, modelId: string, baseUrl?: strin
   }
 
   if (baseUrl) {
-    return createCustomModel(provider, modelId, baseUrl);
+    return createCustomModel(provider, modelId, baseUrl, accessKey, secretKey);
   }
 
   const isBuiltin = BUILTIN_PROVIDERS.includes(provider as LLMProvider);
@@ -383,7 +413,8 @@ export class PHAAgent {
       );
     }
 
-    const model = resolveModelInstance(provider, modelId, config.baseUrl);
+    const cfg = loadConfig();
+    const model = resolveModelInstance(provider, modelId, config.baseUrl, cfg.llm.accessKey, cfg.llm.secretKey);
     const systemPrompt = buildAgentSystemPrompt(this.userUuid, config.profile);
     const tools = resolveAgentTools(config, this.userUuid);
 
