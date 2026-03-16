@@ -3,7 +3,7 @@
  */
 
 import { join } from 'path';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFileSync, rmSync } from 'fs';
 import { getStateDir } from '../utils/config.js';
 import { getSkillsDir } from '../tools/skill-tools.js';
 
@@ -132,20 +132,7 @@ function ensureDirs(): void {
 }
 
 /** Health-coaching category skills to seed into workbench */
-const SEED_SKILL_NAMES = [
-  'sleep-coach',
-  'heart-monitor',
-  'health-overview',
-  'stress-management',
-  'workout-tracker',
-  'nutrition',
-  'weight-management',
-  'blood-pressure',
-  'blood-sugar',
-  'blood-oxygen',
-  'body-temp',
-  'reproductive-health',
-];
+const SEED_SKILL_NAMES = ['blood-sugar'];
 
 const DEFAULT_PROMPT_CONTENT = `你是一位专业的运动健康分析师，具备运动科学、睡眠医学、心血管健康等专业知识背景。
 
@@ -201,16 +188,19 @@ export async function initializeWorkbench(): Promise<WorkbenchState> {
   const promptsDir = getWorkbenchPromptsDir();
   const srcSkillsDir = getSkillsDir();
 
-  // Seed skills if workbench skills dir is empty
+  // Sync skills: remove skills not in SEED_SKILL_NAMES, add missing ones
   const existingSkills = readdirSync(skillsDir).filter((f) => existsSync(join(skillsDir, f, 'SKILL.md')));
-  if (existingSkills.length === 0) {
-    for (const name of SEED_SKILL_NAMES) {
-      const srcPath = join(srcSkillsDir, name, 'SKILL.md');
-      if (existsSync(srcPath)) {
-        const destDir = join(skillsDir, name);
-        if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
-        copyFileSync(srcPath, join(destDir, 'SKILL.md'));
-      }
+  for (const name of existingSkills) {
+    if (!SEED_SKILL_NAMES.includes(name)) {
+      rmSync(join(skillsDir, name), { recursive: true, force: true });
+    }
+  }
+  for (const name of SEED_SKILL_NAMES) {
+    const srcPath = join(srcSkillsDir, name, 'SKILL.md');
+    if (existsSync(srcPath)) {
+      const destDir = join(skillsDir, name);
+      if (!existsSync(destDir)) mkdirSync(destDir, { recursive: true });
+      copyFileSync(srcPath, join(destDir, 'SKILL.md'));
     }
   }
 
