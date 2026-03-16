@@ -219,7 +219,6 @@ export interface PHAAgentConfig {
 
 // LLMProvider, DEFAULT_MODELS, ENV_KEY_MAP, BUILTIN_PROVIDERS imported from config.ts
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createCustomModel(
   provider: string,
   modelId: string,
@@ -239,6 +238,11 @@ function createCustomModel(
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 128000,
     maxTokens: 16384,
+    compat: {
+      supportsUsageInStreaming: false,
+      supportsStore: false,
+      maxTokensField: 'max_tokens',
+    },
   };
 
   if (accessKey && secretKey) {
@@ -258,7 +262,6 @@ function createCustomModel(
   return model;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function resolveModelInstance(
   provider: string,
   modelId: string,
