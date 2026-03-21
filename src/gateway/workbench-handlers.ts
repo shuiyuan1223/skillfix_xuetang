@@ -60,6 +60,10 @@ export const WORKBENCH_ACTIONS = new Set([
   'debug_export_zip',
   'workbench_get_export_data',
   'debug_open_diff_modal',
+  'debug_open_skill_adjust_modal',
+  'debug_skill_adjust_input_change',
+  'debug_generate_skill_variants',
+  'debug_select_skill_variant',
 ]);
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -271,6 +275,38 @@ export async function handleWorkbenchAction(
         sendAll(send, generateDiffModal(diffResult));
       }
       return; // don't rerender main page
+    }
+    case 'debug_open_skill_adjust_modal': {
+      if (!state.selectedSkillId) return;
+      const skill = state.skills.find((s) => s.id === state.selectedSkillId);
+      const originalContent = skill?.editedContent ?? readWorkbenchSkillContent(state.selectedSkillId) ?? '';
+      state.skillVariantsGenerating = false;
+      state.skillVariantsProgress = '';
+      state.skillVariants = null;
+      sendAll(send, generateSkillAdjustModal(state, originalContent));
+      return;
+    }
+    case 'debug_skill_adjust_input_change': {
+      state.skillAdjustInput = String(payload?.value ?? '');
+      return;
+    }
+    case 'debug_generate_skill_variants': {
+      handleGenerateSkillVariants(session, state, send);
+      return;
+    }
+    case 'debug_select_skill_variant': {
+      const idx = Number(payload?.variantIndex ?? -1);
+      if (!state.skillVariants || idx < 0 || idx >= state.skillVariants.length) return;
+      const variant = state.skillVariants[idx];
+      const skill = state.skills.find((s) => s.id === state.selectedSkillId);
+      if (!skill) return;
+      const original = skill.editedContent ?? readWorkbenchSkillContent(state.selectedSkillId!) ?? '';
+      skill.editedContent = applyVariantChanges(original, variant.changes);
+      skill.dirty = true;
+      state.skillVariants = null;
+      state.skillVariantsGenerating = false;
+      send({ deleteSurface: { surfaceId: 'modal' } });
+      break;
     }
     default:
       log.warn('Unknown workbench action', { action });
@@ -707,10 +743,11 @@ function truncateForPrompt(s: string, maxChars: number): string {
   return `${head}\n\n...(truncated ${s.length - maxChars} chars)...\n\n${tail}`;
 }
 
-async function runOneLLMCall(args: {
+export async function runOneLLMCall(args: {
   modelId: string;
   input: string;
   temperature?: number;
+  onProgress?: (text: string) => void;
 }): Promise<{ text: string }> {
   const { createPHAAgent, resolveAgentProfileModel } = await import('../agent/pha-agent.js');
   const { MockDataSource } = await import('../data-sources/mock.js');
@@ -739,6 +776,7 @@ async function runOneLLMCall(args: {
     if (ev.type === 'message_start' || ev.type === 'message_update') {
       if (ev.message?.role === 'assistant' && ev.message?.content) {
         accumulatedText = extractTextFromContent(ev.message.content as unknown[]);
+        args.onProgress?.(accumulatedText);
       }
     }
   });
@@ -1003,4 +1041,239 @@ async function doRunDiffInterpret(session: GatewaySession, result: WorkbenchDiff
   result.text = analysisText || '完成';
 
   rerenderViaSSE(session);
+}
+
+// ── Skill AI Variant Generation ───────────────────────────────
+
+function handleGenerateSkillVariants(session: GatewaySession, state: WorkbenchState, send: SendFn): void {
+  const skillId = state.selectedSkillId;
+  if (!skillId) return;
+
+  const skill = state.skills.find((s) => s.id === skillId);
+  const originalContent = skill?.editedContent ?? readWorkbenchSkillContent(skillId) ?? '';
+  const adjustInput = (state.skillAdjustInput || '').trim();
+
+  if (!adjustInput) {
+    sendAll(send, generateToast('请先输入调整方向', 'warning'));
+    return;
+  }
+
+  state.skillVariantsGenerating = true;
+  state.skillVariantsProgress = '';
+  // Switch modal to 3-column generating state
+  sendAll(send, generateSkillAdjustModal(state, originalContent));
+
+  void (async () => {
+    try {
+      const prompt = buildSkillVariantPrompt(originalContent, adjustInput);
+      const result = await runOneLLMCall({
+        modelId: 'glm-5',
+        input: prompt,
+        temperature: 0,
+        onProgress: (text) => {
+          state.skillVariantsProgress = text;
+          const sseSend = session.getActiveSend();
+          if (sseSend) {
+            sseSend({
+              dataModelUpdate: {
+                surfaceId: 'modal',
+                path: 'wb_adj_progress',
+                contents: { text },
+              },
+            });
+          }
+        },
+      });
+      const variants = parseSkillVariants(result.text);
+
+      state.skillVariantsGenerating = false;
+      state.skillVariantsProgress = '';
+      state.skillVariants = variants.length > 0 ? variants : null;
+
+      const sseSend = session.getActiveSend();
+      if (!sseSend) return;
+
+      if (variants.length === 0) {
+        sendAll(sseSend, generateToast('生成失败，请重试', 'error'));
+        sendAll(sseSend, generateSkillAdjustModal(state, originalContent));
+        return;
+      }
+
+      // Switch modal to 2-column variants state
+      sendAll(sseSend, generateSkillAdjustModal(state, originalContent));
+    } catch {
+      state.skillVariantsGenerating = false;
+      state.skillVariantsProgress = '';
+      const sseSend = session.getActiveSend();
+      if (sseSend) {
+        sendAll(sseSend, generateToast('生成变体失败，请重试', 'error'));
+        sendAll(sseSend, generateSkillAdjustModal(state, originalContent));
+      }
+    }
+  })();
+}
+
+function buildSkillVariantPrompt(currentSkill: string, userRequest: string): string {
+  return `You are an expert in AI agent skill design. Modify the following SKILL.md based on the user's request.
+
+Current skill:
+\`\`\`
+${currentSkill}
+\`\`\`
+
+User request: "${userRequest}"
+
+Output several variants (more variants if the request is vague/has multiple interpretations, fewer if it's clear).
+For each variant, output ONLY the changed sections — include 2-3 lines of surrounding context to locate the change. Do NOT repeat unchanged content.
+Use FIND/REPLACE pairs: FIND is the exact original text (with context), REPLACE is the new text.
+
+Output format (use exactly):
+<<<VARIANT_START>>>
+<<<TITLE>>>中文标题<<<END_TITLE>>>
+<<<DESCRIPTION>>>一两句说明改了什么<<<END_DESCRIPTION>>>
+<<<CHANGE>>>
+<<<FIND>>>
+[exact original text with 2-3 lines context]
+<<<END_FIND>>>
+<<<REPLACE>>>
+[new text]
+<<<END_REPLACE>>>
+<<<END_CHANGE>>>
+<<<VARIANT_END>>>
+
+A variant can have multiple <<<CHANGE>>> blocks if needed.`;
+}
+
+interface SkillChange {
+  find: string;
+  replace: string;
+}
+
+interface SkillVariant {
+  title: string;
+  description: string;
+  changes: SkillChange[];
+}
+
+function applyVariantChanges(original: string, changes: SkillChange[]): string {
+  let result = original;
+  for (const { find, replace } of changes) {
+    if (find && result.includes(find)) {
+      result = result.replace(find, replace);
+    }
+  }
+  return result;
+}
+
+function parseSkillVariants(text: string): SkillVariant[] {
+  const variants: SkillVariant[] = [];
+  const blocks = text.split('<<<VARIANT_START>>>').slice(1);
+  for (const block of blocks) {
+    const titleMatch = /<<<TITLE>>>([\s\S]*?)<<<END_TITLE>>>/.exec(block);
+    const descMatch = /<<<DESCRIPTION>>>([\s\S]*?)<<<END_DESCRIPTION>>>/.exec(block);
+    if (!titleMatch || !descMatch) continue;
+
+    const changes: SkillChange[] = [];
+    const changeRegex = /<<<CHANGE>>>([\s\S]*?)<<<END_CHANGE>>>/g;
+    let cm;
+    while ((cm = changeRegex.exec(block)) !== null) {
+      const findMatch = /<<<FIND>>>([\s\S]*?)<<<END_FIND>>>/.exec(cm[1]);
+      const replaceMatch = /<<<REPLACE>>>([\s\S]*?)<<<END_REPLACE>>>/.exec(cm[1]);
+      if (findMatch && replaceMatch) {
+        changes.push({ find: findMatch[1].trim(), replace: replaceMatch[1].trim() });
+      }
+    }
+    if (changes.length > 0) {
+      variants.push({ title: titleMatch[1].trim(), description: descMatch[1].trim(), changes });
+    }
+  }
+  return variants;
+}
+
+function generateSkillAdjustModal(state: WorkbenchState, originalContent: string): A2UIMessage[] {
+  const ui = new A2UIGenerator('modal');
+
+  // Col 1: Original skill (always shown)
+  const origEditorId = 'wb_adj_original_skill';
+  ui.addRaw(origEditorId, 'CodeEditor', {
+    value: originalContent,
+    language: 'markdown',
+    readonly: true,
+    lineNumbers: true,
+    height: 560,
+  });
+  const col1 = ui.column([ui.text('原始 Skill', 'h4'), origEditorId], { gap: 8 });
+
+  // State C: variants ready — col1 + col2 (variants list)
+  if (state.skillVariants && state.skillVariants.length > 0) {
+    const variantCards: string[] = [];
+    state.skillVariants.forEach((variant, idx) => {
+      const titleId = ui.text(`方案 ${idx + 1}：${variant.title}`, 'h4');
+      const descId = ui.text(variant.description, 'caption');
+      const changeIds = variant.changes.map((c, ci) => {
+        const codeId = `wb_variant_${idx}_change_${ci}`;
+        ui.addRaw(codeId, 'CodeEditor', {
+          value: c.replace,
+          language: 'markdown',
+          readonly: true,
+          lineNumbers: false,
+          height: 100,
+        });
+        return codeId;
+      });
+      const useBtn = ui.button('使用此方案', 'debug_select_skill_variant', {
+        variant: 'primary',
+        size: 'sm',
+        icon: 'check',
+        payload: { variantIndex: idx },
+      });
+      variantCards.push(
+        ui.card([titleId, descId, ...changeIds, ui.row([useBtn], { justify: 'end' })], { padding: 12 })
+      );
+    });
+    const col2 = ui.column([ui.text(`共 ${state.skillVariants.length} 个方案`, 'h4'), ...variantCards], {
+      gap: 12,
+      style: 'overflow-y: auto; max-height: 580px;',
+    });
+    const grid = ui.grid([col1, col2], { columns: '1fr 1fr', gap: 16 });
+    const root = ui.modal('AI 辅助修改 Skill', [grid], { size: '2xl' });
+    return ui.build(root);
+  }
+
+  // State A / B: input + optional progress col
+  const inputId = 'wb_adj_input';
+  ui.addRaw(inputId, 'FormInput', {
+    inputType: 'textarea',
+    name: 'skillAdjustInput',
+    placeholder: '描述你想要的调整方向，例如：增加分级响应流程，针对不同血氧水平触发不同系统动作...',
+    value: state.skillAdjustInput || '',
+    onChange: 'debug_skill_adjust_input_change',
+  });
+  const genBtn = ui.button(state.skillVariantsGenerating ? '正在生成...' : '生成', 'debug_generate_skill_variants', {
+    variant: 'primary',
+    size: 'sm',
+    icon: 'sparkles',
+    disabled: state.skillVariantsGenerating || false,
+  });
+  const col2 = ui.column([ui.text('调整方向', 'h4'), inputId, ui.row([genBtn], { justify: 'end' })], { gap: 8 });
+
+  if (state.skillVariantsGenerating) {
+    // State B: 3 columns with progress
+    const progressId = 'wb_adj_progress';
+    ui.addRaw(progressId, 'Text', {
+      text: state.skillVariantsProgress || '正在生成...',
+      markdown: false,
+      style:
+        'white-space: pre-wrap; font-size: 12px; font-family: monospace; height: 520px; overflow-y: auto; padding: 12px; background: var(--color-surface-code); border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text-muted);',
+    });
+    const col3 = ui.column([ui.text('生成进度', 'h4'), progressId], { gap: 8 });
+    const grid = ui.grid([col1, col2, col3], { columns: '1fr 1fr 1fr', gap: 16 });
+    const root = ui.modal('AI 辅助修改 Skill', [grid], { size: '2xl' });
+    return ui.build(root);
+  }
+
+  // State A: 2 columns
+  const grid = ui.grid([col1, col2], { columns: '1fr 1fr', gap: 16 });
+  const root = ui.modal('AI 辅助修改 Skill', [grid], { size: '2xl' });
+  return ui.build(root);
 }

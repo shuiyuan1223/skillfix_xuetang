@@ -1056,6 +1056,8 @@ interface SkillsPageData {
   editing?: boolean;
   loading?: boolean;
   category?: string;
+  skillAdjustInput?: string;
+  skillVariantsGenerating?: boolean;
 }
 
 function buildSkillsListCard(ui: A2UIGenerator, filteredSkills: SkillInfo[]): string {
@@ -1118,7 +1120,57 @@ function buildSkillEditorCard(ui: A2UIGenerator, data: SkillsPageData): string |
   const editorActions = cancelBtn ? [editBtn, cancelBtn, toggleBtn] : [editBtn, toggleBtn];
   editorChildren.push(ui.row(editorActions, { gap: 8, justify: 'end' }));
   editorChildren.push(editor);
+
+  if (currentFile === 'SKILL.md') {
+    const adjustInputId = `skill_adjust_${data.selectedSkill || 'input'}`;
+    ui.addRaw(adjustInputId, 'FormInput', {
+      inputType: 'text',
+      name: 'skillAdjustInput',
+      placeholder: t('skills.adjustPlaceholder'),
+      value: data.skillAdjustInput || '',
+      onChange: 'skill_adjust_input_change',
+    });
+    const genBtnId = ui.button(
+      data.skillVariantsGenerating ? t('skills.variantGenerating') : t('skills.generateVariants'),
+      'generate_skill_variants',
+      {
+        variant: 'secondary',
+        size: 'sm',
+        icon: 'sparkles',
+        disabled: data.skillVariantsGenerating || false,
+      }
+    );
+    const adjustLabelId = ui.text(t('skills.adjustLabel'), 'caption');
+    editorChildren.push(ui.column([adjustLabelId, ui.row([adjustInputId, genBtnId], { gap: 8 })], { gap: 4 }));
+  }
+
   return ui.card(editorChildren, { title: `${data.selectedSkill}/${currentFile}`, padding: 20 });
+}
+
+export function generateSkillVariantsModal(
+  originalContent: string,
+  variants: Array<{ title: string; description: string; content: string }>
+): A2UIMessage[] {
+  const ui = new A2UIGenerator('modal');
+
+  const variantCards: string[] = [];
+  variants.forEach((variant, idx) => {
+    const titleId = ui.text(variant.title, 'h4');
+    const descId = ui.text(variant.description, 'caption');
+    const diffId = ui.diffView(originalContent, variant.content, { title: 'SKILL.md' });
+    const useBtn = ui.button(t('skills.variantUse'), 'select_skill_variant', {
+      variant: 'primary',
+      size: 'sm',
+      icon: 'check',
+      payload: { variantIndex: idx },
+    });
+    const cardId = ui.card([titleId, descId, diffId, ui.row([useBtn], { justify: 'end' })], { padding: 16 });
+    variantCards.push(cardId);
+  });
+
+  const contentId = ui.column(variantCards, { gap: 16 });
+  const rootId = ui.modal(t('skills.variantsModalTitle'), [contentId], { size: '2xl' });
+  return ui.build(rootId);
 }
 
 export function generateSkillsPage(data: SkillsPageData): A2UIMessage[] {

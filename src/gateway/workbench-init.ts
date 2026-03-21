@@ -108,6 +108,15 @@ export interface WorkbenchState {
   diffMode?: boolean;
   /** Cache for "before" LLM output — reused if before content unchanged between runs */
   beforeOutputCache?: { beforeMessage: string; output: string };
+  /** Skill AI adjustment state */
+  skillAdjustInput?: string;
+  skillVariantsGenerating?: boolean;
+  skillVariantsProgress?: string;
+  skillVariants?: Array<{
+    title: string;
+    description: string;
+    changes: Array<{ find: string; replace: string }>;
+  }> | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────

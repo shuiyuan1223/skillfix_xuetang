@@ -274,6 +274,8 @@ async function navigateSkills(session: GatewaySession, send: SendFn): Promise<'e
           language,
           editing: session.editingSkill,
           category: session.skillsCategory,
+          skillAdjustInput: session.skillAdjustInput,
+          skillVariantsGenerating: session.skillVariantsGenerating,
         })
       )
     );

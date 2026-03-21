@@ -241,6 +241,13 @@ export interface LocaleMessages {
     skillCatEvolution: string;
     skillCatDevelopment: string;
     skillCatUtility: string;
+    adjustPlaceholder: string;
+    adjustLabel: string;
+    generateVariants: string;
+    variantsModalTitle: string;
+    variantUse: string;
+    variantGenerating: string;
+    variantLoadError: string;
   };
 
   // Evolution page

@@ -219,6 +219,13 @@ export const en: LocaleMessages = {
     skillCatEvolution: 'Evolution',
     skillCatDevelopment: 'Development',
     skillCatUtility: 'Utility',
+    adjustPlaceholder: 'Describe what you want to adjust, e.g.: focus more on sleep quality analysis...',
+    adjustLabel: 'AI Adjust',
+    generateVariants: 'Generate Variants',
+    variantsModalTitle: 'Choose Skill Variant',
+    variantUse: 'Use This',
+    variantGenerating: 'Generating variants...',
+    variantLoadError: 'Failed to generate variants, please try again',
   },
 
   evolution: {

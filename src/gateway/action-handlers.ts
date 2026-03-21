@@ -38,6 +38,7 @@ import {
   generateMergeConfirmModal,
   generatePlanDetailModal,
   generateIntegrationsPage,
+  generateSkillVariantsModal,
   type PlansPageTab,
 } from './pages.js';
 import type { A2UIMessage } from './a2ui.js';
@@ -596,6 +597,131 @@ const handleSubmitCreateSkill: ActionHandler = async (_session, _action, payload
   send({ deleteSurface: { surfaceId: 'modal' } });
   await _session.handleNavigate('settings/skills', send);
 };
+
+const handleSkillAdjustInputChange: ActionHandler = async (session, _action, payload, _send) => {
+  if (payload?.value !== undefined) {
+    session.skillAdjustInput = String(payload.value);
+  }
+};
+
+const handleGenerateSkillVariants: ActionHandler = async (session, _action, _payload, send) => {
+  if (!session.selectedSkill) return;
+
+  let currentContent = session.editBuffer;
+  if (!currentContent) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (await getSkillTool.execute({ name: session.selectedSkill })) as any;
+      currentContent = result?.content || '';
+    } catch {
+      currentContent = '';
+    }
+  }
+
+  const adjustInput = session.skillAdjustInput.trim();
+  if (!adjustInput || !currentContent) {
+    sendAll(send, generateToast('请先输入调整方向', 'warning'));
+    return;
+  }
+
+  session.skillVariantsGenerating = true;
+  await session.handleNavigate('settings/skills', send);
+
+  void (async () => {
+    try {
+      const prompt = buildSkillVariantPrompt(currentContent!, adjustInput);
+      const { runOneLLMCall } = await import('./workbench-handlers.js');
+      const result = await runOneLLMCall({ modelId: 'glm-5', input: prompt, temperature: 0 });
+
+      const variants = parseSkillVariants(result.text);
+      session.skillVariants = variants;
+      session.skillVariantsGenerating = false;
+
+      if (variants.length === 0) {
+        sendAll(send, generateToast(t('skills.variantLoadError'), 'error'));
+        await session.handleNavigate('settings/skills', send);
+        return;
+      }
+
+      const modal = generateSkillVariantsModal(currentContent!, variants);
+      sendAll(send, modal);
+      await session.handleNavigate('settings/skills', send);
+    } catch {
+      session.skillVariantsGenerating = false;
+      sendAll(send, generateToast(t('skills.variantLoadError'), 'error'));
+      await session.handleNavigate('settings/skills', send);
+    }
+  })();
+};
+
+const handleSelectSkillVariant: ActionHandler = async (session, _action, payload, send) => {
+  const idx = Number(payload?.variantIndex ?? -1);
+  if (!session.skillVariants || idx < 0 || idx >= session.skillVariants.length) return;
+
+  const variant = session.skillVariants[idx];
+  session.editBuffer = variant.content;
+  session.editingSkill = true;
+  session.skillVariants = null;
+  send({ deleteSurface: { surfaceId: 'modal' } });
+  await session.handleNavigate('settings/skills', send);
+};
+
+function buildSkillVariantPrompt(currentSkill: string, userRequest: string): string {
+  return `You are an expert in designing AI agent skill specifications. Below is a skill written in SKILL.md format (YAML frontmatter + Markdown body).
+
+Current skill:
+\`\`\`
+${currentSkill}
+\`\`\`
+
+The user wants to adjust this skill in the following direction:
+"${userRequest}"
+
+Generate 1-4 complete skill variants based on the request:
+- If the request is specific and clear: generate 1-2 variants
+- If the request is vague or has multiple interpretations: generate 3-4 variants
+
+IMPORTANT: Each variant must be a complete, valid SKILL.md file. Keep the same name/structure but modify the content according to the request.
+
+Output format (use EXACTLY these separators):
+
+<<<VARIANT_START>>>
+<<<TITLE>>>Brief descriptive title for this variant (e.g., "专注睡眠质量分析版")<<<END_TITLE>>>
+<<<DESCRIPTION>>>1-2 sentences explaining what changed compared to the original<<<END_DESCRIPTION>>>
+<<<CONTENT>>>
+[Complete SKILL.md content here]
+<<<END_CONTENT>>>
+<<<VARIANT_END>>>
+
+<<<VARIANT_START>>>
+[next variant if any]
+<<<VARIANT_END>>>
+
+Output only the variants in the specified format, no other text.`;
+}
+
+function parseSkillVariants(text: string): Array<{ title: string; description: string; content: string }> {
+  const variants: Array<{ title: string; description: string; content: string }> = [];
+  const variantRegex = /<<<VARIANT_START>>>([\s\S]*?)<<<VARIANT_END>>>/g;
+  let match;
+
+  while ((match = variantRegex.exec(text)) !== null) {
+    const block = match[1];
+    const titleMatch = /<<<TITLE>>>([\s\S]*?)<<<END_TITLE>>>/.exec(block);
+    const descMatch = /<<<DESCRIPTION>>>([\s\S]*?)<<<END_DESCRIPTION>>>/.exec(block);
+    const contentMatch = /<<<CONTENT>>>([\s\S]*?)<<<END_CONTENT>>>/.exec(block);
+
+    if (titleMatch && descMatch && contentMatch) {
+      variants.push({
+        title: titleMatch[1].trim(),
+        description: descMatch[1].trim(),
+        content: contentMatch[1].trim(),
+      });
+    }
+  }
+
+  return variants;
+}
 
 // ============================================================================
 // System Agent Memory handlers
@@ -1887,6 +2013,9 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   edit_skill_from_modal: handleEditSkillFromModal,
   create_skill: handleCreateSkill,
   submit_create_skill: handleSubmitCreateSkill,
+  skill_adjust_input_change: handleSkillAdjustInputChange,
+  generate_skill_variants: handleGenerateSkillVariants,
+  select_skill_variant: handleSelectSkillVariant,
 
   // System Agent Memory
   sa_memory_select: handleSaMemorySelect,

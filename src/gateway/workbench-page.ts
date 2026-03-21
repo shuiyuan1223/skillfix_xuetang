@@ -185,9 +185,14 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
         language: 'markdown',
         onChange: 'debug_skill_change',
         lineNumbers: true,
-        height: 500,
+        height: 300,
       });
 
+      const aiBtn = ui.button('AI 辅助修改', 'debug_open_skill_adjust_modal', {
+        variant: 'secondary',
+        size: 'sm',
+        icon: 'sparkles',
+      });
       const saveBtn = ui.button(t('common.save'), 'debug_save_skill', {
         variant: 'primary',
         size: 'sm',
@@ -200,7 +205,7 @@ function buildSkillsTab(ui: A2UIGenerator, state: WorkbenchState): string {
         icon: 'refresh-cw',
         disabled: !skill?.dirty,
       });
-      const btnRow = ui.row([saveBtn, revertBtn], { gap: 8, justify: 'end' });
+      const btnRow = ui.row([aiBtn, saveBtn, revertBtn], { gap: 8, justify: 'end' });
       parts.push(skillLabel, toggleRow, editorId, btnRow);
     }
   } else {

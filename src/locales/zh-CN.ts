@@ -219,6 +219,13 @@ export const zhCN: LocaleMessages = {
     skillCatEvolution: '进化系统',
     skillCatDevelopment: '开发工具',
     skillCatUtility: '工具',
+    adjustPlaceholder: '描述你想要的调整方向，例如：让分析更聚焦于睡眠质量...',
+    adjustLabel: 'AI 调整',
+    generateVariants: '生成变体',
+    variantsModalTitle: '选择 Skill 变体',
+    variantUse: '使用此方案',
+    variantGenerating: '正在生成变体...',
+    variantLoadError: '生成变体失败，请重试',
   },
 
   evolution: {

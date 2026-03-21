@@ -995,6 +995,7 @@ export function App() {
         };
         if (surfaceId === 'main') setMainData(patcher);
         else if (surfaceId === 'sidebar') setSidebarData(patcher);
+        else if (surfaceId === 'modal') setModalData(patcher);
         return;
       }
 

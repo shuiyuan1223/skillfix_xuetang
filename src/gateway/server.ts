@@ -921,6 +921,10 @@ export class GatewaySession {
   editingPrompt = false;
   editingSkill = false;
   editBuffer: string | null = null;
+  // Skill AI adjustment state
+  skillAdjustInput: string = '';
+  skillVariants: Array<{ title: string; description: string; content: string }> | null = null;
+  skillVariantsGenerating = false;
   // Track which agent collapsible to expand after tag operations
   _settingsExpandedAgent: string | undefined;
 
